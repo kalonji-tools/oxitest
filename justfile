@@ -5,16 +5,23 @@ set shell := ["./scripts/just-shell.sh", "-c"]
 # the .so with the wrong ABI tag. Unset both before any maturin/python invocation.
 fix_env := "unset _PYTHON_SYSCONFIGDATA_NAME PYTHONPATH"
 
+# maturin internally calls `uv pip install`; without VIRTUAL_ENV set, uv follows
+# .venv/bin/python's symlink back to the immutable Nix store and fails.
+# Pointing VIRTUAL_ENV at the project venv keeps uv scoped to it.
+maturin_env := "VIRTUAL_ENV=$(pwd)/.venv"
+
 # Build the Rust extension; extra args are forwarded to maturin
 build *args:
     {{fix_env}} \
-    && maturin develop {{args}}
+    && uv sync --group build \
+    && {{maturin_env}} maturin develop {{args}}
 
 # Run Python tests (rebuilds extension first)
 test *args:
     {{fix_env}} \
-    && maturin develop \
-    && PYTHONPATH=python python3 -m oxitest {{args}}
+    && uv sync --group test \
+    && {{maturin_env}} maturin develop \
+    && PYTHONPATH=python uv run python -m oxitest {{args}}
 
 # Run Rust unit tests
 test-rust *args:
@@ -26,8 +33,9 @@ dev:
     && rm -f python/oxitest/_oxitest*.so \
     && cargo test \
     && {{fix_env}} \
-    && maturin develop \
-    && PYTHONPATH=python python3 -m oxitest
+    && uv sync --group test \
+    && {{maturin_env}} maturin develop \
+    && PYTHONPATH=python uv run python -m oxitest
 
 # Lint Python (ruff) and check types (ty)
 lint:
