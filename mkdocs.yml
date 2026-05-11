@@ -1,0 +1,92 @@
+site_name: oxitest
+site_description: A fast, typed, and explicit Python test framework backed by a Rust runner.
+docs_dir: docs/src
+site_dir: docs/site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - search.suggest
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+  - minify:
+      minify_html: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python]
+          options:
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Tutorials:
+    - Getting started: tutorials/getting-started.md
+  - How-to guides:
+    - Filter tests with -k: how-to/filter-tests.md
+    - Configure testpaths: how-to/configure-testpaths.md
+    - Migrate from pytest: how-to/migrate-from-pytest.md
+    - Use markers: how-to/use-markers.md
+    - Use parametrize: how-to/use-parametrize.md
+    - Use fixtures: how-to/use-fixtures.md
+    - Use built-in fixtures: how-to/use-builtin-fixtures.md
+    - Run tests in parallel: how-to/run-in-parallel.md
+    - Use the test cache: how-to/use-test-cache.md
+    - Use raises, warns, and importorskip: how-to/use-raises-warns.md
+  - Reference:
+    - CLI flags: reference/cli.md
+    - Configuration: reference/configuration.md
+    - Exit codes: reference/exit-codes.md
+    - JSON output format: reference/json-output.md
+    - Python API:
+      - Marks: reference/python-api/marks.md
+      - Fixture types: reference/python-api/fixture-types.md
+      - Built-in fixtures: reference/python-api/builtins.md
+      - Utilities: reference/python-api/utilities.md
+  - Explanation:
+    - Why Rust + Python: explanation/why-rust-python.md
+    - Assertion diagnostics: explanation/assertion-diagnostics.md
+    - Performance: explanation/performance.md
+    - Strict mode: explanation/strict-mode.md
+    - Parallelism: explanation/parallelism.md
+  - Contributing:
+    - Build setup: contributing/build-setup.md
+    - Architecture: contributing/architecture.md
+    - Contributing guide: contributing/contributing.md
