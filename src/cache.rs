@@ -1,0 +1,1031 @@
+use std::collections::HashSet;
+use std::time::Duration;
+
+use ahash::AHashMap;
+use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::types::{NodeId, TestItem};
+
+const CACHE_VERSION: u32 = 1;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheEntry {
+    duration_ms: f64,
+    age: u32,
+    #[serde(default)]
+    last_outcome: Option<String>,
+}
+
+/// Serialized representation of a single TestItem (module_path and node_id are derived).
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct CachedItemData {
+    fn_name: String,
+    lineno: usize,
+    markers: Vec<String>,
+    param_id: Option<String>,
+    param_values: Vec<(String, String)>,
+}
+
+/// Per-module fast-collection cache. Invalidated when mtime_secs changes.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ModuleCache {
+    mtime_secs: u64,
+    items: Vec<CachedItemData>,
+}
+
+/// Serialize an AHashMap through a BTreeMap to ensure deterministic, alphabetically sorted JSON output.
+fn serialize_sorted<S, V>(map: &AHashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    V: serde::Serialize,
+{
+    use std::collections::BTreeMap;
+    let sorted: BTreeMap<&str, &V> = map.iter().map(|(k, v)| (k.as_str(), v)).collect();
+    serde::Serialize::serialize(&sorted, serializer)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheFile {
+    version: u32,
+    #[serde(serialize_with = "serialize_sorted")]
+    timings: AHashMap<String, CacheEntry>,
+    #[serde(default, serialize_with = "serialize_sorted")]
+    modules: AHashMap<String, ModuleCache>,
+}
+
+pub struct TestCache {
+    inner: CacheFile,
+    dirty: bool,
+}
+
+impl TestCache {
+    fn cache_path(rootdir: &Utf8Path) -> Utf8PathBuf {
+        rootdir.join(".oxitest_cache").join("timings.json")
+    }
+
+    fn empty() -> Self {
+        Self {
+            inner: CacheFile {
+                version: CACHE_VERSION,
+                timings: AHashMap::new(),
+                modules: AHashMap::new(),
+            },
+            dirty: false,
+        }
+    }
+
+    pub fn load(rootdir: &Utf8Path) -> Self {
+        let path = Self::cache_path(rootdir);
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => return Self::empty(),
+        };
+        let file: CacheFile = match serde_json::from_str(&content) {
+            Ok(f) => f,
+            Err(_) => return Self::empty(),
+        };
+        if file.version != CACHE_VERSION {
+            return Self::empty();
+        }
+        Self {
+            inner: file,
+            dirty: false,
+        }
+    }
+
+    pub fn invalidate(&mut self, items: &[TestItem]) {
+        let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
+        let before = self.inner.timings.len();
+        self.inner.timings.retain(|key, _| live.contains(key));
+        if self.inner.timings.len() != before {
+            self.dirty = true;
+        }
+    }
+
+    /// Remove module cache entries for paths that no longer exist on disk.
+    /// Sets dirty = true if any entries were pruned.
+    pub fn invalidate_modules(&mut self) {
+        let before = self.inner.modules.len();
+        self.inner
+            .modules
+            .retain(|key, _| Utf8Path::new(key).exists());
+        if self.inner.modules.len() != before {
+            self.dirty = true;
+        }
+    }
+
+    /// Returns `(total_duration_ms, covered_count)` for items present in the timing cache.
+    fn sum_and_count(&self, items: &[TestItem]) -> (f64, usize) {
+        let mut total = 0.0f64;
+        let mut count = 0usize;
+        for item in items {
+            if let Some(entry) = self.inner.timings.get(item.node_id.as_ref()) {
+                total += entry.duration_ms;
+                count += 1;
+            }
+        }
+        (total, count)
+    }
+
+    fn module_duration_sum(&self, items: &[TestItem]) -> Option<f64> {
+        let (total, count) = self.sum_and_count(items);
+        if count > 0 {
+            Some(total)
+        } else {
+            None
+        }
+    }
+
+    pub fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>) {
+        // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
+        // Avoids re-running module_duration_sum inside the comparator, which would be
+        // O(N log N × M) because the comparator fires once per sort comparison.
+        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<TestItem>)> =
+            std::mem::take(groups)
+                .into_iter()
+                .map(|(path, items)| {
+                    let sum = self.module_duration_sum(&items);
+                    let len = items.len();
+                    (sum, len, path, items)
+                })
+                .collect();
+
+        keyed.sort_by(
+            |(sum_a, len_a, ..), (sum_b, len_b, ..)| match (sum_a, sum_b) {
+                (Some(da), Some(db)) => db.partial_cmp(da).unwrap_or(std::cmp::Ordering::Equal),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => len_b.cmp(len_a),
+            },
+        );
+
+        *groups = keyed
+            .into_iter()
+            .map(|(_, _, path, items)| (path, items))
+            .collect();
+    }
+
+    pub fn estimated_duration(&self, items: &[TestItem]) -> Option<Duration> {
+        if items.is_empty() {
+            return None;
+        }
+        let (total_ms, covered) = self.sum_and_count(items);
+        if covered * 2 < items.len() {
+            return None;
+        }
+        Some(Duration::from_millis(total_ms as u64))
+    }
+
+    /// Returns a suggested timeout in whole seconds for `item`, scaled by `multiplier`.
+    /// Returns `None` if the item has no cached timing (caller should use global timeout).
+    /// Result is `ceil(cached_duration_secs * multiplier)`, minimum 1 second.
+    pub fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
+        let entry = self.inner.timings.get(item.node_id.as_ref())?;
+        let scaled_secs = (entry.duration_ms / 1000.0) * multiplier;
+        Some((scaled_secs.ceil() as u64).max(1))
+    }
+
+    pub fn merge(&mut self, results: &[(NodeId, f64)], max_age: u32) {
+        let executed: HashSet<&str> = results.iter().map(|(id, _)| id.as_ref()).collect();
+
+        for (node_id, duration_ms) in results {
+            let entry = self
+                .inner
+                .timings
+                .entry(node_id.to_string())
+                .or_insert(CacheEntry {
+                    duration_ms: 0.0,
+                    age: 0,
+                    last_outcome: None,
+                }); // initial values overwritten below
+            entry.duration_ms = *duration_ms;
+            entry.age = 0;
+        }
+
+        let before = self.inner.timings.len();
+        self.inner.timings.retain(|key, entry| {
+            if executed.contains(key.as_str()) {
+                return true;
+            }
+            entry.age += 1;
+            entry.age <= max_age
+        });
+
+        if !results.is_empty() || self.inner.timings.len() != before {
+            self.dirty = true;
+        }
+    }
+
+    /// Update `last_outcome` for entries that appear in `outcomes`.
+    /// Entries not in `outcomes` are unchanged.
+    /// Sets dirty = true if any entry was updated.
+    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, String)]) {
+        let mut changed = false;
+        for (node_id, outcome) in outcomes {
+            if let Some(entry) = self.inner.timings.get_mut(node_id.as_ref()) {
+                entry.last_outcome = Some(outcome.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            self.dirty = true;
+        }
+    }
+
+    /// Returns node IDs whose last recorded outcome was a failure
+    /// ("failed", "error", or "timeout").
+    pub fn last_failed_ids(&self) -> std::collections::HashSet<String> {
+        self.inner
+            .timings
+            .iter()
+            .filter(|(_, entry)| {
+                matches!(
+                    entry.last_outcome.as_deref(),
+                    Some("failed") | Some("error") | Some("timeout")
+                )
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    pub fn save(&self, rootdir: &Utf8Path) {
+        if !self.dirty {
+            return;
+        }
+        let dir = rootdir.join(".oxitest_cache");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        let content = match serde_json::to_string_pretty(&self.inner) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let _ = std::fs::write(dir.join("timings.json"), content);
+    }
+
+    /// Returns cached TestItems for `path` if the file's mtime matches `current_mtime_secs`.
+    /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
+    pub fn cached_module_items(
+        &self,
+        path: &Utf8Path,
+        current_mtime_secs: u64,
+    ) -> Option<Vec<TestItem>> {
+        let key = path.as_str();
+        let mc = self.inner.modules.get(key)?;
+        if mc.mtime_secs != current_mtime_secs {
+            return None;
+        }
+        let items = mc
+            .items
+            .iter()
+            .map(|d| TestItem {
+                node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
+                module_path: path.to_owned(),
+                fn_name: d.fn_name.clone(),
+                lineno: d.lineno,
+                markers: d.markers.clone(),
+                param_id: d.param_id.clone(),
+                param_values: d.param_values.clone(),
+            })
+            .collect();
+        Some(items)
+    }
+
+    /// Store the collection result for `path` with the given mtime.
+    /// Sets dirty = true.
+    pub fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[TestItem]) {
+        let key = path.as_str().to_string();
+        let cached_items = items
+            .iter()
+            .map(|item| CachedItemData {
+                fn_name: item.fn_name.clone(),
+                lineno: item.lineno,
+                markers: item.markers.clone(),
+                param_id: item.param_id.clone(),
+                param_values: item.param_values.clone(),
+            })
+            .collect();
+        self.inner.modules.insert(
+            key,
+            ModuleCache {
+                mtime_secs,
+                items: cached_items,
+            },
+        );
+        self.dirty = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_fs::prelude::*;
+
+    fn make_item(node_id: &str) -> TestItem {
+        TestItem {
+            node_id: NodeId::from_raw(node_id),
+            module_path: Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: node_id.to_string(),
+            lineno: 0,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        }
+    }
+
+    fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<TestItem>) {
+        let path = Utf8PathBuf::from(module);
+        let items = names
+            .iter()
+            .map(|name| TestItem {
+                node_id: NodeId::new(module, name, None),
+                module_path: path.clone(),
+                fn_name: name.to_string(),
+                lineno: 0,
+                markers: vec![],
+                param_id: None,
+                param_values: vec![],
+            })
+            .collect();
+        (path, items)
+    }
+
+    fn cache_with_entries(entries: &[(&str, f64)]) -> TestCache {
+        let timings = entries
+            .iter()
+            .map(|(id, ms)| {
+                (
+                    id.to_string(),
+                    CacheEntry {
+                        duration_ms: *ms,
+                        age: 0,
+                        last_outcome: None,
+                    },
+                )
+            })
+            .collect();
+        TestCache {
+            inner: CacheFile {
+                version: CACHE_VERSION,
+                timings,
+                modules: AHashMap::new(),
+            },
+            dirty: false,
+        }
+    }
+
+    #[test]
+    fn load_missing_file_returns_empty() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert!(cache.inner.timings.is_empty());
+        assert!(!cache.dirty);
+    }
+
+    #[test]
+    fn load_wrong_version_returns_empty() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let cache_dir = dir.child(".oxitest_cache");
+        cache_dir.create_dir_all().unwrap();
+        cache_dir
+            .child("timings.json")
+            .write_str(r#"{"version":99,"timings":{"foo::test_a":{"duration_ms":10.0,"age":0}}}"#)
+            .unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert!(cache.inner.timings.is_empty());
+        assert!(!cache.dirty);
+    }
+
+    #[test]
+    fn load_corrupt_json_returns_empty() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let cache_dir = dir.child(".oxitest_cache");
+        cache_dir.create_dir_all().unwrap();
+        cache_dir
+            .child("timings.json")
+            .write_str("not json at all")
+            .unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert!(cache.inner.timings.is_empty());
+        assert!(!cache.dirty);
+    }
+
+    #[test]
+    fn load_valid_file_returns_entries() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let cache_dir = dir.child(".oxitest_cache");
+        cache_dir.create_dir_all().unwrap();
+        cache_dir.child("timings.json").write_str(
+            r#"{"version":1,"timings":{"tests/test_foo.py::test_a":{"duration_ms":42.5,"age":0}}}"#
+        ).unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert_eq!(cache.inner.timings.len(), 1);
+        assert!((cache.inner.timings["tests/test_foo.py::test_a"].duration_ms - 42.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn invalidate_removes_entries_not_in_items() {
+        let mut cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 10.0),
+            ("tests/test_foo.py::test_b", 20.0),
+        ]);
+        let items = vec![make_item("tests/test_foo.py::test_a")];
+        cache.invalidate(&items);
+        assert!(!cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_b"));
+        assert!(cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_a"));
+    }
+
+    #[test]
+    fn invalidate_keeps_entries_present_in_items() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let items = vec![make_item("tests/test_foo.py::test_a")];
+        cache.invalidate(&items);
+        assert_eq!(cache.inner.timings.len(), 1);
+    }
+
+    #[test]
+    fn invalidate_sets_dirty_when_entries_pruned() {
+        let mut cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 10.0),
+            ("tests/test_foo.py::test_gone", 5.0),
+        ]);
+        let items = vec![make_item("tests/test_foo.py::test_a")];
+        cache.invalidate(&items);
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn invalidate_does_not_set_dirty_when_nothing_pruned() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let items = vec![make_item("tests/test_foo.py::test_a")];
+        cache.invalidate(&items);
+        assert!(!cache.dirty);
+    }
+
+    #[test]
+    fn sort_groups_orders_by_sum_duration_heaviest_first() {
+        let cache = cache_with_entries(&[
+            ("tests/fast.py::test_a", 5.0),
+            ("tests/slow.py::test_x", 200.0),
+            ("tests/slow.py::test_y", 300.0),
+        ]);
+        let mut groups = vec![
+            make_group("tests/fast.py", &["test_a"]),
+            make_group("tests/slow.py", &["test_x", "test_y"]),
+        ];
+        cache.sort_groups(&mut groups);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/slow.py"));
+        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/fast.py"));
+    }
+
+    #[test]
+    fn sort_groups_puts_uncached_modules_after_cached() {
+        let cache = cache_with_entries(&[("tests/known.py::test_a", 10.0)]);
+        let mut groups = vec![
+            make_group("tests/unknown.py", &["test_z"]),
+            make_group("tests/known.py", &["test_a"]),
+        ];
+        cache.sort_groups(&mut groups);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/known.py"));
+        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/unknown.py"));
+    }
+
+    #[test]
+    fn sort_groups_falls_back_to_count_when_no_cache_data() {
+        let cache = TestCache::empty();
+        let mut groups = vec![
+            make_group("tests/small.py", &["test_a"]),
+            make_group("tests/large.py", &["test_x", "test_y", "test_z"]),
+        ];
+        cache.sort_groups(&mut groups);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/large.py"));
+        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/small.py"));
+    }
+
+    #[test]
+    fn sort_groups_partial_cache_uses_available_data() {
+        // slow.py has one cached test (50ms) and one uncached (contributes 0ms to sum).
+        // fast.py has one cached test (5ms).
+        // slow.py sum = 50ms > fast.py sum = 5ms → slow.py first.
+        let cache = cache_with_entries(&[
+            ("tests/slow.py::test_x", 50.0),
+            ("tests/fast.py::test_a", 5.0),
+        ]);
+        let mut groups = vec![
+            make_group("tests/fast.py", &["test_a"]),
+            make_group("tests/slow.py", &["test_x", "test_uncached"]),
+        ];
+        cache.sort_groups(&mut groups);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/slow.py"));
+        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/fast.py"));
+    }
+
+    #[test]
+    fn estimated_duration_returns_none_on_empty_items() {
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        assert!(cache.estimated_duration(&[]).is_none());
+    }
+
+    #[test]
+    fn estimated_duration_returns_none_below_half_coverage() {
+        // 1 cached out of 3 items = 33% < 50% → None
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
+        let items = vec![
+            make_item("tests/test_foo.py::test_a"),
+            make_item("tests/test_foo.py::test_b"),
+            make_item("tests/test_foo.py::test_c"),
+        ];
+        assert!(cache.estimated_duration(&items).is_none());
+    }
+
+    #[test]
+    fn estimated_duration_returns_some_at_exactly_half_coverage() {
+        // 1 cached out of 2 items = 50% → Some
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
+        let items = vec![
+            make_item("tests/test_foo.py::test_a"),
+            make_item("tests/test_foo.py::test_b"),
+        ];
+        assert!(cache.estimated_duration(&items).is_some());
+    }
+
+    #[test]
+    fn estimated_duration_sums_cached_entries() {
+        let cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 100.0),
+            ("tests/test_foo.py::test_b", 200.0),
+        ]);
+        let items = vec![
+            make_item("tests/test_foo.py::test_a"),
+            make_item("tests/test_foo.py::test_b"),
+        ];
+        let est = cache.estimated_duration(&items).unwrap();
+        assert_eq!(est.as_millis(), 300);
+    }
+
+    #[test]
+    fn merge_updates_duration_and_resets_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
+        // Manually set age to non-zero
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_a")
+            .unwrap()
+            .age = 5;
+        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 42.0)];
+        cache.merge(&results, 50);
+        let entry = &cache.inner.timings["tests/test_foo.py::test_a"];
+        assert!((entry.duration_ms - 42.0).abs() < 0.01);
+        assert_eq!(entry.age, 0);
+    }
+
+    #[test]
+    fn merge_increments_age_for_unexecuted_tests() {
+        let mut cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 10.0),
+            ("tests/test_foo.py::test_b", 20.0),
+        ]);
+        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 10.0)];
+        cache.merge(&results, 50);
+        assert_eq!(cache.inner.timings["tests/test_foo.py::test_b"].age, 1);
+    }
+
+    #[test]
+    fn merge_drops_entries_exceeding_max_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        // After merge with no results, age: 50 + 1 = 51 > 50 → dropped
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 50;
+        cache.merge(&[], 50);
+        assert!(!cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+    }
+
+    #[test]
+    fn merge_keeps_entries_at_max_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        // After merge, age: 49 + 1 = 50 <= 50 → kept
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 49;
+        cache.merge(&[], 50);
+        assert!(cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+    }
+
+    #[test]
+    fn merge_adds_new_entry_for_first_time_test() {
+        let mut cache = TestCache::empty();
+        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_new"), 15.0)];
+        cache.merge(&results, 50);
+        assert!(cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_new"));
+        assert_eq!(cache.inner.timings["tests/test_foo.py::test_new"].age, 0);
+    }
+
+    #[test]
+    fn merge_sets_dirty_when_results_present() {
+        let mut cache = TestCache::empty();
+        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 10.0)];
+        cache.merge(&results, 50);
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn merge_sets_dirty_when_only_entries_are_dropped() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        // Set age to max_age so one more merge will drop it (50 + 1 = 51 > 50)
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 50;
+        // Empty results — no tests ran, but one entry gets dropped due to age
+        cache.merge(&[], 50);
+        assert!(!cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn save_noop_when_not_dirty() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::empty(); // dirty = false
+        cache.save(utf8_dir);
+        assert!(!dir
+            .path()
+            .join(".oxitest_cache")
+            .join("timings.json")
+            .exists());
+    }
+
+    #[test]
+    fn save_writes_file_when_dirty() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let mut cache = TestCache::empty();
+        cache.dirty = true;
+        cache.save(utf8_dir);
+        assert!(dir
+            .path()
+            .join(".oxitest_cache")
+            .join("timings.json")
+            .exists());
+    }
+
+    #[test]
+    fn save_then_load_round_trips() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 77.5)];
+        let mut cache = TestCache::empty();
+        cache.merge(&results, 50);
+        cache.save(utf8_dir);
+
+        let loaded = TestCache::load(utf8_dir);
+        assert!(
+            (loaded.inner.timings["tests/test_foo.py::test_a"].duration_ms - 77.5).abs() < 0.01
+        );
+    }
+
+    #[test]
+    fn suggested_timeout_secs_returns_none_for_uncached_item() {
+        let cache = TestCache::empty();
+        let item = make_item("tests/test_foo.py::test_a");
+        assert!(cache.suggested_timeout_secs(&item, 3.0).is_none());
+    }
+
+    #[test]
+    fn suggested_timeout_secs_returns_scaled_duration() {
+        // cached: 500ms = 0.5s → multiplier 3.0 → 1.5s → ceil → 2s
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 500.0)]);
+        let item = make_item("tests/test_foo.py::test_a");
+        let timeout = cache.suggested_timeout_secs(&item, 3.0).unwrap();
+        assert_eq!(timeout, 2); // ceil(0.5 * 3.0) = ceil(1.5) = 2
+    }
+
+    #[test]
+    fn suggested_timeout_secs_rounds_up() {
+        // cached: 100ms = 0.1s → multiplier 2.0 → 0.2s → ceil → 1s (minimum 1)
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
+        let item = make_item("tests/test_foo.py::test_a");
+        let timeout = cache.suggested_timeout_secs(&item, 2.0).unwrap();
+        assert_eq!(timeout, 1); // ceil(0.2) = 1
+    }
+
+    #[test]
+    fn suggested_timeout_secs_exact_seconds() {
+        // cached: 2000ms = 2s → multiplier 3.0 → 6s exactly
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 2000.0)]);
+        let item = make_item("tests/test_foo.py::test_a");
+        let timeout = cache.suggested_timeout_secs(&item, 3.0).unwrap();
+        assert_eq!(timeout, 6);
+    }
+
+    #[test]
+    fn record_outcomes_sets_last_outcome_on_known_entries() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let outcomes = vec![(
+            NodeId::from_raw("tests/test_foo.py::test_a"),
+            "failed".to_string(),
+        )];
+        cache.record_outcomes(&outcomes);
+        assert_eq!(
+            cache.inner.timings["tests/test_foo.py::test_a"].last_outcome,
+            Some("failed".to_string())
+        );
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn record_outcomes_ignores_unknown_node_ids() {
+        let mut cache = TestCache::empty();
+        let outcomes = vec![(
+            NodeId::from_raw("tests/test_foo.py::test_unknown"),
+            "failed".to_string(),
+        )];
+        cache.record_outcomes(&outcomes);
+        assert!(cache.inner.timings.is_empty());
+        assert!(!cache.dirty, "unknown node_id must not mark cache as dirty");
+    }
+
+    #[test]
+    fn last_failed_ids_returns_failed_and_error_and_timeout() {
+        let mut cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 10.0),
+            ("tests/test_foo.py::test_b", 20.0),
+            ("tests/test_foo.py::test_c", 30.0),
+            ("tests/test_foo.py::test_d", 40.0),
+        ]);
+        let outcomes = vec![
+            (
+                NodeId::from_raw("tests/test_foo.py::test_a"),
+                "failed".to_string(),
+            ),
+            (
+                NodeId::from_raw("tests/test_foo.py::test_b"),
+                "passed".to_string(),
+            ),
+            (
+                NodeId::from_raw("tests/test_foo.py::test_c"),
+                "error".to_string(),
+            ),
+            (
+                NodeId::from_raw("tests/test_foo.py::test_d"),
+                "timeout".to_string(),
+            ),
+        ];
+        cache.record_outcomes(&outcomes);
+        let failed = cache.last_failed_ids();
+        assert!(failed.contains("tests/test_foo.py::test_a"));
+        assert!(!failed.contains("tests/test_foo.py::test_b"));
+        assert!(failed.contains("tests/test_foo.py::test_c"));
+        assert!(failed.contains("tests/test_foo.py::test_d"));
+    }
+
+    #[test]
+    fn last_failed_ids_returns_empty_on_cold_cache() {
+        let cache = TestCache::empty();
+        assert!(cache.last_failed_ids().is_empty());
+    }
+
+    #[test]
+    fn record_outcomes_sets_dirty() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let outcomes = vec![(
+            NodeId::from_raw("tests/test_foo.py::test_a"),
+            "passed".to_string(),
+        )];
+        cache.record_outcomes(&outcomes);
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn load_file_without_last_outcome_parses_as_none() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let cache_dir = dir.child(".oxitest_cache");
+        cache_dir.create_dir_all().unwrap();
+        cache_dir.child("timings.json").write_str(
+            r#"{"version":1,"timings":{"tests/test_foo.py::test_a":{"duration_ms":10.0,"age":0}}}"#
+        ).unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert_eq!(
+            cache.inner.timings["tests/test_foo.py::test_a"].last_outcome,
+            None
+        );
+    }
+
+    #[test]
+    fn update_and_retrieve_module_cache_roundtrip() {
+        let _dir = assert_fs::TempDir::new().unwrap();
+        let mut cache = TestCache::empty();
+        let module_path = Utf8Path::new("tests/test_foo.py");
+        let items = vec![
+            TestItem {
+                node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+                module_path: Utf8PathBuf::from("tests/test_foo.py"),
+                fn_name: "test_a".to_string(),
+                lineno: 5,
+                markers: vec!["slow".to_string()],
+                param_id: None,
+                param_values: vec![],
+            },
+            TestItem {
+                node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
+                module_path: Utf8PathBuf::from("tests/test_foo.py"),
+                fn_name: "test_b".to_string(),
+                lineno: 10,
+                markers: vec![],
+                param_id: Some("x0".to_string()),
+                param_values: vec![("x".to_string(), "0".to_string())],
+            },
+        ];
+        cache.update_module_cache(module_path, 12345, &items);
+
+        let cached = cache.cached_module_items(module_path, 12345).unwrap();
+        assert_eq!(cached.len(), 2);
+        assert_eq!(cached[0].fn_name, "test_a");
+        assert_eq!(cached[0].lineno, 5);
+        assert_eq!(cached[0].markers, vec!["slow".to_string()]);
+        assert_eq!(cached[1].fn_name, "test_b");
+        assert_eq!(cached[1].param_id, Some("x0".to_string()));
+        assert_eq!(
+            cached[1].param_values,
+            vec![("x".to_string(), "0".to_string())]
+        );
+    }
+
+    #[test]
+    fn cached_module_items_returns_none_on_mtime_mismatch() {
+        let mut cache = TestCache::empty();
+        let module_path = Utf8Path::new("tests/test_foo.py");
+        let items = vec![TestItem {
+            node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+            module_path: Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: "test_a".to_string(),
+            lineno: 1,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        }];
+        cache.update_module_cache(module_path, 12345, &items);
+        assert!(cache.cached_module_items(module_path, 99999).is_none());
+    }
+
+    #[test]
+    fn cached_module_items_returns_none_for_unknown_module() {
+        let cache = TestCache::empty();
+        let module_path = Utf8Path::new("tests/test_unknown.py");
+        assert!(cache.cached_module_items(module_path, 12345).is_none());
+    }
+
+    #[test]
+    fn update_module_cache_sets_dirty() {
+        let mut cache = TestCache::empty();
+        let module_path = Utf8Path::new("tests/test_foo.py");
+        cache.update_module_cache(module_path, 1, &[]);
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn load_file_without_modules_field_parses_empty_modules() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let cache_dir = dir.child(".oxitest_cache");
+        cache_dir.create_dir_all().unwrap();
+        cache_dir.child("timings.json").write_str(
+            r#"{"version":1,"timings":{"tests/test_foo.py::test_a":{"duration_ms":10.0,"age":0}}}"#
+        ).unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let cache = TestCache::load(utf8_dir);
+        assert!(cache.inner.modules.is_empty());
+    }
+
+    #[test]
+    fn invalidate_modules_removes_nonexistent_paths() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let mut cache = TestCache::empty();
+        // path_a exists on disk; path_b does not
+        let path_a = utf8_dir.join("test_a.py");
+        std::fs::write(&path_a, "").unwrap();
+        let path_b = utf8_dir.join("test_b.py"); // never created
+        cache.update_module_cache(&path_a, 1, &[]);
+        cache.update_module_cache(&path_b, 2, &[]);
+        cache.invalidate_modules();
+        assert!(cache.inner.modules.contains_key(path_a.as_str()));
+        assert!(!cache.inner.modules.contains_key(path_b.as_str()));
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn invalidate_modules_sets_dirty_only_when_pruned() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        let mut cache = TestCache::empty();
+        let path_a = utf8_dir.join("test_a.py");
+        std::fs::write(&path_a, "").unwrap();
+        cache.update_module_cache(&path_a, 1, &[]);
+        cache.dirty = false; // reset
+        cache.invalidate_modules(); // path_a exists → not pruned
+        assert!(!cache.dirty); // nothing pruned
+    }
+
+    #[test]
+    fn save_then_load_preserves_module_cache() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let mut cache = TestCache::empty();
+        let module_path = Utf8Path::new("tests/test_foo.py");
+        let items = vec![TestItem {
+            node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+            module_path: Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: "test_a".to_string(),
+            lineno: 3,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        }];
+        cache.update_module_cache(module_path, 9999, &items);
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        cache.save(utf8_dir);
+
+        let loaded = TestCache::load(utf8_dir);
+        let cached = loaded.cached_module_items(module_path, 9999).unwrap();
+        assert_eq!(cached[0].fn_name, "test_a");
+        assert_eq!(cached[0].lineno, 3);
+    }
+
+    #[test]
+    fn cache_json_serialization_is_deterministic() {
+        use ahash::AHashMap;
+
+        let mut timings: AHashMap<String, CacheEntry> = AHashMap::new();
+        timings.insert(
+            "z_test".to_string(),
+            CacheEntry {
+                duration_ms: 10.0,
+                age: 0,
+                last_outcome: None,
+            },
+        );
+        timings.insert(
+            "a_test".to_string(),
+            CacheEntry {
+                duration_ms: 20.0,
+                age: 1,
+                last_outcome: None,
+            },
+        );
+        timings.insert(
+            "m_test".to_string(),
+            CacheEntry {
+                duration_ms: 30.0,
+                age: 2,
+                last_outcome: None,
+            },
+        );
+
+        let cache = CacheFile {
+            version: 1,
+            timings,
+            modules: AHashMap::new(),
+        };
+
+        let json = serde_json::to_string(&cache).unwrap();
+
+        // Keys must appear in alphabetical order
+        let a_pos = json.find("\"a_test\"").unwrap();
+        let m_pos = json.find("\"m_test\"").unwrap();
+        let z_pos = json.find("\"z_test\"").unwrap();
+        assert!(a_pos < m_pos, "a_test should appear before m_test");
+        assert!(m_pos < z_pos, "m_test should appear before z_test");
+    }
+}
