@@ -67,7 +67,6 @@
             LIBRARY_PATH = "${pythonEnv}/lib";
             # Prevent uv from downloading its own Python binaries — Nix owns Python
             UV_PYTHON_DOWNLOADS = "never";
-            UV_PYTHON = "${pythonEnv}/bin/python3";
           };
 
           shellHook = ''
