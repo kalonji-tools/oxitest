@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "oxitest"
+dynamic = ["version"]
+requires-python = ">=3.11"
+description = "A fast Python test runner written in Rust"
+
+[project.scripts]
+oxitest = "oxitest:main"
+
+[tool.maturin]
+module-name = "oxitest._oxitest"
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ty.environment]
+python = ".venv"
+
+[tool.oxitest]
+testpaths = ["python/tests"]
+strict = true
+
+[tool.codespell]
+skip = "target,Cargo.lock,flake.lock"
+ignore-words-list = "NotIn"
+
+[dependency-groups]
+dev = [
+    "loguru>=0.7.3",
+]
