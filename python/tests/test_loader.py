@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import hashlib
+
+from oxitest import TempDir, raises
+
+
+def _unique_name(path: str) -> str:
+    return f"_oxitest_exec_{hashlib.md5(path.encode()).hexdigest()[:12]}"
+
+
+def test_load_module_returns_module_with_function(tmp: TempDir):
+    from oxitest._bridge._loader import _load_module
+
+    f = tmp / "test_sample.py"
+    f.write_text("def test_foo(): pass\n")
+    unique = _unique_name(str(f))
+    module = _load_module(str(f), unique)
+    assert hasattr(module, "test_foo"), (
+        f"loaded module should have 'test_foo' attribute, got attrs: {dir(module)}"
+    )
+    assert callable(module.test_foo), (
+        f"module.test_foo should be callable, got {type(module.test_foo).__name__}"
+    )
+
+
+def test_load_module_raises_load_error_on_bad_path(tmp: TempDir):
+    from oxitest._bridge._loader import _load_module, _LoadError
+
+    unique = _unique_name("/nonexistent/path/test_x.py")
+    with raises(_LoadError):
+        _load_module("/nonexistent/path/test_x.py", unique)
+
+
+def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir):
+    from oxitest._bridge._loader import _load_module, _LoadError
+
+    f = tmp / "test_broken.py"
+    f.write_text("def test_foo(: pass\n")
+    unique = _unique_name(str(f))
+    with raises(_LoadError):
+        _load_module(str(f), unique)
+
+
+def test_resolve_fn_returns_callable(tmp: TempDir):
+    import importlib.util
+    import sys
+
+    from oxitest._bridge._loader import _resolve_fn
+
+    f = tmp / "mod.py"
+    f.write_text("def test_bar(): return 42\n")
+    spec = importlib.util.spec_from_file_location("_test_mod_tmp", f)
+    assert spec is not None and spec.loader is not None, (
+        "importlib.util.spec_from_file_location should return a valid spec with a "
+        "loader"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_test_mod_tmp"] = module
+    spec.loader.exec_module(module)
+
+    fn_raw, fn = _resolve_fn(module, "test_bar", str(f))
+    assert callable(fn), (
+        f"resolved function should be callable, got {type(fn).__name__}"
+    )
+    assert fn() == 42, f"resolved function should return 42, got {fn()!r}"
+    sys.modules.pop("_test_mod_tmp", None)
+
+
+def test_resolve_fn_raises_load_error_on_missing_function(tmp: TempDir):
+    import importlib.util
+    import sys
+
+    from oxitest._bridge._loader import _LoadError, _resolve_fn
+
+    f = tmp / "mod.py"
+    f.write_text("def test_bar(): pass\n")
+    spec = importlib.util.spec_from_file_location("_test_mod_tmp2", f)
+    assert spec is not None and spec.loader is not None, (
+        "importlib.util.spec_from_file_location should return a valid spec with a "
+        "loader"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_test_mod_tmp2"] = module
+    spec.loader.exec_module(module)
+
+    with raises(_LoadError) as exc_info:
+        _resolve_fn(module, "test_nonexistent", str(f))
+    assert exc_info.value.result.status == "error", (  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+        f"_LoadError for missing function should have result.status='error', "
+        f"got {exc_info.value.result.status!r}"  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+    )
+    sys.modules.pop("_test_mod_tmp2", None)
+
+
+def test_resolve_fn_handles_class_method(tmp: TempDir):
+    import importlib.util
+    import sys
+
+    from oxitest._bridge._loader import _resolve_fn
+
+    f = tmp / "mod.py"
+    f.write_text("class TestFoo:\n    def test_method(self): return 'ok'\n")
+    spec = importlib.util.spec_from_file_location("_test_mod_tmp3", f)
+    assert spec is not None and spec.loader is not None, (
+        "importlib.util.spec_from_file_location should return a valid spec with a "
+        "loader"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_test_mod_tmp3"] = module
+    spec.loader.exec_module(module)
+
+    fn_raw, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
+    assert callable(fn), (
+        f"resolved class method should be callable, got {type(fn).__name__}"
+    )
+    assert fn() == "ok", f"resolved class method should return 'ok', got {fn()!r}"
+    sys.modules.pop("_test_mod_tmp3", None)

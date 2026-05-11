@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from oxitest._bridge._raises import raises
+
+
+def test_raises_catches_expected_exception():
+    with raises(ValueError):
+        raise ValueError("boom")
+
+
+def test_raises_no_exception_raises_assertion_error():
+    with raises(AssertionError, match="Expected ValueError"):
+        with raises(ValueError):
+            pass  # nothing raised
+
+
+def test_raises_wrong_type_reraises():
+    with raises(TypeError):
+        with raises(ValueError):
+            raise TypeError("wrong type")
+
+
+def test_raises_match_passes_when_pattern_found():
+    with raises(ValueError, match="boom"):
+        raise ValueError("oh boom, something broke")
+
+
+def test_raises_match_fails_when_pattern_not_found():
+    with raises(AssertionError, match="not found"):
+        with raises(ValueError, match="boom"):
+            raise ValueError("nothing matches here")
+
+
+def test_raises_exc_info_value_holds_exception():
+    with raises(ValueError) as exc_info:
+        raise ValueError("stored")
+    assert isinstance(exc_info.value, ValueError), (
+        f"exc_info.value should be ValueError, got {type(exc_info.value).__name__}"
+    )
+    assert str(exc_info.value) == "stored", (
+        f"exc_info.value message should be 'stored', got {str(exc_info.value)!r}"
+    )
+
+
+def test_raises_match_uses_regex_search_not_full_match():
+    # "boom" must match anywhere in the string, not require a full match
+    with raises(ValueError, match="boom"):
+        raise ValueError("oh boom!")
+
+
+def test_raises_subclass_caught_by_parent_type():
+    # ValueError is a subclass of Exception — parent type must catch it
+    with raises(Exception):
+        raise ValueError("subclass")
+
+
+def test_raises_exported_from_oxitest():
+    import oxitest
+
+    assert hasattr(oxitest, "raises"), (
+        "'raises' should be exported from the oxitest module"
+    )
+    assert "raises" in oxitest.__all__, "'raises' should be listed in oxitest.__all__"
+
+
+def test_raises_tuple_catches_first_type():
+    with raises((ValueError, TypeError)):
+        raise ValueError("first")
+
+
+def test_raises_tuple_catches_second_type():
+    with raises((ValueError, TypeError)):
+        raise TypeError("second")
+
+
+def test_raises_tuple_wrong_type_reraises():
+    with raises(KeyError):
+        with raises((ValueError, TypeError)):
+            raise KeyError("neither")
+
+
+def test_raises_tuple_no_exception_names_all_types():
+    with raises(AssertionError, match=r"\(ValueError \| TypeError\)"):
+        with raises((ValueError, TypeError)):
+            pass
