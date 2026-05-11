@@ -8,7 +8,7 @@ fix_env := "unset _PYTHON_SYSCONFIGDATA_NAME PYTHONPATH"
 # maturin internally calls `uv pip install`; without VIRTUAL_ENV set, uv follows
 # .venv/bin/python's symlink back to the immutable Nix store and fails.
 # Pointing VIRTUAL_ENV at the project venv keeps uv scoped to it.
-maturin_env := "VIRTUAL_ENV=$(pwd)/.venv"
+maturin_env := "VIRTUAL_ENV=" + justfile_directory() + "/.venv"
 
 # Build the Rust extension; extra args are forwarded to maturin
 build *args:
