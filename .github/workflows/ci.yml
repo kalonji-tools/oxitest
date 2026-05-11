@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Python linters
+        run: pip install ruff codespell
+
+      - run: ruff check python/
+      - run: ruff format --check python/
+      - run: codespell
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Set up venv
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install maturin ty loguru
+
+      - name: Rust tests
+        run: cargo test
+
+      - name: Build extension
+        run: .venv/bin/maturin develop
+
+      - name: ty check
+        run: .venv/bin/ty check
+
+      - name: Python tests
+        run: PYTHONPATH=python .venv/bin/python -m oxitest python/tests/
+
+  guard:
+    name: No plans/specs on main
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for plans/specs files
+        run: |
+          found=$(git ls-tree -r --name-only HEAD -- \
+            docs/superpowers/plans docs/superpowers/specs 2>/dev/null || true)
+          if [ -n "$found" ]; then
+            echo "ERROR: plans/specs files found on main:"
+            echo "$found"
+            exit 1
+          fi
