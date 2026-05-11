@@ -38,6 +38,29 @@ skip = "target,Cargo.lock,flake.lock"
 ignore-words-list = "NotIn"
 
 [dependency-groups]
-dev = [
+build = [
+    "maturin>=1.7,<2",
+]
+test = [
     "loguru>=0.7.3",
+    { include-group = "build" },
+]
+lint = [
+    "ruff>=0.4",
+    "codespell>=2",
+]
+typecheck = [
+    "ty",
+]
+docs = [
+    "mkdocs-material>=9",
+    "mkdocs-git-revision-date-localized-plugin>=1",
+    "mkdocs-minify-plugin>=0.7",
+    "mkdocstrings[python]>=0.24",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    { include-group = "typecheck" },
+    { include-group = "docs" },
 ]
