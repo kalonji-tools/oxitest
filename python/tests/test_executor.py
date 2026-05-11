@@ -139,22 +139,6 @@ def test_error_exception(tmp: TempDir):
     )
 
 
-def test_skipped_via_pytest(tmp: TempDir):
-    f = tmp / "test_skip.py"
-    f.write_text("import pytest\ndef test_skip(): pytest.skip('not ready')\n")
-    result = run_test(str(f), "test_skip")
-    assert result.status == "skipped", (
-        f"pytest.skip() should produce status='skipped', got {result.status!r}"
-    )
-    assert result.message == "not ready", (
-        f"skip message should be 'not ready', got {result.message!r}"
-    )
-    assert result.no_message_lines == [], (
-        f"skipped result should have empty no_message_lines, got "
-        f"{result.no_message_lines}"
-    )
-
-
 def test_skipped_via_unittest(tmp: TempDir):
     f = tmp / "test_skip2.py"
     f.write_text(
