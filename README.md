@@ -4,6 +4,24 @@ A pytest rewrite in Rust.
 
 ---
 
+## Background
+
+This project started as a personal learning exercise, not a production tool. The
+goals were concrete:
+
+- **Learn Rust and FFI** — specifically PyO3 and the boundary between a Rust
+  core and a Python API.
+- **Practice Spec Driven Development** — writing design specs before touching
+  code, then deleting them once the feature ships.
+- **Work responsibly with AI** — 2025 was a turbulent year. Multiple clients
+  greenlighted AI in the workplace at once, and the result was a wave of sloppy,
+  oversized PRs that were hard to review and, in the worst cases, got merged
+  anyway. This project is a counter-experiment: use AI as a disciplined
+  collaborator, keep changes small and reviewable, and let the spec drive the
+  work rather than the autocomplete.
+
+---
+
 ## Getting Started in 5 minutes
 
 ### 1. Bare test function
