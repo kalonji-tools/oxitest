@@ -1,0 +1,14 @@
+.worktrees/
+Cargo.lock
+target/
+*.so
+*.pyd
+__pycache__/
+*.pyc
+.venv/
+dist/
+
+.superpowers/
+uv.lock
+docs/site/
+.oxitest_cache/

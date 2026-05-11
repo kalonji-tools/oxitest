@@ -1,0 +1,39 @@
+[package]
+name = "oxitest"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_oxitest"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+walkdir = "2"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+globset = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+console = "0.16"
+indicatif = "0.18"
+indexmap = "2"
+logos = "0.14"
+parking_lot = "0.12"
+ahash = { version = "0.8", features = ["serde"] }
+crossbeam-channel = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+camino = "1"
+
+[dev-dependencies]
+tempfile = "3"
+assert_fs = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
