@@ -1,4 +1,4 @@
-set shell := ["nix", "develop", "--command", "bash", "-c"]
+set shell := ["./scripts/just-shell.sh", "-c"]
 
 # Nix injects Python 3.13 paths into PYTHONPATH and _PYTHON_SYSCONFIGDATA_NAME,
 # corrupting sysconfig.EXT_SUFFIX for the 3.12 env and causing maturin to name
