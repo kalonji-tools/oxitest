@@ -1,0 +1,189 @@
+use camino::{Utf8Path, Utf8PathBuf};
+use pyo3::prelude::*;
+
+use crate::types::{CollectError, NodeId, RawOutcome, TestItem, TestOutcome};
+
+/// Bridge result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
+#[derive(FromPyObject)]
+struct BridgeResult {
+    status: String,
+    message: String,
+    file: String,
+    lineno: usize,
+    source_line: String,
+    no_message_lines: Vec<usize>,
+    left: String,
+    right: String,
+    op: String,
+    strict: bool,
+}
+
+/// Long-lived Python fixture session held across the test loop.
+pub struct FixtureSession(Py<PyAny>);
+
+impl FixtureSession {
+    /// Create a session by loading fixtures from all conftest paths.
+    pub fn new(py: Python<'_>, conftest_paths: &[Utf8PathBuf]) -> PyResult<Self> {
+        let loader = py.import_bound("oxitest._bridge.conftest_loader")?;
+        let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
+        let session = loader.call_method1("create_session", (paths,))?;
+        Ok(Self(session.into()))
+    }
+
+    /// Signal that all tests in the module have finished; runs module teardowns.
+    pub fn end_module(&self, py: Python<'_>, module_path: &Utf8Path) -> PyResult<()> {
+        self.0
+            .bind(py)
+            .call_method1("end_module", (module_path.as_str(),))?;
+        Ok(())
+    }
+
+    /// Run session-scoped teardowns at the end of the run.
+    pub fn end_session(&self, py: Python<'_>) -> PyResult<()> {
+        self.0.bind(py).call_method0("end_session")?;
+        Ok(())
+    }
+
+    /// Returns this session as a bound Python object for passing to bridge calls.
+    pub(crate) fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        self.0.bind(py).clone()
+    }
+}
+
+/// Collected test item extracted from Python. Field names MUST stay in sync with
+/// `python/oxitest/_bridge/result.py` `CollectedItem`.
+#[derive(FromPyObject)]
+struct CollectedItem {
+    fn_name: String,
+    lineno: usize,
+    markers: Vec<String>,
+    param_id: Option<String>,
+    param_values: Vec<(String, String)>,
+}
+
+/// Raw violation extracted from Python. Field names MUST stay in sync with
+/// `python/oxitest/_bridge/result.py` `CollectedViolation`.
+#[derive(pyo3::FromPyObject, Debug)]
+pub(crate) struct RawViolation {
+    pub node_id: String,
+    pub kind: String, // "bare_assert" | "dict_parametrize" | "missing_mark_reason"
+    pub detail: String,
+}
+
+pub fn collect_module(
+    py: Python<'_>,
+    path: &Utf8Path,
+    session: Option<&FixtureSession>,
+    collect_violations: bool,
+) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
+    let importer = py
+        .import_bound("oxitest._bridge.importer")
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+
+    let session_obj = session
+        .map(|s| s.as_py_object(py))
+        .unwrap_or_else(|| py.None().into_bound(py));
+
+    let path_str = path.as_str();
+    let result = importer
+        .call_method1(
+            "collect_module",
+            (path_str, session_obj, collect_violations),
+        )
+        .map_err(|e: PyErr| {
+            // e.to_string() formats as "ImportError: <message>"; strip the redundant
+            // type prefix because CollectError::ImportError already labels the context.
+            let full = e.to_string();
+            let message = full
+                .strip_prefix("ImportError: ")
+                .unwrap_or(&full)
+                .to_string();
+            CollectError::ImportError {
+                path: path.to_owned(),
+                message,
+            }
+        })?;
+
+    let (raw_items, raw_violations): (Vec<CollectedItem>, Vec<RawViolation>) = result
+        .extract()
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+
+    let items_vec = raw_items
+        .into_iter()
+        .map(|item| TestItem {
+            node_id: NodeId::new(path_str, &item.fn_name, item.param_id.as_deref()),
+            module_path: path.to_owned(),
+            fn_name: item.fn_name,
+            lineno: item.lineno,
+            markers: item.markers,
+            param_id: item.param_id,
+            param_values: item.param_values,
+        })
+        .collect();
+
+    Ok((items_vec, raw_violations))
+}
+
+pub fn run_test(
+    py: Python<'_>,
+    item: &TestItem,
+    session: Option<&FixtureSession>,
+    default_timeout: Option<u64>,
+) -> TestOutcome {
+    try_run_test(py, item, session, default_timeout).unwrap_or_else(|e| TestOutcome::Error {
+        message: format!("{} — {}", item.node_id, e),
+        file: String::new(),
+        lineno: 0,
+        source_line: String::new(),
+    })
+}
+
+fn try_run_test(
+    py: Python<'_>,
+    item: &TestItem,
+    session: Option<&FixtureSession>,
+    default_timeout: Option<u64>,
+) -> PyResult<TestOutcome> {
+    let executor = py.import_bound("oxitest._bridge.executor")?;
+    let path_str = item.module_path.as_str();
+
+    let session_obj = session
+        .map(|s| s.as_py_object(py))
+        .unwrap_or_else(|| py.None().into_bound(py));
+
+    let param_id_obj: Py<PyAny> = match &item.param_id {
+        Some(pid) => pid.as_str().into_py(py),
+        None => py.None(),
+    };
+
+    let timeout_obj: Py<PyAny> = match default_timeout {
+        Some(t) => (t as i64).into_py(py),
+        None => py.None(),
+    };
+
+    let r: BridgeResult = executor
+        .call_method1(
+            "run_test",
+            (
+                path_str,
+                item.fn_name.as_str(),
+                session_obj,
+                param_id_obj.bind(py),
+                timeout_obj.bind(py),
+            ),
+        )?
+        .extract()?;
+
+    Ok(TestOutcome::from_raw(RawOutcome {
+        status: r.status.as_str(),
+        message: &r.message,
+        file: &r.file,
+        lineno: r.lineno,
+        source_line: &r.source_line,
+        no_message_lines: &r.no_message_lines,
+        left: &r.left,
+        right: &r.right,
+        op: &r.op,
+        strict: r.strict,
+    }))
+}
