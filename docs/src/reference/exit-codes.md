@@ -5,7 +5,7 @@
 
 | Code | Meaning |
 |------|---------|
-| `0` | All tests passed (or no tests were collected) |
+| `0` | All tests passed (or no tests were collected). Also exits with 0 when `--capture-environment` is used (no tests are run). |
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
 | `3` | Collection error (a test file could not be imported) or strict violations detected when using `--strict=abort` |
