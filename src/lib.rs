@@ -117,7 +117,7 @@ fn os_info() -> String {
             .and_then(|o| String::from_utf8(o.stdout).ok())
             .map(|s| s.trim().to_string())
             .unwrap_or_else(|| "unknown".to_string());
-        return format!("macOS {ver} {arch}");
+        format!("macOS {ver} {arch}")
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -191,15 +191,15 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         }
     };
 
-    let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
-    let cfg = config::Config::load(&rootdir).merge_cli(&cli);
-    let mut cache = cache::TestCache::load(&rootdir);
-
-    // Early-exit flags: handled before any test collection.
+    // Early-exit flags: handled before any filesystem setup.
     if cli.capture_environment {
         println!("{}", env_string(py));
         return Ok(0);
     }
+
+    let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
+    let cfg = config::Config::load(&rootdir).merge_cli(&cli);
+    let mut cache = cache::TestCache::load(&rootdir);
 
     let is_tty = std::io::stdout().is_terminal();
     let use_color = !cli.no_color && console::colors_enabled();
