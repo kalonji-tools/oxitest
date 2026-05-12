@@ -5,17 +5,31 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths:
-      - 'docs/src/**'
-      - 'mkdocs.yml'
-      - 'pyproject.toml'
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect docs changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            docs:
+              - 'docs/src/**'
+              - 'mkdocs.yml'
+              - 'pyproject.toml'
+
   build:
     name: Build docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check build result
+        shell: bash
         run: |
           if [[ "${{ needs.build.result }}" == "failure" ]]; then
             echo "Docs build failed"
