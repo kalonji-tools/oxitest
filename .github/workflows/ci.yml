@@ -33,8 +33,12 @@ jobs:
       - run: cargo clippy -- -D warnings
 
   test:
-    name: Test
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
 
@@ -44,17 +48,19 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
 
       - run: uv sync --group test --group typecheck
 
       - name: Rust tests
+        if: matrix.python-version == '3.12'
         run: cargo test
 
       - name: Build extension
         run: uv run maturin develop
 
       - name: ty check
+        if: matrix.python-version == '3.12'
         run: uv run ty check
 
       - name: Python tests
