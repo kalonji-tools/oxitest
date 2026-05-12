@@ -29,6 +29,9 @@
           name = "oxitest-dev";
 
           packages = with pkgs; [
+            # Version control
+            git
+
             # Rust toolchain
             cargo
             rustc
@@ -78,6 +81,11 @@
             echo "  ruff   : $(ruff --version)"
             echo "  ty     : $(ty --version)"
             echo "  prek   : $(prek --version)"
+            echo "  git    : $(git --version)"
+
+            # FOSS-friendly git defaults
+            git config --global init.defaultBranch main
+            git config --global credential.helper ""
 
             # Install git hooks (unset core.hooksPath if set to avoid prek error)
             if git rev-parse --git-dir > /dev/null 2>&1; then
