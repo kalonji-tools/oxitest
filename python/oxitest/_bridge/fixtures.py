@@ -215,7 +215,14 @@ class Fixtures:
         shared: bool = False,
     ) -> Callable[[_F], _F]: ...
 
-    def fixture(self, fn=None, *, autouse=False, name=None, shared=False):
+    def fixture(
+        self,
+        fn: _F | None = None,
+        *,
+        autouse: bool = False,
+        name: str | None = None,
+        shared: bool = False,
+    ):
         """Register a fixture function with this registry.
 
         Usage (bare decorator)::
