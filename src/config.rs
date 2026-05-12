@@ -828,4 +828,16 @@ spawn_overhead_ms = 100.0
         let merged = cfg.merge_cli(&cli);
         assert_eq!(merged.strict, Some(StrictMode::Enforce));
     }
+
+    #[test]
+    fn test_cli_capture_environment_flag() {
+        let cli = Cli::try_parse_from(["oxitest", "--capture-environment"]).unwrap();
+        assert!(cli.capture_environment);
+    }
+
+    #[test]
+    fn test_cli_capture_environment_absent_is_false() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(!cli.capture_environment);
+    }
 }
