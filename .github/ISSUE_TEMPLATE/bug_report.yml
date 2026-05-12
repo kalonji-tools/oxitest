@@ -1,0 +1,55 @@
+name: Bug Report
+description: File a bug report
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behaviour.
+      placeholder: |
+        1. Create a test file `test_example.py` with:
+           ```python
+           def test_foo():
+               assert 1 == 2
+           ```
+        2. Run `python -m oxitest test_example.py`
+        3. Observe the output / error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+      description: What actually happened? Include full error messages and tracebacks.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: "Provide your environment details. You can run `oxitest --capture-environment` once that feature is available (see issue #14)."
+      placeholder: |
+        oxitest: 0.2.1 (or git sha)
+        python: 3.12.3
+        rustc: 1.78.0
+        os: Ubuntu 24.04 x86_64
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Logs, screenshots, or anything else that might help.
