@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths:
+      - 'docs/src/**'
+      - 'mkdocs.yml'
+      - 'pyproject.toml'
 
 permissions:
   contents: read
@@ -31,6 +35,20 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: docs/site
+
+  required:
+    name: Build docs (required)
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check build result
+        run: |
+          if [[ "${{ needs.build.result }}" == "failure" ]]; then
+            echo "Docs build failed"
+            exit 1
+          fi
+          echo "Docs build passed or was skipped"
 
   deploy:
     name: Deploy to GitHub Pages
