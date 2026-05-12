@@ -10,9 +10,9 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
+pyo3 = { version = "0.28", features = ["extension-module"] }
 walkdir = "2"
-toml = "0.8"
+toml = "1.1"
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 globset = "0.4"
@@ -21,7 +21,7 @@ serde_json = "1"
 console = "0.16"
 indicatif = "0.18"
 indexmap = "2"
-logos = "0.14"
+logos = "0.16"
 parking_lot = "0.12"
 ahash = { version = "0.8", features = ["serde"] }
 crossbeam-channel = "0.5"
