@@ -128,6 +128,10 @@ pub struct Cli {
         require_equals = true,
     )]
     pub strict: Option<StrictMode>,
+
+    /// Print environment information (oxitest version, Python, rustc, OS) and exit
+    #[arg(long)]
+    pub capture_environment: bool,
 }
 
 #[derive(Debug)]
