@@ -91,6 +91,52 @@ fn resolve_timeout(
     }
 }
 
+/// Returns a human-readable OS description, e.g. "Ubuntu 24.04.2 LTS x86_64".
+fn os_info() -> String {
+    let arch = std::env::consts::ARCH;
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("PRETTY_NAME=") {
+                    let val = val.trim_matches('"');
+                    return format!("{val} {arch}");
+                }
+            }
+        }
+        format!("Linux {arch}")
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let ver = std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        return format!("macOS {ver} {arch}");
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    format!("{} {arch}", std::env::consts::OS)
+}
+
+/// Builds the environment snapshot string printed by `--capture-environment`.
+fn env_string(py: Python<'_>) -> String {
+    let oxitest_ver = env!("CARGO_PKG_VERSION");
+    let git_hash = env!("GIT_HASH");
+    let pyver = py.version_info();
+    let python_ver = format!("{}.{}.{}", pyver.major, pyver.minor, pyver.patch);
+    let rustc_ver = env!("RUSTC_VERSION");
+    let os = os_info();
+    format!(
+        "oxitest: {oxitest_ver} (git: {git_hash})\npython: {python_ver}\nrustc: {rustc_ver}\nos: {os}"
+    )
+}
+
 fn run_phase(
     py: Python<'_>,
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
@@ -148,6 +194,12 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
     let cfg = config::Config::load(&rootdir).merge_cli(&cli);
     let mut cache = cache::TestCache::load(&rootdir);
+
+    // Early-exit flags: handled before any test collection.
+    if cli.capture_environment {
+        println!("{}", env_string(py));
+        return Ok(0);
+    }
 
     let is_tty = std::io::stdout().is_terminal();
     let use_color = !cli.no_color && console::colors_enabled();
