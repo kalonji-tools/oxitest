@@ -9,6 +9,7 @@ hooks = [
   { id = "end-of-file-fixer" },
   { id = "check-toml" },
   { id = "check-yaml" },
+  { id = "no-commit-to-branch", args = ["-b", "main"] },
 ]
 
 [[repos]]
