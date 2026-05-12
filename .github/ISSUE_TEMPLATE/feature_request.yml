@@ -1,0 +1,43 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Use-case
+      description: What problem does this solve? Who benefits and in what scenario?
+      placeholder: |
+        When running a large test suite with many fixture scopes, I want to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: Proposed API
+      description: A code sketch of how you'd like this to work. Does not need to be final.
+      placeholder: |
+        # Example using fixture injection
+        def test_example(fx: Fixture[MyFixture]):
+            result = fx.compute()
+            assert result == expected
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you evaluated and why they fall short.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, links, related issues, or any other relevant context.
+    validations:
+      required: false
