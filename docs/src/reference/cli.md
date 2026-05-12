@@ -32,6 +32,7 @@ current working directory when omitted.
 | `--lf` | — | flag | `false` | Run only tests that failed on the last run. Conflicts with `--ff`. |
 | `--ff` | — | flag | `false` | Run failed tests first, then the rest. Conflicts with `--lf`. |
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
+| `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
 
 ## Traceback styles
 
