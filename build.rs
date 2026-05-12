@@ -1,4 +1,14 @@
 fn main() {
+    // Resolve the actual git directory (handles worktrees where .git is a file).
+    let git_dir = std::process::Command::new("git")
+        .args(["rev-parse", "--git-dir"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| ".git".to_string());
+
     // Embed git short hash — falls back to "unknown" outside a git repo.
     let git_hash = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
@@ -25,7 +35,7 @@ fn main() {
         .to_string();
     println!("cargo:rustc-env=RUSTC_VERSION={rustc_ver}");
 
-    // Rerun only when the git HEAD changes.
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/heads/");
+    // Rerun only when the git HEAD changes (worktree-safe: resolves real git dir).
+    println!("cargo:rerun-if-changed={git_dir}/HEAD");
+    println!("cargo:rerun-if-changed={git_dir}/refs/heads/");
 }
