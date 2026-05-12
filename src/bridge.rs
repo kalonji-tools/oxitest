@@ -24,7 +24,7 @@ pub struct FixtureSession(Py<PyAny>);
 impl FixtureSession {
     /// Create a session by loading fixtures from all conftest paths.
     pub fn new(py: Python<'_>, conftest_paths: &[Utf8PathBuf]) -> PyResult<Self> {
-        let loader = py.import_bound("oxitest._bridge.conftest_loader")?;
+        let loader = py.import("oxitest._bridge.conftest_loader")?;
         let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
         let session = loader.call_method1("create_session", (paths,))?;
         Ok(Self(session.into()))
@@ -77,7 +77,7 @@ pub fn collect_module(
     collect_violations: bool,
 ) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
     let importer = py
-        .import_bound("oxitest._bridge.importer")
+        .import("oxitest._bridge.importer")
         .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
 
     let session_obj = session
@@ -144,21 +144,21 @@ fn try_run_test(
     session: Option<&FixtureSession>,
     default_timeout: Option<u64>,
 ) -> PyResult<TestOutcome> {
-    let executor = py.import_bound("oxitest._bridge.executor")?;
+    let executor = py.import("oxitest._bridge.executor")?;
     let path_str = item.module_path.as_str();
 
     let session_obj = session
         .map(|s| s.as_py_object(py))
         .unwrap_or_else(|| py.None().into_bound(py));
 
-    let param_id_obj: Py<PyAny> = match &item.param_id {
-        Some(pid) => pid.as_str().into_py(py),
-        None => py.None(),
+    let param_id_obj: Bound<'_, PyAny> = match &item.param_id {
+        Some(pid) => pid.as_str().into_pyobject(py)?.into_any(),
+        None => py.None().into_bound(py),
     };
 
-    let timeout_obj: Py<PyAny> = match default_timeout {
-        Some(t) => (t as i64).into_py(py),
-        None => py.None(),
+    let timeout_obj: Bound<'_, PyAny> = match default_timeout {
+        Some(t) => (t as i64).into_pyobject(py)?.into_any(),
+        None => py.None().into_bound(py),
     };
 
     let r: BridgeResult = executor
@@ -168,8 +168,8 @@ fn try_run_test(
                 path_str,
                 item.fn_name.as_str(),
                 session_obj,
-                param_id_obj.bind(py),
-                timeout_obj.bind(py),
+                &param_id_obj,
+                &timeout_obj,
             ),
         )?
         .extract()?;
