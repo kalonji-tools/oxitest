@@ -9,7 +9,7 @@ PLANS_DIRS=(
     "docs/superpowers/specs"
 )
 
-while IFS=' ' read -r _local_ref local_sha _remote_ref remote_ref; do
+while IFS=' ' read -r _local_ref local_sha remote_ref _remote_sha; do
     if [[ "$remote_ref" != "refs/heads/main" ]]; then
         continue
     fi
