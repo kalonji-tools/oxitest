@@ -1,5 +1,9 @@
 # oxitest
 
+[![CI](https://github.com/kalonji-tools/oxitest/actions/workflows/ci.yml/badge.svg)](https://github.com/kalonji-tools/oxitest/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/kalonji-tools/oxitest/branch/main/graph/badge.svg)](https://codecov.io/gh/kalonji-tools/oxitest)
+[![PyPI version](https://img.shields.io/pypi/v/oxitest)](https://pypi.org/project/oxitest/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://kalonji-tools.github.io/oxitest/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A pytest rewrite in Rust.
