@@ -59,6 +59,10 @@ docs = [
     "mkdocs-minify-plugin>=0.7",
     "mkdocstrings[python]>=0.24",
 ]
+coverage = [
+    "coverage>=7",
+    { include-group = "test" },
+]
 dev = [
     { include-group = "test" },
     { include-group = "lint" },
