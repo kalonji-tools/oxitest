@@ -72,55 +72,6 @@ jobs:
       - name: Python tests
         run: PYTHONPATH=python uv run python -m oxitest python/tests/
 
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: coverage
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          python-version: '3.12'
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-tarpaulin
-
-      - run: uv sync --group coverage
-
-      - name: Build extension
-        run: uv run maturin develop
-
-      - name: Rust coverage
-        run: cargo tarpaulin --out xml
-
-      - name: Python coverage
-        run: |
-          PYTHONPATH=python uv run coverage run --source=oxitest -m oxitest python/tests/
-          uv run coverage xml
-
-      - name: Upload Rust coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: cobertura.xml
-          flags: rust
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload Python coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-          flags: python
-          token: ${{ secrets.CODECOV_TOKEN }}
-
   guard:
     name: No plans/specs on main
     runs-on: ubuntu-latest
