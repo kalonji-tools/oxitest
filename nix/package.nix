@@ -2,6 +2,7 @@
 , buildPythonPackage
 , fetchPypi
 , rustPlatform
+, maturin
 , cargo
 , rustc
 }:
@@ -18,11 +19,13 @@ buildPythonPackage rec {
 
   cargoDeps = rustPlatform.fetchCargoVendor {
     inherit src;
+    name = "${pname}-${version}";
     hash = "sha256-7oCPrRH+3LzhNDsHfouMq8cNJH3QXlOGsSua7dwuPTA=";
   };
 
   nativeBuildInputs = [
     cargo
+    maturin
     rustPlatform.cargoSetupHook
     rustc
   ];
@@ -35,6 +38,8 @@ buildPythonPackage rec {
     description = "A fast Python test runner written in Rust";
     homepage = "https://github.com/kalonji-tools/oxitest";
     license = licenses.mit;
+    mainProgram = "oxitest";
     maintainers = [ ];
+    platforms = platforms.unix;
   };
 }
