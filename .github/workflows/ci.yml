@@ -94,10 +94,10 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin
+          tool: cargo-llvm-cov
 
       - name: Run Rust coverage
-        run: cargo tarpaulin --out xml --output-dir .
+        run: cargo llvm-cov --cobertura --output-path cobertura.xml
 
       - name: Summarise Rust coverage
         uses: irongut/CodeCoverageSummary@v1.3.0
