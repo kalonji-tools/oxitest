@@ -87,6 +87,11 @@ jobs:
         with:
           shared-key: coverage
 
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.12'
+
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-tarpaulin
