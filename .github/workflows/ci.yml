@@ -92,7 +92,7 @@ jobs:
           tool: cargo-tarpaulin
 
       - name: Run Rust coverage
-        run: cargo tarpaulin --out xml
+        run: cargo tarpaulin --out xml --output-dir .
 
       - name: Summarise Rust coverage
         id: rust_summary
@@ -107,9 +107,7 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: rust-coverage
-          message: |
-            ## 🦀 Rust Coverage
-            ${{ steps.rust_summary.outputs.summary }}
+          path: code-coverage-results.md
 
       - name: Upload Rust coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -117,6 +115,7 @@ jobs:
           files: cobertura.xml
           flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   python-coverage:
     name: Python Coverage
@@ -162,9 +161,7 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: python-coverage
-          message: |
-            ## 🐍 Python Coverage
-            ${{ steps.python_summary.outputs.summary }}
+          path: code-coverage-results.md
 
       - name: Upload Python coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -172,6 +169,7 @@ jobs:
           files: coverage.xml
           flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   guard:
     name: No plans/specs on main
