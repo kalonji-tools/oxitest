@@ -72,6 +72,52 @@ jobs:
       - name: Python tests
         run: PYTHONPATH=python uv run python -m oxitest python/tests/
 
+  rust-coverage:
+    name: Rust Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: coverage
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+
+      - name: Run Rust coverage
+        run: cargo tarpaulin --out xml
+
+      - name: Summarise Rust coverage
+        id: rust_summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: cobertura.xml
+          format: markdown
+          output: both
+
+      - name: Post Rust coverage comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: rust-coverage
+          message: |
+            ## 🦀 Rust Coverage
+            ${{ steps.rust_summary.outputs.summary }}
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: cobertura.xml
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   guard:
     name: No plans/specs on main
     runs-on: ubuntu-latest
