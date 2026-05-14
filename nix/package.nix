@@ -2,7 +2,6 @@
 , buildPythonPackage
 , fetchPypi
 , rustPlatform
-, maturin
 , cargo
 , rustc
 }:
@@ -25,7 +24,6 @@ buildPythonPackage rec {
 
   nativeBuildInputs = [
     cargo
-    maturin
     rustPlatform.cargoSetupHook
     rustc
   ];
