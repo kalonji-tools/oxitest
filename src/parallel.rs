@@ -131,9 +131,9 @@ pub(crate) enum DrainOutcome {
     /// All `expected` results received successfully.
     Complete,
     /// Watchdog deadline elapsed before all results arrived; subprocess should be killed.
-    TimedOut { received: usize },
+    TimedOut,
     /// Channel disconnected (subprocess closed stdout) before all results arrived.
-    Disconnected { received: usize },
+    Disconnected,
 }
 
 /// Reads up to `expected` result lines from `line_rx`.
@@ -163,7 +163,7 @@ pub(crate) fn drain_worker_results(
 
         let remaining = result_deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return (DrainOutcome::TimedOut { received }, received);
+            return (DrainOutcome::TimedOut, received);
         }
 
         match line_rx.recv_timeout(remaining) {
@@ -188,10 +188,10 @@ pub(crate) fn drain_worker_results(
                 }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                return (DrainOutcome::TimedOut { received }, received);
+                return (DrainOutcome::TimedOut, received);
             }
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                return (DrainOutcome::Disconnected { received }, received);
+                return (DrainOutcome::Disconnected, received);
             }
         }
     }
@@ -311,7 +311,7 @@ pub(crate) fn spawn_worker(
 
             match drain_outcome {
                 DrainOutcome::Complete => {}
-                DrainOutcome::TimedOut { .. } => {
+                DrainOutcome::TimedOut => {
                     tracing::error!(
                         module = %group.module_path,
                         watchdog_secs = watchdog.as_secs(),
@@ -324,7 +324,7 @@ pub(crate) fn spawn_worker(
                             tx.send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
                     }
                 }
-                DrainOutcome::Disconnected { .. } => {
+                DrainOutcome::Disconnected => {
                     subprocess_alive = false;
                     for item in group.items.iter().skip(received) {
                         let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
@@ -715,7 +715,7 @@ mod repro_tests {
         let elapsed = start.elapsed();
         assert_eq!(received, 0, "no real results were sent");
         assert!(
-            matches!(outcome, DrainOutcome::TimedOut { .. }),
+            matches!(outcome, DrainOutcome::TimedOut),
             "expected TimedOut, got {outcome:?}"
         );
         // Fails with the bug (elapsed ≈ 300ms); passes after the fix (elapsed ≈ 50ms).
@@ -764,7 +764,7 @@ mod drain_tests {
         );
         assert_eq!(received, 0, "no real results were sent");
         assert!(
-            matches!(outcome, DrainOutcome::Disconnected { .. }),
+            matches!(outcome, DrainOutcome::Disconnected),
             "expected Disconnected, got {outcome:?}"
         );
     }
@@ -831,7 +831,7 @@ mod drain_tests {
             drain_worker_results(&line_rx, 4, Duration::from_millis(500), &result_tx);
 
         assert!(
-            matches!(outcome, DrainOutcome::Disconnected { .. }),
+            matches!(outcome, DrainOutcome::Disconnected),
             "expected Disconnected, got {outcome:?}"
         );
         assert_eq!(received, 2);
@@ -871,7 +871,7 @@ mod drain_tests {
         let elapsed = start.elapsed();
 
         assert!(
-            matches!(outcome, DrainOutcome::TimedOut { .. }),
+            matches!(outcome, DrainOutcome::TimedOut),
             "expected TimedOut, got {outcome:?}"
         );
         assert_eq!(received, 0);
