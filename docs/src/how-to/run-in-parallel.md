@@ -69,3 +69,31 @@ ports, files). If your tests depend on shared external state, either:
 1. Use `--serial` to run everything sequentially.
 2. Design tests to use isolated resources (see [Use built-in fixtures](use-builtin-fixtures.md)
    for `TempDir` and `Patcher`).
+
+## Understand session-scoped fixture behaviour in parallel runs
+
+Fixtures declared with `shared=True` are intended to run once per test session.
+In parallel mode, oxitest spawns each worker as a separate subprocess, and each
+subprocess creates its own fixture session. A `shared=True` fixture therefore
+executes once **per worker process**, not once per run.
+
+oxitest emits a warning when it detects this situation:
+
+```console
+WARN oxitest::lib: shared fixture will run once per worker fixtures="my_db" fixture_count=1 workers=2
+```
+
+To resolve it, choose one of these options:
+
+1. **Use `--serial`** to run all tests in a single process:
+
+    ```console
+    $ oxitest --serial
+    ```
+
+2. **Remove `shared=True`** from fixtures that do not need true session scope. The
+   default (`shared=False`) sets up the fixture once per test, which is safe across
+   workers.
+
+Cross-process fixture sharing (e.g. via sockets or shared memory) is explicitly
+out of scope for oxitest.
