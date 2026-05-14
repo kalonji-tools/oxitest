@@ -627,3 +627,62 @@ mod worker_count_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod repro_tests {
+    use crossbeam_channel::RecvTimeoutError;
+    use std::time::{Duration, Instant};
+
+    /// Reproduces bug #44: a subprocess spamming empty lines prevents the
+    /// watchdog from ever firing.  The buggy recv_timeout(watchdog) resets
+    /// the full timer on every empty line, so received never advances.
+    ///
+    /// Expected (bug present):  loop spins for ~300ms (spammer duration).
+    /// Expected (bug fixed):    loop exits via timeout within ~50ms.
+    #[test]
+    fn bug44_empty_lines_spin_without_progress() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+
+        // Thread that sends empty lines for 300ms — simulates a panicked
+        // Python subprocess continuously flushing its stdout buffer.
+        std::thread::spawn(move || {
+            let stop = Instant::now() + Duration::from_millis(300);
+            while Instant::now() < stop {
+                if line_tx.send("\n".to_string()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let watchdog = Duration::from_millis(50);
+        let expected = 1usize;
+        let mut received = 0usize;
+        let start = Instant::now();
+
+        // Buggy loop: recv_timeout resets on every iteration.
+        loop {
+            if received >= expected {
+                break;
+            }
+            match line_rx.recv_timeout(watchdog) {
+                Ok(line) => {
+                    if line.trim().is_empty() {
+                        continue; // timer resets next call — BUG
+                    }
+                    received += 1;
+                }
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        let elapsed = start.elapsed();
+        assert_eq!(received, 0, "no real results were sent");
+        // Fails with the bug (elapsed ≈ 300ms); passes after the fix (elapsed ≈ 50ms).
+        assert!(
+            elapsed <= Duration::from_millis(100),
+            "BUG #44: watchdog did not fire within 100ms; elapsed={elapsed:?}. \
+             Empty lines are resetting the recv_timeout timer."
+        );
+    }
+}
