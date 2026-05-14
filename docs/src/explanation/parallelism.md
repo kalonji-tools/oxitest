@@ -117,3 +117,5 @@ struct would be populated by a direct in-process call rather than a deserialized
     The subprocess worker model is a deliberate interim design. It works correctly today, its
     costs are understood and bounded, and it will be replaced entirely once the foundation it
     depends on — stable free-threaded Python support in PyO3 — is ready.
+
+Progress on the redesign is tracked in [issue #74](https://github.com/kalonji-tools/oxitest/issues/74).
