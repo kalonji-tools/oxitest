@@ -77,7 +77,8 @@ In parallel mode, oxitest spawns each worker as a separate subprocess, and each
 subprocess creates its own fixture session. A `shared=True` fixture therefore
 executes once **per worker process**, not once per run.
 
-oxitest emits a warning when it detects this situation:
+oxitest emits a warning when it detects this situation. With the default `fmt`
+log layer and `RUST_LOG=warn`:
 
 ```console
 WARN oxitest::lib: shared fixture will run once per worker; session-scoped fixtures are not shared across parallel worker processes — use --serial to run them once, or remove shared=True from fixtures that can be function-scoped fixtures="my_db" fixture_count=1 workers=2
