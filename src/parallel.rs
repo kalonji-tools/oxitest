@@ -360,6 +360,40 @@ pub(crate) fn spawn_worker(
     })
 }
 
+/// Processes one result received from a worker channel.
+///
+/// Returns `Some(outcome)` when the `node_id` maps to a scheduled item and the
+/// reporter has been notified.  Returns `None` when the `node_id` is not
+/// recognised (worker bug or protocol mismatch); the caller should skip the
+/// result in that case.
+fn handle_worker_result(
+    result: &WorkerResult,
+    item_lookup: &ahash::AHashMap<String, std::sync::Arc<types::TestItem>>,
+    rep: &mut dyn reporter::Reporter,
+    timings: &mut Vec<types::TestTiming>,
+) -> Option<types::TestOutcome> {
+    let item = match item_lookup.get(&result.node_id).map(std::sync::Arc::clone) {
+        Some(item) => item,
+        None => {
+            tracing::warn!(
+                node_id = %result.node_id,
+                "worker sent unknown node_id — skipping result"
+            );
+            return None;
+        }
+    };
+    let node_id = types::NodeId::from_raw(&result.node_id);
+    let outcome = result.to_outcome();
+    rep.test_started(&item);
+    rep.test_completed(&item, &outcome, result.duration_ms);
+    timings.push(types::TestTiming {
+        node_id,
+        duration_ms: result.duration_ms,
+        outcome: outcome.as_str().to_string(),
+    });
+    Some(outcome)
+}
+
 pub fn run_phase_parallel(
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
     cfg: &config::Config,
@@ -407,31 +441,9 @@ pub fn run_phase_parallel(
     let mut timings: Vec<types::TestTiming> = Vec::new();
 
     for result in rx {
-        let node_id = types::NodeId::from_raw(&result.node_id);
-        let outcome = result.to_outcome();
-        let item = item_lookup
-            .get(&result.node_id)
-            .map(std::sync::Arc::clone)
-            .unwrap_or_else(|| {
-                // Should not occur: worker sent a node_id not in the scheduled groups.
-                tracing::error!(node_id = %result.node_id, "worker result has unknown node_id");
-                std::sync::Arc::new(types::TestItem {
-                    node_id: node_id.clone(),
-                    module_path: camino::Utf8PathBuf::new(),
-                    fn_name: String::new(),
-                    lineno: 0,
-                    markers: vec![],
-                    param_id: None,
-                    param_values: vec![],
-                })
-            });
-        rep.test_started(&item);
-        rep.test_completed(&item, &outcome, result.duration_ms);
-        timings.push(types::TestTiming {
-            node_id: node_id.clone(),
-            duration_ms: result.duration_ms,
-            outcome: outcome.as_str().to_string(),
-        });
+        let Some(outcome) = handle_worker_result(&result, &item_lookup, rep, &mut timings) else {
+            continue;
+        };
         if outcome.is_hard_failure() {
             failures += 1;
         }
@@ -933,5 +945,89 @@ mod pipe_tests {
         let _ = child.stdin.take();
         assert!(take_child_pipes(&mut child).is_none());
         let _ = child.wait();
+    }
+}
+
+#[cfg(test)]
+mod result_handler_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    struct CountingReporter {
+        started: usize,
+        completed: usize,
+    }
+    impl reporter::Reporter for CountingReporter {
+        fn test_started(&mut self, _: &types::TestItem) {
+            self.started += 1;
+        }
+        fn test_completed(&mut self, _: &types::TestItem, _: &types::TestOutcome, _: f64) {
+            self.completed += 1;
+        }
+        fn finish(&mut self, _: &[types::CollectError], _: bool) -> i32 {
+            0
+        }
+    }
+
+    fn make_worker_result(node_id: &str) -> WorkerResult {
+        serde_json::from_str(&format!(
+            r#"{{"node_id": "{node_id}", "outcome": "passed", "duration_ms": 1.0}}"#
+        ))
+        .unwrap()
+    }
+
+    fn make_item(node_id: &str) -> Arc<types::TestItem> {
+        Arc::new(types::TestItem {
+            node_id: types::NodeId::from_raw(node_id),
+            module_path: camino::Utf8PathBuf::from("tests/test_mod.py"),
+            fn_name: "test_fn".to_string(),
+            lineno: 1,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        })
+    }
+
+    #[test]
+    fn unknown_node_id_returns_none_and_skips_reporter() {
+        let lookup: ahash::AHashMap<String, Arc<types::TestItem>> = ahash::AHashMap::new();
+        let mut rep = CountingReporter {
+            started: 0,
+            completed: 0,
+        };
+        let mut timings: Vec<types::TestTiming> = vec![];
+
+        let result = make_worker_result("unknown::test_fn");
+        let outcome = handle_worker_result(&result, &lookup, &mut rep, &mut timings);
+
+        assert!(outcome.is_none(), "should return None for unknown node_id");
+        assert_eq!(rep.started, 0, "reporter.test_started must not be called");
+        assert_eq!(
+            rep.completed, 0,
+            "reporter.test_completed must not be called"
+        );
+        assert!(timings.is_empty(), "timings must not be recorded");
+    }
+
+    #[test]
+    fn known_node_id_returns_outcome_and_notifies_reporter() {
+        let mut lookup: ahash::AHashMap<String, Arc<types::TestItem>> = ahash::AHashMap::new();
+        lookup.insert("my_mod::test_fn".to_string(), make_item("my_mod::test_fn"));
+        let mut rep = CountingReporter {
+            started: 0,
+            completed: 0,
+        };
+        let mut timings: Vec<types::TestTiming> = vec![];
+
+        let result = make_worker_result("my_mod::test_fn");
+        let outcome = handle_worker_result(&result, &lookup, &mut rep, &mut timings);
+
+        assert!(outcome.is_some(), "should return Some for known node_id");
+        assert_eq!(rep.started, 1, "reporter.test_started must be called once");
+        assert_eq!(
+            rep.completed, 1,
+            "reporter.test_completed must be called once"
+        );
+        assert_eq!(timings.len(), 1, "one timing entry must be recorded");
     }
 }
