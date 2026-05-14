@@ -219,6 +219,22 @@ pub fn compute_optimal_workers(
     }
 }
 
+/// Takes stdin and stdout pipes from a child spawned with `Stdio::piped()`.
+/// Returns `None` if either pipe is unexpectedly absent (OS-level failure).
+fn take_child_pipes(
+    child: &mut std::process::Child,
+) -> Option<(
+    std::io::BufWriter<std::process::ChildStdin>,
+    std::io::BufReader<std::process::ChildStdout>,
+)> {
+    let stdin = child.stdin.take()?;
+    let stdout = child.stdout.take()?;
+    Some((
+        std::io::BufWriter::new(stdin),
+        std::io::BufReader::new(stdout),
+    ))
+}
+
 pub(crate) fn spawn_worker(
     python_bin: String,
     sched: std::sync::Arc<scheduler::Scheduler>,
@@ -227,7 +243,7 @@ pub(crate) fn spawn_worker(
     timeout_secs: Option<u64>,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
-    use std::io::{BufRead, BufReader, BufWriter, Write};
+    use std::io::{BufRead, Write};
     use std::process::{Command, Stdio};
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -258,8 +274,14 @@ pub(crate) fn spawn_worker(
             }
         };
 
-        let mut worker_stdin = BufWriter::new(child.stdin.take().unwrap());
-        let worker_stdout = BufReader::new(child.stdout.take().unwrap());
+        let (mut worker_stdin, worker_stdout) = match take_child_pipes(&mut child) {
+            Some(pipes) => pipes,
+            None => {
+                tracing::error!("worker stdin/stdout unexpectedly None — OS failed to pipe stdio");
+                let _ = child.kill();
+                return;
+            }
+        };
 
         // Offload the blocking read into a dedicated thread so the worker loop
         // can use recv_timeout() and remain responsive to the watchdog deadline.
@@ -881,5 +903,35 @@ mod drain_tests {
             elapsed < watchdog * 5,
             "fired too late ({elapsed:?}); watchdog is {watchdog:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod pipe_tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn take_child_pipes_returns_some_for_piped_child() {
+        let mut child = Command::new("true")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("test helper process must spawn");
+        assert!(take_child_pipes(&mut child).is_some());
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn take_child_pipes_returns_none_when_stdin_already_taken() {
+        let mut child = Command::new("true")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("test helper process must spawn");
+        // Drain stdin manually — simulates OS failing to provide it.
+        let _ = child.stdin.take();
+        assert!(take_child_pipes(&mut child).is_none());
+        let _ = child.wait();
     }
 }
