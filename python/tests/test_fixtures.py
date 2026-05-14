@@ -1194,6 +1194,36 @@ def test_has_shared_fixtures_uses_most_local_definition():
     )
 
 
+def test_shared_fixture_names_uses_most_local_definition():
+    # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
+    # shared_fixture_names() should NOT include "db" because the effective definition
+    # (defs[-1]) has shared=False.
+    reg = FixtureRegistry()
+    root_def = FixtureDef(
+        name="db",
+        func=lambda: None,
+        autouse=False,
+        params=None,
+        conftest_path="/root/conftest.py",
+        shared=True,
+    )
+    leaf_def = FixtureDef(
+        name="db",
+        func=lambda: None,
+        autouse=False,
+        params=None,
+        conftest_path="/root/sub/conftest.py",
+        shared=False,
+    )
+    reg.register(root_def)
+    reg.register(leaf_def)
+    session = FixtureSession(reg)
+    assert session.shared_fixture_names() == [], (
+        "shared_fixture_names() should use only the most-local definition; "
+        "a root shared=True overridden by leaf shared=False should not appear"
+    )
+
+
 def test_shared_fixture_names_returns_empty_when_no_shared():
     reg = FixtureRegistry()
     reg.register(
