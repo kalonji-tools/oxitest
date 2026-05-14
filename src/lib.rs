@@ -360,6 +360,25 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             estimated,
             cfg.spawn_overhead_ms,
         );
+        // Warn when session-scoped (shared=True) fixtures are present: each worker
+        // subprocess creates its own FixtureSession, so these fixtures execute once
+        // per worker rather than once per run.
+        let shared_names = session.shared_fixture_names(py);
+        if !shared_names.is_empty() {
+            let list = shared_names.join(", ");
+            let noun = if shared_names.len() == 1 {
+                "fixture"
+            } else {
+                "fixtures"
+            };
+            eprintln!(
+                "WARN: shared {noun} ({list}) will run once per worker \
+                 ({optimal_worker_count} workers).\n\
+                 Session-scoped fixtures are not shared across parallel worker processes.\n\
+                 Use --serial to run them once, or remove shared=True from fixtures \
+                 that can be function-scoped."
+            );
+        }
         parallel::run_phase_parallel(
             groups,
             &cfg,
