@@ -63,14 +63,14 @@ impl WorkerResult {
             .no_message_lines
             .iter()
             .filter(|&&n| n > 0)
-            .map(|&n| n as usize)
+            .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
 
         types::TestOutcome::from_raw(types::RawOutcome {
             status: &self.outcome,
             message: &message,
             file: self.file.as_deref().unwrap_or_default(),
-            lineno: self.lineno.unwrap_or(0) as usize,
+            lineno: self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)),
             source_line: self.source_line.as_deref().unwrap_or_default(),
             no_message_lines: &no_message_lines,
             left: self.left.as_deref().unwrap_or_default(),
@@ -1029,5 +1029,56 @@ mod result_handler_tests {
             "reporter.test_completed must be called once"
         );
         assert_eq!(timings.len(), 1, "one timing entry must be recorded");
+    }
+}
+
+#[cfg(test)]
+mod lineno_cast_tests {
+    use super::*;
+
+    fn passed_result_with_lineno(lineno: Option<u64>) -> WorkerResult {
+        serde_json::from_str(&format!(
+            r#"{{"node_id":"t","outcome":"passed","duration_ms":0.0,"lineno":{}}}"#,
+            match lineno {
+                Some(n) => n.to_string(),
+                None => "null".to_string(),
+            }
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn lineno_none_maps_to_zero() {
+        let result = passed_result_with_lineno(None);
+        assert_eq!(result.lineno, None);
+        // to_outcome() must not panic
+        let _ = result.to_outcome();
+    }
+
+    #[test]
+    fn lineno_small_value_passes_through() {
+        let r: WorkerResult = serde_json::from_str(
+            r#"{"node_id":"t","outcome":"failed","duration_ms":0.0,
+                "lineno":42,"file":"t.py","source_line":"assert x"}"#,
+        )
+        .unwrap();
+        match r.to_outcome() {
+            types::TestOutcome::Failed { lineno, .. } => {
+                assert_eq!(lineno, 42usize);
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lineno_u32_max_does_not_panic() {
+        let result = passed_result_with_lineno(Some(u32::MAX as u64));
+        let _ = result.to_outcome();
+    }
+
+    #[test]
+    fn lineno_u64_max_does_not_panic() {
+        let result = passed_result_with_lineno(Some(u64::MAX));
+        let _ = result.to_outcome();
     }
 }
