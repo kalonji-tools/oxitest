@@ -1,0 +1,9 @@
+coverage:
+  status:
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "src/bridge.rs"  # PyO3 shims — not exercisable via cargo test without Python interpreter
+  - "src/lib.rs"     # Pipeline orchestration — covered by oxitest-consumer integration tests
