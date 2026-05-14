@@ -1024,6 +1024,35 @@ mod drain_tests {
         }
         assert_eq!(timings.len(), 3, "timings must record each drained item");
     }
+
+    // ── Test 8 ──────────────────────────────────────────────────────────────────
+    // drain_remaining_into_crashed must be a noop on an already-empty scheduler.
+    #[test]
+    fn drain_remaining_into_crashed_is_noop_on_empty_scheduler() {
+        use crate::types::{CollectError, TestItem};
+        use std::sync::Arc;
+
+        let sched = Arc::new(crate::scheduler::Scheduler::new(vec![]));
+        let item_lookup: ahash::AHashMap<String, Arc<TestItem>> = ahash::AHashMap::new();
+
+        struct NullReporter;
+        impl crate::reporter::Reporter for NullReporter {
+            fn test_started(&mut self, _: &TestItem) {
+                panic!("must not be called on empty scheduler");
+            }
+            fn test_completed(&mut self, _: &TestItem, _: &crate::types::TestOutcome, _: f64) {
+                panic!("must not be called on empty scheduler");
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
+                0
+            }
+        }
+
+        let mut rep = NullReporter;
+        let mut timings: Vec<crate::types::TestTiming> = vec![];
+        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings);
+        assert!(timings.is_empty());
+    }
 }
 
 #[cfg(test)]
