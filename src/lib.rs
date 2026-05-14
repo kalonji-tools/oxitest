@@ -373,6 +373,7 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             };
             tracing::warn!(
                 fixtures = %list,
+                fixture_count = shared_names.len(),
                 workers = optimal_worker_count,
                 "shared {noun} will run once per worker; \
                  session-scoped fixtures are not shared across parallel worker processes — \
