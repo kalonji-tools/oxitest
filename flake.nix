@@ -23,8 +23,15 @@
           mkdocstrings
           mkdocstrings-python
         ]);
+
+        oxitest = python.pkgs.callPackage ./nix/package.nix { };
       in
       {
+        packages = {
+          inherit oxitest;
+          default = oxitest;
+        };
+
         devShells.default = pkgs.mkShell {
           name = "oxitest-dev";
 
@@ -57,6 +64,9 @@
 
             # Git hooks
             prek
+
+            # oxitest binary (nix-built; use `maturin develop` for editable dev version)
+            oxitest
           ];
 
           env = {
