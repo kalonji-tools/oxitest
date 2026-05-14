@@ -15,12 +15,6 @@ Closes #
 - [ ] `just check` passes locally <!-- runs ruff, ty, cargo fmt --check, cargo clippy -->
 - [ ] No breaking changes (or documented below)
 
-**If working with an AI agent:**
-
-- [ ] Design spec added as comment on the linked issue
-- [ ] Implementation plan added as comment on this PR
-- [ ] Branch cleaned — no lingering spec or plan docs committed to the branch
-
 ## Breaking Changes
 
 <!-- If you ticked "No breaking changes" above, delete this section.
