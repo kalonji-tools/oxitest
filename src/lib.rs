@@ -371,12 +371,13 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             } else {
                 "fixtures"
             };
-            eprintln!(
-                "WARN: shared {noun} ({list}) will run once per worker \
-                 ({optimal_worker_count} workers).\n\
-                 Session-scoped fixtures are not shared across parallel worker processes.\n\
-                 Use --serial to run them once, or remove shared=True from fixtures \
-                 that can be function-scoped."
+            tracing::warn!(
+                fixtures = %list,
+                workers = optimal_worker_count,
+                "shared {noun} will run once per worker; \
+                 session-scoped fixtures are not shared across parallel worker processes — \
+                 use --serial to run them once, or remove shared=True from fixtures \
+                 that can be function-scoped"
             );
         }
         parallel::run_phase_parallel(
