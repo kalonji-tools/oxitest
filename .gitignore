@@ -13,3 +13,6 @@ docs/superpowers/
 uv.lock
 docs/site/
 .oxitest_cache/
+.pytest_cache/
+.ruff_cache/
+result
