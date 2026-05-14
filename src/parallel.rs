@@ -148,9 +148,53 @@ pub(crate) fn drain_worker_results(
     watchdog: std::time::Duration,
     tx: &crossbeam_channel::Sender<WorkerResult>,
 ) -> (DrainOutcome, usize) {
-    // Stub — will be replaced in Task 2.
-    let _ = (line_rx, expected, watchdog, tx);
-    (DrainOutcome::Complete, 0)
+    use std::time::Instant;
+
+    let mut received = 0usize;
+    // Per-result deadline: resets only when a real result line is received.
+    // Empty lines do NOT reset it — a subprocess spamming blank output cannot
+    // prevent the watchdog from firing.
+    let mut result_deadline = Instant::now() + watchdog;
+
+    loop {
+        if received >= expected {
+            return (DrainOutcome::Complete, received);
+        }
+
+        let remaining = result_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return (DrainOutcome::TimedOut { received }, received);
+        }
+
+        match line_rx.recv_timeout(remaining) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    // Empty line: skip without resetting the deadline.
+                    continue;
+                }
+                match serde_json::from_str::<WorkerResult>(trimmed) {
+                    Ok(r) => {
+                        received += 1;
+                        // Reset deadline: subprocess is alive and responding.
+                        result_deadline = Instant::now() + watchdog;
+                        let _ = tx.send(r);
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, output = %trimmed, "bad worker output");
+                        received += 1;
+                        result_deadline = Instant::now() + watchdog;
+                    }
+                }
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                return (DrainOutcome::TimedOut { received }, received);
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                return (DrainOutcome::Disconnected { received }, received);
+            }
+        }
+    }
 }
 
 pub fn compute_optimal_workers(
@@ -263,51 +307,27 @@ pub(crate) fn spawn_worker(
             }
 
             let expected = group.items.len();
-            let mut received = 0usize;
+            let (drain_outcome, received) = drain_worker_results(&line_rx, expected, watchdog, &tx);
 
-            loop {
-                if received >= expected {
-                    break;
+            match drain_outcome {
+                DrainOutcome::Complete => {}
+                DrainOutcome::TimedOut { .. } => {
+                    tracing::error!(
+                        module = %group.module_path,
+                        watchdog_secs = watchdog.as_secs(),
+                        "worker subprocess unresponsive; killing"
+                    );
+                    let _ = child.kill();
+                    subprocess_alive = false;
+                    for item in group.items.iter().skip(received) {
+                        let _ =
+                            tx.send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
+                    }
                 }
-                match line_rx.recv_timeout(watchdog) {
-                    Ok(line) => {
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            continue;
-                        }
-                        match serde_json::from_str::<WorkerResult>(trimmed) {
-                            Ok(r) => {
-                                received += 1;
-                                let _ = tx.send(r);
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, output = %trimmed, "bad worker output");
-                                received += 1;
-                            }
-                        }
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                        tracing::error!(
-                            module = %group.module_path,
-                            watchdog_secs = watchdog.as_secs(),
-                            "worker subprocess unresponsive; killing"
-                        );
-                        let _ = child.kill();
-                        subprocess_alive = false;
-                        for item in group.items.iter().skip(received) {
-                            let _ = tx
-                                .send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
-                        }
-                        break;
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                        // Reader thread exited: subprocess closed stdout before
-                        // sending all expected results (crash or early exit).
-                        subprocess_alive = false;
-                        for item in group.items.iter().skip(received) {
-                            let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
-                        }
-                        break;
+                DrainOutcome::Disconnected { .. } => {
+                    subprocess_alive = false;
+                    for item in group.items.iter().skip(received) {
+                        let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
                     }
                 }
             }
@@ -657,18 +677,24 @@ mod worker_count_tests {
 
 #[cfg(test)]
 mod repro_tests {
-    use crossbeam_channel::RecvTimeoutError;
+    use super::*;
     use std::time::{Duration, Instant};
 
-    /// Reproduces bug #44: a subprocess spamming empty lines prevents the
-    /// watchdog from ever firing.  The buggy recv_timeout(watchdog) resets
-    /// the full timer on every empty line, so received never advances.
+    /// Regression test for bug #44: a subprocess spamming empty lines must not
+    /// prevent the watchdog from firing.
+    ///
+    /// The old inline loop called recv_timeout(watchdog) fresh on every iteration,
+    /// so continuous empty lines reset the full timer indefinitely.
+    ///
+    /// drain_worker_results() fixes this by tracking a result_deadline that is
+    /// only reset when a real result line is received.
     ///
     /// Expected (bug present):  loop spins for ~300ms (spammer duration).
-    /// Expected (bug fixed):    loop exits via timeout within ~50ms.
+    /// Expected (bug fixed):    drain_worker_results exits via TimedOut within ~50ms.
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         // Thread that sends empty lines for 300ms — simulates a panicked
         // Python subprocess continuously flushing its stdout buffer.
@@ -682,29 +708,16 @@ mod repro_tests {
         });
 
         let watchdog = Duration::from_millis(50);
-        let expected = 1usize;
-        let mut received = 0usize;
         let start = Instant::now();
 
-        // Buggy loop: recv_timeout resets on every iteration.
-        loop {
-            if received >= expected {
-                break;
-            }
-            match line_rx.recv_timeout(watchdog) {
-                Ok(line) => {
-                    if line.trim().is_empty() {
-                        continue; // timer resets next call — BUG
-                    }
-                    received += 1;
-                }
-                Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => break,
-            }
-        }
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
 
         let elapsed = start.elapsed();
         assert_eq!(received, 0, "no real results were sent");
+        assert!(
+            matches!(outcome, DrainOutcome::TimedOut { .. }),
+            "expected TimedOut, got {outcome:?}"
+        );
         // Fails with the bug (elapsed ≈ 300ms); passes after the fix (elapsed ≈ 50ms).
         assert!(
             elapsed <= Duration::from_millis(100),
