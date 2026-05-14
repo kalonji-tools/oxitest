@@ -44,8 +44,10 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Returns sorted names of all shared (session-scoped) fixtures in the registry.
+    /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
     /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
+    /// Unlike `end_module`/`end_session`, errors are absorbed here because this
+    /// method is advisory-only; a failure must not abort the run.
     pub fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {
         self.0
             .bind(py)
