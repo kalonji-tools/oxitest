@@ -324,7 +324,13 @@ pub(crate) fn spawn_worker(
             });
 
             if writeln!(worker_stdin, "{task}").is_err() || worker_stdin.flush().is_err() {
-                tracing::warn!("failed to send task to worker");
+                tracing::warn!(
+                    module = %group.module_path,
+                    "failed to send task to worker — emitting error for all group items"
+                );
+                for item in &group.items {
+                    let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
+                }
                 break;
             }
 
