@@ -394,6 +394,27 @@ fn handle_worker_result(
     Some(outcome)
 }
 
+/// Drain any groups still queued in `sched` after all workers have exited and
+/// emit `WorkerResult::crashed` for each item via the reporter.
+///
+/// Called from `run_phase_parallel` after its result channel is exhausted — at
+/// that point every worker thread has already returned (they drop their `tx`
+/// clone on exit, which is what causes the channel to close), so no live worker
+/// will race us for remaining scheduler entries.
+fn drain_remaining_into_crashed(
+    sched: &scheduler::Scheduler,
+    item_lookup: &ahash::AHashMap<String, std::sync::Arc<types::TestItem>>,
+    rep: &mut dyn reporter::Reporter,
+    timings: &mut Vec<types::TestTiming>,
+) {
+    while let Some(group) = sched.pop() {
+        for item in &group.items {
+            let result = WorkerResult::crashed(item.node_id.to_string());
+            handle_worker_result(&result, item_lookup, rep, timings);
+        }
+    }
+}
+
 pub fn run_phase_parallel(
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
     cfg: &config::Config,
@@ -452,6 +473,12 @@ pub fn run_phase_parallel(
             break;
         }
     }
+
+    // Drain any groups the scheduler still holds after all workers have exited.
+    // This surfaces tests that were never assigned because every worker crashed
+    // before popping them.  Safe here: the rx loop above only completes once all
+    // worker threads have dropped their `tx` clone (i.e., returned).
+    drain_remaining_into_crashed(&sched, &item_lookup, rep, &mut timings);
 
     cancelled.store(true, Ordering::Relaxed);
     for h in handles {
@@ -915,6 +942,87 @@ mod drain_tests {
             elapsed < watchdog * 5,
             "fired too late ({elapsed:?}); watchdog is {watchdog:?}"
         );
+    }
+
+    // ── Test 7 ──────────────────────────────────────────────────────────────────
+    // After all workers crash, groups never popped from the scheduler must appear
+    // as crashed ERROR results rather than being silently dropped.
+    //
+    // BUG: before the fix, drain_remaining_into_crashed does not exist — this test
+    // fails to compile.  After the fix all 3 items must be reported as "error".
+    #[test]
+    fn drain_remaining_into_crashed_emits_error_for_every_item() {
+        use crate::types::{CollectError, NodeId, TestItem, TestOutcome};
+        use camino::Utf8PathBuf;
+        use std::sync::Arc;
+
+        fn make_test_item(path: &str, fn_name: &str) -> TestItem {
+            TestItem {
+                node_id: NodeId::new(path, fn_name, None),
+                module_path: Utf8PathBuf::from(path),
+                fn_name: fn_name.to_string(),
+                lineno: 1,
+                markers: vec![],
+                param_id: None,
+                param_values: vec![],
+            }
+        }
+
+        let all_items = vec![
+            make_test_item("tests/a.py", "test_alpha"),
+            make_test_item("tests/a.py", "test_beta"),
+            make_test_item("tests/b.py", "test_gamma"),
+        ];
+
+        let groups: Vec<(camino::Utf8PathBuf, Vec<TestItem>)> = vec![
+            (
+                camino::Utf8PathBuf::from("tests/a.py"),
+                vec![all_items[0].clone(), all_items[1].clone()],
+            ),
+            (
+                camino::Utf8PathBuf::from("tests/b.py"),
+                vec![all_items[2].clone()],
+            ),
+        ];
+
+        let sched = Arc::new(crate::scheduler::Scheduler::new(groups));
+
+        let item_lookup: ahash::AHashMap<String, Arc<TestItem>> = all_items
+            .iter()
+            .map(|i| (i.node_id.to_string(), Arc::new(i.clone())))
+            .collect();
+
+        struct CrashCollector {
+            started: Vec<String>,
+            completed: Vec<(String, String)>,
+        }
+        impl crate::reporter::Reporter for CrashCollector {
+            fn test_started(&mut self, item: &TestItem) {
+                self.started.push(item.node_id.to_string());
+            }
+            fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, _ms: f64) {
+                self.completed
+                    .push((item.node_id.to_string(), outcome.as_str().to_string()));
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
+                0
+            }
+        }
+
+        let mut rep = CrashCollector {
+            started: vec![],
+            completed: vec![],
+        };
+        let mut timings: Vec<crate::types::TestTiming> = vec![];
+
+        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings);
+
+        assert_eq!(rep.started.len(), 3, "all 3 items must be started");
+        assert_eq!(rep.completed.len(), 3, "all 3 items must be completed");
+        for (_, outcome) in &rep.completed {
+            assert_eq!(outcome, "error", "every drained item must be outcome=error");
+        }
+        assert_eq!(timings.len(), 3, "timings must record each drained item");
     }
 }
 
