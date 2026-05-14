@@ -9,6 +9,7 @@ __pycache__/
 dist/
 
 .superpowers/
+docs/superpowers/
 uv.lock
 docs/site/
 .oxitest_cache/

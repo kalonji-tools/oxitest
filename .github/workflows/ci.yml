@@ -173,20 +173,3 @@ jobs:
           flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-
-  guard:
-    name: No plans/specs on main
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Check for plans/specs files
-        run: |
-          found=$(git ls-tree -r --name-only HEAD -- \
-            docs/superpowers/plans docs/superpowers/specs 2>/dev/null || true)
-          if [ -n "$found" ]; then
-            echo "ERROR: plans/specs files found on main:"
-            echo "$found"
-            exit 1
-          fi
