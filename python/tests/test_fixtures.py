@@ -1130,7 +1130,16 @@ def test_has_shared_fixtures_empty_registry():
 
 def test_has_shared_fixtures_false_when_no_fixture_is_shared():
     reg = FixtureRegistry()
-    reg.register(FixtureDef(name="db", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=False))
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=False,
+        )
+    )
     session = FixtureSession(reg)
     assert session.has_shared_fixtures() is False, (
         "has_shared_fixtures() should return False when no fixture has shared=True"
@@ -1139,7 +1148,16 @@ def test_has_shared_fixtures_false_when_no_fixture_is_shared():
 
 def test_has_shared_fixtures_true_when_any_fixture_is_shared():
     reg = FixtureRegistry()
-    reg.register(FixtureDef(name="db", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=True))
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=True,
+        )
+    )
     session = FixtureSession(reg)
     assert session.has_shared_fixtures() is True, (
         "has_shared_fixtures() should return True when at least one fixture has shared=True"
@@ -1148,7 +1166,16 @@ def test_has_shared_fixtures_true_when_any_fixture_is_shared():
 
 def test_shared_fixture_names_returns_empty_when_no_shared():
     reg = FixtureRegistry()
-    reg.register(FixtureDef(name="client", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=False))
+    reg.register(
+        FixtureDef(
+            name="client",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=False,
+        )
+    )
     session = FixtureSession(reg)
     assert session.shared_fixture_names() == [], (
         "shared_fixture_names() should return [] when no fixture has shared=True"
@@ -1157,11 +1184,38 @@ def test_shared_fixture_names_returns_empty_when_no_shared():
 
 def test_shared_fixture_names_returns_only_shared_names():
     reg = FixtureRegistry()
-    reg.register(FixtureDef(name="db", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=True))
-    reg.register(FixtureDef(name="cache", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=True))
-    reg.register(FixtureDef(name="client", func=lambda: None, autouse=False, params=None, conftest_path="/c.py", shared=False))
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="cache",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="client",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=False,
+        )
+    )
     session = FixtureSession(reg)
-    assert sorted(session.shared_fixture_names()) == ["cache", "db"], (
+    assert session.shared_fixture_names() == ["cache", "db"], (
         "shared_fixture_names() should return only names where shared=True, got "
         f"{session.shared_fixture_names()!r}"
     )
