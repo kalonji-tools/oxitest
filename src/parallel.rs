@@ -126,6 +126,33 @@ impl WorkerResult {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum DrainOutcome {
+    /// All `expected` results received successfully.
+    Complete,
+    /// Watchdog deadline elapsed before all results arrived; subprocess should be killed.
+    TimedOut { received: usize },
+    /// Channel disconnected (subprocess closed stdout) before all results arrived.
+    Disconnected { received: usize },
+}
+
+/// Reads up to `expected` result lines from `line_rx`.
+///
+/// The watchdog deadline is per-result: it starts when a group is dispatched and
+/// resets only when a real (non-empty, parseable or not) result line is received.
+/// Empty lines do NOT reset the deadline — a subprocess spamming blank output
+/// cannot prevent the watchdog from firing.
+pub(crate) fn drain_worker_results(
+    line_rx: &crossbeam_channel::Receiver<String>,
+    expected: usize,
+    watchdog: std::time::Duration,
+    tx: &crossbeam_channel::Sender<WorkerResult>,
+) -> (DrainOutcome, usize) {
+    // Stub — will be replaced in Task 2.
+    let _ = (line_rx, expected, watchdog, tx);
+    (DrainOutcome::Complete, 0)
+}
+
 pub fn compute_optimal_workers(
     explicit_workers: Option<usize>,
     serial: bool,
@@ -683,6 +710,163 @@ mod repro_tests {
             elapsed <= Duration::from_millis(100),
             "BUG #44: watchdog did not fire within 100ms; elapsed={elapsed:?}. \
              Empty lines are resetting the recv_timeout timer."
+        );
+    }
+}
+
+#[cfg(test)]
+mod drain_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn valid_json(node_id: &str) -> String {
+        format!(r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":1.0}}"#)
+    }
+
+    // ── Test 1 ──────────────────────────────────────────────────────────────
+    // Empty lines must NOT reset the deadline.
+    // Setup: send 50 empty lines then close the sender (disconnect).
+    // Watchdog = 50ms. The disconnect must arrive within ~50ms of the first
+    // empty line, not 50ms × 50 = 2500ms.
+    #[test]
+    fn empty_lines_do_not_reset_deadline() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        // Send 50 empty lines then close the channel.
+        for _ in 0..50 {
+            line_tx.send("\n".to_string()).unwrap();
+        }
+        drop(line_tx); // disconnect
+
+        let watchdog = Duration::from_millis(50);
+        let start = std::time::Instant::now();
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
+        let elapsed = start.elapsed();
+
+        // Should disconnect quickly (50 sends are instant), not hang for 50 × 50ms.
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "drain took {elapsed:?}; empty lines must not inflate total wait time"
+        );
+        assert_eq!(received, 0, "no real results were sent");
+        assert!(
+            matches!(outcome, DrainOutcome::Disconnected { .. }),
+            "expected Disconnected, got {outcome:?}"
+        );
+    }
+
+    // ── Test 2 ──────────────────────────────────────────────────────────────
+    // Valid results reset the deadline so a slow-but-alive worker isn't killed.
+    #[test]
+    fn valid_result_resets_deadline() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        let watchdog = Duration::from_millis(100);
+
+        // Spawn a thread that sends two results with 60ms between them.
+        // Each result resets the 100ms deadline, so neither should time out.
+        let handle = std::thread::spawn(move || {
+            line_tx.send(valid_json("t::a")).unwrap();
+            std::thread::sleep(Duration::from_millis(60));
+            line_tx.send(valid_json("t::b")).unwrap();
+        });
+
+        let (outcome, received) = drain_worker_results(&line_rx, 2, watchdog, &result_tx);
+        handle.join().unwrap();
+
+        assert_eq!(outcome, DrainOutcome::Complete, "expected Complete");
+        assert_eq!(received, 2);
+        assert_eq!(result_rx.len(), 2, "both results must have been forwarded");
+    }
+
+    // ── Test 3 ──────────────────────────────────────────────────────────────
+    // Empty lines mixed with a valid result: complete successfully.
+    #[test]
+    fn empty_lines_before_valid_result_still_complete() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        // 10 empty lines, then the real result.
+        for _ in 0..10 {
+            line_tx.send("   \n".to_string()).unwrap();
+        }
+        line_tx.send(valid_json("t::f")).unwrap();
+        drop(line_tx);
+
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 1, Duration::from_millis(500), &result_tx);
+
+        assert_eq!(outcome, DrainOutcome::Complete);
+        assert_eq!(received, 1);
+        assert_eq!(result_rx.len(), 1);
+    }
+
+    // ── Test 4 ──────────────────────────────────────────────────────────────
+    // Disconnect mid-group: received count reflects how many results arrived.
+    #[test]
+    fn disconnected_mid_group_returns_received_count() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        line_tx.send(valid_json("t::a")).unwrap();
+        line_tx.send(valid_json("t::b")).unwrap();
+        drop(line_tx); // disconnect before all 4 expected
+
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 4, Duration::from_millis(500), &result_tx);
+
+        assert!(
+            matches!(outcome, DrainOutcome::Disconnected { .. }),
+            "expected Disconnected, got {outcome:?}"
+        );
+        assert_eq!(received, 2);
+        assert_eq!(result_rx.len(), 2);
+    }
+
+    // ── Test 5 ──────────────────────────────────────────────────────────────
+    // Exactly expected results received: Complete, no timeout.
+    #[test]
+    fn exact_expected_results_returns_complete() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        for i in 0..3 {
+            line_tx.send(valid_json(&format!("t::{i}"))).unwrap();
+        }
+        drop(line_tx);
+
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 3, Duration::from_millis(500), &result_tx);
+
+        assert_eq!(outcome, DrainOutcome::Complete);
+        assert_eq!(received, 3);
+        assert_eq!(result_rx.len(), 3);
+    }
+
+    // ── Test 6 ──────────────────────────────────────────────────────────────
+    // Watchdog fires when channel is silent (no lines at all).
+    #[test]
+    fn silent_channel_triggers_timeout() {
+        let (_line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        let watchdog = Duration::from_millis(30);
+        let start = std::time::Instant::now();
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
+        let elapsed = start.elapsed();
+
+        assert!(
+            matches!(outcome, DrainOutcome::TimedOut { .. }),
+            "expected TimedOut, got {outcome:?}"
+        );
+        assert_eq!(received, 0);
+        // Should fire close to watchdog duration, not sooner or much later.
+        assert!(elapsed >= watchdog, "fired too early: {elapsed:?}");
+        assert!(
+            elapsed < watchdog * 5,
+            "fired too late ({elapsed:?}); watchdog is {watchdog:?}"
         );
     }
 }
