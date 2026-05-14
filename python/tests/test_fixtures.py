@@ -1160,7 +1160,37 @@ def test_has_shared_fixtures_true_when_any_fixture_is_shared():
     )
     session = FixtureSession(reg)
     assert session.has_shared_fixtures() is True, (
-        "has_shared_fixtures() should return True when at least one fixture has shared=True"
+        "has_shared_fixtures() should return True when any fixture has shared=True"
+    )
+
+
+def test_has_shared_fixtures_uses_most_local_definition():
+    # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
+    # The effective definition is the last-registered one (leaf), so
+    # has_shared_fixtures() should return False.
+    reg = FixtureRegistry()
+    root_def = FixtureDef(
+        name="db",
+        func=lambda: None,
+        autouse=False,
+        params=None,
+        conftest_path="/root/conftest.py",
+        shared=True,
+    )
+    leaf_def = FixtureDef(
+        name="db",
+        func=lambda: None,
+        autouse=False,
+        params=None,
+        conftest_path="/root/sub/conftest.py",
+        shared=False,
+    )
+    reg.register(root_def)
+    reg.register(leaf_def)
+    session = FixtureSession(reg)
+    assert session.has_shared_fixtures() is False, (
+        "has_shared_fixtures() should use only the most-local definition; "
+        "root shared=True overridden by leaf shared=False should return False"
     )
 
 
