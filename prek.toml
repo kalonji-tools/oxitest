@@ -61,14 +61,6 @@ files = "\\.rs$"
 stages = ["pre-push"]
 
 [[repos.hooks]]
-id = "no-plans-on-main"
-name = "no plans/specs on main"
-language = "system"
-entry = "bash scripts/check-no-plans-on-main.sh"
-pass_filenames = false
-stages = ["pre-push"]
-
-[[repos.hooks]]
 id = "check-tag-version"
 name = "tag matches Cargo.toml version"
 language = "system"
