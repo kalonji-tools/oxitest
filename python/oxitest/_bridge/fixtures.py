@@ -18,6 +18,7 @@ __all__ = [
 ]
 
 import inspect
+import threading
 import warnings
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -53,11 +54,21 @@ from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 T = TypeVar("T")
 _F = TypeVar("_F", bound=Callable[..., Any])
 
-# Contextvar set in _instantiate so FixtureAccessor can resolve lazily
-# inside fixture bodies. Holds (session, module_path, fn_teardowns).
-_instantiation_context: ContextVar[tuple[Any, str, list[Callable[[], None]]] | None] = (
-    ContextVar("_instantiation_context", default=None)
+# ContextVar set in _instantiate so FixtureAccessor can resolve lazily
+# inside fixture bodies. Holds (session, module_path) — immutable only.
+# The teardown list is carried separately in _teardown_local (threading.local)
+# to avoid sharing a mutable reference across contexts that might inherit a
+# copied ContextVar snapshot (e.g. asyncio tasks).
+_instantiation_context: ContextVar[tuple[Any, str] | None] = ContextVar(
+    "_instantiation_context", default=None
 )
+# Per-worker-thread teardown stack. Set by resolve_for_test before fixture
+# resolution begins; read by FixtureAccessor.__getattr__ when a fixture body
+# accesses a lazy fixture attribute. Per-test isolation is established by
+# resolve_for_test assigning a fresh list at the start of each test and
+# clearing this slot afterwards; threading.local prevents cross-thread
+# interference in multi-threaded configurations.
+_teardown_local: threading.local = threading.local()
 
 # ── Data structures ───────────────────────────────────────────────────────────
 
@@ -166,7 +177,14 @@ class FixtureAccessor:
                 f"If you meant to use the fixture value, annotate with "
                 f"fx: Fixtures and access via fx.<namespace>.{self._fa_name}.{attr}."
             )
-        session, module_path, fn_teardowns = ctx
+        session, module_path = ctx
+        try:
+            fn_teardowns: list[Callable[[], None]] = _teardown_local.fn_teardowns  # type: ignore[attr-defined]
+        except AttributeError:
+            raise RuntimeError(
+                "FixtureAccessor attribute access occurred outside an active "
+                "resolve_for_test call. This is a bug in the test framework."
+            ) from None
         namespace = self._fa_fixtures._namespace_name
         if namespace:
             resolved = session.get_fixture_in_namespace(
@@ -536,7 +554,7 @@ class FixtureSession:
         if hint is Fixtures:
             from oxitest._bridge.proxy_ns import FixturesProxy
 
-            return True, FixturesProxy(self, module_path, fn_teardowns, fn_name=fn_name)
+            return True, FixturesProxy(self, module_path, fn_teardowns, fn_name=fn_name)  # type: ignore[arg-type]
         is_fx, inner = _fixture_inner_type(hint)
         if not is_fx:
             return False, None
@@ -563,59 +581,64 @@ class FixtureSession:
         named in skip_names are skipped even if annotated with Fixture[T].
         """
         fn_teardowns: list[Callable[[], None]] = []
-        hints = _get_hints(fn)
-        fn_name = getattr(fn, "__name__", "")
+        _teardown_local.fn_teardowns = fn_teardowns  # type: ignore[attr-defined]
+        try:
+            hints = _get_hints(fn)
+            fn_name = getattr(fn, "__name__", "")
 
-        # Collect names of explicitly-requested fixtures (to skip in autouse check)
-        requested_names: set[str] = set()
-        for param_name, hint in hints.items():
-            if param_name == "return":
-                continue
-            is_fx, inner = _fixture_inner_type(hint)
-            if (
-                is_fx
-                and BuiltinFixture.for_type(inner) is None
-                and param_name not in skip_names
-            ):
-                requested_names.add(param_name)
+            # Collect names of explicitly-requested fixtures (to skip in autouse check)
+            requested_names: set[str] = set()
+            for param_name, hint in hints.items():
+                if param_name == "return":
+                    continue
+                is_fx, inner = _fixture_inner_type(hint)
+                if (
+                    is_fx
+                    and BuiltinFixture.for_type(inner) is None
+                    and param_name not in skip_names
+                ):
+                    requested_names.add(param_name)
 
-        # Autouse: run for side effects; value NOT injected unless explicitly requested
-        for defn in self._registry.get_autouse():
-            if defn.name not in requested_names:
-                self.get_fixture(defn.name, module_path, fn_teardowns)
+            # Autouse: run for side effects; value NOT injected unless
+            # explicitly requested
+            for defn in self._registry.get_autouse():
+                if defn.name not in requested_names:
+                    self.get_fixture(defn.name, module_path, fn_teardowns)
 
-        # Resolve Fixture[T]-annotated parameters
-        kwargs: dict[str, Any] = {}
-        for param_name, hint in hints.items():
-            if param_name == "return":
-                continue
-            if param_name in skip_names:
-                continue
-            resolved, value = self._resolve_param(
-                param_name,
-                hint,
-                module_path,
-                fn_teardowns=fn_teardowns,
-                fn_name=fn_name,
-                resolve_user_fixture=lambda n: self.get_fixture(
-                    n, module_path, fn_teardowns
-                ),
-            )
-            if resolved:
-                kwargs[param_name] = value
-
-        # Check for unannotated params whose name matches a known fixture
-        for param_name in inspect.signature(fn).parameters:
-            if param_name in skip_names or param_name in kwargs:
-                continue
-            hint = hints.get(param_name)
-            is_fx = _fixture_inner_type(hint)[0] if hint is not None else False
-            if not is_fx and self._registry.get(param_name) is not None:
-                raise UnannotatedFixtureParamError(
-                    param_name, getattr(fn, "__name__", repr(fn))
+            # Resolve Fixture[T]-annotated parameters
+            kwargs: dict[str, Any] = {}
+            for param_name, hint in hints.items():
+                if param_name == "return":
+                    continue
+                if param_name in skip_names:
+                    continue
+                resolved, value = self._resolve_param(
+                    param_name,
+                    hint,
+                    module_path,
+                    fn_teardowns=fn_teardowns,
+                    fn_name=fn_name,
+                    resolve_user_fixture=lambda n: self.get_fixture(
+                        n, module_path, fn_teardowns
+                    ),
                 )
+                if resolved:
+                    kwargs[param_name] = value
 
-        return kwargs, fn_teardowns
+            # Check for unannotated params whose name matches a known fixture
+            for param_name in inspect.signature(fn).parameters:
+                if param_name in skip_names or param_name in kwargs:
+                    continue
+                hint = hints.get(param_name)
+                is_fx = _fixture_inner_type(hint)[0] if hint is not None else False
+                if not is_fx and self._registry.get(param_name) is not None:
+                    raise UnannotatedFixtureParamError(
+                        param_name, getattr(fn, "__name__", repr(fn))
+                    )
+
+            return kwargs, fn_teardowns
+        finally:
+            del _teardown_local.fn_teardowns  # type: ignore[attr-defined]
 
     def get_fixture(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
@@ -714,7 +737,7 @@ class FixtureSession:
         # Set instantiation context so FixtureAccessor attribute access
         # (e.g. kvault.store.namespace("x") inside a fixture body) can
         # resolve the live fixture instance via _instantiation_context.
-        token = _instantiation_context.set((self, module_path, fn_teardowns))
+        token = _instantiation_context.set((self, module_path))
         try:
             result = defn.func(**deps)
             _is_gen = inspect.isgenerator(result)
