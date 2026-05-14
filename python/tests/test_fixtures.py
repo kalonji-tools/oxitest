@@ -1279,3 +1279,40 @@ def test_shared_fixture_names_returns_only_shared_names():
         "shared_fixture_names() should return only names where shared=True, got "
         f"{session.shared_fixture_names()!r}"
     )
+
+
+# ── FixtureAccessor ───────────────────────────────────────────────────────────
+
+
+def test_fixture_accessor_getattr_raises_runtime_error_without_teardown_context():
+    """FixtureAccessor.__getattr__ must raise RuntimeError when
+    _instantiation_context is set but _teardown_local.fn_teardowns is absent.
+    This guards against attribute access that occurs outside an active
+    resolve_for_test call.
+    """
+    import oxitest._bridge.fixtures as _fx_mod
+    from oxitest._bridge.fixtures import (
+        FixtureAccessor,
+        Fixtures,
+        _instantiation_context,
+    )
+
+    _teardown_local = _fx_mod._teardown_local  # ty: ignore[unresolved-attribute]
+
+    fx_obj = Fixtures()
+    accessor = FixtureAccessor("value", fx_obj, lambda: 42)
+
+    # Ensure fn_teardowns is absent on this thread before the test.
+    if hasattr(_teardown_local, "fn_teardowns"):
+        del _teardown_local.fn_teardowns
+
+    token = _instantiation_context.set((object(), "t.py"))  # ty: ignore[invalid-argument-type]
+    try:
+        with raises(RuntimeError) as exc_info:
+            _ = accessor.value  # non-underscore attribute access triggers __getattr__
+        assert "outside an active resolve_for_test call" in str(exc_info.value), (
+            "RuntimeError message should mention 'outside an active resolve_for_test "
+            f"call', got {str(exc_info.value)!r}"
+        )
+    finally:
+        _instantiation_context.reset(token)
