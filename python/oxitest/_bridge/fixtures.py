@@ -477,6 +477,22 @@ class FixtureSession:
         self._shared_scope.drain()
         self._session_scope.drain()
 
+    def has_shared_fixtures(self) -> bool:
+        """Return True if any fixture in the registry has shared=True."""
+        return any(
+            defn.shared
+            for defs in self._registry._defs.values()
+            for defn in defs
+        )
+
+    def shared_fixture_names(self) -> list[str]:
+        """Return sorted names of all fixtures with shared=True in the registry."""
+        return sorted(
+            name
+            for name, defs in self._registry._defs.items()
+            if any(d.shared for d in defs)
+        )
+
     def _inject_builtin(
         self,
         impl_cls: type[BuiltinFixture],
