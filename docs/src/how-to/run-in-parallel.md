@@ -97,4 +97,6 @@ To resolve it, choose one of these options:
    workers.
 
 Cross-process fixture sharing (e.g. via sockets or shared memory) is explicitly
-out of scope for oxitest.
+out of scope for oxitest. This limitation is inherent to the subprocess worker
+model — see [Parallelism](../explanation/parallelism.md) for the full rationale
+and the planned redesign ([#74](https://github.com/kalonji-tools/oxitest/issues/74)).
