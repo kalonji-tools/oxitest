@@ -44,6 +44,16 @@ impl FixtureSession {
         Ok(())
     }
 
+    /// Returns sorted names of all shared (session-scoped) fixtures in the registry.
+    /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
+    pub fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {
+        self.0
+            .bind(py)
+            .call_method0("shared_fixture_names")
+            .and_then(|v| v.extract::<Vec<String>>())
+            .unwrap_or_default()
+    }
+
     /// Returns this session as a bound Python object for passing to bridge calls.
     pub(crate) fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.0.bind(py).clone()
