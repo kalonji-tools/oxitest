@@ -209,7 +209,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     if isinstance(first, dict):
 
         def decorator(fn: _F) -> _F:
-            fn._oxitest_param_cases = _build_dict_cases(cases, fn)  # type: ignore[attr-defined]
+            setattr(fn, "_oxitest_param_cases", _build_dict_cases(cases, fn))
             return fn
 
         return decorator
@@ -223,7 +223,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     param_cases = _build_dataclass_cases(cases)
 
     def decorator(fn: _F) -> _F:
-        fn._oxitest_param_cases = param_cases  # type: ignore[attr-defined]
+        setattr(fn, "_oxitest_param_cases", param_cases)
         return fn
 
     return decorator

@@ -293,7 +293,7 @@ class Fixtures:
         """
 
         def _register(f: _F) -> _F:
-            fixture_name = name or f.__name__
+            fixture_name = name or getattr(f, "__name__", repr(f))
             setattr(f, "_oxitest_fixture_name", fixture_name)
             defn = FixtureDef(
                 name=fixture_name,
