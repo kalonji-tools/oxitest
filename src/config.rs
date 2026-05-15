@@ -26,14 +26,23 @@ struct OxitestConfig {
     strict: Option<StrictMode>,
 }
 
-fn parse_workers(s: &str) -> Result<usize, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerCount {
+    Auto,
+    Fixed(usize),
+}
+
+fn parse_workers(s: &str) -> Result<WorkerCount, String> {
+    if s.eq_ignore_ascii_case("auto") {
+        return Ok(WorkerCount::Auto);
+    }
     let n: usize = s
         .parse()
-        .map_err(|_| format!("'{s}' is not a valid number"))?;
+        .map_err(|_| format!("expected \"auto\" or a positive integer, got \"{s}\""))?;
     if n == 0 {
-        return Err("--workers must be at least 1".to_string());
+        return Err("worker count must be at least 1".into());
     }
-    Ok(n)
+    Ok(WorkerCount::Fixed(n))
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, PartialEq)]
@@ -621,6 +630,32 @@ mod tests {
     fn test_cli_serial_and_workers_conflict() {
         let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "4"]);
         assert!(result.is_err(), "Expected --serial --workers to conflict");
+    }
+
+    #[test]
+    fn test_parse_workers_auto() {
+        assert_eq!(parse_workers("auto"), Ok(WorkerCount::Auto));
+    }
+
+    #[test]
+    fn test_parse_workers_auto_case_insensitive() {
+        assert_eq!(parse_workers("AUTO"), Ok(WorkerCount::Auto));
+        assert_eq!(parse_workers("Auto"), Ok(WorkerCount::Auto));
+    }
+
+    #[test]
+    fn test_parse_workers_fixed() {
+        assert_eq!(parse_workers("4"), Ok(WorkerCount::Fixed(4)));
+    }
+
+    #[test]
+    fn test_parse_workers_zero_rejected() {
+        assert!(parse_workers("0").is_err());
+    }
+
+    #[test]
+    fn test_parse_workers_garbage_rejected() {
+        assert!(parse_workers("abc").is_err());
     }
 
     #[test]
