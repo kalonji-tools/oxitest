@@ -10,7 +10,10 @@ use crate::types::{CollectError, TestItem};
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
 const BUILTIN_MARKERS: &[&str] = &["skip", "skipif", "xfail", "usefixtures", "timeout"];
 
-pub fn validate_markers(items: &[TestItem], registered: &std::collections::HashSet<&str>) -> Vec<CollectError> {
+pub fn validate_markers(
+    items: &[TestItem],
+    registered: &std::collections::HashSet<&str>,
+) -> Vec<CollectError> {
     items
         .iter()
         .flat_map(|item| {
