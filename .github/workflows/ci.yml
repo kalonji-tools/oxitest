@@ -36,7 +36,7 @@ jobs:
         run: prek run --all-files --show-diff-on-failure --skip no-commit-to-branch
 
       - name: Run pre-push checks
-        run: prek run --all-files --stage pre-push
+        run: prek run --all-files --stage pre-push --skip no-commit-to-branch
 
   test:
     name: Test (Python ${{ matrix.python-version }})
