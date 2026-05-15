@@ -198,17 +198,20 @@ pub(crate) fn drain_worker_results(
 }
 
 pub fn compute_optimal_workers(
-    explicit_workers: Option<usize>,
+    explicit_workers: Option<crate::config::WorkerCount>,
     serial: bool,
     cpu_count: usize,
     estimated: Option<std::time::Duration>,
     spawn_overhead_ms: f64,
 ) -> usize {
+    use crate::config::WorkerCount;
+
     if serial {
         return 1;
     }
-    if let Some(n) = explicit_workers {
-        return n;
+    match explicit_workers {
+        Some(WorkerCount::Fixed(n)) => return n,
+        Some(WorkerCount::Auto) | None => {}
     }
     if let Some(est) = estimated {
         let est_ms = est.as_millis() as f64;
@@ -497,12 +500,18 @@ pub fn run_phase_parallel(
 #[cfg(test)]
 mod worker_count_tests {
     use super::*;
+    use crate::config::WorkerCount;
     use std::time::Duration;
 
     #[test]
     fn explicit_workers_bypasses_auto_scale() {
-        let count =
-            compute_optimal_workers(Some(8), false, 16, Some(Duration::from_millis(100)), 250.0);
+        let count = compute_optimal_workers(
+            Some(WorkerCount::Fixed(8)),
+            false,
+            16,
+            Some(Duration::from_millis(100)),
+            250.0,
+        );
         assert_eq!(count, 8);
     }
 
@@ -546,8 +555,40 @@ mod worker_count_tests {
     #[test]
     fn serial_overrides_explicit_workers() {
         // Serial must be absolute even when workers is explicitly set
-        let count = compute_optimal_workers(Some(4), true, 8, None, 250.0);
+        let count = compute_optimal_workers(Some(WorkerCount::Fixed(4)), true, 8, None, 250.0);
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn auto_warm_cache_scales_to_needed() {
+        // 500ms suite / 250ms overhead = 2 workers needed; cpu = 8 → use 2
+        let count = compute_optimal_workers(
+            Some(WorkerCount::Auto),
+            false,
+            8,
+            Some(Duration::from_millis(500)),
+            250.0,
+        );
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn auto_warm_cache_caps_to_cpu() {
+        // 10_000ms / 250ms = 40 needed; cpu = 4 → use 4
+        let count = compute_optimal_workers(
+            Some(WorkerCount::Auto),
+            false,
+            4,
+            Some(Duration::from_millis(10_000)),
+            250.0,
+        );
+        assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn auto_cold_cache_returns_cpu_count() {
+        let count = compute_optimal_workers(Some(WorkerCount::Auto), false, 6, None, 250.0);
+        assert_eq!(count, 6);
     }
 
     #[test]
