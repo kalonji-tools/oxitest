@@ -153,7 +153,7 @@ jobs:
 
       - name: Run Python coverage
         run: |
-          PYTHONPATH=python uv run coverage run --source=oxitest -m oxitest python/tests/
+          PYTHONPATH=python uv run coverage run --source=python/oxitest -m oxitest python/tests/
           uv run coverage xml
 
       - name: Summarise Python coverage
