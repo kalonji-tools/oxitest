@@ -57,7 +57,9 @@ docs-serve:
 
 # Run all checks without modifying files
 check:
-    ruff check python/ \
+    uv lock --check \
+    && cargo update --locked \
+    && ruff check python/ \
     && ruff format --check python/ \
     && ty check \
     && cargo fmt --check \
