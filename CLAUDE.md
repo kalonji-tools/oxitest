@@ -8,34 +8,38 @@ oxitest is a Python test runner rewritten in Rust. It exposes a Python API (fixt
 
 ## Commands
 
-The project uses a `justfile` with Nix devshell. Commands can be run with `just <recipe>` (inside a nix develop shell) or by running the underlying commands directly:
+The project uses a `justfile` for common tasks. Ensure required tools are on `$PATH` (via `nix develop`, or installed manually):
 
 ```bash
-# Build the Rust extension (required before running Python tests)
-maturin develop --release
+# Check all required tools are available
+just health
 
-# Run Python tests (builds extension first if .so missing)
-PYTHONPATH=python python3 -m oxitest python/tests/
+# Build the Rust extension (required before running Python tests)
+just build
+
+# Run Python tests (builds extension first)
+just test
 
 # Run a single Python test file
-PYTHONPATH=python python3 -m oxitest python/tests/test_fixtures.py
+just test python/tests/test_fixtures.py
 
 # Run Rust unit tests
-cargo test
+just test-rust
 
 # Run a single Rust test
-cargo test <test_name>
+just test-rust <test_name>
 
 # Lint Python + type-check
-ruff check python/
-ty check
+just lint
 
 # Format Python + Rust
-ruff format python/
-cargo fmt
+just fmt
 
 # Full check (no modifications)
-just check   # runs ruff check, ruff format --check, ty check, cargo fmt --check, cargo clippy -D warnings
+just check
+
+# Clean build artifacts
+just clean
 ```
 
 ## Architecture
