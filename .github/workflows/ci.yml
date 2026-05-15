@@ -28,6 +28,12 @@ jobs:
 
       - run: uv sync --only-group lint
 
+      - name: Check uv.lock is up-to-date
+        run: uv lock --check
+
+      - name: Check Cargo.lock is up-to-date
+        run: cargo update --locked
+
       - run: uv run ruff check python/
       - run: uv run ruff format --check python/
       - run: uv run codespell
