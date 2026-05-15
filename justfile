@@ -17,40 +17,29 @@ maturin_env := if env("IN_NIX_SHELL", "") != "" {
 
 # Build the Rust extension; extra args are forwarded to maturin
 build *args:
-    {{fix_env}} \
-    && uv sync --group build \
-    && {{maturin_env}} maturin develop {{args}}
+    {{fix_env}} uv sync --group build
+    {{maturin_env}} maturin develop {{args}}
 
 # Run Python tests (rebuilds extension first)
-test *args:
-    {{fix_env}} \
-    && uv sync --group test \
-    && {{maturin_env}} maturin develop \
-    && PYTHONPATH=python uv run python -m oxitest {{args}}
+test *args: build
+    PYTHONPATH=python uv run python -m oxitest {{args}}
 
 # Run Rust unit tests
 test-rust *args:
     cargo test {{args}}
 
-# Clean, run Rust tests, build extension, run Python tests — all in one shell
-dev:
-    cargo clean \
-    && rm -f python/oxitest/_oxitest*.so \
-    && cargo test \
-    && {{fix_env}} \
-    && uv sync --group test \
-    && {{maturin_env}} maturin develop \
-    && PYTHONPATH=python uv run python -m oxitest
+# Clean, run Rust tests, build extension, run Python tests
+dev: clean test-rust test
 
 # Lint Python (ruff) and check types (ty)
 lint:
-    ruff check python/ \
-    && ty check
+    ruff check python/
+    ty check
 
-# Format Python (ruff) and Rust (cargo fmt)
-fmt:
-    ruff format python/ \
-    && cargo fmt
+# Format Python (ruff) and Rust (cargo fmt); pass --check to verify only
+fmt *args:
+    ruff format {{args}} python/
+    cargo fmt {{args}}
 
 # Build the documentation site
 docs:
@@ -61,16 +50,12 @@ docs-serve:
     mkdocs serve --dev-addr localhost:8000
 
 # Run all checks without modifying files
-check:
-    uv lock --check \
-    && cargo update --locked \
-    && ruff check python/ \
-    && ruff format --check python/ \
-    && ty check \
-    && cargo fmt --check \
-    && cargo clippy -- -D warnings
+check: lint (fmt "--check")
+    uv lock --check
+    cargo update --locked
+    cargo clippy -- -D warnings
 
 # Remove build artifacts
 clean:
-    cargo clean \
-    && rm -f python/oxitest/_oxitest*.so
+    cargo clean
+    rm -f python/oxitest/_oxitest*.so
