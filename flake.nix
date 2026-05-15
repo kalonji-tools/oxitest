@@ -14,7 +14,6 @@
         python = pkgs.python312;
 
         pythonEnv = python.withPackages (ps: with ps; [
-          pytest
           pip
           loguru
           mkdocs-material
