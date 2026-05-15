@@ -49,12 +49,6 @@ docs:
 docs-serve:
     mkdocs serve --dev-addr localhost:8000
 
-# Run all checks without modifying files
-check: lint (fmt "--check")
-    uv lock --check
-    cargo update --locked
-    cargo clippy -- -D warnings
-
 # Remove build artifacts
 clean:
     cargo clean

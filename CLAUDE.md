@@ -35,9 +35,6 @@ just lint
 # Format Python + Rust
 just fmt
 
-# Full check (no modifications)
-just check
-
 # Clean build artifacts
 just clean
 ```
