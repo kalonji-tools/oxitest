@@ -1,9 +1,33 @@
 coverage:
   status:
-    patch:
-      default:
+    project:
+      rust:
         target: 80%
+        flags: [rust]
+      python:
+        target: 80%
+        flags: [python]
+    patch:
+      rust:
+        target: 80%
+        flags: [rust]
+      python:
+        target: 80%
+        flags: [python]
+
+flags:
+  rust:
+    paths: [src/]
+    carryforward: true
+  python:
+    paths: [python/oxitest/]
+    carryforward: true
 
 ignore:
-  - "src/bridge.rs"  # PyO3 shims — not exercisable via cargo test without Python interpreter
-  - "src/lib.rs"     # Pipeline orchestration — covered by oxitest-consumer integration tests
+  # Rust: only testable with Python interpreter (covered by oxitest-consumer integration tests)
+  - "src/bridge.rs"
+  - "src/lib.rs"
+  # Python: only exercised through the Rust pipeline, not by Python unit tests
+  - "python/oxitest/_bridge/worker.py"
+  - "python/oxitest/__main__.py"
+  - "python/oxitest/__init__.py"
