@@ -1,14 +1,19 @@
-set shell := ["./scripts/just-shell.sh", "-c"]
+# Apply Nix environment workarounds only when inside a Nix shell.
+# Outside Nix these expand to empty strings and have no effect.
 
 # Nix injects Python 3.13 paths into PYTHONPATH and _PYTHON_SYSCONFIGDATA_NAME,
 # corrupting sysconfig.EXT_SUFFIX for the 3.12 env and causing maturin to name
 # the .so with the wrong ABI tag. Unset both before any maturin/python invocation.
-fix_env := "unset _PYTHON_SYSCONFIGDATA_NAME PYTHONPATH"
+fix_env := if env("IN_NIX_SHELL", "") != "" {
+    "unset _PYTHON_SYSCONFIGDATA_NAME PYTHONPATH &&"
+} else { "" }
 
 # maturin internally calls `uv pip install`; without VIRTUAL_ENV set, uv follows
 # .venv/bin/python's symlink back to the immutable Nix store and fails.
 # Pointing VIRTUAL_ENV at the project venv keeps uv scoped to it.
-maturin_env := "VIRTUAL_ENV=" + justfile_directory() + "/.venv"
+maturin_env := if env("IN_NIX_SHELL", "") != "" {
+    "VIRTUAL_ENV=" + justfile_directory() + "/.venv"
+} else { "" }
 
 # Build the Rust extension; extra args are forwarded to maturin
 build *args:
