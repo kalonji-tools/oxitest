@@ -109,9 +109,9 @@ pub struct Cli {
     #[arg(long)]
     pub serial: bool,
 
-    /// Number of parallel worker processes (default: cpu count)
-    #[arg(long, value_name = "N", conflicts_with = "serial", value_parser = parse_workers)]
-    pub workers: Option<usize>,
+    /// Number of parallel worker processes ("auto" or a positive integer)
+    #[arg(short = 'n', long, value_name = "N", conflicts_with = "serial", value_parser = parse_workers)]
+    pub workers: Option<WorkerCount>,
 
     /// Show the N slowest tests at end of run (0 = disabled)
     #[arg(long, value_name = "N")]
@@ -153,7 +153,7 @@ pub struct Config {
     pub registered_markers: Vec<String>,
     pub timeout_secs: Option<u64>,
     pub serial: bool,
-    pub workers: Option<usize>,
+    pub workers: Option<WorkerCount>,
     pub cache_max_age: u32,
     pub min_parallel_tests: usize,
     pub timeout_multiplier: Option<f64>,
@@ -323,10 +323,11 @@ impl Config {
     }
 
     pub fn worker_count(&self) -> usize {
-        if self.serial {
-            return 1;
+        match self.workers {
+            _ if self.serial => 1,
+            Some(WorkerCount::Fixed(n)) => n,
+            Some(WorkerCount::Auto) | None => cpu_count(),
         }
-        self.workers.unwrap_or_else(cpu_count)
     }
 }
 
@@ -586,7 +587,7 @@ mod tests {
     #[test]
     fn test_cli_workers_flag() {
         let cli = Cli::try_parse_from(["oxitest", "--workers", "4"]).unwrap();
-        assert_eq!(cli.workers, Some(4));
+        assert_eq!(cli.workers, Some(WorkerCount::Fixed(4)));
     }
 
     #[test]
@@ -630,6 +631,24 @@ mod tests {
     fn test_cli_serial_and_workers_conflict() {
         let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "4"]);
         assert!(result.is_err(), "Expected --serial --workers to conflict");
+    }
+
+    #[test]
+    fn test_cli_short_n_flag_auto() {
+        let cli = Cli::try_parse_from(["oxitest", "-n", "auto"]).unwrap();
+        assert_eq!(cli.workers, Some(WorkerCount::Auto));
+    }
+
+    #[test]
+    fn test_cli_short_n_flag_fixed() {
+        let cli = Cli::try_parse_from(["oxitest", "-n", "4"]).unwrap();
+        assert_eq!(cli.workers, Some(WorkerCount::Fixed(4)));
+    }
+
+    #[test]
+    fn test_cli_long_workers_auto() {
+        let cli = Cli::try_parse_from(["oxitest", "--workers", "auto"]).unwrap();
+        assert_eq!(cli.workers, Some(WorkerCount::Auto));
     }
 
     #[test]
