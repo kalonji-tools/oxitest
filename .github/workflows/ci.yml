@@ -33,7 +33,7 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run quality checks
-        run: prek run --all-files --show-diff-on-failure
+        run: prek run --all-files --show-diff-on-failure --skip no-commit-to-branch
 
       - name: Run pre-push checks
         run: prek run --all-files --stage pre-push
