@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -26,16 +26,17 @@ jobs:
         with:
           enable-cache: true
 
-      - run: uv sync --only-group lint
+      - name: Install tools
+        run: |
+          uv tool install prek
+          uv sync --only-group lint --only-group typecheck --only-group test
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Check lock files are up-to-date
-        run: uv lock --check && cargo update --locked
+      - name: Run quality checks
+        run: prek run --all-files --show-diff-on-failure
 
-      - run: uv run ruff check python/
-      - run: uv run ruff format --check python/
-      - run: uv run codespell
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
+      - name: Run pre-push checks
+        run: prek run --all-files --stage pre-push
 
   test:
     name: Test (Python ${{ matrix.python-version }})
