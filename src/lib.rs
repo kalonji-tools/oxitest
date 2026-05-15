@@ -69,7 +69,9 @@ fn collect_items(
     }
 
     if errors.is_empty() {
-        let marker_errors = filter::validate_markers(&items, cfg);
+        let registered: std::collections::HashSet<&str> =
+            cfg.registered_markers.iter().map(String::as_str).collect();
+        let marker_errors = filter::validate_markers(&items, &registered);
         errors.extend(marker_errors);
     }
 
