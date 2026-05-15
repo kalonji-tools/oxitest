@@ -1297,7 +1297,7 @@ def test_fixture_accessor_getattr_raises_runtime_error_without_teardown_context(
         _instantiation_context,
     )
 
-    _teardown_local = _fx_mod._teardown_local  # ty: ignore[unresolved-attribute]
+    _teardown_local = _fx_mod._teardown_local
 
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)
@@ -1306,7 +1306,7 @@ def test_fixture_accessor_getattr_raises_runtime_error_without_teardown_context(
     if hasattr(_teardown_local, "fn_teardowns"):
         del _teardown_local.fn_teardowns
 
-    token = _instantiation_context.set((object(), "t.py"))  # ty: ignore[invalid-argument-type]
+    token = _instantiation_context.set((object(), "t.py"))
     try:
         with raises(RuntimeError) as exc_info:
             _ = accessor.value  # non-underscore attribute access triggers __getattr__
