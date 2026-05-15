@@ -105,7 +105,10 @@ impl WorkerResult {
     fn timed_out(node_id: String, watchdog: std::time::Duration) -> Self {
         Self::error_sentinel(
             node_id,
-            format!("Worker subprocess unresponsive after {}s", watchdog.as_secs()),
+            format!(
+                "Worker subprocess unresponsive after {}s",
+                watchdog.as_secs()
+            ),
             watchdog.as_millis() as f64,
         )
     }
