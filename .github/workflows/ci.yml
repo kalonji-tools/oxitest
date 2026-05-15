@@ -70,7 +70,7 @@ jobs:
         run: uv run maturin develop
 
       - name: ty check
-        if: matrix.python-version == '3.12'
+        if: matrix.python-version == '3.11'
         run: uv run ty check
 
       - name: Python tests
