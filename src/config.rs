@@ -24,12 +24,56 @@ struct OxitestConfig {
     timeout_multiplier: Option<f64>,
     spawn_overhead_ms: Option<f64>,
     strict: Option<StrictMode>,
+    workers: Option<WorkerCount>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerCount {
     Auto,
     Fixed(usize),
+}
+
+impl<'de> serde::Deserialize<'de> for WorkerCount {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct WorkerCountVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for WorkerCountVisitor {
+            type Value = WorkerCount;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("\"auto\" or a positive integer")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<WorkerCount, E> {
+                if v.eq_ignore_ascii_case("auto") {
+                    Ok(WorkerCount::Auto)
+                } else {
+                    Err(E::custom(format!("expected \"auto\", got \"{v}\"")))
+                }
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<WorkerCount, E> {
+                if v <= 0 {
+                    Err(E::custom("worker count must be at least 1"))
+                } else {
+                    Ok(WorkerCount::Fixed(v as usize))
+                }
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<WorkerCount, E> {
+                if v == 0 {
+                    Err(E::custom("worker count must be at least 1"))
+                } else {
+                    Ok(WorkerCount::Fixed(v as usize))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(WorkerCountVisitor)
+    }
 }
 
 fn parse_workers(s: &str) -> Result<WorkerCount, String> {
@@ -233,6 +277,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     config.min_parallel_tests = tc.min_parallel_tests.unwrap_or(config.min_parallel_tests);
     config.timeout_multiplier = tc.timeout_multiplier;
     config.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(config.spawn_overhead_ms);
+    if tc.workers.is_some() {
+        config.workers = tc.workers;
+    }
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
@@ -897,5 +944,52 @@ spawn_overhead_ms = 100.0
     fn test_cli_capture_environment_absent_is_false() {
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
         assert!(!cli.capture_environment);
+    }
+
+    #[test]
+    fn test_toml_workers_auto() {
+        let config = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = "auto"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(config.workers, Some(WorkerCount::Auto));
+    }
+
+    #[test]
+    fn test_toml_workers_fixed() {
+        let config = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = 4
+        "#,
+        )
+        .unwrap();
+        assert_eq!(config.workers, Some(WorkerCount::Fixed(4)));
+    }
+
+    #[test]
+    fn test_toml_workers_absent_is_none() {
+        let config = Config::from_str(
+            r#"
+        [tool.oxitest]
+        testpaths = ["tests"]
+        "#,
+        )
+        .unwrap();
+        assert!(config.workers.is_none());
+    }
+
+    #[test]
+    fn test_toml_workers_zero_rejected() {
+        let result = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = 0
+        "#,
+        );
+        assert!(result.is_err());
     }
 }
