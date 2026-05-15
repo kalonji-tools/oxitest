@@ -362,7 +362,9 @@ impl Config {
             self.maxfail = cli.maxfail;
         }
         self.serial = cli.serial;
-        self.workers = cli.workers;
+        if cli.workers.is_some() {
+            self.workers = cli.workers;
+        }
         if cli.strict.is_some() {
             self.strict = cli.strict.clone();
         }
@@ -991,5 +993,44 @@ spawn_overhead_ms = 100.0
         "#,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_workers_overrides_toml() {
+        let config = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = "auto"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(config.workers, Some(WorkerCount::Auto));
+
+        let cli = Cli::try_parse_from(["oxitest", "--workers", "2"]).unwrap();
+        let merged = config.merge_cli(&cli);
+        assert_eq!(merged.workers, Some(WorkerCount::Fixed(2)));
+    }
+
+    #[test]
+    fn test_toml_workers_preserved_when_cli_absent() {
+        let config = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = 8
+        "#,
+        )
+        .unwrap();
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        let merged = config.merge_cli(&cli);
+        assert_eq!(merged.workers, Some(WorkerCount::Fixed(8)));
+    }
+
+    #[test]
+    fn test_config_worker_count_auto_is_cpu_count() {
+        let config = Config {
+            workers: Some(WorkerCount::Auto),
+            ..Config::default()
+        };
+        assert!(config.worker_count() >= 1);
     }
 }
