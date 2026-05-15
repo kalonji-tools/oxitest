@@ -353,12 +353,8 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             !cfg.serial,
             "compute_optimal_workers is unreachable in serial mode"
         );
-        let explicit_workers = match cfg.workers {
-            Some(config::WorkerCount::Fixed(n)) => Some(n),
-            _ => None,
-        };
         let optimal_worker_count = parallel::compute_optimal_workers(
-            explicit_workers,
+            cfg.workers,
             cfg.serial,
             cpu_count,
             estimated,
