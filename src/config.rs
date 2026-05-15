@@ -371,6 +371,10 @@ impl Config {
         self
     }
 
+    /// Resolve the configured worker count to a concrete number.
+    ///
+    /// On single-CPU machines `Auto` resolves to 1, which means `--workers auto`
+    /// silently falls back to serial (no point spawning one subprocess worker).
     pub fn worker_count(&self) -> usize {
         match self.workers {
             _ if self.serial => 1,
@@ -680,6 +684,15 @@ mod tests {
     fn test_cli_serial_and_workers_conflict() {
         let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "4"]);
         assert!(result.is_err(), "Expected --serial --workers to conflict");
+    }
+
+    #[test]
+    fn test_cli_serial_and_workers_auto_conflict() {
+        let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "auto"]);
+        assert!(
+            result.is_err(),
+            "Expected --serial --workers auto to conflict"
+        );
     }
 
     #[test]
