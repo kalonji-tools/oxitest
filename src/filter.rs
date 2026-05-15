@@ -62,15 +62,9 @@ pub fn sort_failed_first(
     items: Vec<TestItem>,
     failed_ids: &std::collections::HashSet<String>,
 ) -> Vec<TestItem> {
-    let mut failed: Vec<TestItem> = Vec::new();
-    let mut rest: Vec<TestItem> = Vec::new();
-    for item in items {
-        if failed_ids.contains(item.node_id.as_ref()) {
-            failed.push(item);
-        } else {
-            rest.push(item);
-        }
-    }
+    let (mut failed, rest): (Vec<_>, Vec<_>) = items
+        .into_iter()
+        .partition(|item| failed_ids.contains(item.node_id.as_ref()));
     failed.extend(rest);
     failed
 }
