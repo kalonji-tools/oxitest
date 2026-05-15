@@ -1,7 +1,6 @@
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
-use crate::config::Config;
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
@@ -11,9 +10,7 @@ use crate::types::{CollectError, TestItem};
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
 const BUILTIN_MARKERS: &[&str] = &["skip", "skipif", "xfail", "usefixtures", "timeout"];
 
-pub fn validate_markers(items: &[TestItem], cfg: &Config) -> Vec<CollectError> {
-    let registered: std::collections::HashSet<&str> =
-        cfg.registered_markers.iter().map(String::as_str).collect();
+pub fn validate_markers(items: &[TestItem], registered: &std::collections::HashSet<&str>) -> Vec<CollectError> {
     items
         .iter()
         .flat_map(|item| {
