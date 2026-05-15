@@ -66,40 +66,48 @@ pub fn suite_level(violations: &[StrictViolation]) -> Vec<&StrictViolation> {
         .collect()
 }
 
-pub fn format_violation_line(v: &StrictViolation) -> String {
-    match v {
-        StrictViolation::BareAssert { node_id, lines } => {
-            if lines.is_empty() {
-                format!("{:<60}  bare-assert", node_id.as_ref())
-            } else {
-                let nums = lines
-                    .iter()
-                    .map(|n| n.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let label = if lines.len() == 1 { "line" } else { "lines" };
-                format!(
-                    "{:<60}  bare-assert        {} {}",
+impl std::fmt::Display for StrictViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StrictViolation::BareAssert { node_id, lines } => {
+                if lines.is_empty() {
+                    write!(f, "{:<60}  bare-assert", node_id.as_ref())
+                } else {
+                    let nums = lines
+                        .iter()
+                        .map(|n| n.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let label = if lines.len() == 1 { "line" } else { "lines" };
+                    write!(
+                        f,
+                        "{:<60}  bare-assert        {} {}",
+                        node_id.as_ref(),
+                        label,
+                        nums
+                    )
+                }
+            }
+            StrictViolation::DictParametrize { node_id } => {
+                write!(f, "{:<60}  dict-parametrize", node_id.as_ref())
+            }
+            StrictViolation::MissingMarkReason { node_id, mark_name } => {
+                write!(
+                    f,
+                    "{:<60}  missing-mark-reason   {}",
                     node_id.as_ref(),
-                    label,
-                    nums
+                    mark_name
                 )
             }
-        }
-        StrictViolation::DictParametrize { node_id } => {
-            format!("{:<60}  dict-parametrize", node_id.as_ref())
-        }
-        StrictViolation::MissingMarkReason { node_id, mark_name } => {
-            format!(
-                "{:<60}  missing-mark-reason   {}",
-                node_id.as_ref(),
-                mark_name
-            )
-        }
-        StrictViolation::MarkerNoDescription { marker_name } => {
-            format!("markers[\"{}\"]   no description", marker_name)
+            StrictViolation::MarkerNoDescription { marker_name } => {
+                write!(f, "markers[\"{}\"]   no description", marker_name)
+            }
         }
     }
+}
+
+pub fn format_violation_line(v: &StrictViolation) -> String {
+    v.to_string()
 }
 
 /// Returns a `TestOutcome::Error` for a per-test strict violation.
