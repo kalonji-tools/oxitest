@@ -82,18 +82,14 @@ impl WorkerResult {
 }
 
 impl WorkerResult {
-    /// Synthesise an error result for a test whose subprocess never responded.
-    fn timed_out(node_id: String, watchdog: std::time::Duration) -> Self {
-        let msg = format!(
-            "Worker subprocess unresponsive after {}s",
-            watchdog.as_secs()
-        );
+    /// Synthesise an error result for a test that could not be executed.
+    fn error_sentinel(node_id: String, message: String, duration_ms: f64) -> Self {
         WorkerResult {
             node_id,
             outcome: "error".to_string(),
-            duration_ms: watchdog.as_millis() as f64,
-            failure_repr: Some(msg.clone()),
-            message: Some(msg),
+            duration_ms,
+            failure_repr: Some(message.clone()),
+            message: Some(message),
             file: None,
             lineno: None,
             source_line: None,
@@ -105,24 +101,22 @@ impl WorkerResult {
         }
     }
 
+    /// Synthesise an error result for a test whose subprocess never responded.
+    fn timed_out(node_id: String, watchdog: std::time::Duration) -> Self {
+        Self::error_sentinel(
+            node_id,
+            format!("Worker subprocess unresponsive after {}s", watchdog.as_secs()),
+            watchdog.as_millis() as f64,
+        )
+    }
+
     /// Synthesise an error result for a test whose subprocess exited unexpectedly.
     fn crashed(node_id: String) -> Self {
-        let msg = "Worker subprocess exited unexpectedly".to_string();
-        WorkerResult {
+        Self::error_sentinel(
             node_id,
-            outcome: "error".to_string(),
-            duration_ms: 0.0,
-            failure_repr: Some(msg.clone()),
-            message: Some(msg),
-            file: None,
-            lineno: None,
-            source_line: None,
-            no_message_lines: vec![],
-            left: None,
-            right: None,
-            op: None,
-            strict: false,
-        }
+            "Worker subprocess exited unexpectedly".to_string(),
+            0.0,
+        )
     }
 }
 
