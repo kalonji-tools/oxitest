@@ -61,6 +61,24 @@ files = "\\.rs$"
 stages = ["pre-push"]
 
 [[repos.hooks]]
+id = "uv-lock-check"
+name = "uv lock --check"
+language = "system"
+entry = "uv lock --check"
+pass_filenames = false
+files = "(pyproject\\.toml|uv\\.lock)$"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "cargo-lock-check"
+name = "cargo update --locked"
+language = "system"
+entry = "cargo update --locked"
+pass_filenames = false
+files = "(Cargo\\.toml|Cargo\\.lock)$"
+stages = ["pre-push"]
+
+[[repos.hooks]]
 id = "check-tag-version"
 name = "tag matches Cargo.toml version"
 language = "system"
