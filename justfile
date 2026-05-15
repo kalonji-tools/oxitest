@@ -59,3 +59,22 @@ check: lint (fmt "--check")
 clean:
     cargo clean
     rm -f python/oxitest/_oxitest*.so
+
+# Check that all required tools are on $PATH
+health:
+    #!/usr/bin/env bash
+    missing=0
+    for cmd in cargo uv maturin ruff ty mkdocs codespell python3; do
+        if command -v "$cmd" > /dev/null 2>&1; then
+            printf '  ✓ %s (%s)\n' "$cmd" "$(command -v "$cmd")"
+        else
+            printf '  ✗ %s NOT FOUND\n' "$cmd"
+            missing=$((missing + 1))
+        fi
+    done
+    if [ "$missing" -gt 0 ]; then
+        printf '\n%d tool(s) missing\n' "$missing"
+        exit 1
+    else
+        printf '\nAll tools available\n'
+    fi
