@@ -66,12 +66,14 @@ pub enum TestOutcome {
         left: String,
         right: String,
         op: String,
+        frames: Vec<(String, usize, String, String)>,
     },
     Error {
         message: String,
         file: String,
         lineno: usize,
         source_line: String,
+        frames: Vec<(String, usize, String, String)>,
     },
     Skipped {
         reason: String,
@@ -179,6 +181,7 @@ pub struct RawOutcome<'a> {
     pub right: &'a str,
     pub op: &'a str,
     pub strict: bool,
+    pub frames: &'a [(String, usize, String, String)],
 }
 
 impl TestOutcome {
@@ -203,6 +206,7 @@ impl TestOutcome {
                 left: r.left.to_owned(),
                 right: r.right.to_owned(),
                 op: r.op.to_owned(),
+                frames: r.frames.to_vec(),
             },
             "skipped" => TestOutcome::Skipped {
                 reason: r.message.to_owned(),
@@ -219,6 +223,7 @@ impl TestOutcome {
                 file: r.file.to_owned(),
                 lineno: r.lineno,
                 source_line: r.source_line.to_owned(),
+                frames: r.frames.to_vec(),
             },
         }
     }
@@ -250,6 +255,7 @@ mod tests {
             left: "0".to_string(),
             right: "1".to_string(),
             op: "==".to_string(),
+            frames: vec![],
         };
         if let TestOutcome::Failed {
             lineno,
@@ -336,6 +342,7 @@ mod tests {
             left: String::new(),
             right: String::new(),
             op: String::new(),
+            frames: vec![],
         };
         assert!(o.is_hard_failure());
     }
@@ -347,6 +354,7 @@ mod tests {
             file: String::new(),
             lineno: 0,
             source_line: String::new(),
+            frames: vec![],
         };
         assert!(o.is_hard_failure());
     }
@@ -467,6 +475,7 @@ mod tests {
             left: String::new(),
             right: String::new(),
             op: String::new(),
+            frames: vec![],
         };
         assert_eq!(o.dot_char(), 'F');
     }
@@ -478,6 +487,7 @@ mod tests {
             file: String::new(),
             lineno: 0,
             source_line: String::new(),
+            frames: vec![],
         };
         assert_eq!(o.dot_char(), 'E');
     }
@@ -567,6 +577,7 @@ mod tests {
             left: String::new(),
             right: String::new(),
             op: String::new(),
+            frames: vec![],
         };
         assert_eq!(o.label(), "FAIL ");
     }
@@ -578,6 +589,7 @@ mod tests {
             file: String::new(),
             lineno: 0,
             source_line: String::new(),
+            frames: vec![],
         };
         assert_eq!(o.label(), "ERROR");
     }
@@ -654,6 +666,7 @@ mod tests {
                 left: String::new(),
                 right: String::new(),
                 op: String::new(),
+            frames: vec![],
             }
             .as_str(),
             "failed"
@@ -664,6 +677,7 @@ mod tests {
                 file: String::new(),
                 lineno: 0,
                 source_line: String::new(),
+                frames: vec![],
             }
             .as_str(),
             "error"
@@ -765,6 +779,7 @@ mod tests {
             right: "1",
             op: "==",
             strict: false,
+            frames: &[],
         }
     }
 
@@ -789,6 +804,7 @@ mod tests {
             right: "1",
             op: "==",
             strict: false,
+            frames: &[],
         });
         match o {
             TestOutcome::Failed {
@@ -868,12 +884,14 @@ mod tests {
                 left: String::new(),
                 right: String::new(),
                 op: String::new(),
+            frames: vec![],
             },
             TestOutcome::Error {
                 message: String::new(),
                 file: String::new(),
                 lineno: 0,
                 source_line: String::new(),
+                frames: vec![],
             },
             TestOutcome::Skipped {
                 reason: String::new(),

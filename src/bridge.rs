@@ -6,7 +6,6 @@ use crate::types::{CollectError, NodeId, RawOutcome, TestItem, TestOutcome};
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
 #[derive(FromPyObject)]
-#[allow(dead_code)] // Extracted for PyO3 contract sync; rendering added in a later task.
 struct BridgeFrame {
     file: String,
     lineno: usize,
@@ -29,7 +28,6 @@ struct BridgeResult {
     strict: bool,
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
-    #[allow(dead_code)] // Extracted for PyO3 contract sync; rendering added in a later task.
     frames: Vec<BridgeFrame>,
 }
 
@@ -162,6 +160,7 @@ pub fn run_test(
         file: String::new(),
         lineno: 0,
         source_line: String::new(),
+        frames: vec![],
     })
 }
 
@@ -201,6 +200,12 @@ fn try_run_test(
         )?
         .extract()?;
 
+    let frames: Vec<(String, usize, String, String)> = r
+        .frames
+        .iter()
+        .map(|f| (f.file.clone(), f.lineno, f.name.clone(), f.line.clone()))
+        .collect();
+
     Ok(TestOutcome::from_raw(RawOutcome {
         status: r.status.as_str(),
         message: &r.message,
@@ -212,5 +217,6 @@ fn try_run_test(
         right: &r.right,
         op: &r.op,
         strict: r.strict,
+        frames: &frames,
     }))
 }
