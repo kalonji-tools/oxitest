@@ -14,6 +14,7 @@ mod reporter;
 mod scheduler;
 mod strict;
 mod types;
+mod worker_result;
 
 fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
     std::fs::metadata(path)
