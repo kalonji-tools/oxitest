@@ -21,6 +21,7 @@ class TestResult:
     right: str = ""
     op: str = ""
     strict: bool = True
+    exc_type: str = ""
 
 
 @dataclass

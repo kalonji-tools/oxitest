@@ -33,7 +33,7 @@ types = ["python"]
 id = "ty"
 name = "ty check"
 language = "system"
-entry = "ty check"
+entry = "env PYTHONPATH=python ty check"
 types = ["python"]
 pass_filenames = false
 
