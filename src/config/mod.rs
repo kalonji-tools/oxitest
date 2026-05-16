@@ -25,8 +25,10 @@ fn parse_workers(s: &str) -> Result<WorkerCount, String> {
     Ok(WorkerCount::Fixed(n))
 }
 
-#[derive(clap::ValueEnum, Debug, Clone, PartialEq)]
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum TbStyle {
+    Long,
     Short,
     Line,
     No,
@@ -79,6 +81,7 @@ pub struct Config {
     pub markers_without_description: Vec<String>,
     pub schedule: ScheduleStrategy,
     pub failed: Option<FailedMode>,
+    pub tb: TbStyle,
 }
 
 impl Default for Config {
@@ -110,6 +113,7 @@ impl Default for Config {
             markers_without_description: vec![],
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
+            tb: TbStyle::Short,
         }
     }
 }
@@ -162,6 +166,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     }
     if let Some(f) = tc.failed {
         config.failed = Some(f);
+    }
+    if let Some(tb) = tc.tb {
+        config.tb = tb;
     }
 }
 
@@ -254,6 +261,9 @@ impl Config {
         self.schedule = cli.schedule;
         if cli.failed.is_some() {
             self.failed = cli.failed;
+        }
+        if let Some(tb) = cli.tb.clone() {
+            self.tb = tb;
         }
         self
     }
@@ -409,15 +419,40 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_tb_default_is_short() {
+    fn test_cli_tb_default_is_none() {
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.tb, TbStyle::Short);
+        assert_eq!(cli.tb, None);
+    }
+
+    #[test]
+    fn test_cli_tb_short() {
+        let cli = Cli::try_parse_from(["oxitest", "--tb", "short"]).unwrap();
+        assert_eq!(cli.tb, Some(TbStyle::Short));
     }
 
     #[test]
     fn test_cli_tb_no() {
         let cli = Cli::try_parse_from(["oxitest", "--tb", "no"]).unwrap();
-        assert_eq!(cli.tb, TbStyle::No);
+        assert_eq!(cli.tb, Some(TbStyle::No));
+    }
+
+    #[test]
+    fn test_cli_tb_long() {
+        let cli = Cli::try_parse_from(["oxitest", "--tb", "long"]).unwrap();
+        assert_eq!(cli.tb, Some(TbStyle::Long));
+    }
+
+    #[test]
+    fn test_tb_from_pyproject() {
+        let toml = "[tool.oxitest]\ntb = \"long\"\n";
+        let cfg = Config::from_str(toml).unwrap();
+        assert_eq!(cfg.tb, TbStyle::Long);
+    }
+
+    #[test]
+    fn test_tb_default_is_short() {
+        let cfg = Config::default();
+        assert_eq!(cfg.tb, TbStyle::Short);
     }
 
     #[test]

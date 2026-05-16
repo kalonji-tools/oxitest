@@ -47,7 +47,7 @@ impl ReporterOptsBuilder {
         Self {
             total: 0,
             use_color,
-            tb: cli.tb.clone(),
+            tb: cli.tb.clone().unwrap_or(crate::config::TbStyle::Short),
             show_tips: cli.tips || cli.verbose,
             show_warnings: cli.warnings || cli.verbose,
             verbose: cli.verbose,
@@ -62,6 +62,10 @@ impl ReporterOptsBuilder {
 
     pub fn verbose(self, v: bool) -> Self {
         Self { verbose: v, ..self }
+    }
+
+    pub fn tb(self, tb: crate::config::TbStyle) -> Self {
+        Self { tb, ..self }
     }
 
     pub fn strict_suite_lines(self, lines: Vec<String>) -> Self {
@@ -91,12 +95,6 @@ impl Default for ReporterOptsBuilder {
     }
 }
 
-#[cfg(test)]
-impl ReporterOptsBuilder {
-    pub fn tb(self, tb: crate::config::TbStyle) -> Self {
-        Self { tb, ..self }
-    }
-}
 
 #[cfg(test)]
 mod tests {
