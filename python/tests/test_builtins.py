@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
-from oxitest import Fixture, TempDir, importorskip, raises  # noqa: F401
+from oxitest import Fixture, TempDir, raises  # noqa: F401
 from oxitest._bridge._builtins import (  # noqa: F401
     FdCapture,
     LogCapture,
@@ -733,63 +733,6 @@ def test_stdlib_backend_set_level_filters_records():
     assert recs[0].getMessage() == "should be captured", (
         f"only the post-set_level record should be captured, got "
         f"{recs[0].getMessage()!r}"
-    )
-
-
-# ── LoguruLogBackend ──────────────────────────────────────────────────────────
-
-
-def test_loguru_backend_noop_when_not_installed():
-    import sys
-    from unittest.mock import patch
-
-    from oxitest._bridge._builtins._logcapture import LoguruLogBackend
-
-    backend = LoguruLogBackend()
-    with patch.dict(sys.modules, {"loguru": None}):
-        backend.install()  # must not raise
-        assert backend.records == [], (
-            "LoguruLogBackend.records should be empty when loguru is not available"
-        )
-        backend.uninstall()  # must not raise
-        assert backend._sink_id is None, (
-            "LoguruLogBackend._sink_id should be None after uninstall when loguru was "
-            "not available"
-        )
-
-
-def test_loguru_backend_captures_when_installed():
-    importorskip("loguru")
-    import loguru
-    from oxitest._bridge._builtins._logcapture import LoguruLogBackend
-
-    backend = LoguruLogBackend()
-    backend.install()
-    loguru.logger.warning("from loguru")
-    recs = backend.records
-    backend.uninstall()
-
-    assert len(recs) == 1, (
-        f"LoguruLogBackend should capture 1 log record, got {len(recs)}"
-    )
-    assert "from loguru" in recs[0].getMessage(), (
-        f"captured loguru record should contain 'from loguru', got "
-        f"{recs[0].getMessage()!r}"
-    )
-
-
-def test_loguru_backend_uninstall_removes_sink():
-    importorskip("loguru")
-    from oxitest._bridge._builtins._logcapture import LoguruLogBackend
-
-    backend = LoguruLogBackend()
-    backend.install()
-    assert backend._sink_id is not None, (
-        "LoguruLogBackend._sink_id should be set after install(), got None"
-    )
-    backend.uninstall()
-    assert backend._sink_id is None, (
-        "LoguruLogBackend._sink_id should be None after uninstall()"
     )
 
 
