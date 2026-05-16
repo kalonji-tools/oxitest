@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
@@ -54,6 +56,20 @@ impl FixtureSession {
     /// Run session-scoped teardowns at the end of the run.
     pub fn end_session(&self, py: Python<'_>) -> PyResult<()> {
         self.0.bind(py).call_method0("end_session")?;
+        Ok(())
+    }
+
+    /// Load plugins by calling into the Python plugin loader.
+    pub fn load_plugins(
+        &self,
+        py: Python<'_>,
+        plugins: &[String],
+        plugin_settings: &HashMap<String, toml::Value>,
+    ) -> PyResult<()> {
+        let loader = py.import("oxitest._bridge.plugin_loader")?;
+        let plugin_list: Vec<&str> = plugins.iter().map(|s| s.as_str()).collect();
+        let settings_json = serde_json::to_string(plugin_settings).unwrap_or_default();
+        loader.call_method1("init_plugins", (plugin_list, settings_json))?;
         Ok(())
     }
 
