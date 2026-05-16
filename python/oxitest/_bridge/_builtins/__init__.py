@@ -30,7 +30,6 @@ from oxitest._bridge._builtins._capture import (
 )
 from oxitest._bridge._builtins._logcapture import (
     LogBackend as LogBackend,
-    LoguruLogBackend as LoguruLogBackend,
     StdlibLogBackend as StdlibLogBackend,
     _LogCapture,
     _LogCaptureFixture as _LogCaptureFixture,
@@ -89,7 +88,6 @@ __all__ = [
     "WarnCapture",
     "LogBackend",
     "StdlibLogBackend",
-    "LoguruLogBackend",
     "CaptureResult",
     "BuiltinFixture",
     "_BuiltinContext",
