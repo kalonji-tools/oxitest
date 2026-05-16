@@ -1,7 +1,9 @@
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use super::{parse_workers, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount};
+use super::{
+    parse_workers, ColorMode, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "oxitest", about = "A fast Python test runner")]
@@ -22,8 +24,8 @@ pub struct Cli {
     pub exitfirst: bool,
 
     /// Exit after N failures (0 = no limit)
-    #[arg(long, default_value = "0", value_name = "NUM")]
-    pub maxfail: usize,
+    #[arg(long, value_name = "NUM")]
+    pub maxfail: Option<usize>,
 
     /// Traceback style: long, short (default), line, no
     #[arg(long, value_enum)]
@@ -37,8 +39,12 @@ pub struct Cli {
     #[arg(long)]
     pub warnings: bool,
 
-    /// Disable color output
-    #[arg(long)]
+    /// Color output mode: auto (default), always, never
+    #[arg(long, value_enum, default_value = "auto")]
+    pub color: ColorMode,
+
+    /// [hidden] Legacy alias for --color=never
+    #[arg(long, hide = true)]
     pub no_color: bool,
 
     /// Write CTRF JSON results to PATH
@@ -65,7 +71,7 @@ pub struct Cli {
     #[arg(long, value_name = "SECS")]
     pub timeout: Option<u64>,
 
-    /// Show the N slowest tests at end of run (0 = disabled)
+    /// Show the N slowest tests at end of run
     #[arg(long, value_name = "N")]
     pub durations: Option<usize>,
 

@@ -42,17 +42,32 @@ impl ReporterOptsBuilder {
         }
     }
 
-    /// Derive all fields from CLI. Sets total=0 — call `.total(n)` before `.build()`.
-    pub fn from_cli(cli: &crate::config::Cli, use_color: bool) -> Self {
+    /// Derive fields from resolved Config. Sets total=0 — call `.total(n)` before `.build()`.
+    /// Use `.show_tips(true)` / `.show_warnings(true)` to apply CLI-only flags after.
+    pub fn from_config(cfg: &crate::config::Config, use_color: bool) -> Self {
         Self {
             total: 0,
             use_color,
-            tb: cli.tb.clone().unwrap_or(crate::config::TbStyle::Short),
-            show_tips: cli.tips || cli.verbose,
-            show_warnings: cli.warnings || cli.verbose,
-            verbose: cli.verbose,
-            show_durations: cli.durations,
+            tb: cfg.tb.clone(),
+            show_tips: cfg.verbose,
+            show_warnings: cfg.verbose,
+            verbose: cfg.verbose,
+            show_durations: cfg.durations,
             strict_suite_lines: vec![],
+        }
+    }
+
+    pub fn show_tips(self, v: bool) -> Self {
+        Self {
+            show_tips: self.show_tips || v,
+            ..self
+        }
+    }
+
+    pub fn show_warnings(self, v: bool) -> Self {
+        Self {
+            show_warnings: self.show_warnings || v,
+            ..self
         }
     }
 
@@ -99,18 +114,6 @@ impl Default for ReporterOptsBuilder {
 mod tests {
     use super::*;
 
-    fn test_cli(verbose: bool, tips: bool, warnings: bool) -> crate::config::Cli {
-        use clap::Parser;
-        let base = crate::config::Cli::try_parse_from(["oxitest"])
-            .expect("default CLI parse must succeed");
-        crate::config::Cli {
-            verbose,
-            tips,
-            warnings,
-            ..base
-        }
-    }
-
     #[test]
     fn test_builder_new_defaults() {
         let opts = ReporterOptsBuilder::new().build();
@@ -143,58 +146,56 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_from_cli_verbose_implies_show_tips_and_warnings() {
-        let cli = test_cli(true, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_from_config_verbose_implies_show_tips_and_warnings() {
+        let mut cfg = crate::config::Config::default();
+        cfg.verbose = true;
+        let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert!(opts.show_tips);
         assert!(opts.show_warnings);
         assert!(opts.verbose);
     }
 
     #[test]
-    fn test_builder_from_cli_tips_flag_without_verbose() {
-        let cli = test_cli(false, true, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_show_tips_setter() {
+        let opts = ReporterOptsBuilder::new().show_tips(true).build();
         assert!(opts.show_tips);
         assert!(!opts.show_warnings);
         assert!(!opts.verbose);
     }
 
     #[test]
-    fn test_builder_from_cli_warnings_flag_without_verbose() {
-        let cli = test_cli(false, false, true);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_show_warnings_setter() {
+        let opts = ReporterOptsBuilder::new().show_warnings(true).build();
         assert!(!opts.show_tips);
         assert!(opts.show_warnings);
     }
 
     #[test]
-    fn test_builder_from_cli_use_color_passed_through() {
-        let cli = test_cli(false, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, true).build();
+    fn test_from_config_use_color_passed_through() {
+        let cfg = crate::config::Config::default();
+        let opts = ReporterOptsBuilder::from_config(&cfg, true).build();
         assert!(opts.use_color);
     }
 
     #[test]
-    fn test_builder_from_cli_total_default_is_zero() {
-        let cli = test_cli(false, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_from_config_total_default_is_zero() {
+        let cfg = crate::config::Config::default();
+        let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert_eq!(opts.total, 0);
     }
 
     #[test]
-    fn test_builder_durations_from_cli() {
-        use clap::Parser;
-        let cli = crate::config::Cli::try_parse_from(["oxitest", "--durations", "5"]).unwrap();
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_from_config_durations() {
+        let mut cfg = crate::config::Config::default();
+        cfg.durations = Some(5);
+        let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert_eq!(opts.show_durations, Some(5));
     }
 
     #[test]
-    fn test_builder_durations_absent_is_none() {
-        use clap::Parser;
-        let cli = crate::config::Cli::try_parse_from(["oxitest"]).unwrap();
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
+    fn test_from_config_durations_none() {
+        let cfg = crate::config::Config::default();
+        let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert!(opts.show_durations.is_none());
     }
 

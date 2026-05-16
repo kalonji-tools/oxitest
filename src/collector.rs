@@ -132,6 +132,9 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Short,
+            verbose: false,
+            durations: None,
+            color: crate::config::ColorMode::Auto,
         }
     }
 
@@ -200,6 +203,9 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Short,
+            verbose: false,
+            durations: None,
+            color: crate::config::ColorMode::Auto,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -234,6 +240,9 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Short,
+            verbose: false,
+            durations: None,
+            color: crate::config::ColorMode::Auto,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -307,6 +316,9 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Short,
+            verbose: false,
+            durations: None,
+            color: crate::config::ColorMode::Auto,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(

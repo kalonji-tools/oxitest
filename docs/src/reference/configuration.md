@@ -39,6 +39,11 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `failed` | string | — | Failed-test mode. `"only"` runs just previously-failed tests; `"first"` runs failures before the rest. When omitted, all tests run in normal order. |
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
 | `tb` | string | `"short"` | Traceback style on failure. One of: `"long"`, `"short"`, `"line"`, `"no"`. CLI `--tb` overrides this value. |
+| `verbose` | boolean | `false` | Enable verbose output (show each test name). CLI `-v` overrides. |
+| `maxfail` | integer | `0` | Stop after N failures. `0` means unlimited. CLI `--maxfail` overrides. |
+| `durations` | integer | — | Show the N slowest tests at end of run. CLI `--durations` overrides. |
+| `serial` | boolean | `false` | Run all tests in a single process. CLI `--serial` overrides. |
+| `color` | string | `"auto"` | Color output mode. One of: `"auto"`, `"always"`, `"never"`. CLI `--color` overrides. |
 
 ## schedule
 
