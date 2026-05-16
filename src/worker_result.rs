@@ -1,6 +1,14 @@
 use crate::types;
 
 #[derive(serde::Deserialize)]
+pub(crate) struct FrameEntry {
+    pub file: String,
+    pub lineno: u64,
+    pub name: String,
+    pub line: String,
+}
+
+#[derive(serde::Deserialize)]
 pub(crate) struct WorkerResult {
     pub node_id: String,
     pub outcome: String,
@@ -26,6 +34,8 @@ pub(crate) struct WorkerResult {
     pub op: Option<String>,
     #[serde(default)]
     pub strict: bool,
+    #[serde(default)]
+    pub frames: Vec<FrameEntry>,
 }
 
 impl WorkerResult {
@@ -66,6 +76,19 @@ impl WorkerResult {
             .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
 
+        let frames: Vec<(String, usize, String, String)> = self
+            .frames
+            .iter()
+            .map(|f| {
+                (
+                    f.file.clone(),
+                    usize::try_from(f.lineno).unwrap_or(0),
+                    f.name.clone(),
+                    f.line.clone(),
+                )
+            })
+            .collect();
+
         types::TestOutcome::from_raw(types::RawOutcome {
             status: &self.outcome,
             message: &message,
@@ -77,7 +100,7 @@ impl WorkerResult {
             right: self.right.as_deref().unwrap_or_default(),
             op: self.op.as_deref().unwrap_or_default(),
             strict: self.strict,
-            frames: &[],
+            frames: &frames,
         })
     }
 }
@@ -99,6 +122,7 @@ impl WorkerResult {
             right: None,
             op: None,
             strict: false,
+            frames: vec![],
         }
     }
 
