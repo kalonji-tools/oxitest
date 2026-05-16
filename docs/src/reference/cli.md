@@ -21,28 +21,55 @@ current working directory when omitted.
 | `--verbose` | `-v` | flag | `false` | Enable verbose output. Prints each test name as it runs. |
 | `-x` | — | flag | `false` | Stop immediately after the first test failure or error. |
 | `--maxfail` | — | integer | `0` | Stop after `N` failures. `0` means unlimited. |
-| `--tb` | — | `short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
+| `--tb` | — | `long\|short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
 | `--tips` | — | flag | `false` | Expand assertion tip output from a count to a full `file:line` list (see [Tips](#tips)). |
 | `--warnings` | — | flag | `false` | Enable display of Python warnings captured during test execution. |
 | `--no-color` | — | flag | `false` | Disable ANSI color in output. |
 | `--serial` | — | flag | `false` | Run all tests in a single process. Disables parallel workers. Conflicts with `--workers`. |
-| `--workers` | — | integer | cpu count | Number of parallel worker processes. Conflicts with `--serial`. |
+| `--workers` | `-n` | `auto\|integer` | cpu count | Number of parallel worker processes. `auto` uses all available CPUs. Conflicts with `--serial`. |
 | `--durations` | — | integer | — | Show the N slowest tests at end of run. `0` disables. |
 | `--json` | — | `PATH` | — | Write CTRF-format JSON results to `PATH`. |
-| `--lf` | — | flag | `false` | Run only tests that failed on the last run. Conflicts with `--ff`. |
-| `--ff` | — | flag | `false` | Run failed tests first, then the rest. Conflicts with `--lf`. |
+| `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
+| `--schedule` | — | `longest-first\|failed-first\|random` | `longest-first` | Group scheduling strategy for parallel runs. |
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
 | `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
 
 ## Traceback styles
 
-The `--tb` option controls how failure tracebacks are rendered.
+The `--tb` option controls how failure tracebacks are rendered. Each mode shows
+progressively less detail:
 
 | Value | Behaviour |
 |-------|-----------|
-| `short` | Shows the failing source line together with the operand values. Default. |
-| `line` | Shows only the file and line number of the failure; no source or operand detail. |
-| `no` | Suppresses traceback output entirely. |
+| `long` | Full call-chain frames showing how execution reached the failure, plus operand values. |
+| `short` | The failing source line together with the operand values. Default. |
+| `line` | One compact line per failure: `STATUS  node_id  :lineno  message`. |
+| `no` | Suppresses traceback output entirely. Only the summary count is shown. |
+
+Example `--tb=long` output:
+
+```
+FAILED  tests/test_math.py::test_divide
+        ┌─ tests/test_math.py:2
+        │
+        ├─  frames
+        │    tests/test_math.py:8  test_divide
+        │      result = compute(1, 0)
+        │    tests/test_math.py:5  compute
+        │      return helper(a, b)
+        │    tests/test_math.py:2  helper
+        │      return a / b
+        │
+        └─ ZeroDivisionError: division by zero
+```
+
+Example `--tb=line` output:
+
+```
+FAILURES ════════════════════════════════════════════════════════════════════════
+FAILED  tests/test_math.py::test_add     :4   expected 3, got 5
+ERROR   tests/test_math.py::test_divide  :2   ZeroDivisionError: division by zero
+```
 
 ## Tips
 
