@@ -237,6 +237,7 @@ mod tests {
                 left: String::new(),
                 right: String::new(),
                 op: String::new(),
+                frames: vec![],
             },
         )]);
         assert!(

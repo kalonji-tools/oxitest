@@ -215,6 +215,7 @@ mod json_tests {
                 left: "0".to_string(),
                 right: "1".to_string(),
                 op: "==".to_string(),
+                frames: vec![],
             },
             8.0,
         );
