@@ -202,6 +202,27 @@ class MarkerCase:
         ),
         expected_status="skipped",
     ),
+    xfail_raises_matching=MarkerCase(
+        code=(
+            "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
+            "def test_foo(): raise ValueError('boom')\n"
+        ),
+        expected_status="xfailed",
+    ),
+    xfail_raises_not_matching=MarkerCase(
+        code=(
+            "@oxitest.mark.xfail(raises=TypeError, reason='known')\n"
+            "def test_foo(): raise ValueError('boom')\n"
+        ),
+        expected_status="error",
+    ),
+    xfail_raises_passes=MarkerCase(
+        code=(
+            "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
+            "def test_foo(): pass\n"
+        ),
+        expected_status="xpassed",
+    ),
 )
 def test_mark_executor_result(
     tmp: TempDir, code: str, expected_status: str, message_contains: str
