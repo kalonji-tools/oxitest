@@ -27,10 +27,11 @@ current working directory when omitted.
 | `--no-color` | — | flag | `false` | Disable ANSI color in output. |
 | `--serial` | — | flag | `false` | Run all tests in a single process. Disables parallel workers. Conflicts with `--workers`. |
 | `--workers` | `-n` | `auto\|integer` | cpu count | Number of parallel worker processes. `auto` uses all available CPUs. Conflicts with `--serial`. |
-| `--durations` | — | integer | — | Show the N slowest tests at end of run. `0` disables. |
+| `--schedule` | — | `longest-first\|failed-first\|random` | — | Group scheduling strategy for parallel runs. Defaults to `longest-first`. |
+| `--timeout` | — | integer (seconds) | — | Per-test timeout. Tests exceeding this are killed and marked failed. Overrides pyproject.toml `timeout`. |
+| `--durations` | — | integer | — | Show the N slowest tests at end of run. |
 | `--json` | — | `PATH` | — | Write CTRF-format JSON results to `PATH`. |
 | `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
-| `--schedule` | — | `longest-first\|failed-first\|random` | `longest-first` | Group scheduling strategy for parallel runs. |
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
 | `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
 
