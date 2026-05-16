@@ -205,9 +205,16 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let mut cache = cache::TestCache::load(&rootdir);
 
     let is_tty = std::io::stdout().is_terminal();
-    let use_color = !cli.no_color && console::colors_enabled();
+    let use_color = match cfg.color {
+        config::ColorMode::Always => true,
+        config::ColorMode::Never => false,
+        config::ColorMode::Auto => is_tty && console::colors_enabled(),
+    };
     let resolved_tb = cli.tb.clone().unwrap_or(cfg.tb.clone());
-    let base = reporter::ReporterOptsBuilder::from_cli(&cli, use_color).tb(resolved_tb);
+    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color)
+        .tb(resolved_tb)
+        .show_tips(cli.tips)
+        .show_warnings(cli.warnings);
     let make_error_rep =
         || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None);
 
