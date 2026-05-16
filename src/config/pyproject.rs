@@ -26,6 +26,7 @@ pub(super) struct OxitestConfig {
     pub(super) workers: Option<WorkerCount>,
     pub(super) schedule: Option<super::ScheduleStrategy>,
     pub(super) failed: Option<super::FailedMode>,
+    pub(super) tb: Option<super::TbStyle>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {
