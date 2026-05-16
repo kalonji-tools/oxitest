@@ -216,6 +216,20 @@ class MarkerCase:
         ),
         expected_status="error",
     ),
+    xfail_raises_assertion_not_matching=MarkerCase(
+        code=(
+            "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
+            "def test_foo(): assert False\n"
+        ),
+        expected_status="failed",
+    ),
+    xfail_raises_assertion_matching=MarkerCase(
+        code=(
+            "@oxitest.mark.xfail(raises=AssertionError, reason='known')\n"
+            "def test_foo(): assert False\n"
+        ),
+        expected_status="xfailed",
+    ),
     xfail_raises_passes=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
