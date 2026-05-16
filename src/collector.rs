@@ -130,6 +130,7 @@ mod tests {
             strict: None,
             markers_without_description: vec![],
             schedule: crate::config::ScheduleStrategy::LongestFirst,
+            failed: None,
         }
     }
 
@@ -196,6 +197,7 @@ mod tests {
             strict: None,
             markers_without_description: vec![],
             schedule: crate::config::ScheduleStrategy::LongestFirst,
+            failed: None,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -228,6 +230,7 @@ mod tests {
             strict: None,
             markers_without_description: vec![],
             schedule: crate::config::ScheduleStrategy::LongestFirst,
+            failed: None,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -299,6 +302,7 @@ mod tests {
             strict: None,
             markers_without_description: vec![],
             schedule: crate::config::ScheduleStrategy::LongestFirst,
+            failed: None,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
