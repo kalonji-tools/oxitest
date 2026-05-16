@@ -97,6 +97,8 @@ pub struct Config {
     pub verbose: bool,
     pub durations: Option<usize>,
     pub color: ColorMode,
+    pub plugins: Vec<String>,
+    pub plugin_settings: std::collections::HashMap<String, toml::Value>,
 }
 
 impl Default for Config {
@@ -132,6 +134,8 @@ impl Default for Config {
             verbose: false,
             durations: None,
             color: ColorMode::Auto,
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
         }
     }
 }
@@ -203,6 +207,10 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     if let Some(c) = tc.color {
         config.color = c;
     }
+    if let Some(plugins) = tc.plugins {
+        config.plugins = plugins;
+    }
+    config.plugin_settings = tc.plugin_settings;
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
@@ -1235,6 +1243,41 @@ spawn_overhead_ms = 100.0
         assert!(
             err_msg.contains("\"auto\" or a positive integer"),
             "unexpected error: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_plugins_from_pyproject() {
+        let toml = r#"
+[tool.oxitest]
+plugins = ["oxitest_loguru", "oxitest_db"]
+"#;
+        let cfg = Config::from_str(toml).unwrap();
+        assert_eq!(cfg.plugins, vec!["oxitest_loguru", "oxitest_db"]);
+    }
+
+    #[test]
+    fn test_plugins_default_empty() {
+        let cfg = Config::default();
+        assert!(cfg.plugins.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_settings_from_pyproject() {
+        let toml = r#"
+[tool.oxitest]
+plugins = ["myplugin"]
+
+[tool.oxitest.plugin_settings.myplugin]
+level = "DEBUG"
+timeout = 30
+"#;
+        let cfg = Config::from_str(toml).unwrap();
+        assert!(cfg.plugin_settings.contains_key("myplugin"));
+        let settings = &cfg.plugin_settings["myplugin"];
+        assert_eq!(
+            settings.get("level").and_then(|v| v.as_str()),
+            Some("DEBUG")
         );
     }
 }
