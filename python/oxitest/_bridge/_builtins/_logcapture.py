@@ -83,60 +83,6 @@ class StdlibLogBackend:
             self._level = level
 
 
-class LoguruLogBackend:
-    """Best-effort loguru capture backend.
-
-    Adds a loguru sink on ``install()`` that converts each loguru message into a
-    stdlib ``logging.LogRecord``. No-op if loguru is not installed — ``records``
-    returns ``[]`` and ``install()`` / ``uninstall()`` do nothing.
-    """
-
-    def __init__(self) -> None:
-        self._records: list[logging.LogRecord] = []
-        self._sink_id: int | None = None
-
-    def install(self) -> None:
-        try:
-            import loguru as _loguru
-        except ImportError:
-            return
-
-        records = self._records
-
-        def _sink(message: object) -> None:
-            record = message.record  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-            exc = record["exception"]
-            lr = logging.LogRecord(
-                name=record["name"],
-                level=record["level"].no,
-                pathname=str(record["file"].path),
-                lineno=record["line"],
-                msg=record["message"],
-                args=(),
-                exc_info=(exc.type, exc.value, exc.traceback) if exc else None,
-            )
-            lr.created = record["time"].timestamp()
-            lr.funcName = record["function"]
-            records.append(lr)
-
-        self._sink_id = _loguru.logger.add(_sink)
-
-    def uninstall(self) -> None:
-        if self._sink_id is None:
-            return
-        try:
-            import loguru as _loguru
-
-            _loguru.logger.remove(self._sink_id)
-        except ImportError:
-            pass
-        self._sink_id = None
-
-    @property
-    def records(self) -> list[logging.LogRecord]:
-        return list(self._records)
-
-
 class _LogCapture:
     """Aggregates log records from all registered backends.
 
@@ -166,9 +112,6 @@ class _LogCapture:
 
     def set_level(self, level: int, logger: str | None = None) -> None:
         """Set the minimum capture level, filtering out records below *level*.
-
-        Only affects stdlib backends. ``LoguruLogBackend`` records are always
-        captured regardless of this setting.
 
         Args:
             level: Logging level integer (e.g. ``logging.DEBUG``, ``logging.WARNING``).
@@ -214,6 +157,6 @@ class _LogCapture:
 
 class _LogCaptureFixture(BuiltinFixture, fixture_type=_LogCapture):
     def create(self, ctx: _BuiltinContext) -> _LogCapture:
-        cap = _LogCapture([StdlibLogBackend(), LoguruLogBackend()])
+        cap = _LogCapture([StdlibLogBackend()])
         ctx.teardown_stack.append(cap._teardown)
         return cap

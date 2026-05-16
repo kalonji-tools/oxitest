@@ -43,7 +43,6 @@ build = [
     "maturin>=1.7,<2",
 ]
 test = [
-    "loguru>=0.7.3",
     { include-group = "build" },
 ]
 lint = [
