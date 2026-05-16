@@ -112,6 +112,7 @@ def _handle_assertion_error(exc: AssertionError) -> TestResult:
         left=left_repr,
         right=right_repr,
         op=op,
+        exc_type="AssertionError",
     )
 
 
@@ -122,11 +123,13 @@ def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
         return TestResult(status="skipped", message=str(exc))
     if isinstance(exc, Exception):
         file, lineno, source_line = _get_location(exc)
-        return _error_result(
-            f"{type(exc).__name__}: {exc}",
+        return TestResult(
+            status="error",
+            message=f"{type(exc).__name__}: {exc}",
             file=file,
             lineno=lineno,
             source_line=source_line,
+            exc_type=type(exc).__name__,
         )
     return None
 
