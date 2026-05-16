@@ -13,14 +13,11 @@
 
         python = pkgs.python312;
 
+        # Minimal Python interpreter — only pip for maturin editable installs.
+        # All dev tools (ruff, ty, codespell, loguru, mkdocs, etc.) come from
+        # `uv sync` so versions match pyproject.toml and CI.
         pythonEnv = python.withPackages (ps: with ps; [
           pip
-          loguru
-          mkdocs-material
-          mkdocs-git-revision-date-localized-plugin
-          mkdocs-minify-plugin
-          mkdocstrings
-          mkdocstrings-python
         ]);
 
         oxitest = python.pkgs.callPackage ./nix/package.nix { };
@@ -42,30 +39,14 @@
             rustfmt
             rust-analyzer
 
-            # Build support
-            pkg-config
-            openssl
-
-            # Python + tooling
+            # Python interpreter + build tools
             pythonEnv
             maturin
             uv
 
-            # Linting
-            ruff
-            ty
-            codespell
-
-            # Task runner
+            # Task runner & git hooks
             just
-
-            # Docs (mkdocs-material and plugins are in pythonEnv above)
-
-            # Git hooks
             prek
-
-            # oxitest binary (nix-built; use `maturin develop` for editable dev version)
-            oxitest
           ];
 
           env = {
@@ -79,6 +60,12 @@
           };
 
           shellHook = ''
+            # Sync Python dev dependencies (ruff, ty, codespell, mkdocs, etc.)
+            uv sync --quiet 2>/dev/null || true
+
+            # Put .venv/bin on PATH so prek hooks find ruff, ty, codespell
+            export PATH="$PWD/.venv/bin:$PATH"
+
             echo "oxitest dev shell ready"
             echo "  rust   : $(rustc --version)"
             echo "  python : $(python3 --version)"
