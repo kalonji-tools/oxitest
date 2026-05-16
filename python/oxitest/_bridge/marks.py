@@ -94,6 +94,7 @@ class _XFailHandler(MarkHandler):
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         strict = mark.kwargs.get("strict", True)
         reason = mark.kwargs.get("reason", "")
+        raises = mark.kwargs.get("raises", None)
 
         def xfail_wrapper(next_fn: Callable[[], TestResult]) -> TestResult:
             result = next_fn()
@@ -101,6 +102,8 @@ class _XFailHandler(MarkHandler):
                 return result
             if result.status in ("passed", "warned"):
                 return TestResult(status="xpassed", strict=bool(strict))
+            if raises is not None and result.exc_type != raises.__name__:  # ty: ignore[unresolved-attribute]
+                return result
             return TestResult(status="xfailed", message=str(reason))
 
         return MarkEvalResult(wrapper=xfail_wrapper)
