@@ -38,6 +38,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `schedule` | string | `"longest-first"` | Group scheduling strategy for parallel runs. One of: `"longest-first"` (modules in descending duration order), `"failed-first"` (failed modules first, then by duration), `"random"` (random order). |
 | `failed` | string | — | Failed-test mode. `"only"` runs just previously-failed tests; `"first"` runs failures before the rest. When omitted, all tests run in normal order. |
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
+| `tb` | string | `"short"` | Traceback style on failure. One of: `"long"`, `"short"`, `"line"`, `"no"`. CLI `--tb` overrides this value. |
 
 ## schedule
 
@@ -115,4 +116,5 @@ cache_max_age  = 100
 min_parallel_tests = 50
 spawn_overhead_ms  = 100.0
 strict             = "abort"
+tb                 = "short"
 ```
