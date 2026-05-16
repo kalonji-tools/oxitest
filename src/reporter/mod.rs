@@ -4,8 +4,10 @@ use crate::types::CollectError;
 
 mod ci;
 mod colors;
+mod exit;
 mod format;
 pub(crate) mod json;
+mod options;
 mod stats;
 mod tty;
 
@@ -13,6 +15,8 @@ mod tty;
 mod test_helpers;
 
 pub use ci::CiReporter;
+pub(crate) use exit::compute_exit_code;
+pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub use tty::TtyReporter;
 
 use format::{fmt_summary, fmt_tip_block, fmt_warning_block};
@@ -20,106 +24,6 @@ use stats::RunStats;
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
 pub(crate) use format::sep_width;
-
-// ─── Options ─────────────────────────────────────────────────────────────────
-
-#[derive(Debug)]
-pub struct ReporterOpts {
-    pub(crate) total: usize,
-    pub(crate) use_color: bool,
-    pub(crate) tb: crate::config::TbStyle,
-    pub(crate) show_tips: bool,
-    pub(crate) show_warnings: bool,
-    pub(crate) verbose: bool,
-    pub(crate) show_durations: Option<usize>,
-    pub(crate) strict_suite_lines: Vec<String>,
-}
-
-// ─── Builder ──────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Debug)]
-pub struct ReporterOptsBuilder {
-    total: usize,
-    use_color: bool,
-    tb: crate::config::TbStyle,
-    show_tips: bool,
-    show_warnings: bool,
-    verbose: bool,
-    show_durations: Option<usize>,
-    strict_suite_lines: Vec<String>,
-}
-
-impl ReporterOptsBuilder {
-    /// Sensible defaults for tests: total=0, use_color=false, tb=Short,
-    /// show_tips=false, show_warnings=false, verbose=false.
-    pub fn new() -> Self {
-        Self {
-            total: 0,
-            use_color: false,
-            tb: crate::config::TbStyle::Short,
-            show_tips: false,
-            show_warnings: false,
-            verbose: false,
-            show_durations: None,
-            strict_suite_lines: vec![],
-        }
-    }
-
-    /// Derive all fields from CLI. Sets total=0 — call `.total(n)` before `.build()`.
-    pub fn from_cli(cli: &crate::config::Cli, use_color: bool) -> Self {
-        Self {
-            total: 0,
-            use_color,
-            tb: cli.tb.clone(),
-            show_tips: cli.tips || cli.verbose,
-            show_warnings: cli.warnings || cli.verbose,
-            verbose: cli.verbose,
-            show_durations: cli.durations,
-            strict_suite_lines: vec![],
-        }
-    }
-
-    pub fn total(self, n: usize) -> Self {
-        Self { total: n, ..self }
-    }
-
-    pub fn verbose(self, v: bool) -> Self {
-        Self { verbose: v, ..self }
-    }
-
-    pub fn strict_suite_lines(self, lines: Vec<String>) -> Self {
-        Self {
-            strict_suite_lines: lines,
-            ..self
-        }
-    }
-
-    pub fn build(self) -> ReporterOpts {
-        ReporterOpts {
-            total: self.total,
-            use_color: self.use_color,
-            tb: self.tb,
-            show_tips: self.show_tips,
-            show_warnings: self.show_warnings,
-            verbose: self.verbose,
-            show_durations: self.show_durations,
-            strict_suite_lines: self.strict_suite_lines,
-        }
-    }
-}
-
-impl Default for ReporterOptsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-impl ReporterOptsBuilder {
-    pub fn tb(self, tb: crate::config::TbStyle) -> Self {
-        Self { tb, ..self }
-    }
-}
 
 // ─── ParametrizeBuffer ───────────────────────────────────────────────────────
 
@@ -416,24 +320,6 @@ pub(crate) fn print_summary_section(
     compute_exit_code(stats, collect_errors.len(), interrupted)
 }
 
-fn compute_exit_code(stats: &RunStats, collect_err_count: usize, interrupted: bool) -> i32 {
-    if collect_err_count > 0 {
-        return 3;
-    }
-    if interrupted {
-        return 2;
-    }
-    if stats.failed > 0
-        || stats.errored > 0
-        || stats.xpassed_strict > 0
-        || stats.timeout > 0
-        || stats.strict_suite > 0
-    {
-        return 1;
-    }
-    0
-}
-
 fn flush() {
     let _ = io::stdout().flush();
 }
@@ -483,177 +369,6 @@ mod tests {
     use crate::reporter::stats::RunStats;
 
     #[test]
-    fn test_exit_code_zero_when_all_pass() {
-        let stats = RunStats::new();
-        assert_eq!(compute_exit_code(&stats, 0, false), 0);
-    }
-
-    #[test]
-    fn test_exit_code_one_when_failed() {
-        let mut stats = RunStats::new();
-        stats.failed = 1;
-        assert_eq!(compute_exit_code(&stats, 0, false), 1);
-    }
-
-    #[test]
-    fn test_exit_code_one_when_errored() {
-        let mut stats = RunStats::new();
-        stats.errored = 1;
-        assert_eq!(compute_exit_code(&stats, 0, false), 1);
-    }
-
-    #[test]
-    fn test_exit_code_one_when_xpassed_strict() {
-        let mut stats = RunStats::new();
-        stats.xpassed_strict = 1;
-        assert_eq!(compute_exit_code(&stats, 0, false), 1);
-    }
-
-    #[test]
-    fn test_exit_code_one_when_timeout() {
-        let mut stats = RunStats::new();
-        stats.timeout = 1;
-        assert_eq!(compute_exit_code(&stats, 0, false), 1);
-    }
-
-    #[test]
-    fn test_exit_code_two_when_interrupted() {
-        let stats = RunStats::new();
-        assert_eq!(compute_exit_code(&stats, 0, true), 2);
-    }
-
-    #[test]
-    fn test_exit_code_three_when_collect_error() {
-        let stats = RunStats::new();
-        assert_eq!(compute_exit_code(&stats, 1, false), 3);
-    }
-
-    #[test]
-    fn test_exit_code_one_when_strict_suite_violations() {
-        let mut stats = RunStats::new();
-        stats.strict_suite = 2;
-        assert_eq!(compute_exit_code(&stats, 0, false), 1);
-    }
-
-    #[test]
-    fn test_exit_code_collect_error_takes_priority_over_failures() {
-        let mut stats = RunStats::new();
-        stats.failed = 1;
-        stats.timeout = 1;
-        // collect_err_count > 0 must return 3, even with failures
-        assert_eq!(compute_exit_code(&stats, 1, false), 3);
-    }
-
-    #[test]
-    fn test_exit_code_interrupted_takes_priority_over_failures() {
-        let mut stats = RunStats::new();
-        stats.failed = 1;
-        // interrupted must return 2, even with failures
-        assert_eq!(compute_exit_code(&stats, 0, true), 2);
-    }
-
-    // ── ReporterOptsBuilder ────────────────────────────────────────────────────
-
-    fn test_cli(verbose: bool, tips: bool, warnings: bool) -> crate::config::Cli {
-        use clap::Parser;
-        let base = crate::config::Cli::try_parse_from(["oxitest"])
-            .expect("default CLI parse must succeed");
-        crate::config::Cli {
-            verbose,
-            tips,
-            warnings,
-            ..base
-        }
-    }
-
-    #[test]
-    fn test_builder_new_defaults() {
-        let opts = ReporterOptsBuilder::new().build();
-        assert_eq!(opts.total, 0);
-        assert!(!opts.use_color);
-        assert!(!opts.show_tips);
-        assert!(!opts.show_warnings);
-        assert!(!opts.verbose);
-        assert_eq!(opts.tb, crate::config::TbStyle::Short);
-    }
-
-    #[test]
-    fn test_builder_total_override() {
-        let opts = ReporterOptsBuilder::new().total(42).build();
-        assert_eq!(opts.total, 42);
-    }
-
-    #[test]
-    fn test_builder_verbose_override() {
-        let opts = ReporterOptsBuilder::new().verbose(true).build();
-        assert!(opts.verbose);
-    }
-
-    #[test]
-    fn test_builder_tb_override() {
-        let opts = ReporterOptsBuilder::new()
-            .tb(crate::config::TbStyle::No)
-            .build();
-        assert_eq!(opts.tb, crate::config::TbStyle::No);
-    }
-
-    #[test]
-    fn test_builder_from_cli_verbose_implies_show_tips_and_warnings() {
-        let cli = test_cli(true, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert!(opts.show_tips);
-        assert!(opts.show_warnings);
-        assert!(opts.verbose);
-    }
-
-    #[test]
-    fn test_builder_from_cli_tips_flag_without_verbose() {
-        let cli = test_cli(false, true, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert!(opts.show_tips);
-        assert!(!opts.show_warnings);
-        assert!(!opts.verbose);
-    }
-
-    #[test]
-    fn test_builder_from_cli_warnings_flag_without_verbose() {
-        let cli = test_cli(false, false, true);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert!(!opts.show_tips);
-        assert!(opts.show_warnings);
-    }
-
-    #[test]
-    fn test_builder_from_cli_use_color_passed_through() {
-        let cli = test_cli(false, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, true).build();
-        assert!(opts.use_color);
-    }
-
-    #[test]
-    fn test_builder_from_cli_total_default_is_zero() {
-        let cli = test_cli(false, false, false);
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert_eq!(opts.total, 0);
-    }
-
-    #[test]
-    fn test_builder_durations_from_cli() {
-        use clap::Parser;
-        let cli = crate::config::Cli::try_parse_from(["oxitest", "--durations", "5"]).unwrap();
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert_eq!(opts.show_durations, Some(5));
-    }
-
-    #[test]
-    fn test_builder_durations_absent_is_none() {
-        use clap::Parser;
-        let cli = crate::config::Cli::try_parse_from(["oxitest"]).unwrap();
-        let opts = ReporterOptsBuilder::from_cli(&cli, false).build();
-        assert!(opts.show_durations.is_none());
-    }
-
-    #[test]
     fn test_slowest_block_included_when_show_durations_set() {
         use crate::reporter::stats::RunStats;
         let mut stats = RunStats::new();
@@ -663,17 +378,6 @@ mod tests {
         assert_eq!(slowest.len(), 1);
         assert_eq!(slowest[0].0, "tests/test_foo.py::test_slow");
         assert!((slowest[0].1 - 500.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_builder_clone_allows_two_builds_from_same_base() {
-        let base = ReporterOptsBuilder::new().total(5);
-        let a = base.clone().verbose(false).build();
-        let b = base.verbose(true).build();
-        assert_eq!(a.total, 5);
-        assert!(!a.verbose);
-        assert_eq!(b.total, 5);
-        assert!(b.verbose);
     }
 
     // ── StandardReporter / standard_finish ─────────────────────────────────────
