@@ -666,7 +666,7 @@ mod tests {
                 left: String::new(),
                 right: String::new(),
                 op: String::new(),
-            frames: vec![],
+                frames: vec![],
             }
             .as_str(),
             "failed"
@@ -884,7 +884,7 @@ mod tests {
                 left: String::new(),
                 right: String::new(),
                 op: String::new(),
-            frames: vec![],
+                frames: vec![],
             },
             TestOutcome::Error {
                 message: String::new(),
