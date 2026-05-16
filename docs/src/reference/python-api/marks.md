@@ -69,6 +69,10 @@ def test_must_still_fail() -> None:
 | `strict` | `bool` | `True` | If ``True``, an unexpected pass fails the suite. |
 | `raises` | `type[Exception] \| None` | `None` | If set, only failures of this exception type count as `XFAIL`. Other exceptions are reported as errors. |
 
+!!! warning "Not yet implemented"
+    The `raises` parameter is planned (#102) but not yet functional. Currently
+    any exception counts as XFAIL regardless of type.
+
 ---
 
 ## mark.timeout
