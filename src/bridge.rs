@@ -16,6 +16,7 @@ struct BridgeResult {
     right: String,
     op: String,
     strict: bool,
+    #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
 }
 
