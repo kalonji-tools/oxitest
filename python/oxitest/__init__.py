@@ -91,6 +91,7 @@ from oxitest._bridge.fixtures import (
     FixtureTeardownWarning as FixtureTeardownWarning,
 )
 from oxitest._bridge.parametrize import parametrize as parametrize
+from oxitest.plugin import Plugin as Plugin
 
 __all__ = [
     "CaptureResult",
@@ -111,6 +112,7 @@ __all__ = [
     "Yields",
     "importorskip",
     "mark",
+    "Plugin",
     "skip",
     "WarnCapture",
     "warns",
