@@ -86,6 +86,7 @@ nav:
     - Performance: explanation/performance.md
     - Strict mode: explanation/strict-mode.md
     - Parallelism: explanation/parallelism.md
+    - Worker protocol: explanation/worker-protocol.md
   - Contributing:
     - Build setup: contributing/build-setup.md
     - Architecture: contributing/architecture.md
