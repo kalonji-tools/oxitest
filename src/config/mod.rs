@@ -1,83 +1,15 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use serde::Deserialize;
 
 mod cli;
 pub use cli::Cli;
 
-#[derive(Deserialize, Default)]
-struct PyprojectToml {
-    tool: Option<ToolTable>,
-}
-
-#[derive(Deserialize, Default)]
-struct ToolTable {
-    oxitest: Option<OxitestConfig>,
-}
-
-#[derive(Deserialize, Default)]
-struct OxitestConfig {
-    testpaths: Option<Vec<String>>,
-    python_files: Option<Vec<String>>,
-    norecursedirs: Option<Vec<String>>,
-    markers: Option<Vec<String>>,
-    timeout: Option<u64>,
-    cache_max_age: Option<u32>,
-    min_parallel_tests: Option<usize>,
-    timeout_multiplier: Option<f64>,
-    spawn_overhead_ms: Option<f64>,
-    strict: Option<StrictMode>,
-    workers: Option<WorkerCount>,
-    schedule: Option<ScheduleStrategy>,
-    failed: Option<FailedMode>,
-}
+mod pyproject;
+use pyproject::{OxitestConfig, PyprojectToml};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerCount {
     Auto,
     Fixed(usize),
-}
-
-impl<'de> serde::Deserialize<'de> for WorkerCount {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct WorkerCountVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for WorkerCountVisitor {
-            type Value = WorkerCount;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("\"auto\" or a positive integer")
-            }
-
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<WorkerCount, E> {
-                if v.eq_ignore_ascii_case("auto") {
-                    Ok(WorkerCount::Auto)
-                } else {
-                    Err(E::custom(format!("expected \"auto\", got \"{v}\"")))
-                }
-            }
-
-            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<WorkerCount, E> {
-                if v <= 0 {
-                    Err(E::custom("worker count must be at least 1"))
-                } else {
-                    Ok(WorkerCount::Fixed(v as usize))
-                }
-            }
-
-            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<WorkerCount, E> {
-                if v == 0 {
-                    Err(E::custom("worker count must be at least 1"))
-                } else {
-                    Ok(WorkerCount::Fixed(v as usize))
-                }
-            }
-        }
-
-        deserializer.deserialize_any(WorkerCountVisitor)
-    }
 }
 
 fn parse_workers(s: &str) -> Result<WorkerCount, String> {
@@ -1026,5 +958,67 @@ spawn_overhead_ms = 100.0
         .unwrap();
         let config = Config::load(utf8_dir);
         assert_eq!(config.schedule, ScheduleStrategy::FailedFirst);
+    }
+
+    // ── WorkerCount serde visitor edge cases ─────────────────────────────────
+
+    #[test]
+    fn test_toml_workers_negative_rejected() {
+        // TOML parses negative integers as i64 → exercises visit_i64 error path
+        let result = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = -1
+        "#,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_toml_workers_positive_i64() {
+        // TOML may route small positive integers through visit_i64 on some
+        // deserializer implementations; this exercises the success path.
+        // (toml crate uses visit_u64 for positives, so this tests via from_str
+        // with serde_json which does use visit_i64)
+        let v: WorkerCount = serde_json::from_str("3").unwrap();
+        assert_eq!(v, WorkerCount::Fixed(3));
+    }
+
+    #[test]
+    fn test_json_workers_negative_rejected() {
+        // JSON integers can be negative → exercises visit_i64 error path
+        let result = serde_json::from_str::<WorkerCount>("-5");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_json_workers_zero_i64_rejected() {
+        // JSON zero as i64 → exercises visit_i64 with v <= 0
+        let result = serde_json::from_str::<WorkerCount>("0");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_toml_workers_invalid_string_rejected() {
+        // Exercises visit_str error path (string that isn't "auto")
+        let result = Config::from_str(
+            r#"
+        [tool.oxitest]
+        workers = "banana"
+        "#,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_worker_count_expecting_message() {
+        // Exercises the `expecting` method (triggered by type mismatch)
+        let result = serde_json::from_str::<WorkerCount>("true");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("\"auto\" or a positive integer"),
+            "unexpected error: {err_msg}"
+        );
     }
 }
