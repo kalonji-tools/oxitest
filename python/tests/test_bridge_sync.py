@@ -29,6 +29,7 @@ def test_test_result_fields_match_rust_bridge_result():
         op="",
         strict=True,
         exc_type="",
+        frames=[],
     )
     expected_fields = {
         "status",
@@ -42,6 +43,7 @@ def test_test_result_fields_match_rust_bridge_result():
         "op",
         "strict",
         "exc_type",
+        "frames",
     }
     actual_fields = {f.name for f in dataclasses.fields(result)}
     assert actual_fields == expected_fields, (

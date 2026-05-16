@@ -5,6 +5,16 @@ from enum import StrEnum
 
 
 @dataclass
+class Frame:
+    """Single traceback frame for structured display."""
+
+    file: str
+    lineno: int
+    name: str
+    line: str
+
+
+@dataclass
 class TestResult:
     """Bridge result returned by executor.run_test and consumed by Rust bridge.
 
@@ -22,6 +32,7 @@ class TestResult:
     op: str = ""
     strict: bool = True
     exc_type: str = ""
+    frames: list[Frame] = field(default_factory=list)
 
 
 @dataclass
