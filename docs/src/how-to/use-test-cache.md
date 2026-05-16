@@ -6,7 +6,7 @@
 ## Understand how the cache works
 
 oxitest writes timing and result data to `.oxitest_cache/timings.json` in the
-rootdir after every run. The `--lf`, `--ff`, and the scheduler all read this file
+rootdir after every run. The `--failed` flag and the scheduler both read this file
 to make smarter decisions. The cache is human-readable JSON.
 
 !!! tip "Add to .gitignore"
@@ -15,7 +15,7 @@ to make smarter decisions. The cache is human-readable JSON.
 ## Run only tests that failed last time
 
 ```console
-$ oxitest --lf
+$ oxitest --failed=only
 ```
 
 Collects all tests but only runs those that were recorded as failed on the previous
@@ -25,13 +25,11 @@ tests run.
 ## Run failed tests first
 
 ```console
-$ oxitest --ff
+$ oxitest --failed=first
 ```
 
 Runs all tests, but failed tests from the previous run are executed first. This
 gives faster feedback during a fix-iterate cycle without skipping any tests.
-
-`--lf` and `--ff` are mutually exclusive.
 
 ## Show the slowest tests
 
