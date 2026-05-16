@@ -26,6 +26,7 @@ struct OxitestConfig {
     strict: Option<StrictMode>,
     workers: Option<WorkerCount>,
     schedule: Option<ScheduleStrategy>,
+    failed: Option<FailedMode>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +105,15 @@ pub enum StrictMode {
     Enforce,
 }
 
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum FailedMode {
+    /// Only run previously-failed tests
+    Only,
+    /// Run failed tests first, then the rest
+    First,
+}
+
 #[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScheduleStrategy {
@@ -178,13 +188,9 @@ pub struct Cli {
     #[arg(long, value_name = "N")]
     pub durations: Option<usize>,
 
-    /// Run only tests that failed on the last run
-    #[arg(long = "lf", conflicts_with = "failed_first")]
-    pub last_failed: bool,
-
-    /// Run failed tests first, then the rest
-    #[arg(long = "ff", conflicts_with = "last_failed")]
-    pub failed_first: bool,
+    /// Failed-test mode: "only" runs just failures, "first" runs failures before the rest
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub failed: Option<FailedMode>,
 
     /// Enforce strict conventions (bare-assert, dict-parametrize, missing mark reason,
     /// marker-without-description). Use `--strict=MODE` with `=` (e.g. `--strict=enforce`).
@@ -222,6 +228,7 @@ pub struct Config {
     pub strict: Option<StrictMode>,
     pub markers_without_description: Vec<String>,
     pub schedule: ScheduleStrategy,
+    pub failed: Option<FailedMode>,
 }
 
 impl Default for Config {
@@ -252,6 +259,7 @@ impl Default for Config {
             strict: None,
             markers_without_description: vec![],
             schedule: ScheduleStrategy::LongestFirst,
+            failed: None,
         }
     }
 }
@@ -301,6 +309,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     }
     if let Some(s) = tc.schedule {
         config.schedule = s;
+    }
+    if let Some(f) = tc.failed {
+        config.failed = Some(f);
     }
 }
 
@@ -391,6 +402,9 @@ impl Config {
             self.strict = cli.strict.clone();
         }
         self.schedule = cli.schedule;
+        if cli.failed.is_some() {
+            self.failed = cli.failed;
+        }
         self
     }
 
@@ -835,28 +849,34 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_lf_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--lf"]).unwrap();
-        assert!(cli.last_failed);
+    fn test_failed_flag_only() {
+        let cli = Cli::try_parse_from(["oxitest", "--failed=only"]).unwrap();
+        assert_eq!(cli.failed, Some(FailedMode::Only));
     }
 
     #[test]
-    fn test_cli_ff_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--ff"]).unwrap();
-        assert!(cli.failed_first);
+    fn test_failed_flag_first() {
+        let cli = Cli::try_parse_from(["oxitest", "--failed=first"]).unwrap();
+        assert_eq!(cli.failed, Some(FailedMode::First));
     }
 
     #[test]
-    fn test_cli_lf_default_false() {
+    fn test_no_failed_flag() {
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(!cli.last_failed);
-        assert!(!cli.failed_first);
+        assert_eq!(cli.failed, None);
     }
 
     #[test]
-    fn test_cli_lf_and_ff_conflict() {
-        let result = Cli::try_parse_from(["oxitest", "--lf", "--ff"]);
-        assert!(result.is_err(), "--lf and --ff must conflict");
+    fn test_failed_from_pyproject() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nfailed = \"first\"\n",
+        )
+        .unwrap();
+        let config = Config::load(utf8_dir);
+        assert_eq!(config.failed, Some(FailedMode::First));
     }
 
     #[test]

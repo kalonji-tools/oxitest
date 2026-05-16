@@ -263,21 +263,28 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         items
     };
 
-    // --lf: keep only previously-failed tests
-    let items = if cli.last_failed {
-        let failed_ids = cache.last_failed_ids();
-        if failed_ids.is_empty() {
-            // No recorded failures — run all tests (matches pytest behaviour)
-            items
-        } else {
-            filter::filter_last_failed(items, &failed_ids)
+    let total_before_failed_filter = items.len();
+    let items = match cfg.failed {
+        Some(crate::config::FailedMode::Only) => {
+            let failed_ids = cache.last_failed_ids();
+            if failed_ids.is_empty() {
+                eprintln!("no recorded failures — running all {} tests", items.len());
+                items
+            } else {
+                let filtered = filter::filter_last_failed(items, &failed_ids);
+                eprintln!(
+                    "running {}/{} tests (--failed=only mode)",
+                    filtered.len(),
+                    total_before_failed_filter
+                );
+                filtered
+            }
         }
-    } else if cli.failed_first {
-        let failed_ids = cache.last_failed_ids();
-        // Empty set on cold cache: sort_failed_first is a no-op, all tests run in original order
-        filter::sort_failed_first(items, &failed_ids)
-    } else {
-        items
+        Some(crate::config::FailedMode::First) => {
+            let failed_ids = cache.last_failed_ids();
+            filter::sort_failed_first(items, &failed_ids)
+        }
+        None => items,
     };
 
     // ── Strict enforce mode ───────────────────────────────────────────────────────
