@@ -95,7 +95,6 @@ impl Default for ReporterOptsBuilder {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
