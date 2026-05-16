@@ -25,9 +25,9 @@ pub struct Cli {
     #[arg(long, default_value = "0", value_name = "NUM")]
     pub maxfail: usize,
 
-    /// Traceback style: short (default), line, no
-    #[arg(long, value_enum, default_value = "short")]
-    pub tb: TbStyle,
+    /// Traceback style: long, short (default), line, no
+    #[arg(long, value_enum)]
+    pub tb: Option<TbStyle>,
 
     /// Expand assertions-without-messages tip list
     #[arg(long)]
