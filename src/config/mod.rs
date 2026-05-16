@@ -62,6 +62,18 @@ pub enum ScheduleStrategy {
     Random,
 }
 
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorMode {
+    /// Detect TTY automatically
+    #[default]
+    Auto,
+    /// Always enable color
+    Always,
+    /// Disable color
+    Never,
+}
+
 #[derive(Debug)]
 pub struct Config {
     pub rootdir: Utf8PathBuf,
@@ -82,6 +94,9 @@ pub struct Config {
     pub schedule: ScheduleStrategy,
     pub failed: Option<FailedMode>,
     pub tb: TbStyle,
+    pub verbose: bool,
+    pub durations: Option<usize>,
+    pub color: ColorMode,
 }
 
 impl Default for Config {
@@ -114,6 +129,9 @@ impl Default for Config {
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
             tb: TbStyle::Short,
+            verbose: false,
+            durations: None,
+            color: ColorMode::Auto,
         }
     }
 }
@@ -169,6 +187,21 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     }
     if let Some(tb) = tc.tb {
         config.tb = tb;
+    }
+    if let Some(v) = tc.verbose {
+        config.verbose = v;
+    }
+    if let Some(n) = tc.maxfail {
+        config.maxfail = n;
+    }
+    if tc.durations.is_some() {
+        config.durations = tc.durations;
+    }
+    if let Some(s) = tc.serial {
+        config.serial = s;
+    }
+    if let Some(c) = tc.color {
+        config.color = c;
     }
 }
 
@@ -248,10 +281,25 @@ impl Config {
         }
         if cli.exitfirst {
             self.maxfail = 1;
-        } else if cli.maxfail > 0 {
-            self.maxfail = cli.maxfail;
+        } else if let Some(n) = cli.maxfail {
+            if n > 0 {
+                self.maxfail = n;
+            }
         }
-        self.serial = cli.serial;
+        if cli.serial {
+            self.serial = true;
+        }
+        if cli.verbose {
+            self.verbose = true;
+        }
+        if cli.durations.is_some() {
+            self.durations = cli.durations;
+        }
+        if cli.no_color {
+            self.color = ColorMode::Never;
+        } else {
+            self.color = cli.color;
+        }
         if cli.workers.is_some() {
             self.workers = cli.workers;
         }
@@ -398,11 +446,12 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn test_merge_cli_maxfail_sets_maxfail() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let cli = Cli {
-            maxfail: 3,
+            maxfail: Some(3),
             ..base_cli()
         };
         let merged = config.merge_cli(&cli);
@@ -461,15 +510,57 @@ mod tests {
     }
 
     #[test]
+    fn test_verbose_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nverbose = true\n").unwrap();
+        assert!(cfg.verbose);
+    }
+
+    #[test]
+    fn test_maxfail_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nmaxfail = 5\n").unwrap();
+        assert_eq!(cfg.maxfail, 5);
+    }
+
+    #[test]
+    fn test_durations_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\ndurations = 10\n").unwrap();
+        assert_eq!(cfg.durations, Some(10));
+    }
+
+    #[test]
+    fn test_serial_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nserial = true\n").unwrap();
+        assert!(cfg.serial);
+    }
+
+    #[test]
+    fn test_color_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\ncolor = \"never\"\n").unwrap();
+        assert_eq!(cfg.color, ColorMode::Never);
+    }
+
+    #[test]
     fn test_cli_tips_flag() {
         let cli = Cli::try_parse_from(["oxitest", "--tips"]).unwrap();
         assert!(cli.tips);
     }
 
     #[test]
-    fn test_cli_no_color_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--no-color"]).unwrap();
-        assert!(cli.no_color);
+    fn test_cli_color_never() {
+        let cli = Cli::try_parse_from(["oxitest", "--color", "never"]).unwrap();
+        assert_eq!(cli.color, ColorMode::Never);
+    }
+
+    #[test]
+    fn test_cli_color_always() {
+        let cli = Cli::try_parse_from(["oxitest", "--color", "always"]).unwrap();
+        assert_eq!(cli.color, ColorMode::Always);
+    }
+
+    #[test]
+    fn test_cli_color_default_is_auto() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert_eq!(cli.color, ColorMode::Auto);
     }
 
     #[test]
