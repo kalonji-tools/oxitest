@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
     OxitestAssertRewriter,
@@ -46,13 +47,6 @@ def _error_result(
     return TestResult(
         status="error", message=msg, file=file, lineno=lineno, source_line=source_line
     )
-
-
-class _LoadError(Exception):
-    """Raised when a module cannot be loaded or a function cannot be resolved."""
-
-    def __init__(self, result: TestResult) -> None:
-        self.result = result
 
 
 def _load_module(module_path: str, unique_name: str) -> Any:

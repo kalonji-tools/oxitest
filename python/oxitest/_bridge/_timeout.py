@@ -13,9 +13,7 @@ import signal
 import threading
 from typing import Any
 
-
-class OxitestTimeoutError(Exception):
-    """Raised inside a test when its deadline fires."""
+from oxitest._bridge._errors import OxitestTimeoutError
 
 
 class _UnixTimeoutContext:
