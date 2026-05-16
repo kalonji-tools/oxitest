@@ -135,6 +135,8 @@ mod tests {
             verbose: false,
             durations: None,
             color: crate::config::ColorMode::Auto,
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
         }
     }
 
@@ -206,6 +208,8 @@ mod tests {
             verbose: false,
             durations: None,
             color: crate::config::ColorMode::Auto,
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -243,6 +247,8 @@ mod tests {
             verbose: false,
             durations: None,
             color: crate::config::ColorMode::Auto,
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -319,6 +325,8 @@ mod tests {
             verbose: false,
             durations: None,
             color: crate::config::ColorMode::Auto,
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
