@@ -131,6 +131,10 @@ def run(task: dict) -> None:
             "right": result.right or None,
             "op": result.op or None,
             "strict": result.strict,
+            "frames": [
+                {"file": f.file, "lineno": f.lineno, "name": f.name, "line": f.line}
+                for f in getattr(result, "frames", [])
+            ],
         }
         print(json.dumps(output), flush=True)
 
