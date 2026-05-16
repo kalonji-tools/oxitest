@@ -334,7 +334,8 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let items = clean_items;
 
     let mut groups = filter::group_by_module(items);
-    cache.sort_groups(&mut groups);
+    let failed_ids = cache.last_failed_ids();
+    scheduler::apply_schedule_strategy(&mut groups, cfg.schedule, &cache, &failed_ids);
 
     let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
     let cpu_count = config::cpu_count();

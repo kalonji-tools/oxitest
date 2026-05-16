@@ -136,7 +136,7 @@ impl TestCache {
         }
     }
 
-    pub fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>) {
+    pub(crate) fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>) {
         // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
         // Avoids re-running module_duration_sum inside the comparator, which would be
         // O(N log N × M) because the comparator fires once per sort comparison.
@@ -313,6 +313,13 @@ impl TestCache {
             },
         );
         self.dirty = true;
+    }
+}
+
+#[cfg(test)]
+impl TestCache {
+    pub(crate) fn empty_for_test() -> Self {
+        Self::empty()
     }
 }
 

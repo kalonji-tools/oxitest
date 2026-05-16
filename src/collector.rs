@@ -129,6 +129,7 @@ mod tests {
             spawn_overhead_ms: 250.0,
             strict: None,
             markers_without_description: vec![],
+            schedule: crate::config::ScheduleStrategy::LongestFirst,
         }
     }
 
@@ -194,6 +195,7 @@ mod tests {
             spawn_overhead_ms: 250.0,
             strict: None,
             markers_without_description: vec![],
+            schedule: crate::config::ScheduleStrategy::LongestFirst,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -225,6 +227,7 @@ mod tests {
             spawn_overhead_ms: 250.0,
             strict: None,
             markers_without_description: vec![],
+            schedule: crate::config::ScheduleStrategy::LongestFirst,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -295,6 +298,7 @@ mod tests {
             spawn_overhead_ms: 250.0,
             strict: None,
             markers_without_description: vec![],
+            schedule: crate::config::ScheduleStrategy::LongestFirst,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(

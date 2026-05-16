@@ -1,6 +1,42 @@
 use camino::Utf8PathBuf;
 
+use crate::cache::TestCache;
+use crate::config::ScheduleStrategy;
 use crate::types::TestItem;
+
+/// Sort groups according to the chosen scheduling strategy.
+///
+/// Called *before* `Scheduler::new()` — the scheduler itself always
+/// processes groups in insertion order, so the ordering happens here.
+pub fn apply_schedule_strategy(
+    groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>,
+    strategy: ScheduleStrategy,
+    cache: &TestCache,
+    failed_ids: &std::collections::HashSet<String>,
+) {
+    match strategy {
+        ScheduleStrategy::LongestFirst => {
+            cache.sort_groups(groups);
+        }
+        ScheduleStrategy::FailedFirst => {
+            // Sort by duration first, then partition: groups with failed tests move to front.
+            cache.sort_groups(groups);
+            let (mut has_failed, no_failed): (Vec<_>, Vec<_>) =
+                groups.drain(..).partition(|(_, items)| {
+                    items
+                        .iter()
+                        .any(|item| failed_ids.contains(item.node_id.as_ref()))
+                });
+            has_failed.extend(no_failed);
+            *groups = has_failed;
+        }
+        ScheduleStrategy::Random => {
+            use rand::seq::SliceRandom;
+            let mut rng = rand::rng();
+            groups.shuffle(&mut rng);
+        }
+    }
+}
 
 /// A batch of tests from one source file, dispatched as a unit to one worker.
 #[derive(Debug, Clone)]
@@ -125,6 +161,53 @@ mod tests {
         let g = sched.pop().unwrap();
         assert_eq!(g.len(), 3);
         assert!(sched.pop().is_none());
+    }
+
+    #[test]
+    fn test_apply_strategy_longest_first_uses_cache_sort() {
+        use crate::cache::TestCache;
+        use crate::config::ScheduleStrategy;
+        use std::collections::HashSet;
+
+        let cache = TestCache::empty_for_test();
+        // With empty cache, LongestFirst falls back to item count (3 > 1)
+        let mut groups = vec![make_group("fast.py", 1), make_group("slow.py", 3)];
+        let failed: HashSet<String> = HashSet::new();
+
+        apply_schedule_strategy(&mut groups, ScheduleStrategy::LongestFirst, &cache, &failed);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("slow.py"));
+    }
+
+    #[test]
+    fn test_apply_strategy_failed_first_moves_failed_groups_to_front() {
+        use crate::cache::TestCache;
+        use crate::config::ScheduleStrategy;
+        use std::collections::HashSet;
+
+        let cache = TestCache::empty_for_test();
+        let mut groups = vec![make_group("clean.py", 2), make_group("broken.py", 1)];
+        let mut failed: HashSet<String> = HashSet::new();
+        failed.insert("broken.py::test_0".to_string());
+
+        apply_schedule_strategy(&mut groups, ScheduleStrategy::FailedFirst, &cache, &failed);
+        assert_eq!(groups[0].0, Utf8PathBuf::from("broken.py"));
+    }
+
+    #[test]
+    fn test_apply_strategy_random_preserves_all_groups() {
+        use crate::cache::TestCache;
+        use crate::config::ScheduleStrategy;
+        use std::collections::HashSet;
+
+        let cache = TestCache::empty_for_test();
+        let failed: HashSet<String> = HashSet::new();
+
+        let mut groups: Vec<_> = (0..5)
+            .map(|i| make_group(&format!("mod_{i}.py"), 1))
+            .collect();
+        apply_schedule_strategy(&mut groups, ScheduleStrategy::Random, &cache, &failed);
+        // All 5 groups must still be present regardless of order
+        assert_eq!(groups.len(), 5);
     }
 
     #[test]
