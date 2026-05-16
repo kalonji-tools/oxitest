@@ -149,6 +149,87 @@ impl WorkerResult {
 }
 
 #[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    #[test]
+    fn frames_deserialized_from_json() {
+        let json = r#"{
+            "node_id": "t.py::test_deep",
+            "outcome": "failed",
+            "duration_ms": 1.5,
+            "file": "t.py",
+            "lineno": 2,
+            "source_line": "assert x > 0",
+            "frames": [
+                {"file": "t.py", "lineno": 8, "name": "test_deep", "line": "compute(5)"},
+                {"file": "t.py", "lineno": 5, "name": "compute", "line": "return helper(x)"},
+                {"file": "t.py", "lineno": 2, "name": "helper", "line": "assert x > 0"}
+            ]
+        }"#;
+        let r: WorkerResult = serde_json::from_str(json).unwrap();
+        assert_eq!(r.frames.len(), 3);
+        assert_eq!(r.frames[0].file, "t.py");
+        assert_eq!(r.frames[0].lineno, 8);
+        assert_eq!(r.frames[0].name, "test_deep");
+        assert_eq!(r.frames[0].line, "compute(5)");
+        assert_eq!(r.frames[2].name, "helper");
+    }
+
+    #[test]
+    fn frames_threaded_to_outcome() {
+        let json = r#"{
+            "node_id": "t.py::test_f",
+            "outcome": "failed",
+            "duration_ms": 0.5,
+            "file": "t.py",
+            "lineno": 3,
+            "message": "oops",
+            "frames": [
+                {"file": "t.py", "lineno": 10, "name": "test_f", "line": "do_thing()"},
+                {"file": "t.py", "lineno": 3, "name": "do_thing", "line": "raise ValueError"}
+            ]
+        }"#;
+        let r: WorkerResult = serde_json::from_str(json).unwrap();
+        match r.to_outcome() {
+            types::TestOutcome::Failed { frames, .. } => {
+                assert_eq!(frames.len(), 2);
+                assert_eq!(
+                    frames[0],
+                    (
+                        "t.py".to_string(),
+                        10,
+                        "test_f".to_string(),
+                        "do_thing()".to_string()
+                    )
+                );
+                assert_eq!(
+                    frames[1],
+                    (
+                        "t.py".to_string(),
+                        3,
+                        "do_thing".to_string(),
+                        "raise ValueError".to_string()
+                    )
+                );
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_frames_defaults_to_empty() {
+        let json = r#"{"node_id":"t","outcome":"failed","duration_ms":0.0}"#;
+        let r: WorkerResult = serde_json::from_str(json).unwrap();
+        assert!(r.frames.is_empty());
+        match r.to_outcome() {
+            types::TestOutcome::Failed { frames, .. } => assert!(frames.is_empty()),
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
 mod lineno_cast_tests {
     use super::*;
 
