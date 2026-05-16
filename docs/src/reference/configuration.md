@@ -34,7 +34,31 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `min_parallel_tests` | integer | `100` | Minimum number of collected tests before parallel workers are used. Below this threshold oxitest runs serially to avoid spawn overhead. |
 | `timeout_multiplier` | float | — | Multiplies all timeout values. Useful in slow CI environments (e.g. `2.0` doubles every timeout). When omitted, no multiplier is applied. |
 | `spawn_overhead_ms` | float | `250.0` | Estimated cost in milliseconds to spawn a single worker process. The scheduler uses `spawn_overhead_ms × worker_count` as the total spawn budget when deciding whether parallelism is worth it. |
+| `schedule` | string | `"longest-first"` | Group scheduling strategy for parallel runs. One of: `"longest-first"` (modules in descending duration order), `"failed-first"` (failed modules first, then by duration), `"random"` (random order). |
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
+
+## schedule
+
+Group scheduling strategy for parallel runs.
+
+| Value | Description |
+|-------|-------------|
+| `longest-first` | **(default)** Longest modules first based on cached timing data |
+| `failed-first` | Previously-failed modules first, then by duration |
+| `random` | Random order — useful for detecting order-dependent tests |
+
+CLI: `--schedule=longest-first`
+
+pyproject.toml:
+```toml
+[tool.oxitest]
+schedule = "failed-first"
+```
+
+**Relationship to `--ff` / `--lf`:**
+- `--lf` filters to only failed tests (any mode)
+- `--ff` reorders individual tests in serial mode
+- `--schedule=failed-first` is the parallel-mode equivalent of `--ff`
 
 ## Example
 
