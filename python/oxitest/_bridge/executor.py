@@ -8,6 +8,7 @@ import linecache
 import reprlib
 import sys
 import textwrap
+import traceback
 import warnings
 from collections.abc import Callable
 from typing import Any, cast
@@ -34,7 +35,7 @@ from oxitest._bridge.fixtures import (
 )
 from oxitest._bridge.marks import ExecutionWrapper, _HandlerContext, evaluate_marks
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import Frame, TestResult
 
 _REPR_MAX = 80
 _repr = reprlib.Repr()
@@ -84,6 +85,17 @@ def _get_location(exc: BaseException) -> tuple[str, int, str]:
     return (file, lineno, source_line)
 
 
+def _get_frames(exc: BaseException) -> list[Frame]:
+    """Extract structured traceback frames from an exception."""
+    tb = exc.__traceback__
+    if tb is None:
+        return []
+    return [
+        Frame(file=f.filename, lineno=f.lineno or 0, name=f.name, line=f.line or "")
+        for f in traceback.extract_tb(tb)
+    ]
+
+
 def _error_result(
     msg: str, file: str = "", lineno: int = 0, source_line: str = ""
 ) -> TestResult:
@@ -113,6 +125,7 @@ def _handle_assertion_error(exc: AssertionError) -> TestResult:
         right=right_repr,
         op=op,
         exc_type="AssertionError",
+        frames=_get_frames(exc),
     )
 
 
@@ -130,6 +143,7 @@ def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
             lineno=lineno,
             source_line=source_line,
             exc_type=type(exc).__name__,
+            frames=_get_frames(exc),
         )
     return None
 
