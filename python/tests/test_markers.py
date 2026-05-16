@@ -440,3 +440,25 @@ def test_each_handler_has_mark_name_class_attr():
             f"handler.mark_name should match registry key {name!r}, got "
             f"{handler.mark_name!r}"
         )
+
+
+def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
+    path = _write_test(tmp, "def test_foo(): assert False\n")
+    result = run_test(path, "test_foo")
+    assert result.exc_type == "AssertionError", (
+        f"expected exc_type='AssertionError', got {result.exc_type!r}"
+    )
+
+
+def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
+    path = _write_test(tmp, "def test_foo(): raise ValueError('boom')\n")
+    result = run_test(path, "test_foo")
+    assert result.exc_type == "ValueError", (
+        f"expected exc_type='ValueError', got {result.exc_type!r}"
+    )
+
+
+def test_exc_type_empty_on_pass(tmp: TempDir) -> None:
+    path = _write_test(tmp, "def test_foo(): pass\n")
+    result = run_test(path, "test_foo")
+    assert result.exc_type == "", f"expected exc_type='', got {result.exc_type!r}"
