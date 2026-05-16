@@ -70,7 +70,7 @@ pub(crate) fn fmt_diagnostic_block(
         return String::new();
     }
 
-    let (file, lineno, source_line, extra) = match outcome {
+    let (file, lineno, source_line, extra, frames) = match outcome {
         TestOutcome::Failed {
             message,
             file,
@@ -79,7 +79,7 @@ pub(crate) fn fmt_diagnostic_block(
             left,
             right,
             op,
-            frames: _,
+            frames,
         } => {
             let mut label_items: Vec<String> = Vec::new();
             if !op.is_empty() {
@@ -110,21 +110,21 @@ pub(crate) fn fmt_diagnostic_block(
                 ));
             }
             let extra = render_label_block(&label_items, use_color);
-            (file.as_str(), *lineno, source_line.as_str(), extra)
+            (file.as_str(), *lineno, source_line.as_str(), extra, frames)
         }
         TestOutcome::Error {
             message,
             file,
             lineno,
             source_line,
-            frames: _,
+            frames,
         } => {
             let hint = format!(
                 "        {} {}\n",
                 color_dim(BOX_BOT_LEFT, use_color),
                 color_dim(message, use_color)
             );
-            (file.as_str(), *lineno, source_line.as_str(), hint)
+            (file.as_str(), *lineno, source_line.as_str(), hint, frames)
         }
         _ => return String::new(),
     };
@@ -166,7 +166,32 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    if *tb == TbStyle::Short && !file.is_empty() {
+    if *tb == TbStyle::Long && !frames.is_empty() {
+        out.push_str(&format!(
+            "        {}  {}\n",
+            color_dim(BOX_BRANCH, use_color),
+            color_dim("frames", use_color)
+        ));
+        for (f_file, f_lineno, f_name, f_line) in frames {
+            out.push_str(&format!(
+                "        {}    {}:{}  {}\n",
+                color_dim(BOX_VERT, use_color),
+                f_file,
+                f_lineno,
+                color_dim(f_name, use_color)
+            ));
+            if !f_line.is_empty() {
+                out.push_str(&format!(
+                    "        {}      {}\n",
+                    color_dim(BOX_VERT, use_color),
+                    color_bold_white(f_line, use_color)
+                ));
+            }
+        }
+        out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+    }
+
+    if (*tb == TbStyle::Short || (*tb == TbStyle::Long && frames.is_empty())) && !file.is_empty() {
         let lineno_padded = format!("{:>4}", lineno);
         out.push_str(&format!(
             "   {} {} {}\n",
@@ -453,5 +478,69 @@ mod tests {
     #[test]
     fn test_sep_width_is_consistent() {
         assert_eq!(sep_width(), sep_width());
+    }
+
+    #[test]
+    fn test_diagnostic_block_long_shows_frames() {
+        use crate::types::{TestItem, TestOutcome};
+
+        let item = TestItem {
+            node_id: crate::types::NodeId::from_raw("test_foo.py::test_check"),
+            module_path: "test_foo.py".into(),
+            fn_name: "test_check".to_string(),
+            lineno: 10,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        };
+        let outcome = TestOutcome::Failed {
+            message: "assert failed".to_string(),
+            file: "test_foo.py".to_string(),
+            lineno: 5,
+            source_line: "assert x > 0".to_string(),
+            left: "".to_string(),
+            right: "".to_string(),
+            op: "".to_string(),
+            frames: vec![
+                ("test_foo.py".to_string(), 10, "test_check".to_string(), "helper(-1)".to_string()),
+                ("test_foo.py".to_string(), 5, "helper".to_string(), "assert x > 0".to_string()),
+            ],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
+        assert!(block.contains("frames"), "must contain frames label");
+        assert!(block.contains("test_check"), "must show caller function");
+        assert!(block.contains("helper"), "must show callee function");
+        assert!(block.contains("helper(-1)"), "must show caller source line");
+        // In Long mode with frames, numbered source line should NOT appear
+        assert!(!block.contains("   5 │"), "must NOT show numbered source line when frames present");
+    }
+
+    #[test]
+    fn test_diagnostic_block_long_empty_frames_falls_back_to_short() {
+        use crate::types::{TestItem, TestOutcome};
+
+        let item = TestItem {
+            node_id: crate::types::NodeId::from_raw("t.py::test_direct"),
+            module_path: "t.py".into(),
+            fn_name: "test_direct".to_string(),
+            lineno: 3,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+        };
+        let outcome = TestOutcome::Failed {
+            message: "oops".to_string(),
+            file: "t.py".to_string(),
+            lineno: 3,
+            source_line: "assert False".to_string(),
+            left: "".to_string(),
+            right: "".to_string(),
+            op: "".to_string(),
+            frames: vec![],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
+        // Empty frames → falls back to showing source line like Short
+        assert!(block.contains("   3 │"), "must show numbered source line when no frames");
+        assert!(!block.contains("frames"), "must NOT show frames section");
     }
 }
