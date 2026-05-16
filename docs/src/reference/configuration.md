@@ -44,6 +44,36 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `durations` | integer | — | Show the N slowest tests at end of run. CLI `--durations` overrides. |
 | `serial` | boolean | `false` | Run all tests in a single process. CLI `--serial` overrides. |
 | `color` | string | `"auto"` | Color output mode. One of: `"auto"`, `"always"`, `"never"`. CLI `--color` overrides. |
+| `plugins` | list of strings | `[]` | Python module paths of oxitest plugins to load. Each module must export an `oxitest_plugin(config=None)` function returning `oxitest.Plugin`. |
+| `plugin_settings` | table | `{}` | Per-plugin configuration. Each key is a plugin module name, value is a table of settings passed to `oxitest_plugin(config=...)`. |
+
+## plugins
+
+Declare plugins to extend oxitest. Each entry is a Python module path.
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_loguru", "oxitest_sqlalchemy"]
+```
+
+Plugins are loaded in order at session start. Each must export:
+
+```python
+def oxitest_plugin(config: dict | None = None) -> oxitest.Plugin:
+    ...
+```
+
+## plugin_settings
+
+Per-plugin configuration passed to the plugin's entry point.
+
+```toml
+[tool.oxitest.plugin_settings.oxitest_loguru]
+level = "DEBUG"
+format = "{time} {message}"
+```
+
+The table name must match the plugin module name from the `plugins` list.
 
 ## schedule
 
