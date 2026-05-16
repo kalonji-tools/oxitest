@@ -66,7 +66,7 @@ pub(crate) fn fmt_diagnostic_block(
     tb: &TbStyle,
     use_color: bool,
 ) -> String {
-    if *tb == TbStyle::No {
+    if *tb == TbStyle::No || *tb == TbStyle::Line {
         return String::new();
     }
 
@@ -166,13 +166,19 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    if *tb == TbStyle::Long && !frames.is_empty() {
+    // Filter out internal oxitest frames (executor, fixtures, etc.)
+    let user_frames: Vec<_> = frames
+        .iter()
+        .filter(|(f_file, _, _, _)| !f_file.contains("oxitest/_bridge/"))
+        .collect();
+
+    if *tb == TbStyle::Long && !user_frames.is_empty() {
         out.push_str(&format!(
             "        {}  {}\n",
             color_dim(BOX_BRANCH, use_color),
             color_dim("frames", use_color)
         ));
-        for (f_file, f_lineno, f_name, f_line) in frames {
+        for (f_file, f_lineno, f_name, f_line) in &user_frames {
             out.push_str(&format!(
                 "        {}    {}:{}  {}\n",
                 color_dim(BOX_VERT, use_color),
@@ -191,7 +197,9 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    if (*tb == TbStyle::Short || (*tb == TbStyle::Long && frames.is_empty())) && !file.is_empty() {
+    if (*tb == TbStyle::Short || (*tb == TbStyle::Long && user_frames.is_empty()))
+        && !file.is_empty()
+    {
         let lineno_padded = format!("{:>4}", lineno);
         out.push_str(&format!(
             "   {} {} {}\n",
@@ -260,14 +268,14 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_line_style_no_source() {
+    fn test_diagnostic_line_style_returns_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false);
-        assert!(block.contains("tests/test_foo.py:8"));
-        assert!(!block.contains("assert add(1, 2) == 4"));
-        assert!(block.contains("why:"));
-        assert!(block.contains("msg"));
+        assert!(
+            block.is_empty(),
+            "--tb=line must produce no diagnostic block"
+        );
     }
 
     #[test]
@@ -502,8 +510,18 @@ mod tests {
             right: "".to_string(),
             op: "".to_string(),
             frames: vec![
-                ("test_foo.py".to_string(), 10, "test_check".to_string(), "helper(-1)".to_string()),
-                ("test_foo.py".to_string(), 5, "helper".to_string(), "assert x > 0".to_string()),
+                (
+                    "test_foo.py".to_string(),
+                    10,
+                    "test_check".to_string(),
+                    "helper(-1)".to_string(),
+                ),
+                (
+                    "test_foo.py".to_string(),
+                    5,
+                    "helper".to_string(),
+                    "assert x > 0".to_string(),
+                ),
             ],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
@@ -512,7 +530,10 @@ mod tests {
         assert!(block.contains("helper"), "must show callee function");
         assert!(block.contains("helper(-1)"), "must show caller source line");
         // In Long mode with frames, numbered source line should NOT appear
-        assert!(!block.contains("   5 │"), "must NOT show numbered source line when frames present");
+        assert!(
+            !block.contains("   5 │"),
+            "must NOT show numbered source line when frames present"
+        );
     }
 
     #[test]
@@ -540,7 +561,10 @@ mod tests {
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
         // Empty frames → falls back to showing source line like Short
-        assert!(block.contains("   3 │"), "must show numbered source line when no frames");
+        assert!(
+            block.contains("   3 │"),
+            "must show numbered source line when no frames"
+        );
         assert!(!block.contains("frames"), "must NOT show frames section");
     }
 }

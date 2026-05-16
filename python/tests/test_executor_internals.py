@@ -190,6 +190,59 @@ def test_repr_safe_truncates_long_string():
     )
 
 
+def test_frames_captured_on_assertion_error():
+    """_handle_assertion_error populates frames from the traceback."""
+
+    def inner():
+        assert False, "boom"  # noqa: B011
+
+    try:
+        inner()
+    except AssertionError as exc:
+        result = _handle_assertion_error(exc)
+
+    assert result.status == "failed", f"expected failed, got {result.status!r}"
+    assert len(result.frames) >= 2, (
+        f"Expected at least 2 frames (test + inner), got {len(result.frames)}"
+    )
+    assert result.frames[-1].name == "inner", (
+        f"last frame should be 'inner', got {result.frames[-1].name!r}"
+    )
+    assert result.frames[-1].lineno > 0, (
+        f"lineno should be positive, got {result.frames[-1].lineno}"
+    )
+
+
+def test_frames_captured_on_runtime_exception():
+    """_handle_runtime_exception populates frames from the traceback."""
+
+    def blow_up():
+        raise ValueError("kaboom")
+
+    try:
+        blow_up()
+    except Exception as exc:
+        result = _handle_runtime_exception(exc)
+
+    assert result is not None, "runtime exception should return a result"
+    assert result.status == "error", f"expected error, got {result.status!r}"
+    assert len(result.frames) >= 2, (
+        f"Expected at least 2 frames, got {len(result.frames)}"
+    )
+    assert result.frames[-1].name == "blow_up", (
+        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"
+    )
+
+
+def test_frames_empty_when_no_traceback():
+    """An exception without __traceback__ produces empty frames."""
+    exc = ValueError("no tb")
+    exc.__traceback__ = None
+    result = _handle_runtime_exception(exc)
+    assert result is not None, "should return a result even without traceback"
+    assert result.frames == [], f"expected empty frames, got {result.frames!r}"
+
+
 def test_bad_module_path_returns_error(tmp: TempDir):
     from oxitest._bridge.executor import run_test
 

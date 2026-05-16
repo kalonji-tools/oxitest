@@ -24,11 +24,29 @@ impl CiReporter {
     }
 
     fn push_deferred_diag(&mut self, item: &TestItem, outcome: &TestOutcome) {
+        let c = self.opts.use_color;
+
+        // --tb=line: compact one-liner per failure
+        if self.opts.tb == crate::config::TbStyle::Line {
+            let (label, message, lineno) = match outcome {
+                TestOutcome::Failed {
+                    message, lineno, ..
+                } => ("FAILED", message.as_str(), *lineno),
+                TestOutcome::Error {
+                    message, lineno, ..
+                } => ("ERROR", message.as_str(), *lineno),
+                TestOutcome::Timeout { message } => ("TIMEOUT", message.as_str(), 0),
+                _ => return,
+            };
+            let line = format!("{:<7} {}   :{}   {}", label, item.node_id, lineno, message);
+            self.deferred_diags.push(line);
+            return;
+        }
+
         let diag = fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.use_color);
         if diag.is_empty() {
             return;
         }
-        let c = self.opts.use_color;
         let header = if let Some(pid) = &item.param_id {
             let sep = case_sep(c);
             match outcome {
@@ -316,6 +334,39 @@ mod tests {
         assert!(
             reporter.deferred_diags[0].contains("test_add"),
             "deferred diag must contain fn name"
+        );
+    }
+
+    #[test]
+    fn test_line_mode_emits_one_liner() {
+        let mut reporter = make_ci_reporter(TbStyle::Line);
+        let item = make_item("test_bar");
+        let outcome = make_failed("values differ", "test_foo.py", 5, "assert x == y");
+        reporter.test_completed(&item, &outcome, 10.0);
+        assert_eq!(reporter.deferred_diags.len(), 1);
+        let line = &reporter.deferred_diags[0];
+        assert!(line.contains("FAILED"), "must contain FAILED label");
+        assert!(
+            line.contains("test_foo.py::test_bar"),
+            "must contain node_id"
+        );
+        assert!(line.contains(":5"), "must contain lineno");
+        assert!(line.contains("values differ"), "must contain message");
+    }
+
+    #[test]
+    fn test_line_mode_error_emits_one_liner() {
+        let mut reporter = make_ci_reporter(TbStyle::Line);
+        let item = make_item("test_deep");
+        let outcome = make_error("ValueError: something broke", "test_foo.py", 10, "obj.x");
+        reporter.test_completed(&item, &outcome, 5.0);
+        assert_eq!(reporter.deferred_diags.len(), 1);
+        let line = &reporter.deferred_diags[0];
+        assert!(line.contains("ERROR"), "must contain ERROR label");
+        assert!(line.contains(":10"), "must contain lineno");
+        assert!(
+            line.contains("ValueError: something broke"),
+            "must contain message"
         );
     }
 
