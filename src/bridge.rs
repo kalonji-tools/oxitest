@@ -16,6 +16,7 @@ struct BridgeResult {
     right: String,
     op: String,
     strict: bool,
+    exc_type: String,
 }
 
 /// Long-lived Python fixture session held across the test loop.
