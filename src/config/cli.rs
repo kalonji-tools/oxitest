@@ -58,8 +58,12 @@ pub struct Cli {
     pub workers: Option<WorkerCount>,
 
     /// Group scheduling strategy for parallel runs
-    #[arg(long, value_enum, default_value = "longest-first")]
-    pub schedule: ScheduleStrategy,
+    #[arg(long, value_enum)]
+    pub schedule: Option<ScheduleStrategy>,
+
+    /// Per-test timeout in seconds (overrides pyproject.toml timeout)
+    #[arg(long, value_name = "SECS")]
+    pub timeout: Option<u64>,
 
     /// Show the N slowest tests at end of run (0 = disabled)
     #[arg(long, value_name = "N")]

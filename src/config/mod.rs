@@ -258,12 +258,17 @@ impl Config {
         if cli.strict.is_some() {
             self.strict = cli.strict.clone();
         }
-        self.schedule = cli.schedule;
+        if let Some(schedule) = cli.schedule {
+            self.schedule = schedule;
+        }
         if cli.failed.is_some() {
             self.failed = cli.failed;
         }
         if let Some(tb) = cli.tb.clone() {
             self.tb = tb;
+        }
+        if let Some(timeout) = cli.timeout {
+            self.timeout_secs = Some(timeout);
         }
         self
     }
@@ -993,6 +998,91 @@ spawn_overhead_ms = 100.0
         .unwrap();
         let config = Config::load(utf8_dir);
         assert_eq!(config.schedule, ScheduleStrategy::FailedFirst);
+    }
+
+    #[test]
+    fn test_schedule_pyproject_preserved_when_cli_absent() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nschedule = \"random\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.schedule,
+            ScheduleStrategy::Random,
+            "pyproject schedule must be preserved when CLI does not specify --schedule"
+        );
+    }
+
+    #[test]
+    fn test_schedule_cli_overrides_pyproject() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nschedule = \"random\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--schedule", "failed-first"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.schedule,
+            ScheduleStrategy::FailedFirst,
+            "CLI --schedule must override pyproject value"
+        );
+    }
+
+    #[test]
+    fn test_cli_timeout_flag() {
+        let cli = Cli::try_parse_from(["oxitest", "--timeout", "30"]).unwrap();
+        assert_eq!(cli.timeout, Some(30));
+    }
+
+    #[test]
+    fn test_cli_timeout_absent_is_none() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert_eq!(cli.timeout, None);
+    }
+
+    #[test]
+    fn test_timeout_cli_overrides_pyproject() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ntimeout = 60\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        assert_eq!(cfg.timeout_secs, Some(60));
+        let cli = Cli::try_parse_from(["oxitest", "--timeout", "10"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.timeout_secs,
+            Some(10),
+            "CLI --timeout must override pyproject value"
+        );
+    }
+
+    #[test]
+    fn test_timeout_pyproject_preserved_when_cli_absent() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ntimeout = 45\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.timeout_secs,
+            Some(45),
+            "pyproject timeout must be preserved when CLI does not specify --timeout"
+        );
     }
 
     // ── WorkerCount serde visitor edge cases ─────────────────────────────────
