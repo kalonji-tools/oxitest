@@ -26,11 +26,11 @@ current working directory when omitted.
 | `--warnings` | — | flag | `false` | Enable display of Python warnings captured during test execution. |
 | `--no-color` | — | flag | `false` | Disable ANSI color in output. |
 | `--serial` | — | flag | `false` | Run all tests in a single process. Disables parallel workers. Conflicts with `--workers`. |
-| `--workers` | — | integer | cpu count | Number of parallel worker processes. Conflicts with `--serial`. |
+| `--workers` | `-n` | `auto\|integer` | cpu count | Number of parallel worker processes. `auto` uses all available CPUs. Conflicts with `--serial`. |
 | `--durations` | — | integer | — | Show the N slowest tests at end of run. `0` disables. |
 | `--json` | — | `PATH` | — | Write CTRF-format JSON results to `PATH`. |
-| `--lf` | — | flag | `false` | Run only tests that failed on the last run. Conflicts with `--ff`. |
-| `--ff` | — | flag | `false` | Run failed tests first, then the rest. Conflicts with `--lf`. |
+| `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
+| `--schedule` | — | `longest-first\|failed-first\|random` | `longest-first` | Group scheduling strategy for parallel runs. |
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
 | `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
 
