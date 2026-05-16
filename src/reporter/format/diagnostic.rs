@@ -79,6 +79,7 @@ pub(crate) fn fmt_diagnostic_block(
             left,
             right,
             op,
+            frames: _,
         } => {
             let mut label_items: Vec<String> = Vec::new();
             if !op.is_empty() {
@@ -116,6 +117,7 @@ pub(crate) fn fmt_diagnostic_block(
             file,
             lineno,
             source_line,
+            frames: _,
         } => {
             let hint = format!(
                 "        {} {}\n",
@@ -274,6 +276,7 @@ mod tests {
             left: "41".to_string(),
             right: "42".to_string(),
             op: "==".to_string(),
+            frames: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(block.contains("left:"), "missing left label");
@@ -293,6 +296,7 @@ mod tests {
             left: "False".to_string(),
             right: String::new(),
             op: String::new(),
+            frames: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(block.contains("value:"), "missing value label");
@@ -314,6 +318,7 @@ mod tests {
             left: "41".to_string(),
             right: "42".to_string(),
             op: "==".to_string(),
+            frames: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(block.contains("why:"), "missing why label");
@@ -361,6 +366,7 @@ mod tests {
             left: "42".to_string(),
             right: String::new(),
             op: "==".to_string(),
+            frames: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(block.contains("left:"), "left should appear");
@@ -424,6 +430,7 @@ mod tests {
             file: String::new(),
             lineno: 0,
             source_line: String::new(),
+            frames: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(

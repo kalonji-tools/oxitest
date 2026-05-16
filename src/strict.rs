@@ -147,6 +147,7 @@ pub fn per_test_error(v: &StrictViolation) -> TestOutcome {
         file: String::new(),
         lineno: 0,
         source_line: String::new(),
+        frames: vec![],
     }
 }
 

@@ -77,6 +77,7 @@ impl WorkerResult {
             right: self.right.as_deref().unwrap_or_default(),
             op: self.op.as_deref().unwrap_or_default(),
             strict: self.strict,
+            frames: &[],
         })
     }
 }

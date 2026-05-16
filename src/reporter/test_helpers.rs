@@ -26,6 +26,7 @@ pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> Te
         left: String::new(),
         right: String::new(),
         op: String::new(),
+        frames: vec![],
     }
 }
 
@@ -35,5 +36,6 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
         file: file.to_string(),
         lineno,
         source_line: src.to_string(),
+        frames: vec![],
     }
 }
