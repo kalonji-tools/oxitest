@@ -8,14 +8,11 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
+from oxitest._bridge._errors import ParametrizeError
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge.fixtures import _fixture_inner_type
 
 _F = TypeVar("_F", bound=Callable[..., Any])
-
-
-class ParametrizeError(Exception):
-    """Raised when parametrize case resolution fails due to misconfiguration."""
 
 
 @dataclass(frozen=True)
