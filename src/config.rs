@@ -25,6 +25,7 @@ struct OxitestConfig {
     spawn_overhead_ms: Option<f64>,
     strict: Option<StrictMode>,
     workers: Option<WorkerCount>,
+    schedule: Option<ScheduleStrategy>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +104,18 @@ pub enum StrictMode {
     Enforce,
 }
 
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScheduleStrategy {
+    /// Longest modules first (based on cached timing data, falls back to item count)
+    #[default]
+    LongestFirst,
+    /// Previously-failed modules first
+    FailedFirst,
+    /// Random order (useful for detecting order-dependent tests)
+    Random,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "oxitest", about = "A fast Python test runner")]
 pub struct Cli {
@@ -157,6 +170,10 @@ pub struct Cli {
     #[arg(short = 'n', long, value_name = "N", conflicts_with = "serial", value_parser = parse_workers)]
     pub workers: Option<WorkerCount>,
 
+    /// Group scheduling strategy for parallel runs
+    #[arg(long, value_enum, default_value = "longest-first")]
+    pub schedule: ScheduleStrategy,
+
     /// Show the N slowest tests at end of run (0 = disabled)
     #[arg(long, value_name = "N")]
     pub durations: Option<usize>,
@@ -204,6 +221,7 @@ pub struct Config {
     pub spawn_overhead_ms: f64,
     pub strict: Option<StrictMode>,
     pub markers_without_description: Vec<String>,
+    pub schedule: ScheduleStrategy,
 }
 
 impl Default for Config {
@@ -233,6 +251,7 @@ impl Default for Config {
             spawn_overhead_ms: 250.0,
             strict: None,
             markers_without_description: vec![],
+            schedule: ScheduleStrategy::LongestFirst,
         }
     }
 }
@@ -279,6 +298,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     config.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(config.spawn_overhead_ms);
     if tc.workers.is_some() {
         config.workers = tc.workers;
+    }
+    if let Some(s) = tc.schedule {
+        config.schedule = s;
     }
 }
 
@@ -368,6 +390,7 @@ impl Config {
         if cli.strict.is_some() {
             self.strict = cli.strict.clone();
         }
+        self.schedule = cli.schedule;
         self
     }
 
@@ -1045,5 +1068,24 @@ spawn_overhead_ms = 100.0
             ..Config::default()
         };
         assert!(config.worker_count() >= 1);
+    }
+
+    #[test]
+    fn test_schedule_strategy_default_is_longest_first() {
+        let cfg = Config::default();
+        assert_eq!(cfg.schedule, ScheduleStrategy::LongestFirst);
+    }
+
+    #[test]
+    fn test_schedule_strategy_from_pyproject() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nschedule = \"failed-first\"\n",
+        )
+        .unwrap();
+        let config = Config::load(utf8_dir);
+        assert_eq!(config.schedule, ScheduleStrategy::FailedFirst);
     }
 }
