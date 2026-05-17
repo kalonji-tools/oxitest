@@ -879,3 +879,59 @@ def test_logcapture_injected_via_session():
     )
     for td in reversed(teardowns):
         td()
+
+
+def test_logcapture_includes_plugin_backends():
+    """Plugin-provided log backends are installed alongside StdlibLogBackend."""
+    import logging
+    import sys
+    import types
+
+    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge.plugin_loader import load_plugins
+    from oxitest.plugin import Plugin
+
+    class FakePluginBackend:
+        def __init__(self):
+            self.installed = False
+            self._records: list[logging.LogRecord] = []
+
+        def install(self):
+            self.installed = True
+
+        def uninstall(self):
+            self.installed = False
+
+        @property
+        def records(self):
+            return list(self._records)
+
+    fake_backend = FakePluginBackend()
+
+    mod = types.ModuleType("fake_log_plugin")
+    mod.oxitest_plugin = lambda config=None: Plugin(log_backends=[fake_backend])  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    sys.modules["fake_log_plugin"] = mod
+    try:
+        from oxitest._bridge import plugin_loader
+
+        old_registry = plugin_loader._registry
+        plugin_loader._registry = load_plugins(["fake_log_plugin"], {})
+
+        registry = plugin_loader.get_registry()
+        backends = [StdlibLogBackend()] + list(registry.log_backends)
+        cap = _LogCapture(backends)
+
+        assert fake_backend.installed, (
+            "Plugin log backend should be installed when LogCapture is created"
+        )
+        assert len(cap._backends) == 2, (
+            f"Expected 2 backends (stdlib + plugin), got {len(cap._backends)}"
+        )
+
+        cap._teardown()
+        assert not fake_backend.installed, (
+            "Plugin log backend should be uninstalled after teardown"
+        )
+    finally:
+        plugin_loader._registry = old_registry
+        sys.modules.pop("fake_log_plugin", None)
