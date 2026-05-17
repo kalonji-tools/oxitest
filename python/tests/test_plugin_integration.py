@@ -145,3 +145,72 @@ def test_plugin_receives_config(tmp: TempDir):
     assert received["retries"] == 3, (
         f"expected retries=3, got {received.get('retries')!r}"
     )
+
+
+def test_plugin_log_backend_captures_records(tmp: TempDir):
+    """A plugin-provided LogBackend is installed and captures log records."""
+    project = Path(str(tmp))
+
+    # Write a plugin that provides a LogBackend writing a marker on install
+    plugin_dir = project / "log_plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "import logging\n"
+        "from pathlib import Path\n"
+        "from oxitest.plugin import Plugin\n\n"
+        "class MarkerBackend:\n"
+        "    def __init__(self, marker_file):\n"
+        "        self._marker = marker_file\n"
+        "        self._records = []\n"
+        "    def install(self):\n"
+        "        Path(self._marker).write_text('installed')\n"
+        "    def uninstall(self):\n"
+        "        Path(self._marker).write_text('uninstalled')\n"
+        "    @property\n"
+        "    def records(self):\n"
+        "        return self._records\n\n"
+        "def oxitest_plugin(config=None):\n"
+        "    return Plugin(log_backends=[MarkerBackend(config['marker'])])\n"
+    )
+
+    marker_file = project / "backend_state.txt"
+
+    (project / "pyproject.toml").write_text(
+        f'[tool.oxitest]\n'
+        f'testpaths = ["tests"]\n'
+        f'plugins = ["log_plugin"]\n\n'
+        f'[tool.oxitest.plugin_settings.log_plugin]\n'
+        f'marker = "{marker_file}"\n'
+    )
+
+    # Write a test that uses LogCapture (triggers backend install)
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_log.py").write_text(
+        "from oxitest import Fixture\n"
+        "from oxitest._bridge._builtins._logcapture import _LogCapture\n\n"
+        "def test_with_log(log: Fixture[_LogCapture]):\n"
+        "    assert log is not None\n"
+    )
+
+    python_src = str(Path(__file__).resolve().parents[2] / "python")
+    env = {**os.environ, "PYTHONPATH": f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"}
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert marker_file.exists(), (
+        f"Plugin log backend was not installed.\n"
+        f"exit code: {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    # After test completes, teardown should have called uninstall
+    assert marker_file.read_text() == "uninstalled", (
+        f"Expected backend to be uninstalled after test, "
+        f"got state: {marker_file.read_text()!r}"
+    )
