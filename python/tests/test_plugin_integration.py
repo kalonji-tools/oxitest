@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from oxitest import Fixture, TempDir
+from oxitest import TempDir
 
 
 def test_plugin_loads_and_entry_called(tmp: TempDir):
@@ -29,10 +29,10 @@ def test_plugin_loads_and_entry_called(tmp: TempDir):
 
     # Write pyproject.toml declaring the plugin
     (project / "pyproject.toml").write_text(
-        f'[tool.oxitest]\n'
+        f"[tool.oxitest]\n"
         f'testpaths = ["tests"]\n'
         f'plugins = ["my_plugin"]\n\n'
-        f'[tool.oxitest.plugin_settings.my_plugin]\n'
+        f"[tool.oxitest.plugin_settings.my_plugin]\n"
         f'marker_file = "{marker_file}"\n'
     )
 
@@ -67,7 +67,7 @@ def test_missing_plugin_exits_with_error(tmp: TempDir):
     project = Path(str(tmp))
 
     (project / "pyproject.toml").write_text(
-        '[tool.oxitest]\n'
+        "[tool.oxitest]\n"
         'testpaths = ["."]\n'
         'plugins = ["nonexistent_plugin_xyz_12345"]\n'
     )
@@ -111,13 +111,13 @@ def test_plugin_receives_config(tmp: TempDir):
     output_file = project / "config_received.json"
 
     (project / "pyproject.toml").write_text(
-        f'[tool.oxitest]\n'
+        f"[tool.oxitest]\n"
         f'testpaths = ["tests"]\n'
         f'plugins = ["cfg_checker"]\n\n'
-        f'[tool.oxitest.plugin_settings.cfg_checker]\n'
+        f"[tool.oxitest.plugin_settings.cfg_checker]\n"
         f'output = "{output_file}"\n'
         f'level = "DEBUG"\n'
-        f'retries = 3\n'
+        f"retries = 3\n"
     )
 
     tests_dir = project / "tests"
@@ -134,9 +134,10 @@ def test_plugin_receives_config(tmp: TempDir):
     )
 
     assert output_file.exists(), (
-        f"Plugin did not write config file — oxitest_plugin() was not called"
+        "Plugin did not write config file — oxitest_plugin() was not called"
     )
     import json
+
     received = json.loads(output_file.read_text())
     assert received["level"] == "DEBUG", (
         f"expected level='DEBUG', got {received.get('level')!r}"

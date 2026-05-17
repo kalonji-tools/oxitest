@@ -234,8 +234,7 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     // Load plugins declared in [tool.oxitest] plugins = [...]
     if !cfg.plugins.is_empty() {
         if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
-            let err =
-                types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+            let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
             return Ok(make_error_rep().finish(&[err], false));
         }
     }
