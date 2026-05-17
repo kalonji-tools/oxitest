@@ -144,6 +144,23 @@ def test_debug_logs(log: LogCapture) -> None:
     assert any("low-level detail" in r.getMessage() for r in log.records)
 ```
 
+### Plugin backends
+
+`LogCapture` automatically picks up log backends provided by plugins. For example,
+a loguru plugin would register a `LogBackend` that captures loguru output into the
+same `log.records` list:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_loguru"]
+```
+
+With this configured, `log.records` includes records from both Python's stdlib
+`logging` module and loguru. No changes to test code required — plugin backends
+are installed and torn down automatically.
+
+See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
+
 ## WarnCapture — Python warnings
 
 `WarnCapture` captures every `warnings.warn()` call made during a test, including
