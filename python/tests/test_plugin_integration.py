@@ -176,10 +176,10 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
     marker_file = project / "backend_state.txt"
 
     (project / "pyproject.toml").write_text(
-        f'[tool.oxitest]\n'
+        f"[tool.oxitest]\n"
         f'testpaths = ["tests"]\n'
         f'plugins = ["log_plugin"]\n\n'
-        f'[tool.oxitest.plugin_settings.log_plugin]\n'
+        f"[tool.oxitest.plugin_settings.log_plugin]\n"
         f'marker = "{marker_file}"\n'
     )
 
@@ -194,7 +194,8 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
     )
 
     python_src = str(Path(__file__).resolve().parents[2] / "python")
-    env = {**os.environ, "PYTHONPATH": f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"}
+    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
+    env = {**os.environ, "PYTHONPATH": pypath}
     result = subprocess.run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
