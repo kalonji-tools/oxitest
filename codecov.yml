@@ -31,3 +31,7 @@ ignore:
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
   - "python/oxitest/__init__.py"
+  # Plugin system: init_plugins() called from Rust via PyO3, not reachable by Python coverage
+  - "python/oxitest/_bridge/plugin_loader.py"
+  # Protocol stubs — method bodies are `...`, never executed
+  - "python/oxitest/plugin.py"
