@@ -215,3 +215,78 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
         f"Expected backend to be uninstalled after test, "
         f"got state: {marker_file.read_text()!r}"
     )
+
+
+def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
+    """A plugin-provided fixture is injectable via Fixture[T] in a test."""
+    project = Path(str(tmp))
+
+    # Write a plugin that provides a Database fixture
+    plugin_dir = project / "db_plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "from oxitest.plugin import Plugin\n\n"
+        "class Database:\n"
+        "    def __init__(self):\n"
+        "        self.connected = True\n\n"
+        "class DatabaseProvider:\n"
+        "    @property\n"
+        "    def name(self):\n"
+        "        return 'db'\n"
+        "    @property\n"
+        "    def fixture_type(self):\n"
+        "        return Database\n"
+        "    def create(self, ctx):\n"
+        "        return Database()\n"
+        "    def teardown(self, value):\n"
+        "        value.connected = False\n\n"
+        "def oxitest_plugin(config=None):\n"
+        "    return Plugin(fixture_providers=[DatabaseProvider()])\n"
+    )
+
+    marker_file = project / "test_result.txt"
+
+    (project / "pyproject.toml").write_text(
+        f'[tool.oxitest]\n'
+        f'testpaths = ["tests"]\n'
+        f'plugins = ["db_plugin"]\n'
+    )
+
+    # Write a test that injects the plugin fixture
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_db.py").write_text(
+        "from pathlib import Path\n"
+        "from oxitest import Fixture\n"
+        "from db_plugin import Database\n\n"
+        f"MARKER = Path('{marker_file}')\n\n"
+        "def test_uses_db(db: Fixture[Database]):\n"
+        "    assert db.connected, 'database should be connected'\n"
+        "    MARKER.write_text('injected')\n"
+    )
+
+    python_src = str(Path(__file__).resolve().parents[2] / "python")
+    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
+    env = {**os.environ, "PYTHONPATH": pypath}
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert marker_file.exists(), (
+        f"Plugin fixture was not injected — test didn't run.\n"
+        f"exit code: {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    assert marker_file.read_text() == "injected", (
+        f"Expected 'injected', got {marker_file.read_text()!r}"
+    )
+    assert result.returncode == 0, (
+        f"Test should pass, got exit code {result.returncode}\n"
+        f"stdout:\n{result.stdout}"
+    )
