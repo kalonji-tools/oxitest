@@ -1316,3 +1316,59 @@ def test_fixture_accessor_getattr_raises_runtime_error_without_teardown_context(
         )
     finally:
         _instantiation_context.reset(token)
+
+
+def test_plugin_fixture_provider_injected():
+    """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
+    import sys
+    import types
+
+    from oxitest._bridge.plugin_loader import load_plugins
+    from oxitest.plugin import Plugin
+
+    class FakeDatabase:
+        """The type that the plugin provides."""
+
+        def __init__(self, url: str) -> None:
+            self.url = url
+            self.closed = False
+
+    class FakeDatabaseProvider:
+        @property
+        def name(self) -> str:
+            return "db"
+
+        @property
+        def fixture_type(self) -> type:
+            return FakeDatabase
+
+        def create(self, ctx: object) -> FakeDatabase:
+            return FakeDatabase(url="sqlite://test")
+
+        def teardown(self, value: object) -> None:
+            if isinstance(value, FakeDatabase):
+                value.closed = True
+
+    provider = FakeDatabaseProvider()
+    mod = types.ModuleType("db_plugin")
+    mod.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        fixture_providers=[provider]
+    )
+    sys.modules["db_plugin"] = mod
+
+    try:
+        from oxitest._bridge import plugin_loader
+
+        old_registry = plugin_loader._registry
+        plugin_loader._registry = load_plugins(["db_plugin"], {})
+
+        registry = plugin_loader.get_registry()
+        assert len(registry.fixture_providers) == 1, (
+            f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
+        )
+        assert registry.fixture_providers[0].fixture_type is FakeDatabase, (
+            "Provider fixture_type should be FakeDatabase"
+        )
+    finally:
+        plugin_loader._registry = old_registry
+        sys.modules.pop("db_plugin", None)

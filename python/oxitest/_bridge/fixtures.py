@@ -536,6 +536,24 @@ class FixtureSession:
             )
         )
 
+    def _try_plugin_fixture(
+        self,
+        inner: type,
+        teardown_stack: list[Callable[[], None]],
+    ) -> Any | None:
+        """Check plugin registry for a FixtureProvider matching the requested type.
+
+        Returns the fixture value if a provider matches, None otherwise.
+        """
+        from oxitest._bridge.plugin_loader import get_registry
+
+        for provider in get_registry().fixture_providers:
+            if provider.fixture_type is inner:
+                value = provider.create(None)
+                teardown_stack.append(lambda v=value, p=provider: p.teardown(v))
+                return value
+        return None
+
     def _resolve_param(
         self,
         param_name: str,
@@ -563,6 +581,10 @@ class FixtureSession:
             return True, self._inject_builtin(
                 impl_cls, module_path, "function", fn_teardowns, fn_name=fn_name
             )
+        # Check plugin fixture providers (matched by type, not name)
+        plugin_value = self._try_plugin_fixture(inner, fn_teardowns)
+        if plugin_value is not None:
+            return True, plugin_value
         return True, resolve_user_fixture(param_name)
 
     # ── Resolution ────────────────────────────────────────────────────────────
