@@ -216,7 +216,7 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         .show_tips(cli.tips)
         .show_warnings(cli.warnings);
     let make_error_rep =
-        || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None);
+        || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None, vec![]);
 
     let (test_files, conftest_files) = collector::collect_files(&cfg);
 
@@ -334,10 +334,25 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     cache.invalidate(&clean_items);
     let estimated = cache.estimated_duration(&clean_items);
 
+    // Fetch plugin reporters from Python registry
+    let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !cfg.plugins.is_empty() {
+        bridge::get_plugin_reporters(py)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|obj| {
+                Box::new(reporter::plugin::PyPluginReporter::new(obj))
+                    as Box<dyn reporter::Reporter>
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
     let mut rep = reporter::make_reporter(
         base.total(total).strict_suite_lines(suite_lines).build(),
         is_tty,
         cli.json.clone(),
+        plugin_reporters,
     );
 
     // Immediately report violated items as Error outcomes (no worker dispatch).
