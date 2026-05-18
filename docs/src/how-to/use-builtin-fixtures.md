@@ -240,4 +240,25 @@ provide the same type, the conftest fixture wins.
 
 Plugin fixtures are torn down automatically after each test.
 
+## Plugin reporters
+
+Plugins can provide custom reporters that receive test events alongside the built-in
+reporter. For example, a JUnit XML plugin:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_junit"]
+
+[tool.oxitest.plugin_settings.oxitest_junit]
+output = "test-results.xml"
+```
+
+Plugin reporters receive three events:
+
+- `test_started(item)` — called before each test (item is the node ID string)
+- `test_completed(item, outcome, duration_ms)` — called after each test
+- `finish(collect_errors, interrupted)` — called once at the end of the run
+
+Plugin reporters do not influence the exit code.
+
 See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
