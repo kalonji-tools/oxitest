@@ -111,6 +111,16 @@ pub(crate) struct RawViolation {
     pub detail: String,
 }
 
+/// Fetch plugin reporter objects from the Python plugin registry.
+pub fn get_plugin_reporters(py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+    let loader = py.import("oxitest._bridge.plugin_loader")?;
+    let registry = loader.call_method0("get_registry")?;
+    let reporters: Vec<Py<PyAny>> = registry
+        .getattr("reporters")?
+        .extract::<Vec<Py<PyAny>>>()?;
+    Ok(reporters)
+}
+
 pub fn collect_module(
     py: Python<'_>,
     path: &Utf8Path,
