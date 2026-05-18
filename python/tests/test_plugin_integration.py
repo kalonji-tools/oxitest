@@ -248,9 +248,7 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
     marker_file = project / "test_result.txt"
 
     (project / "pyproject.toml").write_text(
-        f'[tool.oxitest]\n'
-        f'testpaths = ["tests"]\n'
-        f'plugins = ["db_plugin"]\n'
+        '[tool.oxitest]\ntestpaths = ["tests"]\nplugins = ["db_plugin"]\n'
     )
 
     # Write a test that injects the plugin fixture
@@ -287,6 +285,5 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
         f"Expected 'injected', got {marker_file.read_text()!r}"
     )
     assert result.returncode == 0, (
-        f"Test should pass, got exit code {result.returncode}\n"
-        f"stdout:\n{result.stdout}"
+        f"Test should pass, got exit code {result.returncode}\nstdout:\n{result.stdout}"
     )
