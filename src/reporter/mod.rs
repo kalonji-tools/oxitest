@@ -8,9 +8,9 @@ mod exit;
 mod format;
 pub(crate) mod json;
 mod options;
+pub(crate) mod plugin;
 mod stats;
 mod tty;
-pub(crate) mod plugin;
 
 #[cfg(test)]
 mod test_helpers;
