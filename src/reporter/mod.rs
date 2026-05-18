@@ -125,6 +125,7 @@ pub fn make_reporter(
     opts: ReporterOpts,
     is_tty: bool,
     json_path: Option<camino::Utf8PathBuf>,
+    plugin_reporters: Vec<Box<dyn Reporter>>,
 ) -> Box<dyn Reporter> {
     let json_reporter =
         json_path.map(|path| Box::new(json::JsonReporter::new(path)) as Box<dyn Reporter>);
@@ -135,9 +136,16 @@ pub fn make_reporter(
         Box::new(CiReporter::new(opts))
     };
 
-    match json_reporter {
-        Some(jr) => Box::new(CompositeReporter::new(vec![primary, jr])),
-        None => primary,
+    let mut reporters = vec![primary];
+    if let Some(jr) = json_reporter {
+        reporters.push(jr);
+    }
+    reporters.extend(plugin_reporters);
+
+    if reporters.len() == 1 {
+        reporters.into_iter().next().unwrap()
+    } else {
+        Box::new(CompositeReporter::new(reporters))
     }
 }
 
