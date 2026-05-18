@@ -214,3 +214,30 @@ def test_combined(fx: Fixtures) -> None:
 
 This is equivalent to declaring `tmp: TempDir, patch: Patcher, log: LogCapture` as
 separate parameters.
+
+## Plugin-provided fixtures
+
+Plugins can register custom fixtures injectable via `Fixture[T]` annotations,
+just like built-in fixtures. For example, a database plugin might provide:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_db"]
+```
+
+```python
+from oxitest import Fixture
+from oxitest_db import Database
+
+def test_query(db: Fixture[Database]):
+    result = db.execute("SELECT 1")
+    assert result == 1
+```
+
+Plugin fixtures are resolved by **type**, not by name — the parameter name (`db`) doesn't
+matter, only the `Fixture[Database]` annotation. If a conftest fixture and a plugin fixture
+provide the same type, the conftest fixture wins.
+
+Plugin fixtures are torn down automatically after each test.
+
+See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
