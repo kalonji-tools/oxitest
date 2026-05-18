@@ -287,3 +287,81 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
     assert result.returncode == 0, (
         f"Test should pass, got exit code {result.returncode}\nstdout:\n{result.stdout}"
     )
+
+
+def test_plugin_reporter_receives_events(tmp: TempDir):
+    """A plugin-provided reporter receives test_started/test_completed/finish events."""
+    project = Path(str(tmp))
+
+    # Write a plugin that provides a reporter writing events to a file
+    plugin_dir = project / "reporter_plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "import json\n"
+        "from pathlib import Path\n"
+        "from oxitest.plugin import Plugin\n\n"
+        "class FileReporter:\n"
+        "    def __init__(self, output_path):\n"
+        "        self._path = Path(output_path)\n"
+        "        self._events = []\n"
+        "    def test_started(self, item):\n"
+        "        self._events.append({'event': 'started', 'item': str(item)})\n"
+        "    def test_completed(self, item, outcome, duration_ms):\n"
+        "        self._events.append({\n"
+        "            'event': 'completed',\n"
+        "            'item': str(item),\n"
+        "            'outcome': str(outcome),\n"
+        "            'duration_ms': duration_ms,\n"
+        "        })\n"
+        "    def finish(self, collect_errors, interrupted):\n"
+        "        self._events.append({'event': 'finish'})\n"
+        "        self._path.write_text(json.dumps(self._events))\n\n"
+        "def oxitest_plugin(config=None):\n"
+        "    return Plugin(reporters=[FileReporter(config['output'])])\n"
+    )
+
+    output_file = project / "reporter_events.json"
+
+    (project / "pyproject.toml").write_text(
+        f"[tool.oxitest]\n"
+        f'testpaths = ["tests"]\n'
+        f'plugins = ["reporter_plugin"]\n\n'
+        f"[tool.oxitest.plugin_settings.reporter_plugin]\n"
+        f'output = "{output_file}"\n'
+    )
+
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_sample.py").write_text(
+        "def test_one(): pass\ndef test_two(): assert True\n"
+    )
+
+    python_src = str(Path(__file__).resolve().parents[2] / "python")
+    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
+    env = {**os.environ, "PYTHONPATH": pypath}
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert output_file.exists(), (
+        f"Plugin reporter did not write events file.\n"
+        f"exit code: {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+    import json
+
+    events = json.loads(output_file.read_text())
+
+    started = [e for e in events if e["event"] == "started"]
+    completed = [e for e in events if e["event"] == "completed"]
+    finished = [e for e in events if e["event"] == "finish"]
+
+    assert len(started) == 2, f"Expected 2 started events, got {len(started)}"
+    assert len(completed) == 2, f"Expected 2 completed events, got {len(completed)}"
+    assert len(finished) == 1, f"Expected 1 finish event, got {len(finished)}"
