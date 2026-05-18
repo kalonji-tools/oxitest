@@ -10,6 +10,7 @@ pub(crate) mod json;
 mod options;
 mod stats;
 mod tty;
+pub(crate) mod plugin;
 
 #[cfg(test)]
 mod test_helpers;
