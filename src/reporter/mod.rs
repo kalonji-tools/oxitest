@@ -620,6 +620,72 @@ mod tests {
         );
     }
 
+    // ── make_reporter ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_make_reporter_returns_single_reporter_when_tty_and_no_extras() {
+        let opts = ReporterOptsBuilder::new().build();
+        let mut reporter = make_reporter(opts, true, None, vec![]);
+        assert_eq!(reporter.finish(&[], false), 0);
+    }
+
+    #[test]
+    fn test_make_reporter_returns_single_reporter_when_ci_and_no_extras() {
+        let opts = ReporterOptsBuilder::new().build();
+        let mut reporter = make_reporter(opts, false, None, vec![]);
+        assert_eq!(reporter.finish(&[], false), 0);
+    }
+
+    #[test]
+    fn test_make_reporter_wraps_in_composite_when_json_path_given() {
+        use camino::Utf8PathBuf;
+        let opts = ReporterOptsBuilder::new().build();
+        let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
+        let mut reporter = make_reporter(opts, false, Some(path), vec![]);
+        assert_eq!(reporter.finish(&[], false), 0);
+    }
+
+    #[test]
+    fn test_make_reporter_wraps_in_composite_when_plugin_reporters_given() {
+        use crate::reporter::test_helpers::make_item;
+        use crate::types::TestOutcome;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        struct CountingStub(Arc<AtomicUsize>);
+        impl Reporter for CountingStub {
+            fn test_started(&mut self, _: &crate::types::TestItem) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+            fn test_completed(
+                &mut self,
+                _: &crate::types::TestItem,
+                _: &crate::types::TestOutcome,
+                _: f64,
+            ) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
+                0
+            }
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let opts = ReporterOptsBuilder::new().build();
+        let plugins: Vec<Box<dyn Reporter>> = vec![Box::new(CountingStub(Arc::clone(&calls)))];
+        let mut reporter = make_reporter(opts, true, None, plugins);
+        let item = make_item("test_x");
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        reporter.test_started(&item);
+        reporter.test_completed(&item, &outcome, 1.0);
+        assert!(
+            calls.load(Ordering::Relaxed) >= 2,
+            "plugin reporter should receive test_started and test_completed events"
+        );
+        assert_eq!(reporter.finish(&[], false), 0);
+    }
+
     #[test]
     fn test_composite_reporter_dispatches_test_started_to_all_reporters() {
         use crate::reporter::test_helpers::make_item;

@@ -444,6 +444,50 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
     )
 
 
+def test_multiple_teardown_failures_all_reported(
+    tmp: TempDir, warn: WarnCapture
+) -> None:
+    """When ALL fixture teardowns fail, each emits a warning and test still passes."""
+    f = tmp / "test_multi_td.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
+        "    assert a == 1\n"
+        "    assert b == 2\n"
+    )
+    log: list[str] = []
+
+    def factory_a():
+        yield 1
+        log.append("a_teardown")
+        raise RuntimeError("a exploded")
+
+    def factory_b():
+        yield 2
+        log.append("b_teardown")
+        raise ValueError("b exploded")
+
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("a", factory_a, False, None, "/c.py"))
+    reg.register(FixtureDef("b", factory_b, False, None, "/c.py"))
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_ok", session)
+    assert result.status == "passed", (
+        f"test result should be passed despite all teardowns failing, got "
+        f"status={result.status!r}, msg={result.message!r}"
+    )
+    assert "a_teardown" in log, f"fixture a teardown must have run, got log={log!r}"
+    assert "b_teardown" in log, f"fixture b teardown must have run, got log={log!r}"
+    teardown_warnings = [
+        w for w in warn.list if issubclass(w.category, FixtureTeardownWarning)
+    ]
+    assert len(teardown_warnings) == 2, (
+        f"expected 2 FixtureTeardownWarning (one per failing teardown), "
+        f"got {len(teardown_warnings)}: {warn.list!r}"
+    )
+
+
 # ── Compact parametrize ───────────────────────────────────────────────────────
 
 
