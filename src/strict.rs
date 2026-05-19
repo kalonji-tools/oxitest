@@ -1,3 +1,13 @@
+//! Strict-mode violation detection and reporting.
+//!
+//! When `--strict` is enabled, oxitest checks for code quality issues at
+//! collection time: bare `assert` statements without messages, dict-based
+//! parametrize (instead of frozen dataclasses), missing mark reasons, and
+//! unregistered markers without descriptions.
+//!
+//! Violations are either warnings (enforce mode) or hard errors (abort mode)
+//! depending on the [`StrictMode`](crate::config::StrictMode) setting.
+
 use crate::bridge::RawViolation;
 use crate::config::Config;
 use crate::types::{NodeId, TestOutcome};

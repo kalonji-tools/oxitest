@@ -1,3 +1,9 @@
+//! Core data types shared across the runner.
+//!
+//! Defines [`NodeId`] (stable test identifier), [`TestItem`] (collected test metadata),
+//! [`TestOutcome`] (the eight possible results of running a test), [`CollectError`],
+//! and [`TestTiming`].
+
 use camino::Utf8PathBuf;
 
 /// Stable test identifier used throughout the runner.

@@ -1,3 +1,9 @@
+//! File discovery — walks the filesystem to find test files and conftest files.
+//!
+//! Uses `testpaths`, `python_files`, and `norecursedirs` from [`Config`] to
+//! match files via glob patterns. Returns deduplicated, sorted lists of
+//! test file paths and conftest paths.
+
 use camino::{Utf8Path, Utf8PathBuf};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use std::collections::HashSet;

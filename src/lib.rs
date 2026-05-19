@@ -1,3 +1,11 @@
+//! Pipeline orchestrator — the main entry point for an oxitest run.
+//!
+//! [`run()`] ties all modules together in a fixed sequence:
+//! config → collect files → import tests → filter → schedule → execute → report → cache.
+//!
+//! Both serial and parallel execution paths converge through this module.
+//! The PyO3 `#[pyfunction]` at the bottom exposes `run(args)` to Python.
+
 #![allow(clippy::useless_conversion)] // pyo3 macros generate this
 use clap::Parser;
 use pyo3::prelude::*;
