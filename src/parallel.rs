@@ -122,6 +122,62 @@ fn take_child_pipes(
     ))
 }
 
+/// Spawns a worker subprocess and returns its stdin, a line receiver for stdout,
+/// and the child handle. Returns `None` on spawn or pipe failure.
+fn setup_worker_process(
+    python_bin: &str,
+) -> Option<(
+    std::process::Child,
+    std::io::BufWriter<std::process::ChildStdin>,
+    crossbeam_channel::Receiver<String>,
+)> {
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+
+    let mut child = match Command::new(python_bin)
+        .args(["-m", "oxitest._bridge.worker"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("failed to spawn worker: {e}");
+            return None;
+        }
+    };
+
+    let (worker_stdin, worker_stdout) = match take_child_pipes(&mut child) {
+        Some(pipes) => pipes,
+        None => {
+            tracing::error!("worker stdin/stdout unexpectedly None — OS failed to pipe stdio");
+            let _ = child.kill();
+            return None;
+        }
+    };
+
+    // Offload blocking reads into a dedicated thread so the worker loop
+    // can use recv_timeout() and remain responsive to the watchdog deadline.
+    let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+    let _reader = std::thread::spawn(move || {
+        let mut stdout = worker_stdout;
+        loop {
+            let mut line = String::new();
+            match stdout.read_line(&mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    if line_tx.send(line).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    Some((child, worker_stdin, line_rx))
+}
+
 pub(crate) fn spawn_worker(
     python_bin: String,
     sched: std::sync::Arc<scheduler::Scheduler>,
@@ -130,8 +186,7 @@ pub(crate) fn spawn_worker(
     timeout_secs: Option<u64>,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
-    use std::io::{BufRead, Write};
-    use std::process::{Command, Stdio};
+    use std::io::Write;
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
@@ -147,46 +202,10 @@ pub(crate) fn spawn_worker(
         .unwrap_or(Duration::from_secs(600));
 
     std::thread::spawn(move || {
-        let mut child = match Command::new(&python_bin)
-            .args(["-m", "oxitest._bridge.worker"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("failed to spawn worker: {e}");
-                return;
-            }
+        let (mut child, mut worker_stdin, line_rx) = match setup_worker_process(&python_bin) {
+            Some(v) => v,
+            None => return,
         };
-
-        let (mut worker_stdin, worker_stdout) = match take_child_pipes(&mut child) {
-            Some(pipes) => pipes,
-            None => {
-                tracing::error!("worker stdin/stdout unexpectedly None — OS failed to pipe stdio");
-                let _ = child.kill();
-                return;
-            }
-        };
-
-        // Offload the blocking read into a dedicated thread so the worker loop
-        // can use recv_timeout() and remain responsive to the watchdog deadline.
-        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let _reader = std::thread::spawn(move || {
-            let mut stdout = worker_stdout;
-            loop {
-                let mut line = String::new();
-                match stdout.read_line(&mut line) {
-                    Ok(0) | Err(_) => break, // EOF or I/O error — drops line_tx, closing line_rx
-                    Ok(_) => {
-                        if line_tx.send(line).is_err() {
-                            break; // worker loop dropped line_rx (e.g. after kill)
-                        }
-                    }
-                }
-            }
-        });
 
         let mut subprocess_alive = true;
 
