@@ -437,3 +437,74 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
     assert "2" in result.stdout or "collected 2" in result.stdout, (
         f"Expected 2 collected items in output.\nstdout:\n{result.stdout}"
     )
+
+
+def test_plugin_execution_wrapper_retries(tmp: TempDir):
+    """A plugin ExecutionWrapper wraps test execution based on a marker."""
+    project = Path(str(tmp))
+
+    # Write a plugin that provides a retry wrapper
+    plugin_dir = project / "retry_plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "from oxitest.plugin import Plugin\n\n"
+        "class RetryWrapper:\n"
+        "    @property\n"
+        "    def marker(self):\n"
+        "        return 'retry'\n"
+        "    def wrap(self, test_fn, marker_args):\n"
+        "        count = marker_args.get('count', 1)\n"
+        "        last_result = None\n"
+        "        for _ in range(count):\n"
+        "            last_result = test_fn()\n"
+        "            if last_result.status == 'passed':\n"
+        "                return last_result\n"
+        "        return last_result\n\n"
+        "def oxitest_plugin(config=None):\n"
+        "    return Plugin(execution_wrappers=[RetryWrapper()])\n"
+    )
+
+    marker_file = project / "attempt_count.txt"
+
+    (project / "pyproject.toml").write_text(
+        "[tool.oxitest]\n"
+        'testpaths = ["tests"]\n'
+        'plugins = ["retry_plugin"]\n'
+        'markers = ["retry: retry a test multiple times"]\n'
+    )
+
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    # Test that fails on first attempt, passes on second
+    (tests_dir / "test_flaky.py").write_text(
+        "from pathlib import Path\n"
+        "import oxitest\n\n"
+        f"COUNTER = Path('{marker_file}')\n\n"
+        "@oxitest.mark.retry(count=3)\n"
+        "def test_flaky():\n"
+        "    n = int(COUNTER.read_text()) if COUNTER.exists() else 0\n"
+        "    n += 1\n"
+        "    COUNTER.write_text(str(n))\n"
+        "    assert n >= 2, f'attempt {n} failed'\n"
+    )
+
+    python_src = str(Path(__file__).resolve().parents[2] / "python")
+    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
+    env = {**os.environ, "PYTHONPATH": pypath}
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, (
+        f"Test should pass after retry, got exit code {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    assert marker_file.exists(), "Counter file should exist after test execution"
+    attempts = int(marker_file.read_text())
+    assert attempts == 2, f"Expected 2 attempts (fail then pass), got {attempts}"
