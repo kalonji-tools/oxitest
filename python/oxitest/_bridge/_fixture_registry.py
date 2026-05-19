@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Annotated, Any, Generic, TypeVar, get_args, get_origin
+
+from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
+
+T = TypeVar("T")
+
+
+@dataclass
+class FixtureDef(Generic[T]):
+    name: str
+    func: Callable[..., T]
+    autouse: bool
+    params: list[Any] | None
+    conftest_path: str  # which conftest registered this (for locality precedence)
+    shared: bool = False  # True = session-lifetime, immutable (FrozenProxy-wrapped)
+    namespace: str = ""  # Fixtures() instance name; empty = no namespace
+
+
+class FixtureRegistry:
+    def __init__(self) -> None:
+        # name -> list of FixtureDef, ordered from root conftest to leaf conftest
+        self._defs: dict[str, list[FixtureDef[Any]]] = {}
+        self._namespaces: set[str] = set()  # O(1) namespace existence check
+
+    def register(self, defn: FixtureDef[Any]) -> None:
+        self._defs.setdefault(defn.name, []).append(defn)
+        if defn.namespace:
+            self._namespaces.add(defn.namespace)
+
+    def get(self, name: str) -> FixtureDef[Any] | None:
+        """Return the most-local (last-registered) FixtureDef for name."""
+        defs = self._defs.get(name)
+        return defs[-1] if defs else None
+
+    def get_autouse(self) -> list[FixtureDef[Any]]:
+        """Return all autouse fixtures (most-local version of each name)."""
+        return [defs[-1] for defs in self._defs.values() if defs and defs[-1].autouse]
+
+    def get_in_namespace(self, name: str, namespace: str) -> FixtureDef[Any] | None:
+        """Return the most-local FixtureDef for name within the given namespace."""
+        defs = self._defs.get(name)
+        if not defs:
+            return None
+        for defn in reversed(defs):
+            if defn.namespace == namespace:
+                return defn
+        return None
+
+    def has_namespace(self, namespace: str) -> bool:
+        """Return True if any registered fixture belongs to the given namespace."""
+        return namespace in self._namespaces
+
+
+def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
+    """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
+    if get_origin(hint) is not Annotated:
+        return False, None
+    inner, *meta = get_args(hint)
+    if not any(isinstance(m, _FixtureMarker) for m in meta):
+        return False, None
+    return True, inner
+
+
+def _fixture_ref_inner_type(hint: Any) -> tuple[bool, Any]:
+    """Return (is_fixture_ref, inner_type). True iff hint is FixtureRef[T]."""
+    if get_origin(hint) is not Annotated:
+        return False, None
+    inner, *meta = get_args(hint)
+    if not any(isinstance(m, _FixtureRefMarker) for m in meta):
+        return False, None
+    return True, inner
