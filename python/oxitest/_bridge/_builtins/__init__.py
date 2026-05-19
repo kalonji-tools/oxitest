@@ -48,14 +48,15 @@ from oxitest._bridge._builtins._warncapture import (
     _WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
-from oxitest._bridge._fixture_type import _FixtureMarker
 
 # ── TestContext registration ──────────────────────────────────────────────────
-# Imported here (after fixtures.py is already loaded) to avoid circular imports.
-# _TestContextFixture registers TestContext with BuiltinFixture._registry so the
-# resolver in FixtureSession._inject_builtin() handles it alongside all other
-# built-ins — no special-case needed in fixtures.py.
-from oxitest._bridge.fixtures import _Node as _Node, _TestContext
+# Imported from _fixture_session (canonical location) rather than fixtures.py to
+# avoid circular imports during module initialization. _TestContextFixture
+# registers TestContext with BuiltinFixture._registry so the resolver in
+# FixtureSession._inject_builtin() handles it alongside all other built-ins —
+# no special-case needed in fixtures.py.
+from oxitest._bridge._fixture_session import _Node as _Node, _TestContext
+from oxitest._bridge._fixture_type import _FixtureMarker
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
