@@ -118,7 +118,7 @@ jobs:
 
       - name: Post Rust coverage comment
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: rust-coverage
           path: code-coverage-results.md
@@ -172,7 +172,7 @@ jobs:
 
       - name: Post Python coverage comment
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: python-coverage
           path: code-coverage-results.md
