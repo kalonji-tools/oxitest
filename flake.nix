@@ -75,10 +75,12 @@
             echo "  ty     : $(ty --version)"
             echo "  prek   : $(prek --version)"
 
-            # Install git hooks (unset core.hooksPath if set to avoid prek error)
+            # Install git hooks and set hooksPath so worktrees share them
             if git rev-parse --git-dir > /dev/null 2>&1; then
               git config --unset core.hooksPath 2>/dev/null || true
               prek install
+              HOOKS_DIR="$(git rev-parse --git-common-dir)/hooks"
+              git config core.hooksPath "$HOOKS_DIR"
             fi
           '';
         };
