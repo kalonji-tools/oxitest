@@ -85,3 +85,11 @@ language = "system"
 entry = "bash scripts/check-tag-version.sh"
 pass_filenames = false
 stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "bridge-sync"
+name = "bridge-sync"
+language = "system"
+entry = "python scripts/check_bridge_sync.py"
+pass_filenames = false
+files = "(bridge\\.rs|result\\.py)$"
