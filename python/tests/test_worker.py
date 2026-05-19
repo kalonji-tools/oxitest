@@ -19,15 +19,14 @@ def _run_worker(task: dict) -> list[dict]:
         text=True,
         check=False,
         env=env,
+        timeout=30,
     )
     lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
     return [json.loads(line) for line in lines]
 
 
 def test_worker_runs_passing_test():
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False, dir="/tmp"
-    ) as f:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
         f.write("def test_pass():\n    assert 1 == 1\n")
         path = f.name
 
@@ -49,9 +48,7 @@ def test_worker_runs_passing_test():
 
 
 def test_worker_runs_failing_test():
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False, dir="/tmp"
-    ) as f:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
         f.write("def test_fail():\n    assert 1 == 2\n")
         path = f.name
 
@@ -71,9 +68,7 @@ def test_worker_runs_failing_test():
 
 
 def test_worker_result_has_required_fields():
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False, dir="/tmp"
-    ) as f:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
         f.write("def test_x():\n    pass\n")
         path = f.name
 
@@ -97,9 +92,7 @@ def test_worker_result_has_required_fields():
 
 
 def test_worker_emits_structured_failure_fields():
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False, dir="/tmp"
-    ) as f:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
         f.write("def test_simple_assert():\n    x = 1\n    y = 2\n    assert x == y\n")
         path = f.name
 
