@@ -262,3 +262,40 @@ Plugin reporters receive three events:
 Plugin reporters do not influence the exit code.
 
 See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
+
+## Plugin collectors
+
+Plugins can discover additional test items beyond the default `test_*` function
+and `Test*` class patterns. For example, a collector that discovers `check_*` functions:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_checks"]
+```
+
+Plugin collectors receive the file path and loaded module, and return `CollectedItem`
+instances:
+
+```python
+import inspect
+from oxitest.plugin import Plugin
+from oxitest._bridge.result import CollectedItem
+
+class CheckCollector:
+    def collect(self, path, module):
+        return [
+            CollectedItem(
+                fn_name=name, lineno=inspect.getsourcelines(obj)[1],
+                markers=[], param_id=None, param_values=[],
+            )
+            for name, obj in inspect.getmembers(module, inspect.isfunction)
+            if name.startswith("check_")
+        ]
+
+def oxitest_plugin(config=None):
+    return Plugin(collectors=[CheckCollector()])
+```
+
+Plugin-collected items are merged with built-in discovery and sorted by line number.
+
+See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
