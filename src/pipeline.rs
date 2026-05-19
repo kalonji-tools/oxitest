@@ -302,6 +302,67 @@ fn apply_strict(
     })
 }
 
+/// Apply keyword, marker, and last-failed filters to the collected items.
+///
+/// Returns the filtered item list, or `Err(code)` for an invalid `-m` expression
+/// (code 2, surfaced via the error reporter supplied by `make_error_rep`).
+fn apply_filters(
+    items: Vec<types::TestItem>,
+    cli: &config::Cli,
+    cfg: &config::Config,
+    cache: &cache::TestCache,
+    make_error_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
+) -> Result<Vec<types::TestItem>, i32> {
+    // Keyword filter (-k).
+    let items = filter::filter_items(items, cli.keyword.as_deref());
+
+    // Marker expression filter (-m).
+    let items = if let Some(expr) = &cli.marker {
+        match marker::filter_by_marker_expr(items, expr) {
+            Ok(items) => items,
+            Err(e) => {
+                let code = make_error_rep().finish(
+                    &[types::CollectError::PyError(format!(
+                        "invalid -m expression: {}",
+                        e
+                    ))],
+                    false,
+                );
+                return Err(code);
+            }
+        }
+    } else {
+        items
+    };
+
+    // Last-failed filter (--failed=only / --failed=first).
+    let total_before_failed_filter = items.len();
+    let items = match cfg.failed {
+        Some(config::FailedMode::Only) => {
+            let failed_ids = cache.last_failed_ids();
+            if failed_ids.is_empty() {
+                eprintln!("no recorded failures — running all {} tests", items.len());
+                items
+            } else {
+                let filtered = filter::filter_last_failed(items, &failed_ids);
+                eprintln!(
+                    "running {}/{} tests (--failed=only mode)",
+                    filtered.len(),
+                    total_before_failed_filter
+                );
+                filtered
+            }
+        }
+        Some(config::FailedMode::First) => {
+            let failed_ids = cache.last_failed_ids();
+            filter::sort_failed_first(items, &failed_ids)
+        }
+        None => items,
+    };
+
+    Ok(items)
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let SetupContext {
         cfg,
@@ -358,46 +419,9 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Err(code) => return Ok(code),
     };
 
-    let items = filter::filter_items(clean_items, cli.keyword.as_deref());
-    let items = if let Some(expr) = &cli.marker {
-        match marker::filter_by_marker_expr(items, expr) {
-            Ok(items) => items,
-            Err(e) => {
-                return Ok(make_error_rep().finish(
-                    &[types::CollectError::PyError(format!(
-                        "invalid -m expression: {}",
-                        e
-                    ))],
-                    false,
-                ));
-            }
-        }
-    } else {
-        items
-    };
-
-    let total_before_failed_filter = items.len();
-    let items = match cfg.failed {
-        Some(config::FailedMode::Only) => {
-            let failed_ids = cache.last_failed_ids();
-            if failed_ids.is_empty() {
-                eprintln!("no recorded failures — running all {} tests", items.len());
-                items
-            } else {
-                let filtered = filter::filter_last_failed(items, &failed_ids);
-                eprintln!(
-                    "running {}/{} tests (--failed=only mode)",
-                    filtered.len(),
-                    total_before_failed_filter
-                );
-                filtered
-            }
-        }
-        Some(config::FailedMode::First) => {
-            let failed_ids = cache.last_failed_ids();
-            filter::sort_failed_first(items, &failed_ids)
-        }
-        None => items,
+    let items = match apply_filters(clean_items, &cli, &cfg, &cache, &make_error_rep) {
+        Ok(items) => items,
+        Err(code) => return Ok(code),
     };
 
     let total = violated_items.len() + items.len();
