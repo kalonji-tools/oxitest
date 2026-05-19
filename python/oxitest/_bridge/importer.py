@@ -295,6 +295,21 @@ def collect_module(
         found_items, found_viols = discover(module, path, collect_violations)
         items.extend(found_items)
         violations.extend(found_viols)
+
+    # Plugin collectors — discover additional test items
+    from oxitest._bridge.plugin_loader import get_registry
+
+    for collector in get_registry().collectors:  # pragma: no cover
+        try:
+            plugin_items = collector.collect(path, module)
+            for item in plugin_items:
+                if isinstance(item, CollectedItem):
+                    items.append(item)
+        except Exception:
+            import traceback
+
+            traceback.print_exc()
+
     if collect_violations:
         violations.extend(_collect_bare_asserts(path))
     items.sort(key=lambda x: x.lineno)
