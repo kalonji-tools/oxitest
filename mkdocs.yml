@@ -70,6 +70,7 @@ nav:
     - Run tests in parallel: how-to/run-in-parallel.md
     - Use the test cache: how-to/use-test-cache.md
     - Use raises, warns, and importorskip: how-to/use-raises-warns.md
+    - Troubleshooting: how-to/troubleshooting.md
   - Reference:
     - CLI flags: reference/cli.md
     - Configuration: reference/configuration.md
