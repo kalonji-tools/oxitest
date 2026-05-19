@@ -299,3 +299,43 @@ def oxitest_plugin(config=None):
 Plugin-collected items are merged with built-in discovery and sorted by line number.
 
 See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
+
+## Plugin execution wrappers
+
+Plugins can wrap test execution based on markers. For example, a retry plugin:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_retry"]
+markers = ["retry: retry a test multiple times"]
+```
+
+```python
+import oxitest
+
+@oxitest.mark.retry(count=3)
+def test_flaky():
+    result = call_flaky_service()
+    assert result.ok
+```
+
+The plugin's `ExecutionWrapper` receives the test function and marker arguments:
+
+```python
+class RetryWrapper:
+    @property
+    def marker(self):
+        return "retry"
+
+    def wrap(self, test_fn, marker_args):
+        for _ in range(marker_args.get("count", 1)):
+            result = test_fn()
+            if result.status == "passed":
+                return result
+        return result
+```
+
+Plugin wrappers run as the outermost layer — they wrap around built-in wrappers
+like `@xfail` and `@timeout`.
+
+See [Plugin System](../reference/configuration.md#plugins) for how to declare plugins.
