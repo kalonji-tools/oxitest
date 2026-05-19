@@ -24,7 +24,7 @@ jobs:
           manylinux: auto
           args: --release --out dist -i python3.11 python3.12 python3.13
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.target }}
           path: dist
@@ -48,7 +48,7 @@ jobs:
           target: universal2-apple-darwin
           args: --release --out dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.python-version }}
           path: dist
@@ -64,7 +64,7 @@ jobs:
           command: sdist
           args: --out dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
