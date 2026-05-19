@@ -8,6 +8,20 @@
 
 A pytest rewrite in Rust.
 
+## Installation
+
+```bash
+pip install oxitest
+```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv add oxitest
+```
+
+Requires Python 3.11+.
+
 ---
 
 ## Background
