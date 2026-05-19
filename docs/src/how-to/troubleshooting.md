@@ -1,0 +1,149 @@
+# Troubleshooting
+
+!!! abstract "How-to"
+    Diagnose and fix common problems when running tests with oxitest.
+
+## Why are my tests running serially?
+
+oxitest decides at runtime whether to use parallel workers. On a **cold cache**
+(no `.oxitest_cache/` yet), it falls back to a test-count threshold:
+parallelism only kicks in when at least `min_parallel_tests` tests are collected
+(default **100**). On a **warm cache**, it compares the estimated total duration
+against the spawn overhead (`spawn_overhead_ms * worker_count`).
+
+If your suite has fewer than 100 tests and no cached timing data, oxitest
+runs everything in-process to avoid the cost of spawning workers.
+
+**Options:**
+
+- Lower the threshold in `pyproject.toml`:
+
+    ```toml
+    [tool.oxitest]
+    min_parallel_tests = 10
+    ```
+
+- Force a specific worker count:
+
+    ```console
+    $ oxitest --workers 4
+    ```
+
+- Force serial explicitly with `--serial` if that is what you want.
+
+## Why does my test hang or timeout?
+
+By default oxitest does **not** enforce a timeout — tests run until they
+finish. If a test hangs, it blocks the entire worker.
+
+Set a per-test timeout with the CLI flag or in `pyproject.toml`:
+
+```console
+$ oxitest --timeout 30
+```
+
+```toml
+[tool.oxitest]
+timeout = 30
+```
+
+For suites with cached timing data, `timeout_multiplier` derives a per-test
+timeout from the cached duration (e.g. 3x the historical average), clamped to
+at least the global timeout:
+
+```toml
+[tool.oxitest]
+timeout = 10
+timeout_multiplier = 3.0
+```
+
+## How do I debug a failing test?
+
+Use these flags to narrow down and inspect failures:
+
+```console
+# Full tracebacks with all call-chain frames
+$ oxitest --tb=long
+
+# Compact tracebacks (default)
+$ oxitest --tb=short
+
+# One-line summary per failure
+$ oxitest --tb=line
+
+# Run a single test by keyword
+$ oxitest -k test_my_function
+
+# Run a single file
+$ oxitest tests/test_foo.py
+
+# Verbose output — shows each test name and result
+$ oxitest -vv
+```
+
+Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --tb=long -vv`.
+
+## Why is test collection slow?
+
+oxitest walks directories recursively during collection. If it scans large
+non-test trees, collection time increases.
+
+Check these settings in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+# Limit which directories are scanned
+testpaths = ["tests"]
+
+# Narrow the file-name pattern (default: test_*.py and *_test.py)
+python_files = ["test_*.py"]
+
+# Exclude directories from recursive scanning
+# (defaults already exclude .git, __pycache__, .venv, venv,
+#  .tox, dist, build, node_modules)
+norecursedirs = [".git", "__pycache__", ".venv", "node_modules", "data"]
+```
+
+If collection is still slow, verify you are not scanning into virtual
+environments, `node_modules`, or large data directories.
+
+## How do I clear the cache?
+
+Delete the cache directory manually:
+
+```console
+$ rm -rf .oxitest_cache/
+```
+
+The cache stores timing data and last-failed outcomes in
+`.oxitest_cache/timings.json`. Removing it forces a cold start — oxitest
+rebuilds the cache on the next run.
+
+Cache entries auto-expire when their age exceeds `cache_max_age` (default
+**50** runs). Adjust it in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+cache_max_age = 20
+```
+
+A missing or corrupt cache file is silently ignored — oxitest always writes a
+fresh cache at the end of a run.
+
+## Why does `--failed=only` show no tests?
+
+`--failed=only` re-runs only tests that **failed, errored, or timed out** on
+the previous run. If no cache exists or every test passed last time, there are
+no recorded failures and all tests run normally (oxitest prints a message:
+`no recorded failures — running all N tests`).
+
+If you want to run failed tests first but still execute the full suite, use
+`--failed=first` instead:
+
+```console
+# Re-run only failures (skips passing tests)
+$ oxitest --failed=only
+
+# Run failures first, then everything else
+$ oxitest --failed=first
+```
