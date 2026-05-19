@@ -292,6 +292,25 @@ def run_test(
 
             wrappers.append(_default_timeout_wrapper)
 
+        # Plugin execution wrappers — match by marker name
+        from oxitest._bridge.plugin_loader import get_registry  # pragma: no cover
+
+        for pw in get_registry().execution_wrappers:  # pragma: no cover
+            for mark in marks:
+                if mark.name == pw.marker:
+                    marker_args = {**dict(enumerate(mark.args)), **mark.kwargs}
+                    _pw, _args = pw, marker_args  # capture for closure
+
+                    def _plugin_wrapper(
+                        next_fn: Callable[[], TestResult],
+                        _w: Any = _pw,
+                        _a: dict[int | str, Any] = _args,
+                    ) -> TestResult:
+                        return _w.wrap(next_fn, _a)
+
+                    wrappers.append(_plugin_wrapper)
+                    break  # one match per wrapper per test
+
         # Base execution: run fn and map exceptions to TestResult
         _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
         _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
