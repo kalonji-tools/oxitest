@@ -129,7 +129,7 @@ jobs:
           files: cobertura.xml
           flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
+          fail_ci_if_error: ${{ github.actor != 'dependabot[bot]' }}
 
   python-coverage:
     name: Python Coverage
@@ -183,4 +183,4 @@ jobs:
           files: coverage.xml
           flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
+          fail_ci_if_error: ${{ github.actor != 'dependabot[bot]' }}
