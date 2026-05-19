@@ -363,6 +363,96 @@ fn apply_filters(
     Ok(items)
 }
 
+/// Report violated items, group and schedule the clean items, decide
+/// serial vs. parallel, dispatch, and return `(interrupted, timings)`.
+///
+/// `cache.invalidate()` and `cache.estimated_duration()` are called here
+/// because they feed directly into the parallel-dispatch decision.
+#[allow(clippy::too_many_arguments)]
+fn execute(
+    py: Python<'_>,
+    clean_items: Vec<types::TestItem>,
+    violated_items: Vec<types::TestItem>,
+    all_violations: Vec<strict::StrictViolation>,
+    cfg: &config::Config,
+    cache: &cache::TestCache,
+    session: &bridge::FixtureSession,
+    conftest_files: &[camino::Utf8PathBuf],
+    rep: &mut dyn reporter::Reporter,
+) -> (bool, Vec<types::TestTiming>) {
+    // Immediately report violated items as Error outcomes (no worker dispatch).
+    for item in &violated_items {
+        // Per-test items may have multiple violations; we report only the first to keep
+        // the error message focused. Users address violations one at a time.
+        if let Some(v) = all_violations
+            .iter()
+            .find(|v| v.node_id().is_some_and(|id| id == &item.node_id))
+        {
+            let outcome = strict::per_test_error(v);
+            rep.test_started(item);
+            rep.test_completed(item, &outcome, 0.0);
+        }
+    }
+
+    let estimated = cache.estimated_duration(&clean_items);
+
+    let mut groups = filter::group_by_module(clean_items);
+    let failed_ids = cache.last_failed_ids();
+    scheduler::apply_schedule_strategy(&mut groups, cfg.schedule, cache, &failed_ids);
+
+    let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
+    let cpu_count = config::cpu_count();
+
+    let force_parallel = cfg.workers.is_some() && !cfg.serial;
+    let use_parallel = !cfg.serial
+        && cfg.worker_count() > 1
+        && (force_parallel
+            || match estimated {
+                Some(est) => {
+                    est.as_millis() as f64 > cfg.spawn_overhead_ms * cfg.worker_count() as f64
+                }
+                None => total_tests >= cfg.min_parallel_tests, // cold cache: fall back to configured threshold
+            });
+
+    if use_parallel {
+        debug_assert!(
+            !cfg.serial,
+            "compute_optimal_workers is unreachable in serial mode"
+        );
+        let optimal_worker_count = parallel::compute_optimal_workers(
+            cfg.workers,
+            cfg.serial,
+            cpu_count,
+            estimated,
+            cfg.spawn_overhead_ms,
+        );
+        // Warn when session-scoped (shared=True) fixtures are present: each worker
+        // subprocess creates its own FixtureSession, so these fixtures execute once
+        // per worker rather than once per run.
+        let shared_names = session.shared_fixture_names(py);
+        if !shared_names.is_empty() {
+            let list = shared_names.join(", ");
+            let noun = if shared_names.len() == 1 {
+                "fixture"
+            } else {
+                "fixtures"
+            };
+            tracing::warn!(
+                fixtures = %list,
+                fixture_count = shared_names.len(),
+                workers = optimal_worker_count,
+                "shared {noun} will run once per worker; \
+                 session-scoped fixtures are not shared across parallel worker processes — \
+                 use --serial to run them once, or remove shared=True from fixtures \
+                 that can be function-scoped"
+            );
+        }
+        parallel::run_phase_parallel(groups, cfg, optimal_worker_count, conftest_files, rep)
+    } else {
+        run_phase(py, groups, cfg, cache, session, rep)
+    }
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let SetupContext {
         cfg,
@@ -425,11 +515,9 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     let total = violated_items.len() + items.len();
-
     cache.invalidate(&items);
-    let estimated = cache.estimated_duration(&items);
 
-    // Fetch plugin reporters from Python registry
+    // Fetch plugin reporters from Python registry.
     let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !cfg.plugins.is_empty() {
         bridge::get_plugin_reporters(py)
             .unwrap_or_default()
@@ -450,81 +538,17 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         plugin_reporters,
     );
 
-    // Immediately report violated items as Error outcomes (no worker dispatch).
-    for item in &violated_items {
-        // Per-test items may have multiple violations; we report only the first to keep
-        // the error message focused. Users address violations one at a time.
-        if let Some(v) = all_violations
-            .iter()
-            .find(|v| v.node_id().is_some_and(|id| id == &item.node_id))
-        {
-            let outcome = strict::per_test_error(v);
-            rep.test_started(item);
-            rep.test_completed(item, &outcome, 0.0);
-        }
-    }
-
-    let mut groups = filter::group_by_module(items);
-    let failed_ids = cache.last_failed_ids();
-    scheduler::apply_schedule_strategy(&mut groups, cfg.schedule, &cache, &failed_ids);
-
-    let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
-    let cpu_count = config::cpu_count();
-
-    let force_parallel = cfg.workers.is_some() && !cfg.serial;
-    let use_parallel = !cfg.serial
-        && cfg.worker_count() > 1
-        && (force_parallel
-            || match estimated {
-                Some(est) => {
-                    est.as_millis() as f64 > cfg.spawn_overhead_ms * cfg.worker_count() as f64
-                }
-                None => total_tests >= cfg.min_parallel_tests, // cold cache: fall back to configured threshold
-            });
-
-    let (interrupted, timings) = if use_parallel {
-        debug_assert!(
-            !cfg.serial,
-            "compute_optimal_workers is unreachable in serial mode"
-        );
-        let optimal_worker_count = parallel::compute_optimal_workers(
-            cfg.workers,
-            cfg.serial,
-            cpu_count,
-            estimated,
-            cfg.spawn_overhead_ms,
-        );
-        // Warn when session-scoped (shared=True) fixtures are present: each worker
-        // subprocess creates its own FixtureSession, so these fixtures execute once
-        // per worker rather than once per run.
-        let shared_names = session.shared_fixture_names(py);
-        if !shared_names.is_empty() {
-            let list = shared_names.join(", ");
-            let noun = if shared_names.len() == 1 {
-                "fixture"
-            } else {
-                "fixtures"
-            };
-            tracing::warn!(
-                fixtures = %list,
-                fixture_count = shared_names.len(),
-                workers = optimal_worker_count,
-                "shared {noun} will run once per worker; \
-                 session-scoped fixtures are not shared across parallel worker processes — \
-                 use --serial to run them once, or remove shared=True from fixtures \
-                 that can be function-scoped"
-            );
-        }
-        parallel::run_phase_parallel(
-            groups,
-            &cfg,
-            optimal_worker_count,
-            &conftest_files,
-            rep.as_mut(),
-        )
-    } else {
-        run_phase(py, groups, &cfg, &cache, &session, rep.as_mut())
-    };
+    let (interrupted, timings) = execute(
+        py,
+        items,
+        violated_items,
+        all_violations,
+        &cfg,
+        &cache,
+        &session,
+        &conftest_files,
+        rep.as_mut(),
+    );
 
     // Single pass: move node_id into outcome_pairs, clone once into timing_pairs.
     let mut timing_pairs: Vec<(types::NodeId, f64)> = Vec::with_capacity(timings.len());
