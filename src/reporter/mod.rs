@@ -1,3 +1,11 @@
+//! Test result reporting — terminal output, CI formatting, and JSON export.
+//!
+//! Defines the [`Reporter`] trait and its concrete implementations:
+//! [`TtyReporter`](tty::TtyReporter) (progress bars, colors),
+//! [`CiReporter`](ci::CiReporter) (GitHub Actions annotations),
+//! [`JsonReporter`](json::JsonReporter) (CTRF format), and
+//! [`PyPluginReporter`](plugin::PyPluginReporter) (user-supplied Python plugins).
+
 use std::io::{self, Write};
 
 use crate::types::CollectError;

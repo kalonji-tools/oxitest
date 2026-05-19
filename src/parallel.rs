@@ -1,3 +1,13 @@
+//! Subprocess worker pool for parallel test execution.
+//!
+//! Spawns `python -m oxitest._bridge.worker` subprocesses, one per worker slot.
+//! Each worker is persistent within a run — it receives JSON tasks over stdin
+//! (one module group per task) and streams JSON result lines back over stdout.
+//!
+//! Includes a per-result watchdog timeout: if a worker stalls, it is killed and
+//! remaining tests are marked as timed out. Worker crashes produce sentinel
+//! error results so the pipeline never hangs.
+
 use crate::{config, reporter, scheduler, types, worker_result::WorkerResult};
 
 #[derive(Debug, PartialEq)]

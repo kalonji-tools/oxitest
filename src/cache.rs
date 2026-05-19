@@ -1,3 +1,12 @@
+//! Timing cache and outcome persistence.
+//!
+//! Manages `.oxitest_cache/timings.json` — stores per-test durations and
+//! pass/fail outcomes across runs. Used by the scheduler to sort groups
+//! heaviest-first, and by `--lf`/`--ff` to filter or prioritize failed tests.
+//!
+//! Cache entries age out after `cache_max_age` runs without being refreshed.
+//! The file format is versioned ([`CACHE_VERSION`]) to allow future migration.
+
 use std::collections::HashSet;
 use std::time::Duration;
 

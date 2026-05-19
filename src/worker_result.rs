@@ -1,3 +1,9 @@
+//! Deserialization of JSON results from worker subprocesses.
+//!
+//! Each worker writes one JSON line per test to stdout. This module defines
+//! [`WorkerResult`] and converts it to [`TestOutcome`](types::TestOutcome).
+//! Also provides sentinel builders for worker crashes and timeouts.
+
 use crate::types;
 
 #[derive(serde::Deserialize)]

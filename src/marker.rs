@@ -1,3 +1,9 @@
+//! Marker expression parser and evaluator for the `-m` flag.
+//!
+//! Parses boolean expressions like `slow and not integration` using a
+//! [`Logos`]-based lexer and recursive descent parser. Evaluates expressions
+//! against the set of marker names attached to each test item.
+
 use logos::Logos;
 
 use crate::types::TestItem;
