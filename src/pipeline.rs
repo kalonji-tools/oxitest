@@ -177,27 +177,44 @@ fn run_phase(
     (interrupted, timings)
 }
 
-pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
-    let argv: Vec<String> = std::iter::once("oxitest".to_string()).chain(args).collect();
+struct SetupContext {
+    cfg: config::Config,
+    cache: cache::TestCache,
+    cli: config::Cli,
+    rootdir: camino::Utf8PathBuf,
+    is_tty: bool,
+    use_color: bool,
+    base: reporter::ReporterOptsBuilder,
+}
+
+enum SetupResult {
+    EarlyExit(i32),
+    Ready(SetupContext),
+}
+
+fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
+    let argv: Vec<String> = std::iter::once("oxitest".to_string())
+        .chain(args.iter().cloned())
+        .collect();
 
     let cli = match config::Cli::try_parse_from(&argv) {
         Ok(c) => c,
         Err(e) => {
             // Clap formats this for the user; subscriber may not be initialised yet.
             eprintln!("{}", e);
-            return Ok(4);
+            return Ok(SetupResult::EarlyExit(4));
         }
     };
 
     // Early-exit flags: handled before any filesystem setup.
     if cli.capture_environment {
         println!("{}", env_string(py));
-        return Ok(0);
+        return Ok(SetupResult::EarlyExit(0));
     }
 
     let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
     let cfg = config::Config::load(&rootdir).merge_cli(&cli);
-    let mut cache = cache::TestCache::load(&rootdir);
+    let cache = cache::TestCache::load(&rootdir);
 
     let is_tty = std::io::stdout().is_terminal();
     let use_color = match cfg.color {
@@ -210,6 +227,32 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         .tb(resolved_tb)
         .show_tips(cli.tips)
         .show_warnings(cli.warnings);
+
+    Ok(SetupResult::Ready(SetupContext {
+        cfg,
+        cache,
+        cli,
+        rootdir,
+        is_tty,
+        use_color,
+        base,
+    }))
+}
+
+pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
+    let SetupContext {
+        cfg,
+        mut cache,
+        cli,
+        rootdir,
+        is_tty,
+        use_color,
+        base,
+    } = match setup(py, &args)? {
+        SetupResult::EarlyExit(code) => return Ok(code),
+        SetupResult::Ready(ctx) => ctx,
+    };
+
     let make_error_rep =
         || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None, vec![]);
 
