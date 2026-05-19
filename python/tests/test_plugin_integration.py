@@ -365,3 +365,75 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
     assert len(started) == 2, f"Expected 2 started events, got {len(started)}"
     assert len(completed) == 2, f"Expected 2 completed events, got {len(completed)}"
     assert len(finished) == 1, f"Expected 1 finish event, got {len(finished)}"
+
+
+def test_plugin_collector_discovers_extra_items(tmp: TempDir):
+    """A plugin collector adds items that appear in the test run."""
+    project = Path(str(tmp))
+
+    # Write a plugin that provides a collector discovering functions named check_*
+    plugin_dir = project / "check_collector"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "import inspect\n"
+        "from oxitest.plugin import Plugin\n"
+        "from oxitest._bridge.result import CollectedItem\n\n"
+        "class CheckCollector:\n"
+        "    def collect(self, path, module):\n"
+        "        items = []\n"
+        "        for name, obj in inspect.getmembers(module, inspect.isfunction):\n"
+        "            if name.startswith('check_'):\n"
+        "                lineno = inspect.getsourcelines(obj)[1]\n"
+        "                items.append(CollectedItem(\n"
+        "                    fn_name=name,\n"
+        "                    lineno=lineno,\n"
+        "                    markers=[],\n"
+        "                    param_id=None,\n"
+        "                    param_values=[],\n"
+        "                ))\n"
+        "        return items\n\n"
+        "def oxitest_plugin(config=None):\n"
+        "    return Plugin(collectors=[CheckCollector()])\n"
+    )
+
+    marker_file = project / "collector_result.txt"
+
+    (project / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["tests"]\nplugins = ["check_collector"]\n'
+    )
+
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_checks.py").write_text(
+        "from pathlib import Path\n\n"
+        f"MARKER = Path('{marker_file}')\n\n"
+        "def test_normal():\n"
+        "    pass\n\n"
+        "def check_extra():\n"
+        "    MARKER.write_text('collected')\n"
+    )
+
+    python_src = str(Path(__file__).resolve().parents[2] / "python")
+    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
+    env = {**os.environ, "PYTHONPATH": pypath}
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert marker_file.exists(), (
+        f"Plugin collector item was not executed.\n"
+        f"exit code: {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    assert marker_file.read_text() == "collected", (
+        f"Expected 'collected', got {marker_file.read_text()!r}"
+    )
+    # Should have collected 2 items: test_normal + check_extra
+    assert "2" in result.stdout or "collected 2" in result.stdout, (
+        f"Expected 2 collected items in output.\nstdout:\n{result.stdout}"
+    )
