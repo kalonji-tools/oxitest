@@ -4,6 +4,13 @@
 With a broken module cache, each test re-executes the module, so the
 process-level counter increments once per test. With the cache working,
 both tests should see count == 1.
+
+NOTE: This file uses a sys.modules sentinel to count how many times
+the module body executes. The sentinel is scoped to the oxitest session
+that runs this file — each session gets a fresh import. If this file
+is imported by another test runner in the same process, the counter
+may be stale. This is intentional: the test validates oxitest's own
+module cache, which guarantees one import per file per session.
 """
 
 from __future__ import annotations
@@ -11,8 +18,9 @@ from __future__ import annotations
 import sys
 
 # Use sys.modules as process-persistent storage so the counter survives
-# module eviction between tests.
-_KEY = "_oxitest_load_counter"
+# module eviction between tests.  The key is unique enough to avoid
+# collision with other test files.
+_KEY = "_oxitest_load_counter_test_module_cache"
 if _KEY not in sys.modules:
     counter = type(sys)(_KEY)
     counter.n = 0  # type: ignore[attr-defined] # ty: ignore[unresolved-attribute]
