@@ -69,6 +69,7 @@ nav:
     - Use built-in fixtures: how-to/use-builtin-fixtures.md
     - Run tests in parallel: how-to/run-in-parallel.md
     - Use the test cache: how-to/use-test-cache.md
+    - Use class-based tests: how-to/use-class-based-tests.md
     - Use raises, warns, and importorskip: how-to/use-raises-warns.md
   - Reference:
     - CLI flags: reference/cli.md
