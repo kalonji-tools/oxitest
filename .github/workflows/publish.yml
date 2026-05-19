@@ -10,6 +10,7 @@ permissions: {}
 jobs:
   linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +31,7 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +55,7 @@ jobs:
 
   sdist:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -68,6 +71,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [linux, macos, sdist]
     environment: pypi
     permissions:
@@ -86,6 +90,7 @@ jobs:
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: publish
     permissions:
       contents: write
