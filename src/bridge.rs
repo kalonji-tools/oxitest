@@ -1,3 +1,12 @@
+//! PyO3 bridge — the boundary between Rust orchestration and Python execution.
+//!
+//! Defines the data contracts for deserializing Python results ([`BridgeResult`],
+//! [`CollectedItem`], [`RawViolation`]) and wraps the Python function calls
+//! (`collect_module`, `run_test`, `FixtureSession` lifecycle).
+//!
+//! **Contract rule:** struct field names MUST stay in sync with
+//! `python/oxitest/_bridge/result.py`. A mismatch silently drops data.
+
 use std::collections::HashMap;
 
 use camino::{Utf8Path, Utf8PathBuf};

@@ -1,3 +1,12 @@
+//! Test filtering and grouping.
+//!
+//! Applies `-k` keyword filters, validates marker names against registered markers,
+//! handles `--lf`/`--ff` (last-failed / failed-first) logic, and groups items by
+//! source module for parallel dispatch.
+//!
+//! Marker *names* are collected here; marker *conditions* (e.g. `skipif(...)`) are
+//! evaluated at execution time by `python/oxitest/_bridge/marks.py`.
+
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
