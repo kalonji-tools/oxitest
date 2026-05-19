@@ -453,6 +453,26 @@ fn execute(
     }
 }
 
+/// Merge timings into the cache, record outcomes, and persist to disk.
+fn finalize(
+    cache: &mut cache::TestCache,
+    timings: Vec<types::TestTiming>,
+    cache_max_age: u32,
+    rootdir: &camino::Utf8Path,
+) {
+    // Single pass: move node_id into outcome_pairs, clone once into timing_pairs.
+    let mut timing_pairs: Vec<(types::NodeId, f64)> = Vec::with_capacity(timings.len());
+    let mut outcome_pairs: Vec<(types::NodeId, String)> = Vec::with_capacity(timings.len());
+    for t in timings {
+        outcome_pairs.push((t.node_id.clone(), t.outcome));
+        timing_pairs.push((t.node_id, t.duration_ms));
+    }
+
+    cache.merge(&timing_pairs, cache_max_age);
+    cache.record_outcomes(&outcome_pairs);
+    cache.save(rootdir);
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let SetupContext {
         cfg,
@@ -550,17 +570,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         rep.as_mut(),
     );
 
-    // Single pass: move node_id into outcome_pairs, clone once into timing_pairs.
-    let mut timing_pairs: Vec<(types::NodeId, f64)> = Vec::with_capacity(timings.len());
-    let mut outcome_pairs: Vec<(types::NodeId, String)> = Vec::with_capacity(timings.len());
-    for t in timings {
-        outcome_pairs.push((t.node_id.clone(), t.outcome));
-        timing_pairs.push((t.node_id, t.duration_ms));
-    }
-
-    cache.merge(&timing_pairs, cfg.cache_max_age);
-    cache.record_outcomes(&outcome_pairs);
-    cache.save(&rootdir);
+    finalize(&mut cache, timings, cfg.cache_max_age, &rootdir);
 
     Ok(rep.finish(&[], interrupted))
 }
