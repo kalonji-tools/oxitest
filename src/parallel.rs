@@ -178,6 +178,40 @@ fn setup_worker_process(
     Some((child, worker_stdin, line_rx))
 }
 
+/// Handles the result of draining worker output for one group.
+/// Returns `false` if the subprocess died and should not receive more tasks.
+fn handle_drain_outcome(
+    outcome: DrainOutcome,
+    child: &mut std::process::Child,
+    items: &[crate::types::TestItem],
+    received: usize,
+    watchdog: std::time::Duration,
+    module_path: &camino::Utf8Path,
+    tx: &crossbeam_channel::Sender<WorkerResult>,
+) -> bool {
+    match outcome {
+        DrainOutcome::Complete => true,
+        DrainOutcome::TimedOut => {
+            tracing::error!(
+                module = %module_path,
+                watchdog_secs = watchdog.as_secs(),
+                "worker subprocess unresponsive; killing"
+            );
+            let _ = child.kill();
+            for item in items.iter().skip(received) {
+                let _ = tx.send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
+            }
+            false
+        }
+        DrainOutcome::Disconnected => {
+            for item in items.iter().skip(received) {
+                let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
+            }
+            false
+        }
+    }
+}
+
 pub(crate) fn spawn_worker(
     python_bin: String,
     sched: std::sync::Arc<scheduler::Scheduler>,
@@ -243,28 +277,15 @@ pub(crate) fn spawn_worker(
             let expected = group.items.len();
             let (drain_outcome, received) = drain_worker_results(&line_rx, expected, watchdog, &tx);
 
-            match drain_outcome {
-                DrainOutcome::Complete => {}
-                DrainOutcome::TimedOut => {
-                    tracing::error!(
-                        module = %group.module_path,
-                        watchdog_secs = watchdog.as_secs(),
-                        "worker subprocess unresponsive; killing"
-                    );
-                    let _ = child.kill();
-                    subprocess_alive = false;
-                    for item in group.items.iter().skip(received) {
-                        let _ =
-                            tx.send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
-                    }
-                }
-                DrainOutcome::Disconnected => {
-                    subprocess_alive = false;
-                    for item in group.items.iter().skip(received) {
-                        let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
-                    }
-                }
-            }
+            subprocess_alive = handle_drain_outcome(
+                drain_outcome,
+                &mut child,
+                &group.items,
+                received,
+                watchdog,
+                &group.module_path,
+                &tx,
+            );
         }
 
         drop(worker_stdin);
