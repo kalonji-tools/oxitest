@@ -239,6 +239,69 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
     }))
 }
 
+struct StrictResult {
+    clean_items: Vec<types::TestItem>,
+    violated_items: Vec<types::TestItem>,
+    all_violations: Vec<strict::StrictViolation>,
+    suite_lines: Vec<String>,
+}
+
+/// Build violations, handle abort mode, produce enforce-mode suite lines, and
+/// partition items into violated vs. clean.  Returns `Err(3)` when abort mode
+/// detects violations (caller should propagate as `Ok(3)`).
+fn apply_strict(
+    cfg: &config::Config,
+    items: Vec<types::TestItem>,
+    raw_violations: Vec<bridge::RawViolation>,
+    use_color: bool,
+) -> Result<StrictResult, i32> {
+    // Build the full violation list.
+    let all_violations: Vec<strict::StrictViolation> = if cfg.strict.is_some() {
+        let mut v = strict::check_config(cfg);
+        v.extend(strict::check_collected(raw_violations));
+        v
+    } else {
+        vec![]
+    };
+
+    // Abort mode: print and signal early exit.
+    if cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
+        reporter::print_strict_abort(&all_violations, use_color);
+        return Err(3);
+    }
+
+    // Enforce mode: build suite-level violation lines and partition items.
+    let suite_lines: Vec<String> = if cfg.strict == Some(config::StrictMode::Enforce) {
+        strict::suite_level(&all_violations)
+            .iter()
+            .map(|v| strict::format_violation_line(v))
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let (violated_items, clean_items): (Vec<_>, Vec<_>) =
+        if cfg.strict == Some(config::StrictMode::Enforce) {
+            let violated_ids: std::collections::HashSet<&str> = all_violations
+                .iter()
+                .filter_map(|v| v.node_id())
+                .map(|id| id.as_ref())
+                .collect();
+            items
+                .into_iter()
+                .partition(|i| violated_ids.contains(i.node_id.as_ref()))
+        } else {
+            (vec![], items)
+        };
+
+    Ok(StrictResult {
+        clean_items,
+        violated_items,
+        all_violations,
+        suite_lines,
+    })
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let SetupContext {
         cfg,
@@ -285,22 +348,17 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         return Ok(make_error_rep().finish(&errors, false));
     }
 
-    // ── Strict: build violations list ────────────────────────────────────────────
-    let all_violations: Vec<strict::StrictViolation> = if cfg.strict.is_some() {
-        let mut v = strict::check_config(&cfg);
-        v.extend(strict::check_collected(raw_violations));
-        v
-    } else {
-        vec![]
+    let StrictResult {
+        clean_items,
+        violated_items,
+        all_violations,
+        suite_lines,
+    } = match apply_strict(&cfg, items, raw_violations, use_color) {
+        Ok(r) => r,
+        Err(code) => return Ok(code),
     };
 
-    // ── Strict abort mode ─────────────────────────────────────────────────────────
-    if cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
-        reporter::print_strict_abort(&all_violations, use_color);
-        return Ok(3);
-    }
-
-    let items = filter::filter_items(items, cli.keyword.as_deref());
+    let items = filter::filter_items(clean_items, cli.keyword.as_deref());
     let items = if let Some(expr) = &cli.marker {
         match marker::filter_by_marker_expr(items, expr) {
             Ok(items) => items,
@@ -342,35 +400,10 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         None => items,
     };
 
-    // ── Strict enforce mode ───────────────────────────────────────────────────────
-    let suite_lines: Vec<String> = if cfg.strict == Some(config::StrictMode::Enforce) {
-        strict::suite_level(&all_violations)
-            .iter()
-            .map(|v| strict::format_violation_line(v))
-            .collect()
-    } else {
-        vec![]
-    };
+    let total = violated_items.len() + items.len();
 
-    // Partition items: those with per-test violations bypass workers.
-    let (violated_items, clean_items): (Vec<_>, Vec<_>) =
-        if cfg.strict == Some(config::StrictMode::Enforce) {
-            let violated_ids: std::collections::HashSet<&str> = all_violations
-                .iter()
-                .filter_map(|v| v.node_id())
-                .map(|id| id.as_ref())
-                .collect();
-            items
-                .into_iter()
-                .partition(|i| violated_ids.contains(i.node_id.as_ref()))
-        } else {
-            (vec![], items)
-        };
-
-    let total = violated_items.len() + clean_items.len();
-
-    cache.invalidate(&clean_items);
-    let estimated = cache.estimated_duration(&clean_items);
+    cache.invalidate(&items);
+    let estimated = cache.estimated_duration(&items);
 
     // Fetch plugin reporters from Python registry
     let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !cfg.plugins.is_empty() {
@@ -406,9 +439,6 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             rep.test_completed(item, &outcome, 0.0);
         }
     }
-
-    // Continue pipeline with only the clean items.
-    let items = clean_items;
 
     let mut groups = filter::group_by_module(items);
     let failed_ids = cache.last_failed_ids();
