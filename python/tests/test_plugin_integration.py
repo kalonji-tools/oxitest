@@ -5,9 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 
 from oxitest import TempDir
+
+_run = partial(subprocess.run, capture_output=True, text=True, timeout=30)
 
 
 def test_plugin_loads_and_entry_called(tmp: TempDir):
@@ -43,11 +46,9 @@ def test_plugin_loads_and_entry_called(tmp: TempDir):
 
     # Run oxitest from the project directory
     env = {**os.environ, "PYTHONPATH": f"{project}:{os.environ.get('PYTHONPATH', '')}"}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -73,11 +74,9 @@ def test_missing_plugin_exits_with_error(tmp: TempDir):
     )
     (project / "test_pass.py").write_text("def test_ok(): pass\n")
 
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(project), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
     )
 
     assert result.returncode != 0, (
@@ -125,11 +124,9 @@ def test_plugin_receives_config(tmp: TempDir):
     (tests_dir / "test_pass.py").write_text("def test_ok(): pass\n")
 
     env = {**os.environ, "PYTHONPATH": f"{project}:{os.environ.get('PYTHONPATH', '')}"}
-    subprocess.run(
+    _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -196,11 +193,9 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
     python_src = str(Path(__file__).resolve().parents[2] / "python")
     pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
     env = {**os.environ, "PYTHONPATH": pypath}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -267,11 +262,9 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
     python_src = str(Path(__file__).resolve().parents[2] / "python")
     pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
     env = {**os.environ, "PYTHONPATH": pypath}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -339,11 +332,9 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
     python_src = str(Path(__file__).resolve().parents[2] / "python")
     pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
     env = {**os.environ, "PYTHONPATH": pypath}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -416,11 +407,9 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
     python_src = str(Path(__file__).resolve().parents[2] / "python")
     pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
     env = {**os.environ, "PYTHONPATH": pypath}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
@@ -492,11 +481,9 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir):
     python_src = str(Path(__file__).resolve().parents[2] / "python")
     pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
     env = {**os.environ, "PYTHONPATH": pypath}
-    result = subprocess.run(
+    result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
-        capture_output=True,
-        text=True,
         env=env,
     )
 
