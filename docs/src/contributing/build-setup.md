@@ -76,3 +76,24 @@ cargo test
 
 Outside Nix, maturin detects your system Python automatically. Set `PYO3_PYTHON` and
 `LIBRARY_PATH` explicitly if you need to target a specific interpreter.
+
+## Repository layout (bare repo + worktrees)
+
+The oxitest repository uses a **bare git repo** (`oxitest/`) with worktrees for each
+branch. The main worktree is `oxitest.main/`; feature branches live in sibling
+directories like `oxitest.<branch>/`.
+
+[worktrunk](https://github.com/kalonji-tools/worktrunk) (`wt`) manages worktrees:
+
+```bash
+wt switch --create my-feature -y    # create a worktree for a new branch
+wt remove                           # remove the current worktree after merge
+```
+
+Git hooks are shared across all worktrees via `core.hooksPath`, which points to the
+bare repo's hooks directory. This means pre-commit and pre-push hooks work in every
+worktree without extra setup.
+
+**Why worktrees?** They let you work on multiple branches concurrently without
+switching — each branch gets its own directory, build artifacts, and virtual
+environment.
