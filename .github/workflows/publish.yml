@@ -100,9 +100,23 @@ jobs:
       - name: Extract release notes
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          sed -n "/^## \[$VERSION\]/,/^## \[/{/^## \[$VERSION\]/p; /^## \[/!p}" CHANGELOG.md \
-            > release-notes.txt 2>/dev/null || true
+          found=false
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^##\ \[$VERSION\] ]]; then
+              found=true
+              echo "$line"
+              continue
+            fi
+            if $found; then
+              if [[ "$line" =~ ^##\  ]]; then
+                break
+              fi
+              echo "$line"
+            fi
+          done < CHANGELOG.md > release-notes.txt
+
           if [ ! -s release-notes.txt ]; then
+            echo "::warning::No CHANGELOG entry found for $VERSION, using fallback"
             echo "Release $GITHUB_REF_NAME" > release-notes.txt
           fi
 
