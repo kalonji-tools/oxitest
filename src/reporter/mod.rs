@@ -21,7 +21,7 @@ mod stats;
 mod tty;
 
 #[cfg(test)]
-mod test_helpers;
+pub(crate) mod test_helpers;
 
 pub use ci::CiReporter;
 pub(crate) use exit::compute_exit_code;
