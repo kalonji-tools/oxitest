@@ -31,6 +31,7 @@ ignore:
   - "src/parallel.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
+  - "python/oxitest/_bridge/_loader.py"
   - "python/oxitest/__main__.py"
   - "python/oxitest/__init__.py"
   # Fixture internals: exercised via fixtures.py re-exports, not directly by test imports
