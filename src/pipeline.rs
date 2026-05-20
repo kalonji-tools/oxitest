@@ -166,13 +166,25 @@ fn run_phase(
             }
             if cfg.maxfail > 0 && failures >= cfg.maxfail {
                 interrupted = true;
-                session.end_module(py, module_path).ok(); // ensure teardown runs before break
+                if let Err(e) = session.end_module(py, module_path) {
+                    tracing::warn!(%e, module = %module_path, "teardown error in end_module");
+                    rep.record_teardown_warning(
+                        &format!("end_module({})", module_path),
+                        &e.to_string(),
+                    );
+                }
                 break 'run;
             }
         }
-        session.end_module(py, module_path).ok();
+        if let Err(e) = session.end_module(py, module_path) {
+            tracing::warn!(%e, module = %module_path, "teardown error in end_module");
+            rep.record_teardown_warning(&format!("end_module({})", module_path), &e.to_string());
+        }
     }
-    session.end_session(py).ok();
+    if let Err(e) = session.end_session(py) {
+        tracing::warn!(%e, "teardown error in end_session");
+        rep.record_teardown_warning("end_session", &e.to_string());
+    }
 
     (interrupted, timings)
 }
