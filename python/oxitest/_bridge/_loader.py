@@ -15,7 +15,7 @@ from oxitest._bridge.ast_rewriter import (
     _BareAssertCollector,
     _OxitestAssertionError,
 )
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import _error_result
 
 __all__ = ["_load_module", "_resolve_fn", "_LoadError", "ModuleCache"]
 
@@ -39,14 +39,6 @@ class ModuleCache:
 
     def evict(self, module_path: str) -> None:
         self._modules.pop(module_path, None)
-
-
-def _error_result(
-    msg: str, file: str = "", lineno: int = 0, source_line: str = ""
-) -> TestResult:
-    return TestResult(
-        status="error", message=msg, file=file, lineno=lineno, source_line=source_line
-    )
 
 
 def _load_module(module_path: str, unique_name: str) -> Any:
