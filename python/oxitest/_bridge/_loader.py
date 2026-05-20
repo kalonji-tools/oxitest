@@ -76,9 +76,9 @@ def _load_module(module_path: str, unique_name: str) -> Any:
         module.__dict__["_oxitest_bare_asserts"] = collector.by_fn
         exec(code, module.__dict__)  # noqa: S102
         return module
-    except Exception:
+    except Exception as exc:
         sys.modules.pop(unique_name, None)
-        raise _LoadError(_error_result(traceback.format_exc()))
+        raise _LoadError(_error_result(traceback.format_exc())) from exc
 
 
 def _resolve_fn(
