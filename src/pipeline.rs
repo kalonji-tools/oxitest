@@ -144,7 +144,7 @@ fn run_phase(
     session: &bridge::FixtureSession,
     rep: &mut dyn reporter::Reporter,
 ) -> (bool, Vec<types::TestTiming>) {
-    let mut failures = 0usize;
+    let mut acc = types::FailureAccumulator::new(cfg.maxfail);
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::new();
 
@@ -161,10 +161,7 @@ fn run_phase(
                 outcome: outcome.as_str().to_string(),
             });
             rep.test_completed(item, &outcome, duration_ms);
-            if outcome.is_hard_failure() {
-                failures += 1;
-            }
-            if cfg.maxfail > 0 && failures >= cfg.maxfail {
+            if acc.record(&outcome) {
                 interrupted = true;
                 if let Err(e) = session.end_module(py, module_path) {
                     tracing::warn!(%e, module = %module_path, "teardown error in end_module");
