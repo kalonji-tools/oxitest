@@ -303,10 +303,8 @@ impl Config {
         if cli.durations.is_some() {
             self.durations = cli.durations;
         }
-        if cli.no_color {
-            self.color = ColorMode::Never;
-        } else {
-            self.color = cli.color;
+        if let Some(c) = cli.color {
+            self.color = c;
         }
         if cli.workers.is_some() {
             self.workers = cli.workers;
@@ -556,19 +554,60 @@ mod tests {
     #[test]
     fn test_cli_color_never() {
         let cli = Cli::try_parse_from(["oxitest", "--color", "never"]).unwrap();
-        assert_eq!(cli.color, ColorMode::Never);
+        assert_eq!(cli.color, Some(ColorMode::Never));
     }
 
     #[test]
     fn test_cli_color_always() {
         let cli = Cli::try_parse_from(["oxitest", "--color", "always"]).unwrap();
-        assert_eq!(cli.color, ColorMode::Always);
+        assert_eq!(cli.color, Some(ColorMode::Always));
     }
 
     #[test]
-    fn test_cli_color_default_is_auto() {
+    fn test_cli_color_default_is_none() {
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.color, ColorMode::Auto);
+        assert_eq!(cli.color, None);
+    }
+
+    #[test]
+    fn test_color_pyproject_preserved_when_cli_absent() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ncolor = \"always\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        assert_eq!(
+            cfg.color,
+            ColorMode::Always,
+            "pyproject color must load correctly"
+        );
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.color,
+            ColorMode::Always,
+            "pyproject color must be preserved when CLI does not specify --color"
+        );
+    }
+
+    #[test]
+    fn test_color_cli_overrides_pyproject() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ncolor = \"always\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--color", "never"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(
+            merged.color,
+            ColorMode::Never,
+            "CLI --color must override pyproject value"
+        );
     }
 
     #[test]
