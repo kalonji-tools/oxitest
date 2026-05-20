@@ -45,6 +45,20 @@ git commit --no-verify -m "feat: your message"
 This is a known environment issue, not a code problem. CI runs `ty` from `.venv`
 and will pass correctly.
 
+## Design specs and plans
+
+Non-trivial changes follow a structured workflow:
+
+1. **Issue** — describes the problem or feature request.
+2. **Spec** — a design document written before implementation, exploring trade-offs and
+   decisions. Specs live in `docs/superpowers/specs/` (gitignored, local only).
+3. **Plan** — an implementation checklist derived from the spec, posted as a comment on the PR.
+4. **PR** — implements the plan and closes the issue.
+
+Specs are posted as comments on their GitHub issue so the design rationale is publicly
+visible even though the files themselves are not committed. If you are picking up an
+issue that already has a spec comment, read it before starting.
+
 ## Submitting changes
 
 - Branch from `main`
