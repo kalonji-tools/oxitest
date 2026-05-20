@@ -172,6 +172,29 @@ pub struct TestTiming {
     pub outcome: String,
 }
 
+/// Tracks hard failures and determines when to stop (maxfail).
+pub(crate) struct FailureAccumulator {
+    count: usize,
+    max: usize,
+}
+
+impl FailureAccumulator {
+    pub(crate) fn new(maxfail: usize) -> Self {
+        Self {
+            count: 0,
+            max: maxfail,
+        }
+    }
+
+    /// Record an outcome. Returns `true` if execution should stop (maxfail reached).
+    pub(crate) fn record(&mut self, outcome: &TestOutcome) -> bool {
+        if outcome.is_hard_failure() {
+            self.count += 1;
+        }
+        self.max > 0 && self.count >= self.max
+    }
+}
+
 /// Normalised inputs for constructing a `TestOutcome` from either the serial
 /// (`bridge.rs`) or parallel (`parallel.rs`) execution path.
 /// Each caller is responsible for mapping its own field types (Option<String>,
@@ -232,6 +255,49 @@ impl TestOutcome {
                 frames: r.frames.to_vec(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod failure_accumulator_tests {
+    use super::*;
+
+    #[test]
+    fn test_no_maxfail_never_stops() {
+        let mut acc = FailureAccumulator::new(0);
+        let outcome = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert!(!acc.record(&outcome));
+        assert!(!acc.record(&outcome));
+    }
+
+    #[test]
+    fn test_maxfail_stops_at_threshold() {
+        let mut acc = FailureAccumulator::new(2);
+        let fail = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        let pass = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        assert!(!acc.record(&pass));
+        assert!(!acc.record(&fail));
+        assert!(acc.record(&fail)); // 2nd failure = stop
     }
 }
 
