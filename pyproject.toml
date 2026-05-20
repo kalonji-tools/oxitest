@@ -22,7 +22,14 @@ target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "UP", "B", "T20"]
+ignore = ["B009", "B010"]  # getattr/setattr used intentionally for ty compatibility
+
+[tool.ruff.lint.per-file-ignores]
+"python/oxitest/_bridge/worker.py" = ["T201"]
+"python/oxitest/_bridge/_builtins/_capture.py" = ["T201"]
+"python/tests/*" = ["T201", "B011", "B017", "B018", "B028"]
+"scripts/*" = ["T201"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
