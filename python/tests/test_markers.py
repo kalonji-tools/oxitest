@@ -289,7 +289,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
 
 def _make_ctx(fn=None):
     """Minimal _HandlerContext for mark tests."""
-    from oxitest._bridge.executor import _NullFixtureSession
+    from oxitest._bridge._fixture_session import _NullFixtureSession
     from oxitest._bridge.marks import _HandlerContext
 
     if fn is None:
