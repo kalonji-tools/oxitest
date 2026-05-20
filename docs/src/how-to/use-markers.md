@@ -120,3 +120,7 @@ def test_must_finish_quickly():
 oxitest kills the test and marks it failed if it exceeds the timeout. `seconds` must be
 a positive integer. A global timeout can also be set in `pyproject.toml` via the
 `timeout` key.
+
+## See also
+
+- [Strict mode](../explanation/strict-mode.md) — how strict mode enforces marker descriptions and other conventions

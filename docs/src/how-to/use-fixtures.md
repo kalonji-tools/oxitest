@@ -178,3 +178,8 @@ def test_export(fx: Fixtures) -> None:
 !!! warning "Reserved name"
     Using `oxi` as a `Fixtures()` variable name is reserved and raises a `ValueError`
     at load time.
+
+## See also
+
+- [Use built-in fixtures](use-builtin-fixtures.md) — `TempDir`, `StdCapture`, `Patcher`, `LogCapture`, and other auto-injected fixtures
+- [Fixture types reference](../reference/python-api/fixture-types.md) — API docs for `Fixture[T]`, `FixtureRef[T]`, `Yields[T]`, and `Fixtures`
