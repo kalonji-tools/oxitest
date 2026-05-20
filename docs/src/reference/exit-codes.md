@@ -10,3 +10,7 @@
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
 | `3` | Collection error (a test file could not be imported) or strict violations detected when using `--strict=abort` |
 | `4` | Invalid CLI arguments — oxitest exits before running any tests |
+
+## See also
+
+- [Error reference](errors.md) — catalog of error messages with causes and fixes
