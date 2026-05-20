@@ -18,7 +18,7 @@ class Frame:
 class TestResult:
     """Bridge result returned by executor.run_test and consumed by Rust bridge.
 
-    Field names must match the Rust BridgeResult struct in src/bridge.rs.
+    Field names must match the Rust TestResult struct in src/bridge.rs.
     """
 
     status: str

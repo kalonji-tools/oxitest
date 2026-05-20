@@ -31,12 +31,12 @@ def _python_fields(cls: type) -> frozenset[str]:
     return frozenset(f.name for f in dataclasses.fields(cls))
 
 
-def test_bridge_result_fields_match_rust_bridge_result():
+def test_bridge_result_fields_match_rust_test_result():
     source = _BRIDGE_RS.read_text()
-    rust_fields = _rust_struct_fields(source, "BridgeResult")
+    rust_fields = _rust_struct_fields(source, "TestResult")
     python_fields = _python_fields(TestResult)
     assert rust_fields == python_fields, (
-        "Field mismatch between BridgeResult (src/bridge.rs) and TestResult"
+        "Field mismatch between TestResult (src/bridge.rs) and TestResult"
         " (python/oxitest/_bridge/result.py).\n"
         f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
         f"  Only in Python: {sorted(python_fields - rust_fields)}"
