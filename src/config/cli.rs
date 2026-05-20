@@ -39,13 +39,9 @@ pub struct Cli {
     #[arg(long)]
     pub warnings: bool,
 
-    /// Color output mode: auto (default), always, never
-    #[arg(long, value_enum, default_value = "auto")]
-    pub color: ColorMode,
-
-    /// [hidden] Legacy alias for --color=never
-    #[arg(long, hide = true)]
-    pub no_color: bool,
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum)]
+    pub color: Option<ColorMode>,
 
     /// Write CTRF JSON results to PATH
     #[arg(long, value_name = "PATH")]
