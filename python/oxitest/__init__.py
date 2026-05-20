@@ -71,7 +71,7 @@ from oxitest._bridge._builtins import (
     TestContext as TestContext,
     WarnCapture as WarnCapture,
 )
-from oxitest._bridge._exceptions import (
+from oxitest._bridge._errors import (
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
 from oxitest._bridge._fixture_type import (

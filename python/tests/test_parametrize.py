@@ -225,7 +225,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
     """A param with a wrong annotation (e.g. int instead of Fixture[int]) whose name
     matches a registered fixture raises UnannotatedFixtureParamError — the check covers
     both no-annotation and wrong-annotation cases."""
-    from oxitest._bridge._exceptions import UnannotatedFixtureParamError
+    from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     registry = FixtureRegistry()
 

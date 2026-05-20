@@ -24,7 +24,7 @@ from typing import (
     overload,
 )
 
-from oxitest._bridge._exceptions import (  # noqa: F401
+from oxitest._bridge._errors import (  # noqa: F401
     FixtureCycleError as FixtureCycleError,
     FixtureNotFoundError as FixtureNotFoundError,
     FixtureSetupError as FixtureSetupError,
