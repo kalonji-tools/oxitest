@@ -148,8 +148,11 @@ pub fn per_test_error(v: &StrictViolation) -> TestOutcome {
         StrictViolation::MissingMarkReason { mark_name, .. } => {
             format!("strict: @mark.{} requires reason=", mark_name)
         }
-        StrictViolation::MarkerNoDescription { .. } => {
-            unreachable!("MarkerNoDescription is suite-level, not per-test")
+        StrictViolation::MarkerNoDescription { marker_name } => {
+            unreachable!(
+                "MarkerNoDescription({marker_name:?}) passed to per_test_error(); \
+                 this variant is suite-level — filter with suite_level() first"
+            )
         }
     };
     TestOutcome::Error {
