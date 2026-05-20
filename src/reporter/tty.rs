@@ -6,7 +6,7 @@ use super::colors::{
 };
 use super::format::{case_sep, fmt_diagnostic_block, pad_to};
 use super::stats::RunStats;
-use super::{sep_width, ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
+use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -181,21 +181,7 @@ impl StandardReporter for TtyReporter {
             self.flush_param_group(group);
         }
         self.pb.finish_and_clear();
-        if !self.opts.strict_suite_lines.is_empty() {
-            let hdr = format!(
-                "STRICT {}",
-                color_dim(
-                    &"═".repeat(sep_width().saturating_sub("STRICT ".len())),
-                    self.opts.use_color,
-                )
-            );
-            println!("\n{}", hdr);
-            for line in &self.opts.strict_suite_lines {
-                println!("  {}", line);
-            }
-            self.stats
-                .record_strict_suite(self.opts.strict_suite_lines.len());
-        }
+        super::print_strict_suite_section(&self.opts, &mut self.stats);
     }
 
     fn run_stats(&self) -> &RunStats {

@@ -367,6 +367,23 @@ pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: b
     }
 }
 
+pub(crate) fn print_strict_suite_section(opts: &ReporterOpts, stats: &mut RunStats) {
+    if !opts.strict_suite_lines.is_empty() {
+        let hdr = format!(
+            "STRICT {}",
+            colors::color_dim(
+                &"═".repeat(sep_width().saturating_sub("STRICT ".len())),
+                opts.use_color,
+            )
+        );
+        println!("\n{}", hdr);
+        for line in &opts.strict_suite_lines {
+            println!("  {}", line);
+        }
+        stats.record_strict_suite(opts.strict_suite_lines.len());
+    }
+}
+
 pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
     println!("\nSTRICT VIOLATIONS");
     println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
