@@ -35,7 +35,7 @@ from oxitest._bridge.fixtures import (
 )
 from oxitest._bridge.marks import ExecutionWrapper, _HandlerContext, evaluate_marks
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.result import Frame, TestResult
+from oxitest._bridge.result import Frame, TestResult, _error_result
 
 _REPR_MAX = 80
 _repr = reprlib.Repr()
@@ -94,14 +94,6 @@ def _get_frames(exc: BaseException) -> list[Frame]:
         Frame(file=f.filename, lineno=f.lineno or 0, name=f.name, line=f.line or "")
         for f in traceback.extract_tb(tb)
     ]
-
-
-def _error_result(
-    msg: str, file: str = "", lineno: int = 0, source_line: str = ""
-) -> TestResult:
-    return TestResult(
-        status="error", message=msg, file=file, lineno=lineno, source_line=source_line
-    )
 
 
 def _handle_assertion_error(exc: AssertionError) -> TestResult:
