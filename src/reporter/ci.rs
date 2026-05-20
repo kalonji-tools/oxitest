@@ -93,21 +93,7 @@ impl StandardReporter for CiReporter {
                 println!("{}", d);
             }
         }
-        if !self.opts.strict_suite_lines.is_empty() {
-            let hdr = format!(
-                "STRICT {}",
-                color_dim(
-                    &"═".repeat(sep_width().saturating_sub("STRICT ".len())),
-                    self.opts.use_color,
-                )
-            );
-            println!("\n{}", hdr);
-            for line in &self.opts.strict_suite_lines {
-                println!("  {}", line);
-            }
-            self.stats
-                .record_strict_suite(self.opts.strict_suite_lines.len());
-        }
+        super::print_strict_suite_section(&self.opts, &mut self.stats);
     }
 
     fn run_stats(&self) -> &RunStats {
