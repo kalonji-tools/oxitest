@@ -390,7 +390,7 @@ pub fn run_phase_parallel(
 
     drop(tx);
 
-    let mut failures = 0usize;
+    let mut acc = types::FailureAccumulator::new(cfg.maxfail);
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::new();
 
@@ -398,10 +398,7 @@ pub fn run_phase_parallel(
         let Some(outcome) = handle_worker_result(&result, &item_lookup, rep, &mut timings) else {
             continue;
         };
-        if outcome.is_hard_failure() {
-            failures += 1;
-        }
-        if cfg.maxfail > 0 && failures >= cfg.maxfail {
+        if acc.record(&outcome) {
             interrupted = true;
             break;
         }
