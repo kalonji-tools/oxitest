@@ -87,6 +87,11 @@ pub trait Reporter {
         duration_ms: f64,
     );
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32;
+
+    /// Record a teardown warning (default: no-op).
+    /// `context` identifies what failed (e.g. "end_module(path)" or "end_session").
+    /// `error` is the stringified error message.
+    fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -126,6 +131,12 @@ impl Reporter for CompositeReporter {
             .map(|r| r.finish(collect_errors, interrupted))
             .max()
             .unwrap_or(0)
+    }
+
+    fn record_teardown_warning(&mut self, context: &str, error: &str) {
+        for r in &mut self.reporters {
+            r.record_teardown_warning(context, error);
+        }
     }
 }
 
@@ -719,5 +730,46 @@ mod tests {
             2,
             "test_started should be dispatched to every inner reporter"
         );
+    }
+
+    #[test]
+    fn test_composite_reporter_dispatches_teardown_warning_to_all() {
+        use std::sync::{Arc, Mutex};
+
+        struct WarningCollector(Arc<Mutex<Vec<(String, String)>>>);
+        impl Reporter for WarningCollector {
+            fn test_started(&mut self, _: &crate::types::TestItem) {}
+            fn test_completed(
+                &mut self,
+                _: &crate::types::TestItem,
+                _: &crate::types::TestOutcome,
+                _: f64,
+            ) {
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
+                0
+            }
+            fn record_teardown_warning(&mut self, context: &str, error: &str) {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((context.to_string(), error.to_string()));
+            }
+        }
+
+        let warnings = Arc::new(Mutex::new(Vec::new()));
+        let mut composite = CompositeReporter::new(vec![
+            Box::new(WarningCollector(Arc::clone(&warnings))),
+            Box::new(WarningCollector(Arc::clone(&warnings))),
+        ]);
+        composite.record_teardown_warning("end_module(tests/test_foo.py)", "RuntimeError: boom");
+        let collected = warnings.lock().unwrap();
+        assert_eq!(
+            collected.len(),
+            2,
+            "teardown warning should be dispatched to every inner reporter"
+        );
+        assert_eq!(collected[0].0, "end_module(tests/test_foo.py)");
+        assert_eq!(collected[0].1, "RuntimeError: boom");
     }
 }
