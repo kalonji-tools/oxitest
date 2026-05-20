@@ -76,7 +76,12 @@ impl ReporterOptsBuilder {
     }
 
     pub fn verbose(self, v: bool) -> Self {
-        Self { verbose: v, ..self }
+        Self {
+            verbose: v,
+            show_tips: self.show_tips || v,
+            show_warnings: self.show_warnings || v,
+            ..self
+        }
     }
 
     pub fn tb(self, tb: crate::config::TbStyle) -> Self {
@@ -132,9 +137,11 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_verbose_override() {
+    fn test_builder_verbose_propagates_to_tips_and_warnings() {
         let opts = ReporterOptsBuilder::new().verbose(true).build();
         assert!(opts.verbose);
+        assert!(opts.show_tips, "verbose(true) must set show_tips");
+        assert!(opts.show_warnings, "verbose(true) must set show_warnings");
     }
 
     #[test]
