@@ -367,11 +367,11 @@ pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: b
     }
 }
 
-pub(crate) fn print_strict_abort(violations: &[crate::strict::StrictViolation], use_color: bool) {
+pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
     println!("\nSTRICT VIOLATIONS");
     println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
-    for v in violations {
-        println!("  {}", crate::strict::format_violation_line(v));
+    for line in formatted_lines {
+        println!("  {}", line);
     }
     println!("strict violations found — aborting (exit 3)");
 }
@@ -457,19 +457,12 @@ mod tests {
 
     #[test]
     fn test_print_strict_abort_does_not_panic_with_violations() {
-        use crate::strict::StrictViolation;
-        use crate::types::NodeId;
-        let violations = vec![
-            StrictViolation::BareAssert {
-                node_id: NodeId::from_raw("tests/test_foo.py::test_x"),
-                lines: vec![5, 12],
-            },
-            StrictViolation::MarkerNoDescription {
-                marker_name: "db".to_string(),
-            },
+        let lines = vec![
+            "tests/test_foo.py::test_x — bare assert at lines 5, 12".to_string(),
+            "marker 'db' has no description".to_string(),
         ];
         // Should not panic. Output goes to stdout (captured in test harness).
-        super::print_strict_abort(&violations, false);
+        super::print_strict_abort(&lines, false);
     }
 
     // ── ParametrizeBuffer ─────────────────────────────────────────────────────
