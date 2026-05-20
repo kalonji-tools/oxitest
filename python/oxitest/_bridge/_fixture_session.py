@@ -186,15 +186,11 @@ class FixtureSession:
 
     def has_shared_fixtures(self) -> bool:
         """Return True if the effective (most-local) definition has shared=True."""
-        return any(defs[-1].shared for defs in self._registry._defs.values() if defs)
+        return self._registry.has_shared()
 
     def shared_fixture_names(self) -> list[str]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
-        return sorted(
-            name
-            for name, defs in self._registry._defs.items()
-            if defs and defs[-1].shared
-        )
+        return self._registry.shared_names()
 
     def _inject_builtin(
         self,

@@ -54,6 +54,16 @@ class FixtureRegistry:
         """Return True if any registered fixture belongs to the given namespace."""
         return namespace in self._namespaces
 
+    def has_shared(self) -> bool:
+        """Return True if any effective fixture definition has shared=True."""
+        return any(defs[-1].shared for defs in self._defs.values() if defs)
+
+    def shared_names(self) -> list[str]:
+        """Return sorted names of fixtures with effective (most-local) shared=True."""
+        return sorted(
+            name for name, defs in self._defs.items() if defs and defs[-1].shared
+        )
+
 
 def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
     """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
