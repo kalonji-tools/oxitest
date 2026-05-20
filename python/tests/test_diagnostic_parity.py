@@ -20,7 +20,7 @@ from oxitest import TempDir
 def _run_oxitest(tmp: TempDir, *extra_args: str) -> tuple[str, int]:
     """Run oxitest CLI against tmp and return (stdout, returncode)."""
     result = subprocess.run(
-        [sys.executable, "-m", "oxitest", str(tmp), "--no-color", *extra_args],
+        [sys.executable, "-m", "oxitest", str(tmp), "--color", "never", *extra_args],
         capture_output=True,
         text=True,
         timeout=60,
