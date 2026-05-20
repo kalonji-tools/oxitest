@@ -93,44 +93,26 @@ pub fn group_by_module(items: Vec<TestItem>) -> Vec<(Utf8PathBuf, Vec<TestItem>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::NodeId;
+    use crate::reporter::test_helpers::make_item_in;
     use camino::Utf8PathBuf;
     use std::collections::HashSet;
 
-    fn make_item(name: &str) -> TestItem {
-        TestItem {
-            node_id: NodeId::new("tests/test_mod.py", name, None),
-            module_path: Utf8PathBuf::from("tests/test_mod.py"),
-            fn_name: name.to_string(),
-            lineno: 0,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-        }
-    }
-
-    fn make_item_in(name: &str, module: &str) -> TestItem {
-        TestItem {
-            node_id: NodeId::new(module, name, None),
-            module_path: Utf8PathBuf::from(module),
-            fn_name: name.to_string(),
-            lineno: 0,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-        }
-    }
-
     #[test]
     fn test_filter_items_no_keyword_returns_all() {
-        let items = vec![make_item("test_a"), make_item("test_b")];
+        let items = vec![
+            make_item_in("test_a", "tests/test_mod.py"),
+            make_item_in("test_b", "tests/test_mod.py"),
+        ];
         let filtered = filter_items(items, None);
         assert_eq!(filtered.len(), 2);
     }
 
     #[test]
     fn test_filter_items_with_keyword() {
-        let items = vec![make_item("test_foo"), make_item("test_bar")];
+        let items = vec![
+            make_item_in("test_foo", "tests/test_mod.py"),
+            make_item_in("test_bar", "tests/test_mod.py"),
+        ];
         let filtered = filter_items(items, Some("foo"));
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].fn_name, "test_foo");
@@ -138,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_filter_items_no_match_returns_empty() {
-        let items = vec![make_item("test_foo")];
+        let items = vec![make_item_in("test_foo", "tests/test_mod.py")];
         let filtered = filter_items(items, Some("xyz"));
         assert!(filtered.is_empty());
     }
@@ -147,7 +129,10 @@ mod tests {
     fn test_filter_items_by_path_component_in_node_id() {
         // node_id = "tests/test_mod.py::test_a" — "test_mod" is in the path
         // but NOT in fn_name ("test_a"). The filter must still match.
-        let items = vec![make_item("test_a"), make_item("test_b")];
+        let items = vec![
+            make_item_in("test_a", "tests/test_mod.py"),
+            make_item_in("test_b", "tests/test_mod.py"),
+        ];
         let filtered = filter_items(items, Some("test_mod"));
         assert_eq!(
             filtered.len(),
@@ -158,7 +143,10 @@ mod tests {
 
     #[test]
     fn test_group_by_module_single_module() {
-        let items = vec![make_item("test_a"), make_item("test_b")];
+        let items = vec![
+            make_item_in("test_a", "tests/test_mod.py"),
+            make_item_in("test_b", "tests/test_mod.py"),
+        ];
         let groups = group_by_module(items);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].1.len(), 2);
@@ -256,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_filter_last_failed_empty_set_returns_empty() {
-        let items = vec![make_item("test_a")];
+        let items = vec![make_item_in("test_a", "tests/test_mod.py")];
         let failed: HashSet<String> = HashSet::new();
         let filtered = filter_last_failed(items, &failed);
         assert!(filtered.is_empty());
@@ -291,7 +279,7 @@ mod tests {
     fn module_path_as_str_does_not_require_unwrap() {
         // Utf8PathBuf::as_str() returns &str directly — no Option, no unwrap.
         // This fails to compile if module_path is PathBuf (PathBuf has no as_str()).
-        let item = make_item("test_a");
+        let item = make_item_in("test_a", "tests/test_mod.py");
         let _s: &str = item.module_path.as_str();
     }
 }

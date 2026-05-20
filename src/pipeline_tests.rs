@@ -19,19 +19,7 @@ mod mtime_tests {
 mod timeout_tests {
     use super::*;
     use crate::cache::TestCache;
-    use crate::types::{NodeId, TestItem};
-
-    fn make_item(node_id: &str) -> TestItem {
-        TestItem {
-            node_id: NodeId::from_raw(node_id),
-            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: node_id.to_string(),
-            lineno: 0,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-        }
-    }
+    use crate::reporter::test_helpers::make_item_raw as make_item;
 
     #[test]
     fn no_multiplier_returns_global() {
@@ -111,20 +99,9 @@ mod tracing_tests {
 mod strict_pipeline_tests {
     use super::*;
     use crate::config::Config;
+    use crate::reporter::test_helpers::make_item_raw as make_item;
     use crate::strict::StrictViolation;
     use crate::types::NodeId;
-
-    fn make_item(node_id: &str) -> types::TestItem {
-        types::TestItem {
-            node_id: NodeId::from_raw(node_id),
-            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: "test_foo".to_string(),
-            lineno: 1,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-        }
-    }
 
     #[test]
     fn all_violations_empty_when_strict_none() {
