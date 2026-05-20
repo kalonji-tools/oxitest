@@ -35,7 +35,9 @@ jobs:
   build:
     name: Build docs
     needs: changes
-    if: needs.changes.outputs.docs == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name != 'pull_request'
+      || needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
