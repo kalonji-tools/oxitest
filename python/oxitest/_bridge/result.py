@@ -35,6 +35,14 @@ class TestResult:
     frames: list[Frame] = field(default_factory=list)
 
 
+def _error_result(
+    msg: str, file: str = "", lineno: int = 0, source_line: str = ""
+) -> TestResult:
+    return TestResult(
+        status="error", message=msg, file=file, lineno=lineno, source_line=source_line
+    )
+
+
 @dataclass
 class CollectedItem:
     """Bridge result returned by importer.collect_module and consumed by Rust bridge.
