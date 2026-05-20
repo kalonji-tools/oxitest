@@ -335,36 +335,8 @@ impl TestCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reporter::test_helpers::{make_group, make_item_raw as make_item};
     use assert_fs::prelude::*;
-
-    fn make_item(node_id: &str) -> TestItem {
-        TestItem {
-            node_id: NodeId::from_raw(node_id),
-            module_path: Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: node_id.to_string(),
-            lineno: 0,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-        }
-    }
-
-    fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<TestItem>) {
-        let path = Utf8PathBuf::from(module);
-        let items = names
-            .iter()
-            .map(|name| TestItem {
-                node_id: NodeId::new(module, name, None),
-                module_path: path.clone(),
-                fn_name: name.to_string(),
-                lineno: 0,
-                markers: vec![],
-                param_id: None,
-                param_values: vec![],
-            })
-            .collect();
-        (path, items)
-    }
 
     fn cache_with_entries(entries: &[(&str, f64)]) -> TestCache {
         let timings = entries
