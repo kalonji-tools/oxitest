@@ -275,7 +275,11 @@ fn apply_strict(
 
     // Abort mode: print and signal early exit.
     if cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
-        reporter::print_strict_abort(&all_violations, use_color);
+        let abort_lines: Vec<String> = all_violations
+            .iter()
+            .map(strict::format_violation_line)
+            .collect();
+        reporter::print_strict_abort(&abort_lines, use_color);
         return Err(3);
     }
 
