@@ -12,8 +12,8 @@ fail immediately if either side drifts.
 import dataclasses
 
 
-def test_test_result_fields_match_rust_bridge_result():
-    """TestResult fields must exactly match BridgeResult in src/bridge.rs."""
+def test_test_result_fields_match_rust_test_result():
+    """TestResult fields must exactly match TestResult in src/bridge.rs."""
     from oxitest._bridge.result import TestResult
 
     # Construct with all fields — TypeError if any field is missing or renamed.
@@ -47,10 +47,10 @@ def test_test_result_fields_match_rust_bridge_result():
     }
     actual_fields = {f.name for f in dataclasses.fields(result)}
     assert actual_fields == expected_fields, (
-        f"TestResult fields differ from Rust BridgeResult.\n"
+        f"TestResult fields differ from Rust TestResult.\n"
         f"  Missing from Python: {expected_fields - actual_fields}\n"
         f"  Extra in Python:     {actual_fields - expected_fields}\n"
-        f"  Update src/bridge.rs BridgeResult to match, or update result.py."
+        f"  Update src/bridge.rs TestResult to match, or update result.py."
     )
 
 

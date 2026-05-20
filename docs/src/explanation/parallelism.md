@@ -106,7 +106,7 @@ machinery would run in-process, on real threads, with no serialization and no pe
 overhead. The Rust scheduler would dispatch work to a thread pool rather than a process pool.
 
 The boundary between Rust and Python would shrink: there would be no worker subprocess protocol,
-no JSON encoding of test tasks and results, and no stdin/stdout coordination. The `BridgeResult`
+no JSON encoding of test tasks and results, and no stdin/stdout coordination. The `TestResult`
 struct would be populated by a direct in-process call rather than a deserialized network message.
 
 !!! note "Why not now"
