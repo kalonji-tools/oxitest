@@ -19,8 +19,8 @@ PYTHON_PATH = ROOT / "python" / "oxitest" / "_bridge" / "result.py"
 
 # Rust struct name -> Python class name
 PAIRS = {
-    "BridgeResult": "TestResult",
-    "BridgeFrame": "Frame",
+    "TestResult": "TestResult",
+    "Frame": "Frame",
     "CollectedItem": "CollectedItem",
     "RawViolation": "CollectedViolation",
 }

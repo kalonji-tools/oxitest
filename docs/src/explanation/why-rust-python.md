@@ -77,7 +77,7 @@ Rust `run()` function, passing the raw command-line argument strings. Rust parse
 `clap` and then drives the whole lifecycle — discovery, filtering, reporting — but for each
 test it calls back into Python through a thin executor layer.
 
-That call returns a result dataclass. On the Rust side, `BridgeResult` implements
+That call returns a result dataclass. On the Rust side, `TestResult` implements
 `#[derive(FromPyObject)]`, which lets PyO3 extract the fields from the Python object without
 going through a string-serialization round-trip. The data crosses the boundary as native
 Python objects; Rust reads their fields directly from CPython's memory layout.

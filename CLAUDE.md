@@ -70,7 +70,7 @@ just clean
 
 ### PyO3 data contract
 
-`BridgeResult` in `src/bridge.rs` must stay in sync with `python/oxitest/_bridge/result.py`. `CollectedItem` fields must stay in sync with the Python `collect_module` return type. When adding fields to the Python result objects, update the Rust `#[derive(FromPyObject)]` structs too.
+`TestResult` in `src/bridge.rs` must stay in sync with `python/oxitest/_bridge/result.py`. `CollectedItem` fields must stay in sync with the Python `collect_module` return type. When adding fields to the Python result objects, update the Rust `#[derive(FromPyObject)]` structs too.
 
 ### Parallel execution
 

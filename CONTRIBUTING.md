@@ -76,7 +76,7 @@ oxitest is a two-layer system:
   scheduling, parallel dispatch, caching, and reporting.
 - **Python** (`python/oxitest/_bridge/`) handles test execution: fixture injection,
   mark evaluation, assertion rewriting, and result building.
-- The layers communicate via **PyO3**. Key data contracts (`BridgeResult`,
+- The layers communicate via **PyO3**. Key data contracts (`TestResult`,
   `CollectedItem`) must stay in sync across languages.
 
 See the full [Architecture](https://kalonji-tools.github.io/oxitest/contributing/architecture/)

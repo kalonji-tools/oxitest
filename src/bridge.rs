@@ -1,6 +1,6 @@
 //! PyO3 bridge — the boundary between Rust orchestration and Python execution.
 //!
-//! Defines the data contracts for deserializing Python results ([`BridgeResult`],
+//! Defines the data contracts for deserializing Python results ([`TestResult`],
 //! [`CollectedItem`], [`RawViolation`]) and wraps the Python function calls
 //! (`collect_module`, `run_test`, `FixtureSession` lifecycle).
 //!
@@ -17,16 +17,16 @@ use crate::types::{CollectError, NodeId, RawOutcome, TestItem, TestOutcome};
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
 #[derive(FromPyObject)]
-struct BridgeFrame {
+struct Frame {
     file: String,
     lineno: usize,
     name: String,
     line: String,
 }
 
-/// Bridge result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
+/// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
 #[derive(FromPyObject)]
-struct BridgeResult {
+struct TestResult {
     status: String,
     message: String,
     file: String,
@@ -39,7 +39,7 @@ struct BridgeResult {
     strict: bool,
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
-    frames: Vec<BridgeFrame>,
+    frames: Vec<Frame>,
 }
 
 /// Long-lived Python fixture session held across the test loop.
@@ -226,7 +226,7 @@ fn try_run_test(
         None => py.None().into_bound(py),
     };
 
-    let r: BridgeResult = executor
+    let r: TestResult = executor
         .call_method1(
             "run_test",
             (
