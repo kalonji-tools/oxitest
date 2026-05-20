@@ -8,7 +8,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Protocol
 
-from oxitest._bridge._exceptions import (
+from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,

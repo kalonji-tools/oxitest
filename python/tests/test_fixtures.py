@@ -641,7 +641,7 @@ def test_resolve_for_test_skip_names_prevents_resolution():
 
 
 def test_unannotated_param_matching_fixture_raises_helpful_error():
-    from oxitest._bridge._exceptions import UnannotatedFixtureParamError
+    from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     reg = FixtureRegistry()
     reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))
@@ -670,7 +670,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error():
 
 
 def test_wrong_annotation_matching_fixture_raises_helpful_error():
-    from oxitest._bridge._exceptions import UnannotatedFixtureParamError
+    from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     reg = FixtureRegistry()
     reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))

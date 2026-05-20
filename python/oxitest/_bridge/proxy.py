@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from oxitest._bridge._exceptions import (
+from oxitest._bridge._errors import (
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
 

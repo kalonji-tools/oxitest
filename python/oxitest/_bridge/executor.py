@@ -13,7 +13,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any, cast
 
-from oxitest._bridge._exceptions import FixtureNotFoundError, FixtureSetupError
+from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._loader import (
     _load_module,
     _LoadError,
