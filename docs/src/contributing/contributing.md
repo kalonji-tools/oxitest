@@ -14,9 +14,21 @@ Rust unit tests are inline in their modules and require no additional setup beyo
 
 ## Running integration tests
 
-Integration tests live in the `oxitest-consumer` repository. They run oxitest against a real
-test suite and verify end-to-end behavior. See the `oxitest-consumer` repository for setup
-instructions.
+Integration tests live in the separate
+[oxitest-consumer](https://github.com/kalonji-tools/oxitest-consumer) repository.
+It depends on oxitest via a `uv` editable install, so changes to the local oxitest
+source are picked up immediately.
+
+Tests use **oxitest fixtures** (not pytest) to exercise the full pipeline — collection,
+scheduling, parallel execution, caching, and reporting.
+
+```bash
+cd oxitest-consumer
+uv sync                                        # install deps (editable oxitest)
+.venv/bin/python -m oxitest tests/             # run the integration suite
+```
+
+See the oxitest-consumer README for additional details.
 
 ## Pre-commit hooks
 
