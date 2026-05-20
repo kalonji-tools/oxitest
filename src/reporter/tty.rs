@@ -247,6 +247,12 @@ impl Reporter for TtyReporter {
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
         super::standard_finish(self, collect_errors, interrupted)
     }
+
+    fn record_teardown_warning(&mut self, context: &str, error: &str) {
+        self.stats
+            .warning_msgs
+            .push((context.to_string(), error.to_string()));
+    }
 }
 
 #[cfg(test)]
@@ -489,5 +495,17 @@ mod tests {
         };
         let line = reporter.format_test_line(&item, &outcome, 30_000.0);
         assert!(line.contains("TIME"), "TIME label must appear: {line:?}");
+    }
+
+    #[test]
+    fn test_record_teardown_warning_pushes_to_warning_msgs() {
+        let mut reporter = make_tty_reporter();
+        reporter.record_teardown_warning("end_module(tests/test_foo.py)", "RuntimeError: boom");
+        assert_eq!(reporter.stats.warning_msgs.len(), 1);
+        assert_eq!(
+            reporter.stats.warning_msgs[0].0,
+            "end_module(tests/test_foo.py)"
+        );
+        assert_eq!(reporter.stats.warning_msgs[0].1, "RuntimeError: boom");
     }
 }
