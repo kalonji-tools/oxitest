@@ -77,6 +77,7 @@ nav:
     - CLI flags: reference/cli.md
     - Configuration: reference/configuration.md
     - Exit codes: reference/exit-codes.md
+    - Errors: reference/errors.md
     - JSON output format: reference/json-output.md
     - Python API:
       - Marks: reference/python-api/marks.md
