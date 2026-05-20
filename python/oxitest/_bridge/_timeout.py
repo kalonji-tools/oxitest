@@ -92,3 +92,22 @@ def _timeout_context(seconds: int) -> _UnixTimeoutContext | _WindowsTimeoutConte
     if hasattr(signal, "alarm"):
         return _UnixTimeoutContext(seconds)
     return _WindowsTimeoutContext(seconds)
+
+
+def make_timeout_wrapper(seconds: int) -> Any:
+    """Return an execution wrapper that enforces a timeout of *seconds*.
+
+    The returned wrapper has the ExecutionWrapper signature:
+    ``wrapper(next_fn: Callable[[], TestResult]) -> TestResult``.
+    """
+
+    def wrapper(next_fn: Any) -> Any:
+        try:
+            with _timeout_context(seconds):
+                return next_fn()
+        except OxitestTimeoutError:
+            from oxitest._bridge.result import TestResult
+
+            return TestResult(status="timeout", message=f"Timed out after {seconds}s")
+
+    return wrapper

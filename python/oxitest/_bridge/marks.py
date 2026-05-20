@@ -115,19 +115,9 @@ class _TimeoutHandler(MarkHandler):
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         seconds = int(mark.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
 
-        from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
+        from oxitest._bridge._timeout import make_timeout_wrapper
 
-        def timeout_wrapper(next_fn: Callable[[], TestResult]) -> TestResult:
-            try:
-                with _timeout_context(seconds):
-                    return next_fn()
-            except OxitestTimeoutError:
-                return TestResult(
-                    status="timeout",
-                    message=f"Timed out after {seconds}s",
-                )
-
-        return MarkEvalResult(wrapper=timeout_wrapper)
+        return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
 
 
 # NOTE: @oxitest.mark.timeout combined with @oxitest.mark.xfail is not supported.
