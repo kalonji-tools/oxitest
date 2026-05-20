@@ -1,6 +1,3 @@
-use std::fs;
-use std::io::Write;
-
 use camino::Utf8PathBuf;
 
 use serde::Serialize;
@@ -92,6 +89,13 @@ fn outcome_message(outcome: &TestOutcome) -> Option<String> {
     }
 }
 
+impl JsonReporter {
+    fn write_json(&self, output: &CtrfOutput) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(output).map_err(std::io::Error::other)?;
+        std::fs::write(&self.path, json)
+    }
+}
+
 impl Reporter for JsonReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
@@ -126,27 +130,10 @@ impl Reporter for JsonReporter {
             },
         };
 
-        match serde_json::to_string_pretty(&output) {
-            Ok(json) => match fs::File::create(&self.path) {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(json.as_bytes()) {
-                        tracing::error!(
-                            path = %self.path,
-                            error = %e,
-                            "failed to write JSON output"
-                        );
-                    }
-                }
-                Err(e) => tracing::error!(
-                    path = %self.path,
-                    error = %e,
-                    "failed to create JSON output file"
-                ),
-            },
-            Err(e) => tracing::error!(error = %e, "failed to serialise JSON output"),
+        if let Err(e) = self.write_json(&output) {
+            eprintln!("error: failed to write JSON report to {}: {e}", self.path);
+            return 4;
         }
-
-        // JsonReporter does not determine the exit code — CompositeReporter uses max()
         0
     }
 }
@@ -244,5 +231,40 @@ mod tests {
             !json.contains("\"message\""),
             "empty message must not appear as a key in JSON"
         );
+    }
+
+    #[test]
+    fn test_finish_returns_4_on_write_failure() {
+        let path = camino::Utf8PathBuf::from("/nonexistent/dir/out.json");
+        let mut rep = JsonReporter::new(path);
+        rep.test_completed(
+            &make_item("test_a"),
+            &TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            1.0,
+        );
+        let code = rep.finish(&[], false);
+        assert_eq!(
+            code, 4,
+            "must return exit code 4 when JSON file cannot be written"
+        );
+    }
+
+    #[test]
+    fn test_finish_returns_0_on_successful_write() {
+        let dir = TempDir::new().unwrap();
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
+        let mut rep = JsonReporter::new(path.clone());
+        rep.test_completed(
+            &make_item("test_a"),
+            &TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            1.0,
+        );
+        let code = rep.finish(&[], false);
+        assert_eq!(code, 0, "must return 0 on successful write");
+        assert!(path.exists(), "JSON file must be created");
     }
 }
