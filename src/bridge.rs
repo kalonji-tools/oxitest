@@ -77,7 +77,13 @@ impl FixtureSession {
     ) -> PyResult<()> {
         let loader = py.import("oxitest._bridge.plugin_loader")?;
         let plugin_list: Vec<&str> = plugins.iter().map(|s| s.as_str()).collect();
-        let settings_json = serde_json::to_string(plugin_settings).unwrap_or_default();
+        let settings_json = match serde_json::to_string(plugin_settings) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to serialize plugin settings; plugins will receive empty config");
+                "{}".to_string()
+            }
+        };
         loader.call_method1("init_plugins", (plugin_list, settings_json))?;
         Ok(())
     }
