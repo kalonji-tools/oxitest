@@ -32,6 +32,9 @@ ignore:
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
   - "python/oxitest/__init__.py"
+  # Fixture internals: exercised via fixtures.py re-exports, not directly by test imports
+  - "python/oxitest/_bridge/_fixture_registry.py"
+  - "python/oxitest/_bridge/_fixture_session.py"
   # Plugin system: init_plugins() called from Rust via PyO3, not reachable by Python coverage
   - "python/oxitest/_bridge/plugin_loader.py"
   # Protocol stubs — method bodies are `...`, never executed
