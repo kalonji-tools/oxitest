@@ -238,22 +238,9 @@ def run_test(
 
         # Apply global default timeout if no per-test @timeout mark
         if default_timeout is not None and not any(m.name == "timeout" for m in marks):
-            from oxitest._bridge._timeout import _timeout_context
+            from oxitest._bridge._timeout import make_timeout_wrapper
 
-            def _default_timeout_wrapper(
-                next_fn: Callable[[], TestResult],
-                _t: int = default_timeout,
-            ) -> TestResult:
-                try:
-                    with _timeout_context(_t):
-                        return next_fn()
-                except OxitestTimeoutError:
-                    return TestResult(
-                        status="timeout",
-                        message=f"Timed out after {_t}s",
-                    )
-
-            wrappers.append(_default_timeout_wrapper)
+            wrappers.append(make_timeout_wrapper(default_timeout))
 
         # Plugin execution wrappers — match by marker name
         from oxitest._bridge.plugin_loader import get_registry  # pragma: no cover
