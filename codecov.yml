@@ -28,6 +28,7 @@ ignore:
   - "src/bridge.rs"
   - "src/lib.rs"
   - "src/pipeline.rs"
+  - "src/parallel.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
