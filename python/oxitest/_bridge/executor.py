@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
+from oxitest._bridge._fixture_session import _NullFixtureSession
 from oxitest._bridge._loader import (
     _load_module,
     _LoadError,
@@ -149,36 +150,6 @@ def _compose(
     (ruff B023) that a bare lambda inside a for-loop would cause.
     """
     return lambda: wrapper(inner)
-
-
-class _NullFixtureSession:
-    """Null Object for when no conftest session is available.
-
-    Allows run_test to treat session as always present, eliminating guards.
-    """
-
-    def resolve_for_test(
-        self,
-        fn: Callable[..., Any],
-        module_path: str,
-        *,
-        skip_names: frozenset[str] = frozenset(),
-    ) -> tuple[dict[str, Any], list[Callable[[], None]]]:
-        return {}, []
-
-    def get_fixture(
-        self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
-    ) -> Any:
-        raise FixtureNotFoundError(name)
-
-    def get_fixture_in_namespace(
-        self,
-        name: str,
-        namespace: str,
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-    ) -> Any:
-        raise FixtureNotFoundError(name, namespace=namespace)
 
 
 _NULL_SESSION: _SessionProtocol = _NullFixtureSession()
