@@ -137,6 +137,12 @@ impl Reporter for CiReporter {
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
         super::standard_finish(self, collect_errors, interrupted)
     }
+
+    fn record_teardown_warning(&mut self, context: &str, error: &str) {
+        self.stats
+            .warning_msgs
+            .push((context.to_string(), error.to_string()));
+    }
 }
 
 #[cfg(test)]
@@ -380,5 +386,17 @@ mod tests {
         );
         reporter.finish(&[], false);
         assert_eq!(reporter.stats.strict_suite, 1);
+    }
+
+    #[test]
+    fn test_record_teardown_warning_pushes_to_warning_msgs() {
+        let mut reporter = make_ci_reporter(TbStyle::Short);
+        reporter.record_teardown_warning("end_session", "PyErr: interpreter shutdown");
+        assert_eq!(reporter.stats.warning_msgs.len(), 1);
+        assert_eq!(reporter.stats.warning_msgs[0].0, "end_session");
+        assert_eq!(
+            reporter.stats.warning_msgs[0].1,
+            "PyErr: interpreter shutdown"
+        );
     }
 }
