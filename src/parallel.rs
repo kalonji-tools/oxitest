@@ -8,7 +8,10 @@
 //! remaining tests are marked as timed out. Worker crashes produce sentinel
 //! error results so the pipeline never hangs.
 
-use crate::{config, reporter, scheduler, types, worker_result::WorkerResult};
+use crate::{
+    config, reporter, scheduler, types,
+    worker_result::{WorkerResult, WorkerTask, WorkerTaskItem},
+};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum DrainOutcome {
@@ -246,24 +249,35 @@ pub(crate) fn spawn_worker(
         while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
             let Some(group) = sched.pop() else { break };
 
-            let items_json: Vec<serde_json::Value> = group
-                .items
-                .iter()
-                .map(|item| {
-                    serde_json::json!({
-                        "fn_name": item.fn_name,
-                        "param_id": item.param_id,
+            let task = WorkerTask {
+                module_path: group.module_path.as_str(),
+                items: group
+                    .items
+                    .iter()
+                    .map(|item| WorkerTaskItem {
+                        fn_name: &item.fn_name,
+                        param_id: item.param_id.as_deref(),
                     })
-                })
-                .collect();
-            let task = serde_json::json!({
-                "module_path": group.module_path.as_str(),
-                "items": items_json,
-                "conftest_paths": &*conftest_json,
-                "timeout_secs": timeout_secs,
-            });
+                    .collect(),
+                conftest_paths: &conftest_json,
+                timeout_secs,
+            };
+            let task_json = match serde_json::to_string(&task) {
+                Ok(j) => j,
+                Err(e) => {
+                    tracing::error!(
+                        module = %group.module_path,
+                        error = %e,
+                        "failed to serialize WorkerTask — emitting error for all group items"
+                    );
+                    for item in &group.items {
+                        let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
+                    }
+                    break;
+                }
+            };
 
-            if writeln!(worker_stdin, "{task}").is_err() || worker_stdin.flush().is_err() {
+            if writeln!(worker_stdin, "{task_json}").is_err() || worker_stdin.flush().is_err() {
                 tracing::warn!(
                     module = %group.module_path,
                     "failed to send task to worker — emitting error for all group items"

@@ -3,8 +3,32 @@
 //! Each worker writes one JSON line per test to stdout. This module defines
 //! [`WorkerResult`] and converts it to [`TestOutcome`](types::TestOutcome).
 //! Also provides sentinel builders for worker crashes and timeouts.
+//!
+//! The send-side schema — the JSON task sent *to* worker subprocesses — is
+//! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
+//! type-checked at compile time rather than constructed with ad-hoc macros.
 
 use crate::types;
+
+/// A JSON task sent to a worker subprocess over stdin.
+///
+/// One task describes a single module group: the module file to import, the
+/// list of test items to run, the conftest files to load, and an optional
+/// per-test timeout.  The worker deserializes this from a single JSON line.
+#[derive(serde::Serialize)]
+pub(crate) struct WorkerTask<'a> {
+    pub module_path: &'a str,
+    pub items: Vec<WorkerTaskItem<'a>>,
+    pub conftest_paths: &'a [String],
+    pub timeout_secs: Option<u64>,
+}
+
+/// One test item within a [`WorkerTask`].
+#[derive(serde::Serialize)]
+pub(crate) struct WorkerTaskItem<'a> {
+    pub fn_name: &'a str,
+    pub param_id: Option<&'a str>,
+}
 
 #[derive(serde::Deserialize)]
 pub(crate) struct FrameEntry {
