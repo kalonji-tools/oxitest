@@ -1026,3 +1026,50 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir):
     assert "val" in result.message, (
         f"error message should mention fixture name 'val', got {result.message!r}"
     )
+
+
+# ── Async timeouts ───────────────────────────────────────────────────────────
+
+
+def test_async_test_timeout_mark_fires(tmp: TempDir):
+    f = tmp / "test_async_to.py"
+    f.write_text(
+        "import asyncio, oxitest\n"
+        "@oxitest.mark.timeout(seconds=1)\n"
+        "async def test_slow():\n"
+        "    await asyncio.sleep(10)\n"
+    )
+    result = run_test(str(f), "test_slow")
+    assert result.status == "timeout", (
+        f"@mark.timeout on slow async test should produce status='timeout', "
+        f"got {result.status!r}, msg={result.message!r}"
+    )
+    assert "1s" in result.message, (
+        f"timeout message should mention the limit '1s', got {result.message!r}"
+    )
+
+
+def test_async_test_default_timeout_fires(tmp: TempDir):
+    f = tmp / "test_async_dt.py"
+    f.write_text(
+        "import asyncio\nasync def test_slow():\n    await asyncio.sleep(10)\n"
+    )
+    result = run_test(str(f), "test_slow", default_timeout=1)
+    assert result.status == "timeout", (
+        f"default_timeout=1 should fire on slow async test, "
+        f"got status={result.status!r}, msg={result.message!r}"
+    )
+
+
+def test_async_test_timeout_passes_fast_test(tmp: TempDir):
+    f = tmp / "test_async_fast.py"
+    f.write_text(
+        "import oxitest\n"
+        "@oxitest.mark.timeout(seconds=5)\n"
+        "async def test_fast():\n"
+        "    pass\n"
+    )
+    result = run_test(str(f), "test_fast")
+    assert result.status == "passed", (
+        f"fast async test under timeout should pass, got {result.status!r}"
+    )
