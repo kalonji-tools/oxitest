@@ -81,7 +81,7 @@ impl FixtureSession {
             Ok(json) => json,
             Err(e) => {
                 tracing::warn!(error = %e, "failed to serialize plugin settings; plugins will receive empty config");
-                "{}".to_string()
+                "{}".to_owned()
             }
         };
         loader.call_method1("init_plugins", (plugin_list, settings_json))?;
