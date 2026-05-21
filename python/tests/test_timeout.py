@@ -6,9 +6,9 @@ import time
 import oxitest
 from oxitest import raises
 from oxitest._bridge._fixture_session import _NullFixtureSession
-from oxitest._bridge._marks import MarkInfo
+from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._mark_registry import _HandlerContext, _TimeoutHandler
 from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
-from oxitest._bridge.marks import _HandlerContext, _TimeoutHandler
 from oxitest._bridge.result import TestResult
 
 

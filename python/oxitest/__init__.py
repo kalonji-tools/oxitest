@@ -80,7 +80,7 @@ from oxitest._bridge._fixture_type import (
     Yields as Yields,
 )
 from oxitest._bridge._importorskip import importorskip as importorskip
-from oxitest._bridge._marks import (
+from oxitest._bridge._mark_api import (
     mark as mark,
     skip as skip,
 )

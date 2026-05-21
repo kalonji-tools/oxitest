@@ -4,14 +4,8 @@ import dataclasses
 
 import oxitest
 from oxitest import TempDir, parametrize
-from oxitest._bridge._marks import MarkInfo, _append_mark
-from oxitest._bridge.executor import run_test
-from oxitest._bridge.fixtures import (
-    FixtureDef,
-    FixtureRegistry,
-    FixtureSession,
-)
-from oxitest._bridge.marks import (
+from oxitest._bridge._mark_api import MarkInfo, _append_mark
+from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
     MarkEvalResult,
     MarkHandler,
@@ -21,6 +15,12 @@ from oxitest._bridge.marks import (
     _UsefixturesHandler,
     _XFailHandler,
     evaluate_marks,
+)
+from oxitest._bridge.executor import run_test
+from oxitest._bridge.fixtures import (
+    FixtureDef,
+    FixtureRegistry,
+    FixtureSession,
 )
 from oxitest._bridge.result import TestResult
 
@@ -289,7 +289,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
 def _make_ctx(fn=None):
     """Minimal _HandlerContext for mark tests."""
     from oxitest._bridge._fixture_session import _NullFixtureSession
-    from oxitest._bridge.marks import _HandlerContext
+    from oxitest._bridge._mark_registry import _HandlerContext
 
     if fn is None:
 
