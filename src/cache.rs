@@ -13,7 +13,7 @@ use std::time::Duration;
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::types::{NodeId, TestItem};
+use crate::types::{NodeId, OutcomeKind, TestItem};
 
 const CACHE_VERSION: u32 = 1;
 
@@ -22,7 +22,7 @@ struct CacheEntry {
     duration_ms: f64,
     age: u32,
     #[serde(default)]
-    last_outcome: Option<String>,
+    last_outcome: Option<OutcomeKind>,
 }
 
 /// Serialized representation of a single TestItem (module_path and node_id are derived).
@@ -228,7 +228,7 @@ impl TestCache {
     /// Update `last_outcome` for entries that appear in `outcomes`.
     /// Entries not in `outcomes` are unchanged.
     /// Sets dirty = true if any entry was updated.
-    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, String)]) {
+    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, OutcomeKind)]) {
         let mut changed = false;
         for (node_id, outcome) in outcomes {
             if let Some(entry) = self.inner.timings.get_mut(node_id.as_ref()) {
@@ -242,16 +242,16 @@ impl TestCache {
     }
 
     /// Returns node IDs whose last recorded outcome was a failure
-    /// ("failed", "error", or "timeout").
+    /// (failed, error, or timeout).
     pub fn last_failed_ids(&self) -> std::collections::HashSet<String> {
         self.inner
             .timings
             .iter()
             .filter(|(_, entry)| {
-                matches!(
-                    entry.last_outcome.as_deref(),
-                    Some("failed") | Some("error") | Some("timeout")
-                )
+                entry
+                    .last_outcome
+                    .as_ref()
+                    .is_some_and(OutcomeKind::is_failure)
             })
             .map(|(id, _)| id.clone())
             .collect()
@@ -743,12 +743,12 @@ mod tests {
         let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
         let outcomes = vec![(
             NodeId::from_raw("tests/test_foo.py::test_a"),
-            "failed".to_string(),
+            OutcomeKind::Failed,
         )];
         cache.record_outcomes(&outcomes);
         assert_eq!(
             cache.inner.timings["tests/test_foo.py::test_a"].last_outcome,
-            Some("failed".to_string())
+            Some(OutcomeKind::Failed)
         );
         assert!(cache.dirty);
     }
@@ -758,7 +758,7 @@ mod tests {
         let mut cache = TestCache::empty();
         let outcomes = vec![(
             NodeId::from_raw("tests/test_foo.py::test_unknown"),
-            "failed".to_string(),
+            OutcomeKind::Failed,
         )];
         cache.record_outcomes(&outcomes);
         assert!(cache.inner.timings.is_empty());
@@ -776,19 +776,19 @@ mod tests {
         let outcomes = vec![
             (
                 NodeId::from_raw("tests/test_foo.py::test_a"),
-                "failed".to_string(),
+                OutcomeKind::Failed,
             ),
             (
                 NodeId::from_raw("tests/test_foo.py::test_b"),
-                "passed".to_string(),
+                OutcomeKind::Passed,
             ),
             (
                 NodeId::from_raw("tests/test_foo.py::test_c"),
-                "error".to_string(),
+                OutcomeKind::Error,
             ),
             (
                 NodeId::from_raw("tests/test_foo.py::test_d"),
-                "timeout".to_string(),
+                OutcomeKind::Timeout,
             ),
         ];
         cache.record_outcomes(&outcomes);
@@ -810,7 +810,7 @@ mod tests {
         let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
         let outcomes = vec![(
             NodeId::from_raw("tests/test_foo.py::test_a"),
-            "passed".to_string(),
+            OutcomeKind::Passed,
         )];
         cache.record_outcomes(&outcomes);
         assert!(cache.dirty);

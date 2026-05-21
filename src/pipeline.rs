@@ -158,7 +158,7 @@ fn run_phase(
             timings.push(types::TestTiming {
                 node_id: item.node_id.clone(),
                 duration_ms,
-                outcome: outcome.as_str().to_string(),
+                outcome: types::OutcomeKind::from(&outcome),
             });
             rep.test_completed(item, &outcome, duration_ms);
             if acc.record(&outcome) {
@@ -475,7 +475,8 @@ fn finalize(
 ) {
     // Single pass: move node_id into outcome_pairs, clone once into timing_pairs.
     let mut timing_pairs: Vec<(types::NodeId, f64)> = Vec::with_capacity(timings.len());
-    let mut outcome_pairs: Vec<(types::NodeId, String)> = Vec::with_capacity(timings.len());
+    let mut outcome_pairs: Vec<(types::NodeId, types::OutcomeKind)> =
+        Vec::with_capacity(timings.len());
     for t in timings {
         outcome_pairs.push((t.node_id.clone(), t.outcome));
         timing_pairs.push((t.node_id, t.duration_ms));

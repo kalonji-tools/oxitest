@@ -163,13 +163,78 @@ pub enum CollectError {
     PyError(String),
 }
 
+/// Lightweight tag for the kind of test outcome — no payload, just the label.
+///
+/// Used in [`TestTiming`] and [`CacheEntry`](crate::cache) to avoid stringly-typed
+/// comparisons. The `#[serde(rename_all = "snake_case")]` attribute ensures round-trip
+/// compatibility with the JSON cache and worker protocol.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeKind {
+    Passed,
+    Failed,
+    Error,
+    Skipped,
+    Warned,
+    #[serde(rename = "xfailed")]
+    XFailed,
+    #[serde(rename = "xpassed")]
+    XPassed,
+    Timeout,
+    /// Catch-all for unrecognised outcome strings from workers.
+    #[serde(other)]
+    Unknown,
+}
+
+impl OutcomeKind {
+    /// True for outcomes that represent a definitive test failure.
+    pub fn is_failure(&self) -> bool {
+        matches!(self, Self::Failed | Self::Error | Self::Timeout)
+    }
+
+    /// Canonical lowercase status string matching [`TestOutcome::as_str()`].
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+            Self::Error => "error",
+            Self::Skipped => "skipped",
+            Self::Warned => "warned",
+            Self::XFailed => "xfailed",
+            Self::XPassed => "xpassed",
+            Self::Timeout => "timeout",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for OutcomeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl From<&TestOutcome> for OutcomeKind {
+    fn from(outcome: &TestOutcome) -> Self {
+        match outcome {
+            TestOutcome::Passed { .. } => Self::Passed,
+            TestOutcome::Failed { .. } => Self::Failed,
+            TestOutcome::Error { .. } => Self::Error,
+            TestOutcome::Skipped { .. } => Self::Skipped,
+            TestOutcome::Warned { .. } => Self::Warned,
+            TestOutcome::XFailed { .. } => Self::XFailed,
+            TestOutcome::XPassed { .. } => Self::XPassed,
+            TestOutcome::Timeout { .. } => Self::Timeout,
+        }
+    }
+}
+
 /// Result record for a single test execution, returned from the run phases.
-/// `outcome` is one of the canonical strings returned by `TestOutcome::as_str()`.
 #[derive(Debug, Clone)]
 pub struct TestTiming {
     pub node_id: NodeId,
     pub duration_ms: f64,
-    pub outcome: String,
+    pub outcome: OutcomeKind,
 }
 
 /// Tracks hard failures and determines when to stop (maxfail).
@@ -819,24 +884,21 @@ mod tests {
         let t = TestTiming {
             node_id: NodeId::from_raw("tests/test_foo.py::test_a"),
             duration_ms: 42.5,
-            outcome: "passed".to_string(),
+            outcome: OutcomeKind::Passed,
         };
-        assert_eq!(t.outcome, "passed");
+        assert_eq!(t.outcome, OutcomeKind::Passed);
         assert!((t.duration_ms - 42.5).abs() < 0.01);
         assert_eq!(t.node_id.to_string(), "tests/test_foo.py::test_a");
     }
 
     #[test]
-    fn test_timing_outcome_is_owned_string() {
-        // Construct outcome from a runtime String (not a &'static str)
-        // to verify the field is truly owned.
-        let runtime_outcome = format!("{}", "passed");
+    fn test_timing_outcome_is_enum() {
         let timing = TestTiming {
             node_id: NodeId::from_raw("test_mod::test_fn"),
             duration_ms: 42.0,
-            outcome: runtime_outcome,
+            outcome: OutcomeKind::Passed,
         };
-        assert_eq!(timing.outcome, "passed");
+        assert_eq!(timing.outcome, OutcomeKind::Passed);
     }
 
     fn raw(status: &str) -> RawOutcome<'_> {

@@ -336,7 +336,7 @@ fn handle_worker_result(
     timings.push(types::TestTiming {
         node_id,
         duration_ms: result.duration_ms,
-        outcome: outcome.as_str().to_string(),
+        outcome: types::OutcomeKind::from(&outcome),
     });
     Some(outcome)
 }
@@ -656,7 +656,11 @@ mod worker_count_tests {
             "tests/test_foo.py::test_slow".to_string(),
             std::time::Duration::from_secs(30),
         );
-        assert_eq!(r.outcome, "error", "timed_out must produce outcome='error'");
+        assert_eq!(
+            r.outcome,
+            types::OutcomeKind::Error,
+            "timed_out must produce outcome=Error"
+        );
         assert_eq!(r.node_id, "tests/test_foo.py::test_slow");
         let msg = r.message.as_deref().unwrap_or("");
         assert!(
@@ -668,7 +672,11 @@ mod worker_count_tests {
     #[test]
     fn worker_result_crashed_has_error_outcome_and_preserves_node_id() {
         let r = WorkerResult::crashed("tests/test_foo.py::test_gone".to_string());
-        assert_eq!(r.outcome, "error", "crashed must produce outcome='error'");
+        assert_eq!(
+            r.outcome,
+            types::OutcomeKind::Error,
+            "crashed must produce outcome=Error"
+        );
         assert_eq!(r.node_id, "tests/test_foo.py::test_gone");
         assert!(
             r.message.is_some(),
