@@ -346,6 +346,16 @@ def _build_execution_chain(
     _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
     no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
 
+    # Determine the effective timeout for async tests.
+    # Sync tests use the sync timeout wrapper (unchanged).
+    _timeout_secs: int | None = None
+    for m in marks:
+        if m.name == "timeout":
+            _timeout_secs = int(m.kwargs["seconds"])  # type: ignore[arg-type]
+            break
+    if _timeout_secs is None and default_timeout is not None:
+        _timeout_secs = default_timeout
+
     # Reject async fixture values in sync tests
     if not inspect.iscoroutinefunction(fn):
         for k, v in all_kwargs.items():
@@ -388,6 +398,16 @@ def _build_execution_chain(
                 else:
                     resolved[k] = v
             try:
+                if _timeout_secs is not None:
+                    import asyncio
+
+                    try:
+                        return await asyncio.wait_for(
+                            _run_base_async(fn, resolved, no_message_lines),
+                            timeout=_timeout_secs,
+                        )
+                    except TimeoutError:
+                        raise OxitestTimeoutError() from None
                 return await _run_base_async(fn, resolved, no_message_lines)
             finally:
                 for name, gen in reversed(async_teardowns):
