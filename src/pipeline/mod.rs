@@ -177,7 +177,7 @@ fn run_phase(
                 ctx.cfg.timeout_multiplier,
             );
             let outcome = ctx.runner.run_test(py, item, ctx.session, timeout);
-            let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+            let duration_ms = types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
             timings.push(types::TestTiming {
                 node_id: item.node_id.clone(),
                 duration_ms,
@@ -424,7 +424,7 @@ fn execute(
         {
             let outcome = strict::per_test_error(v);
             rep.test_started(item);
-            rep.test_completed(item, &outcome, 0.0);
+            rep.test_completed(item, &outcome, types::DurationMs::ZERO);
         }
     }
 
@@ -507,7 +507,7 @@ fn finalize(
         Vec::with_capacity(timings.len());
     for t in timings {
         outcome_pairs.push((t.node_id.clone(), t.outcome));
-        timing_pairs.push((t.node_id, t.duration_ms));
+        timing_pairs.push((t.node_id, t.duration_ms.as_f64()));
     }
 
     cache.merge(&timing_pairs, cache_max_age);

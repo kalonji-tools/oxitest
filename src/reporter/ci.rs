@@ -1,4 +1,4 @@
-use crate::types::{CollectError, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{color_dim, color_error_token, color_fail};
 use super::format::{case_sep, fmt_diagnostic_block};
@@ -108,7 +108,7 @@ impl StandardReporter for CiReporter {
 impl Reporter for CiReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: f64) {
+    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
         self.dot_buf.push(outcome.dot_char());
         match outcome {
             TestOutcome::Failed { .. }
@@ -155,9 +155,9 @@ mod tests {
             no_message_lines: vec![],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, 0.1);
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, 0.1);
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
         assert_eq!(reporter.dot_buf, "..");
     }
 
@@ -169,7 +169,7 @@ mod tests {
             no_message_lines: vec![5],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, 0.1);
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
         assert_eq!(reporter.dot_buf, "\u{00B7}");
     }
 
@@ -179,7 +179,7 @@ mod tests {
         let item = make_item("test_a");
         let outcome = make_failed("oops", "t.py", 1, "assert x");
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, 1.0);
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert_eq!(reporter.dot_buf, "F");
         assert_eq!(reporter.stats.failed, 1);
     }
@@ -193,7 +193,7 @@ mod tests {
             &TestOutcome::Skipped {
                 reason: "reason".to_string(),
             },
-            0.0,
+            DurationMs::ZERO,
         );
         assert_eq!(reporter.dot_buf, "s");
     }
@@ -203,7 +203,7 @@ mod tests {
         let mut reporter = make_ci_reporter(TbStyle::Short);
         let item = make_item("test_a");
         let outcome = make_error("AttributeError: x", "t.py", 5, "obj.x");
-        reporter.test_completed(&item, &outcome, 0.0);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(reporter.dot_buf, "E");
     }
 
@@ -221,7 +221,7 @@ mod tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            0.0,
+            DurationMs::ZERO,
         );
         assert_eq!(reporter.finish(&[], false).code(), 0);
     }
@@ -235,7 +235,11 @@ mod tests {
                 .build(),
         );
         let item = make_item("test_a");
-        reporter.test_completed(&item, &make_failed("x", "f.py", 1, "assert"), 0.0);
+        reporter.test_completed(
+            &item,
+            &make_failed("x", "f.py", 1, "assert"),
+            DurationMs::ZERO,
+        );
         assert_eq!(reporter.finish(&[], false).code(), 1);
     }
 
@@ -248,7 +252,11 @@ mod tests {
                 .build(),
         );
         let item = make_item("test_a");
-        reporter.test_completed(&item, &make_failed("x", "f.py", 1, "assert"), 0.0);
+        reporter.test_completed(
+            &item,
+            &make_failed("x", "f.py", 1, "assert"),
+            DurationMs::ZERO,
+        );
         assert_eq!(reporter.finish(&[], true).code(), 2);
     }
 
@@ -261,7 +269,7 @@ mod tests {
             &TestOutcome::XFailed {
                 reason: "known bug".to_string(),
             },
-            0.0,
+            DurationMs::ZERO,
         );
         assert_eq!(reporter.dot_buf, "x");
         assert_eq!(reporter.stats.xfailed, 1);
@@ -271,7 +279,11 @@ mod tests {
     fn test_ci_reporter_xpassed_shows_capital_x() {
         let mut reporter = make_ci_reporter(TbStyle::Short);
         let item = make_item("test_a");
-        reporter.test_completed(&item, &TestOutcome::XPassed { strict: true }, 0.0);
+        reporter.test_completed(
+            &item,
+            &TestOutcome::XPassed { strict: true },
+            DurationMs::ZERO,
+        );
         assert_eq!(reporter.dot_buf, "X");
         assert_eq!(reporter.stats.xpassed, 1);
         assert_eq!(reporter.stats.xpassed_strict, 1);
@@ -281,7 +293,11 @@ mod tests {
     fn test_ci_reporter_xpassed_lenient_increments_xpassed_not_strict() {
         let mut reporter = make_ci_reporter(TbStyle::Short);
         let item = make_item("test_a");
-        reporter.test_completed(&item, &TestOutcome::XPassed { strict: false }, 0.0);
+        reporter.test_completed(
+            &item,
+            &TestOutcome::XPassed { strict: false },
+            DurationMs::ZERO,
+        );
         assert_eq!(reporter.dot_buf, "X");
         assert_eq!(reporter.stats.xpassed, 1);
         assert_eq!(reporter.stats.xpassed_strict, 0);
@@ -313,7 +329,7 @@ mod tests {
             is_async: false,
         };
         let outcome = make_failed("", "tests/test_foo.py", 5, "assert x > 0");
-        reporter.test_completed(&item, &outcome, 1.0);
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert_eq!(reporter.dot_buf, "F");
         assert_eq!(reporter.deferred_diags.len(), 1);
         assert!(
@@ -331,7 +347,7 @@ mod tests {
         let mut reporter = make_ci_reporter(TbStyle::Line);
         let item = make_item("test_bar");
         let outcome = make_failed("values differ", "test_foo.py", 5, "assert x == y");
-        reporter.test_completed(&item, &outcome, 10.0);
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];
         assert!(line.contains("FAILED"), "must contain FAILED label");
@@ -348,7 +364,7 @@ mod tests {
         let mut reporter = make_ci_reporter(TbStyle::Line);
         let item = make_item("test_deep");
         let outcome = make_error("ValueError: something broke", "test_foo.py", 10, "obj.x");
-        reporter.test_completed(&item, &outcome, 5.0);
+        reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];
         assert!(line.contains("ERROR"), "must contain ERROR label");
