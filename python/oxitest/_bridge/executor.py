@@ -191,6 +191,39 @@ def _run_base(
         raise
 
 
+async def _run_base_async(
+    fn: Callable[..., Any],
+    all_kwargs: dict[str, Any],
+    no_message_lines: list[int],
+) -> TestResult:
+    """Run an async test function and map exceptions to TestResult."""
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            await fn(**all_kwargs)
+        caught: list[str] = [
+            f"{wi.category.__name__}: {wi.message}"
+            for wi in w
+            if not issubclass(wi.category, FixtureTeardownWarning)
+        ]
+        if caught:
+            return TestResult(
+                status="warned",
+                message="\n".join(str(c) for c in caught),
+                no_message_lines=no_message_lines,
+            )
+        return TestResult(status="passed", no_message_lines=no_message_lines)
+    except OxitestTimeoutError:
+        raise  # propagate to timeout wrapper
+    except AssertionError as exc:
+        return _handle_assertion_error(exc)
+    except BaseException as exc:
+        result = _handle_runtime_exception(exc)
+        if result is not None:
+            return result
+        raise
+
+
 class _ResolveError(Exception):
     """Internal: wraps an early-return TestResult from resolution failures."""
 
@@ -314,8 +347,27 @@ def _build_execution_chain(
     no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
 
     # Compose wrappers: last appended = outermost
-    def _base() -> TestResult:
-        return _run_base(fn, all_kwargs, no_message_lines)
+    if inspect.iscoroutinefunction(fn):
+        from oxitest._bridge._async_backend import get_async_backend
+
+        backend = get_async_backend()
+
+        async def _async_core() -> TestResult:
+            # Await any async fixture coroutines in kwargs
+            resolved: dict[str, Any] = {}
+            for k, v in all_kwargs.items():
+                if inspect.iscoroutine(v):
+                    resolved[k] = await v
+                else:
+                    resolved[k] = v
+            return await _run_base_async(fn, resolved, no_message_lines)
+
+        def _base() -> TestResult:
+            return backend.run(_async_core())
+    else:
+
+        def _base() -> TestResult:
+            return _run_base(fn, all_kwargs, no_message_lines)
 
     execute: Callable[[], TestResult] = _base
     for wrapper in reversed(wrappers):
