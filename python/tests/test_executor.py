@@ -1249,3 +1249,35 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir):
     assert log == ["setup", "teardown"], (
         f"teardown should run at end_session, got {log!r}"
     )
+
+
+def test_non_shared_async_test_gets_own_loop(tmp: TempDir):
+    """Async test not using shared fixtures gets per-test asyncio.run(), even
+    when the session has a shared async loop from another test."""
+    f = tmp / "test_isolation.py"
+    f.write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture\n"
+        "async def test_shared(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 42\n"
+        "async def test_independent() -> None:\n"
+        "    loop = asyncio.get_running_loop()\n"
+        "    assert loop is not None\n"
+    )
+
+    async def async_pool_factory():
+        return 42
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            "pool", async_pool_factory, False, None, "/c.py", shared=True, is_async=True
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    r1 = run_test(str(f), "test_shared", session)
+    r2 = run_test(str(f), "test_independent", session)
+    assert r1.status == "passed", f"test_shared: {r1.status!r}, {r1.message!r}"
+    assert r2.status == "passed", f"test_independent: {r2.status!r}, {r2.message!r}"
+    session.end_session()
