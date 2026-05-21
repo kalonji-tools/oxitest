@@ -67,6 +67,26 @@ class OxitestTimeoutError(ExecutionError):
     """Raised inside a test when its deadline fires."""
 
 
+class BackendNotFoundError(OxitestError):
+    """Raised when the configured async backend name matches no provider."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"async backend '{name}' not found \u2014 is the plugin installed?"
+        )
+        self.backend_name = name
+
+
+class ConflictingBackendError(OxitestError):
+    """Raised when multiple plugins provide the same backend name."""
+
+    def __init__(self, name: str, providers: list[str]) -> None:
+        joined = ", ".join(providers)
+        super().__init__(f"multiple plugins provide async backend '{name}': {joined}")
+        self.backend_name = name
+        self.providers = providers
+
+
 # ─── Parametrize / loading errors ─────────────────────────────────────────────
 
 
