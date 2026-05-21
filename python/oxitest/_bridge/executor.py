@@ -56,7 +56,12 @@ def _repr_safe(value: object) -> str:
 
 
 def _find_bare_asserts(fn: object) -> list[int]:
-    """Return absolute file line numbers of assert statements with no message."""
+    """Fallback bare-assert detection for modules loaded without the AST rewriter.
+
+    Normally _oxitest_bare_asserts is populated by ast_rewriter.py during module
+    import. This function re-parses the function source at runtime when that
+    attribute is missing (e.g., module imported outside _load_module).
+    """
     try:
         source_lines, start_line = inspect.getsourcelines(cast(Any, fn))
         source = textwrap.dedent("".join(source_lines))
@@ -261,6 +266,9 @@ def run_test(
                     break  # one match per wrapper per test
 
         # Base execution: run fn and map exceptions to TestResult
+        # _oxitest_bare_asserts is set by ast_rewriter.py during module import.
+        # Falls back to _find_bare_asserts (runtime AST parse) if the module was
+        # loaded without rewriting.
         _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
         _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
         no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
