@@ -18,18 +18,15 @@ fn fmt_quiet_line(symbol: String, body: String) -> String {
 
 fn outcome_label(outcome: &TestOutcome, use_color: bool) -> String {
     let text = outcome.label();
-    if text.is_empty() {
-        return String::new();
-    }
     let c = use_color;
     match outcome {
+        TestOutcome::Passed { .. } => String::new(),
         TestOutcome::Failed { .. } | TestOutcome::XPassed { strict: true } => color_fail(text, c),
         TestOutcome::Error { .. } => color_error_token(text, c),
         TestOutcome::Skipped { .. } => color_skip(text, c),
         TestOutcome::Warned { .. } | TestOutcome::XPassed { strict: false } => color_warn(text, c),
         TestOutcome::XFailed { .. } => color_dim(text, c),
         TestOutcome::Timeout { .. } => color_timeout(text, c),
-        _ => unreachable!(),
     }
 }
 
