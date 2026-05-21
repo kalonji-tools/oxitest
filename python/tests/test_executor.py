@@ -1073,3 +1073,30 @@ def test_async_test_timeout_passes_fast_test(tmp: TempDir):
     assert result.status == "passed", (
         f"fast async test under timeout should pass, got {result.status!r}"
     )
+
+
+def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
+    """Async yield fixture teardown must run even when test times out."""
+    f = tmp / "test_async_td_timeout.py"
+    f.write_text(
+        "import asyncio, oxitest\n"
+        "from oxitest import Fixture\n"
+        "@oxitest.mark.timeout(seconds=1)\n"
+        "async def test_slow(val: Fixture[int]) -> None:\n"
+        "    await asyncio.sleep(10)\n"
+    )
+    torn_down: list[bool] = []
+
+    async def async_yield_factory():
+        yield 42
+        torn_down.append(True)
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_slow", session)
+    assert result.status == "timeout", (
+        f"test should timeout, got status={result.status!r}"
+    )
+    assert torn_down == [True], (
+        f"async yield fixture teardown should run on timeout, got {torn_down!r}"
+    )

@@ -351,7 +351,7 @@ def _build_execution_chain(
     _timeout_secs: int | None = None
     for m in marks:
         if m.name == "timeout":
-            _timeout_secs = int(m.kwargs["seconds"])  # type: ignore[arg-type]
+            _timeout_secs = int(m.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
             break
     if _timeout_secs is None and default_timeout is not None:
         _timeout_secs = default_timeout
