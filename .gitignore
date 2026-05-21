@@ -16,3 +16,6 @@ docs/site/
 .pytest_cache/
 .ruff_cache/
 result
+bench/generated/
+bench/results.json
+bench/results_*.json
