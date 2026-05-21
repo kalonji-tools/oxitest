@@ -49,6 +49,14 @@ docs:
 docs-serve:
     mkdocs serve --dev-addr localhost:8000
 
+# Run hyperfine benchmarks across all tiers
+bench:
+    bash bench/run.sh
+
+# Print speedup summary against bench/baseline.json
+bench-compare:
+    python bench/compare.py
+
 # Remove build artifacts
 clean:
     cargo clean
