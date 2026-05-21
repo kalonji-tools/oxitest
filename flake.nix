@@ -50,6 +50,9 @@
 
             # Benchmarking
             hyperfine
+
+            # Release tooling
+            git-cliff
           ];
 
           env = {
