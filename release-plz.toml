@@ -1,3 +1,0 @@
-[workspace]
-publish = false
-semver_check = false
