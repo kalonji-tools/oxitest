@@ -30,8 +30,7 @@ ignore = ["B009", "B010"]  # getattr/setattr used intentionally for ty compatibi
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201"]
 "python/tests/*" = ["T201", "B011", "B017", "B018", "B028"]
 "scripts/*" = ["T201"]
-"bench/compare.py" = ["T201"]
-"bench/test_compare.py" = ["E501"]
+"bench/*.py" = ["T201", "E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
