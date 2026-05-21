@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from oxitest import Fixture, TempDir, parametrize, raises
-from oxitest._bridge.conftest_loader import create_session
+from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
 from oxitest._bridge.executor import run_test as executor_run_test
 from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
 from oxitest._bridge.importer import collect_module
@@ -698,12 +698,12 @@ def test_parametrize_rejects_invalid_case_type():
 def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
     tmp: TempDir,
 ):
-    """FixtureRef function with _oxitest_namespace uses namespace-qualified lookup.
+    """FixtureRef function with FixtureDef.namespace uses namespace-qualified lookup.
 
     Two namespaces 'db' and 'http' both define a fixture named 'conn'.  'http'
     is registered after 'db', so flat lookup would return the http version.
-    The FixtureRef holds the db-namespace function (which carries
-    _oxitest_namespace = "db"), so the result must be the db value.
+    The FixtureRef holds the db-namespace function, whose FixtureDef.namespace
+    is "db", so the result must be the db value.
     """
     conftest = tmp / "conftest.py"
     conftest.write_text(
@@ -719,9 +719,9 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "def conn():  # same name, different namespace\n"
         "    return 'http-conn'\n"
     )
-    # Test file imports the db-namespace conn from conftest (carries
-    # _oxitest_namespace="db") and uses it as a FixtureRef.  Without
-    # namespace-aware lookup the flat registry returns the http version
+    # Test file imports the db-namespace conn from conftest. The registry
+    # resolves the namespace via FixtureDef.namespace (matched by func identity).
+    # Without namespace-aware lookup the flat registry returns the http version
     # (last registered wins).
     f = tmp / "test_ns.py"
     f.write_text(
@@ -752,11 +752,11 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
 
 
 def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
-    """FixtureRef function without _oxitest_namespace falls back to flat _get_fixture.
+    """FixtureRef function without a namespace falls back to flat get_fixture.
 
-    The fixture function has no _oxitest_namespace attribute (not loaded via the
-    conftest loader), so executor must fall back to the legacy flat _get_fixture
-    call — no regression from the pre-namespace behaviour.
+    The fixture function is not registered in the session's registry (defined
+    locally in the test file), so the registry returns no namespace and the
+    executor falls back to the flat get_fixture call.
     """
     conftest = tmp / "conftest.py"
     conftest.write_text(
@@ -768,7 +768,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
         "    return 'flat-pg'\n"
     )
     # The test file defines a local stub (NOT imported from conftest) so it will
-    # NOT have _oxitest_namespace stamped.  The flat lookup must still resolve it.
+    # NOT be in the session registry.  The flat lookup must still resolve it.
     f = tmp / "test_flat.py"
     f.write_text(
         "from __future__ import annotations\n"
@@ -780,7 +780,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
         "\n"
         "@_fixtures.fixture\n"
         "def pg_db(): return 'flat-pg'\n"
-        "# pg_db defined locally: no _oxitest_namespace attribute\n"
+        "# pg_db defined locally: not in conftest registry\n"
         "\n"
         "@dataclass(frozen=True)\n"
         "class DbCase:\n"
@@ -911,8 +911,13 @@ def test_build_dataclass_cases_rejects_mixed_types():
 
 
 def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
-    """FixtureRef with _oxitest_namespace and session=None returns error with
-    namespace in message."""
+    """FixtureRef with namespace and session=None returns error.
+
+    When no session is available (session=None), the executor uses a
+    _NullFixtureSession which has no registry. Loading the conftest via
+    create_session provides the registry and namespace. Without it, the
+    fixture resolution fails.
+    """
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -922,6 +927,8 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
         "def conn():\n"
         "    return 'db-conn'\n"
     )
+    # Load conftest so sys.modules["conftest"] has db available for import
+    load_fixtures_from_conftest(str(conftest))
     f = tmp / "test_ns_err.py"
     f.write_text(
         "from __future__ import annotations\n"
@@ -949,8 +956,8 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
         f"FixtureRef with namespace and session=None should produce status='error', "
         f"got {result.status!r}"
     )
-    assert "db" in result.message, (
-        f"error message should mention namespace 'db', got {result.message!r}"
+    assert "conn" in result.message, (
+        f"error message should mention fixture name 'conn', got {result.message!r}"
     )
 
 

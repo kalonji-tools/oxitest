@@ -207,7 +207,9 @@ def run_test(
             fixture_name = _get_fixture_name(
                 fixture_fn, fallback=getattr(fixture_fn, "__name__", "")
             )
-            namespace = getattr(fixture_fn, "_oxitest_namespace", None)
+            namespace = effective_session.get_namespace_for_func(
+                fixture_name, fixture_fn
+            )
             if namespace:
                 param_kwargs[field_name] = effective_session.get_fixture_in_namespace(
                     fixture_name, namespace, module_path, fn_teardowns

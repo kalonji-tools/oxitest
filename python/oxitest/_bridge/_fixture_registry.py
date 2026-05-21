@@ -50,6 +50,21 @@ class FixtureRegistry:
                 return defn
         return None
 
+    def get_namespace_for_func(self, name: str, func: Callable[..., Any]) -> str | None:
+        """Return the namespace of the FixtureDef whose func is *func*, or None.
+
+        Also handles FixtureAccessor objects by unwrapping via ``_fa_func``.
+        """
+        defs = self._defs.get(name)
+        if not defs:
+            return None
+        # Unwrap FixtureAccessor (duck-typed to avoid circular import)
+        raw = getattr(func, "_fa_func", func)
+        for defn in defs:
+            if defn.func is raw:
+                return defn.namespace or None
+        return None
+
     def has_namespace(self, namespace: str) -> bool:
         """Return True if any registered fixture belongs to the given namespace."""
         return namespace in self._namespaces
