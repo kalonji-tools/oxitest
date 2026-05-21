@@ -500,6 +500,7 @@ mod tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         };
         let outcome = TestOutcome::Failed {
             message: "assert failed".to_string(),
@@ -548,6 +549,7 @@ mod tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         };
         let outcome = TestOutcome::Failed {
             message: "oops".to_string(),

@@ -172,6 +172,7 @@ mod tests {
             markers: markers.into_iter().map(|s| s.to_string()).collect(),
             param_id: None,
             param_values: vec![],
+            is_async: false,
         }
     }
 
