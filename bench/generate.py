@@ -88,7 +88,9 @@ def _oxitest_file(file_idx: int, test_offset: int) -> str:
             f"c{c}=Case{idx}(value={c})" for c in range(PARAMETRIZE_CASES)
         )
         lines.append(f"@oxi.parametrize({cases})")
-        lines.append(f"def test_param_{idx}(value: int, data: oxi.Fixture[dict]) -> None:")
+        lines.append(
+            f"def test_param_{idx}(value: int, data: oxi.Fixture[dict]) -> None:"
+        )
         lines.append(f"    data['k{idx}'] = value")
         lines.append(f"    assert data['k{idx}'] == value, ''")
         idx += 1
