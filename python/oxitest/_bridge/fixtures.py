@@ -14,7 +14,6 @@ __all__ = [
     "_fixture_ref_inner_type",
     "_Node",
     "_Scope",
-    "MarkInfo",
 ]
 
 from collections.abc import Callable
@@ -47,12 +46,6 @@ from oxitest._bridge._fixture_session import (
     _teardown_local,
     _TestContext as _TestContext,
     _warn_teardown as _warn_teardown,
-)
-from oxitest._bridge._marks import (  # noqa: F401
-    MarkInfo as MarkInfo,
-    _append_mark as _append_mark,  # type: ignore[reportPrivateUsage]
-    mark as mark,
-    skip as skip,
 )
 
 _F = TypeVar("_F", bound=Callable[..., Any])
