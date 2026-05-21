@@ -41,7 +41,7 @@ pub(crate) struct FrameEntry {
 #[derive(serde::Deserialize)]
 pub(crate) struct WorkerResult {
     pub node_id: String,
-    pub outcome: String,
+    pub outcome: types::OutcomeKind,
     pub duration_ms: f64,
     #[serde(default)]
     pub failure_repr: Option<String>,
@@ -74,24 +74,17 @@ impl WorkerResult {
         // failure_repr.  For failed/error, use message only — failure_repr is a
         // legacy fallback that predates structured diagnostic fields; using it as
         // a message masks the left/right/op display in the reporter.
-        let message: String = match self.outcome.as_str() {
-            "skipped" | "xfailed" | "timeout" | "warned" => {
+        let message: String = match self.outcome {
+            types::OutcomeKind::Skipped
+            | types::OutcomeKind::XFailed
+            | types::OutcomeKind::Timeout
+            | types::OutcomeKind::Warned => {
                 self.failure_repr.as_deref().unwrap_or_default().to_owned()
             }
             _ => self.message.as_deref().unwrap_or_default().to_owned(),
         };
 
-        if !matches!(
-            self.outcome.as_str(),
-            "passed"
-                | "failed"
-                | "error"
-                | "skipped"
-                | "warned"
-                | "xfailed"
-                | "xpassed"
-                | "timeout"
-        ) {
+        if self.outcome == types::OutcomeKind::Unknown {
             tracing::warn!(
                 outcome = %self.outcome,
                 "Unknown outcome string from worker — treating as error"
@@ -120,7 +113,7 @@ impl WorkerResult {
             .collect();
 
         types::TestOutcome::from_raw(types::RawOutcome {
-            status: &self.outcome,
+            status: self.outcome.as_str(),
             message: &message,
             file: self.file.as_deref().unwrap_or_default(),
             lineno: self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)),
@@ -140,7 +133,7 @@ impl WorkerResult {
     pub(crate) fn error_sentinel(node_id: String, message: String, duration_ms: f64) -> Self {
         WorkerResult {
             node_id,
-            outcome: "error".to_string(),
+            outcome: types::OutcomeKind::Error,
             duration_ms,
             failure_repr: Some(message.clone()),
             message: Some(message),
