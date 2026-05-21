@@ -1100,3 +1100,77 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
     assert torn_down == [True], (
         f"async yield fixture teardown should run on timeout, got {torn_down!r}"
     )
+
+
+# ── Shared async fixtures ────────────────────────────────────────────────────
+
+
+def test_shared_async_fixture_provides_value(tmp: TempDir):
+    f = tmp / "test_shared_async.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_pool(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 99\n"
+    )
+
+    async def async_pool_factory():
+        return 99
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            "pool",
+            async_pool_factory,
+            False,
+            None,
+            "/c.py",
+            shared=True,
+            is_async=True,
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_pool", session)
+    assert result.status == "passed", (
+        f"shared async fixture should provide value, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_shared_async_fixture_cached_across_tests(tmp: TempDir):
+    f = tmp / "test_shared_cached.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_a(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 1\n"
+        "async def test_b(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 1\n"
+    )
+    call_count = 0
+
+    async def async_pool_factory():
+        nonlocal call_count
+        call_count += 1
+        return call_count
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            "pool",
+            async_pool_factory,
+            False,
+            None,
+            "/c.py",
+            shared=True,
+            is_async=True,
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    r1 = run_test(str(f), "test_a", session)
+    r2 = run_test(str(f), "test_b", session)
+    assert r1.status == "passed", f"test_a: {r1.status!r}, {r1.message!r}"
+    assert r2.status == "passed", f"test_b: {r2.status!r}, {r2.message!r}"
+    assert call_count == 1, (
+        f"shared fixture factory should be called exactly once, got {call_count}"
+    )
