@@ -2,7 +2,7 @@ use camino::Utf8PathBuf;
 
 use serde::Serialize;
 
-use crate::types::{CollectError, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 use super::Reporter;
 
@@ -99,11 +99,11 @@ impl JsonReporter {
 impl Reporter for JsonReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: f64) {
+    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
         self.tests.push(CtrfTest {
             name: item.node_id.to_string(),
             status: outcome_status(outcome),
-            duration: duration_ms,
+            duration: duration_ms.as_f64(),
             message: outcome_message(outcome),
         });
     }
@@ -150,7 +150,7 @@ mod tests {
         let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
         let mut rep = JsonReporter::new(path.clone());
         for (item, outcome) in outcomes {
-            rep.test_completed(&item, &outcome, 1.0);
+            rep.test_completed(&item, &outcome, DurationMs::new(1.0));
         }
         rep.finish(&[], false);
         std::fs::read_to_string(&path).unwrap()
@@ -242,7 +242,7 @@ mod tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         let vote = rep.finish(&[], false);
         assert_eq!(
@@ -262,7 +262,7 @@ mod tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         let vote = rep.finish(&[], false);
         assert!(

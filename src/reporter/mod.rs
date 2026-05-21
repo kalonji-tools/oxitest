@@ -8,7 +8,7 @@
 
 use std::io::{self, Write};
 
-use crate::types::CollectError;
+use crate::types::{CollectError, DurationMs};
 
 mod ci;
 mod colors;
@@ -39,7 +39,11 @@ pub(crate) use format::sep_width;
 /// Buffers results for a single parametrized function group.
 pub(crate) struct ParametrizeBuffer {
     pub fn_name: String,
-    pub results: Vec<(crate::types::TestItem, crate::types::TestOutcome, f64)>,
+    pub results: Vec<(
+        crate::types::TestItem,
+        crate::types::TestOutcome,
+        DurationMs,
+    )>,
 }
 
 impl ParametrizeBuffer {
@@ -54,13 +58,15 @@ impl ParametrizeBuffer {
         &mut self,
         item: crate::types::TestItem,
         outcome: crate::types::TestOutcome,
-        ms: f64,
+        ms: DurationMs,
     ) {
         self.results.push((item, outcome, ms));
     }
 
-    pub fn total_ms(&self) -> f64 {
-        self.results.iter().map(|(_, _, ms)| ms).sum()
+    pub fn total_ms(&self) -> DurationMs {
+        self.results
+            .iter()
+            .fold(DurationMs::ZERO, |acc, (_, _, ms)| acc + *ms)
     }
 
     pub fn any_failed(&self) -> bool {
@@ -105,7 +111,7 @@ pub trait Reporter {
         &mut self,
         item: &crate::types::TestItem,
         outcome: &crate::types::TestOutcome,
-        duration_ms: f64,
+        duration_ms: DurationMs,
     );
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> ExitVote;
 
@@ -139,7 +145,7 @@ impl Reporter for CompositeReporter {
         &mut self,
         item: &crate::types::TestItem,
         outcome: &crate::types::TestOutcome,
-        duration_ms: f64,
+        duration_ms: DurationMs,
     ) {
         for r in &mut self.reporters {
             r.test_completed(item, outcome, duration_ms);
@@ -231,7 +237,7 @@ mod json_tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            12.5,
+            DurationMs::new(12.5),
         );
         rep.finish(&[], false);
 
@@ -271,7 +277,7 @@ mod json_tests {
                 op: "==".to_string(),
                 frames: vec![],
             },
-            8.0,
+            DurationMs::new(8.0),
         );
         rep.finish(&[], false);
 
@@ -299,7 +305,7 @@ mod json_tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            5.0,
+            DurationMs::new(5.0),
         );
         rep.test_started(&a);
         rep.test_completed(
@@ -307,7 +313,7 @@ mod json_tests {
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            5.0,
+            DurationMs::new(5.0),
         );
         rep.finish(&[], false);
 
@@ -458,8 +464,8 @@ mod tests {
     fn test_slowest_block_included_when_show_durations_set() {
         use crate::reporter::stats::RunStats;
         let mut stats = RunStats::new();
-        stats.record_timing("tests/test_foo.py::test_slow", 500.0);
-        stats.record_timing("tests/test_foo.py::test_fast", 10.0);
+        stats.record_timing("tests/test_foo.py::test_slow", DurationMs::new(500.0));
+        stats.record_timing("tests/test_foo.py::test_fast", DurationMs::new(10.0));
         let slowest = stats.slowest(1);
         assert_eq!(slowest.len(), 1);
         assert_eq!(slowest[0].0, "tests/test_foo.py::test_slow");
@@ -535,17 +541,17 @@ mod tests {
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            10.0,
+            DurationMs::new(10.0),
         );
         buf.push(
             make_item("test_add"),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            25.5,
+            DurationMs::new(25.5),
         );
         assert!(
-            (buf.total_ms() - 35.5).abs() < 0.001,
+            (buf.total_ms().as_f64() - 35.5).abs() < 0.001,
             "total_ms should sum all durations, got {}",
             buf.total_ms()
         );
@@ -562,12 +568,12 @@ mod tests {
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         buf.push(
             make_item("test_add"),
             make_failed("oops", "t.py", 1, "assert x"),
-            1.0,
+            DurationMs::new(1.0),
         );
         assert!(
             buf.any_failed(),
@@ -586,14 +592,14 @@ mod tests {
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         buf.push(
             make_item("test_add"),
             TestOutcome::Skipped {
                 reason: "not ready".to_string(),
             },
-            0.0,
+            DurationMs::ZERO,
         );
         assert!(
             !buf.any_failed(),
@@ -612,26 +618,26 @@ mod tests {
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         buf.push(
             make_item("test_add"),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            1.0,
+            DurationMs::new(1.0),
         );
         buf.push(
             make_item("test_add"),
             make_failed("oops", "t.py", 1, "assert x"),
-            1.0,
+            DurationMs::new(1.0),
         );
         buf.push(
             make_item("test_add"),
             TestOutcome::Skipped {
                 reason: "skip".to_string(),
             },
-            0.0,
+            DurationMs::ZERO,
         );
         assert_eq!(
             buf.passed_count(),
@@ -651,7 +657,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
@@ -690,7 +696,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
@@ -719,7 +725,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
@@ -779,7 +785,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
                 self.0.fetch_add(1, Ordering::Relaxed);
             }
@@ -796,7 +802,7 @@ mod tests {
             no_message_lines: vec![],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, 1.0);
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert!(
             calls.load(Ordering::Relaxed) >= 2,
             "plugin reporter should receive test_started and test_completed events"
@@ -818,7 +824,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
@@ -850,7 +856,7 @@ mod tests {
                 &mut self,
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
-                _: f64,
+                _: DurationMs,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {

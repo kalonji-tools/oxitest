@@ -48,6 +48,50 @@ impl AsRef<str> for NodeId {
     }
 }
 
+/// Duration in milliseconds, used throughout the runner for test timings.
+///
+/// Wraps `f64` to prevent accidental unit confusion (milliseconds vs seconds).
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+pub struct DurationMs(f64);
+
+impl DurationMs {
+    pub const ZERO: DurationMs = DurationMs(0.0);
+
+    pub fn new(ms: f64) -> Self {
+        DurationMs(ms)
+    }
+
+    pub fn as_f64(self) -> f64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for DurationMs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.1}ms", self.0)
+    }
+}
+
+impl std::ops::Add for DurationMs {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        DurationMs(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::AddAssign for DurationMs {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
+
+impl std::ops::Sub for DurationMs {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self {
+        DurationMs(self.0 - rhs.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TestItem {
     pub(crate) node_id: NodeId,
@@ -243,7 +287,7 @@ impl From<&TestOutcome> for OutcomeKind {
 #[derive(Debug, Clone)]
 pub struct TestTiming {
     pub node_id: NodeId,
-    pub duration_ms: f64,
+    pub duration_ms: DurationMs,
     pub outcome: OutcomeKind,
 }
 
@@ -923,11 +967,11 @@ mod tests {
     fn test_timing_fields() {
         let t = TestTiming {
             node_id: NodeId::from_raw("tests/test_foo.py::test_a"),
-            duration_ms: 42.5,
+            duration_ms: DurationMs::new(42.5),
             outcome: OutcomeKind::Passed,
         };
         assert_eq!(t.outcome, OutcomeKind::Passed);
-        assert!((t.duration_ms - 42.5).abs() < 0.01);
+        assert!((t.duration_ms.as_f64() - 42.5).abs() < 0.01);
         assert_eq!(t.node_id.to_string(), "tests/test_foo.py::test_a");
     }
 
@@ -935,7 +979,7 @@ mod tests {
     fn test_timing_outcome_is_enum() {
         let timing = TestTiming {
             node_id: NodeId::from_raw("test_mod::test_fn"),
-            duration_ms: 42.0,
+            duration_ms: DurationMs::new(42.0),
             outcome: OutcomeKind::Passed,
         };
         assert_eq!(timing.outcome, OutcomeKind::Passed);
@@ -1091,5 +1135,46 @@ mod tests {
             "Worker status strings must exactly match TestOutcome::as_str() values.\n\
              If you add a new outcome, update both worker.py and this test."
         );
+    }
+}
+
+#[cfg(test)]
+mod duration_ms_tests {
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        let a = DurationMs::new(10.0);
+        let b = DurationMs::new(20.0);
+        assert_eq!((a + b).as_f64(), 30.0);
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(format!("{}", DurationMs::new(42.5)), "42.5ms");
+    }
+
+    #[test]
+    fn test_zero() {
+        assert_eq!(DurationMs::ZERO.as_f64(), 0.0);
+    }
+
+    #[test]
+    fn test_ord() {
+        assert!(DurationMs::new(10.0) < DurationMs::new(20.0));
+    }
+
+    #[test]
+    fn test_add_assign() {
+        let mut d = DurationMs::new(10.0);
+        d += DurationMs::new(5.0);
+        assert_eq!(d.as_f64(), 15.0);
+    }
+
+    #[test]
+    fn test_sub() {
+        let a = DurationMs::new(30.0);
+        let b = DurationMs::new(10.0);
+        assert_eq!((a - b).as_f64(), 20.0);
     }
 }

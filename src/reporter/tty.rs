@@ -1,4 +1,4 @@
-use crate::types::{CollectError, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{
     color_cyan, color_dim, color_dim_green, color_error_token, color_fail, color_skip,
@@ -64,8 +64,14 @@ impl TtyReporter {
         format!(" {}  {} {}", label, name, trailing)
     }
 
-    fn format_test_line(&self, item: &TestItem, outcome: &TestOutcome, duration_ms: f64) -> String {
-        let ms = color_dim(&format!("{:.1}ms", duration_ms), self.opts.use_color);
+    fn format_test_line(
+        &self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        duration_ms: DurationMs,
+    ) -> String {
+        let raw_ms = duration_ms.as_f64();
+        let ms = color_dim(&format!("{:.1}ms", raw_ms), self.opts.use_color);
         let c = self.opts.use_color;
         match outcome {
             TestOutcome::Passed { no_message_lines } if no_message_lines.is_empty() => {
@@ -88,7 +94,7 @@ impl TtyReporter {
                     &format!(
                         "{:<width$} {:.1}ms",
                         item.fn_name,
-                        duration_ms,
+                        raw_ms,
                         width = NAME_WIDTH
                     ),
                     c,
@@ -120,9 +126,10 @@ impl TtyReporter {
     fn flush_param_group(&mut self, group: ParametrizeBuffer) {
         let c = self.opts.use_color;
         let total_ms = group.total_ms();
+        let total_ms_raw = total_ms.as_f64();
 
         if group.any_failed() {
-            let ms = color_dim(&format!("{:.1}ms", total_ms), c);
+            let ms = color_dim(&format!("{:.1}ms", total_ms_raw), c);
             let passed = group.passed_count();
             let failed = group.results.len() - passed;
             let line = self.fmt_line(
@@ -161,7 +168,7 @@ impl TtyReporter {
                         "{:<width$} {} cases   {:.1}ms",
                         group.fn_name,
                         count,
-                        total_ms,
+                        total_ms_raw,
                         width = NAME_WIDTH
                     ),
                     c,
@@ -195,7 +202,7 @@ impl Reporter for TtyReporter {
         self.pb.set_message(item.fn_name.clone());
     }
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: f64) {
+    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
         self.stats.record(item, outcome);
         self.stats.record_timing(item.node_id.as_ref(), duration_ms);
 
@@ -244,7 +251,7 @@ mod tests {
 
     use super::*;
     use crate::reporter::test_helpers::{make_error, make_failed};
-    use crate::types::TestOutcome;
+    use crate::types::{DurationMs, TestOutcome};
 
     /// Serializes tests that mutate `console::set_colors_enabled` (global state).
     fn color_test_lock() -> &'static Mutex<()> {
@@ -389,7 +396,7 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
-        let line = reporter.format_test_line(&item, &outcome, 42.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(42.0));
         assert!(
             line.contains("test_add"),
             "fn_name must appear in line: {line:?}"
@@ -407,7 +414,7 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![5],
         };
-        let line = reporter.format_test_line(&item, &outcome, 10.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(10.0));
         assert!(
             line.contains('\u{00B7}'),
             "bare-assert pass must use middot (\u{00B7}): {line:?}"
@@ -421,7 +428,7 @@ mod tests {
         let outcome = TestOutcome::Skipped {
             reason: "not ready".to_string(),
         };
-        let line = reporter.format_test_line(&item, &outcome, 0.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::ZERO);
         assert!(line.contains("SKIP"), "SKIP label must appear: {line:?}");
         assert!(
             line.contains("not ready"),
@@ -437,7 +444,7 @@ mod tests {
             reason: "DeprecationWarning: use new_api".to_string(),
             no_message_lines: vec![],
         };
-        let line = reporter.format_test_line(&item, &outcome, 5.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(5.0));
         assert!(line.contains("WARN"), "WARN label must appear: {line:?}");
         assert!(
             line.contains("DeprecationWarning"),
@@ -452,7 +459,7 @@ mod tests {
         let outcome = TestOutcome::XFailed {
             reason: "issue #42".to_string(),
         };
-        let line = reporter.format_test_line(&item, &outcome, 3.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(3.0));
         assert!(line.contains("XFAIL"), "XFAIL label must appear: {line:?}");
         assert!(
             line.contains("issue #42"),
@@ -465,7 +472,7 @@ mod tests {
         let reporter = make_tty_reporter();
         let item = make_item("test_math");
         let outcome = make_failed("wrong value", "tests/test_math.py", 10, "assert x == 1");
-        let line = reporter.format_test_line(&item, &outcome, 15.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(15.0));
         assert!(line.contains("FAIL"), "FAIL label must appear: {line:?}");
     }
 
@@ -476,7 +483,7 @@ mod tests {
         let outcome = TestOutcome::Timeout {
             message: "exceeded 30s".to_string(),
         };
-        let line = reporter.format_test_line(&item, &outcome, 30_000.0);
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(30_000.0));
         assert!(line.contains("TIME"), "TIME label must appear: {line:?}");
     }
 
