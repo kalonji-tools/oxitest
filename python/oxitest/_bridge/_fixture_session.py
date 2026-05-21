@@ -620,6 +620,20 @@ class FixtureSession:
             if resolved:
                 deps[param_name] = value
 
+        # Reject async fixture values as dependencies of sync fixtures
+        if not defn.is_async:
+            for dep_name, dep_val in deps.items():
+                if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
+                    if inspect.iscoroutine(dep_val):
+                        dep_val.close()
+                    raise FixtureSetupError(
+                        defn.name,
+                        RuntimeError(
+                            f"sync fixture '{defn.name}' cannot depend on "
+                            f"async fixture '{dep_name}'"
+                        ),
+                    )
+
         # Set instantiation context so FixtureAccessor attribute access
         # (e.g. kvault.store.namespace("x") inside a fixture body) can
         # resolve the live fixture instance via _instantiation_context.

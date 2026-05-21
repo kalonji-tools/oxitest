@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from oxitest import FixtureTeardownWarning, TempDir, WarnCapture, parametrize
+from oxitest import Fixture, FixtureTeardownWarning, TempDir, WarnCapture, parametrize
 from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
     FixtureDef,
@@ -1339,4 +1339,38 @@ def test_task_group_fixture_sync_test_error(tmp: TempDir):
     )
     assert "async fixture" in result.message.lower(), (
         f"error should mention 'async fixture', got {result.message!r}"
+    )
+
+
+# ── Async fixture dependency errors ──────────────────────────────────────────
+
+
+def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir):
+    """A sync fixture that depends on a non-shared async fixture should error."""
+    f = tmp / "test_sync_dep_async.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_combo(combo: Fixture[str]) -> None:\n"
+        "    pass\n"
+    )
+
+    async def async_factory():
+        return 42
+
+    def sync_factory(dep: Fixture[int]) -> str:
+        return f"got {dep}"
+
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("dep", async_factory, False, None, "/c.py", is_async=True))
+    reg.register(FixtureDef("combo", sync_factory, False, None, "/c.py"))
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_combo", session)
+    assert result.status == "error", (
+        f"sync fixture depending on async fixture should error, "
+        f"got {result.status!r}, msg={result.message!r}"
+    )
+    msg_lower = result.message.lower()
+    assert "sync fixture" in msg_lower or "cannot depend" in msg_lower, (
+        f"error should mention sync/async dependency issue, got {result.message!r}"
     )
