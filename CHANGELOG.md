@@ -1,133 +1,97 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-## [0.2.0] - 2026-05-21
 
-### Bug Fixes
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
 
-- Protect breaking commits, tighten parser regexes, clean up cliff.toml
-- Remove unnecessary fetch-depth, pin action-gh-release to SHA
-- Configure release-plz to skip crates.io registry
-- Add name to fetchCargoVendor, maturin to nativeBuildInputs, mainProgram and platforms to meta
-- Remove redundant maturin from nativeBuildInputs (maturinBuildHook provides it)
-- Use deadline-based watchdog — empty lines no longer reset timer
-- Replace unwrap() on child stdin/stdout with graceful error handling
-- Skip unknown worker node_id instead of synthesising empty TestItem
-- Replace unsound lineno as-usize casts with try_from
-- Emit crashed results when worker stdin write fails
-- Assert shared_fixture_names() sorted order directly
-- Use most-local definition for shared fixture introspection
-- Use tracing::warn! for shared fixture warning
-- Add fixture_count field to shared fixture warning
-- Show full tracing warning message in parallel how-to
-- Add shared_fixture_names override test; clarify warning format note
-- Preserve pyproject.toml workers when CLI flag absent (#68)
-- Add worker_count docstring and serial+auto conflict test (#68)
-- Resolve ty check errors for version-compatible type safety
-- Remove stale oxitest and duplicate dev tools from devShell
-- --schedule respects pyproject.toml + add --timeout CLI flag
-- Remove LoguruLogBackend from core (leaked to stderr)
-- Ignore plugin system files in codecov coverage
-- Set core.hooksPath so worktrees share pre-commit hooks
-- Allow codecov upload failure on dependabot PRs
-- Harden test subprocess safety
-- Log warning on plugin settings serialization failure (#162)
-- Improve unreachable!() message in strict.rs per_test_error (#163)
-- Preserve pyproject color when --color not passed
-- Surface teardown errors instead of swallowing with .ok()
-- Return exit 4 and print to stderr on JSON write failure
-- Verbose() now propagates to show_tips/show_warnings
-- Make outcome_label() match exhaustive
-- Add return type annotations to PluginRegistry properties
-- Update bridge sync script for BridgeFrame rename (#216)
-- Correct _load_and_resolve return type annotation (#217)
-- Resolve compiler warnings from trait seam refactor (#218)
-- Remove old pipeline.rs after module restructure (#218)
-- Resolve ruff lint violations in bench scripts
+## [0.1.0](https://github.com/kalonji-tools/oxitest/releases/tag/v0.1.0) - 2026-05-13
 
-### Features
+### Added
 
-
-- Add cliff.toml for git-cliff changelog configuration
-- Add release job to publish workflow — creates GitHub Release after PyPI publish
-- Add nixpkgs-style derivation for oxitest v0.1.0
-- Expose oxitest as flake package output and add to devShell
-- Add drain_remaining_into_crashed helper with test
-- Add has_shared_fixtures() and shared_fixture_names() to FixtureSession
-- Expose shared_fixture_names() through FixtureSession
-- Warn when shared=True fixtures detected in parallel run
-- Add WorkerCount enum and update parse_workers (#68)
-- Update Cli/Config to use WorkerCount, add -n short flag (#68)
-- Add WorkerCount serde support and pyproject.toml workers field (#68)
-- Update compute_optimal_workers for WorkerCount enum (#68)
-- Add health recipe for tool availability check
-- Add --schedule flag for pluggable group scheduling strategies
-- Add exc_type field to TestResult and BridgeResult
-- Populate exc_type in exception handlers
-- Implement raises parameter check
-- Add Long variant to TbStyle and pyproject.toml support
-- Capture structured traceback frames in TestResult
-- Thread traceback frames through serial path
-- Serialize traceback frames in worker JSON
-- Render --tb=long with frames section
-- Revise --tb=line to single-line-per-failure mode
-- Add pyproject config for verbose/maxfail/durations/serial + --color flag
-- Add Plugin dataclass and Protocol stubs
-- Implement plugin loader with validation and registry
-- Parse plugins list and plugin_settings from pyproject.toml
-- Wire plugin loading into session startup via bridge
-- Integrate LogBackend protocol with LogCapture fixture
-- Integrate FixtureProvider protocol with fixture resolution
-- Add PyPluginReporter wrapper for Python plugin reporters
-- Wire plugin reporters into CompositeReporter via make_reporter
-- Integrate Collector protocol with collection pipeline
-- Integrate ExecutionWrapper protocol with mark system
-- Add bridge contract sync checker script
-- Add record_teardown_warning to Reporter trait
-- Implement record_teardown_warning on Tty/Ci reporters
-- Add test generator for multi-tier bench suite
-- Add multi-tier bench runner
-- Add regression checker with unit tests
-
-## [0.1.0] - 2026-05-13
-
-### Bug Fixes
-
-
-- Remove UV_PYTHON — causes maturin to target immutable Nix store
-- Set VIRTUAL_ENV before maturin develop to prevent uv resolving into Nix store
-- Strict = "abort" in pyproject.toml; remove test_skipped_via_pytest
-- Resolve real git dir in build.rs for worktree compatibility
-- Move capture-environment early-exit before filesystem setup; update exit-codes doc
-- Correct remote-ref field in check-no-plans-on-main; add no-commit-to-branch builtin
-- Annotate Fixtures.fixture impl signature to silence griffe warnings
-- Migrate PyO3 API from 0.22 to 0.28
-- Fix sticky comment path, pin tarpaulin output, add codecov fail_ci_if_error
-- Add setup-uv to rust-coverage so PyO3 can find libpython for linking
-- Switch tarpaulin to cargo-llvm-cov (compatible with PyO3 extension-module)
-
-### Features
-
-
-- Initial pipeline v0.1 — config, collector, PyO3 bridge, executor, reporter
-- TTY/CI reporter — diagnostic blocks, ANSI color, exit codes, --json CTRF
-- Marks — skip, skipif, xfail, usefixtures, custom markers, -m expression filter
-- Fixture engine — Fixtures class, FixtureDef, FixtureSession, conftest loader
-- Parametrize — mark.parametrize → oxitest.parametrize, dict/dataclass modes
-- Type-safe fixture annotations — Fixture[T], FixtureRef[T], Yields[T]
-- Built-in fixtures Tier 1 — TempDir, TempDirFactory, StdCapture, FdCapture, Patcher
-- Built-in fixtures Tier 2 — LogCapture, WarnCapture, FixtureTeardownWarning
-- Test helpers — raises, warns, importorskip, timeout
-- Strict mode — bare-assert checker, dict-parametrize violations, --strict flag
-- Test cache — TestCache, --lf, --ff, --durations, per-test timeout scaling
-- Parallel execution — Scheduler, persistent worker pool, --workers N, --serial
-- Fixture namespaces — Fixtures(name=), FixturesProxy, fx:Fixtures injection
+- *(release)* add release job to publish workflow — creates GitHub Release after PyPI publish
+- *(release)* add cliff.toml for git-cliff changelog configuration
+- *(hooks)* add pre-push hook to validate v* tag matches Cargo.toml version
+- implement --capture-environment environment snapshot
+- create build.rs and add --capture-environment flag to Cli
+- *(tooling)* add AI agent checklist items to PR template
+- *(tooling)* add pull request template
+- *(tooling)* add feature request issue template
+- *(tooling)* add bug report issue template
 - AST assert rewriter — operand capture for enriched failure output
-- Add bug report issue template
-- Add feature request issue template
-- Add pull request template
-- Add AI agent checklist items to PR template
-- Create build.rs and add --capture-environment flag to Cli
-- Implement --capture-environment environment snapshot
-- Add pre-push hook to validate v* tag matches Cargo.toml version
+- fixture namespaces — Fixtures(name=), FixturesProxy, fx:Fixtures injection
+- parallel execution — Scheduler, persistent worker pool, --workers N, --serial
+- test cache — TestCache, --lf, --ff, --durations, per-test timeout scaling
+- strict mode — bare-assert checker, dict-parametrize violations, --strict flag
+- test helpers — raises, warns, importorskip, timeout
+- built-in fixtures Tier 2 — LogCapture, WarnCapture, FixtureTeardownWarning
+- built-in fixtures Tier 1 — TempDir, TempDirFactory, StdCapture, FdCapture, Patcher
+- type-safe fixture annotations — Fixture[T], FixtureRef[T], Yields[T]
+- parametrize — mark.parametrize → oxitest.parametrize, dict/dataclass modes
+- fixture engine — Fixtures class, FixtureDef, FixtureSession, conftest loader
+- marks — skip, skipif, xfail, usefixtures, custom markers, -m expression filter
+- TTY/CI reporter — diagnostic blocks, ANSI color, exit codes, --json CTRF
+- initial pipeline v0.1 — config, collector, PyO3 bridge, executor, reporter
+
+### Fixed
+
+- *(release)* configure release-plz to skip crates.io registry
+- *(release)* remove unnecessary fetch-depth, pin action-gh-release to SHA
+- *(release)* protect breaking commits, tighten parser regexes, clean up cliff.toml
+- *(ci)* switch tarpaulin to cargo-llvm-cov (compatible with PyO3 extension-module)
+- *(ci)* add setup-uv to rust-coverage so PyO3 can find libpython for linking
+- *(ci)* fix sticky comment path, pin tarpaulin output, add codecov fail_ci_if_error
+- *(bridge)* migrate PyO3 API from 0.22 to 0.28
+- *(docs)* annotate Fixtures.fixture impl signature to silence griffe warnings
+- *(prek)* correct remote-ref field in check-no-plans-on-main; add no-commit-to-branch builtin
+- move capture-environment early-exit before filesystem setup; update exit-codes doc
+- resolve real git dir in build.rs for worktree compatibility
+- strict = "abort" in pyproject.toml; remove test_skipped_via_pytest
+- set VIRTUAL_ENV before maturin develop to prevent uv resolving into Nix store
+- remove UV_PYTHON — causes maturin to target immutable Nix store
+
+### Other
+
+- *(ci)* remove dead step ids from coverage jobs
+- remove spec/plan files before merging to main
+- *(coverage)* add python-coverage job with sticky PR comment
+- *(coverage)* add rust-coverage job with sticky PR comment
+- *(coverage)* remove monolithic coverage job
+- *(plan)* coverage integration implementation plan
+- *(spec)* coverage integration design for issue #5
+- add coverage job with tarpaulin (Rust) and coverage.py (Python) ([#5](https://github.com/kalonji-tools/oxitest/pull/5))
+- enable uv and Rust caching to reduce wall time ([#9](https://github.com/kalonji-tools/oxitest/pull/9))
+- *(security)* add SECURITY.md with disclosure policy ([#11](https://github.com/kalonji-tools/oxitest/pull/11))
+- expand test job to Python 3.11 / 3.12 / 3.13 matrix ([#10](https://github.com/kalonji-tools/oxitest/pull/10))
+- *(deps)* bump actions/upload-pages-artifact from 3 to 5
+- *(deps)* bump actions/checkout from 4 to 6
+- *(deps)* bump actions/download-artifact from 4 to 8
+- *(deps)* bump dorny/paths-filter from 3 to 4
+- *(deps)* bump the cargo-deps group with 3 updates
+- *(deps)* bump actions/setup-python from 5 to 6
+- *(deps)* bump astral-sh/setup-uv from 5 to 7
+- add status badges to README ([#7](https://github.com/kalonji-tools/oxitest/pull/7))
+- *(tooling)* add dependabot config with grouped cargo updates ([#8](https://github.com/kalonji-tools/oxitest/pull/8))
+- *(tooling)* add MIT license ([#4](https://github.com/kalonji-tools/oxitest/pull/4))
+- *(docs)* add workflow_dispatch trigger for manual deploys ([#22](https://github.com/kalonji-tools/oxitest/pull/22))
+- *(docs)* use dorny/paths-filter so required job always runs on PRs
+- *(docs)* skip build on non-docs PRs; add required-check companion job
+- add CONTRIBUTING.md with label taxonomy
+- embed OXITEST_GIT_SHA via build.rs
+- document --capture-environment flag in CLI reference
+- add failing tests for --capture-environment CLI flag
+- use justfile_directory() instead of pwd for VIRTUAL_ENV path
+- prevent uv from downloading Python — delegate to Nix
+- skip nix develop when already inside the dev shell
+- uv dependency groups — build, test, lint, typecheck, docs; use uv in CI
+- docs workflow — build on PRs, deploy to GitHub Pages on main
+- test workflow — lint, type-check, Rust/Python tests, plans/specs guard
+- add project background — educational goals and motivation
+- pre-push hook — reject plans/specs on main
+- release automation — release-plz, maturin PyPI publish, workflow permissions
+- mkdocs-material site — guides, references, explanation, contributing pages
+- comprehensive test suite — fixtures, marks, parametrize, cache, parallel
+- add dev tooling — prek, ruff, codespell, justfile, pyproject
+- scaffold project — Nix devshell, maturin crate, .gitignore
