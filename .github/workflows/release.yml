@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Compute next version
+        id: version
+        run: |
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          NEXT=$(git-cliff --bumped-version | sed 's/^v//')
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" = "$NEXT" ]; then
+            echo "::error::No releasable commits since v$CURRENT"
+            exit 1
+          fi
+          echo "Bumping $CURRENT -> $NEXT"
+
+      - name: Update changelog
+        run: git-cliff --bump -o CHANGELOG.md
+
+      - name: Update Cargo.toml version
+        run: sed -i "0,/^version = .*/s//version = \"${{ steps.version.outputs.next }}\"/" Cargo.toml
+
+      - name: Commit and tag
+        run: |
+          VERSION="${{ steps.version.outputs.next }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md Cargo.toml
+          git commit -m "release: v${VERSION}"
+          git tag "v${VERSION}"
+          git push origin main --follow-tags
