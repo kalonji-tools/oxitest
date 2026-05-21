@@ -74,9 +74,8 @@ class TestExpensive:
 
 ## Limitations
 
-- **No class-scoped fixtures.** Fixtures are scoped to `function`, `module`, or
-  `session` — there is no `class` scope. Each test method gets its own fixture
-  instances.
+- **No class-scoped fixtures.** Fixtures are scoped to `function` or `session`
+  — there is no `class` scope. Each test method gets its own fixture instances.
 - **No `setup_method` / `teardown_method`.** Use fixtures with yield teardown
   instead.
 - **`self` is not injected.** The `self` parameter is the class instance, not a

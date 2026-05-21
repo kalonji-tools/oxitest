@@ -9,7 +9,7 @@
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
 | `3` | Collection error (a test file could not be imported) or strict violations detected when using `--strict=abort` |
-| `4` | Invalid CLI arguments — oxitest exits before running any tests |
+| `4` | Invalid CLI arguments — oxitest exits before running any tests. Also returned when `--json` output file cannot be written. |
 
 ## See also
 

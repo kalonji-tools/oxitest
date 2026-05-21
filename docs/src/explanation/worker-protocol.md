@@ -76,7 +76,8 @@ For each test item, the worker writes exactly one JSON line to stdout:
     "left": null,
     "right": null,
     "op": null,
-    "strict": false
+    "strict": false,
+    "frames": []
 }
 ```
 
@@ -95,6 +96,7 @@ For each test item, the worker writes exactly one JSON line to stdout:
 | `right` | string \| null | Right operand repr for comparison assertions |
 | `op` | string \| null | Comparison operator (e.g. `"=="`, `"!="`, `"in"`) |
 | `strict` | bool | Whether the test was in strict xfail mode |
+| `frames` | array of objects | Stack frames from the traceback (empty for passed tests). Each object has `file` (string), `lineno` (int), `name` (string), `line` (string). |
 
 ## Outcome Values
 
