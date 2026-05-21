@@ -262,6 +262,7 @@ impl FailureAccumulator {
     }
 
     /// Record an outcome. Returns `true` if execution should stop (maxfail reached).
+    #[must_use = "caller must check whether maxfail was reached"]
     pub(crate) fn record(&mut self, outcome: &TestOutcome) -> bool {
         if outcome.is_hard_failure() {
             self.count += 1;

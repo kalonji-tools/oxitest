@@ -42,6 +42,7 @@ pub fn validate_markers(
         .collect()
 }
 
+#[must_use = "returns filtered items; original is consumed"]
 pub fn filter_items(items: Vec<TestItem>, keyword: Option<&str>) -> Vec<TestItem> {
     items
         .into_iter()
@@ -55,6 +56,7 @@ pub fn filter_items(items: Vec<TestItem>, keyword: Option<&str>) -> Vec<TestItem
 
 /// Keep only items whose node_id is in `failed_ids`.
 /// Used by `--lf` (last-failed) mode.
+#[must_use = "returns filtered items; original is consumed"]
 pub fn filter_last_failed(
     items: Vec<TestItem>,
     failed_ids: &std::collections::HashSet<String>,
@@ -67,6 +69,7 @@ pub fn filter_last_failed(
 
 /// Move items whose node_id is in `failed_ids` to the front; preserve relative order within each group.
 /// Used by `--ff` (failed-first) mode.
+#[must_use = "returns reordered items; original is consumed"]
 pub fn sort_failed_first(
     items: Vec<TestItem>,
     failed_ids: &std::collections::HashSet<String>,
@@ -79,6 +82,7 @@ pub fn sort_failed_first(
 }
 
 /// Group items by module path, preserving insertion order within each group.
+#[must_use = "returns grouped items; original is consumed"]
 pub fn group_by_module(items: Vec<TestItem>) -> Vec<(Utf8PathBuf, Vec<TestItem>)> {
     let mut groups: IndexMap<Utf8PathBuf, Vec<TestItem>> = IndexMap::new();
     for item in items {

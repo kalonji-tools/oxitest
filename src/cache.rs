@@ -176,6 +176,7 @@ impl TestCache {
             .collect();
     }
 
+    #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
     pub fn estimated_duration(&self, items: &[TestItem]) -> Option<Duration> {
         if items.is_empty() {
             return None;
