@@ -389,3 +389,51 @@ def test_check_fn_violations_class_method_missing_mark_reason():
         f"violation node_id should be '{path}::{fn_name}', got {v.node_id!r}"
     )
     assert v.detail == "skip", f"violation detail should be 'skip', got {v.detail!r}"
+
+
+def test_collect_async_function_sets_is_async(tmp: TempDir):
+    f = tmp / "test_async.py"
+    f.write_text("async def test_hello(): pass\n")
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert items[0].is_async is True, (
+        f"async def test should have is_async=True, got {items[0].is_async!r}"
+    )
+
+
+def test_collect_sync_function_sets_is_async_false(tmp: TempDir):
+    f = tmp / "test_sync.py"
+    f.write_text("def test_hello(): pass\n")
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert items[0].is_async is False, (
+        f"sync def test should have is_async=False, got {items[0].is_async!r}"
+    )
+
+
+def test_collect_mixed_sync_async(tmp: TempDir):
+    f = tmp / "test_mixed.py"
+    f.write_text("def test_sync(): pass\nasync def test_async(): pass\n")
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    by_name = {item.fn_name: item for item in items}
+    assert by_name["test_sync"].is_async is False, "sync test should be is_async=False"
+    assert by_name["test_async"].is_async is True, "async test should be is_async=True"
+
+
+def test_collect_async_class_method_sets_is_async(tmp: TempDir):
+    f = tmp / "test_cls_async.py"
+    f.write_text(
+        "class TestSuite:\n"
+        "    async def test_async_method(self): pass\n"
+        "    def test_sync_method(self): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    by_name = {item.fn_name: item for item in items}
+    assert by_name["TestSuite::test_async_method"].is_async is True, (
+        "async class method should be is_async=True"
+    )
+    assert by_name["TestSuite::test_sync_method"].is_async is False, (
+        "sync class method should be is_async=False"
+    )
