@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Protocol
 
+from oxitest._bridge._async_backend import SharedAsyncSession, get_async_backend
 from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
@@ -241,7 +242,7 @@ class FixtureSession:
             _Scope()
         )  # shared=True fixtures — init once, drain at end_session
         self._module_cache = ModuleCache()
-        self._async_loop: Any = None  # asyncio.AbstractEventLoop, lazily created
+        self._shared_session: SharedAsyncSession | None = None
         self._async_teardowns: list[tuple[str, Any]] = []  # (name, async_gen)
         self._used_shared_async = False  # per-test flag, reset in resolve_for_test
         self._registry.register(
@@ -266,22 +267,16 @@ class FixtureSession:
 
     def end_session(self) -> None:
         # Tear down shared async fixtures first (reverse order), then sync scopes.
-        if self._async_loop is not None:
+        if self._shared_session is not None:
             for name, gen in reversed(self._async_teardowns):
                 try:
-                    self._async_loop.run_until_complete(anext(gen))
+                    self._shared_session.run(anext(gen))
                 except StopAsyncIteration:
                     pass
                 except Exception as exc:
                     _warn_teardown(name, exc)
-            try:
-                self._async_loop.run_until_complete(
-                    self._async_loop.shutdown_asyncgens()
-                )
-            except Exception:
-                pass
-            self._async_loop.close()
-            self._async_loop = None
+            self._shared_session.close()
+            self._shared_session = None
             self._async_teardowns.clear()
         # Drain shared (user fixtures) before session (builtins like TempDirFactory)
         # so that shared fixture teardowns can still access session-scoped builtins.
@@ -546,10 +541,8 @@ class FixtureSession:
         resolving: frozenset[str],
     ) -> Any:
         """Eagerly resolve a shared async fixture on the session event loop."""
-        import asyncio
-
-        if self._async_loop is None:
-            self._async_loop = asyncio.new_event_loop()
+        if self._shared_session is None:
+            self._shared_session = get_async_backend().create_shared_session()
 
         self._used_shared_async = True
 
@@ -591,10 +584,10 @@ class FixtureSession:
         try:
             result = defn.func(**deps)
             if inspect.isasyncgen(result):
-                value = self._async_loop.run_until_complete(anext(result))
+                value = self._shared_session.run(anext(result))
                 self._async_teardowns.append((defn.name, result))
             elif inspect.iscoroutine(result):
-                value = self._async_loop.run_until_complete(result)
+                value = self._shared_session.run(result)
             else:
                 value = result
         except Exception as exc:

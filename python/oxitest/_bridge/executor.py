@@ -11,7 +11,10 @@ import textwrap
 import traceback
 import warnings
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from oxitest._bridge._async_backend import SharedAsyncSession
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
@@ -311,7 +314,7 @@ def _build_execution_chain(
     marks: list[MarkInfo],
     wrappers: list[ExecutionWrapper],
     default_timeout: int | None,
-    session_loop: Any = None,
+    shared_session: SharedAsyncSession | None = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable from wrappers and base runner.
 
@@ -428,27 +431,10 @@ def _build_execution_chain(
                             stacklevel=2,
                         )
 
-        if session_loop is not None:
+        if shared_session is not None:
 
             def _base() -> TestResult:  # pragma: no cover
-                import asyncio
-
-                before = asyncio.all_tasks(session_loop)
-                try:
-                    return session_loop.run_until_complete(_async_core())
-                finally:
-                    after = asyncio.all_tasks(session_loop)
-                    stray = after - before
-                    if stray:
-                        for task in stray:
-                            task.cancel()
-                        session_loop.run_until_complete(
-                            asyncio.gather(*stray, return_exceptions=True)
-                        )
-                        warnings.warn(
-                            f"test '{fn_name}' leaked {len(stray)} task(s) (cancelled)",
-                            stacklevel=2,
-                        )
+                return shared_session.run(_async_core())
         else:
 
             def _base() -> TestResult:
@@ -509,7 +495,7 @@ def run_test(
         if short_circuit is not None:
             return short_circuit
 
-        _session_loop = getattr(effective_session, "_async_loop", None)
+        _shared_session = getattr(effective_session, "_shared_session", None)
         _used_shared = getattr(effective_session, "_used_shared_async", False)
 
         execute = _build_execution_chain(
@@ -521,7 +507,7 @@ def run_test(
             marks,
             wrappers,
             default_timeout,
-            session_loop=_session_loop if _used_shared else None,
+            shared_session=_shared_session if _used_shared else None,
         )
         return execute()
     finally:
