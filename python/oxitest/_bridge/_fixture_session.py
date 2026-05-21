@@ -207,6 +207,32 @@ class _Scope:
         self.teardowns.clear()
 
 
+async def _task_group_factory():  # type: ignore[return-value]
+    """Built-in async yield fixture providing a managed asyncio.TaskGroup.
+
+    Tracks all tasks created via ``task_group.create_task()`` and cancels any
+    that are still running when the test body returns, preventing hangs on
+    teardown.
+    """
+    import asyncio
+
+    tasks: list[asyncio.Task[Any]] = []
+    tg = asyncio.TaskGroup()
+    orig_create_task = tg.create_task
+
+    def _tracked_create(coro, *, name=None, context=None):  # type: ignore[misc]
+        t = orig_create_task(coro, name=name, context=context)
+        tasks.append(t)
+        return t
+
+    tg.create_task = _tracked_create  # type: ignore[method-assign]  # ty: ignore
+    async with tg:
+        yield tg
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+
+
 class FixtureSession:
     def __init__(self, registry: FixtureRegistry) -> None:
         self._registry = registry
@@ -218,6 +244,16 @@ class FixtureSession:
         self._async_loop: Any = None  # asyncio.AbstractEventLoop, lazily created
         self._async_teardowns: list[tuple[str, Any]] = []  # (name, async_gen)
         self._used_shared_async = False  # per-test flag, reset in resolve_for_test
+        self._registry.register(
+            FixtureDef(
+                name="task_group",
+                func=_task_group_factory,
+                autouse=False,
+                params=None,
+                conftest_path="<builtin>",
+                is_async=True,
+            )
+        )
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

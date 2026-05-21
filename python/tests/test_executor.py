@@ -1281,3 +1281,62 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir):
     assert r1.status == "passed", f"test_shared: {r1.status!r}, {r1.message!r}"
     assert r2.status == "passed", f"test_independent: {r2.status!r}, {r2.message!r}"
     session.end_session()
+
+
+# ── Built-in task_group fixture ──────────────────────────────────────────────
+
+
+def test_task_group_fixture_basic(tmp: TempDir):
+    f = tmp / "test_tg.py"
+    f.write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture\n"
+        "async def test_spawn(task_group: Fixture[asyncio.TaskGroup]) -> None:\n"
+        "    results: list[int] = []\n"
+        "    async def worker(n: int) -> None:\n"
+        "        results.append(n)\n"
+        "    task_group.create_task(worker(1))\n"
+        "    task_group.create_task(worker(2))\n"
+        "    await asyncio.sleep(0)  # let tasks run\n"
+        "    assert sorted(results) == [1, 2]\n"
+    )
+    result = run_test(str(f), "test_spawn")
+    assert result.status == "passed", (
+        f"task_group fixture should allow spawning tasks, "
+        f"got status={result.status!r}, msg={result.message!r}"
+    )
+
+
+def test_task_group_fixture_cancels_on_test_end(tmp: TempDir):
+    """Tasks still running when the test ends should be cancelled by TaskGroup exit."""
+    f = tmp / "test_tg_cancel.py"
+    f.write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture\n"
+        "async def test_leak(task_group: Fixture[asyncio.TaskGroup]) -> None:\n"
+        "    task_group.create_task(asyncio.sleep(999))\n"
+        "    # Test ends without awaiting — TaskGroup.__aexit__ cancels it\n"
+    )
+    result = run_test(str(f), "test_leak")
+    assert result.status == "passed", (
+        f"task_group should handle leftover tasks gracefully, "
+        f"got status={result.status!r}, msg={result.message!r}"
+    )
+
+
+def test_task_group_fixture_sync_test_error(tmp: TempDir):
+    """Sync test requesting task_group should get a clear error."""
+    f = tmp / "test_tg_sync.py"
+    f.write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture\n"
+        "def test_sync(task_group: Fixture[asyncio.TaskGroup]) -> None:\n"
+        "    pass\n"
+    )
+    result = run_test(str(f), "test_sync")
+    assert result.status == "error", (
+        f"sync test with task_group should produce error, got {result.status!r}"
+    )
+    assert "async fixture" in result.message.lower(), (
+        f"error should mention 'async fixture', got {result.message!r}"
+    )
