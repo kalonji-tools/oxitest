@@ -215,6 +215,9 @@ class FixtureSession:
             _Scope()
         )  # shared=True fixtures — init once, drain at end_session
         self._module_cache = ModuleCache()
+        self._async_loop: Any = None  # asyncio.AbstractEventLoop, lazily created
+        self._async_teardowns: list[tuple[str, Any]] = []  # (name, async_gen)
+        self._used_shared_async = False  # per-test flag, reset in resolve_for_test
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -338,6 +341,7 @@ class FixtureSession:
         named in skip_names are skipped even if annotated with Fixture[T].
         """
         fn_teardowns: list[Callable[[], None]] = []
+        self._used_shared_async = False  # reset per-test
         _teardown_local.fn_teardowns = fn_teardowns  # type: ignore[attr-defined]
         try:
             hints = _get_hints(fn)
