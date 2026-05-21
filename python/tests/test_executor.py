@@ -1374,3 +1374,40 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir):
     assert "sync fixture" in msg_lower or "cannot depend" in msg_lower, (
         f"error should mention sync/async dependency issue, got {result.message!r}"
     )
+
+
+def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir):
+    """A shared async fixture cannot depend on a non-shared async fixture."""
+    f = tmp / "test_shared_dep_nonshared.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_pool(pool: Fixture[str]) -> None:\n"
+        "    pass\n"
+    )
+
+    async def non_shared_async():
+        return 42
+
+    async def shared_async(dep: Fixture[int]) -> str:
+        return f"got {dep}"
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef("dep", non_shared_async, False, None, "/c.py", is_async=True)
+    )
+    reg.register(
+        FixtureDef(
+            "pool", shared_async, False, None, "/c.py", shared=True, is_async=True
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_pool", session)
+    assert result.status == "error", (
+        f"shared async depending on non-shared async should error, "
+        f"got {result.status!r}, msg={result.message!r}"
+    )
+    msg_lower = result.message.lower()
+    assert "lifetime" in msg_lower or "non-shared" in msg_lower, (
+        f"error should mention lifetime mismatch, got {result.message!r}"
+    )

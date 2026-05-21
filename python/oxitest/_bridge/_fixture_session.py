@@ -573,6 +573,20 @@ class FixtureSession:
             if resolved:
                 deps[param_name] = value
 
+        # Reject non-shared async fixture values as dependencies of shared fixtures
+        for dep_name, dep_val in deps.items():
+            if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
+                if inspect.iscoroutine(dep_val):
+                    dep_val.close()
+                raise FixtureSetupError(
+                    defn.name,
+                    RuntimeError(
+                        f"shared fixture '{defn.name}' cannot depend on "
+                        f"non-shared async fixture '{dep_name}' \u2014 "
+                        f"lifetime mismatch"
+                    ),
+                )
+
         token = _instantiation_context.set((self, module_path))
         try:
             result = defn.func(**deps)
