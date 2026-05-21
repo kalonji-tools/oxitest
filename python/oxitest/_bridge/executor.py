@@ -158,6 +158,39 @@ def _compose(
     return lambda: wrapper(inner)
 
 
+def _run_base(
+    fn: Callable[..., Any],
+    all_kwargs: dict[str, Any],
+    no_message_lines: list[int],
+) -> TestResult:
+    """Run the test function and map exceptions to TestResult."""
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fn(**all_kwargs)
+        caught: list[str] = [
+            f"{wi.category.__name__}: {wi.message}"
+            for wi in w
+            if not issubclass(wi.category, FixtureTeardownWarning)
+        ]
+        if caught:
+            return TestResult(
+                status="warned",
+                message="\n".join(str(c) for c in caught),
+                no_message_lines=no_message_lines,
+            )
+        return TestResult(status="passed", no_message_lines=no_message_lines)
+    except OxitestTimeoutError:
+        raise  # propagate to timeout wrapper
+    except AssertionError as exc:
+        return _handle_assertion_error(exc)
+    except BaseException as exc:
+        result = _handle_runtime_exception(exc)
+        if result is not None:
+            return result
+        raise
+
+
 _NULL_SESSION: _SessionProtocol = _NullFixtureSession()
 
 
@@ -277,35 +310,11 @@ def run_test(
         _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
         no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
 
-        def base() -> TestResult:
-            try:
-                with warnings.catch_warnings(record=True) as w:
-                    warnings.simplefilter("always")
-                    fn(**all_kwargs)  # type: ignore[operator]
-                caught: list[str] = [
-                    f"{wi.category.__name__}: {wi.message}"
-                    for wi in w
-                    if not issubclass(wi.category, FixtureTeardownWarning)
-                ]
-                if caught:
-                    return TestResult(
-                        status="warned",
-                        message="\n".join(str(c) for c in caught),
-                        no_message_lines=no_message_lines,
-                    )
-                return TestResult(status="passed", no_message_lines=no_message_lines)
-            except OxitestTimeoutError:
-                raise  # propagate to timeout wrapper
-            except AssertionError as exc:
-                return _handle_assertion_error(exc)
-            except BaseException as exc:
-                result = _handle_runtime_exception(exc)
-                if result is not None:
-                    return result
-                raise
-
         # Compose wrappers: last appended = outermost
-        execute: Callable[[], TestResult] = base
+        def _base() -> TestResult:
+            return _run_base(fn, all_kwargs, no_message_lines)
+
+        execute: Callable[[], TestResult] = _base
         for wrapper in reversed(wrappers):
             execute = _compose(wrapper, execute)
 
