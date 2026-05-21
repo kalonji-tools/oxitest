@@ -17,7 +17,7 @@ use crate::types::{NodeId, OutcomeKind, TestItem};
 
 const CACHE_VERSION: u32 = 1;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct CacheEntry {
     duration_ms: f64,
     age: u32,
@@ -26,7 +26,7 @@ struct CacheEntry {
 }
 
 /// Serialized representation of a single TestItem (module_path and node_id are derived).
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 struct CachedItemData {
     fn_name: String,
     lineno: usize,
@@ -38,7 +38,7 @@ struct CachedItemData {
 }
 
 /// Per-module fast-collection cache. Invalidated when mtime_secs changes.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ModuleCache {
     mtime_secs: u64,
     items: Vec<CachedItemData>,
@@ -55,7 +55,7 @@ where
     serde::Serialize::serialize(&sorted, serializer)
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct CacheFile {
     version: u32,
     #[serde(serialize_with = "serialize_sorted")]
@@ -64,6 +64,7 @@ struct CacheFile {
     modules: AHashMap<String, ModuleCache>,
 }
 
+#[derive(Debug)]
 pub struct TestCache {
     inner: CacheFile,
     dirty: bool,
