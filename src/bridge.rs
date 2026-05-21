@@ -88,6 +88,16 @@ impl FixtureSession {
         Ok(())
     }
 
+    /// Initialize the async backend by resolving the config name against plugins.
+    pub fn init_async_backend(&self, py: Python<'_>, backend_name: &str) -> PyResult<()> {
+        let backend_mod = py.import("oxitest._bridge._async_backend")?;
+        let plugin_mod = py.import("oxitest._bridge.plugin_loader")?;
+        let registry = plugin_mod.call_method0("get_registry")?;
+        let backend = backend_mod.call_method1("resolve_backend", (backend_name, registry))?;
+        backend_mod.call_method1("set_async_backend", (backend,))?;
+        Ok(())
+    }
+
     /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
     /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
     /// Unlike `end_module`/`end_session`, errors are absorbed here because this
