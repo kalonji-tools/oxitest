@@ -111,6 +111,41 @@ def oxitest_plugin(config=None) -> Plugin:
 
 ---
 
+## Async backend errors
+
+Async backend errors occur when the configured async backend cannot be resolved.
+
+---
+
+```text
+async backend '<name>' not found — is the plugin installed?
+```
+
+**Cause:** The `async_backend` option in `pyproject.toml` names a backend that no
+installed plugin provides.
+
+**Fix:** Install the plugin that provides the backend, or check the spelling:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_trio"]
+async_backend = "trio"
+```
+
+---
+
+```text
+multiple plugins provide async backend '<name>': <plugin_a>, <plugin_b>
+```
+
+**Cause:** Two or more installed plugins each provide an async backend with the same
+`name` property.
+
+**Fix:** Remove one of the conflicting plugins from the `plugins` list in
+`pyproject.toml`, or contact the plugin authors to use distinct names.
+
+---
+
 ## Fixture errors
 
 Fixture errors occur during fixture resolution or teardown.

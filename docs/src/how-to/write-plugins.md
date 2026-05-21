@@ -449,3 +449,59 @@ After running `oxitest`, the file `build/test-events.json` contains:
 
 Common plugin errors -- missing entry points, import failures, protocol
 mismatches -- are documented in the [error reference](../reference/errors.md).
+
+## Async backend
+
+Plugins can provide an alternative async runtime backend by implementing the
+`AsyncBackend` and `SharedAsyncSession` protocols.
+
+```python
+from oxitest import Plugin, AsyncBackend, SharedAsyncSession
+
+
+class TrioSharedSession:
+    """Long-lived trio session for shared fixture resolution."""
+
+    def run(self, coro):
+        import trio
+        return trio.from_thread.run(coro)
+
+    def close(self):
+        pass  # trio manages its own cleanup
+
+
+class TrioBackend:
+    """Trio async backend for oxitest."""
+
+    @property
+    def name(self) -> str:
+        return "trio"
+
+    def run(self, coro):
+        import trio
+        return trio.run(coro)
+
+    def create_shared_session(self) -> SharedAsyncSession:
+        return TrioSharedSession()
+
+
+def oxitest_plugin(config=None) -> Plugin:
+    return Plugin(async_backend=TrioBackend())
+```
+
+Users select the backend explicitly in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+plugins = ["oxitest_trio"]
+async_backend = "trio"
+```
+
+**Rules:**
+
+- Only one backend can be active. If multiple plugins provide a backend with the
+  same `name`, oxitest raises `ConflictingBackendError`.
+- The `async_backend` config value must match a backend `name`. If no match is
+  found, oxitest raises `BackendNotFoundError`.
+- The built-in `"asyncio"` backend is always available. Plugins must not use the
+  name `"asyncio"`.
