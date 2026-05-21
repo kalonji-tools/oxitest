@@ -8,7 +8,7 @@
 //! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
 //! type-checked at compile time rather than constructed with ad-hoc macros.
 
-use crate::types;
+use crate::types::{self, Frame};
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
@@ -99,16 +99,14 @@ impl WorkerResult {
             .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
 
-        let frames: Vec<(String, usize, String, String)> = self
+        let frames: Vec<Frame> = self
             .frames
             .iter()
-            .map(|f| {
-                (
-                    f.file.clone(),
-                    usize::try_from(f.lineno).unwrap_or(0),
-                    f.name.clone(),
-                    f.line.clone(),
-                )
+            .map(|f| Frame {
+                file: f.file.clone(),
+                lineno: usize::try_from(f.lineno).unwrap_or(0),
+                name: f.name.clone(),
+                line: f.line.clone(),
             })
             .collect();
 
@@ -174,6 +172,7 @@ impl WorkerResult {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use crate::types::Frame;
 
     #[test]
     fn frames_deserialized_from_json() {
@@ -219,21 +218,21 @@ mod frame_tests {
                 assert_eq!(frames.len(), 2);
                 assert_eq!(
                     frames[0],
-                    (
-                        "t.py".to_string(),
-                        10,
-                        "test_f".to_string(),
-                        "do_thing()".to_string()
-                    )
+                    Frame {
+                        file: "t.py".to_string(),
+                        lineno: 10,
+                        name: "test_f".to_string(),
+                        line: "do_thing()".to_string(),
+                    }
                 );
                 assert_eq!(
                     frames[1],
-                    (
-                        "t.py".to_string(),
-                        3,
-                        "do_thing".to_string(),
-                        "raise ValueError".to_string()
-                    )
+                    Frame {
+                        file: "t.py".to_string(),
+                        lineno: 3,
+                        name: "do_thing".to_string(),
+                        line: "raise ValueError".to_string(),
+                    }
                 );
             }
             other => panic!("expected Failed, got {other:?}"),
