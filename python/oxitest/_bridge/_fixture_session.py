@@ -456,7 +456,15 @@ class FixtureSession:
         if defn.shared:
             s = self._shared_scope
             if defn.name in s.cache:
+                if defn.is_async:
+                    self._used_shared_async = True
                 return s.cache[defn.name]
+
+            if defn.is_async:
+                return self._resolve_shared_async(
+                    defn, module_path, fn_teardowns, resolving
+                )
+
             from oxitest._bridge.proxy import FrozenProxy
 
             def _make_shared(
@@ -475,6 +483,62 @@ class FixtureSession:
         return self._instantiate(
             defn, module_path, fn_teardowns, fn_teardowns, resolving
         )
+
+    def _resolve_shared_async(
+        self,
+        defn: FixtureDef[Any],
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+        resolving: frozenset[str],
+    ) -> Any:
+        """Eagerly resolve a shared async fixture on the session event loop."""
+        import asyncio
+
+        if self._async_loop is None:
+            self._async_loop = asyncio.new_event_loop()
+
+        self._used_shared_async = True
+
+        # Resolve sync dependencies (shared async fixtures can only depend on
+        # sync fixtures — non-shared async fixtures are unresolved coroutines).
+        hints = _get_hints(defn.func)
+        deps: dict[str, Any] = {}
+        for param_name, hint in hints.items():
+            if param_name == "return":
+                continue
+            resolved, value = self._resolve_param(
+                param_name,
+                hint,
+                module_path,
+                fn_teardowns=fn_teardowns,
+                fn_name=defn.name,
+                resolve_user_fixture=lambda n: self._resolve_fixture(
+                    n, module_path, fn_teardowns, resolving
+                ),
+            )
+            if resolved:
+                deps[param_name] = value
+
+        token = _instantiation_context.set((self, module_path))
+        try:
+            result = defn.func(**deps)
+            if inspect.isasyncgen(result):
+                value = self._async_loop.run_until_complete(anext(result))
+                self._async_teardowns.append((defn.name, result))
+            elif inspect.iscoroutine(result):
+                value = self._async_loop.run_until_complete(result)
+            else:
+                value = result
+        except Exception as exc:
+            raise FixtureSetupError(defn.name, exc) from exc
+        finally:
+            _instantiation_context.reset(token)
+
+        from oxitest._bridge.proxy import FrozenProxy
+
+        proxy = FrozenProxy(value)
+        self._shared_scope.cache[defn.name] = proxy
+        return proxy
 
     def _instantiate(
         self,
