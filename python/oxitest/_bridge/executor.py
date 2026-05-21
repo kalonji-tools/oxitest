@@ -14,7 +14,11 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
-from oxitest._bridge._fixture_session import _NullFixtureSession, _SessionProtocol
+from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
+from oxitest._bridge._fixture_session import (
+    FixtureSession,
+    _SessionProtocol,
+)
 from oxitest._bridge._loader import (
     _load_module,
     _LoadError,
@@ -461,7 +465,7 @@ def _build_execution_chain(
     return execute
 
 
-_NULL_SESSION: _SessionProtocol = _NullFixtureSession()
+_NULL_SESSION: _SessionProtocol = FixtureSession(_FixtureRegistry())
 
 
 def run_test(
