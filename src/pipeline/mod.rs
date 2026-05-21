@@ -584,6 +584,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     let total = violated_items.len() + items.len();
+    let async_count = items.iter().filter(|i| i.is_async).count();
     cache.invalidate(&items);
 
     // Fetch plugin reporters from Python registry.
@@ -601,7 +602,10 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     let mut rep = reporter::make_reporter(
-        base.total(total).strict_suite_lines(suite_lines).build(),
+        base.total(total)
+            .async_count(async_count)
+            .strict_suite_lines(suite_lines)
+            .build(),
         is_tty,
         cli.json.clone(),
         plugin_reporters,

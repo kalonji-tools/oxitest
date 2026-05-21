@@ -14,7 +14,7 @@ pub struct CiReporter {
 
 impl CiReporter {
     pub fn new(opts: ReporterOpts) -> Self {
-        super::print_collected(opts.total);
+        super::print_collected(opts.total, opts.async_count);
         Self {
             opts,
             stats: RunStats::new(),

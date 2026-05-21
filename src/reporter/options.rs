@@ -3,6 +3,7 @@
 #[derive(Debug)]
 pub struct ReporterOpts {
     pub(crate) total: usize,
+    pub(crate) async_count: usize,
     pub(crate) use_color: bool,
     pub(crate) tb: crate::config::TbStyle,
     pub(crate) show_tips: bool,
@@ -17,6 +18,7 @@ pub struct ReporterOpts {
 #[derive(Clone, Debug)]
 pub struct ReporterOptsBuilder {
     total: usize,
+    async_count: usize,
     use_color: bool,
     tb: crate::config::TbStyle,
     show_tips: bool,
@@ -32,6 +34,7 @@ impl ReporterOptsBuilder {
     pub fn new() -> Self {
         Self {
             total: 0,
+            async_count: 0,
             use_color: false,
             tb: crate::config::TbStyle::Short,
             show_tips: false,
@@ -47,6 +50,7 @@ impl ReporterOptsBuilder {
     pub fn from_config(cfg: &crate::config::Config, use_color: bool) -> Self {
         Self {
             total: 0,
+            async_count: 0,
             use_color,
             tb: cfg.tb.clone(),
             show_tips: cfg.verbose,
@@ -75,6 +79,13 @@ impl ReporterOptsBuilder {
         Self { total: n, ..self }
     }
 
+    pub fn async_count(self, count: usize) -> Self {
+        Self {
+            async_count: count,
+            ..self
+        }
+    }
+
     pub fn verbose(self, v: bool) -> Self {
         Self {
             verbose: v,
@@ -98,6 +109,7 @@ impl ReporterOptsBuilder {
     pub fn build(self) -> ReporterOpts {
         ReporterOpts {
             total: self.total,
+            async_count: self.async_count,
             use_color: self.use_color,
             tb: self.tb,
             show_tips: self.show_tips,
