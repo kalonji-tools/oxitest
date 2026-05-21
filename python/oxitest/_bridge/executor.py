@@ -191,7 +191,7 @@ def _run_base(
         raise
 
 
-async def _run_base_async(
+async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
     no_message_lines: list[int],
@@ -349,8 +349,9 @@ def _build_execution_chain(
     # Reject async fixture values in sync tests
     if not inspect.iscoroutinefunction(fn):
         for k, v in all_kwargs.items():
-            if inspect.iscoroutine(v):
-                v.close()  # prevent "coroutine was never awaited" warning
+            if inspect.iscoroutine(v) or inspect.isasyncgen(v):
+                if inspect.iscoroutine(v):
+                    v.close()  # prevent "coroutine was never awaited" warning
                 _msg = (
                     f"async fixture '{k}' cannot be used by sync test "
                     f"'{fn_name}' \u2014 make the test async def"
@@ -363,7 +364,7 @@ def _build_execution_chain(
 
         backend = get_async_backend()
 
-        async def _async_core() -> TestResult:
+        async def _async_core() -> TestResult:  # pragma: no cover
             # Resolve async fixture values (coroutines and async generators).
             # Sync fixture values pass through unchanged.
             resolved: dict[str, Any] = {}
