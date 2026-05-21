@@ -76,6 +76,27 @@ impl ParametrizeBuffer {
     }
 }
 
+// ─── ExitVote ────────────────────────────────────────────────────────────────
+
+/// Exit code vote from a reporter.
+#[derive(Debug, Clone, Copy)]
+pub enum ExitVote {
+    /// Reporter does not influence exit code.
+    Abstain,
+    /// Reporter votes for this exit code.
+    Code(i32),
+}
+
+impl ExitVote {
+    /// Extract the exit code, treating `Abstain` as 0.
+    pub fn code(self) -> i32 {
+        match self {
+            ExitVote::Abstain => 0,
+            ExitVote::Code(c) => c,
+        }
+    }
+}
+
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
 pub trait Reporter {
@@ -86,7 +107,7 @@ pub trait Reporter {
         outcome: &crate::types::TestOutcome,
         duration_ms: f64,
     );
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32;
+    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> ExitVote;
 
     /// Record a teardown warning (default: no-op).
     /// `context` identifies what failed (e.g. "end_module(path)" or "end_session").
@@ -96,7 +117,7 @@ pub trait Reporter {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-/// Fans reporter events to every inner reporter; returns the highest exit code.
+/// Fans reporter events to every inner reporter; returns the highest voted exit code.
 pub struct CompositeReporter {
     reporters: Vec<Box<dyn Reporter>>,
 }
@@ -125,12 +146,16 @@ impl Reporter for CompositeReporter {
         }
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
+    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> ExitVote {
         self.reporters
             .iter_mut()
             .map(|r| r.finish(collect_errors, interrupted))
+            .filter_map(|v| match v {
+                ExitVote::Code(c) => Some(c),
+                ExitVote::Abstain => None,
+            })
             .max()
-            .unwrap_or(0)
+            .map_or(ExitVote::Code(0), ExitVote::Code)
     }
 
     fn record_teardown_warning(&mut self, context: &str, error: &str) {
@@ -403,10 +428,15 @@ pub(crate) fn standard_finish(
     r: &mut impl StandardReporter,
     collect_errors: &[CollectError],
     interrupted: bool,
-) -> i32 {
+) -> ExitVote {
     r.pre_finish();
     print_collect_errors(collect_errors, r.run_opts().use_color);
-    print_summary_section(r.run_stats(), r.run_opts(), collect_errors, interrupted)
+    ExitVote::Code(print_summary_section(
+        r.run_stats(),
+        r.run_opts(),
+        collect_errors,
+        interrupted,
+    ))
 }
 
 #[cfg(test)]
@@ -451,8 +481,8 @@ mod tests {
             opts: ReporterOptsBuilder::new().build(),
             pre_finish_called: false,
         };
-        let code = standard_finish(&mut s, &[], false);
-        assert_eq!(code, 0);
+        let vote = standard_finish(&mut s, &[], false);
+        assert_eq!(vote.code(), 0);
         assert!(s.pre_finish_called);
     }
 
@@ -604,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_composite_reporter_finish_returns_max_exit_code() {
-        struct StubReporter(i32);
+        struct StubReporter(ExitVote);
         impl Reporter for StubReporter {
             fn test_started(&mut self, _: &crate::types::TestItem) {}
             fn test_completed(
@@ -614,18 +644,18 @@ mod tests {
                 _: f64,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
                 self.0
             }
         }
 
         let mut composite = CompositeReporter::new(vec![
-            Box::new(StubReporter(0)),
-            Box::new(StubReporter(1)),
-            Box::new(StubReporter(0)),
+            Box::new(StubReporter(ExitVote::Code(0))),
+            Box::new(StubReporter(ExitVote::Code(1))),
+            Box::new(StubReporter(ExitVote::Code(0))),
         ]);
         assert_eq!(
-            composite.finish(&[], false),
+            composite.finish(&[], false).code(),
             1,
             "CompositeReporter::finish should return the max exit code across all reporters"
         );
@@ -635,9 +665,66 @@ mod tests {
     fn test_composite_reporter_finish_with_no_reporters_returns_zero() {
         let mut composite = CompositeReporter::new(vec![]);
         assert_eq!(
-            composite.finish(&[], false),
+            composite.finish(&[], false).code(),
             0,
             "CompositeReporter with no reporters should return exit code 0"
+        );
+    }
+
+    #[test]
+    fn test_composite_reporter_finish_ignores_abstentions() {
+        struct StubReporter(ExitVote);
+        impl Reporter for StubReporter {
+            fn test_started(&mut self, _: &crate::types::TestItem) {}
+            fn test_completed(
+                &mut self,
+                _: &crate::types::TestItem,
+                _: &crate::types::TestOutcome,
+                _: f64,
+            ) {
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+                self.0
+            }
+        }
+
+        let mut composite = CompositeReporter::new(vec![
+            Box::new(StubReporter(ExitVote::Code(1))),
+            Box::new(StubReporter(ExitVote::Abstain)),
+            Box::new(StubReporter(ExitVote::Abstain)),
+        ]);
+        assert_eq!(
+            composite.finish(&[], false).code(),
+            1,
+            "CompositeReporter::finish should ignore Abstain votes"
+        );
+    }
+
+    #[test]
+    fn test_composite_reporter_finish_all_abstain_returns_zero() {
+        struct StubReporter(ExitVote);
+        impl Reporter for StubReporter {
+            fn test_started(&mut self, _: &crate::types::TestItem) {}
+            fn test_completed(
+                &mut self,
+                _: &crate::types::TestItem,
+                _: &crate::types::TestOutcome,
+                _: f64,
+            ) {
+            }
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+                self.0
+            }
+        }
+
+        let mut composite = CompositeReporter::new(vec![
+            Box::new(StubReporter(ExitVote::Abstain)),
+            Box::new(StubReporter(ExitVote::Abstain)),
+        ]);
+        assert_eq!(
+            composite.finish(&[], false).code(),
+            0,
+            "CompositeReporter with all Abstain should return exit code 0"
         );
     }
 
@@ -647,14 +734,14 @@ mod tests {
     fn test_make_reporter_returns_single_reporter_when_tty_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, true, None, vec![]);
-        assert_eq!(reporter.finish(&[], false), 0);
+        assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
     fn test_make_reporter_returns_single_reporter_when_ci_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, false, None, vec![]);
-        assert_eq!(reporter.finish(&[], false), 0);
+        assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
@@ -663,7 +750,7 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
         let mut reporter = make_reporter(opts, false, Some(path), vec![]);
-        assert_eq!(reporter.finish(&[], false), 0);
+        assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
@@ -686,8 +773,8 @@ mod tests {
             ) {
                 self.0.fetch_add(1, Ordering::Relaxed);
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
-                0
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+                ExitVote::Abstain
             }
         }
         let calls = Arc::new(AtomicUsize::new(0));
@@ -704,7 +791,7 @@ mod tests {
             calls.load(Ordering::Relaxed) >= 2,
             "plugin reporter should receive test_started and test_completed events"
         );
-        assert_eq!(reporter.finish(&[], false), 0);
+        assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
@@ -724,8 +811,8 @@ mod tests {
                 _: f64,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
-                0
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+                ExitVote::Abstain
             }
         }
 
@@ -756,8 +843,8 @@ mod tests {
                 _: f64,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
-                0
+            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+                ExitVote::Abstain
             }
             fn record_teardown_warning(&mut self, context: &str, error: &str) {
                 self.0

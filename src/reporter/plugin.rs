@@ -37,7 +37,7 @@ impl super::Reporter for PyPluginReporter {
         });
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
+    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
         Python::attach(|py| {
             let err_count = collect_errors.len();
             if let Err(e) = self
@@ -48,6 +48,6 @@ impl super::Reporter for PyPluginReporter {
             }
         });
         // Plugin reporters don't influence exit code
-        0
+        super::ExitVote::Abstain
     }
 }
