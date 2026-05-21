@@ -205,7 +205,7 @@ def _load_and_resolve(
     param_id: str | None,
 ) -> tuple[
     Any,
-    Callable[..., Any],
+    object,
     Callable[..., Any],
     dict[str, Any],
     list[Callable[[], None]],
@@ -267,7 +267,7 @@ def _load_and_resolve(
 
 def _build_execution_chain(
     module: Any,
-    fn_raw: Callable[..., Any],
+    fn_raw: object,
     fn_name: str,
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
