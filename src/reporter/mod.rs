@@ -329,12 +329,21 @@ mod json_tests {
     }
 }
 
-pub(crate) fn print_collected(total: usize) {
-    println!(
-        "collected {} item{}\n",
-        total,
-        if total == 1 { "" } else { "s" }
-    );
+pub(crate) fn print_collected(total: usize, async_count: usize) {
+    if async_count > 0 {
+        println!(
+            "collected {} item{} ({} async)\n",
+            total,
+            if total == 1 { "" } else { "s" },
+            async_count,
+        );
+    } else {
+        println!(
+            "collected {} item{}\n",
+            total,
+            if total == 1 { "" } else { "s" }
+        );
+    }
 }
 
 pub(crate) fn print_summary_section(
