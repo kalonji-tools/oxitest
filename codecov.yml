@@ -37,3 +37,4 @@ ignore:
   - "python/oxitest/_bridge/_fixture_session.py"
   # Protocol stubs — method bodies are `...`, never executed
   - "python/oxitest/plugin.py"
+  - "python/oxitest/_bridge/_async_backend.py"
