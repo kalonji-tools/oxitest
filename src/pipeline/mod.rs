@@ -220,13 +220,7 @@ struct SetupContext {
     base: reporter::ReporterOptsBuilder,
 }
 
-#[derive(Debug)]
-enum SetupResult {
-    EarlyExit(i32),
-    Ready(Box<SetupContext>),
-}
-
-fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
+fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, i32>> {
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
@@ -236,14 +230,14 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
         Err(e) => {
             // Clap formats this for the user; subscriber may not be initialised yet.
             eprintln!("{}", e);
-            return Ok(SetupResult::EarlyExit(4));
+            return Ok(Err(4));
         }
     };
 
     // Early-exit flags: handled before any filesystem setup.
     if cli.capture_environment {
         println!("{}", env_string(py));
-        return Ok(SetupResult::EarlyExit(0));
+        return Ok(Err(0));
     }
 
     let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
@@ -262,7 +256,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
         .show_tips(cli.tips)
         .show_warnings(cli.warnings);
 
-    Ok(SetupResult::Ready(Box::new(SetupContext {
+    Ok(Ok(Box::new(SetupContext {
         cfg,
         cache,
         cli,
@@ -531,8 +525,8 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         use_color,
         base,
     } = match setup(py, &args)? {
-        SetupResult::EarlyExit(code) => return Ok(code),
-        SetupResult::Ready(ctx) => *ctx,
+        Err(code) => return Ok(code),
+        Ok(ctx) => *ctx,
     };
 
     let make_error_rep =
