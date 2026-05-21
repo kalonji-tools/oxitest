@@ -208,6 +208,7 @@ def test_collected_item_can_be_constructed():
         markers=[],
         param_id=None,
         param_values=[],
+        is_async=False,
     )
     assert item.fn_name == "test_foo", (
         f"expected fn_name='test_foo', got {item.fn_name!r}"
@@ -218,6 +219,7 @@ def test_collected_item_can_be_constructed():
     assert item.param_values == [], (
         f"expected empty param_values, got {item.param_values}"
     )
+    assert item.is_async is False, f"expected is_async=False, got {item.is_async!r}"
 
 
 def test_collected_item_with_markers_and_param():
@@ -227,6 +229,7 @@ def test_collected_item_with_markers_and_param():
         markers=["slow"],
         param_id="case_a",
         param_values=[("x", "1"), ("y", "2")],
+        is_async=False,
     )
     assert item.markers == ["slow"], f"expected markers=['slow'], got {item.markers}"
     assert item.param_id == "case_a", (

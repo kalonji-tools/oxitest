@@ -55,6 +55,7 @@ class CollectedItem:
     markers: list[str]
     param_id: str | None
     param_values: list[tuple[str, str]]
+    is_async: bool = False
 
 
 class ViolationKind(StrEnum):
