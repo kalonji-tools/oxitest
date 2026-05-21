@@ -10,7 +10,7 @@ from types import ModuleType
 from typing import Any, cast
 
 from oxitest._bridge._loader import _load_module, _LoadError
-from oxitest._bridge._marks import _append_mark
+from oxitest._bridge._mark_api import _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge.fixtures import Fixtures
 from oxitest._bridge.parametrize import _DataclassCases, _DictCases
