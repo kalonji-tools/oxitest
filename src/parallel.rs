@@ -331,11 +331,12 @@ fn handle_worker_result(
     };
     let node_id = types::NodeId::from_raw(&result.node_id);
     let outcome = result.to_outcome();
+    let duration_ms = types::DurationMs::new(result.duration_ms);
     rep.test_started(&item);
-    rep.test_completed(&item, &outcome, result.duration_ms);
+    rep.test_completed(&item, &outcome, duration_ms);
     timings.push(types::TestTiming {
         node_id,
-        duration_ms: result.duration_ms,
+        duration_ms,
         outcome: types::OutcomeKind::from(&outcome),
     });
     Some(outcome)
@@ -991,7 +992,12 @@ mod drain_tests {
             fn test_started(&mut self, item: &TestItem) {
                 self.started.push(item.node_id.to_string());
             }
-            fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, _ms: f64) {
+            fn test_completed(
+                &mut self,
+                item: &TestItem,
+                outcome: &TestOutcome,
+                _ms: types::DurationMs,
+            ) {
                 self.completed
                     .push((item.node_id.to_string(), outcome.as_str().to_string()));
             }
@@ -1031,7 +1037,12 @@ mod drain_tests {
             fn test_started(&mut self, _: &TestItem) {
                 panic!("must not be called on empty scheduler");
             }
-            fn test_completed(&mut self, _: &TestItem, _: &crate::types::TestOutcome, _: f64) {
+            fn test_completed(
+                &mut self,
+                _: &TestItem,
+                _: &crate::types::TestOutcome,
+                _: types::DurationMs,
+            ) {
                 panic!("must not be called on empty scheduler");
             }
             fn finish(&mut self, _: &[CollectError], _: bool) -> crate::reporter::ExitVote {
@@ -1089,7 +1100,12 @@ mod result_handler_tests {
         fn test_started(&mut self, _: &types::TestItem) {
             self.started += 1;
         }
-        fn test_completed(&mut self, _: &types::TestItem, _: &types::TestOutcome, _: f64) {
+        fn test_completed(
+            &mut self,
+            _: &types::TestItem,
+            _: &types::TestOutcome,
+            _: types::DurationMs,
+        ) {
             self.completed += 1;
         }
         fn finish(&mut self, _: &[types::CollectError], _: bool) -> reporter::ExitVote {

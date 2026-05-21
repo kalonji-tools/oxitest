@@ -1,4 +1,4 @@
-use crate::types::{TestItem, TestOutcome};
+use crate::types::{DurationMs, TestItem, TestOutcome};
 
 pub(crate) struct RunStats {
     pub(crate) passed: usize,
@@ -102,8 +102,9 @@ impl RunStats {
         self.strict_suite += count;
     }
 
-    pub(crate) fn record_timing(&mut self, node_id: &str, duration_ms: f64) {
-        self.timings.push((node_id.to_string(), duration_ms));
+    pub(crate) fn record_timing(&mut self, node_id: &str, duration_ms: DurationMs) {
+        self.timings
+            .push((node_id.to_string(), duration_ms.as_f64()));
     }
 
     /// Returns the N slowest tests, sorted by duration descending.
@@ -142,17 +143,17 @@ mod tests {
     #[test]
     fn test_record_timing_accumulates_entries() {
         let mut stats = RunStats::new();
-        stats.record_timing("tests/test_foo.py::test_a", 42.5);
-        stats.record_timing("tests/test_foo.py::test_b", 10.0);
+        stats.record_timing("tests/test_foo.py::test_a", DurationMs::new(42.5));
+        stats.record_timing("tests/test_foo.py::test_b", DurationMs::new(10.0));
         assert_eq!(stats.timings.len(), 2);
     }
 
     #[test]
     fn test_slowest_returns_sorted_descending() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_fast", 5.0);
-        stats.record_timing("test_slow", 200.0);
-        stats.record_timing("test_medium", 50.0);
+        stats.record_timing("test_fast", DurationMs::new(5.0));
+        stats.record_timing("test_slow", DurationMs::new(200.0));
+        stats.record_timing("test_medium", DurationMs::new(50.0));
         let top2 = stats.slowest(2);
         assert_eq!(top2[0].0, "test_slow");
         assert_eq!(top2[1].0, "test_medium");
@@ -161,7 +162,7 @@ mod tests {
     #[test]
     fn test_slowest_n_greater_than_count_returns_all() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_a", 10.0);
+        stats.record_timing("test_a", DurationMs::new(10.0));
         let top10 = stats.slowest(10);
         assert_eq!(top10.len(), 1);
     }
@@ -169,7 +170,7 @@ mod tests {
     #[test]
     fn test_slowest_zero_returns_empty() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_a", 10.0);
+        stats.record_timing("test_a", DurationMs::new(10.0));
         assert!(stats.slowest(0).is_empty());
     }
 

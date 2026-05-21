@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use crate::types::{CollectError, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 /// Wraps a Python plugin reporter object and forwards `Reporter` trait calls
 /// through PyO3. Acquires the GIL on each call.
@@ -24,14 +24,15 @@ impl super::Reporter for PyPluginReporter {
         });
     }
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: f64) {
+    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
         Python::attach(|py| {
             let node_id = item.node_id.to_string();
             let status = outcome.as_str();
-            if let Err(e) =
-                self.obj
-                    .call_method1(py, "test_completed", (node_id, status, duration_ms))
-            {
+            if let Err(e) = self.obj.call_method1(
+                py,
+                "test_completed",
+                (node_id, status, duration_ms.as_f64()),
+            ) {
                 tracing::warn!("Plugin reporter test_completed error: {e}");
             }
         });
