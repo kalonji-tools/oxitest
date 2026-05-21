@@ -1208,3 +1208,44 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture):
         f"expected leaked task warning, got {[str(w.message) for w in warn.list]}"
     )
     session.end_session()
+
+
+def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir):
+    """Shared async yield fixture teardown runs when end_session is called."""
+    f = tmp / "test_shared_td.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_ok(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 42\n"
+    )
+    log: list[str] = []
+
+    async def async_yield_factory():
+        log.append("setup")
+        yield 42
+        log.append("teardown")
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            "pool",
+            async_yield_factory,
+            False,
+            None,
+            "/c.py",
+            shared=True,
+            is_async=True,
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_ok", session)
+    assert result.status == "passed", (
+        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+    )
+    assert log == ["setup"], f"only setup should have run, got {log!r}"
+
+    session.end_session()
+    assert log == ["setup", "teardown"], (
+        f"teardown should run at end_session, got {log!r}"
+    )

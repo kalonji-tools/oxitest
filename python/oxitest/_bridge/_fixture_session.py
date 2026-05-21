@@ -229,6 +229,24 @@ class FixtureSession:
         self._module_cache.evict(module_path)
 
     def end_session(self) -> None:
+        # Tear down shared async fixtures first (reverse order), then sync scopes.
+        if self._async_loop is not None:
+            for name, gen in reversed(self._async_teardowns):
+                try:
+                    self._async_loop.run_until_complete(anext(gen))
+                except StopAsyncIteration:
+                    pass
+                except Exception as exc:
+                    _warn_teardown(name, exc)
+            try:
+                self._async_loop.run_until_complete(
+                    self._async_loop.shutdown_asyncgens()
+                )
+            except Exception:
+                pass
+            self._async_loop.close()
+            self._async_loop = None
+            self._async_teardowns.clear()
         # Drain shared (user fixtures) before session (builtins like TempDirFactory)
         # so that shared fixture teardowns can still access session-scoped builtins.
         self._shared_scope.drain()
