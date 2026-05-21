@@ -57,6 +57,7 @@ pub struct TestItem {
     pub markers: Vec<String>,
     pub param_id: Option<String>,
     pub param_values: Vec<(String, String)>,
+    pub is_async: bool,
 }
 
 /// Single traceback frame from a test failure or error.
@@ -473,6 +474,7 @@ mod tests {
             markers: vec![],
             param_id: Some("basic".to_string()),
             param_values: vec![("x".to_string(), "1".to_string())],
+            is_async: false,
         };
         assert_eq!(item.param_id, Some("basic".to_string()));
         assert_eq!(item.param_values.len(), 1);
@@ -533,9 +535,37 @@ mod tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         };
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
+    }
+
+    #[test]
+    fn test_item_has_is_async_field() {
+        let sync_item = TestItem {
+            node_id: NodeId::new("test.py", "test_sync", None),
+            module_path: Utf8PathBuf::from("test.py"),
+            fn_name: "test_sync".to_string(),
+            lineno: 1,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+            is_async: false,
+        };
+        assert!(!sync_item.is_async);
+
+        let async_item = TestItem {
+            node_id: NodeId::new("test.py", "test_async", None),
+            module_path: Utf8PathBuf::from("test.py"),
+            fn_name: "test_async".to_string(),
+            lineno: 1,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+            is_async: true,
+        };
+        assert!(async_item.is_async);
     }
 
     #[test]

@@ -115,6 +115,7 @@ struct CollectedItem {
     markers: Vec<String>,
     param_id: Option<String>,
     param_values: Vec<(String, String)>,
+    is_async: bool,
 }
 
 /// Typed violation kind coming from Python. Variants map 1-to-1 to the
@@ -206,6 +207,7 @@ pub(crate) fn collect_module_with_session_obj(
             markers: item.markers,
             param_id: item.param_id,
             param_values: item.param_values,
+            is_async: item.is_async,
         })
         .collect();
 

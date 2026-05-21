@@ -112,6 +112,7 @@ mod tests {
                 markers: vec![],
                 param_id: None,
                 param_values: vec![],
+                is_async: false,
             })
             .collect();
         (p, items)

@@ -310,6 +310,7 @@ mod tests {
             markers: vec![],
             param_id: Some("neg".to_string()),
             param_values: vec![("x".to_string(), "-1".to_string())],
+            is_async: false,
         };
         let outcome = make_failed("", "tests/test_foo.py", 5, "assert x > 0");
         reporter.test_completed(&item, &outcome, 1.0);

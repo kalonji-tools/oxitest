@@ -33,6 +33,8 @@ struct CachedItemData {
     markers: Vec<String>,
     param_id: Option<String>,
     param_values: Vec<(String, String)>,
+    #[serde(default)]
+    is_async: bool,
 }
 
 /// Per-module fast-collection cache. Invalidated when mtime_secs changes.
@@ -295,6 +297,7 @@ impl TestCache {
                 markers: d.markers.clone(),
                 param_id: d.param_id.clone(),
                 param_values: d.param_values.clone(),
+                is_async: d.is_async,
             })
             .collect();
         Some(items)
@@ -312,6 +315,7 @@ impl TestCache {
                 markers: item.markers.clone(),
                 param_id: item.param_id.clone(),
                 param_values: item.param_values.clone(),
+                is_async: item.is_async,
             })
             .collect();
         self.inner.modules.insert(
@@ -846,6 +850,7 @@ mod tests {
                 markers: vec!["slow".to_string()],
                 param_id: None,
                 param_values: vec![],
+                is_async: false,
             },
             TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
@@ -855,6 +860,7 @@ mod tests {
                 markers: vec![],
                 param_id: Some("x0".to_string()),
                 param_values: vec![("x".to_string(), "0".to_string())],
+                is_async: false,
             },
         ];
         cache.update_module_cache(module_path, 12345, &items);
@@ -884,6 +890,7 @@ mod tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         }];
         cache.update_module_cache(module_path, 12345, &items);
         assert!(cache.cached_module_items(module_path, 99999).is_none());
@@ -960,6 +967,7 @@ mod tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         }];
         cache.update_module_cache(module_path, 9999, &items);
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
