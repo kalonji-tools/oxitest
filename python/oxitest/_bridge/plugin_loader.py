@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from oxitest.plugin import Plugin
 
@@ -79,6 +79,15 @@ class PluginRegistry:
         for entry in self.entries:
             reporters.extend(entry.plugin.reporters)
         return reporters
+
+    @property
+    def async_backends(self) -> list[tuple[str, Any]]:
+        """All async backends from all plugins, as (module_name, backend) pairs."""
+        return [
+            (entry.module_name, entry.plugin.async_backend)
+            for entry in self.entries
+            if entry.plugin.async_backend is not None
+        ]
 
 
 _registry: PluginRegistry | None = None
