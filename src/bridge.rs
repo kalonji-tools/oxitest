@@ -117,12 +117,36 @@ struct CollectedItem {
     param_values: Vec<(String, String)>,
 }
 
+/// Typed violation kind coming from Python. Variants map 1-to-1 to the
+/// string values produced by `python/oxitest/_bridge/result.py`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ViolationKind {
+    BareAssert,
+    DictParametrize,
+    MissingMarkReason,
+    Unknown,
+}
+
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        let s: String = ob.extract()?;
+        Ok(match s.as_str() {
+            "bare_assert" => ViolationKind::BareAssert,
+            "dict_parametrize" => ViolationKind::DictParametrize,
+            "missing_mark_reason" => ViolationKind::MissingMarkReason,
+            _ => ViolationKind::Unknown,
+        })
+    }
+}
+
 /// Raw violation extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `CollectedViolation`.
 #[derive(pyo3::FromPyObject, Debug)]
 pub(crate) struct RawViolation {
     pub node_id: String,
-    pub kind: String, // "bare_assert" | "dict_parametrize" | "missing_mark_reason"
+    pub kind: ViolationKind,
     pub detail: String,
 }
 
