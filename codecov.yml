@@ -27,7 +27,7 @@ ignore:
   # Rust: only testable with Python interpreter (covered by oxitest-consumer integration tests)
   - "src/bridge.rs"
   - "src/lib.rs"
-  - "src/pipeline.rs"
+  - "src/pipeline/"
   - "src/parallel.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
