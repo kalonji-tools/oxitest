@@ -191,6 +191,80 @@ def _run_base(
         raise
 
 
+class _ResolveError(Exception):
+    """Internal: wraps an early-return TestResult from resolution failures."""
+
+    def __init__(self, result: TestResult) -> None:
+        self.result = result
+
+
+def _load_and_resolve(
+    module_path: str,
+    fn_name: str,
+    session: _SessionProtocol,
+    param_id: str | None,
+) -> tuple[
+    Any,
+    Callable[..., Any],
+    Callable[..., Any],
+    dict[str, Any],
+    list[Callable[[], None]],
+]:
+    """Load module, resolve function, parametrize, and fixtures.
+
+    Returns (module, fn_raw, fn, all_kwargs, fn_teardowns).
+    Raises _LoadError on module/fn errors.
+    Raises _ResolveError on parametrize/fixture errors.
+    """
+    unique_name = _exec_unique_name(module_path)
+    _cache = getattr(session, "_module_cache", None)
+    _cached = _cache.get(module_path) if _cache is not None else None
+    if _cached is not None:
+        module = _cached
+        sys.modules[unique_name] = module
+    else:
+        module = _load_module(module_path, unique_name)
+        if _cache is not None:
+            _cache.set(module_path, module)
+    fn_raw, fn = _resolve_fn(module, fn_name, module_path)
+
+    # Resolve parametrize case values
+    try:
+        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, param_id)
+    except ParametrizeError as exc:
+        raise _ResolveError(_error_result(str(exc))) from None
+
+    # Resolve fixtures from function signature
+    fn_teardowns: list[Callable[[], None]] = []
+    try:
+        fixture_kwargs: dict[str, Any]
+        fixture_kwargs, fn_teardowns = session.resolve_for_test(
+            fn,  # type: ignore[arg-type]
+            module_path,
+            skip_names=fixref_names,
+        )
+        # Resolve FixtureRef fields using each case's specific fixture function
+        for field_name in fixref_names:
+            fixture_fn = param_kwargs[field_name]
+            fixture_name = _get_fixture_name(
+                fixture_fn, fallback=getattr(fixture_fn, "__name__", "")
+            )
+            namespace = session.get_namespace_for_func(fixture_name, fixture_fn)
+            if namespace:
+                param_kwargs[field_name] = session.get_fixture_in_namespace(
+                    fixture_name, namespace, module_path, fn_teardowns
+                )
+            else:
+                param_kwargs[field_name] = session.get_fixture(
+                    fixture_name, module_path, fn_teardowns
+                )
+    except (FixtureSetupError, FixtureNotFoundError) as exc:
+        raise _ResolveError(_error_result(str(exc))) from None
+
+    all_kwargs: dict[str, Any] = {**fixture_kwargs, **param_kwargs}
+    return module, fn_raw, fn, all_kwargs, fn_teardowns
+
+
 _NULL_SESSION: _SessionProtocol = _NullFixtureSession()
 
 
@@ -212,55 +286,13 @@ def run_test(
     )
     unique_name = _exec_unique_name(module_path)
     try:
-        _cache = getattr(effective_session, "_module_cache", None)
-        _cached = _cache.get(module_path) if _cache is not None else None
-        if _cached is not None:
-            module = _cached
-            sys.modules[unique_name] = module
-        else:
-            module = _load_module(module_path, unique_name)
-            if _cache is not None:
-                _cache.set(module_path, module)
-        fn_raw, fn = _resolve_fn(module, fn_name, module_path)
+        module, fn_raw, fn, all_kwargs, fn_teardowns = _load_and_resolve(
+            module_path, fn_name, effective_session, param_id
+        )
     except _LoadError as e:
         return e.result
-
-    # Resolve parametrize case values
-    try:
-        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, param_id)
-    except ParametrizeError as exc:
-        return _error_result(str(exc))
-
-    # Resolve fixtures from function signature
-    fn_teardowns: list[Callable[[], None]] = []
-    try:
-        fixture_kwargs: dict[str, Any]
-        fixture_kwargs, fn_teardowns = effective_session.resolve_for_test(
-            fn,  # type: ignore[arg-type]
-            module_path,
-            skip_names=fixref_names,
-        )
-        # Resolve FixtureRef fields using each case's specific fixture function
-        for field_name in fixref_names:
-            fixture_fn = param_kwargs[field_name]
-            fixture_name = _get_fixture_name(
-                fixture_fn, fallback=getattr(fixture_fn, "__name__", "")
-            )
-            namespace = effective_session.get_namespace_for_func(
-                fixture_name, fixture_fn
-            )
-            if namespace:
-                param_kwargs[field_name] = effective_session.get_fixture_in_namespace(
-                    fixture_name, namespace, module_path, fn_teardowns
-                )
-            else:
-                param_kwargs[field_name] = effective_session.get_fixture(
-                    fixture_name, module_path, fn_teardowns
-                )
-    except (FixtureSetupError, FixtureNotFoundError) as exc:
-        return _error_result(str(exc))
-
-    all_kwargs: dict[str, Any] = {**fixture_kwargs, **param_kwargs}
+    except _ResolveError as e:
+        return e.result
 
     ctx = _HandlerContext(
         fn_raw=fn_raw,
@@ -303,9 +335,6 @@ def run_test(
                     break  # one match per wrapper per test
 
         # Base execution: run fn and map exceptions to TestResult
-        # _oxitest_bare_asserts is set by ast_rewriter.py during module import.
-        # Falls back to _find_bare_asserts (runtime AST parse) if the module was
-        # loaded without rewriting.
         _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
         _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
         no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
