@@ -164,9 +164,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
         let mut no_desc = Vec::new();
         for s in raw_markers {
             if let Some((name, _)) = s.split_once(':') {
-                names.push(name.trim().to_string());
+                names.push(name.trim().to_owned());
             } else {
-                let name = s.trim().to_string();
+                let name = s.trim().to_owned();
                 no_desc.push(name.clone());
                 names.push(name);
             }
