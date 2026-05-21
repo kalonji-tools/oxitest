@@ -9,7 +9,10 @@ Plugin authors import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from oxitest._bridge._async_backend import AsyncBackend
 
 
 @runtime_checkable
@@ -78,3 +81,6 @@ class Plugin:
     # Global hooks (eager — activated at startup)
     collectors: list[Collector] = field(default_factory=list)
     reporters: list[Reporter] = field(default_factory=list)
+
+    # Async runtime backend (at most one across all plugins)
+    async_backend: AsyncBackend | None = None
