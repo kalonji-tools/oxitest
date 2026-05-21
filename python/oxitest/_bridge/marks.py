@@ -12,7 +12,8 @@ import dataclasses
 from collections.abc import Callable
 from typing import Any
 
-from oxitest._bridge.fixtures import MarkInfo, _SessionProtocol
+from oxitest._bridge._fixture_session import _SessionProtocol
+from oxitest._bridge._marks import MarkInfo
 from oxitest._bridge.result import TestResult
 
 ExecutionWrapper = Callable[[Callable[[], TestResult]], TestResult]

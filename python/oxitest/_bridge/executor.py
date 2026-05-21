@@ -14,12 +14,13 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
-from oxitest._bridge._fixture_session import _NullFixtureSession
+from oxitest._bridge._fixture_session import _NullFixtureSession, _SessionProtocol
 from oxitest._bridge._loader import (
     _load_module,
     _LoadError,
     _resolve_fn,
 )
+from oxitest._bridge._marks import MarkInfo
 from oxitest._bridge._metadata import (
     get_fixture_name as _get_fixture_name,
     get_marks,
@@ -29,11 +30,7 @@ from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )
-from oxitest._bridge.fixtures import (
-    FixtureTeardownWarning,
-    MarkInfo,
-    _SessionProtocol,
-)
+from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.marks import ExecutionWrapper, _HandlerContext, evaluate_marks
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import Frame, TestResult, _error_result

@@ -4,13 +4,12 @@ import dataclasses
 
 import oxitest
 from oxitest import TempDir, parametrize
+from oxitest._bridge._marks import MarkInfo, _append_mark
 from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
     FixtureDef,
     FixtureRegistry,
     FixtureSession,
-    MarkInfo,
-    _append_mark,
 )
 from oxitest._bridge.marks import (
     _MARK_REGISTRY,
