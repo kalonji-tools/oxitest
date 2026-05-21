@@ -353,11 +353,17 @@ def _build_execution_chain(
         backend = get_async_backend()
 
         async def _async_core() -> TestResult:
-            # Await any async fixture coroutines in kwargs
+            # Await any async fixture coroutines in kwargs.
+            # Exceptions during async fixture setup produce status='error'.
             resolved: dict[str, Any] = {}
             for k, v in all_kwargs.items():
                 if inspect.iscoroutine(v):
-                    resolved[k] = await v
+                    try:
+                        resolved[k] = await v
+                    except Exception as exc:
+                        from oxitest._bridge._errors import FixtureSetupError
+
+                        return _error_result(str(FixtureSetupError(k, exc)))
                 else:
                     resolved[k] = v
             return await _run_base_async(fn, resolved, no_message_lines)
