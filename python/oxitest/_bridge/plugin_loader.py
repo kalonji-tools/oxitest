@@ -8,8 +8,18 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from oxitest.plugin import Plugin
+
+if TYPE_CHECKING:
+    from oxitest.plugin import (
+        Collector,
+        ExecutionWrapper,
+        FixtureProvider,
+        LogBackend,
+        Reporter,
+    )
 
 
 class PluginLoadError(Exception):
@@ -31,7 +41,7 @@ class PluginRegistry:
     entries: list[PluginEntry] = field(default_factory=list)
 
     @property
-    def log_backends(self) -> list:
+    def log_backends(self) -> list[LogBackend]:
         """All log backends from all plugins."""
         backends = []
         for entry in self.entries:
@@ -39,7 +49,7 @@ class PluginRegistry:
         return backends
 
     @property
-    def fixture_providers(self) -> list:
+    def fixture_providers(self) -> list[FixtureProvider]:
         """All fixture providers from all plugins."""
         providers = []
         for entry in self.entries:
@@ -47,7 +57,7 @@ class PluginRegistry:
         return providers
 
     @property
-    def execution_wrappers(self) -> list:
+    def execution_wrappers(self) -> list[ExecutionWrapper]:
         """All execution wrappers from all plugins."""
         wrappers = []
         for entry in self.entries:
@@ -55,7 +65,7 @@ class PluginRegistry:
         return wrappers
 
     @property
-    def collectors(self) -> list:
+    def collectors(self) -> list[Collector]:
         """All collectors from all plugins."""
         collectors = []
         for entry in self.entries:
@@ -63,7 +73,7 @@ class PluginRegistry:
         return collectors
 
     @property
-    def reporters(self) -> list:
+    def reporters(self) -> list[Reporter]:
         """All reporters from all plugins."""
         reporters = []
         for entry in self.entries:
