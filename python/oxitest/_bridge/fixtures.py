@@ -61,9 +61,10 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 class FixtureAccessor:
     """Returned by ``Fixtures.__getattr__``; serves two roles:
 
-    1. **FixtureRef target** — carries ``_oxitest_fixture_name`` and
-       ``_oxitest_namespace`` so the executor can resolve it as a callable
-       fixture reference in ``@oxitest.parametrize``.
+    1. **FixtureRef target** — carries ``_oxitest_fixture_name`` and wraps the
+       underlying fixture function (``_fa_func``) so the executor can resolve it
+       as a callable fixture reference in ``@oxitest.parametrize``.  The
+       namespace is looked up via ``FixtureDef.namespace`` in the registry.
 
     2. **Lazy attribute proxy** — when attribute access happens *inside* a
        test or fixture body, it resolves the live fixture instance via the
@@ -95,12 +96,6 @@ class FixtureAccessor:
         # Mirror what _register sets so the executor can read them directly.
         self._oxitest_fixture_name: str = getattr(func, "_oxitest_fixture_name", name)
         self.__name__ = name
-
-    @property
-    def _oxitest_namespace(self) -> str | None:
-        """Dynamic: reflects the namespace even if stamped after creation."""
-        ns = self._fa_fixtures._namespace_name
-        return ns or None
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._fa_func(*args, **kwargs)

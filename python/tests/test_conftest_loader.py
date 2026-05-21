@@ -329,7 +329,7 @@ def test_load_fixtures_explicit_name_overrides_variable_name(tmp: TempDir):
     )
 
 
-def test_load_fixtures_stamps_oxitest_namespace_on_function(tmp: TempDir):
+def test_load_fixtures_sets_namespace_on_fixture_def(tmp: TempDir):
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -339,9 +339,12 @@ def test_load_fixtures_stamps_oxitest_namespace_on_function(tmp: TempDir):
         "    return 1\n"
     )
     defs = load_fixtures_from_conftest(str(conftest))
-    assert getattr(defs[0].func, "_oxitest_namespace", None) == "db", (
-        f"fixture function should have _oxitest_namespace='db' stamped, "
-        f"got {getattr(defs[0].func, '_oxitest_namespace', None)!r}"
+    assert defs[0].namespace == "db", (
+        f"FixtureDef.namespace should be 'db', got {defs[0].namespace!r}"
+    )
+    # Ensure the function is NOT stamped with a private attribute
+    assert not hasattr(defs[0].func, "_oxitest_namespace"), (
+        "fixture function should not have _oxitest_namespace stamped"
     )
 
 
