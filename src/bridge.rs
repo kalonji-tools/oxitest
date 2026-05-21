@@ -164,13 +164,26 @@ pub fn collect_module(
     session: Option<&FixtureSession>,
     collect_violations: bool,
 ) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
-    let importer = py
-        .import("oxitest._bridge.importer")
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
-
     let session_obj = session
         .map(|s| s.as_py_object(py))
         .unwrap_or_else(|| py.None().into_bound(py));
+
+    collect_module_with_session_obj(py, path, session_obj, collect_violations)
+}
+
+/// Variant of [`collect_module`] that accepts a raw Python session object.
+///
+/// The trait-based `ModuleCollector` implementation calls this directly,
+/// bypassing the `Option<&FixtureSession>` indirection.
+pub(crate) fn collect_module_with_session_obj(
+    py: Python<'_>,
+    path: &Utf8Path,
+    session_obj: Bound<'_, PyAny>,
+    collect_violations: bool,
+) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
+    let importer = py
+        .import("oxitest._bridge.importer")
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
 
     let path_str = path.as_str();
     let result = importer
@@ -218,27 +231,42 @@ pub fn run_test(
     session: Option<&FixtureSession>,
     default_timeout: Option<u64>,
 ) -> TestOutcome {
-    try_run_test(py, item, session, default_timeout).unwrap_or_else(|e| TestOutcome::Error {
-        message: format!("{} — {}", item.node_id, e),
-        file: String::new(),
-        lineno: 0,
-        source_line: String::new(),
-        frames: vec![],
+    let session_obj = session
+        .map(|s| s.as_py_object(py))
+        .unwrap_or_else(|| py.None().into_bound(py));
+
+    run_test_with_session_obj(py, item, session_obj, default_timeout)
+}
+
+/// Variant of [`run_test`] that accepts a raw Python session object.
+///
+/// The trait-based `TestRunner` implementation calls this directly,
+/// bypassing the `Option<&FixtureSession>` indirection.
+pub(crate) fn run_test_with_session_obj(
+    py: Python<'_>,
+    item: &TestItem,
+    session_obj: Bound<'_, PyAny>,
+    default_timeout: Option<u64>,
+) -> TestOutcome {
+    try_run_test_with_session_obj(py, item, session_obj, default_timeout).unwrap_or_else(|e| {
+        TestOutcome::Error {
+            message: format!("{} — {}", item.node_id, e),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        }
     })
 }
 
-fn try_run_test(
+fn try_run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,
-    session: Option<&FixtureSession>,
+    session_obj: Bound<'_, PyAny>,
     default_timeout: Option<u64>,
 ) -> PyResult<TestOutcome> {
     let executor = py.import("oxitest._bridge.executor")?;
     let path_str = item.module_path.as_str();
-
-    let session_obj = session
-        .map(|s| s.as_py_object(py))
-        .unwrap_or_else(|| py.None().into_bound(py));
 
     let param_id_obj: Bound<'_, PyAny> = match &item.param_id {
         Some(pid) => pid.as_str().into_pyobject(py)?.into_any(),
