@@ -356,14 +356,17 @@ fn apply_filters(
         Some(config::FailedMode::Only) => {
             let failed_ids = cache.last_failed_ids();
             if failed_ids.is_empty() {
-                eprintln!("no recorded failures — running all {} tests", items.len());
+                tracing::info!(
+                    count = items.len(),
+                    "no recorded failures — running all tests"
+                );
                 items
             } else {
                 let filtered = filter::filter_last_failed(items, &failed_ids);
-                eprintln!(
-                    "running {}/{} tests (--failed=only mode)",
-                    filtered.len(),
-                    total_before_failed_filter
+                tracing::info!(
+                    running = filtered.len(),
+                    total = total_before_failed_filter,
+                    "running tests in --failed=only mode"
                 );
                 filtered
             }
