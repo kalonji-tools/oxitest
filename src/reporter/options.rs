@@ -228,4 +228,28 @@ mod tests {
         assert_eq!(b.total, 5);
         assert!(b.verbose);
     }
+
+    #[test]
+    fn test_builder_async_count_defaults_to_zero() {
+        let opts = ReporterOptsBuilder::new().build();
+        assert_eq!(opts.async_count, 0);
+    }
+
+    #[test]
+    fn test_builder_async_count_override() {
+        let opts = ReporterOptsBuilder::new().total(42).async_count(18).build();
+        assert_eq!(opts.async_count, 18);
+    }
+
+    #[test]
+    fn test_print_collected_no_async() {
+        // Exercises the zero-async branch (output goes to stdout, not asserted)
+        super::super::print_collected(10, 0);
+    }
+
+    #[test]
+    fn test_print_collected_with_async() {
+        // Exercises the async-count branch
+        super::super::print_collected(10, 3);
+    }
 }
