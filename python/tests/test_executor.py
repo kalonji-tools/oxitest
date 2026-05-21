@@ -707,3 +707,31 @@ def test_async_test_skip(tmp: TempDir):
     assert "not ready" in result.message, (
         f"skip message should contain 'not ready', got {result.message!r}"
     )
+
+
+def test_async_test_xfail(tmp: TempDir):
+    f = tmp / "test_async_xfail.py"
+    f.write_text(
+        "import oxitest\n"
+        "@oxitest.mark.xfail(reason='known bug')\n"
+        "async def test_xfail():\n"
+        "    assert 1 == 2\n"
+    )
+    result = run_test(str(f), "test_xfail")
+    assert result.status == "xfailed", (
+        f"xfail async test should have status='xfailed', got {result.status!r}"
+    )
+
+
+def test_async_test_xpass(tmp: TempDir):
+    f = tmp / "test_async_xpass.py"
+    f.write_text(
+        "import oxitest\n"
+        "@oxitest.mark.xfail(reason='expected to fail')\n"
+        "async def test_xpass():\n"
+        "    assert 1 == 1\n"
+    )
+    result = run_test(str(f), "test_xpass")
+    assert result.status == "xpassed", (
+        f"xpass async test should have status='xpassed', got {result.status!r}"
+    )
