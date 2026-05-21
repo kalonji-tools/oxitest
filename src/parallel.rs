@@ -994,8 +994,8 @@ mod drain_tests {
                 self.completed
                     .push((item.node_id.to_string(), outcome.as_str().to_string()));
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
-                0
+            fn finish(&mut self, _: &[CollectError], _: bool) -> crate::reporter::ExitVote {
+                crate::reporter::ExitVote::Abstain
             }
         }
 
@@ -1033,8 +1033,8 @@ mod drain_tests {
             fn test_completed(&mut self, _: &TestItem, _: &crate::types::TestOutcome, _: f64) {
                 panic!("must not be called on empty scheduler");
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> i32 {
-                0
+            fn finish(&mut self, _: &[CollectError], _: bool) -> crate::reporter::ExitVote {
+                crate::reporter::ExitVote::Abstain
             }
         }
 
@@ -1091,8 +1091,8 @@ mod result_handler_tests {
         fn test_completed(&mut self, _: &types::TestItem, _: &types::TestOutcome, _: f64) {
             self.completed += 1;
         }
-        fn finish(&mut self, _: &[types::CollectError], _: bool) -> i32 {
-            0
+        fn finish(&mut self, _: &[types::CollectError], _: bool) -> reporter::ExitVote {
+            reporter::ExitVote::Abstain
         }
     }
 

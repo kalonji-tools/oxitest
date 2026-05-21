@@ -108,7 +108,7 @@ impl Reporter for JsonReporter {
         });
     }
 
-    fn finish(&mut self, _collect_errors: &[CollectError], _interrupted: bool) -> i32 {
+    fn finish(&mut self, _collect_errors: &[CollectError], _interrupted: bool) -> super::ExitVote {
         let passed = self.tests.iter().filter(|t| t.status == "passed").count();
         let failed = self.tests.iter().filter(|t| t.status == "failed").count();
         let skipped = self.tests.iter().filter(|t| t.status == "skipped").count();
@@ -132,9 +132,9 @@ impl Reporter for JsonReporter {
 
         if let Err(e) = self.write_json(&output) {
             eprintln!("error: failed to write JSON report to {}: {e}", self.path);
-            return 4;
+            return super::ExitVote::Code(4);
         }
-        0
+        super::ExitVote::Abstain
     }
 }
 
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn test_finish_returns_4_on_write_failure() {
+    fn test_finish_returns_code_4_on_write_failure() {
         let path = camino::Utf8PathBuf::from("/nonexistent/dir/out.json");
         let mut rep = JsonReporter::new(path);
         rep.test_completed(
@@ -244,15 +244,16 @@ mod tests {
             },
             1.0,
         );
-        let code = rep.finish(&[], false);
+        let vote = rep.finish(&[], false);
         assert_eq!(
-            code, 4,
+            vote.code(),
+            4,
             "must return exit code 4 when JSON file cannot be written"
         );
     }
 
     #[test]
-    fn test_finish_returns_0_on_successful_write() {
+    fn test_finish_returns_abstain_on_successful_write() {
         let dir = TempDir::new().unwrap();
         let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
         let mut rep = JsonReporter::new(path.clone());
@@ -263,8 +264,11 @@ mod tests {
             },
             1.0,
         );
-        let code = rep.finish(&[], false);
-        assert_eq!(code, 0, "must return 0 on successful write");
+        let vote = rep.finish(&[], false);
+        assert!(
+            matches!(vote, crate::reporter::ExitVote::Abstain),
+            "must return Abstain on successful write"
+        );
         assert!(path.exists(), "JSON file must be created");
     }
 }
