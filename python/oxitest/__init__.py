@@ -60,6 +60,10 @@ from __future__ import annotations
 import sys
 from typing import Any as _Any, NoReturn as _NoReturn
 
+from oxitest._bridge._async_backend import (
+    AsyncBackend as AsyncBackend,
+    SharedAsyncSession as SharedAsyncSession,
+)
 from oxitest._bridge._builtins import (
     CaptureResult as CaptureResult,
     FdCapture as FdCapture,
@@ -94,6 +98,7 @@ from oxitest._bridge.parametrize import parametrize as parametrize
 from oxitest.plugin import Plugin as Plugin
 
 __all__ = [
+    "AsyncBackend",
     "CaptureResult",
     "FdCapture",
     "Fixture",
@@ -104,6 +109,7 @@ __all__ = [
     "Patcher",
     "parametrize",
     "raises",
+    "SharedAsyncSession",
     "SharedFixtureMutationError",
     "StdCapture",
     "TempDir",
