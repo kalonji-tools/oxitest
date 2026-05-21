@@ -16,6 +16,7 @@ __all__ = [
     "_Scope",
 ]
 
+import inspect
 from collections.abc import Callable
 from typing import (
     Any,
@@ -229,6 +230,9 @@ class Fixtures:
                 params=None,
                 conftest_path="",
                 shared=shared,
+                is_async=(
+                    inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
+                ),
             )
             self._defs.append(defn)
             self._defs_by_name[fixture_name] = defn

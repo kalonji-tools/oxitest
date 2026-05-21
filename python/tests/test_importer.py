@@ -421,6 +421,41 @@ def test_collect_mixed_sync_async(tmp: TempDir):
     assert by_name["test_async"].is_async is True, "async test should be is_async=True"
 
 
+def test_async_fixture_flagged_during_registration(tmp: TempDir):
+    """Async fixtures should have is_async=True on their FixtureDef."""
+    f = tmp / "test_async_fx.py"
+    f.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "async def async_val():\n"
+        "    return 42\n"
+        "@fixtures.fixture\n"
+        "def sync_val():\n"
+        "    return 1\n"
+        "async def test_foo(async_val, sync_val): pass\n"
+    )
+    from oxitest._bridge.fixtures import FixtureRegistry
+
+    registry = FixtureRegistry()
+
+    class _FakeSession:
+        _registry = registry
+        _module_cache = None
+
+    collect_module(str(f), session=_FakeSession())  # type: ignore[arg-type]
+    async_defn = registry.get("async_val")
+    sync_defn = registry.get("sync_val")
+    assert async_defn is not None, "async_val fixture should be registered"
+    assert sync_defn is not None, "sync_val fixture should be registered"
+    assert async_defn.is_async is True, (
+        f"async fixture should have is_async=True, got {async_defn.is_async!r}"
+    )
+    assert sync_defn.is_async is False, (
+        f"sync fixture should have is_async=False, got {sync_defn.is_async!r}"
+    )
+
+
 def test_collect_async_class_method_sets_is_async(tmp: TempDir):
     f = tmp / "test_cls_async.py"
     f.write_text(
