@@ -11,6 +11,16 @@ from pathlib import Path
 from oxitest import TempDir
 
 _run = partial(subprocess.run, capture_output=True, text=True, timeout=30)
+_PYTHON_SRC = str(Path(__file__).resolve().parents[2] / "python")
+
+
+def _env(*extra_paths: Path | str) -> dict[str, str]:
+    parts = [str(p) for p in extra_paths]
+    parts.append(_PYTHON_SRC)
+    existing = os.environ.get("PYTHONPATH", "")
+    if existing:
+        parts.append(existing)
+    return {**os.environ, "PYTHONPATH": ":".join(parts)}
 
 
 def test_plugin_loads_and_entry_called(tmp: TempDir):
@@ -45,7 +55,7 @@ def test_plugin_loads_and_entry_called(tmp: TempDir):
     (tests_dir / "test_pass.py").write_text("def test_ok(): pass\n")
 
     # Run oxitest from the project directory
-    env = {**os.environ, "PYTHONPATH": f"{project}:{os.environ.get('PYTHONPATH', '')}"}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -74,9 +84,11 @@ def test_missing_plugin_exits_with_error(tmp: TempDir):
     )
     (project / "test_pass.py").write_text("def test_ok(): pass\n")
 
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(project), "--color=never"],
         cwd=str(project),
+        env=env,
     )
 
     assert result.returncode != 0, (
@@ -123,7 +135,7 @@ def test_plugin_receives_config(tmp: TempDir):
     tests_dir.mkdir()
     (tests_dir / "test_pass.py").write_text("def test_ok(): pass\n")
 
-    env = {**os.environ, "PYTHONPATH": f"{project}:{os.environ.get('PYTHONPATH', '')}"}
+    env = _env(project)
     _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -190,9 +202,7 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
         "    assert log is not None\n"
     )
 
-    python_src = str(Path(__file__).resolve().parents[2] / "python")
-    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
-    env = {**os.environ, "PYTHONPATH": pypath}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -259,9 +269,7 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
         "    MARKER.write_text('injected')\n"
     )
 
-    python_src = str(Path(__file__).resolve().parents[2] / "python")
-    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
-    env = {**os.environ, "PYTHONPATH": pypath}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -329,9 +337,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
         "def test_one(): pass\ndef test_two(): assert True\n"
     )
 
-    python_src = str(Path(__file__).resolve().parents[2] / "python")
-    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
-    env = {**os.environ, "PYTHONPATH": pypath}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -404,9 +410,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
         "    MARKER.write_text('collected')\n"
     )
 
-    python_src = str(Path(__file__).resolve().parents[2] / "python")
-    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
-    env = {**os.environ, "PYTHONPATH": pypath}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
@@ -478,9 +482,7 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir):
         "    assert n >= 2, f'attempt {n} failed'\n"
     )
 
-    python_src = str(Path(__file__).resolve().parents[2] / "python")
-    pypath = f"{project}:{python_src}:{os.environ.get('PYTHONPATH', '')}"
-    env = {**os.environ, "PYTHONPATH": pypath}
+    env = _env(project)
     result = _run(
         [sys.executable, "-m", "oxitest", str(tests_dir), "--color=never"],
         cwd=str(project),
