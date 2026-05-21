@@ -9,7 +9,10 @@ from __future__ import annotations
 import asyncio
 import warnings
 from collections.abc import Coroutine
-from typing import Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+
+if TYPE_CHECKING:
+    from oxitest._bridge.plugin_loader import PluginRegistry
 
 _T = TypeVar("_T")
 
@@ -106,3 +109,32 @@ def set_async_backend(backend: AsyncBackend) -> None:
     """Set the active async backend (called during session init)."""
     global _backend  # noqa: PLW0603
     _backend = backend
+
+
+def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
+    """Resolve the active backend by config name.
+
+    Raises:
+        BackendNotFoundError: if no backend matches the config name.
+        ConflictingBackendError: if multiple plugins register the same name.
+    """
+    from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
+
+    plugin_backends = [
+        (entry.module_name, entry.plugin.async_backend)
+        for entry in registry.entries
+        if entry.plugin.async_backend is not None
+    ]
+
+    if name == "asyncio":
+        conflicts = [m for m, b in plugin_backends if b.name == "asyncio"]
+        if conflicts:
+            raise ConflictingBackendError("asyncio", conflicts)
+        return AsyncioBackend()
+
+    candidates = [(m, b) for m, b in plugin_backends if b.name == name]
+    if not candidates:
+        raise BackendNotFoundError(name)
+    if len(candidates) > 1:
+        raise ConflictingBackendError(name, [m for m, _ in candidates])
+    return candidates[0][1]
