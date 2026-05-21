@@ -556,6 +556,12 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         }
     }
 
+    // Resolve and set the async backend
+    if let Err(e) = session.init_async_backend(py, &cfg.async_backend) {
+        let err = types::CollectError::PyError(format!("Async backend init failed: {}", e));
+        return Ok(early_exit_with_error(&[err], &make_error_rep));
+    }
+
     let collector_impl = traits::BridgeCollector;
     let runner_impl = traits::BridgeRunner;
     let parallel_impl = traits::DefaultParallelRunner;
