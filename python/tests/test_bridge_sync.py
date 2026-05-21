@@ -64,8 +64,16 @@ def test_collected_item_fields_match_rust_collected_item():
         markers=[],
         param_id=None,
         param_values=[],
+        is_async=False,
     )
-    expected_fields = {"fn_name", "lineno", "markers", "param_id", "param_values"}
+    expected_fields = {
+        "fn_name",
+        "lineno",
+        "markers",
+        "param_id",
+        "param_values",
+        "is_async",
+    }
     actual_fields = {f.name for f in dataclasses.fields(item)}
     assert actual_fields == expected_fields, (
         f"CollectedItem fields differ from Rust CollectedItem.\n"
