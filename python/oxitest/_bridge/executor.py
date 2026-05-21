@@ -265,6 +265,65 @@ def _load_and_resolve(
     return module, fn_raw, fn, all_kwargs, fn_teardowns
 
 
+def _build_execution_chain(
+    module: Any,
+    fn_raw: Callable[..., Any],
+    fn_name: str,
+    fn: Callable[..., Any],
+    all_kwargs: dict[str, Any],
+    marks: list[MarkInfo],
+    wrappers: list[ExecutionWrapper],
+    default_timeout: int | None,
+) -> Callable[[], TestResult]:
+    """Build the composed execution callable from wrappers and base runner.
+
+    Appends default-timeout and plugin wrappers to the list, then composes
+    them around ``_run_base`` so the last-appended wrapper is outermost.
+    """
+    # Apply global default timeout if no per-test @timeout mark
+    if default_timeout is not None and not any(m.name == "timeout" for m in marks):
+        from oxitest._bridge._timeout import make_timeout_wrapper
+
+        wrappers.append(make_timeout_wrapper(default_timeout))
+
+    # Plugin execution wrappers — match by marker name
+    from oxitest._bridge.plugin_loader import get_registry  # pragma: no cover
+
+    for pw in get_registry().execution_wrappers:  # pragma: no cover
+        for mark in marks:
+            if mark.name == pw.marker:
+                marker_args = {**dict(enumerate(mark.args)), **mark.kwargs}
+                _pw, _args = pw, marker_args  # capture for closure
+
+                def _plugin_wrapper(
+                    next_fn: Callable[[], TestResult],
+                    _w: Any = _pw,
+                    _a: dict[int | str, Any] = _args,
+                ) -> TestResult:
+                    return _w.wrap(next_fn, _a)
+
+                wrappers.append(_plugin_wrapper)
+                break  # one match per wrapper per test
+
+    # Bare-assert map lookup
+    # _oxitest_bare_asserts is set by ast_rewriter.py during module import.
+    # Falls back to _find_bare_asserts (runtime AST parse) if the module was
+    # loaded without rewriting.
+    _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
+    _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
+    no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
+
+    # Compose wrappers: last appended = outermost
+    def _base() -> TestResult:
+        return _run_base(fn, all_kwargs, no_message_lines)
+
+    execute: Callable[[], TestResult] = _base
+    for wrapper in reversed(wrappers):
+        execute = _compose(wrapper, execute)
+
+    return execute
+
+
 _NULL_SESSION: _SessionProtocol = _NullFixtureSession()
 
 
@@ -309,44 +368,16 @@ def run_test(
         if short_circuit is not None:
             return short_circuit
 
-        # Apply global default timeout if no per-test @timeout mark
-        if default_timeout is not None and not any(m.name == "timeout" for m in marks):
-            from oxitest._bridge._timeout import make_timeout_wrapper
-
-            wrappers.append(make_timeout_wrapper(default_timeout))
-
-        # Plugin execution wrappers — match by marker name
-        from oxitest._bridge.plugin_loader import get_registry  # pragma: no cover
-
-        for pw in get_registry().execution_wrappers:  # pragma: no cover
-            for mark in marks:
-                if mark.name == pw.marker:
-                    marker_args = {**dict(enumerate(mark.args)), **mark.kwargs}
-                    _pw, _args = pw, marker_args  # capture for closure
-
-                    def _plugin_wrapper(
-                        next_fn: Callable[[], TestResult],
-                        _w: Any = _pw,
-                        _a: dict[int | str, Any] = _args,
-                    ) -> TestResult:
-                        return _w.wrap(next_fn, _a)
-
-                    wrappers.append(_plugin_wrapper)
-                    break  # one match per wrapper per test
-
-        # Base execution: run fn and map exceptions to TestResult
-        _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
-        _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
-        no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
-
-        # Compose wrappers: last appended = outermost
-        def _base() -> TestResult:
-            return _run_base(fn, all_kwargs, no_message_lines)
-
-        execute: Callable[[], TestResult] = _base
-        for wrapper in reversed(wrappers):
-            execute = _compose(wrapper, execute)
-
+        execute = _build_execution_chain(
+            module,
+            fn_raw,
+            fn_name,
+            fn,
+            all_kwargs,
+            marks,
+            wrappers,
+            default_timeout,
+        )
         return execute()
     finally:
         sys.modules.pop(unique_name, None)
