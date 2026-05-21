@@ -47,6 +47,9 @@
             # Task runner & git hooks
             just
             prek
+
+            # Benchmarking
+            hyperfine
           ];
 
           env = {
