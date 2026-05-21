@@ -30,7 +30,7 @@ pub(crate) struct WorkerTaskItem<'a> {
     pub param_id: Option<&'a str>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct FrameEntry {
     pub file: String,
     pub lineno: u64,
@@ -38,7 +38,7 @@ pub(crate) struct FrameEntry {
     pub line: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct WorkerResult {
     pub node_id: String,
     pub outcome: types::OutcomeKind,

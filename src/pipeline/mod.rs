@@ -209,6 +209,7 @@ fn run_phase(
     (interrupted, timings)
 }
 
+#[derive(Debug)]
 struct SetupContext {
     cfg: config::Config,
     cache: cache::TestCache,
@@ -219,6 +220,7 @@ struct SetupContext {
     base: reporter::ReporterOptsBuilder,
 }
 
+#[derive(Debug)]
 enum SetupResult {
     EarlyExit(i32),
     Ready(Box<SetupContext>),
@@ -271,6 +273,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<SetupResult> {
     })))
 }
 
+#[derive(Debug)]
 struct StrictResult {
     clean_items: Vec<types::TestItem>,
     violated_items: Vec<types::TestItem>,
