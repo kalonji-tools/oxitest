@@ -88,6 +88,7 @@ nav:
     - Why Rust + Python: explanation/why-rust-python.md
     - Assertion diagnostics: explanation/assertion-diagnostics.md
     - Performance: explanation/performance.md
+    - Benchmarks: explanation/benchmarks.md
     - Strict mode: explanation/strict-mode.md
     - Parallelism: explanation/parallelism.md
     - Worker protocol: explanation/worker-protocol.md
