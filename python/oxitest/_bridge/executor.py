@@ -346,6 +346,17 @@ def _build_execution_chain(
     _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
     no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
 
+    # Reject async fixture values in sync tests
+    if not inspect.iscoroutinefunction(fn):
+        for k, v in all_kwargs.items():
+            if inspect.iscoroutine(v):
+                v.close()  # prevent "coroutine was never awaited" warning
+                _msg = (
+                    f"async fixture '{k}' cannot be used by sync test "
+                    f"'{fn_name}' \u2014 make the test async def"
+                )
+                return lambda: _error_result(_msg)
+
     # Compose wrappers: last appended = outermost
     if inspect.iscoroutinefunction(fn):
         from oxitest._bridge._async_backend import get_async_backend
