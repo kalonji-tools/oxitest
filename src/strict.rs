@@ -8,7 +8,7 @@
 //! Violations are either warnings (enforce mode) or hard errors (abort mode)
 //! depending on the [`StrictMode`](crate::config::StrictMode) setting.
 
-use crate::bridge::RawViolation;
+use crate::bridge::{RawViolation, ViolationKind};
 use crate::config::Config;
 use crate::types::{NodeId, TestOutcome};
 
@@ -49,8 +49,8 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
     raw.into_iter()
         .filter_map(|r| {
             let node_id = NodeId::from_raw(&r.node_id);
-            match r.kind.as_str() {
-                "bare_assert" => {
+            match r.kind {
+                ViolationKind::BareAssert => {
                     let lines: Vec<usize> = r
                         .detail
                         .split_whitespace()
@@ -58,12 +58,14 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         .collect();
                     Some(StrictViolation::BareAssert { node_id, lines })
                 }
-                "dict_parametrize" => Some(StrictViolation::DictParametrize { node_id }),
-                "missing_mark_reason" => Some(StrictViolation::MissingMarkReason {
+                ViolationKind::DictParametrize => {
+                    Some(StrictViolation::DictParametrize { node_id })
+                }
+                ViolationKind::MissingMarkReason => Some(StrictViolation::MissingMarkReason {
                     node_id,
                     mark_name: r.detail,
                 }),
-                _ => None,
+                ViolationKind::Unknown => None,
             }
         })
         .collect()
@@ -205,7 +207,7 @@ mod tests {
     fn test_check_collected_bare_assert() {
         let raw = vec![RawViolation {
             node_id: "tests/test_foo.py::test_add".to_string(),
-            kind: "bare_assert".to_string(),
+            kind: ViolationKind::BareAssert,
             detail: "12 18".to_string(),
         }];
         let violations = check_collected(raw);
@@ -221,7 +223,7 @@ mod tests {
     fn test_check_collected_dict_parametrize() {
         let raw = vec![RawViolation {
             node_id: "tests/test_foo.py::test_mul".to_string(),
-            kind: "dict_parametrize".to_string(),
+            kind: ViolationKind::DictParametrize,
             detail: String::new(),
         }];
         let violations = check_collected(raw);
@@ -235,7 +237,7 @@ mod tests {
     fn test_check_collected_missing_mark_reason() {
         let raw = vec![RawViolation {
             node_id: "tests/test_foo.py::test_skip".to_string(),
-            kind: "missing_mark_reason".to_string(),
+            kind: ViolationKind::MissingMarkReason,
             detail: "skip".to_string(),
         }];
         let violations = check_collected(raw);
@@ -250,7 +252,7 @@ mod tests {
     fn test_check_collected_unknown_kind_ignored() {
         let raw = vec![RawViolation {
             node_id: "tests/test_foo.py::test_x".to_string(),
-            kind: "unknown_future_kind".to_string(),
+            kind: ViolationKind::Unknown,
             detail: String::new(),
         }];
         let violations = check_collected(raw);
@@ -321,7 +323,7 @@ mod tests {
     fn test_check_collected_bare_assert_empty_detail() {
         let raw = vec![RawViolation {
             node_id: "tests/test_foo.py::test_x".to_string(),
-            kind: "bare_assert".to_string(),
+            kind: ViolationKind::BareAssert,
             detail: String::new(),
         }];
         let violations = check_collected(raw);
