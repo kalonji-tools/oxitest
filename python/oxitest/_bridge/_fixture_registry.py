@@ -18,6 +18,7 @@ class FixtureDef(Generic[T]):
     conftest_path: str  # which conftest registered this (for locality precedence)
     shared: bool = False  # True = session-lifetime, immutable (FrozenProxy-wrapped)
     namespace: str = ""  # Fixtures() instance name; empty = no namespace
+    is_async: bool = False  # True = async def or async generator fixture
 
 
 class FixtureRegistry:
