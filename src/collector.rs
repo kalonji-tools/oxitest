@@ -143,6 +143,7 @@ mod tests {
             color: crate::config::ColorMode::Auto,
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
         }
     }
 
@@ -216,6 +217,7 @@ mod tests {
             color: crate::config::ColorMode::Auto,
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -255,6 +257,7 @@ mod tests {
             color: crate::config::ColorMode::Auto,
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -333,6 +336,7 @@ mod tests {
             color: crate::config::ColorMode::Auto,
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
