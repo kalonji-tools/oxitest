@@ -169,7 +169,7 @@ pub(crate) fn fmt_diagnostic_block(
     // Filter out internal oxitest frames (executor, fixtures, etc.)
     let user_frames: Vec<_> = frames
         .iter()
-        .filter(|(f_file, _, _, _)| !f_file.contains("oxitest/_bridge/"))
+        .filter(|f| !f.file.contains("oxitest/_bridge/"))
         .collect();
 
     if *tb == TbStyle::Long && !user_frames.is_empty() {
@@ -178,19 +178,19 @@ pub(crate) fn fmt_diagnostic_block(
             color_dim(BOX_BRANCH, use_color),
             color_dim("frames", use_color)
         ));
-        for (f_file, f_lineno, f_name, f_line) in &user_frames {
+        for f in &user_frames {
             out.push_str(&format!(
                 "        {}    {}:{}  {}\n",
                 color_dim(BOX_VERT, use_color),
-                f_file,
-                f_lineno,
-                color_dim(f_name, use_color)
+                f.file,
+                f.lineno,
+                color_dim(&f.name, use_color)
             ));
-            if !f_line.is_empty() {
+            if !f.line.is_empty() {
                 out.push_str(&format!(
                     "        {}      {}\n",
                     color_dim(BOX_VERT, use_color),
-                    color_bold_white(f_line, use_color)
+                    color_bold_white(&f.line, use_color)
                 ));
             }
         }
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_block_long_shows_frames() {
-        use crate::types::{TestItem, TestOutcome};
+        use crate::types::{Frame, TestItem, TestOutcome};
 
         let item = TestItem {
             node_id: crate::types::NodeId::from_raw("test_foo.py::test_check"),
@@ -510,18 +510,18 @@ mod tests {
             right: "".to_string(),
             op: "".to_string(),
             frames: vec![
-                (
-                    "test_foo.py".to_string(),
-                    10,
-                    "test_check".to_string(),
-                    "helper(-1)".to_string(),
-                ),
-                (
-                    "test_foo.py".to_string(),
-                    5,
-                    "helper".to_string(),
-                    "assert x > 0".to_string(),
-                ),
+                Frame {
+                    file: "test_foo.py".to_string(),
+                    lineno: 10,
+                    name: "test_check".to_string(),
+                    line: "helper(-1)".to_string(),
+                },
+                Frame {
+                    file: "test_foo.py".to_string(),
+                    lineno: 5,
+                    name: "helper".to_string(),
+                    line: "assert x > 0".to_string(),
+                },
             ],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
