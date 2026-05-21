@@ -820,3 +820,183 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
     assert "val" in result.message, (
         f"error message should mention fixture name 'val', got {result.message!r}"
     )
+
+
+# ── Async yield fixtures ─────────────────────────────────────────────────────
+
+
+def test_async_yield_fixture_provides_value(tmp: TempDir):
+    f = tmp / "test_async_yield.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_val(val: Fixture[int]) -> None:\n"
+        "    assert val == 42\n"
+    )
+
+    async def async_yield_factory():
+        yield 42
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_val", session)
+    assert result.status == "passed", (
+        f"async yield fixture should provide value, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_async_yield_fixture_teardown_runs(tmp: TempDir):
+    """Teardown code after yield must execute even when test passes."""
+    f = tmp / "test_async_td.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_ok(val: Fixture[list]) -> None:\n"
+        "    val.append('test_ran')\n"
+    )
+    log: list[str] = []
+
+    async def async_yield_factory():
+        log.append("setup")
+        yield log
+        log.append("teardown")
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_ok", session)
+    assert result.status == "passed", (
+        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+    )
+    assert log == ["setup", "test_ran", "teardown"], (
+        f"expected setup->test->teardown order, got {log!r}"
+    )
+
+
+def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir):
+    """Teardown must run even when the test fails."""
+    f = tmp / "test_async_td_fail.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_fail(val: Fixture[int]) -> None:\n"
+        '    assert val == 0, "not zero"\n'
+    )
+    torn_down: list[bool] = []
+
+    async def async_yield_factory():
+        yield 42
+        torn_down.append(True)
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_fail", session)
+    assert result.status == "failed", f"test should fail, got status={result.status!r}"
+    assert torn_down == [True], (
+        f"async yield fixture teardown should run on test failure, got {torn_down!r}"
+    )
+
+
+def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir):
+    """Teardown must run even when the test errors."""
+    f = tmp / "test_async_td_err.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_err(val: Fixture[int]) -> None:\n"
+        "    raise ValueError('boom')\n"
+    )
+    torn_down: list[bool] = []
+
+    async def async_yield_factory():
+        yield 42
+        torn_down.append(True)
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_err", session)
+    assert result.status == "error", f"test should error, got status={result.status!r}"
+    assert torn_down == [True], (
+        f"async yield fixture teardown should run on test error, got {torn_down!r}"
+    )
+
+
+def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir):
+    """Multiple async yield fixtures tear down in reverse order."""
+    f = tmp / "test_async_td_order.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_ok(a: Fixture[str], b: Fixture[str]) -> None:\n"
+        "    assert a == 'A'\n"
+        "    assert b == 'B'\n"
+    )
+    log: list[str] = []
+
+    async def factory_a():
+        log.append("setup_a")
+        yield "A"
+        log.append("teardown_a")
+
+    async def factory_b():
+        log.append("setup_b")
+        yield "B"
+        log.append("teardown_b")
+
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("a", factory_a, False, None, "/c.py"))
+    reg.register(FixtureDef("b", factory_b, False, None, "/c.py"))
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_ok", session)
+    assert result.status == "passed", (
+        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+    )
+    assert log[:2] == ["setup_a", "setup_b"], f"setup should be in order, got {log!r}"
+    assert log[2:] == ["teardown_b", "teardown_a"], (
+        f"teardown should be in reverse order, got {log!r}"
+    )
+
+
+def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCapture):
+    """Teardown exception should warn, not crash."""
+    f = tmp / "test_async_td_warn.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_ok(val: Fixture[int]) -> None:\n"
+        "    assert val == 42\n"
+    )
+
+    async def async_yield_factory():
+        yield 42
+        raise RuntimeError("teardown exploded")
+
+    session = _make_session_with("val", async_yield_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_ok", session)
+    assert result.status == "passed", (
+        f"teardown error should not affect test result, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.list), (
+        f"expected a FixtureTeardownWarning, got {warn.list!r}"
+    )
+
+
+def test_async_yield_fixture_setup_error(tmp: TempDir):
+    """Error during async yield fixture setup should produce error result."""
+    f = tmp / "test_async_yield_setup_err.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_bad(bad: Fixture[None]) -> None:\n"
+        "    pass\n"
+    )
+
+    async def bad_factory():
+        raise RuntimeError("setup failed")
+        yield  # noqa: RET503
+
+    session = _make_session_with("bad", bad_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_bad", session)
+    assert result.status == "error", (
+        f"async yield fixture setup error should produce error, got {result.status!r}"
+    )
+    assert "setup failed" in result.message, (
+        f"error message should contain 'setup failed', got {result.message!r}"
+    )
