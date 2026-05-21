@@ -334,13 +334,15 @@ fn apply_filters(
         match marker::filter_by_marker_expr(items, expr) {
             Ok(items) => items,
             Err(e) => {
-                let code = make_error_rep().finish(
-                    &[types::CollectError::PyError(format!(
-                        "invalid -m expression: {}",
-                        e
-                    ))],
-                    false,
-                );
+                let code = make_error_rep()
+                    .finish(
+                        &[types::CollectError::PyError(format!(
+                            "invalid -m expression: {}",
+                            e
+                        ))],
+                        false,
+                    )
+                    .code();
                 return Err(code);
             }
         }
@@ -513,7 +515,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Err(e) => {
             let err =
                 types::CollectError::PyError(format!("Failed to load conftest fixtures: {}", e));
-            return Ok(make_error_rep().finish(&[err], false));
+            return Ok(make_error_rep().finish(&[err], false).code());
         }
     };
 
@@ -521,7 +523,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     if !cfg.plugins.is_empty() {
         if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
             let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-            return Ok(make_error_rep().finish(&[err], false));
+            return Ok(make_error_rep().finish(&[err], false).code());
         }
     }
 
@@ -530,7 +532,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         collect_items(py, &test_files, &cfg, &session, &mut cache);
 
     if !errors.is_empty() {
-        return Ok(make_error_rep().finish(&errors, false));
+        return Ok(make_error_rep().finish(&errors, false).code());
     }
 
     let StrictResult {
@@ -586,7 +588,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 
     finalize(&mut cache, timings, cfg.cache_max_age, &rootdir);
 
-    Ok(rep.finish(&[], interrupted))
+    Ok(rep.finish(&[], interrupted).code())
 }
 
 #[cfg(test)]

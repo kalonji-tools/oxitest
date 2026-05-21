@@ -230,7 +230,7 @@ impl Reporter for TtyReporter {
         self.pb.set_message("");
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
+    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
         super::standard_finish(self, collect_errors, interrupted)
     }
 

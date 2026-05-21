@@ -120,7 +120,7 @@ impl Reporter for CiReporter {
         self.stats.record_timing(item.node_id.as_ref(), duration_ms);
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> i32 {
+    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
         super::standard_finish(self, collect_errors, interrupted)
     }
 
@@ -223,8 +223,7 @@ mod tests {
             },
             0.0,
         );
-        let code = reporter.finish(&[], false);
-        assert_eq!(code, 0);
+        assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
@@ -237,8 +236,7 @@ mod tests {
         );
         let item = make_item("test_a");
         reporter.test_completed(&item, &make_failed("x", "f.py", 1, "assert"), 0.0);
-        let code = reporter.finish(&[], false);
-        assert_eq!(code, 1);
+        assert_eq!(reporter.finish(&[], false).code(), 1);
     }
 
     #[test]
@@ -251,8 +249,7 @@ mod tests {
         );
         let item = make_item("test_a");
         reporter.test_completed(&item, &make_failed("x", "f.py", 1, "assert"), 0.0);
-        let code = reporter.finish(&[], true);
-        assert_eq!(code, 2);
+        assert_eq!(reporter.finish(&[], true).code(), 2);
     }
 
     #[test]
@@ -299,8 +296,7 @@ mod tests {
                 .build(),
         );
         let errors = vec![CollectError::PyError("import failed".to_string())];
-        let code = reporter.finish(&errors, false);
-        assert_eq!(code, 3);
+        assert_eq!(reporter.finish(&errors, false).code(), 3);
     }
 
     #[test]
