@@ -16,6 +16,7 @@ pub(crate) fn make_item(name: &str) -> TestItem {
         markers: vec![],
         param_id: None,
         param_values: vec![],
+        is_async: false,
     }
 }
 
@@ -31,6 +32,7 @@ pub(crate) fn make_item_raw(node_id: &str) -> TestItem {
         markers: vec![],
         param_id: None,
         param_values: vec![],
+        is_async: false,
     }
 }
 
@@ -45,6 +47,7 @@ pub(crate) fn make_item_in(name: &str, module: &str) -> TestItem {
         markers: vec![],
         param_id: None,
         param_values: vec![],
+        is_async: false,
     }
 }
 
@@ -62,6 +65,7 @@ pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Test
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         })
         .collect();
     (path, items)

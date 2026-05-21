@@ -955,6 +955,7 @@ mod drain_tests {
                 markers: vec![],
                 param_id: None,
                 param_values: vec![],
+                is_async: false,
             }
         }
 
@@ -1112,6 +1113,7 @@ mod result_handler_tests {
             markers: vec![],
             param_id: None,
             param_values: vec![],
+            is_async: false,
         })
     }
 
