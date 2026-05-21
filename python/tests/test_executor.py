@@ -794,3 +794,29 @@ def test_async_fixture_setup_error(tmp: TempDir):
     assert "db is down" in result.message, (
         f"error message should contain 'db is down', got {result.message!r}"
     )
+
+
+def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
+    f = tmp / "test_sync_async_fx.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "def test_uses_val(val: Fixture[int]) -> None:\n"
+        "    assert val == 99\n"
+    )
+
+    async def async_factory():
+        return 99
+
+    session = _make_session_with("val", async_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_val", session)
+    assert result.status == "error", (
+        f"sync test with async fixture should produce error, got {result.status!r}, "
+        f"msg={result.message!r}"
+    )
+    assert "async fixture" in result.message.lower(), (
+        f"error message should mention 'async fixture', got {result.message!r}"
+    )
+    assert "val" in result.message, (
+        f"error message should mention fixture name 'val', got {result.message!r}"
+    )
