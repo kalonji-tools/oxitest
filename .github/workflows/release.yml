@@ -38,7 +38,7 @@ jobs:
       - name: Update changelog
         run: |
           git-cliff --bump -o CHANGELOG.md
-          truncate -s -1 CHANGELOG.md
+          sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md
 
       - name: Update Cargo.toml version
         run: sed -i "0,/^version = .*/s//version = \"${{ steps.version.outputs.next }}\"/" Cargo.toml
