@@ -364,11 +364,20 @@ def _build_execution_chain(
         backend = get_async_backend()
 
         async def _async_core() -> TestResult:
-            # Await any async fixture coroutines in kwargs.
-            # Exceptions during async fixture setup produce status='error'.
+            # Resolve async fixture values (coroutines and async generators).
+            # Sync fixture values pass through unchanged.
             resolved: dict[str, Any] = {}
+            async_teardowns: list[tuple[str, Any]] = []  # (name, async_gen)
             for k, v in all_kwargs.items():
-                if inspect.iscoroutine(v):
+                if inspect.isasyncgen(v):
+                    try:
+                        resolved[k] = await anext(v)
+                        async_teardowns.append((k, v))
+                    except Exception as exc:
+                        from oxitest._bridge._errors import FixtureSetupError
+
+                        return _error_result(str(FixtureSetupError(k, exc)))
+                elif inspect.iscoroutine(v):
                     try:
                         resolved[k] = await v
                     except Exception as exc:
@@ -377,7 +386,21 @@ def _build_execution_chain(
                         return _error_result(str(FixtureSetupError(k, exc)))
                 else:
                     resolved[k] = v
-            return await _run_base_async(fn, resolved, no_message_lines)
+            try:
+                return await _run_base_async(fn, resolved, no_message_lines)
+            finally:
+                for name, gen in reversed(async_teardowns):
+                    try:
+                        await anext(gen)
+                    except StopAsyncIteration:
+                        pass
+                    except Exception as exc:
+                        warnings.warn(
+                            FixtureTeardownWarning(
+                                f"error in teardown of fixture '{name}': {exc}"
+                            ),
+                            stacklevel=2,
+                        )
 
         def _base() -> TestResult:
             return backend.run(_async_core())
