@@ -70,7 +70,6 @@ def load_fixtures_from_conftest(path: str) -> list[FixtureDef[Any]]:
             stamped = dataclasses.replace(
                 defn, conftest_path=path, namespace=namespace_name
             )
-            stamped.func._oxitest_namespace = namespace_name  # type: ignore[attr-defined]  # noqa: E501
             found.append(stamped)
     return found
 

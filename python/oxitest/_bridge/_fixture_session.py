@@ -63,6 +63,12 @@ class _SessionProtocol(Protocol):
         fn_teardowns: list[Callable[[], None]],
     ) -> Any: ...
 
+    def get_namespace_for_func(
+        self,
+        name: str,
+        func: Callable[..., Any],
+    ) -> str | None: ...
+
 
 class _NullFixtureSession:
     """Null Object for when no conftest session is available.
@@ -96,6 +102,13 @@ class _NullFixtureSession:
         from oxitest._bridge._errors import FixtureNotFoundError
 
         raise FixtureNotFoundError(name, namespace=namespace)
+
+    def get_namespace_for_func(
+        self,
+        name: str,
+        func: Callable[..., Any],
+    ) -> str | None:
+        return None
 
 
 # ── _TestContext ──────────────────────────────────────────────────────────────
@@ -405,6 +418,13 @@ class FixtureSession:
         return self._resolve_fixture_defn(
             defn, module_path, fn_teardowns, frozenset({name})
         )
+
+    def get_namespace_for_func(
+        self,
+        name: str,
+        func: Callable[..., Any],
+    ) -> str | None:
+        return self._registry.get_namespace_for_func(name, func)
 
     def _resolve_fixture(
         self,
