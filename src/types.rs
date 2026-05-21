@@ -59,6 +59,15 @@ pub struct TestItem {
     pub param_values: Vec<(String, String)>,
 }
 
+/// Single traceback frame from a test failure or error.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Frame {
+    pub file: String,
+    pub lineno: usize,
+    pub name: String,
+    pub line: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum TestOutcome {
     Passed {
@@ -72,14 +81,14 @@ pub enum TestOutcome {
         left: String,
         right: String,
         op: String,
-        frames: Vec<(String, usize, String, String)>,
+        frames: Vec<Frame>,
     },
     Error {
         message: String,
         file: String,
         lineno: usize,
         source_line: String,
-        frames: Vec<(String, usize, String, String)>,
+        frames: Vec<Frame>,
     },
     Skipped {
         reason: String,
@@ -275,7 +284,7 @@ pub struct RawOutcome<'a> {
     pub right: &'a str,
     pub op: &'a str,
     pub strict: bool,
-    pub frames: &'a [(String, usize, String, String)],
+    pub frames: &'a [Frame],
 }
 
 impl TestOutcome {
