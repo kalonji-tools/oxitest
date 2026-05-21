@@ -12,12 +12,12 @@ use std::collections::HashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
-use crate::types::{CollectError, NodeId, RawOutcome, TestItem, TestOutcome};
+use crate::types::{CollectError, Frame, NodeId, RawOutcome, TestItem, TestOutcome};
 
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
 #[derive(FromPyObject)]
-struct Frame {
+struct BridgeFrame {
     file: String,
     lineno: usize,
     name: String,
@@ -39,7 +39,7 @@ struct TestResult {
     strict: bool,
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
-    frames: Vec<Frame>,
+    frames: Vec<BridgeFrame>,
 }
 
 /// Long-lived Python fixture session held across the test loop.
@@ -263,10 +263,15 @@ fn try_run_test(
         )?
         .extract()?;
 
-    let frames: Vec<(String, usize, String, String)> = r
+    let frames: Vec<Frame> = r
         .frames
-        .iter()
-        .map(|f| (f.file.clone(), f.lineno, f.name.clone(), f.line.clone()))
+        .into_iter()
+        .map(|f| Frame {
+            file: f.file,
+            lineno: f.lineno,
+            name: f.name,
+            line: f.line,
+        })
         .collect();
 
     Ok(TestOutcome::from_raw(RawOutcome {
