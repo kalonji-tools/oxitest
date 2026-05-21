@@ -136,15 +136,27 @@ fn env_string(py: Python<'_>) -> String {
     )
 }
 
+struct ExecutionContext<'a> {
+    cfg: &'a config::Config,
+    cache: &'a cache::TestCache,
+    session: &'a bridge::FixtureSession,
+    conftest_files: &'a [camino::Utf8PathBuf],
+}
+
+fn early_exit_with_error(
+    errors: &[types::CollectError],
+    make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
+) -> i32 {
+    make_rep().finish(errors, false).code()
+}
+
 fn run_phase(
     py: Python<'_>,
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
-    cfg: &config::Config,
-    cache: &cache::TestCache,
-    session: &bridge::FixtureSession,
+    ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,
 ) -> (bool, Vec<types::TestTiming>) {
-    let mut acc = types::FailureAccumulator::new(cfg.maxfail);
+    let mut acc = types::FailureAccumulator::new(ctx.cfg.maxfail);
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::new();
 
@@ -152,8 +164,13 @@ fn run_phase(
         for item in items {
             rep.test_started(item);
             let start = std::time::Instant::now();
-            let timeout = resolve_timeout(cache, item, cfg.timeout_secs, cfg.timeout_multiplier);
-            let outcome = bridge::run_test(py, item, Some(session), timeout);
+            let timeout = resolve_timeout(
+                ctx.cache,
+                item,
+                ctx.cfg.timeout_secs,
+                ctx.cfg.timeout_multiplier,
+            );
+            let outcome = bridge::run_test(py, item, Some(ctx.session), timeout);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             timings.push(types::TestTiming {
                 node_id: item.node_id.clone(),
@@ -163,7 +180,7 @@ fn run_phase(
             rep.test_completed(item, &outcome, duration_ms);
             if acc.record(&outcome) {
                 interrupted = true;
-                if let Err(e) = session.end_module(py, module_path) {
+                if let Err(e) = ctx.session.end_module(py, module_path) {
                     tracing::warn!(%e, module = %module_path, "teardown error in end_module");
                     rep.record_teardown_warning(
                         &format!("end_module({})", module_path),
@@ -173,12 +190,12 @@ fn run_phase(
                 break 'run;
             }
         }
-        if let Err(e) = session.end_module(py, module_path) {
+        if let Err(e) = ctx.session.end_module(py, module_path) {
             tracing::warn!(%e, module = %module_path, "teardown error in end_module");
             rep.record_teardown_warning(&format!("end_module({})", module_path), &e.to_string());
         }
     }
-    if let Err(e) = session.end_session(py) {
+    if let Err(e) = ctx.session.end_session(py) {
         tracing::warn!(%e, "teardown error in end_session");
         rep.record_teardown_warning("end_session", &e.to_string());
     }
@@ -386,16 +403,12 @@ fn apply_filters(
 ///
 /// `cache.invalidate()` and `cache.estimated_duration()` are called here
 /// because they feed directly into the parallel-dispatch decision.
-#[allow(clippy::too_many_arguments)]
 fn execute(
     py: Python<'_>,
     clean_items: Vec<types::TestItem>,
     violated_items: Vec<types::TestItem>,
     all_violations: Vec<strict::StrictViolation>,
-    cfg: &config::Config,
-    cache: &cache::TestCache,
-    session: &bridge::FixtureSession,
-    conftest_files: &[camino::Utf8PathBuf],
+    ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,
 ) -> (bool, Vec<types::TestTiming>) {
     // Immediately report violated items as Error outcomes (no worker dispatch).
@@ -412,42 +425,43 @@ fn execute(
         }
     }
 
-    let estimated = cache.estimated_duration(&clean_items);
+    let estimated = ctx.cache.estimated_duration(&clean_items);
 
     let mut groups = filter::group_by_module(clean_items);
-    let failed_ids = cache.last_failed_ids();
-    scheduler::apply_schedule_strategy(&mut groups, cfg.schedule, cache, &failed_ids);
+    let failed_ids = ctx.cache.last_failed_ids();
+    scheduler::apply_schedule_strategy(&mut groups, ctx.cfg.schedule, ctx.cache, &failed_ids);
 
     let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
     let cpu_count = config::cpu_count();
 
-    let force_parallel = cfg.workers.is_some() && !cfg.serial;
-    let use_parallel = !cfg.serial
-        && cfg.worker_count() > 1
+    let force_parallel = ctx.cfg.workers.is_some() && !ctx.cfg.serial;
+    let use_parallel = !ctx.cfg.serial
+        && ctx.cfg.worker_count() > 1
         && (force_parallel
             || match estimated {
                 Some(est) => {
-                    est.as_millis() as f64 > cfg.spawn_overhead_ms * cfg.worker_count() as f64
+                    est.as_millis() as f64
+                        > ctx.cfg.spawn_overhead_ms * ctx.cfg.worker_count() as f64
                 }
-                None => total_tests >= cfg.min_parallel_tests, // cold cache: fall back to configured threshold
+                None => total_tests >= ctx.cfg.min_parallel_tests, // cold cache: fall back to configured threshold
             });
 
     if use_parallel {
         debug_assert!(
-            !cfg.serial,
+            !ctx.cfg.serial,
             "compute_optimal_workers is unreachable in serial mode"
         );
         let optimal_worker_count = parallel::compute_optimal_workers(
-            cfg.workers,
-            cfg.serial,
+            ctx.cfg.workers,
+            ctx.cfg.serial,
             cpu_count,
             estimated,
-            cfg.spawn_overhead_ms,
+            ctx.cfg.spawn_overhead_ms,
         );
         // Warn when session-scoped (shared=True) fixtures are present: each worker
         // subprocess creates its own FixtureSession, so these fixtures execute once
         // per worker rather than once per run.
-        let shared_names = session.shared_fixture_names(py);
+        let shared_names = ctx.session.shared_fixture_names(py);
         if !shared_names.is_empty() {
             let list = shared_names.join(", ");
             let noun = if shared_names.len() == 1 {
@@ -465,9 +479,15 @@ fn execute(
                  that can be function-scoped"
             );
         }
-        parallel::run_phase_parallel(groups, cfg, optimal_worker_count, conftest_files, rep)
+        parallel::run_phase_parallel(
+            groups,
+            ctx.cfg,
+            optimal_worker_count,
+            ctx.conftest_files,
+            rep,
+        )
     } else {
-        run_phase(py, groups, cfg, cache, session, rep)
+        run_phase(py, groups, ctx, rep)
     }
 }
 
@@ -518,7 +538,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Err(e) => {
             let err =
                 types::CollectError::PyError(format!("Failed to load conftest fixtures: {}", e));
-            return Ok(make_error_rep().finish(&[err], false).code());
+            return Ok(early_exit_with_error(&[err], &make_error_rep));
         }
     };
 
@@ -526,7 +546,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     if !cfg.plugins.is_empty() {
         if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
             let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-            return Ok(make_error_rep().finish(&[err], false).code());
+            return Ok(early_exit_with_error(&[err], &make_error_rep));
         }
     }
 
@@ -535,7 +555,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         collect_items(py, &test_files, &cfg, &session, &mut cache);
 
     if !errors.is_empty() {
-        return Ok(make_error_rep().finish(&errors, false).code());
+        return Ok(early_exit_with_error(&errors, &make_error_rep));
     }
 
     let StrictResult {
@@ -577,15 +597,19 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         plugin_reporters,
     );
 
+    let ctx = ExecutionContext {
+        cfg: &cfg,
+        cache: &cache,
+        session: &session,
+        conftest_files: &conftest_files,
+    };
+
     let (interrupted, timings) = execute(
         py,
         items,
         violated_items,
         all_violations,
-        &cfg,
-        &cache,
-        &session,
-        &conftest_files,
+        &ctx,
         rep.as_mut(),
     );
 
