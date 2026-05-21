@@ -99,6 +99,7 @@ pub struct Config {
     pub color: ColorMode,
     pub plugins: Vec<String>,
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
+    pub async_backend: String,
 }
 
 impl Default for Config {
@@ -136,6 +137,7 @@ impl Default for Config {
             color: ColorMode::Auto,
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
         }
     }
 }
@@ -211,6 +213,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
         config.plugins = plugins;
     }
     config.plugin_settings = tc.plugin_settings;
+    if let Some(ab) = tc.async_backend {
+        config.async_backend = ab;
+    }
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
@@ -1318,5 +1323,21 @@ timeout = 30
             settings.get("level").and_then(|v| v.as_str()),
             Some("DEBUG")
         );
+    }
+
+    #[test]
+    fn test_async_backend_default() {
+        let cfg = Config::default();
+        assert_eq!(cfg.async_backend, "asyncio");
+    }
+
+    #[test]
+    fn test_async_backend_from_pyproject() {
+        let toml = r#"
+[tool.oxitest]
+async_backend = "trio"
+"#;
+        let cfg = Config::from_str(toml).unwrap();
+        assert_eq!(cfg.async_backend, "trio");
     }
 }
