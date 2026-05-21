@@ -158,20 +158,7 @@ pub fn get_plugin_reporters(py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
     Ok(reporters)
 }
 
-pub fn collect_module(
-    py: Python<'_>,
-    path: &Utf8Path,
-    session: Option<&FixtureSession>,
-    collect_violations: bool,
-) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
-    let session_obj = session
-        .map(|s| s.as_py_object(py))
-        .unwrap_or_else(|| py.None().into_bound(py));
-
-    collect_module_with_session_obj(py, path, session_obj, collect_violations)
-}
-
-/// Variant of [`collect_module`] that accepts a raw Python session object.
+/// Variant of `collect_module` that accepts a raw Python session object.
 ///
 /// The trait-based `ModuleCollector` implementation calls this directly,
 /// bypassing the `Option<&FixtureSession>` indirection.
@@ -225,20 +212,7 @@ pub(crate) fn collect_module_with_session_obj(
     Ok((items_vec, raw_violations))
 }
 
-pub fn run_test(
-    py: Python<'_>,
-    item: &TestItem,
-    session: Option<&FixtureSession>,
-    default_timeout: Option<u64>,
-) -> TestOutcome {
-    let session_obj = session
-        .map(|s| s.as_py_object(py))
-        .unwrap_or_else(|| py.None().into_bound(py));
-
-    run_test_with_session_obj(py, item, session_obj, default_timeout)
-}
-
-/// Variant of [`run_test`] that accepts a raw Python session object.
+/// Variant of `run_test` that accepts a raw Python session object.
 ///
 /// The trait-based `TestRunner` implementation calls this directly,
 /// bypassing the `Option<&FixtureSession>` indirection.
