@@ -50,14 +50,14 @@ impl AsRef<str> for NodeId {
 
 #[derive(Debug, Clone)]
 pub struct TestItem {
-    pub node_id: NodeId,
-    pub module_path: Utf8PathBuf,
-    pub fn_name: String,
-    pub lineno: usize,
-    pub markers: Vec<String>,
-    pub param_id: Option<String>,
-    pub param_values: Vec<(String, String)>,
-    pub is_async: bool,
+    pub(crate) node_id: NodeId,
+    pub(crate) module_path: Utf8PathBuf,
+    pub(crate) fn_name: String,
+    pub(crate) lineno: usize,
+    pub(crate) markers: Vec<String>,
+    pub(crate) param_id: Option<String>,
+    pub(crate) param_values: Vec<(String, String)>,
+    pub(crate) is_async: bool,
 }
 
 /// Single traceback frame from a test failure or error.
