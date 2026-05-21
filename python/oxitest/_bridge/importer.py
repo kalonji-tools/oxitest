@@ -36,6 +36,7 @@ def _expand_item(
     fn: object,
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
+    is_async = inspect.iscoroutinefunction(fn)
     param_cases: _DictCases | _DataclassCases | None = getattr(
         fn, "_oxitest_param_cases", None
     )
@@ -47,6 +48,7 @@ def _expand_item(
                 markers=marker_names,
                 param_id=None,
                 param_values=[],
+                is_async=is_async,
             )
         ]
     return [
@@ -56,6 +58,7 @@ def _expand_item(
             markers=marker_names,
             param_id=case_id,
             param_values=list(pv),
+            is_async=is_async,
         )
         for case_id, pv in param_cases.items()
     ]
