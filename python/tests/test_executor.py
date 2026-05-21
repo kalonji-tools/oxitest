@@ -735,3 +735,62 @@ def test_async_test_xpass(tmp: TempDir):
     assert result.status == "xpassed", (
         f"xpass async test should have status='xpassed', got {result.status!r}"
     )
+
+
+def test_async_test_with_async_fixture(tmp: TempDir):
+    f = tmp / "test_async_fx.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_val(val: Fixture[int]) -> None:\n"
+        "    assert val == 99\n"
+    )
+
+    async def async_factory():
+        return 99
+
+    session = _make_session_with("val", async_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_val", session)
+    assert result.status == "passed", (
+        f"async test with async fixture should pass, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_async_test_with_sync_fixture(tmp: TempDir):
+    f = tmp / "test_async_sync_fx.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_val(val: Fixture[int]) -> None:\n"
+        "    assert val == 42\n"
+    )
+    session = _make_session_with("val", lambda: 42)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_val", session)
+    assert result.status == "passed", (
+        f"async test with sync fixture should pass, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_async_fixture_setup_error(tmp: TempDir):
+    f = tmp / "test_async_fx_err.py"
+    f.write_text(
+        "from oxitest import Fixture\n"
+        "async def test_uses_bad(bad: Fixture[None]) -> None:\n"
+        "    pass\n"
+    )
+
+    async def bad_factory():
+        raise RuntimeError("db is down")
+
+    session = _make_session_with("bad", bad_factory)
+    session.begin_module(str(f))
+    result = run_test(str(f), "test_uses_bad", session)
+    assert result.status == "error", (
+        f"async fixture setup error should produce status='error', "
+        f"got {result.status!r}"
+    )
+    assert "db is down" in result.message, (
+        f"error message should contain 'db is down', got {result.message!r}"
+    )
