@@ -633,3 +633,77 @@ def test_run_test_no_timeout_by_default(tmp: TempDir):
     assert result.status == "passed", (
         f"test without timeout mark should pass normally, got {result.status!r}"
     )
+
+
+# ── Async test execution ─────────────────────────────────────────────────────
+
+
+def test_async_test_passes(tmp: TempDir):
+    f = tmp / "test_async_pass.py"
+    f.write_text("async def test_ok():\n    assert 1 == 1\n")
+    result = run_test(str(f), "test_ok")
+    assert result.status == "passed", (
+        f"passing async test should have status='passed', got {result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_async_test_fails(tmp: TempDir):
+    f = tmp / "test_async_fail.py"
+    f.write_text('async def test_bad():\n    assert 1 == 2, "nope"\n')
+    result = run_test(str(f), "test_bad")
+    assert result.status == "failed", (
+        f"failing async test should have status='failed', got {result.status!r}"
+    )
+    assert "nope" in result.message, (
+        f"failure message should contain 'nope', got {result.message!r}"
+    )
+
+
+def test_async_test_error(tmp: TempDir):
+    f = tmp / "test_async_err.py"
+    f.write_text("async def test_err():\n    raise ValueError('boom')\n")
+    result = run_test(str(f), "test_err")
+    assert result.status == "error", (
+        f"async error should produce status='error', got {result.status!r}"
+    )
+    assert "ValueError" in result.message, (
+        f"error message should contain 'ValueError', got {result.message!r}"
+    )
+    assert "boom" in result.message, (
+        f"error message should contain 'boom', got {result.message!r}"
+    )
+
+
+def test_async_test_warning(tmp: TempDir):
+    f = tmp / "test_async_warn.py"
+    f.write_text(
+        "import warnings\n"
+        "async def test_warn():\n"
+        "    warnings.warn('old api', DeprecationWarning)\n"
+        "    assert 1 == 1\n"
+    )
+    result = run_test(str(f), "test_warn")
+    assert result.status == "warned", (
+        f"async test with warning should produce status='warned', got {result.status!r}"
+    )
+    assert "DeprecationWarning" in result.message, (
+        f"warned message should mention 'DeprecationWarning', got {result.message!r}"
+    )
+
+
+def test_async_test_skip(tmp: TempDir):
+    f = tmp / "test_async_skip.py"
+    f.write_text(
+        "import oxitest\n"
+        "@oxitest.mark.skip(reason='not ready')\n"
+        "async def test_skip():\n"
+        "    pass\n"
+    )
+    result = run_test(str(f), "test_skip")
+    assert result.status == "skipped", (
+        f"skipped async test should have status='skipped', got {result.status!r}"
+    )
+    assert "not ready" in result.message, (
+        f"skip message should contain 'not ready', got {result.message!r}"
+    )
