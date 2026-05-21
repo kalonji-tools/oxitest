@@ -84,7 +84,7 @@ pub(crate) fn drain_worker_results(
     }
 }
 
-pub fn compute_optimal_workers(
+pub(crate) fn compute_optimal_workers(
     explicit_workers: Option<crate::config::WorkerCount>,
     serial: bool,
     cpu_count: usize,
@@ -362,7 +362,7 @@ fn drain_remaining_into_crashed(
     }
 }
 
-pub fn run_phase_parallel(
+pub(crate) fn run_phase_parallel(
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count

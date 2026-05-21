@@ -8,7 +8,7 @@ use crate::types::TestItem;
 ///
 /// Called *before* `Scheduler::new()` — the scheduler itself always
 /// processes groups in insertion order, so the ordering happens here.
-pub fn apply_schedule_strategy(
+pub(crate) fn apply_schedule_strategy(
     groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>,
     strategy: ScheduleStrategy,
     cache: &TestCache,
@@ -40,13 +40,13 @@ pub fn apply_schedule_strategy(
 
 /// A batch of tests from one source file, dispatched as a unit to one worker.
 #[derive(Debug, Clone)]
-pub struct ModuleGroup {
-    pub module_path: Utf8PathBuf,
-    pub items: Vec<TestItem>,
+pub(crate) struct ModuleGroup {
+    pub(crate) module_path: Utf8PathBuf,
+    pub(crate) items: Vec<TestItem>,
 }
 
 impl ModuleGroup {
-    pub fn new(module_path: Utf8PathBuf, items: Vec<TestItem>) -> Self {
+    pub(crate) fn new(module_path: Utf8PathBuf, items: Vec<TestItem>) -> Self {
         Self { module_path, items }
     }
 }
@@ -67,13 +67,13 @@ impl ModuleGroup {
 /// Groups are dispatched in insertion order. Callers are responsible for
 /// pre-sorting groups (e.g., via `cache.sort_groups()`). Workers call `pop()`
 /// atomically to claim the next group.
-pub struct Scheduler {
+pub(crate) struct Scheduler {
     queue: parking_lot::Mutex<std::collections::VecDeque<ModuleGroup>>,
 }
 
 impl Scheduler {
     /// Build from a list of (path, items) groups. Preserves insertion order (cache already sorted by duration).
-    pub fn new(groups: Vec<(Utf8PathBuf, Vec<TestItem>)>) -> Self {
+    pub(crate) fn new(groups: Vec<(Utf8PathBuf, Vec<TestItem>)>) -> Self {
         let groups: Vec<ModuleGroup> = groups
             .into_iter()
             .map(|(p, items)| ModuleGroup::new(p, items))
@@ -84,7 +84,7 @@ impl Scheduler {
     }
 
     /// Pop the next group. Returns `None` when the queue is empty.
-    pub fn pop(&self) -> Option<ModuleGroup> {
+    pub(crate) fn pop(&self) -> Option<ModuleGroup> {
         self.queue.lock().pop_front()
     }
 }
