@@ -1,36 +1,108 @@
 """Pluggable async backend for test execution.
 
 Abstracts the async runtime so alternative backends (trio, uvloop) can be
-swapped in via the plugin system in a future phase.
+swapped in via the plugin system.
 """
 
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections.abc import Coroutine
 from typing import Any, Protocol, TypeVar
 
 _T = TypeVar("_T")
 
 
-class AsyncBackend(Protocol):
-    """Protocol for async test execution backends."""
+class SharedAsyncSession(Protocol):
+    """A long-lived async session for shared fixture resolution."""
 
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        """Run a coroutine synchronously and return its result."""
+        """Execute a coroutine on the persistent session."""
+        ...
+
+    def close(self) -> None:
+        """Tear down the session and release resources."""
         ...
 
 
+class AsyncBackend(Protocol):
+    """Pluggable async runtime backend."""
+
+    @property
+    def name(self) -> str:
+        """Unique name for this backend (e.g. 'asyncio', 'trio')."""
+        ...
+
+    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Run a coroutine to completion (per-test, fresh context)."""
+        ...
+
+    def create_shared_session(self) -> SharedAsyncSession:
+        """Create a long-lived session for shared fixture resolution."""
+        ...
+
+
+class AsyncioSharedSession:
+    """Wraps an asyncio event loop as a SharedAsyncSession."""
+
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
+
+    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        if self._loop is None or self._loop.is_closed():
+            msg = "SharedAsyncSession is closed"
+            raise RuntimeError(msg)
+        before = asyncio.all_tasks(self._loop)
+        try:
+            return self._loop.run_until_complete(coro)
+        finally:
+            after = asyncio.all_tasks(self._loop)
+            stray = after - before
+            if stray:
+                for task in stray:
+                    task.cancel()
+                self._loop.run_until_complete(
+                    asyncio.gather(*stray, return_exceptions=True)
+                )
+                warnings.warn(
+                    f"leaked {len(stray)} task(s) (cancelled)",
+                    stacklevel=2,
+                )
+
+    def close(self) -> None:
+        if self._loop is not None and not self._loop.is_closed():
+            try:
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            self._loop.close()
+        self._loop = None
+
+
 class AsyncioBackend:
-    """Default async backend using ``asyncio.run()``."""
+    """Default async backend using ``asyncio``."""
+
+    @property
+    def name(self) -> str:
+        return "asyncio"
 
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
         return asyncio.run(coro)
 
+    def create_shared_session(self) -> SharedAsyncSession:
+        return AsyncioSharedSession()
 
-_default_backend: AsyncBackend = AsyncioBackend()
+
+_backend: AsyncBackend = AsyncioBackend()
 
 
 def get_async_backend() -> AsyncBackend:
-    """Return the active async backend (currently always AsyncioBackend)."""
-    return _default_backend
+    """Return the active async backend."""
+    return _backend
+
+
+def set_async_backend(backend: AsyncBackend) -> None:
+    """Set the active async backend (called during session init)."""
+    global _backend  # noqa: PLW0603
+    _backend = backend
