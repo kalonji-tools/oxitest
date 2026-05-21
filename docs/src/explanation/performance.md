@@ -82,8 +82,13 @@ expensive modules first. The Rust side owns the progress display; workers only r
 ### Automatic serial/parallel decision
 
 For small suites the subprocess spawn overhead outweighs the parallelism benefit. oxitest decides
-automatically: if the number of collected tests is below `min_parallel_tests` (default: 100), it
-runs in a single process. Above the threshold, it spawns workers.
+automatically using a two-tier strategy:
+
+- **Warm cache** (timing data available): if the estimated total duration is less than
+  `spawn_overhead_ms × worker_count`, it runs serially — the overhead of spawning workers would
+  exceed the time saved by parallelism.
+- **Cold cache** (no timing data): falls back to a count threshold — if the number of collected
+  tests is below `min_parallel_tests` (default: 100), it runs in a single process.
 
 Both values are configurable in `pyproject.toml`:
 

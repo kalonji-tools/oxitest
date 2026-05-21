@@ -43,14 +43,17 @@ all in Rust, without GIL contention at the coordination layer.
 
 | Module | File | Responsibility |
 |--------|------|----------------|
-| `lib` | `src/lib.rs` | Pipeline orchestrator — ties all modules together; entry point for `run()` |
-| `config` | `src/config.rs` | CLI parsing (`clap`), config loading from `pyproject.toml`, `Config` struct |
+| `lib` | `src/lib.rs` | Entry point — delegates to `pipeline::run()` |
+| `pipeline` | `src/pipeline/` | Pipeline orchestrator (`mod.rs`): discovery → execution → cache update. Trait seams (`traits.rs`): `Session`, `ModuleCollector`, `TestRunner`, `ParallelRunner`. `ExecutionContext` bundles config/cache/session/conftest for the run phase. |
+| `config` | `src/config/` | `mod.rs`: shared types + `Config` struct. `cli.rs`: CLI parsing (`clap`). `pyproject.rs`: TOML deserialization. |
 | `collector` | `src/collector.rs` | File system walk: finds test files and conftest files |
-| `bridge` | `src/bridge.rs` | PyO3 bridge: imports Python modules, collects `TestItem` list, runs individual tests |
-| `types` | `src/types.rs` | Core data types: `TestItem`, `TestOutcome`, `NodeId`, `CollectError`, `TestTiming` |
+| `bridge` | `src/bridge.rs` | PyO3 bridge: imports Python modules, collects `TestItem` list, runs individual tests. `_with_session_obj` variants take `Bound<'_, PyAny>`. |
+| `types` | `src/types.rs` | Core data types: `TestItem`, `TestOutcome`, `OutcomeKind`, `NodeId`, `CollectError`, `TestTiming`, `Frame`, `FailureAccumulator` |
+| `worker_result` | `src/worker_result.rs` | Worker subprocess JSON contract: `WorkerResult` (receive), `WorkerTask`/`WorkerTaskItem` (send) |
 | `filter` | `src/filter.rs` | Keyword filtering, marker name validation, `--lf`/`--ff` logic, `group_by_module` |
 | `marker` | `src/marker.rs` | Marker expression parser and evaluator (`and`/`or`/`not`) |
 | `cache` | `src/cache.rs` | Timing cache: load/save `timings.json`, invalidation, duration estimation, `sort_groups` |
 | `scheduler` | `src/scheduler.rs` | Work-stealing scheduler; preserves insertion order; cache pre-sorts groups by duration |
 | `parallel` | `src/parallel.rs` | Subprocess worker pool: spawns `python -m oxitest._bridge.worker`, communicates over stdio JSON |
-| `reporter` | `src/reporter/` | Terminal output (TTY + CI), JSON output (`--json`), progress bars, timing summaries |
+| `strict` | `src/strict.rs` | Strict-mode violation checking: bare asserts, dict parametrize, missing mark reason, unregistered markers |
+| `reporter` | `src/reporter/` | Terminal output (`tty.rs`, `ci.rs`), JSON output (`json.rs`), plugin reporters (`plugin.rs`), exit codes (`exit.rs` + `ExitVote` enum), progress bars, timing summaries. Formatting in `format/` (diagnostics, summaries). |

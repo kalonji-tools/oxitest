@@ -8,7 +8,7 @@
 The following pytest features are supported out of the box:
 
 - Plain `test_*` functions with `assert` statements
-- `pytest.skip()` and `unittest.SkipTest`
+- `oxitest.skip()` and `unittest.SkipTest`
 - Standard test file patterns (`test_*.py`, `*_test.py`)
 
 ## Use fixtures with oxitest
