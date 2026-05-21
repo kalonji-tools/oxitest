@@ -307,6 +307,7 @@ def _build_execution_chain(
     marks: list[MarkInfo],
     wrappers: list[ExecutionWrapper],
     default_timeout: int | None,
+    session_loop: Any = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable from wrappers and base runner.
 
@@ -423,8 +424,31 @@ def _build_execution_chain(
                             stacklevel=2,
                         )
 
-        def _base() -> TestResult:
-            return backend.run(_async_core())
+        if session_loop is not None:
+
+            def _base() -> TestResult:  # pragma: no cover
+                import asyncio
+
+                before = asyncio.all_tasks(session_loop)
+                try:
+                    return session_loop.run_until_complete(_async_core())
+                finally:
+                    after = asyncio.all_tasks(session_loop)
+                    stray = after - before
+                    if stray:
+                        for task in stray:
+                            task.cancel()
+                        session_loop.run_until_complete(
+                            asyncio.gather(*stray, return_exceptions=True)
+                        )
+                        warnings.warn(
+                            f"test '{fn_name}' leaked {len(stray)} task(s) (cancelled)",
+                            stacklevel=2,
+                        )
+        else:
+
+            def _base() -> TestResult:
+                return backend.run(_async_core())
     else:
 
         def _base() -> TestResult:
@@ -481,6 +505,9 @@ def run_test(
         if short_circuit is not None:
             return short_circuit
 
+        _session_loop = getattr(effective_session, "_async_loop", None)
+        _used_shared = getattr(effective_session, "_used_shared_async", False)
+
         execute = _build_execution_chain(
             module,
             fn_raw,
@@ -490,6 +517,7 @@ def run_test(
             marks,
             wrappers,
             default_timeout,
+            session_loop=_session_loop if _used_shared else None,
         )
         return execute()
     finally:

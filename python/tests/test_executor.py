@@ -1174,3 +1174,37 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir):
     assert call_count == 1, (
         f"shared fixture factory should be called exactly once, got {call_count}"
     )
+
+
+def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture):
+    """Stray tasks from one test should not affect the next test."""
+    f = tmp / "test_shared_stray.py"
+    f.write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture\n"
+        "async def test_leaker(pool: Fixture[int]) -> None:\n"
+        "    asyncio.get_event_loop().create_task(asyncio.sleep(999))\n"
+        "async def test_clean(pool: Fixture[int]) -> None:\n"
+        "    assert pool == 42\n"
+    )
+
+    async def async_pool_factory():
+        return 42
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            "pool", async_pool_factory, False, None, "/c.py", shared=True, is_async=True
+        )
+    )
+    session = FixtureSession(reg)
+    session.begin_module(str(f))
+    r1 = run_test(str(f), "test_leaker", session)
+    r2 = run_test(str(f), "test_clean", session)
+    assert r1.status == "passed", f"test_leaker: {r1.status!r}, {r1.message!r}"
+    assert r2.status == "passed", f"test_clean: {r2.status!r}, {r2.message!r}"
+    leaked_warns = [w for w in warn.list if "leaked" in str(w.message).lower()]
+    assert len(leaked_warns) >= 1, (
+        f"expected leaked task warning, got {[str(w.message) for w in warn.list]}"
+    )
+    session.end_session()
