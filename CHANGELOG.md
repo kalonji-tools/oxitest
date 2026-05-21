@@ -131,5 +131,3 @@ All notable changes to this project will be documented in this file.
 - Create build.rs and add --capture-environment flag to Cli
 - Implement --capture-environment environment snapshot
 - Add pre-push hook to validate v* tag matches Cargo.toml version
-
-
