@@ -511,22 +511,12 @@ fn execute(
 /// Merge timings into the cache, record outcomes, and persist to disk.
 fn finalize(
     cache: &mut cache::TestCache,
-    timings: Vec<types::TestTiming>,
+    timings: &[types::TestTiming],
     cache_max_age: u32,
     rootdir: &camino::Utf8Path,
 ) {
-    let (outcome_pairs, timing_pairs): (Vec<_>, Vec<_>) = timings
-        .into_iter()
-        .map(|t| {
-            (
-                (t.node_id.clone(), t.outcome),
-                (t.node_id, t.duration_ms.as_f64()),
-            )
-        })
-        .unzip();
-
-    cache.merge(&timing_pairs, cache_max_age);
-    cache.record_outcomes(&outcome_pairs);
+    cache.merge_timings(timings, cache_max_age);
+    cache.record_timing_outcomes(timings);
     cache.save(rootdir);
 }
 
@@ -657,7 +647,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         rep.as_mut(),
     );
 
-    finalize(&mut cache, timings, cfg.cache_max_age, &rootdir);
+    finalize(&mut cache, &timings, cfg.cache_max_age, &rootdir);
 
     Ok(rep.finish(&[], interrupted).code())
 }
