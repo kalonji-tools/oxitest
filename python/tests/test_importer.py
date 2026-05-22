@@ -357,7 +357,9 @@ def test_check_fn_violations_class_method_dict_parametrize():
 
     from oxitest._bridge._fn_metadata import get_or_create
 
-    get_or_create(test_method).param_cases = _DictCases(cases={"basic": {"x": 1}})
+    get_or_create(test_method).param_cases = _DictCases(
+        cases={"basic": {"x": 1}, "extra": {"x": 2}}
+    )
 
     path = "tests/test_cls.py"
     fn_name = "TestSuite::test_method"
