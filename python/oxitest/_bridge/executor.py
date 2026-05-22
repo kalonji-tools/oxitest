@@ -31,6 +31,7 @@ from oxitest._bridge._mark_registry import (
     ExecutionWrapper,
     MarkHandler,
     _HandlerContext,
+    _PluginMarkHandler,
     evaluate_marks,
 )
 from oxitest._bridge._metadata import (
@@ -258,8 +259,6 @@ def run_test(
         _plugin_registry = getattr(effective_session, "_plugin_registry", None)
         _plugin_handlers: list[MarkHandler] = []
         if _plugin_registry is not None:  # pragma: no cover
-            from oxitest._bridge._mark_registry import _PluginMarkHandler
-
             _plugin_handlers = [
                 _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
             ]
