@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "OxitestError",
+    "FixtureError",
+    "ExecutionError",
+    "FixtureNotFoundError",
+    "FixtureCycleError",
+    "FixtureSetupError",
+    "UnannotatedFixtureParamError",
+    "SharedFixtureMutationError",
+    "OxitestTimeoutError",
+    "BackendNotFoundError",
+    "ConflictingBackendError",
+    "ParametrizeError",
+    "LoadError",
+]
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+__all__ = [
+    "Frame",
+    "TestResult",
+    "CollectedItem",
+    "ViolationKind",
+    "CollectedViolation",
+    "_error_result",
+]
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 

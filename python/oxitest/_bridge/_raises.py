@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["raises"]
+
 import re
 from typing import Any
 

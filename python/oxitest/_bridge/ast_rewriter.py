@@ -26,6 +26,7 @@ _OXITEST_NO_RHS = _OxitestNoRhs()
 
 __all__ = [
     "OxitestAssertRewriter",
+    "_BareAssertCollector",
     "_OxitestAssertionError",
     "_OxitestNoRhs",
     "_OXITEST_NO_RHS",

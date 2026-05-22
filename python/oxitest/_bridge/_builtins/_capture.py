@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+__all__ = [
+    "CaptureResult",
+    "_StdCapture",
+    "_FdCapture",
+    "_StdCaptureFixture",
+    "_FdCaptureFixture",
+]
+
 import io
 import os
 import sys

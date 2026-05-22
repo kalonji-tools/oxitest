@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["importorskip"]
+
 import importlib
 import unittest
 from typing import Any

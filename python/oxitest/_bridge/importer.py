@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["collect_module"]
+
 import ast
 import dataclasses
 import hashlib
