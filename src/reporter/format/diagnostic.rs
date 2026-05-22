@@ -11,6 +11,33 @@ const BOX_VERT: &str = "│";
 const BOX_BOT_LEFT: &str = "└─";
 const BOX_BRANCH: &str = "├─";
 
+const INTERNAL_PREFIXES: &[&str] = &["oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin"];
+
+fn is_internal_frame(frame: &crate::types::Frame) -> bool {
+    INTERNAL_PREFIXES
+        .iter()
+        .any(|prefix| frame.file.contains(prefix))
+}
+
+fn filter_frames<'a>(
+    frames: &'a [crate::types::Frame],
+    tb: &TbStyle,
+) -> Vec<&'a crate::types::Frame> {
+    match tb {
+        TbStyle::Long => frames.iter().collect(),
+        _ => {
+            let user_frames: Vec<&crate::types::Frame> =
+                frames.iter().filter(|f| !is_internal_frame(f)).collect();
+            if user_frames.is_empty() && !frames.is_empty() {
+                // Always show at least the last frame (where the error occurred)
+                vec![frames.last().unwrap()]
+            } else {
+                user_frames
+            }
+        }
+    }
+}
+
 pub(crate) fn sep_width() -> usize {
     static WIDTH: OnceLock<usize> = OnceLock::new();
     *WIDTH.get_or_init(|| {
@@ -181,19 +208,15 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    // Filter out internal oxitest frames (executor, fixtures, etc.)
-    let user_frames: Vec<_> = frames
-        .iter()
-        .filter(|f| !f.file.contains("oxitest/_bridge/"))
-        .collect();
+    let visible_frames = filter_frames(frames, tb);
 
-    if *tb == TbStyle::Long && !user_frames.is_empty() {
+    if !visible_frames.is_empty() {
         out.push_str(&format!(
             "        {}  {}\n",
             color_dim(BOX_BRANCH, use_color),
             color_dim("frames", use_color)
         ));
-        for f in &user_frames {
+        for f in &visible_frames {
             out.push_str(&format!(
                 "        {}    {}:{}  {}\n",
                 color_dim(BOX_VERT, use_color),
@@ -212,9 +235,7 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    if (*tb == TbStyle::Short || (*tb == TbStyle::Long && user_frames.is_empty()))
-        && !file.is_empty()
-    {
+    if visible_frames.is_empty() && !file.is_empty() {
         let lineno_padded = format!("{:>4}", lineno);
         out.push_str(&format!(
             "   {} {} {}\n",
@@ -233,7 +254,7 @@ pub(crate) fn fmt_diagnostic_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed, make_item};
+    use crate::reporter::test_helpers::{make_error, make_failed, make_item, make_item_at};
     use crate::types::TestOutcome;
 
     #[test]
@@ -597,5 +618,104 @@ mod tests {
             "must show numbered source line when no frames"
         );
         assert!(!block.contains("frames"), "must NOT show frames section");
+    }
+
+    #[test]
+    fn test_diagnostic_short_hides_internal_frames() {
+        use crate::types::Frame;
+
+        let item = make_item_at("test_user_code", "tests/test_app.py", 10);
+        let outcome = TestOutcome::Failed {
+            message: "assert x == 1".to_string(),
+            file: "tests/test_app.py".to_string(),
+            lineno: 10,
+            source_line: "assert x == 1".to_string(),
+            left: "0".to_string(),
+            right: "1".to_string(),
+            op: "==".to_string(),
+            frames: vec![
+                Frame {
+                    file: "tests/test_app.py".to_string(),
+                    lineno: 10,
+                    name: "test_user_code".to_string(),
+                    line: "result = helper()".to_string(),
+                },
+                Frame {
+                    file: "oxitest/_bridge/executor.py".to_string(),
+                    lineno: 55,
+                    name: "_run_base".to_string(),
+                    line: "fn()".to_string(),
+                },
+                Frame {
+                    file: "oxitest/_bridge/_middleware.py".to_string(),
+                    lineno: 30,
+                    name: "_compose".to_string(),
+                    line: "wrapper(fn)".to_string(),
+                },
+            ],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
+        assert!(
+            block.contains("test_app.py"),
+            "user frame must appear: {block}"
+        );
+        assert!(
+            !block.contains("executor.py"),
+            "internal frame must be hidden: {block}"
+        );
+        assert!(
+            !block.contains("_middleware.py"),
+            "internal frame must be hidden: {block}"
+        );
+    }
+
+    #[test]
+    fn test_diagnostic_long_shows_all_frames() {
+        use crate::types::Frame;
+
+        let item = make_item_at("test_user_code", "tests/test_app.py", 10);
+        let outcome = TestOutcome::Failed {
+            message: "assert x == 1".to_string(),
+            file: "tests/test_app.py".to_string(),
+            lineno: 10,
+            source_line: "assert x == 1".to_string(),
+            left: "0".to_string(),
+            right: "1".to_string(),
+            op: "==".to_string(),
+            frames: vec![
+                Frame {
+                    file: "tests/test_app.py".to_string(),
+                    lineno: 10,
+                    name: "test_user_code".to_string(),
+                    line: "result = helper()".to_string(),
+                },
+                Frame {
+                    file: "oxitest/_bridge/executor.py".to_string(),
+                    lineno: 55,
+                    name: "_run_base".to_string(),
+                    line: "fn()".to_string(),
+                },
+            ],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
+        assert!(
+            block.contains("executor.py"),
+            "long mode must show internal frames: {block}"
+        );
+    }
+
+    #[test]
+    fn test_filter_frames_fallback_to_last() {
+        use crate::types::Frame;
+
+        // When ALL frames are internal, still show the last one
+        let frames = vec![Frame {
+            file: "oxitest/_bridge/executor.py".to_string(),
+            lineno: 10,
+            name: "_run_base".to_string(),
+            line: "fn()".to_string(),
+        }];
+        let filtered = filter_frames(&frames, &TbStyle::Short);
+        assert_eq!(filtered.len(), 1, "should show at least the last frame");
     }
 }
