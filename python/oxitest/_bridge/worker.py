@@ -155,7 +155,7 @@ def main() -> None:
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the
     # Rust watchdog — it expects one result line per test.
-    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
     for raw in sys.stdin:
         raw = raw.strip()
         if raw:
