@@ -55,11 +55,9 @@ class MarkInfo:
 
 
 def _append_mark(f: Callable[..., Any], info: MarkInfo) -> None:
-    existing: list[MarkInfo] | None = getattr(f, "_oxitest_marks", None)
-    if existing is None:
-        existing = []
-        setattr(f, "_oxitest_marks", existing)
-    existing.append(info)
+    from oxitest._bridge._fn_metadata import get_or_create
+
+    get_or_create(f).marks.append(info)
 
 
 class _Mark:

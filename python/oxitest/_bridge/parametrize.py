@@ -214,7 +214,9 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     if isinstance(first, dict):
 
         def decorator(fn: _F) -> _F:
-            setattr(fn, "_oxitest_param_cases", _build_dict_cases(cases, fn))
+            from oxitest._bridge._fn_metadata import get_or_create
+
+            get_or_create(fn).param_cases = _build_dict_cases(cases, fn)
             return fn
 
         return decorator
@@ -228,7 +230,9 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     param_cases = _build_dataclass_cases(cases)
 
     def decorator(fn: _F) -> _F:
-        setattr(fn, "_oxitest_param_cases", param_cases)
+        from oxitest._bridge._fn_metadata import get_or_create
+
+        get_or_create(fn).param_cases = param_cases
         return fn
 
     return decorator
@@ -249,7 +253,10 @@ def resolve_parametrize(
     """
     if param_id is None:
         return {}, frozenset()
-    param_cases = getattr(fn_raw, "_oxitest_param_cases", _MISSING)
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(fn_raw)
+    param_cases = meta.param_cases if meta.param_cases is not None else _MISSING
     if param_cases is _MISSING:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
         raise ParametrizeError(
