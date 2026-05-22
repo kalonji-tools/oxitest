@@ -35,6 +35,8 @@ ignore:
   # Fixture internals: exercised via fixtures.py re-exports, not directly by test imports
   - "python/oxitest/_bridge/_fixture_registry.py"
   - "python/oxitest/_bridge/_fixture_session.py"
+  # Middleware internals: async paths run inside asyncio.run(), plugin paths need real plugins
+  - "python/oxitest/_bridge/_middleware.py"
   # Protocol stubs — method bodies are `...`, never executed
   - "python/oxitest/plugin.py"
   - "python/oxitest/_bridge/_async_backend.py"
