@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "parametrize",
+    "resolve_parametrize",
+    "ParametrizeError",
+    "_DictCases",
+    "_DataclassCases",
+]
+
 import dataclasses
 import sys
 from collections.abc import Callable, Iterable
