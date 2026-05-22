@@ -261,7 +261,7 @@ pub(crate) fn spawn_worker(
     python_bin: String,
     sched: std::sync::Arc<scheduler::Scheduler>,
     cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    conftest_json: std::sync::Arc<Vec<String>>,
+    conftest_json: std::sync::Arc<serde_json::value::RawValue>,
     timeout_secs: Option<u64>,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
@@ -420,8 +420,13 @@ pub(crate) fn run_phase_parallel(
         .collect();
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let conftest_json: std::sync::Arc<Vec<String>> =
-        std::sync::Arc::new(conftest_paths.iter().map(|p| p.to_string()).collect());
+    let conftest_raw: std::sync::Arc<serde_json::value::RawValue> = {
+        let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
+        let json_str = serde_json::to_string(&paths).expect("conftest paths serialize");
+        std::sync::Arc::from(
+            serde_json::value::RawValue::from_string(json_str).expect("valid JSON"),
+        )
+    };
     let timeout_secs = cfg.timeout_secs;
     let python_bin = std::env::var("PYO3_PYTHON").unwrap_or_else(|_| "python3".to_string());
 
@@ -433,7 +438,7 @@ pub(crate) fn run_phase_parallel(
                 python_bin.clone(),
                 Arc::clone(&sched),
                 Arc::clone(&cancelled),
-                std::sync::Arc::clone(&conftest_json),
+                std::sync::Arc::clone(&conftest_raw),
                 timeout_secs,
                 tx.clone(),
             )
