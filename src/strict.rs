@@ -19,6 +19,7 @@ pub enum PerTestViolation {
     BareAssert { node_id: NodeId, lines: Vec<usize> },
     DictParametrize { node_id: NodeId },
     MissingMarkReason { node_id: NodeId, mark_name: String },
+    SingleCaseParametrize { node_id: NodeId },
 }
 
 impl PerTestViolation {
@@ -27,6 +28,7 @@ impl PerTestViolation {
             Self::BareAssert { node_id, .. } => node_id,
             Self::DictParametrize { node_id } => node_id,
             Self::MissingMarkReason { node_id, .. } => node_id,
+            Self::SingleCaseParametrize { node_id } => node_id,
         }
     }
 }
@@ -90,6 +92,9 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         mark_name: r.detail,
                     },
                 )),
+                ViolationKind::SingleCaseParametrize => Some(StrictViolation::PerTest(
+                    PerTestViolation::SingleCaseParametrize { node_id },
+                )),
                 ViolationKind::Unknown => None,
             }
         })
@@ -138,6 +143,9 @@ impl std::fmt::Display for PerTestViolation {
                     node_id.as_ref(),
                     mark_name
                 )
+            }
+            Self::SingleCaseParametrize { node_id } => {
+                write!(f, "{:<60}  single-case-parametrize", node_id.as_ref())
             }
         }
     }
@@ -190,6 +198,9 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         }
         PerTestViolation::MissingMarkReason { mark_name, .. } => {
             format!("strict: @mark.{} requires reason=", mark_name)
+        }
+        PerTestViolation::SingleCaseParametrize { .. } => {
+            "strict: @parametrize with a single case — use a plain test instead".to_string()
         }
     };
     TestOutcome::Error {
@@ -409,5 +420,40 @@ mod tests {
             "line must contain 'bare-assert': {:?}",
             line
         );
+    }
+
+    #[test]
+    fn test_check_collected_single_case_parametrize() {
+        let raw = vec![RawViolation {
+            node_id: "tests/test_foo.py::test_single".to_string(),
+            kind: ViolationKind::SingleCaseParametrize,
+            detail: String::new(),
+        }];
+        let violations = check_collected(raw);
+        assert_eq!(violations.len(), 1);
+        assert!(matches!(
+            &violations[0],
+            StrictViolation::PerTest(PerTestViolation::SingleCaseParametrize { .. })
+        ));
+    }
+
+    #[test]
+    fn test_per_test_error_single_case_parametrize() {
+        let v = PerTestViolation::SingleCaseParametrize {
+            node_id: NodeId::from_raw("tests/test_foo.py::test_single"),
+        };
+        let outcome = per_test_error(&v);
+        if let TestOutcome::Error { message, .. } = outcome {
+            assert!(
+                message.contains("strict"),
+                "message must contain 'strict': {message:?}"
+            );
+            assert!(
+                message.contains("single case"),
+                "message must mention single case: {message:?}"
+            );
+        } else {
+            panic!("expected Error outcome");
+        }
     }
 }
