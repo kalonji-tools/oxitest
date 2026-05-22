@@ -139,7 +139,8 @@ def run(task: dict) -> None:
                 for f in getattr(result, "frames", [])
             ],
         }
-        print(json.dumps(output), flush=True)
+        print(json.dumps(output))
+    sys.stdout.flush()
 
 
 def main() -> None:
