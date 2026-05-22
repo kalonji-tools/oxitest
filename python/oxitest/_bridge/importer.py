@@ -7,7 +7,7 @@ import dataclasses
 import hashlib
 import inspect
 import pathlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from types import ModuleType
 from typing import Any, cast
 
@@ -230,36 +230,32 @@ def _register_module_fixtures(
                 registry.register(dataclasses.replace(defn, conftest_path=path))
 
 
-def _discover_module_items(
-    module: ModuleType,
+def _collect_items(
+    members: Iterable[tuple[str, object]],
     path: str,
     collect_violations: bool,
 ) -> tuple[list[CollectedItem], list[CollectedViolation]]:
-    """Discover test functions at module level."""
+    """Shared collection loop: expand items + check violations for each member."""
     items: list[CollectedItem] = []
     violations: list[CollectedViolation] = []
-
-    for name, obj in inspect.getmembers(module, inspect.isfunction):
-        if not name.startswith("test_"):
-            continue
-        lineno = getattr(getattr(obj, "__code__", None), "co_firstlineno", 0)
-        marker_names = [m.name for m in get_marks(obj)]
-        items.extend(_expand_item(name, lineno, marker_names, obj))
+    for fn_name, fn in members:
+        lineno = getattr(getattr(fn, "__code__", None), "co_firstlineno", 0)
+        marker_names = [m.name for m in get_marks(fn)]
+        items.extend(_expand_item(fn_name, lineno, marker_names, fn))
         if collect_violations:
-            violations.extend(_check_fn_violations(path, name, obj))
-
+            violations.extend(_check_fn_violations(path, fn_name, fn))
     return items, violations
 
 
-def _discover_class_items(
-    module: ModuleType,
-    path: str,
-    collect_violations: bool,
-) -> tuple[list[CollectedItem], list[CollectedViolation]]:
-    """Discover test methods inside Test* classes."""
-    items: list[CollectedItem] = []
-    violations: list[CollectedViolation] = []
+def _module_members(module: ModuleType) -> Iterable[tuple[str, object]]:
+    """Yield (fn_name, fn) for module-level test functions."""
+    for name, obj in inspect.getmembers(module, inspect.isfunction):
+        if name.startswith("test_"):
+            yield name, obj
 
+
+def _class_members(module: ModuleType) -> Iterable[tuple[str, object]]:
+    """Yield (fn_name, fn) for test methods in Test* classes."""
     for cls_name, cls in inspect.getmembers(module, inspect.isclass):
         if not cls_name.startswith("Test"):
             continue
@@ -267,14 +263,7 @@ def _discover_class_items(
             if not method_name.startswith("test_"):
                 continue
             _propagate_class_marks(method, cls)
-            lineno = getattr(getattr(method, "__code__", None), "co_firstlineno", 0)
-            fn_name = f"{cls_name}::{method_name}"
-            marker_names = [m.name for m in get_marks(method)]
-            items.extend(_expand_item(fn_name, lineno, marker_names, method))
-            if collect_violations:
-                violations.extend(_check_fn_violations(path, fn_name, method))
-
-    return items, violations
+            yield f"{cls_name}::{method_name}", method
 
 
 def collect_module(
@@ -295,8 +284,10 @@ def collect_module(
     _register_module_fixtures(module, path, session)
     items: list[CollectedItem] = []
     violations: list[CollectedViolation] = []
-    for discover in (_discover_module_items, _discover_class_items):
-        found_items, found_viols = discover(module, path, collect_violations)
+    for discover in (_module_members, _class_members):
+        found_items, found_viols = _collect_items(
+            discover(module), path, collect_violations
+        )
         items.extend(found_items)
         violations.extend(found_viols)
 

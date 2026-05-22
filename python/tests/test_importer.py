@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import textwrap
+from types import ModuleType
 
 from oxitest import TempDir, raises
 from oxitest._bridge.importer import (
     _check_fn_violations,
+    _collect_items,
+    _module_members,
     _propagate_class_marks,
     collect_module,
 )
@@ -478,3 +481,39 @@ def test_collect_async_class_method_sets_is_async(tmp: TempDir):
     assert by_name["TestSuite::test_sync_method"].is_async is False, (
         "sync class method should be is_async=False"
     )
+
+
+def test_module_members_yields_test_functions_only():
+    mod = ModuleType("fake")
+
+    def test_one():
+        pass
+
+    def test_two():
+        pass
+
+    def helper():
+        pass
+
+    mod.__dict__["test_one"] = test_one
+    mod.__dict__["test_two"] = test_two
+    mod.__dict__["helper"] = helper
+    members = list(_module_members(mod))
+    names = [n for n, _ in members]
+    assert "test_one" in names, f"'test_one' should be yielded, got {names}"
+    assert "test_two" in names, f"'test_two' should be yielded, got {names}"
+    assert "helper" not in names, f"'helper' should not be yielded, got {names}"
+
+
+def test_collect_items_returns_collected_items():
+    def fake_fn():
+        pass
+
+    lineno = fake_fn.__code__.co_firstlineno
+    members = [("test_fake", fake_fn)]
+    items, violations = _collect_items(members, "/fake.py", collect_violations=False)
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert items[0].fn_name == "test_fake", (
+        f"expected fn_name='test_fake', got {items[0].fn_name!r}"
+    )
+    assert items[0].lineno == lineno, f"expected lineno={lineno}, got {items[0].lineno}"
