@@ -38,7 +38,7 @@ import sys
 import time
 from typing import Any
 
-from oxitest._bridge.result import StatusKind
+from oxitest._bridge.result import StatusKind, TestResult
 
 
 def _build_node_id(module_path: str, fn_name: str, param_id: str | None) -> str:
@@ -60,37 +60,29 @@ NON_FAILURE_STATUSES = frozenset(
 )
 
 
-def _build_failure_repr(result: object) -> str | None:
+def _build_failure_repr(result: TestResult) -> str | None:
     """Build a human-readable failure string from a TestResult."""
-    status = getattr(result, "status", "")
-    if status in NON_FAILURE_STATUSES:
+    if result.status in NON_FAILURE_STATUSES:
         return None
 
     parts: list[str] = []
 
-    message = getattr(result, "message", "")
-    if message:
-        parts.append(message)
+    if result.message:
+        parts.append(result.message)
 
-    file_ = getattr(result, "file", "")
-    lineno = getattr(result, "lineno", 0)
-    source_line = getattr(result, "source_line", "")
-    if file_:
-        location = f"{file_}:{lineno}"
-        if source_line:
-            location += f"  {source_line}"
+    if result.file:
+        location = f"{result.file}:{result.lineno}"
+        if result.source_line:
+            location += f"  {result.source_line}"
         parts.append(location)
 
-    left = getattr(result, "left", "")
-    right = getattr(result, "right", "")
-    op = getattr(result, "op", "")
-    if left:
-        if right and op:
-            parts.append(f"assert {left} {op} {right}")
+    if result.left:
+        if result.right and result.op:
+            parts.append(f"assert {result.left} {result.op} {result.right}")
         else:
-            parts.append(f"assert {left}")
+            parts.append(f"assert {result.left}")
 
-    return "\n".join(parts) if parts else f"Test {status}"
+    return "\n".join(parts) if parts else f"Test {result.status}"
 
 
 def run(task: dict) -> None:
