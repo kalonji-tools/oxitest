@@ -1083,4 +1083,169 @@ mod tests {
         assert!(a_pos < m_pos, "a_test should appear before m_test");
         assert!(m_pos < z_pos, "m_test should appear before z_test");
     }
+
+    // ── merge_timings ───────────────────────────────────────────────────
+
+    fn make_timing(node_id: &str, ms: f64, outcome: OutcomeKind) -> crate::types::TestTiming {
+        crate::types::TestTiming {
+            node_id: NodeId::from_raw(node_id),
+            duration_ms: crate::types::DurationMs::new(ms),
+            outcome,
+        }
+    }
+
+    #[test]
+    fn merge_timings_updates_duration_and_resets_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_a")
+            .unwrap()
+            .age = 5;
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            42.0,
+            OutcomeKind::Passed,
+        )];
+        cache.merge_timings(&timings, 50);
+        let entry = &cache.inner.timings["tests/test_foo.py::test_a"];
+        assert!((entry.duration_ms - 42.0).abs() < 0.01);
+        assert_eq!(entry.age, 0);
+    }
+
+    #[test]
+    fn merge_timings_increments_age_for_unexecuted_tests() {
+        let mut cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 10.0),
+            ("tests/test_foo.py::test_b", 20.0),
+        ]);
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            10.0,
+            OutcomeKind::Passed,
+        )];
+        cache.merge_timings(&timings, 50);
+        assert_eq!(cache.inner.timings["tests/test_foo.py::test_b"].age, 1);
+    }
+
+    #[test]
+    fn merge_timings_drops_entries_exceeding_max_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 50;
+        cache.merge_timings(&[], 50);
+        assert!(!cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+    }
+
+    #[test]
+    fn merge_timings_keeps_entries_at_max_age() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 49;
+        cache.merge_timings(&[], 50);
+        assert!(cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+    }
+
+    #[test]
+    fn merge_timings_adds_new_entry() {
+        let mut cache = TestCache::empty();
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_new",
+            15.0,
+            OutcomeKind::Passed,
+        )];
+        cache.merge_timings(&timings, 50);
+        assert!(cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_new"));
+        assert_eq!(cache.inner.timings["tests/test_foo.py::test_new"].age, 0);
+    }
+
+    #[test]
+    fn merge_timings_sets_dirty_when_results_present() {
+        let mut cache = TestCache::empty();
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            10.0,
+            OutcomeKind::Passed,
+        )];
+        cache.merge_timings(&timings, 50);
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn merge_timings_sets_dirty_when_only_entries_dropped() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
+        cache
+            .inner
+            .timings
+            .get_mut("tests/test_foo.py::test_old")
+            .unwrap()
+            .age = 50;
+        cache.merge_timings(&[], 50);
+        assert!(!cache
+            .inner
+            .timings
+            .contains_key("tests/test_foo.py::test_old"));
+        assert!(cache.dirty);
+    }
+
+    // ── record_timing_outcomes ──────────────────────────────────────────
+
+    #[test]
+    fn record_timing_outcomes_sets_last_outcome_on_known_entries() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            10.0,
+            OutcomeKind::Failed,
+        )];
+        cache.record_timing_outcomes(&timings);
+        assert_eq!(
+            cache.inner.timings["tests/test_foo.py::test_a"].last_outcome,
+            Some(OutcomeKind::Failed)
+        );
+        assert!(cache.dirty);
+    }
+
+    #[test]
+    fn record_timing_outcomes_ignores_unknown_node_ids() {
+        let mut cache = TestCache::empty();
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_unknown",
+            10.0,
+            OutcomeKind::Failed,
+        )];
+        cache.record_timing_outcomes(&timings);
+        assert!(cache.inner.timings.is_empty());
+        assert!(!cache.dirty);
+    }
+
+    #[test]
+    fn record_timing_outcomes_sets_dirty() {
+        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            10.0,
+            OutcomeKind::Passed,
+        )];
+        cache.record_timing_outcomes(&timings);
+        assert!(cache.dirty);
+    }
 }
