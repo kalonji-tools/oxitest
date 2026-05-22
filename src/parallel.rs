@@ -165,12 +165,13 @@ fn setup_worker_process(
     let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
     let _reader = std::thread::spawn(move || {
         let mut stdout = worker_stdout;
+        let mut buf = String::with_capacity(256);
         loop {
-            let mut line = String::new();
-            match stdout.read_line(&mut line) {
+            buf.clear();
+            match stdout.read_line(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
-                    if line_tx.send(line).is_err() {
+                    if line_tx.send(buf.clone()).is_err() {
                         break;
                     }
                 }
