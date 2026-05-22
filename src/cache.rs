@@ -200,6 +200,7 @@ impl TestCache {
         Some((scaled_secs.ceil() as u64).max(1))
     }
 
+    #[allow(dead_code)]
     pub fn merge(&mut self, results: &[(NodeId, f64)], max_age: u32) {
         let executed: HashSet<&str> = results.iter().map(|(id, _)| id.as_ref()).collect();
 
@@ -231,9 +232,56 @@ impl TestCache {
         }
     }
 
+    /// Merge test timings directly from `&[TestTiming]`, avoiding intermediate allocations.
+    pub fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32) {
+        let executed: HashSet<&str> = timings.iter().map(|t| t.node_id.as_ref()).collect();
+
+        for t in timings {
+            let entry = self
+                .inner
+                .timings
+                .entry(t.node_id.to_string())
+                .or_insert(CacheEntry {
+                    duration_ms: 0.0,
+                    age: 0,
+                    last_outcome: None,
+                });
+            entry.duration_ms = t.duration_ms.as_f64();
+            entry.age = 0;
+        }
+
+        let before = self.inner.timings.len();
+        self.inner.timings.retain(|key, entry| {
+            if executed.contains(key.as_str()) {
+                return true;
+            }
+            entry.age += 1;
+            entry.age <= max_age
+        });
+
+        if !timings.is_empty() || self.inner.timings.len() != before {
+            self.dirty = true;
+        }
+    }
+
+    /// Record outcomes from `&[TestTiming]` directly.
+    pub fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]) {
+        let mut changed = false;
+        for t in timings {
+            if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
+                entry.last_outcome = Some(t.outcome.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            self.dirty = true;
+        }
+    }
+
     /// Update `last_outcome` for entries that appear in `outcomes`.
     /// Entries not in `outcomes` are unchanged.
     /// Sets dirty = true if any entry was updated.
+    #[allow(dead_code)]
     pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, OutcomeKind)]) {
         let mut changed = false;
         for (node_id, outcome) in outcomes {
