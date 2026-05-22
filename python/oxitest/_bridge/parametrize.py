@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
+from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge.fixtures import _fixture_inner_type
 
@@ -214,8 +215,6 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     if isinstance(first, dict):
 
         def decorator(fn: _F) -> _F:
-            from oxitest._bridge._fn_metadata import get_or_create
-
             get_or_create(fn).param_cases = _build_dict_cases(cases, fn)
             return fn
 
@@ -230,8 +229,6 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     param_cases = _build_dataclass_cases(cases)
 
     def decorator(fn: _F) -> _F:
-        from oxitest._bridge._fn_metadata import get_or_create
-
         get_or_create(fn).param_cases = param_cases
         return fn
 
@@ -253,8 +250,6 @@ def resolve_parametrize(
     """
     if param_id is None:
         return {}, frozenset()
-    from oxitest._bridge._fn_metadata import get_metadata
-
     meta = get_metadata(fn_raw)
     param_cases = meta.param_cases if meta.param_cases is not None else _MISSING
     if param_cases is _MISSING:

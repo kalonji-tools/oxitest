@@ -48,6 +48,7 @@ from oxitest._bridge._fixture_session import (
     _TestContext as _TestContext,
     _warn_teardown as _warn_teardown,
 )
+from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -88,8 +89,6 @@ class FixtureAccessor:
         self._fa_fixtures = fixtures
         self._fa_func = func
         # Mirror what _register sets so the executor can read them directly.
-        from oxitest._bridge._fn_metadata import get_metadata
-
         self._oxitest_fixture_name: str = get_metadata(func).fixture_name or name
         self.__name__ = name
 
@@ -223,8 +222,6 @@ class Fixtures:
         """
 
         def _register(f: _F) -> _F:
-            from oxitest._bridge._fn_metadata import get_or_create
-
             fixture_name = name or getattr(f, "__name__", repr(f))
             get_or_create(f).fixture_name = fixture_name
             defn = FixtureDef(

@@ -16,6 +16,7 @@ from typing import Any
 
 from oxitest._bridge._fixture_session import _SessionProtocol
 from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._timeout import make_timeout_wrapper
 from oxitest._bridge.result import StatusKind, TestResult
 
 ExecutionWrapper = Callable[[Callable[[], TestResult]], TestResult]
@@ -117,9 +118,6 @@ class _TimeoutHandler(MarkHandler):
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         seconds = int(mark.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
-
-        from oxitest._bridge._timeout import make_timeout_wrapper
-
         return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
 
 

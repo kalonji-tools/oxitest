@@ -7,6 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from oxitest._bridge._fn_metadata import get_or_create
+
 _F = TypeVar("_F", bound=Callable[..., Any])
 _T = TypeVar("_T")
 
@@ -55,8 +57,6 @@ class MarkInfo:
 
 
 def _append_mark(f: Callable[..., Any], info: MarkInfo) -> None:
-    from oxitest._bridge._fn_metadata import get_or_create
-
     get_or_create(f).marks.append(info)
 
 

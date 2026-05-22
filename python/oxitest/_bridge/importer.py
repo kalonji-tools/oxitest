@@ -11,6 +11,7 @@ from collections.abc import Callable
 from types import ModuleType
 from typing import Any, cast
 
+from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import _append_mark
 from oxitest._bridge._metadata import get_marks
@@ -38,8 +39,6 @@ def _expand_item(
     fn: object,
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
-    from oxitest._bridge._fn_metadata import get_metadata
-
     is_async = inspect.iscoroutinefunction(fn)
     param_cases: _DictCases | _DataclassCases | None = get_metadata(fn).param_cases
     if param_cases is None:
@@ -75,8 +74,6 @@ def _check_dict_parametrize(
 
     Dict-parametrize: _oxitest_param_cases is a _DictCases instance.
     """
-    from oxitest._bridge._fn_metadata import get_metadata
-
     param_cases = get_metadata(fn).param_cases
     if isinstance(param_cases, _DictCases):
         return [
