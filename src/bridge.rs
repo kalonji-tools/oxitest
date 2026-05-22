@@ -138,6 +138,7 @@ pub(crate) enum ViolationKind {
     BareAssert,
     DictParametrize,
     MissingMarkReason,
+    SingleCaseParametrize,
     Unknown,
 }
 
@@ -150,6 +151,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
             "bare_assert" => ViolationKind::BareAssert,
             "dict_parametrize" => ViolationKind::DictParametrize,
             "missing_mark_reason" => ViolationKind::MissingMarkReason,
+            "single_case_parametrize" => ViolationKind::SingleCaseParametrize,
             _ => ViolationKind::Unknown,
         })
     }
