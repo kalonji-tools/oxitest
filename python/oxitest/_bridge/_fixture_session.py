@@ -10,12 +10,14 @@ __all__ = [
     "_Node",
     "_Scope",
     "_fixture_context",
+    "_fixture_scope",
     "_warn_teardown",
 ]
 
 import inspect
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Protocol
@@ -58,6 +60,22 @@ class FixtureContext:
 _fixture_context: ContextVar[FixtureContext | None] = ContextVar(
     "_fixture_context", default=None
 )
+
+
+@contextmanager
+def _fixture_scope(
+    session: Any,
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
+):
+    """Scoped fixture context — handles parent lookup and guaranteed reset."""
+    parent = _fixture_context.get(None)
+    effective = parent.fn_teardowns if parent is not None else fn_teardowns
+    token = _fixture_context.set(FixtureContext(session, module_path, effective))
+    try:
+        yield
+    finally:
+        _fixture_context.reset(token)
 
 
 class _SessionProtocol(Protocol):
