@@ -8,7 +8,13 @@ set of built-in marker names defined by BUILTIN_MARKERS in filter.rs.
 
 from __future__ import annotations
 
-__all__ = ["evaluate_marks", "ExecutionWrapper", "_HandlerContext", "MarkHandler"]
+__all__ = [
+    "evaluate_marks",
+    "ExecutionWrapper",
+    "_HandlerContext",
+    "MarkHandler",
+    "_PluginMarkHandler",
+]
 
 import dataclasses
 from collections.abc import Callable
@@ -121,6 +127,27 @@ class _TimeoutHandler(MarkHandler):
         return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
 
 
+class _PluginMarkHandler(MarkHandler):
+    """Adapter: wraps a plugin ExecutionWrapper as a MarkHandler."""
+
+    def __init__(self, pw: Any) -> None:
+        self.mark_name = pw.marker
+        self._pw = pw
+
+    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        args = {**dict(enumerate(mark.args)), **mark.kwargs}
+        pw = self._pw
+
+        def wrapper(
+            next_fn: Callable[[], TestResult],
+            _w: Any = pw,
+            _a: dict[int | str, Any] = args,
+        ) -> TestResult:
+            return _w.wrap(next_fn, _a)
+
+        return MarkEvalResult(wrapper=wrapper)
+
+
 # NOTE: @oxitest.mark.timeout combined with @oxitest.mark.xfail is not supported.
 # Behaviour is undefined — see docs/superpowers/specs/2026-05-03-timeout-design.md.
 _MARK_REGISTRY: dict[str, MarkHandler] = {
@@ -136,17 +163,23 @@ _MARK_REGISTRY: dict[str, MarkHandler] = {
 
 
 def evaluate_marks(
-    marks: list[MarkInfo], ctx: _HandlerContext
+    marks: list[MarkInfo],
+    ctx: _HandlerContext,
+    plugin_handlers: list[MarkHandler] | None = None,
 ) -> tuple[TestResult | None, list[ExecutionWrapper]]:
     """Run marks through the handler registry.
 
     Returns (short_circuit, wrappers).
     short_circuit: if not None, return it immediately without running the test.
     wrappers: callables to compose around the test execution, in order added.
+    plugin_handlers: additional handlers from plugin execution wrappers.
     """
+    registry = _MARK_REGISTRY
+    if plugin_handlers:
+        registry = {**_MARK_REGISTRY, **{h.mark_name: h for h in plugin_handlers}}
     wrappers: list[ExecutionWrapper] = []
     for mark in marks:
-        handler = _MARK_REGISTRY.get(mark.name)
+        handler = registry.get(mark.name)
         if handler is None:
             continue
         result = handler.handle(mark, ctx)

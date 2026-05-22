@@ -10,6 +10,7 @@ from oxitest._bridge._mark_registry import (
     MarkEvalResult,
     MarkHandler,
     _HandlerContext,
+    _PluginMarkHandler,
     _SkipHandler,
     _SkipIfHandler,
     _UsefixturesHandler,
@@ -508,3 +509,57 @@ def test_exc_type_empty_on_pass(tmp: TempDir) -> None:
     path = _write_test(tmp, "def test_foo(): pass\n")
     result = run_test(path, "test_foo")
     assert result.exc_type == "", f"expected exc_type='', got {result.exc_type!r}"
+
+
+class _FakePluginWrapper:
+    marker = "custom_mark"
+
+    def wrap(self, next_fn, args):
+        result = next_fn()
+        return dataclasses.replace(result, message=f"wrapped:{args}")
+
+
+def test_plugin_mark_handler_wraps_correctly():
+    pw = _FakePluginWrapper()
+    handler = _PluginMarkHandler(pw)
+    assert handler.mark_name == "custom_mark", (
+        f"expected mark_name='custom_mark', got {handler.mark_name!r}"
+    )
+    mark = MarkInfo("custom_mark", ("arg1",), {"key": "val"})
+    ctx = _HandlerContext(
+        fn_raw=lambda: None,
+        fn=lambda: None,
+        all_kwargs={},
+        session=FixtureSession(FixtureRegistry()),
+        module_path="/fake.py",
+        fn_teardowns=[],
+    )
+    result = handler.handle(mark, ctx)
+    assert result.wrapper is not None, "handler should produce a wrapper"
+    assert result.short_circuit is None, "handler should not short-circuit"
+
+    # Execute the wrapper
+    inner_result = TestResult(status=StatusKind.PASSED)
+    wrapped_result = result.wrapper(lambda: inner_result)
+    assert "wrapped:" in wrapped_result.message, (
+        f"wrapper should modify message, got {wrapped_result.message!r}"
+    )
+
+
+def test_evaluate_marks_dispatches_plugin_handlers():
+    pw = _FakePluginWrapper()
+    handler = _PluginMarkHandler(pw)
+    marks = [MarkInfo("custom_mark", (), {})]
+    ctx = _HandlerContext(
+        fn_raw=lambda: None,
+        fn=lambda: None,
+        all_kwargs={},
+        session=FixtureSession(FixtureRegistry()),
+        module_path="/fake.py",
+        fn_teardowns=[],
+    )
+    short_circuit, wrappers = evaluate_marks(marks, ctx, plugin_handlers=[handler])
+    assert short_circuit is None, "should not short-circuit"
+    assert len(wrappers) == 1, (
+        f"expected 1 wrapper from plugin handler, got {len(wrappers)}"
+    )
