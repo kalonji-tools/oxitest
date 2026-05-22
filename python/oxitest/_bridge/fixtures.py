@@ -40,11 +40,10 @@ from oxitest._bridge._fixture_session import (
     BuiltinFixture as BuiltinFixture,
     FixtureSession as FixtureSession,
     FixtureTeardownWarning as FixtureTeardownWarning,
-    _instantiation_context,
+    _fixture_context,
     _Node as _Node,
     _Scope as _Scope,
     _SessionProtocol as _SessionProtocol,
-    _teardown_local,
     _TestContext as _TestContext,
     _warn_teardown as _warn_teardown,
 )
@@ -63,7 +62,7 @@ class FixtureAccessor:
 
     2. **Lazy attribute proxy** — when attribute access happens *inside* a
        test or fixture body, it resolves the live fixture instance via the
-       ``_instantiation_context`` contextvar and proxies the attribute.
+       ``_fixture_context`` contextvar and proxies the attribute.
 
     Example::
 
@@ -98,7 +97,7 @@ class FixtureAccessor:
     def __getattr__(self, attr: str) -> Any:
         if attr.startswith("_"):
             raise AttributeError(attr)
-        ctx = _instantiation_context.get(None)
+        ctx = _fixture_context.get(None)
         if ctx is None:
             raise AttributeError(
                 f"Attribute '{attr}' of fixture '{self._fa_name}' can only be accessed "
@@ -106,14 +105,9 @@ class FixtureAccessor:
                 f"If you meant to use the fixture value, annotate with "
                 f"fx: Fixtures and access via fx.<namespace>.{self._fa_name}.{attr}."
             )
-        session, module_path = ctx
-        try:
-            fn_teardowns: list[Callable[[], None]] = _teardown_local.fn_teardowns  # type: ignore[attr-defined]
-        except AttributeError:
-            raise RuntimeError(
-                "FixtureAccessor attribute access occurred outside an active "
-                "resolve_for_test call. This is a bug in the test framework."
-            ) from None
+        session = ctx.session
+        module_path = ctx.module_path
+        fn_teardowns = ctx.fn_teardowns
         namespace = self._fa_fixtures._namespace_name
         if namespace:
             resolved = session.get_fixture_in_namespace(
