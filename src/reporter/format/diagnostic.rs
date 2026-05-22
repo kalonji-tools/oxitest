@@ -248,6 +248,11 @@ pub(crate) fn fmt_diagnostic_block(
 
     out.push_str(&extra);
 
+    if let Some(hint) = super::suggestions::suggest_fix(outcome, use_color) {
+        out.push_str(&hint);
+        out.push('\n');
+    }
+
     out
 }
 
