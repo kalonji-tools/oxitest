@@ -52,6 +52,7 @@ pub struct TtyReporter {
         crate::types::TestOutcome,
         DurationMs,
     )>,
+    running_tests: Vec<String>,
 }
 
 impl TtyReporter {
@@ -75,6 +76,7 @@ impl TtyReporter {
             pb,
             pending_group: None,
             deferred_failures: Vec::new(),
+            running_tests: Vec::new(),
         }
     }
 
@@ -169,6 +171,26 @@ impl TtyReporter {
                 &ms,
             ),
         }
+    }
+
+    fn update_running_message(&self) {
+        let max_names = 3;
+        let msg = if self.running_tests.len() <= max_names {
+            self.running_tests.join(", ")
+        } else {
+            let shown: Vec<&str> = self
+                .running_tests
+                .iter()
+                .take(max_names)
+                .map(|s| s.as_str())
+                .collect();
+            format!(
+                "{}, +{} more",
+                shown.join(", "),
+                self.running_tests.len() - max_names
+            )
+        };
+        self.pb.set_message(msg);
     }
 
     /// Dispatch a completed parametrize group: print immediately in verbose mode,
@@ -277,10 +299,14 @@ impl StandardReporter for TtyReporter {
 
 impl Reporter for TtyReporter {
     fn test_started(&mut self, item: &TestItem) {
-        self.pb.set_message(item.fn_name.clone());
+        self.running_tests.push(item.fn_name.clone());
+        self.update_running_message();
     }
 
     fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+        if let Some(pos) = self.running_tests.iter().position(|n| n == &item.fn_name) {
+            self.running_tests.remove(pos);
+        }
         self.stats.record(item, outcome);
         self.stats.record_timing(item.node_id.as_ref(), duration_ms);
 
@@ -318,7 +344,7 @@ impl Reporter for TtyReporter {
         }
 
         self.pb.inc(1);
-        self.pb.set_message("");
+        self.update_running_message();
     }
 
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
@@ -746,5 +772,41 @@ mod tests {
             reporter.deferred_failures.is_empty(),
             "verbose mode should print immediately, not defer"
         );
+    }
+
+    // ── running_tests tracking ────────────────────────────────────────────────
+
+    #[test]
+    fn test_running_tests_tracks_in_flight() {
+        let opts = ReporterOptsBuilder::new().build();
+        let mut reporter = TtyReporter::new(opts);
+
+        let item_a = make_item("test_login");
+        let item_b = make_item("test_signup");
+
+        reporter.test_started(&item_a);
+        reporter.test_started(&item_b);
+        assert_eq!(reporter.running_tests.len(), 2);
+
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        reporter.test_completed(&item_a, &outcome, DurationMs::new(10.0));
+        assert_eq!(reporter.running_tests.len(), 1);
+        assert_eq!(reporter.running_tests[0], "test_signup");
+    }
+
+    #[test]
+    fn test_running_tests_empty_after_all_complete() {
+        let opts = ReporterOptsBuilder::new().build();
+        let mut reporter = TtyReporter::new(opts);
+
+        let item = make_item("test_foo");
+        reporter.test_started(&item);
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
+        assert!(reporter.running_tests.is_empty());
     }
 }
