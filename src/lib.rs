@@ -17,6 +17,7 @@ mod reporter;
 mod scheduler;
 mod strict;
 mod types;
+mod watch;
 mod worker_result;
 
 #[pyfunction]
