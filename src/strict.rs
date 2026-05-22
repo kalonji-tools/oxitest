@@ -15,20 +15,38 @@ use crate::types::{NodeId, TestOutcome};
 // ── Violation types ───────────────────────────────────────────────────────────
 
 #[derive(Debug, PartialEq)]
-pub enum StrictViolation {
+pub enum PerTestViolation {
     BareAssert { node_id: NodeId, lines: Vec<usize> },
     DictParametrize { node_id: NodeId },
     MissingMarkReason { node_id: NodeId, mark_name: String },
+}
+
+impl PerTestViolation {
+    pub fn node_id(&self) -> &NodeId {
+        match self {
+            Self::BareAssert { node_id, .. } => node_id,
+            Self::DictParametrize { node_id } => node_id,
+            Self::MissingMarkReason { node_id, .. } => node_id,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SuiteViolation {
     MarkerNoDescription { marker_name: String },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum StrictViolation {
+    PerTest(PerTestViolation),
+    Suite(SuiteViolation),
 }
 
 impl StrictViolation {
     pub fn node_id(&self) -> Option<&NodeId> {
         match self {
-            Self::BareAssert { node_id, .. } => Some(node_id),
-            Self::DictParametrize { node_id } => Some(node_id),
-            Self::MissingMarkReason { node_id, .. } => Some(node_id),
-            Self::MarkerNoDescription { .. } => None,
+            Self::PerTest(v) => Some(v.node_id()),
+            Self::Suite(_) => None,
         }
     }
 }
@@ -39,8 +57,10 @@ pub fn check_config(config: &Config) -> Vec<StrictViolation> {
     config
         .markers_without_description
         .iter()
-        .map(|name| StrictViolation::MarkerNoDescription {
-            marker_name: name.clone(),
+        .map(|name| {
+            StrictViolation::Suite(SuiteViolation::MarkerNoDescription {
+                marker_name: name.clone(),
+            })
         })
         .collect()
 }
@@ -56,32 +76,40 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         .split_whitespace()
                         .filter_map(|s| s.parse().ok())
                         .collect();
-                    Some(StrictViolation::BareAssert { node_id, lines })
+                    Some(StrictViolation::PerTest(PerTestViolation::BareAssert {
+                        node_id,
+                        lines,
+                    }))
                 }
-                ViolationKind::DictParametrize => {
-                    Some(StrictViolation::DictParametrize { node_id })
-                }
-                ViolationKind::MissingMarkReason => Some(StrictViolation::MissingMarkReason {
-                    node_id,
-                    mark_name: r.detail,
-                }),
+                ViolationKind::DictParametrize => Some(StrictViolation::PerTest(
+                    PerTestViolation::DictParametrize { node_id },
+                )),
+                ViolationKind::MissingMarkReason => Some(StrictViolation::PerTest(
+                    PerTestViolation::MissingMarkReason {
+                        node_id,
+                        mark_name: r.detail,
+                    },
+                )),
                 ViolationKind::Unknown => None,
             }
         })
         .collect()
 }
 
-pub fn suite_level(violations: &[StrictViolation]) -> Vec<&StrictViolation> {
+pub fn suite_level(violations: &[StrictViolation]) -> Vec<&SuiteViolation> {
     violations
         .iter()
-        .filter(|v| matches!(v, StrictViolation::MarkerNoDescription { .. }))
+        .filter_map(|v| match v {
+            StrictViolation::Suite(sv) => Some(sv),
+            StrictViolation::PerTest(_) => None,
+        })
         .collect()
 }
 
-impl std::fmt::Display for StrictViolation {
+impl std::fmt::Display for PerTestViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StrictViolation::BareAssert { node_id, lines } => {
+            Self::BareAssert { node_id, lines } => {
                 if lines.is_empty() {
                     write!(f, "{:<60}  bare-assert", node_id.as_ref())
                 } else {
@@ -100,10 +128,10 @@ impl std::fmt::Display for StrictViolation {
                     )
                 }
             }
-            StrictViolation::DictParametrize { node_id } => {
+            Self::DictParametrize { node_id } => {
                 write!(f, "{:<60}  dict-parametrize", node_id.as_ref())
             }
-            StrictViolation::MissingMarkReason { node_id, mark_name } => {
+            Self::MissingMarkReason { node_id, mark_name } => {
                 write!(
                     f,
                     "{:<60}  missing-mark-reason   {}",
@@ -111,9 +139,25 @@ impl std::fmt::Display for StrictViolation {
                     mark_name
                 )
             }
-            StrictViolation::MarkerNoDescription { marker_name } => {
+        }
+    }
+}
+
+impl std::fmt::Display for SuiteViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MarkerNoDescription { marker_name } => {
                 write!(f, "markers[\"{}\"]   no description", marker_name)
             }
+        }
+    }
+}
+
+impl std::fmt::Display for StrictViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PerTest(v) => v.fmt(f),
+            Self::Suite(v) => v.fmt(f),
         }
     }
 }
@@ -124,14 +168,11 @@ pub fn format_violation_line(v: &StrictViolation) -> String {
 
 /// Returns a `TestOutcome::Error` for a per-test strict violation.
 ///
-/// # Panics
-///
-/// Panics if called with `StrictViolation::MarkerNoDescription` — that variant
-/// is suite-level and must never be passed to this function.
-/// Use [`suite_level`] to separate suite-level violations before calling this.
-pub fn per_test_error(v: &StrictViolation) -> TestOutcome {
+/// Accepts only [`PerTestViolation`], so suite-level violations are excluded
+/// at compile time — no runtime `unreachable!()` needed.
+pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
     let message = match v {
-        StrictViolation::BareAssert { lines, .. } => {
+        PerTestViolation::BareAssert { lines, .. } => {
             if lines.is_empty() {
                 "strict: bare assert (no line info)".to_string()
             } else {
@@ -144,17 +185,11 @@ pub fn per_test_error(v: &StrictViolation) -> TestOutcome {
                 format!("strict: bare assert on {} {}", label, nums)
             }
         }
-        StrictViolation::DictParametrize { .. } => {
+        PerTestViolation::DictParametrize { .. } => {
             "strict: use a frozen dataclass instead of dict for parametrize cases".to_string()
         }
-        StrictViolation::MissingMarkReason { mark_name, .. } => {
+        PerTestViolation::MissingMarkReason { mark_name, .. } => {
             format!("strict: @mark.{} requires reason=", mark_name)
-        }
-        StrictViolation::MarkerNoDescription { marker_name } => {
-            unreachable!(
-                "MarkerNoDescription({marker_name:?}) passed to per_test_error(); \
-                 this variant is suite-level — filter with suite_level() first"
-            )
         }
     };
     TestOutcome::Error {
@@ -198,7 +233,7 @@ mod tests {
         assert_eq!(violations.len(), 1);
         assert!(matches!(
             &violations[0],
-            StrictViolation::MarkerNoDescription { marker_name }
+            StrictViolation::Suite(SuiteViolation::MarkerNoDescription { marker_name })
             if marker_name == "db"
         ));
     }
@@ -214,7 +249,7 @@ mod tests {
         assert_eq!(violations.len(), 1);
         assert!(matches!(
             &violations[0],
-            StrictViolation::BareAssert { lines, .. }
+            StrictViolation::PerTest(PerTestViolation::BareAssert { lines, .. })
             if *lines == vec![12usize, 18]
         ));
     }
@@ -229,7 +264,7 @@ mod tests {
         let violations = check_collected(raw);
         assert!(matches!(
             &violations[0],
-            StrictViolation::DictParametrize { .. }
+            StrictViolation::PerTest(PerTestViolation::DictParametrize { .. })
         ));
     }
 
@@ -243,7 +278,7 @@ mod tests {
         let violations = check_collected(raw);
         assert!(matches!(
             &violations[0],
-            StrictViolation::MissingMarkReason { mark_name, .. }
+            StrictViolation::PerTest(PerTestViolation::MissingMarkReason { mark_name, .. })
             if mark_name == "skip"
         ));
     }
@@ -261,28 +296,28 @@ mod tests {
 
     #[test]
     fn test_suite_level_returns_only_marker_no_description() {
-        let v1 = StrictViolation::MarkerNoDescription {
+        let v1 = StrictViolation::Suite(SuiteViolation::MarkerNoDescription {
             marker_name: "db".to_string(),
-        };
-        let v2 = StrictViolation::BareAssert {
+        });
+        let v2 = StrictViolation::PerTest(PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_x"),
             lines: vec![5],
-        };
+        });
         let violations = vec![v1, v2];
         let suite = suite_level(&violations);
         assert_eq!(suite.len(), 1);
         assert!(matches!(
             suite[0],
-            StrictViolation::MarkerNoDescription { .. }
+            SuiteViolation::MarkerNoDescription { .. }
         ));
     }
 
     #[test]
     fn test_format_violation_line_bare_assert() {
-        let v = StrictViolation::BareAssert {
+        let v = StrictViolation::PerTest(PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_add"),
             lines: vec![12, 18],
-        };
+        });
         let line = format_violation_line(&v);
         assert!(line.contains("bare-assert"));
         assert!(line.contains("12"));
@@ -291,9 +326,9 @@ mod tests {
 
     #[test]
     fn test_format_violation_line_marker_no_description() {
-        let v = StrictViolation::MarkerNoDescription {
+        let v = StrictViolation::Suite(SuiteViolation::MarkerNoDescription {
             marker_name: "db".to_string(),
-        };
+        });
         let line = format_violation_line(&v);
         assert!(line.contains("db"));
         assert!(line.contains("no description"));
@@ -301,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_per_test_error_returns_error_outcome() {
-        let v = StrictViolation::BareAssert {
+        let v = PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_x"),
             lines: vec![5],
         };
@@ -313,9 +348,9 @@ mod tests {
 
     #[test]
     fn test_node_id_returns_none_for_suite_level() {
-        let v = StrictViolation::MarkerNoDescription {
+        let v = StrictViolation::Suite(SuiteViolation::MarkerNoDescription {
             marker_name: "db".to_string(),
-        };
+        });
         assert!(v.node_id().is_none());
     }
 
@@ -330,13 +365,13 @@ mod tests {
         assert_eq!(violations.len(), 1);
         assert!(matches!(
             &violations[0],
-            StrictViolation::BareAssert { lines, .. } if lines.is_empty()
+            StrictViolation::PerTest(PerTestViolation::BareAssert { lines, .. }) if lines.is_empty()
         ));
     }
 
     #[test]
     fn test_per_test_error_bare_assert_empty_lines_no_trailing_space() {
-        let v = StrictViolation::BareAssert {
+        let v = PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_x"),
             lines: vec![],
         };
@@ -359,10 +394,10 @@ mod tests {
 
     #[test]
     fn test_format_violation_line_bare_assert_empty_lines_no_trailing_space() {
-        let v = StrictViolation::BareAssert {
+        let v = StrictViolation::PerTest(PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_x"),
             lines: vec![],
-        };
+        });
         let line = format_violation_line(&v);
         assert!(
             !line.ends_with(' '),

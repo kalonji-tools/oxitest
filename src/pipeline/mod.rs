@@ -307,7 +307,7 @@ fn apply_strict(
     let suite_lines: Vec<String> = if cfg.strict == Some(config::StrictMode::Enforce) {
         strict::suite_level(&all_violations)
             .iter()
-            .map(|v| strict::format_violation_line(v))
+            .map(|v| v.to_string())
             .collect()
     } else {
         vec![]
@@ -418,11 +418,11 @@ fn execute(
     for item in &violated_items {
         // Per-test items may have multiple violations; we report only the first to keep
         // the error message focused. Users address violations one at a time.
-        if let Some(v) = all_violations
-            .iter()
-            .find(|v| v.node_id().is_some_and(|id| id == &item.node_id))
-        {
-            let outcome = strict::per_test_error(v);
+        if let Some(pv) = all_violations.iter().find_map(|v| match v {
+            strict::StrictViolation::PerTest(pv) if pv.node_id() == &item.node_id => Some(pv),
+            _ => None,
+        }) {
+            let outcome = strict::per_test_error(pv);
             rep.test_started(item);
             rep.test_completed(item, &outcome, types::DurationMs::ZERO);
         }
