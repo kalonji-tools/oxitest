@@ -86,8 +86,9 @@ def test_worker_result_has_required_fields():
     assert "duration_ms" in r, (
         f"worker result missing 'duration_ms' field, got keys: {list(r)}"
     )
-    assert "failure_repr" in r, (
-        f"worker result missing 'failure_repr' field, got keys: {list(r)}"
+    # failure_repr is omitted when null (compact format)
+    assert "failure_repr" not in r, (
+        f"passing test should not emit 'failure_repr', got keys: {list(r)}"
     )
 
 

@@ -38,51 +38,12 @@ import sys
 import time
 from typing import Any
 
-from oxitest._bridge.result import StatusKind, TestResult
-
 
 def _build_node_id(module_path: str, fn_name: str, param_id: str | None) -> str:
     node_id = f"{module_path}::{fn_name}"
     if param_id is not None:
         node_id += f"[{param_id}]"
     return node_id
-
-
-NON_FAILURE_STATUSES = frozenset(
-    {
-        StatusKind.PASSED,
-        StatusKind.SKIPPED,
-        StatusKind.WARNED,
-        StatusKind.XFAILED,
-        StatusKind.XPASSED,
-        StatusKind.TIMEOUT,
-    }
-)
-
-
-def _build_failure_repr(result: TestResult) -> str | None:
-    """Build a human-readable failure string from a TestResult."""
-    if result.status in NON_FAILURE_STATUSES:
-        return None
-
-    parts: list[str] = []
-
-    if result.message:
-        parts.append(result.message)
-
-    if result.file:
-        location = f"{result.file}:{result.lineno}"
-        if result.source_line:
-            location += f"  {result.source_line}"
-        parts.append(location)
-
-    if result.left:
-        if result.right and result.op:
-            parts.append(f"assert {result.left} {result.op} {result.right}")
-        else:
-            parts.append(f"assert {result.left}")
-
-    return "\n".join(parts) if parts else f"Test {result.status}"
 
 
 def run(task: dict) -> None:
@@ -118,28 +79,7 @@ def run(task: dict) -> None:
             default_timeout=timeout_secs,
         )
         duration_ms = (time.monotonic() - start) * 1000.0
-
-        output = {
-            "node_id": node_id,
-            "outcome": result.status,
-            "duration_ms": duration_ms,
-            "failure_repr": _build_failure_repr(result),
-            # Structured diagnostic fields (populated by executor.py)
-            "message": result.message or None,
-            "file": result.file or None,
-            "lineno": result.lineno if result.lineno != 0 else None,
-            "source_line": result.source_line or None,
-            "no_message_lines": result.no_message_lines,
-            "left": result.left or None,
-            "right": result.right or None,
-            "op": result.op or None,
-            "strict": result.strict,
-            "frames": [
-                {"file": f.file, "lineno": f.lineno, "name": f.name, "line": f.line}
-                for f in getattr(result, "frames", [])
-            ],
-        }
-        print(json.dumps(output))
+        print(json.dumps(result.to_wire(node_id, duration_ms)))
 
 
 def main() -> None:
