@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use crate::config::TbStyle;
 use crate::types::{TestItem, TestOutcome};
 
+use super::fmt_diff;
 use crate::reporter::colors::{color_bold_white, color_dim, color_dim_cyan, color_dim_green};
 
 const BOX_TOP_LEFT: &str = "┌─";
@@ -82,19 +83,27 @@ pub(crate) fn fmt_diagnostic_block(
             frames,
         } => {
             let mut label_items: Vec<String> = Vec::new();
-            if !op.is_empty() {
+            let mut diff_section = String::new();
+
+            if !op.is_empty() && !left.is_empty() && !right.is_empty() {
+                // Use colorized diff instead of plain left/right labels.
+                let diff = fmt_diff(left, right, op, use_color);
+                if !diff.is_empty() {
+                    for line in diff.lines() {
+                        diff_section.push_str(&format!(
+                            "        {}  {}\n",
+                            color_dim(BOX_VERT, use_color),
+                            line
+                        ));
+                    }
+                }
+            } else if !op.is_empty() {
+                // op set but right is empty — show left only
                 label_items.push(format!(
                     "{:<7}{}",
                     "left:",
                     color_dim_green(left, use_color)
                 ));
-                if !right.is_empty() {
-                    label_items.push(format!(
-                        "{:<7}{}",
-                        "right:",
-                        color_dim_green(right, use_color)
-                    ));
-                }
             } else if !left.is_empty() {
                 label_items.push(format!(
                     "{:<7}{}",
@@ -102,6 +111,7 @@ pub(crate) fn fmt_diagnostic_block(
                     color_dim_green(left, use_color)
                 ));
             }
+
             if !message.is_empty() {
                 label_items.push(format!(
                     "{:<7}{}",
@@ -109,7 +119,12 @@ pub(crate) fn fmt_diagnostic_block(
                     color_dim_green(message, use_color)
                 ));
             }
-            let extra = render_label_block(&label_items, use_color);
+
+            let extra = format!(
+                "{}{}",
+                diff_section,
+                render_label_block(&label_items, use_color)
+            );
             (file.as_str(), *lineno, source_line.as_str(), extra, frames)
         }
         TestOutcome::Error {
