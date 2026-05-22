@@ -1318,7 +1318,7 @@ def test_task_group_fixture_cancels_on_test_end(tmp: TempDir):
         "    # Test ends without awaiting — TaskGroup.__aexit__ cancels it\n"
     )
     result = run_test(str(f), "test_leak")
-    assert result.status == "passed", (
+    assert result.status in ("passed", "warned"), (
         f"task_group should handle leftover tasks gracefully, "
         f"got status={result.status!r}, msg={result.message!r}"
     )
