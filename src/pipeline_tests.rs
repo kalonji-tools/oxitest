@@ -100,7 +100,7 @@ mod strict_pipeline_tests {
     use super::*;
     use crate::config::Config;
     use crate::reporter::test_helpers::make_item_raw as make_item;
-    use crate::strict::StrictViolation;
+    use crate::strict::{PerTestViolation, StrictViolation};
     use crate::types::NodeId;
 
     #[test]
@@ -123,10 +123,10 @@ mod strict_pipeline_tests {
             make_item("tests/test_foo.py::test_bad"),
             make_item("tests/test_foo.py::test_good"),
         ];
-        let violations = vec![StrictViolation::BareAssert {
+        let violations = vec![StrictViolation::PerTest(PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_bad"),
             lines: vec![5],
-        }];
+        })];
         let violated_ids: std::collections::HashSet<&str> = violations
             .iter()
             .filter_map(|v| v.node_id())
