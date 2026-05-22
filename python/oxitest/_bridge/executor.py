@@ -191,7 +191,7 @@ def _run_base(
         raise  # propagate to timeout wrapper
     except AssertionError as exc:
         return _handle_assertion_error(exc)
-    except BaseException as exc:
+    except Exception as exc:
         result = _handle_runtime_exception(exc)
         if result is not None:
             return result
@@ -224,7 +224,7 @@ async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
         raise  # propagate to timeout wrapper
     except AssertionError as exc:
         return _handle_assertion_error(exc)
-    except BaseException as exc:
+    except Exception as exc:
         result = _handle_runtime_exception(exc)
         if result is not None:
             return result
