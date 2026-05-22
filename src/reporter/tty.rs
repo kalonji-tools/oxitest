@@ -4,7 +4,7 @@ use super::colors::{
     color_cyan, color_dim, color_dim_green, color_error_token, color_fail, color_skip,
     color_timeout, color_warn,
 };
-use super::format::{case_sep, fmt_diagnostic_block, pad_to};
+use super::format::{case_sep, fmt_diagnostic_block, pad_to, plural};
 use super::stats::RunStats;
 use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
@@ -198,10 +198,11 @@ impl TtyReporter {
                 color_dim_green("\u{2713}    ", c),
                 color_dim(
                     &format!(
-                        "{:<width$} {:.1}ms  ({} cases)",
+                        "{:<width$} {:.1}ms  ({} case{})",
                         truncate_name(&group.fn_name, w),
                         total_ms_raw,
                         count,
+                        plural(count),
                         width = w
                     ),
                     c,
@@ -599,10 +600,11 @@ mod tests {
         let count = 2_usize;
         let w = reporter.opts.name_width;
         let formatted = format!(
-            "{:<width$} {:.1}ms  ({} cases)",
+            "{:<width$} {:.1}ms  ({} case{})",
             truncate_name("test_math", w),
             total_ms_raw,
             count,
+            plural(count),
             width = w
         );
         // Duration appears before the case count
@@ -616,6 +618,37 @@ mod tests {
         assert!(
             !formatted.contains("cases   "),
             "old ordering (cases before ms) must not appear: {formatted:?}"
+        );
+    }
+
+    #[test]
+    fn test_flush_param_group_singular_case() {
+        use crate::reporter::ParametrizeBuffer;
+
+        let reporter = make_tty_reporter();
+        let item = make_item("test_single");
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        let mut group = ParametrizeBuffer::new("test_single".to_string());
+        group.push(item, outcome, DurationMs::new(3.0));
+
+        let w = reporter.opts.name_width;
+        let formatted = format!(
+            "{:<width$} {:.1}ms  ({} case{})",
+            truncate_name("test_single", w),
+            3.0_f64,
+            1_usize,
+            plural(1),
+            width = w
+        );
+        assert!(
+            formatted.contains("(1 case)"),
+            "singular must say 'case' not 'cases': {formatted:?}"
+        );
+        assert!(
+            !formatted.contains("cases"),
+            "singular must not contain 'cases': {formatted:?}"
         );
     }
 }

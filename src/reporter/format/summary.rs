@@ -7,7 +7,7 @@ use crate::reporter::colors::{
 
 use super::diagnostic::sep_width;
 
-fn plural(n: usize) -> &'static str {
+pub(crate) fn plural(n: usize) -> &'static str {
     if n == 1 {
         ""
     } else {
