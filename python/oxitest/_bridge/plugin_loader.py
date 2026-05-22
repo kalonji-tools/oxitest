@@ -6,6 +6,7 @@ plugin module paths and their per-plugin config dicts.
 
 from __future__ import annotations
 
+import functools
 import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -40,7 +41,7 @@ class PluginRegistry:
 
     entries: list[PluginEntry] = field(default_factory=list)
 
-    @property
+    @functools.cached_property
     def log_backends(self) -> list[LogBackend]:
         """All log backends from all plugins."""
         backends = []
@@ -48,7 +49,7 @@ class PluginRegistry:
             backends.extend(entry.plugin.log_backends)
         return backends
 
-    @property
+    @functools.cached_property
     def fixture_providers(self) -> list[FixtureProvider]:
         """All fixture providers from all plugins."""
         providers = []
@@ -56,7 +57,7 @@ class PluginRegistry:
             providers.extend(entry.plugin.fixture_providers)
         return providers
 
-    @property
+    @functools.cached_property
     def execution_wrappers(self) -> list[ExecutionWrapper]:
         """All execution wrappers from all plugins."""
         wrappers = []
@@ -64,7 +65,7 @@ class PluginRegistry:
             wrappers.extend(entry.plugin.execution_wrappers)
         return wrappers
 
-    @property
+    @functools.cached_property
     def collectors(self) -> list[Collector]:
         """All collectors from all plugins."""
         collectors = []
@@ -72,7 +73,7 @@ class PluginRegistry:
             collectors.extend(entry.plugin.collectors)
         return collectors
 
-    @property
+    @functools.cached_property
     def reporters(self) -> list[Reporter]:
         """All reporters from all plugins."""
         reporters = []
@@ -80,7 +81,7 @@ class PluginRegistry:
             reporters.extend(entry.plugin.reporters)
         return reporters
 
-    @property
+    @functools.cached_property
     def async_backends(self) -> list[tuple[str, Any]]:
         """All async backends from all plugins, as (module_name, backend) pairs."""
         return [
