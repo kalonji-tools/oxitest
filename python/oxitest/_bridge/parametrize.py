@@ -14,6 +14,7 @@ import dataclasses
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
@@ -40,13 +41,17 @@ class _DictCases:
         return dict(self.cases[param_id]), frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass
 class _DataclassCases:
     """Encapsulates dataclass-mode parametrize cases."""
 
     cases: dict[str, Any]
     param_type: type
     fixref_fields: list[str]  # precomputed at decoration time; invariant across cases
+
+    @cached_property
+    def fixref_names(self) -> frozenset[str]:
+        return frozenset(self.fixref_fields)
 
     def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
         for case_id, case in self.cases.items():
@@ -62,7 +67,7 @@ class _DataclassCases:
         self, fn: Callable[..., Any], param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
         case = self.cases[param_id]
-        fixref_names = frozenset(self.fixref_fields)
+        fixref_names = self.fixref_names
         is_compact, compact_param = _detect_compact_mode(fn, case)
         if is_compact:
             if fixref_names:
