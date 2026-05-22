@@ -92,7 +92,9 @@ def test_timeout_mark_stores_seconds():
     def test_ok():
         pass
 
-    marks = getattr(test_ok, "_oxitest_marks", [])
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    marks = get_metadata(test_ok).marks
     assert len(marks) == 1, (
         f"expected 1 mark on test_ok after @mark.timeout, got {len(marks)}: {marks}"
     )

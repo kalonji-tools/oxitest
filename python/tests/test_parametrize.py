@@ -22,7 +22,9 @@ def test_parametrize_stamps_function():
     def test_foo(x, y, expected):
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DataclassCases), (
         "parametrize decorator should stamp '_oxitest_param_cases' as _DataclassCases"
     )
@@ -46,7 +48,9 @@ def test_parametrize_multiple_cases():
     def test_foo(x, y, expected):
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DataclassCases), (
         "decorator should stamp _DataclassCases"
     )
@@ -488,7 +492,9 @@ def test_parametrize_dict_mode_stamps_function():
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -505,7 +511,9 @@ def test_parametrize_dict_mode_multiple_cases():
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -548,7 +556,9 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema():
     def test_foo(x: int, expected: int, multiplier: Fixture[int]) -> None:
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -669,7 +679,9 @@ def test_parametrize_inferred_type_stamps_function():
     def test_foo(x, y, expected):
         pass
 
-    param_cases = test_foo._oxitest_param_cases  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    param_cases = get_metadata(test_foo).param_cases
     assert isinstance(param_cases, _DataclassCases), (
         f"dataclass mode should stamp _DataclassCases, got {type(param_cases)!r}"
     )

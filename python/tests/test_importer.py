@@ -123,7 +123,9 @@ def test_propagate_class_marks_copies_usefixtures():
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
-    marks = getattr(test_fn, "_oxitest_marks", [])
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    marks = get_metadata(test_fn).marks
     assert any(m.name == "usefixtures" for m in marks), (
         "usefixtures mark from class should be propagated to function"
     )
@@ -141,9 +143,11 @@ def test_propagate_class_marks_ignores_non_usefixtures():
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
-    assert not hasattr(test_fn, "_oxitest_marks") or all(
-        m.name != "skip" for m in getattr(test_fn, "_oxitest_marks", [])
-    ), "skip mark from class with skip_class=False should not propagate to test_fn"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert all(m.name != "skip" for m in get_metadata(test_fn).marks), (
+        "skip mark from class with skip_class=False should not propagate to test_fn"
+    )
 
 
 def test_collect_class_methods_use_qualified_name(tmp: TempDir):
@@ -348,7 +352,9 @@ def test_check_fn_violations_class_method_dict_parametrize():
     def test_method(self):
         pass
 
-    setattr(test_method, "_oxitest_param_cases", _DictCases(cases={"basic": {"x": 1}}))
+    from oxitest._bridge._fn_metadata import get_or_create
+
+    get_or_create(test_method).param_cases = _DictCases(cases={"basic": {"x": 1}})
 
     path = "tests/test_cls.py"
     fn_name = "TestSuite::test_method"
