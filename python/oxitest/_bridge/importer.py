@@ -317,9 +317,9 @@ def collect_module(
         for collector in _plugin_registry.collectors:  # pragma: no cover
             try:
                 plugin_items = collector.collect(path, module)
-                for item in plugin_items:
-                    if isinstance(item, CollectedItem):
-                        items.append(item)
+                items.extend(
+                    item for item in plugin_items if isinstance(item, CollectedItem)
+                )
             except Exception:
                 import traceback
 

@@ -4,6 +4,7 @@ __all__ = ["_Patcher", "_PatcherFixture"]
 
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
@@ -68,7 +69,7 @@ class _Patcher:
         Args:
             path: Directory to change into. Accepts any ``os.fspath``-compatible value.
         """
-        old = os.getcwd()
+        old = Path.cwd()
         os.chdir(path)
         self._undos.append(lambda p=old: os.chdir(p))
 

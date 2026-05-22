@@ -36,6 +36,7 @@ assert_fs = "1"
 
 [lints.rust]
 unsafe_code = "forbid"
+warnings = "deny"
 
 [lints.clippy]
-all = "warn"
+all = "deny"

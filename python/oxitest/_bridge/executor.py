@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = ["run_test"]
 
 import ast
+import contextlib
 import functools
 import hashlib
 import inspect
@@ -439,7 +440,6 @@ def run_test(
     finally:
         sys.modules.pop(unique_name, None)
         for td in reversed(fn_teardowns):
-            try:
+            # teardown errors already printed by FixtureSession._safe_call
+            with contextlib.suppress(Exception):
                 td()
-            except Exception:
-                pass  # teardown errors already printed by FixtureSession._safe_call
