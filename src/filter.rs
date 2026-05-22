@@ -27,9 +27,8 @@ pub fn validate_markers(
         .iter()
         .flat_map(|item| {
             item.markers.iter().filter_map(|name| {
-                if !BUILTIN_MARKERS.contains(&name.as_str())
-                    && !registered.contains(name.as_str())
-                {
+                let s = name.as_str();
+                if !BUILTIN_MARKERS.contains(&s) && !registered.contains(s) {
                     Some(CollectError::PyError(format!(
                         "unknown marker '{}' on {}\nHint: register it in pyproject.toml:\n  [tool.oxitest]\n  markers = [\"{}: <description>\"]",
                         name, item.node_id, name
@@ -54,6 +53,15 @@ pub fn filter_items(items: Vec<TestItem>, keyword: Option<&str>) -> Vec<TestItem
         .collect()
 }
 
+fn partition_by_failed(
+    items: Vec<TestItem>,
+    failed_ids: &std::collections::HashSet<String>,
+) -> (Vec<TestItem>, Vec<TestItem>) {
+    items
+        .into_iter()
+        .partition(|item| failed_ids.contains(item.node_id.as_ref()))
+}
+
 /// Keep only items whose node_id is in `failed_ids`.
 /// Used by `--lf` (last-failed) mode.
 #[must_use = "returns filtered items; original is consumed"]
@@ -61,10 +69,7 @@ pub fn filter_last_failed(
     items: Vec<TestItem>,
     failed_ids: &std::collections::HashSet<String>,
 ) -> Vec<TestItem> {
-    items
-        .into_iter()
-        .filter(|item| failed_ids.contains(item.node_id.as_ref()))
-        .collect()
+    partition_by_failed(items, failed_ids).0
 }
 
 /// Move items whose node_id is in `failed_ids` to the front; preserve relative order within each group.
@@ -74,9 +79,7 @@ pub fn sort_failed_first(
     items: Vec<TestItem>,
     failed_ids: &std::collections::HashSet<String>,
 ) -> Vec<TestItem> {
-    let (mut failed, rest): (Vec<_>, Vec<_>) = items
-        .into_iter()
-        .partition(|item| failed_ids.contains(item.node_id.as_ref()));
+    let (mut failed, rest) = partition_by_failed(items, failed_ids);
     failed.extend(rest);
     failed
 }

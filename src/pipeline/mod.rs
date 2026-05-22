@@ -501,14 +501,15 @@ fn finalize(
     cache_max_age: u32,
     rootdir: &camino::Utf8Path,
 ) {
-    // Single pass: move node_id into outcome_pairs, clone once into timing_pairs.
-    let mut timing_pairs: Vec<(types::NodeId, f64)> = Vec::with_capacity(timings.len());
-    let mut outcome_pairs: Vec<(types::NodeId, types::OutcomeKind)> =
-        Vec::with_capacity(timings.len());
-    for t in timings {
-        outcome_pairs.push((t.node_id.clone(), t.outcome));
-        timing_pairs.push((t.node_id, t.duration_ms.as_f64()));
-    }
+    let (outcome_pairs, timing_pairs): (Vec<_>, Vec<_>) = timings
+        .into_iter()
+        .map(|t| {
+            (
+                (t.node_id.clone(), t.outcome),
+                (t.node_id, t.duration_ms.as_f64()),
+            )
+        })
+        .unzip();
 
     cache.merge(&timing_pairs, cache_max_age);
     cache.record_outcomes(&outcome_pairs);
