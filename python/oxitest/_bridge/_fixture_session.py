@@ -744,29 +744,13 @@ class FixtureSession:
         with _fixture_scope(self, module_path, fn_teardowns):
             try:
                 result = defn.func(**deps)
-                _is_gen = inspect.isgenerator(result)
-                if _is_gen:
-                    value = next(result)
-                else:
-                    value = result
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
+            outcome = _unpack_sync(result, defn.name)
 
-        if _is_gen:
-            fixture_name = defn.name
-
-            def teardown(gen=result, n=fixture_name):  # type: ignore[misc]
-                try:
-                    next(gen)
-                except StopIteration:
-                    pass
-                except Exception as exc:
-                    _warn_teardown(n, exc)
-
-            scope_teardowns.append(teardown)
-            return value
-
-        return result
+        if outcome.teardown is not None:
+            scope_teardowns.append(outcome.teardown)
+        return outcome.value
 
 
 # Trigger built-in fixture registrations by importing the _builtins package.
