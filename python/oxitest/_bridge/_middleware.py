@@ -10,21 +10,170 @@ __all__ = [
     "build_pipeline",
 ]
 
+import ast
 import inspect
+import linecache
+import reprlib
+import textwrap
+import traceback
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._mark_registry import ExecutionWrapper
 from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
-from oxitest._bridge.executor import (
-    _compose,
-    _find_bare_asserts,
-    _run_base_async,
+from oxitest._bridge.ast_rewriter import (
+    _OXITEST_NO_RHS,
+    _OxitestAssertionError,
 )
 from oxitest._bridge.fixtures import FixtureTeardownWarning
-from oxitest._bridge.result import TestResult, _error_result
+from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
+
+_REPR_MAX = 80
+_repr = reprlib.Repr()
+_repr.maxstring = _REPR_MAX
+_repr.maxother = _REPR_MAX
+
+
+def _repr_safe(value: object) -> str:
+    try:
+        return _repr.repr(value)
+    except Exception:
+        return "<repr failed>"
+
+
+def _get_location(exc: BaseException) -> tuple[str, int, str]:
+    """Extract (file, lineno, source_line) from the innermost traceback frame."""
+    tb = exc.__traceback__
+    if tb is None:
+        return ("", 0, "")
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    file = tb.tb_frame.f_code.co_filename
+    lineno = tb.tb_lineno
+    source_line = linecache.getline(file, lineno).strip()
+    return (file, lineno, source_line)
+
+
+def _get_frames(exc: BaseException) -> list[Frame]:
+    """Extract structured traceback frames from an exception."""
+    tb = exc.__traceback__
+    if tb is None:
+        return []
+    return [
+        Frame(file=f.filename, lineno=f.lineno or 0, name=f.name, line=f.line or "")
+        for f in traceback.extract_tb(tb)
+    ]
+
+
+def _handle_assertion_error(exc: AssertionError) -> TestResult:
+    """Map an AssertionError to a failed TestResult."""
+    file, lineno, source_line = _get_location(exc)
+    if isinstance(exc, _OxitestAssertionError):
+        msg = exc.args[0] if exc.args and exc.args[0] else ""
+        left_repr = _repr_safe(exc.left)
+        right_repr = _repr_safe(exc.right) if exc.right is not _OXITEST_NO_RHS else ""
+        op = exc.op
+    else:
+        msg = str(exc) if str(exc) else ""
+        left_repr = right_repr = op = ""
+    return TestResult(
+        status=StatusKind.FAILED,
+        message=msg,
+        file=file,
+        lineno=lineno,
+        source_line=source_line,
+        left=left_repr,
+        right=right_repr,
+        op=op,
+        exc_type="AssertionError",
+        frames=_get_frames(exc),
+    )
+
+
+def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
+    """Map a non-assertion BaseException to a TestResult, or None to re-raise."""
+    exc_type = type(exc).__name__
+    if exc_type in ("Skipped", "SkipTest"):
+        return TestResult(status=StatusKind.SKIPPED, message=str(exc))
+    if isinstance(exc, Exception):
+        file, lineno, source_line = _get_location(exc)
+        return TestResult(
+            status=StatusKind.ERROR,
+            message=f"{type(exc).__name__}: {exc}",
+            file=file,
+            lineno=lineno,
+            source_line=source_line,
+            exc_type=type(exc).__name__,
+            frames=_get_frames(exc),
+        )
+    return None
+
+
+def _compose(
+    wrapper: ExecutionWrapper, inner: Callable[[], TestResult]
+) -> Callable[[], TestResult]:
+    """Return a callable that runs wrapper(inner).
+
+    Using a named function avoids the loop-variable capture problem
+    (ruff B023) that a bare lambda inside a for-loop would cause.
+    """
+    return lambda: wrapper(inner)
+
+
+def _find_bare_asserts(fn: object) -> list[int]:
+    """Fallback bare-assert detection for modules loaded without the AST rewriter.
+
+    Normally _oxitest_bare_asserts is populated by ast_rewriter.py during module
+    import. This function re-parses the function source at runtime when that
+    attribute is missing (e.g., module imported outside _load_module).
+    """
+    try:
+        source_lines, start_line = inspect.getsourcelines(cast(Any, fn))
+        source = textwrap.dedent("".join(source_lines))
+        tree = ast.parse(source)
+        return [
+            n.lineno + start_line - 1
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assert) and n.msg is None
+        ]
+    except (OSError, TypeError, SyntaxError):
+        return []
+
+
+async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
+    fn: Callable[..., Any],
+    all_kwargs: dict[str, Any],
+    no_message_lines: list[int],
+) -> TestResult:
+    """Run an async test function and map exceptions to TestResult."""
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            await fn(**all_kwargs)
+        caught: list[str] = [
+            f"{wi.category.__name__}: {wi.message}"
+            for wi in w
+            if not issubclass(wi.category, FixtureTeardownWarning)
+        ]
+        if caught:
+            return TestResult(
+                status=StatusKind.WARNED,
+                message="\n".join(str(c) for c in caught),
+                no_message_lines=no_message_lines,
+            )
+        return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
+    except OxitestTimeoutError:
+        raise  # propagate to timeout wrapper
+    except AssertionError as exc:
+        return _handle_assertion_error(exc)
+    except Exception as exc:
+        result = _handle_runtime_exception(exc)
+        if result is not None:
+            return result
+        raise
 
 
 @dataclass
