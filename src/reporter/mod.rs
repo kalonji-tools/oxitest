@@ -18,6 +18,7 @@ pub(crate) mod json;
 mod options;
 pub(crate) mod plugin;
 mod stats;
+pub(crate) mod tracing_writer;
 mod tty;
 
 #[cfg(test)]

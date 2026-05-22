@@ -63,6 +63,7 @@ impl TtyReporter {
         };
         pb.set_style(style);
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
+        super::tracing_writer::register(pb.clone());
         Self {
             opts,
             stats: RunStats::new(),
@@ -217,6 +218,7 @@ impl StandardReporter for TtyReporter {
             self.flush_param_group(group);
         }
         self.pb.finish_and_clear();
+        super::tracing_writer::deregister();
         super::print_strict_suite_section(&self.opts, &mut self.stats);
     }
 

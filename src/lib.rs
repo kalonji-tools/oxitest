@@ -33,7 +33,7 @@ fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
         )
-        .with_writer(std::io::stderr)
+        .with_writer(reporter::tracing_writer::PbMakeWriter::new())
         .try_init();
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
