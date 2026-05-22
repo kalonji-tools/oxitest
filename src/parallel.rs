@@ -363,13 +363,21 @@ fn drain_remaining_into_crashed(
     }
 }
 
+/// Result of a test execution phase (serial or parallel).
+pub(crate) struct PhaseResult {
+    /// Whether execution was interrupted (e.g., by maxfail).
+    pub interrupted: bool,
+    /// Per-test timing data.
+    pub timings: Vec<types::TestTiming>,
+}
+
 pub(crate) fn run_phase_parallel(
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
     conftest_paths: &[camino::Utf8PathBuf],
     rep: &mut dyn reporter::Reporter,
-) -> (bool, Vec<types::TestTiming>) {
+) -> PhaseResult {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -430,7 +438,10 @@ pub(crate) fn run_phase_parallel(
         let _ = h.join();
     }
 
-    (interrupted, timings)
+    PhaseResult {
+        interrupted,
+        timings,
+    }
 }
 
 #[cfg(test)]
