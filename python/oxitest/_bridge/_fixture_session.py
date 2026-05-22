@@ -5,6 +5,7 @@ __all__ = [
     "FixtureContext",
     "FixtureSession",
     "FixtureTeardownWarning",
+    "_FixtureOutcome",
     "_NullFixtureSession",
     "_SessionProtocol",
     "_TestContext",
@@ -15,6 +16,7 @@ __all__ = [
     "_reject_async_in_sync",
     "_reject_nonshared_async",
     "_resolve_deps",
+    "_unpack_sync",
     "_warn_teardown",
 ]
 
@@ -147,6 +149,31 @@ def _resolve_deps(
         for dep_name, dep_val in deps.items():
             async_policy(dep_name, dep_val, fn_name)
     return deps
+
+
+@dataclass
+class _FixtureOutcome:
+    """Result of unpacking a fixture function call."""
+
+    value: Any
+    teardown: Callable[[], None] | None = None
+
+
+def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
+    """Unpack a sync fixture call: plain value or generator."""
+    if inspect.isgenerator(result):
+        value = next(result)
+
+        def teardown(gen: Any = result, n: str = name) -> None:
+            try:
+                next(gen)
+            except StopIteration:
+                pass
+            except Exception as exc:
+                _warn_teardown(n, exc)
+
+        return _FixtureOutcome(value, teardown)
+    return _FixtureOutcome(result)
 
 
 class _SessionProtocol(Protocol):
