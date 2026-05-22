@@ -44,7 +44,7 @@ strict = "abort"
 
 [tool.codespell]
 skip = "target,Cargo.lock,flake.lock"
-ignore-words-list = "NotIn"
+ignore-words-list = "NotIn,ser"
 
 [dependency-groups]
 build = [
