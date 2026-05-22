@@ -518,9 +518,11 @@ def test_fixtures_stamps_fixture_name_for_inject_compat():
     def my_fixture():
         pass
 
-    assert getattr(my_fixture, "_oxitest_fixture_name") == "my_fixture", (
-        f"@fx.fixture should stamp '_oxitest_fixture_name' = 'my_fixture' on function, "
-        f"got {getattr(my_fixture, '_oxitest_fixture_name', '<missing>')!r}"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert get_metadata(my_fixture).fixture_name == "my_fixture", (
+        f"@fx.fixture should register fixture_name='my_fixture' in metadata, "
+        f"got {get_metadata(my_fixture).fixture_name!r}"
     )
 
 
@@ -531,10 +533,11 @@ def test_fixtures_name_override_stamps_fixture_name():
     def original():
         pass
 
-    assert getattr(original, "_oxitest_fixture_name") == "renamed", (
-        f"@fx.fixture(name='renamed') should stamp '_oxitest_fixture_name' = "
-        "'renamed', "
-        f"got {getattr(original, '_oxitest_fixture_name', '<missing>')!r}"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert get_metadata(original).fixture_name == "renamed", (
+        f"@fx.fixture(name='renamed') should register fixture_name='renamed'"
+        f" in metadata, got {get_metadata(original).fixture_name!r}"
     )
 
 

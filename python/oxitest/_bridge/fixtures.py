@@ -88,7 +88,9 @@ class FixtureAccessor:
         self._fa_fixtures = fixtures
         self._fa_func = func
         # Mirror what _register sets so the executor can read them directly.
-        self._oxitest_fixture_name: str = getattr(func, "_oxitest_fixture_name", name)
+        from oxitest._bridge._fn_metadata import get_metadata
+
+        self._oxitest_fixture_name: str = get_metadata(func).fixture_name or name
         self.__name__ = name
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -221,8 +223,10 @@ class Fixtures:
         """
 
         def _register(f: _F) -> _F:
+            from oxitest._bridge._fn_metadata import get_or_create
+
             fixture_name = name or getattr(f, "__name__", repr(f))
-            setattr(f, "_oxitest_fixture_name", fixture_name)
+            get_or_create(f).fixture_name = fixture_name
             defn = FixtureDef(
                 name=fixture_name,
                 func=f,

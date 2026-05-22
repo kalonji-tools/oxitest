@@ -37,14 +37,14 @@ def test_append_mark_creates_list_on_first_call():
         pass
 
     _append_mark(fn, MarkInfo("slow", (), {}))
-    assert hasattr(fn, "_oxitest_marks"), (
-        "fn should have '_oxitest_marks' attribute after first _append_mark call"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(fn)
+    assert len(meta.marks) == 1, (
+        f"expected 1 mark after first append, got {len(meta.marks)}"
     )
-    assert len(fn._oxitest_marks) == 1, (
-        f"expected 1 mark after first append, got {len(fn._oxitest_marks)}"
-    )
-    assert fn._oxitest_marks[0].name == "slow", (
-        f"first mark name should be 'slow', got {fn._oxitest_marks[0].name!r}"
+    assert meta.marks[0].name == "slow", (
+        f"first mark name should be 'slow', got {meta.marks[0].name!r}"
     )
 
 
@@ -54,9 +54,10 @@ def test_append_mark_stacks_multiple_marks():
 
     _append_mark(fn, MarkInfo("slow", (), {}))
     _append_mark(fn, MarkInfo("integration", (), {}))
-    assert len(getattr(fn, "_oxitest_marks", [])) == 2, (
-        f"expected 2 marks after two appends, got "
-        f"{len(getattr(fn, '_oxitest_marks', []))}"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert len(get_metadata(fn).marks) == 2, (
+        f"expected 2 marks after two appends, got {len(get_metadata(fn).marks)}"
     )
 
 
@@ -65,17 +66,18 @@ def test_mark_bare_decorator_stamps_function():
     def test_fn():
         pass
 
-    assert hasattr(test_fn, "_oxitest_marks"), (
-        "bare mark decorator should stamp '_oxitest_marks' on function"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert len(meta.marks) == 1, "bare mark decorator should register mark in metadata"
+    assert meta.marks[0].name == "slow", (
+        f"mark name should be 'slow', got {meta.marks[0].name!r}"
     )
-    assert test_fn._oxitest_marks[0].name == "slow", (
-        f"mark name should be 'slow', got {test_fn._oxitest_marks[0].name!r}"
+    assert meta.marks[0].args == (), (
+        f"bare mark should have empty args, got {meta.marks[0].args!r}"
     )
-    assert test_fn._oxitest_marks[0].args == (), (
-        f"bare mark should have empty args, got {test_fn._oxitest_marks[0].args!r}"
-    )
-    assert test_fn._oxitest_marks[0].kwargs == {}, (
-        f"bare mark should have empty kwargs, got {test_fn._oxitest_marks[0].kwargs!r}"
+    assert meta.marks[0].kwargs == {}, (
+        f"bare mark should have empty kwargs, got {meta.marks[0].kwargs!r}"
     )
 
 
@@ -84,12 +86,14 @@ def test_mark_parameterised_decorator_stores_args():
     def test_fn():
         pass
 
-    assert test_fn._oxitest_marks[0].name == "skip", (
-        f"mark name should be 'skip', got {test_fn._oxitest_marks[0].name!r}"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert meta.marks[0].name == "skip", (
+        f"mark name should be 'skip', got {meta.marks[0].name!r}"
     )
-    assert test_fn._oxitest_marks[0].kwargs == {"reason": "not ready"}, (
-        f"mark kwargs should be {{'reason': 'not ready'}}, got "
-        f"{test_fn._oxitest_marks[0].kwargs!r}"
+    assert meta.marks[0].kwargs == {"reason": "not ready"}, (
+        f"mark kwargs should be {{'reason': 'not ready'}}, got {meta.marks[0].kwargs!r}"
     )
 
 
@@ -98,7 +102,9 @@ def test_mark_skipif_stores_condition():
     def test_fn():
         pass
 
-    m = test_fn._oxitest_marks[0]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    m = get_metadata(test_fn).marks[0]
     assert m.name == "skipif", f"mark name should be 'skipif', got {m.name!r}"
     assert m.args == (True,), f"skipif args should be (True,), got {m.args!r}"
     assert m.kwargs == {"reason": "always skip"}, (
@@ -111,7 +117,9 @@ def test_mark_xfail_stores_strict_false():
     def test_fn():
         pass
 
-    m = test_fn._oxitest_marks[0]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    m = get_metadata(test_fn).marks[0]
     assert m.name == "xfail", f"mark name should be 'xfail', got {m.name!r}"
     assert m.kwargs == {"strict": False, "reason": "flaky"}, (
         f"xfail kwargs should be {{'strict': False, 'reason': 'flaky'}}, got "
@@ -124,7 +132,9 @@ def test_mark_usefixtures_stores_fixture_names():
     def test_fn():
         pass
 
-    m = test_fn._oxitest_marks[0]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    m = get_metadata(test_fn).marks[0]
     assert m.name == "usefixtures", f"mark name should be 'usefixtures', got {m.name!r}"
     assert m.args == ("db", "cache"), (
         f"usefixtures args should be ('db', 'cache'), got {m.args!r}"
@@ -137,7 +147,9 @@ def test_mark_stacking_two_decorators():
     def test_fn():
         pass
 
-    names = [m.name for m in test_fn._oxitest_marks]
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    names = [m.name for m in get_metadata(test_fn).marks]
     assert "slow" in names, f"'slow' should be in stacked marks, got {names}"
     assert "integration" in names, (
         f"'integration' should be in stacked marks, got {names}"
