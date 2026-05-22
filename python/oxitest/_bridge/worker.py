@@ -148,11 +148,14 @@ def run(task: dict) -> None:
             ],
         }
         print(json.dumps(output))
-    sys.stdout.flush()
 
 
 def main() -> None:
     """Persistent worker: read newline-delimited JSON tasks from stdin until EOF."""
+    # Force line buffering on stdout so each print() flushes on newline.
+    # Piped stdout defaults to block buffering (8KB), which starves the
+    # Rust watchdog — it expects one result line per test.
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
     for raw in sys.stdin:
         raw = raw.strip()
         if raw:
