@@ -114,7 +114,7 @@ def _check_single_case_parametrize(
 ) -> list[CollectedViolation]:
     """Return a SINGLE_CASE_PARAMETRIZE violation if only one case is defined."""
     param_cases = get_metadata(fn).param_cases
-    if param_cases is not None and len(param_cases) == 1:
+    if param_cases is not None and len(param_cases.cases) == 1:
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",
