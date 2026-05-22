@@ -660,37 +660,17 @@ class FixtureSession:
 
         # Resolve sync dependencies (shared async fixtures can only depend on
         # sync fixtures — non-shared async fixtures are unresolved coroutines).
-        hints = _get_hints(defn.func)
-        deps: dict[str, Any] = {}
-        for param_name, hint in hints.items():
-            if param_name == "return":
-                continue
-            resolved, value = self._resolve_param(
-                param_name,
-                hint,
-                module_path,
-                fn_teardowns=fn_teardowns,
-                fn_name=defn.name,
-                resolve_user_fixture=lambda n: self._resolve_fixture(
-                    n, module_path, fn_teardowns, resolving
-                ),
-            )
-            if resolved:
-                deps[param_name] = value
-
-        # Reject non-shared async fixture values as dependencies of shared fixtures
-        for dep_name, dep_val in deps.items():
-            if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
-                if inspect.iscoroutine(dep_val):
-                    dep_val.close()
-                raise FixtureSetupError(
-                    defn.name,
-                    RuntimeError(
-                        f"shared fixture '{defn.name}' cannot depend on "
-                        f"non-shared async fixture '{dep_name}' \u2014 "
-                        f"lifetime mismatch"
-                    ),
-                )
+        deps = _resolve_deps(
+            self,
+            defn.func,
+            module_path,
+            fn_teardowns=fn_teardowns,
+            fn_name=defn.name,
+            resolve_user=lambda n: self._resolve_fixture(
+                n, module_path, fn_teardowns, resolving
+            ),
+            async_policy=_reject_nonshared_async,
+        )
 
         with _fixture_scope(self, module_path, fn_teardowns):
             try:
@@ -719,37 +699,17 @@ class FixtureSession:
         fn_teardowns: list[Callable[[], None]],
         resolving: frozenset[str],
     ) -> Any:
-        hints = _get_hints(defn.func)
-        deps: dict[str, Any] = {}
-        for param_name, hint in hints.items():
-            if param_name == "return":
-                continue
-            resolved, value = self._resolve_param(
-                param_name,
-                hint,
-                module_path,
-                fn_teardowns=fn_teardowns,
-                fn_name=defn.name,
-                resolve_user_fixture=lambda n: self._resolve_fixture(
-                    n, module_path, fn_teardowns, resolving
-                ),
-            )
-            if resolved:
-                deps[param_name] = value
-
-        # Reject async fixture values as dependencies of sync fixtures
-        if not defn.is_async:
-            for dep_name, dep_val in deps.items():
-                if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
-                    if inspect.iscoroutine(dep_val):
-                        dep_val.close()
-                    raise FixtureSetupError(
-                        defn.name,
-                        RuntimeError(
-                            f"sync fixture '{defn.name}' cannot depend on "
-                            f"async fixture '{dep_name}'"
-                        ),
-                    )
+        deps = _resolve_deps(
+            self,
+            defn.func,
+            module_path,
+            fn_teardowns=fn_teardowns,
+            fn_name=defn.name,
+            resolve_user=lambda n: self._resolve_fixture(
+                n, module_path, fn_teardowns, resolving
+            ),
+            async_policy=_reject_async_in_sync if not defn.is_async else None,
+        )
 
         # Set fixture context so FixtureAccessor attribute access
         # (e.g. kvault.store.namespace("x") inside a fixture body) can
