@@ -110,8 +110,6 @@ class _NullFixtureSession:
     def get_fixture(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
     ) -> Any:
-        from oxitest._bridge._errors import FixtureNotFoundError
-
         raise FixtureNotFoundError(name)
 
     def get_fixture_in_namespace(
@@ -121,8 +119,6 @@ class _NullFixtureSession:
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
     ) -> Any:
-        from oxitest._bridge._errors import FixtureNotFoundError
-
         raise FixtureNotFoundError(name, namespace=namespace)
 
     def get_namespace_for_func(

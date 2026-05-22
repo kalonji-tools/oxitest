@@ -39,7 +39,7 @@ from oxitest._bridge._metadata import (
     get_fixture_name as _get_fixture_name,
     get_marks,
 )
-from oxitest._bridge._timeout import OxitestTimeoutError
+from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
 from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
@@ -328,8 +328,6 @@ def _build_execution_chain(
     """
     # Apply global default timeout if no per-test @timeout mark
     if default_timeout is not None and not any(m.name == "timeout" for m in marks):
-        from oxitest._bridge._timeout import make_timeout_wrapper
-
         wrappers.append(make_timeout_wrapper(default_timeout))
 
     # Plugin execution wrappers — match by marker name
@@ -398,15 +396,11 @@ def _build_execution_chain(
                         resolved[k] = await anext(v)
                         async_teardowns.append((k, v))
                     except Exception as exc:
-                        from oxitest._bridge._errors import FixtureSetupError
-
                         return _error_result(str(FixtureSetupError(k, exc)))
                 elif inspect.iscoroutine(v):
                     try:
                         resolved[k] = await v
                     except Exception as exc:
-                        from oxitest._bridge._errors import FixtureSetupError
-
                         return _error_result(str(FixtureSetupError(k, exc)))
                 else:
                     resolved[k] = v
