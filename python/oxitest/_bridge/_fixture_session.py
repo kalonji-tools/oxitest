@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "AsyncPolicy",
     "FixtureContext",
     "FixtureSession",
     "FixtureTeardownWarning",
@@ -11,6 +12,9 @@ __all__ = [
     "_Scope",
     "_fixture_context",
     "_fixture_scope",
+    "_reject_async_in_sync",
+    "_reject_nonshared_async",
+    "_resolve_deps",
     "_warn_teardown",
 ]
 
@@ -76,6 +80,73 @@ def _fixture_scope(
         yield
     finally:
         _fixture_context.reset(token)
+
+
+def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:
+    """Sync fixtures cannot depend on async fixtures."""
+    if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
+        if inspect.iscoroutine(dep_val):
+            dep_val.close()
+        raise FixtureSetupError(
+            fixture_name,
+            RuntimeError(
+                f"sync fixture '{fixture_name}' cannot depend on "
+                f"async fixture '{dep_name}'"
+            ),
+        )
+
+
+def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> None:
+    """Shared fixtures cannot depend on non-shared async fixtures."""
+    if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
+        if inspect.iscoroutine(dep_val):
+            dep_val.close()
+        raise FixtureSetupError(
+            fixture_name,
+            RuntimeError(
+                f"shared fixture '{fixture_name}' cannot depend on "
+                f"non-shared async fixture '{dep_name}' \u2014 "
+                f"lifetime mismatch"
+            ),
+        )
+
+
+AsyncPolicy = Callable[[str, Any, str], None]
+
+
+def _resolve_deps(
+    session: FixtureSession,
+    fn: Callable[..., Any],
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
+    fn_name: str,
+    resolve_user: Callable[[str], Any],
+    async_policy: AsyncPolicy | None = None,
+) -> dict[str, Any]:
+    """Resolve fixture dependencies from type hints.
+
+    async_policy: if provided, called as policy(dep_name, dep_val, fn_name)
+    for each resolved dependency. Raises on invalid async dependency patterns.
+    """
+    hints = _get_hints(fn)
+    deps: dict[str, Any] = {}
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        resolved, value = session._resolve_param(
+            param_name,
+            hint,
+            module_path,
+            fn_teardowns=fn_teardowns,
+            fn_name=fn_name,
+            resolve_user_fixture=resolve_user,
+        )
+        if resolved:
+            deps[param_name] = value
+    if async_policy is not None:
+        for dep_name, dep_val in deps.items():
+            async_policy(dep_name, dep_val, fn_name)
+    return deps
 
 
 class _SessionProtocol(Protocol):
