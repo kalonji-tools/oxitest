@@ -21,7 +21,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Protocol
 
-from oxitest._bridge._async_backend import SharedAsyncSession, get_async_backend
+from oxitest._bridge._async_backend import (
+    AsyncBackend,
+    AsyncioBackend,
+    SharedAsyncSession,
+)
 from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
@@ -92,6 +96,7 @@ class _NullFixtureSession:
     """
 
     _plugin_registry: PluginRegistry = PluginRegistry()
+    _async_backend: AsyncBackend = AsyncioBackend()
 
     def resolve_for_test(
         self,
@@ -255,9 +260,11 @@ class FixtureSession:
         self,
         registry: FixtureRegistry,
         plugin_registry: PluginRegistry | None = None,
+        async_backend: AsyncBackend | None = None,
     ) -> None:
         self._registry = registry
         self._plugin_registry = plugin_registry or PluginRegistry()
+        self._async_backend: AsyncBackend = async_backend or AsyncioBackend()
         self._session_scope = _Scope()
         self._shared_scope = (
             _Scope()
@@ -563,7 +570,7 @@ class FixtureSession:
     ) -> Any:
         """Eagerly resolve a shared async fixture on the session event loop."""
         if self._shared_session is None:
-            self._shared_session = get_async_backend().create_shared_session()
+            self._shared_session = self._async_backend.create_shared_session()
 
         self._used_shared_async = True
 
