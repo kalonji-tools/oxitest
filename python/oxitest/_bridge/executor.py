@@ -41,7 +41,7 @@ from oxitest._bridge._metadata import (
     get_fixture_name as _get_fixture_name,
     get_marks,
 )
-from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
+from oxitest._bridge._timeout import OxitestTimeoutError
 from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
@@ -321,110 +321,42 @@ def _build_execution_chain(
     shared_session: SharedAsyncSession | None = None,
     session: _SessionProtocol | None = None,
 ) -> Callable[[], TestResult]:
-    """Build the composed execution callable from wrappers and base runner.
+    """Build the composed execution callable via middleware pipeline."""
+    from oxitest._bridge._middleware import (
+        AsyncBridgeMiddleware,
+        AsyncDepGuardMiddleware,
+        BareAssertMiddleware,
+        ExecutionPlan,
+        TimeoutMiddleware,
+        build_pipeline,
+    )
 
-    Appends default-timeout wrapper to the list, then composes
-    them around ``_run_base`` so the last-appended wrapper is outermost.
-    """
-    # Apply global default timeout if no per-test @timeout mark
-    if default_timeout is not None and not any(m.name == "timeout" for m in marks):
-        wrappers.append(make_timeout_wrapper(default_timeout))
+    plan = ExecutionPlan(
+        fn=fn,
+        fn_name=fn_name,
+        kwargs=all_kwargs,
+        marks=marks,
+        no_message_lines=[],
+        is_async=inspect.iscoroutinefunction(fn),
+        default_timeout=default_timeout,
+        backend=getattr(session, "_async_backend", None),
+        shared_session=shared_session,
+    )
 
-    # Bare-assert map lookup
-    # _oxitest_bare_asserts is set by ast_rewriter.py during module import.
-    # Falls back to _find_bare_asserts (runtime AST parse) if the module was
-    # loaded without rewriting.
-    _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
-    _simple_fn_name = fn_name.split("::")[-1]  # strip class prefix
-    no_message_lines = _bare_map.get(_simple_fn_name, _find_bare_asserts(fn_raw))
+    # BareAssert must run first (populates plan.no_message_lines)
+    middlewares: list[Any] = [
+        BareAssertMiddleware(module),
+        AsyncDepGuardMiddleware(),
+        TimeoutMiddleware(default_timeout),
+        AsyncBridgeMiddleware(),
+    ]
 
-    # Determine the effective timeout for async tests.
-    # Sync tests use the sync timeout wrapper (unchanged).
-    _timeout_secs: int | None = None
-    for m in marks:
-        if m.name == "timeout":
-            _timeout_secs = int(m.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
-            break
-    if _timeout_secs is None and default_timeout is not None:
-        _timeout_secs = default_timeout
+    def _base() -> TestResult:
+        return _run_base(fn, all_kwargs, plan.no_message_lines)
 
-    # Reject async fixture values in sync tests
-    if not inspect.iscoroutinefunction(fn):
-        for k, v in all_kwargs.items():
-            if inspect.iscoroutine(v) or inspect.isasyncgen(v):
-                if inspect.iscoroutine(v):
-                    v.close()  # prevent "coroutine was never awaited" warning
-                _msg = (
-                    f"async fixture '{k}' cannot be used by sync test "
-                    f"'{fn_name}' \u2014 make the test async def"
-                )
-                return lambda: _error_result(_msg)
+    execute = build_pipeline(middlewares, plan, _base)
 
-    # Compose wrappers: last appended = outermost
-    if inspect.iscoroutinefunction(fn):
-        from oxitest._bridge._async_backend import AsyncioBackend
-
-        backend = getattr(session, "_async_backend", None) or AsyncioBackend()
-
-        async def _async_core() -> TestResult:  # pragma: no cover
-            # Resolve async fixture values (coroutines and async generators).
-            # Sync fixture values pass through unchanged.
-            resolved: dict[str, Any] = {}
-            async_teardowns: list[tuple[str, Any]] = []  # (name, async_gen)
-            for k, v in all_kwargs.items():
-                if inspect.isasyncgen(v):
-                    try:
-                        resolved[k] = await anext(v)
-                        async_teardowns.append((k, v))
-                    except Exception as exc:
-                        return _error_result(str(FixtureSetupError(k, exc)))
-                elif inspect.iscoroutine(v):
-                    try:
-                        resolved[k] = await v
-                    except Exception as exc:
-                        return _error_result(str(FixtureSetupError(k, exc)))
-                else:
-                    resolved[k] = v
-            try:
-                if _timeout_secs is not None:
-                    import asyncio
-
-                    try:
-                        return await asyncio.wait_for(
-                            _run_base_async(fn, resolved, no_message_lines),
-                            timeout=_timeout_secs,
-                        )
-                    except TimeoutError:
-                        raise OxitestTimeoutError() from None
-                return await _run_base_async(fn, resolved, no_message_lines)
-            finally:
-                for name, gen in reversed(async_teardowns):
-                    try:
-                        await anext(gen)
-                    except StopAsyncIteration:
-                        pass
-                    except Exception as exc:
-                        warnings.warn(
-                            FixtureTeardownWarning(
-                                f"error in teardown of fixture '{name}': {exc}"
-                            ),
-                            stacklevel=2,
-                        )
-
-        if shared_session is not None:
-
-            def _base() -> TestResult:  # pragma: no cover
-                return shared_session.run(_async_core())
-        else:
-
-            def _base() -> TestResult:
-                return backend.run(_async_core())
-    else:
-
-        def _base() -> TestResult:
-            return _run_base(fn, all_kwargs, no_message_lines)
-
-    execute: Callable[[], TestResult] = _base
+    # Apply mark wrappers (from evaluate_marks) around the pipeline result
     for wrapper in reversed(wrappers):
         execute = _compose(wrapper, execute)
 
