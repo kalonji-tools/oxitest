@@ -3,8 +3,11 @@ from __future__ import annotations
 __all__ = ["BuiltinFixture", "_BuiltinContext"]
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from oxitest._bridge.plugin_loader import PluginRegistry
 
 
 @dataclass
@@ -15,6 +18,7 @@ class _BuiltinContext:
     inject_scope: str  # "function" for test-level injections
     teardown_stack: list[Callable[[], None]]
     fn_name: str = ""  # test function name, used for debuggable temp dir names
+    plugin_registry: PluginRegistry | None = field(default=None, repr=False)
 
 
 class BuiltinFixture:

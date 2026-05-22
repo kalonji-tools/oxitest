@@ -1360,12 +1360,7 @@ def test_plugin_fixture_provider_injected():
     sys.modules["db_plugin"] = mod
 
     try:
-        from oxitest._bridge import plugin_loader
-
-        old_registry = plugin_loader._registry
-        plugin_loader._registry = load_plugins(["db_plugin"], {})
-
-        registry = plugin_loader.get_registry()
+        registry = load_plugins(["db_plugin"], {})
         assert len(registry.fixture_providers) == 1, (
             f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
         )
@@ -1373,5 +1368,4 @@ def test_plugin_fixture_provider_injected():
             "Provider fixture_type should be FakeDatabase"
         )
     finally:
-        plugin_loader._registry = old_registry
         sys.modules.pop("db_plugin", None)
