@@ -1,6 +1,46 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.3.0] - 2026-05-22
+
+### Bug Fixes
+
+
+- Accept warned status in task_group cancellation test
+
+### Features
+
+
+- Add is_async field to Python CollectedItem
+- Detect async test functions via iscoroutinefunction
+- Add is_async field to Rust CollectedItem and TestItem
+- Flag async fixtures with is_async during registration
+- Add AsyncBackend protocol and AsyncioBackend
+- Add _run_base_async and async execution path in executor
+- Reject async fixtures in sync tests with clear error
+- Support async yield fixtures with teardown in reverse order
+- Reject async yield fixtures in sync tests
+- Route async timeouts through asyncio.wait_for
+- Add async loop state to FixtureSession
+- Eagerly resolve shared async fixtures on session loop
+- Route tests using shared fixtures to session loop with stray task cleanup
+- Async fixture teardown in end_session
+- Add built-in task_group fixture
+- Hard error when sync fixture depends on async fixture
+- Hard error when shared fixture depends on non-shared async
+- Show async test count in collection summary
+- Expand AsyncBackend protocol with SharedAsyncSession
+- Add async_backend field to Plugin and PluginRegistry
+- Add resolve_backend with error types
+- Add async_backend config field
+- Init async backend from Rust pipeline
+- Thread SharedAsyncSession through fixture session
+- Add _fixture_scope context manager (#353)
+- Add _PluginMarkHandler and unified evaluate_marks (#356)
+- Add _resolve_deps combinator and async policies (#354)
+- Add _FixtureOutcome and _unpack_sync (#357)
+- Add middleware pipeline infrastructure (#352)
+
 ## [0.2.0] - 2026-05-21
 
 ### Bug Fixes
