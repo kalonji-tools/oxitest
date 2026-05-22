@@ -13,6 +13,7 @@ import textwrap
 import traceback
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -234,11 +235,13 @@ async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
         raise
 
 
-class _ResolveError(Exception):
-    """Internal: wraps an early-return TestResult from resolution failures."""
-
-    def __init__(self, result: TestResult) -> None:
-        self.result = result
+@dataclass
+class _ResolvedTest:
+    module: Any
+    fn_raw: Any
+    fn: Callable[..., Any]
+    all_kwargs: dict[str, Any]
+    fn_teardowns: list[Callable[[], None]]
 
 
 def _load_and_resolve(
@@ -246,18 +249,10 @@ def _load_and_resolve(
     fn_name: str,
     session: _SessionProtocol,
     param_id: str | None,
-) -> tuple[
-    Any,
-    object,
-    Callable[..., Any],
-    dict[str, Any],
-    list[Callable[[], None]],
-]:
+) -> TestResult | _ResolvedTest:
     """Load module, resolve function, parametrize, and fixtures.
 
-    Returns (module, fn_raw, fn, all_kwargs, fn_teardowns).
-    Raises _LoadError on module/fn errors.
-    Raises _ResolveError on parametrize/fixture errors.
+    Returns _ResolvedTest on success, or TestResult on module/fn/resolve errors.
     """
     unique_name = _exec_unique_name(module_path)
     _cache = getattr(session, "_module_cache", None)
@@ -266,16 +261,22 @@ def _load_and_resolve(
         module = _cached
         sys.modules[unique_name] = module
     else:
-        module = _load_module(module_path, unique_name)
+        try:
+            module = _load_module(module_path, unique_name)
+        except _LoadError as e:
+            return e.result
         if _cache is not None:
             _cache.set(module_path, module)
-    fn_raw, fn = _resolve_fn(module, fn_name, module_path)
+    try:
+        fn_raw, fn = _resolve_fn(module, fn_name, module_path)
+    except _LoadError as e:
+        return e.result
 
     # Resolve parametrize case values
     try:
         param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, param_id)
     except ParametrizeError as exc:
-        raise _ResolveError(_error_result(str(exc))) from None
+        return _error_result(str(exc))
 
     # Resolve fixtures from function signature
     fn_teardowns: list[Callable[[], None]] = []
@@ -302,10 +303,10 @@ def _load_and_resolve(
                     fixture_name, module_path, fn_teardowns
                 )
     except (FixtureSetupError, FixtureNotFoundError) as exc:
-        raise _ResolveError(_error_result(str(exc))) from None
+        return _error_result(str(exc))
 
     all_kwargs: dict[str, Any] = {**fixture_kwargs, **param_kwargs}
-    return module, fn_raw, fn, all_kwargs, fn_teardowns
+    return _ResolvedTest(module, fn_raw, fn, all_kwargs, fn_teardowns)
 
 
 def _build_execution_chain(
@@ -470,14 +471,14 @@ def run_test(
         session if session is not None else _NULL_SESSION
     )
     unique_name = _exec_unique_name(module_path)
-    try:
-        module, fn_raw, fn, all_kwargs, fn_teardowns = _load_and_resolve(
-            module_path, fn_name, effective_session, param_id
-        )
-    except _LoadError as e:
-        return e.result
-    except _ResolveError as e:
-        return e.result
+    resolved = _load_and_resolve(module_path, fn_name, effective_session, param_id)
+    if isinstance(resolved, TestResult):
+        return resolved
+    module = resolved.module
+    fn_raw = resolved.fn_raw
+    fn = resolved.fn
+    all_kwargs = resolved.all_kwargs
+    fn_teardowns = resolved.fn_teardowns
 
     ctx = _HandlerContext(
         fn_raw=fn_raw,
