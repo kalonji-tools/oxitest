@@ -107,9 +107,28 @@ def _check_missing_mark_reason(
     ]
 
 
+def _check_single_case_parametrize(
+    path: str,
+    fn_name: str,
+    fn: object,
+) -> list[CollectedViolation]:
+    """Return a SINGLE_CASE_PARAMETRIZE violation if only one case is defined."""
+    param_cases = get_metadata(fn).param_cases
+    if param_cases is not None and len(param_cases) == 1:
+        return [
+            CollectedViolation(
+                node_id=f"{path}::{fn_name}",
+                kind=ViolationKind.SINGLE_CASE_PARAMETRIZE,
+                detail="",
+            )
+        ]
+    return []
+
+
 _FN_VIOLATION_CHECKERS: list[Callable[[str, str, Any], list[CollectedViolation]]] = [
     _check_dict_parametrize,
     _check_missing_mark_reason,
+    _check_single_case_parametrize,
 ]
 
 
