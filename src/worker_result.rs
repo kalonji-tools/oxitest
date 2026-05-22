@@ -19,7 +19,7 @@ use crate::types::{self, Frame};
 pub(crate) struct WorkerTask<'a> {
     pub module_path: &'a str,
     pub items: Vec<WorkerTaskItem<'a>>,
-    pub conftest_paths: &'a [String],
+    pub conftest_paths: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
 }
 
