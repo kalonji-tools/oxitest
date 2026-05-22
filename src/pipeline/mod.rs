@@ -168,7 +168,8 @@ fn run_phase(
 ) -> parallel::PhaseResult {
     let mut acc = types::FailureAccumulator::new(ctx.cfg.maxfail);
     let mut interrupted = false;
-    let mut timings: Vec<types::TestTiming> = Vec::new();
+    let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
+    let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
     'run: for (module_path, items) in &groups {
         for item in items {
