@@ -47,6 +47,11 @@ pub struct TtyReporter {
     stats: RunStats,
     pb: ProgressBar,
     pending_group: Option<ParametrizeBuffer>,
+    deferred_failures: Vec<(
+        crate::types::TestItem,
+        crate::types::TestOutcome,
+        DurationMs,
+    )>,
 }
 
 impl TtyReporter {
@@ -69,6 +74,7 @@ impl TtyReporter {
             stats: RunStats::new(),
             pb,
             pending_group: None,
+            deferred_failures: Vec::new(),
         }
     }
 
@@ -165,6 +171,20 @@ impl TtyReporter {
         }
     }
 
+    /// Dispatch a completed parametrize group: print immediately in verbose mode,
+    /// defer hard failures in non-verbose mode.
+    fn dispatch_param_group(&mut self, group: ParametrizeBuffer) {
+        if self.opts.verbose {
+            self.flush_param_group(group);
+        } else {
+            for (item, outcome, duration_ms) in group.results {
+                if outcome.is_hard_failure() {
+                    self.deferred_failures.push((item, outcome, duration_ms));
+                }
+            }
+        }
+    }
+
     fn flush_param_group(&mut self, group: ParametrizeBuffer) {
         let c = self.opts.use_color;
         let total_ms = group.total_ms();
@@ -229,7 +249,17 @@ impl TtyReporter {
 impl StandardReporter for TtyReporter {
     fn pre_finish(&mut self) {
         if let Some(group) = self.pending_group.take() {
-            self.flush_param_group(group);
+            self.dispatch_param_group(group);
+        }
+        // Flush deferred failures before clearing the progress bar
+        let deferred = std::mem::take(&mut self.deferred_failures);
+        for (item, outcome, duration_ms) in deferred {
+            self.pb
+                .println(self.format_test_line(&item, &outcome, duration_ms));
+            let diag = fmt_diagnostic_block(&item, &outcome, &self.opts.tb, self.opts.use_color);
+            if !diag.is_empty() {
+                self.pb.println(diag.trim_end());
+            }
         }
         self.pb.finish_and_clear();
         super::tracing_writer::deregister();
@@ -259,14 +289,14 @@ impl Reporter for TtyReporter {
             let flush = matches!(&self.pending_group, Some(g) if g.fn_name != item.fn_name);
             if flush {
                 let group = self.pending_group.take().unwrap();
-                self.flush_param_group(group);
+                self.dispatch_param_group(group);
             }
             let group = self
                 .pending_group
                 .get_or_insert_with(|| ParametrizeBuffer::new(item.fn_name.clone()));
             group.push(item.clone(), outcome.clone(), duration_ms);
-        } else {
-            // Flush any pending group first
+        } else if self.opts.verbose {
+            // Verbose mode: flush pending group and print every result immediately
             if let Some(group) = self.pending_group.take() {
                 self.flush_param_group(group);
             }
@@ -275,6 +305,15 @@ impl Reporter for TtyReporter {
             let diag = fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.use_color);
             if !diag.is_empty() {
                 self.pb.println(diag.trim_end());
+            }
+        } else {
+            // Non-verbose mode: only defer hard failures; passing/skipped/xfailed are silent
+            if let Some(group) = self.pending_group.take() {
+                self.flush_param_group(group);
+            }
+            if outcome.is_hard_failure() {
+                self.deferred_failures
+                    .push(((*item).clone(), outcome.clone(), duration_ms));
             }
         }
 
@@ -662,6 +701,50 @@ mod tests {
         assert!(
             !formatted.contains("cases"),
             "singular must not contain 'cases': {formatted:?}"
+        );
+    }
+
+    // ── deferred failures (non-verbose mode) ─────────────────────────────────
+
+    #[test]
+    fn test_non_verbose_defers_failures() {
+        let opts = ReporterOptsBuilder::new().verbose(false).build();
+        let mut reporter = TtyReporter::new(opts);
+        let item = make_item("test_failing");
+        let outcome = make_failed("oops", "test.py", 5, "assert x");
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        assert_eq!(
+            reporter.deferred_failures.len(),
+            1,
+            "failure should be deferred in non-verbose mode"
+        );
+    }
+
+    #[test]
+    fn test_non_verbose_does_not_defer_passes() {
+        let opts = ReporterOptsBuilder::new().verbose(false).build();
+        let mut reporter = TtyReporter::new(opts);
+        let item = make_item("test_passing");
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        assert!(
+            reporter.deferred_failures.is_empty(),
+            "passing test should not be deferred"
+        );
+    }
+
+    #[test]
+    fn test_verbose_does_not_defer() {
+        let opts = ReporterOptsBuilder::new().verbose(true).build();
+        let mut reporter = TtyReporter::new(opts);
+        let item = make_item("test_failing");
+        let outcome = make_failed("oops", "test.py", 5, "assert x");
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        assert!(
+            reporter.deferred_failures.is_empty(),
+            "verbose mode should print immediately, not defer"
         );
     }
 }
