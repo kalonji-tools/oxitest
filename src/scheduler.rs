@@ -21,16 +21,12 @@ pub(crate) fn apply_schedule_strategy(
             cache.sort_groups(groups);
         }
         ScheduleStrategy::FailedFirst => {
-            // Sort by duration first, then partition: groups with failed tests move to front.
             cache.sort_groups(groups);
-            let (mut has_failed, no_failed): (Vec<_>, Vec<_>) =
-                groups.drain(..).partition(|(_, items)| {
-                    items
-                        .iter()
-                        .any(|item| failed_ids.contains(item.node_id.as_ref()))
-                });
-            has_failed.extend(no_failed);
-            *groups = has_failed;
+            groups.sort_by_key(|(_, items)| {
+                !items
+                    .iter()
+                    .any(|item| failed_ids.contains(item.node_id.as_ref()))
+            });
         }
         ScheduleStrategy::Random => {
             use rand::seq::SliceRandom;
