@@ -1,3 +1,5 @@
+const DEFAULT_NAME_WIDTH: usize = 45;
+
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -10,6 +12,7 @@ pub struct ReporterOpts {
     pub(crate) show_warnings: bool,
     pub(crate) verbose: bool,
     pub(crate) show_durations: Option<usize>,
+    pub(crate) name_width: usize,
     pub(crate) strict_suite_lines: Vec<String>,
 }
 
@@ -25,6 +28,7 @@ pub struct ReporterOptsBuilder {
     show_warnings: bool,
     verbose: bool,
     show_durations: Option<usize>,
+    name_width: usize,
     strict_suite_lines: Vec<String>,
 }
 
@@ -41,6 +45,7 @@ impl ReporterOptsBuilder {
             show_warnings: false,
             verbose: false,
             show_durations: None,
+            name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
         }
     }
@@ -57,6 +62,7 @@ impl ReporterOptsBuilder {
             show_warnings: cfg.verbose,
             verbose: cfg.verbose,
             show_durations: cfg.durations,
+            name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
         }
     }
@@ -106,6 +112,13 @@ impl ReporterOptsBuilder {
         }
     }
 
+    pub fn name_width(self, w: usize) -> Self {
+        Self {
+            name_width: w.clamp(30, 70),
+            ..self
+        }
+    }
+
     pub fn build(self) -> ReporterOpts {
         ReporterOpts {
             total: self.total,
@@ -116,6 +129,7 @@ impl ReporterOptsBuilder {
             show_warnings: self.show_warnings,
             verbose: self.verbose,
             show_durations: self.show_durations,
+            name_width: self.name_width,
             strict_suite_lines: self.strict_suite_lines,
         }
     }
@@ -227,6 +241,22 @@ mod tests {
         assert!(!a.verbose);
         assert_eq!(b.total, 5);
         assert!(b.verbose);
+    }
+
+    #[test]
+    fn test_builder_name_width_default_is_45() {
+        let opts = ReporterOptsBuilder::new().build();
+        assert_eq!(opts.name_width, 45);
+    }
+
+    #[test]
+    fn test_builder_name_width_clamped_to_range() {
+        let low = ReporterOptsBuilder::new().name_width(10).build();
+        assert_eq!(low.name_width, 30, "must clamp to minimum 30");
+        let high = ReporterOptsBuilder::new().name_width(100).build();
+        assert_eq!(high.name_width, 70, "must clamp to maximum 70");
+        let mid = ReporterOptsBuilder::new().name_width(55).build();
+        assert_eq!(mid.name_width, 55);
     }
 
     #[test]

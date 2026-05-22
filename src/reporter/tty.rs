@@ -10,7 +10,19 @@ use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-const NAME_WIDTH: usize = 45;
+fn truncate_name(name: &str, max_width: usize) -> String {
+    if name.len() <= max_width {
+        return name.to_string();
+    }
+    let cut = max_width.saturating_sub(3);
+    let end = name
+        .char_indices()
+        .map(|(i, _)| i)
+        .take_while(|&i| i <= cut)
+        .last()
+        .unwrap_or(0);
+    format!("{}...", &name[..end])
+}
 
 fn fmt_quiet_line(symbol: String, body: String) -> String {
     format!(" {}  {}", symbol, body)
@@ -59,7 +71,7 @@ impl TtyReporter {
         }
     }
 
-    /// Assemble a single reporter line: ` LABEL  <name padded to 45>  trailing`
+    /// Assemble a single reporter line: ` LABEL  <name padded to name_width>  trailing`
     fn fmt_line(&self, label: String, name: &str, trailing: &str) -> String {
         format!(" {}  {} {}", label, name, trailing)
     }
@@ -75,49 +87,65 @@ impl TtyReporter {
         let c = self.opts.use_color;
         match outcome {
             TestOutcome::Passed { no_message_lines } if no_message_lines.is_empty() => {
+                let w = self.opts.name_width;
                 fmt_quiet_line(
                     color_dim_green("\u{2713}    ", c),
                     color_dim(
                         &format!(
                             "{:<width$} {:.1}ms",
-                            item.fn_name,
+                            truncate_name(&item.fn_name, w),
                             raw_ms,
-                            width = NAME_WIDTH
+                            width = w
                         ),
                         c,
                     ),
                 )
             }
-            TestOutcome::Passed { .. } => fmt_quiet_line(
-                color_dim("\u{00B7}    ", c),
-                color_dim(
-                    &format!(
-                        "{:<width$} {:.1}ms",
-                        item.fn_name,
-                        raw_ms,
-                        width = NAME_WIDTH
+            TestOutcome::Passed { .. } => {
+                let w = self.opts.name_width;
+                fmt_quiet_line(
+                    color_dim("\u{00B7}    ", c),
+                    color_dim(
+                        &format!(
+                            "{:<width$} {:.1}ms",
+                            truncate_name(&item.fn_name, w),
+                            raw_ms,
+                            width = w
+                        ),
+                        c,
                     ),
-                    c,
-                ),
-            ),
+                )
+            }
             TestOutcome::Skipped { reason } => self.fmt_line(
                 outcome_label(outcome, c),
-                &pad_to(&item.fn_name, NAME_WIDTH),
+                &pad_to(
+                    &truncate_name(&item.fn_name, self.opts.name_width),
+                    self.opts.name_width,
+                ),
                 &color_dim(reason, c),
             ),
             TestOutcome::Warned { reason, .. } => self.fmt_line(
                 outcome_label(outcome, c),
-                &pad_to(&item.fn_name, NAME_WIDTH),
+                &pad_to(
+                    &truncate_name(&item.fn_name, self.opts.name_width),
+                    self.opts.name_width,
+                ),
                 &color_warn(reason, c),
             ),
             TestOutcome::XFailed { reason } => self.fmt_line(
                 outcome_label(outcome, c),
-                &pad_to(&item.fn_name, NAME_WIDTH),
+                &pad_to(
+                    &truncate_name(&item.fn_name, self.opts.name_width),
+                    self.opts.name_width,
+                ),
                 &color_dim(reason, c),
             ),
             _ => self.fmt_line(
                 outcome_label(outcome, c),
-                &pad_to(&color_cyan(&item.fn_name, c), NAME_WIDTH),
+                &pad_to(
+                    &color_cyan(&truncate_name(&item.fn_name, self.opts.name_width), c),
+                    self.opts.name_width,
+                ),
                 &ms,
             ),
         }
@@ -134,7 +162,10 @@ impl TtyReporter {
             let failed = group.results.len() - passed;
             let line = self.fmt_line(
                 color_fail("FAIL ", c),
-                &pad_to(&group.fn_name, NAME_WIDTH),
+                &pad_to(
+                    &truncate_name(&group.fn_name, self.opts.name_width),
+                    self.opts.name_width,
+                ),
                 &format!("{} passed  {} failed   {}", passed, failed, ms),
             );
             self.pb.println(line);
@@ -161,15 +192,16 @@ impl TtyReporter {
             }
         } else {
             let count = group.results.len();
+            let w = self.opts.name_width;
             let line = fmt_quiet_line(
                 color_dim_green("\u{2713}    ", c),
                 color_dim(
                     &format!(
                         "{:<width$} {} cases   {:.1}ms",
-                        group.fn_name,
+                        truncate_name(&group.fn_name, w),
                         count,
                         total_ms_raw,
-                        width = NAME_WIDTH
+                        width = w
                     ),
                     c,
                 ),
@@ -499,6 +531,37 @@ mod tests {
         };
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(30_000.0));
         assert!(line.contains("TIME"), "TIME label must appear: {line:?}");
+    }
+
+    // ── truncate_name ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_truncate_name_short_unchanged() {
+        assert_eq!(truncate_name("test_add", 45), "test_add");
+    }
+
+    #[test]
+    fn test_truncate_name_exact_length_unchanged() {
+        let name = "a".repeat(45);
+        assert_eq!(truncate_name(&name, 45), name);
+    }
+
+    #[test]
+    fn test_truncate_name_over_limit_gets_ellipsis() {
+        let name = "a".repeat(50);
+        let result = truncate_name(&name, 45);
+        assert_eq!(result.len(), 45);
+        assert!(
+            result.ends_with("..."),
+            "truncated name must end with ...: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_truncate_name_non_ascii_does_not_panic() {
+        let name = "é".repeat(30); // 60 bytes, over max_width=45
+        let result = truncate_name(&name, 45);
+        assert!(result.ends_with("..."));
     }
 
     #[test]
