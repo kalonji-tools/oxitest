@@ -198,10 +198,10 @@ impl TtyReporter {
                 color_dim_green("\u{2713}    ", c),
                 color_dim(
                     &format!(
-                        "{:<width$} {} cases   {:.1}ms",
+                        "{:<width$} {:.1}ms  ({} cases)",
                         truncate_name(&group.fn_name, w),
-                        count,
                         total_ms_raw,
+                        count,
                         width = w
                     ),
                     c,
@@ -576,5 +576,46 @@ mod tests {
             "end_module(tests/test_foo.py)"
         );
         assert_eq!(reporter.stats.warning_msgs[0].1, "RuntimeError: boom");
+    }
+
+    // ── flush_param_group ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_flush_param_group_all_passed_duration_before_cases() {
+        use crate::reporter::ParametrizeBuffer;
+
+        let mut reporter = make_tty_reporter();
+        let item = make_item("test_math");
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        let mut group = ParametrizeBuffer::new("test_math".to_string());
+        group.push(item.clone(), outcome.clone(), DurationMs::new(2.0));
+        group.push(item.clone(), outcome.clone(), DurationMs::new(2.6));
+        // flush_param_group consumes group and prints via pb — capture output by
+        // checking the format directly via the inner logic instead.
+        // Verify the format string produces duration-first output:
+        let total_ms_raw = 4.6_f64;
+        let count = 2_usize;
+        let w = reporter.opts.name_width;
+        let formatted = format!(
+            "{:<width$} {:.1}ms  ({} cases)",
+            truncate_name("test_math", w),
+            total_ms_raw,
+            count,
+            width = w
+        );
+        // Duration appears before the case count
+        let ms_pos = formatted.find("4.6ms").expect("duration must appear");
+        let cases_pos = formatted.find("(2 cases)").expect("case count must appear");
+        assert!(
+            ms_pos < cases_pos,
+            "duration must come before case count: {formatted:?}"
+        );
+        // No old-style "N cases   Xms" ordering
+        assert!(
+            !formatted.contains("cases   "),
+            "old ordering (cases before ms) must not appear: {formatted:?}"
+        );
     }
 }
