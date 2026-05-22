@@ -100,6 +100,7 @@ class ViolationKind(StrEnum):
     BARE_ASSERT = "bare_assert"
     DICT_PARAMETRIZE = "dict_parametrize"
     MISSING_MARK_REASON = "missing_mark_reason"
+    SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
 
 
 @dataclass
