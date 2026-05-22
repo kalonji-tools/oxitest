@@ -435,8 +435,7 @@ class FixtureSession:
         """
         fn_teardowns: list[Callable[[], None]] = []
         self._used_shared_async = False  # reset per-test
-        token = _fixture_context.set(FixtureContext(self, module_path, fn_teardowns))
-        try:
+        with _fixture_scope(self, module_path, fn_teardowns):
             hints = _get_hints(fn)
             fn_name = getattr(fn, "__name__", "")
 
@@ -491,8 +490,6 @@ class FixtureSession:
                     )
 
             return kwargs, fn_teardowns
-        finally:
-            _fixture_context.reset(token)
 
     def get_fixture(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
@@ -624,27 +621,18 @@ class FixtureSession:
                     ),
                 )
 
-        parent_ctx = _fixture_context.get(None)
-        token = _fixture_context.set(
-            FixtureContext(
-                self,
-                module_path,
-                parent_ctx.fn_teardowns if parent_ctx is not None else fn_teardowns,
-            )
-        )
-        try:
-            result = defn.func(**deps)
-            if inspect.isasyncgen(result):
-                value = self._shared_session.run(anext(result))
-                self._async_teardowns.append((defn.name, result))
-            elif inspect.iscoroutine(result):
-                value = self._shared_session.run(result)
-            else:
-                value = result
-        except Exception as exc:
-            raise FixtureSetupError(defn.name, exc) from exc
-        finally:
-            _fixture_context.reset(token)
+        with _fixture_scope(self, module_path, fn_teardowns):
+            try:
+                result = defn.func(**deps)
+                if inspect.isasyncgen(result):
+                    value = self._shared_session.run(anext(result))
+                    self._async_teardowns.append((defn.name, result))
+                elif inspect.iscoroutine(result):
+                    value = self._shared_session.run(result)
+                else:
+                    value = result
+            except Exception as exc:
+                raise FixtureSetupError(defn.name, exc) from exc
 
         from oxitest._bridge.proxy import FrozenProxy
 
@@ -695,25 +683,16 @@ class FixtureSession:
         # Set fixture context so FixtureAccessor attribute access
         # (e.g. kvault.store.namespace("x") inside a fixture body) can
         # resolve the live fixture instance via _fixture_context.
-        parent_ctx = _fixture_context.get(None)
-        token = _fixture_context.set(
-            FixtureContext(
-                self,
-                module_path,
-                parent_ctx.fn_teardowns if parent_ctx is not None else fn_teardowns,
-            )
-        )
-        try:
-            result = defn.func(**deps)
-            _is_gen = inspect.isgenerator(result)
-            if _is_gen:
-                value = next(result)
-            else:
-                value = result
-        except Exception as exc:
-            raise FixtureSetupError(defn.name, exc) from exc
-        finally:
-            _fixture_context.reset(token)
+        with _fixture_scope(self, module_path, fn_teardowns):
+            try:
+                result = defn.func(**deps)
+                _is_gen = inspect.isgenerator(result)
+                if _is_gen:
+                    value = next(result)
+                else:
+                    value = result
+            except Exception as exc:
+                raise FixtureSetupError(defn.name, exc) from exc
 
         if _is_gen:
             fixture_name = defn.name
