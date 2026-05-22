@@ -603,7 +603,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 
     // Fetch plugin reporters from Python registry.
     let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !cfg.plugins.is_empty() {
-        bridge::get_plugin_reporters(py)
+        bridge::get_plugin_reporters(py, &session)
             .unwrap_or_default()
             .into_iter()
             .map(|obj| {

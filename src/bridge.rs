@@ -68,7 +68,8 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Load plugins by calling into the Python plugin loader.
+    /// Load plugins by calling into the Python plugin loader and store the
+    /// registry on the session object for dependency injection.
     pub fn load_plugins(
         &self,
         py: Python<'_>,
@@ -84,15 +85,17 @@ impl FixtureSession {
                 "{}".to_owned()
             }
         };
-        loader.call_method1("init_plugins", (plugin_list, settings_json))?;
+        let json_mod = py.import("json")?;
+        let plugin_configs = json_mod.call_method1("loads", (&settings_json,))?;
+        let registry = loader.call_method1("load_plugins", (plugin_list, plugin_configs))?;
+        self.0.bind(py).setattr("_plugin_registry", registry)?;
         Ok(())
     }
 
     /// Initialize the async backend by resolving the config name against plugins.
     pub fn init_async_backend(&self, py: Python<'_>, backend_name: &str) -> PyResult<()> {
         let backend_mod = py.import("oxitest._bridge._async_backend")?;
-        let plugin_mod = py.import("oxitest._bridge.plugin_loader")?;
-        let registry = plugin_mod.call_method0("get_registry")?;
+        let registry = self.0.bind(py).getattr("_plugin_registry")?;
         let backend = backend_mod.call_method1("resolve_backend", (backend_name, registry))?;
         backend_mod.call_method1("set_async_backend", (backend,))?;
         Ok(())
@@ -161,10 +164,9 @@ pub(crate) struct RawViolation {
     pub detail: String,
 }
 
-/// Fetch plugin reporter objects from the Python plugin registry.
-pub fn get_plugin_reporters(py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
-    let loader = py.import("oxitest._bridge.plugin_loader")?;
-    let registry = loader.call_method0("get_registry")?;
+/// Fetch plugin reporter objects from the session's plugin registry.
+pub fn get_plugin_reporters(py: Python<'_>, session: &FixtureSession) -> PyResult<Vec<Py<PyAny>>> {
+    let registry = session.0.bind(py).getattr("_plugin_registry")?;
     let reporters: Vec<Py<PyAny>> = registry.getattr("reporters")?.extract::<Vec<Py<PyAny>>>()?;
     Ok(reporters)
 }

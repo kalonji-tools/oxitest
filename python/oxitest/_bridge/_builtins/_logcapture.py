@@ -159,10 +159,9 @@ class _LogCapture:
 
 class _LogCaptureFixture(BuiltinFixture, fixture_type=_LogCapture):
     def create(self, ctx: _BuiltinContext) -> _LogCapture:
-        from oxitest._bridge.plugin_loader import get_registry
-
         backends: list[LogBackend] = [StdlibLogBackend()]
-        backends.extend(get_registry().log_backends)
+        if ctx.plugin_registry is not None:
+            backends.extend(ctx.plugin_registry.log_backends)
         cap = _LogCapture(backends)
         ctx.teardown_stack.append(cap._teardown)
         return cap

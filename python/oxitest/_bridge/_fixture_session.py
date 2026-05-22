@@ -35,6 +35,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
+from oxitest._bridge.plugin_loader import PluginRegistry
 
 # ContextVar set in _instantiate so FixtureAccessor can resolve lazily
 # inside fixture bodies. Holds (session, module_path) — immutable only.
@@ -89,6 +90,8 @@ class _NullFixtureSession:
 
     Allows run_test to treat session as always present, eliminating guards.
     """
+
+    _plugin_registry: PluginRegistry = PluginRegistry()
 
     def resolve_for_test(
         self,
@@ -248,8 +251,13 @@ async def _task_group_factory():  # type: ignore[return-value]
 
 
 class FixtureSession:
-    def __init__(self, registry: FixtureRegistry) -> None:
+    def __init__(
+        self,
+        registry: FixtureRegistry,
+        plugin_registry: PluginRegistry | None = None,
+    ) -> None:
         self._registry = registry
+        self._plugin_registry = plugin_registry or PluginRegistry()
         self._session_scope = _Scope()
         self._shared_scope = (
             _Scope()
@@ -321,6 +329,7 @@ class FixtureSession:
                         module_path=module_path,
                         inject_scope="session",
                         teardown_stack=self._session_scope.teardowns,
+                        plugin_registry=self._plugin_registry,
                     )
                 ),
             )
@@ -330,6 +339,7 @@ class FixtureSession:
                 inject_scope=inject_scope,
                 teardown_stack=teardown_stack,
                 fn_name=fn_name,
+                plugin_registry=self._plugin_registry,
             )
         )
 
@@ -342,9 +352,7 @@ class FixtureSession:
 
         Returns the fixture value if a provider matches, None otherwise.
         """
-        from oxitest._bridge.plugin_loader import get_registry
-
-        for provider in get_registry().fixture_providers:
+        for provider in self._plugin_registry.fixture_providers:
             if provider.fixture_type is inner:
                 value = provider.create(None)
                 teardown_stack.append(lambda v=value, p=provider: p.teardown(v))
