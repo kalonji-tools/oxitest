@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "FixtureContext",
     "FixtureSession",
     "FixtureTeardownWarning",
     "_NullFixtureSession",
@@ -8,13 +9,11 @@ __all__ = [
     "_TestContext",
     "_Node",
     "_Scope",
-    "_instantiation_context",
-    "_teardown_local",
+    "_fixture_context",
     "_warn_teardown",
 ]
 
 import inspect
-import threading
 import warnings
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -41,21 +40,24 @@ from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge.plugin_loader import PluginRegistry
 
-# ContextVar set in _instantiate so FixtureAccessor can resolve lazily
-# inside fixture bodies. Holds (session, module_path) — immutable only.
-# The teardown list is carried separately in _teardown_local (threading.local)
-# to avoid sharing a mutable reference across contexts that might inherit a
-# copied ContextVar snapshot (e.g. asyncio tasks).
-_instantiation_context: ContextVar[tuple[Any, str] | None] = ContextVar(
-    "_instantiation_context", default=None
+
+@dataclass
+class FixtureContext:
+    """Context for fixture resolution during test execution.
+
+    Bundles the session, module path, and per-test teardown list into a single
+    ContextVar value, replacing the previous dual-state mechanism
+    (_instantiation_context ContextVar + _teardown_local threading.local).
+    """
+
+    session: Any  # FixtureSession (avoiding circular import)
+    module_path: str
+    fn_teardowns: list[Callable[[], None]]
+
+
+_fixture_context: ContextVar[FixtureContext | None] = ContextVar(
+    "_fixture_context", default=None
 )
-# Per-worker-thread teardown stack. Set by resolve_for_test before fixture
-# resolution begins; read by FixtureAccessor.__getattr__ when a fixture body
-# accesses a lazy fixture attribute. Per-test isolation is established by
-# resolve_for_test assigning a fresh list at the start of each test and
-# clearing this slot afterwards; threading.local prevents cross-thread
-# interference in multi-threaded configurations.
-_teardown_local: threading.local = threading.local()
 
 
 class _SessionProtocol(Protocol):
@@ -415,7 +417,7 @@ class FixtureSession:
         """
         fn_teardowns: list[Callable[[], None]] = []
         self._used_shared_async = False  # reset per-test
-        _teardown_local.fn_teardowns = fn_teardowns  # type: ignore[attr-defined]
+        token = _fixture_context.set(FixtureContext(self, module_path, fn_teardowns))
         try:
             hints = _get_hints(fn)
             fn_name = getattr(fn, "__name__", "")
@@ -472,7 +474,7 @@ class FixtureSession:
 
             return kwargs, fn_teardowns
         finally:
-            del _teardown_local.fn_teardowns  # type: ignore[attr-defined]
+            _fixture_context.reset(token)
 
     def get_fixture(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
@@ -604,7 +606,14 @@ class FixtureSession:
                     ),
                 )
 
-        token = _instantiation_context.set((self, module_path))
+        parent_ctx = _fixture_context.get(None)
+        token = _fixture_context.set(
+            FixtureContext(
+                self,
+                module_path,
+                parent_ctx.fn_teardowns if parent_ctx is not None else fn_teardowns,
+            )
+        )
         try:
             result = defn.func(**deps)
             if inspect.isasyncgen(result):
@@ -617,7 +626,7 @@ class FixtureSession:
         except Exception as exc:
             raise FixtureSetupError(defn.name, exc) from exc
         finally:
-            _instantiation_context.reset(token)
+            _fixture_context.reset(token)
 
         from oxitest._bridge.proxy import FrozenProxy
 
@@ -665,10 +674,17 @@ class FixtureSession:
                         ),
                     )
 
-        # Set instantiation context so FixtureAccessor attribute access
+        # Set fixture context so FixtureAccessor attribute access
         # (e.g. kvault.store.namespace("x") inside a fixture body) can
-        # resolve the live fixture instance via _instantiation_context.
-        token = _instantiation_context.set((self, module_path))
+        # resolve the live fixture instance via _fixture_context.
+        parent_ctx = _fixture_context.get(None)
+        token = _fixture_context.set(
+            FixtureContext(
+                self,
+                module_path,
+                parent_ctx.fn_teardowns if parent_ctx is not None else fn_teardowns,
+            )
+        )
         try:
             result = defn.func(**deps)
             _is_gen = inspect.isgenerator(result)
@@ -679,7 +695,7 @@ class FixtureSession:
         except Exception as exc:
             raise FixtureSetupError(defn.name, exc) from exc
         finally:
-            _instantiation_context.reset(token)
+            _fixture_context.reset(token)
 
         if _is_gen:
             fixture_name = defn.name

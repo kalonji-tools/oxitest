@@ -1287,38 +1287,27 @@ def test_shared_fixture_names_returns_only_shared_names():
 # ── FixtureAccessor ───────────────────────────────────────────────────────────
 
 
-def test_fixture_accessor_getattr_raises_runtime_error_without_teardown_context():
-    """FixtureAccessor.__getattr__ must raise RuntimeError when
-    _instantiation_context is set but _teardown_local.fn_teardowns is absent.
-    This guards against attribute access that occurs outside an active
-    resolve_for_test call.
+def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context():
+    """FixtureAccessor.__getattr__ must raise AttributeError when
+    _fixture_context is not set (no active instantiation context).
     """
-    import oxitest._bridge.fixtures as _fx_mod
-    from oxitest._bridge.fixtures import (
-        FixtureAccessor,
-        Fixtures,
-        _instantiation_context,
-    )
-
-    _teardown_local = _fx_mod._teardown_local
+    from oxitest._bridge._fixture_session import _fixture_context
+    from oxitest._bridge.fixtures import FixtureAccessor, Fixtures
 
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)
 
-    # Ensure fn_teardowns is absent on this thread before the test.
-    if hasattr(_teardown_local, "fn_teardowns"):
-        del _teardown_local.fn_teardowns
-
-    token = _instantiation_context.set((object(), "t.py"))
+    # Ensure no active fixture context.
+    token = _fixture_context.set(None)
     try:
-        with raises(RuntimeError) as exc_info:
+        with raises(AttributeError) as exc_info:
             _ = accessor.value  # non-underscore attribute access triggers __getattr__
-        assert "outside an active resolve_for_test call" in str(exc_info.value), (
-            "RuntimeError message should mention 'outside an active resolve_for_test "
-            f"call', got {str(exc_info.value)!r}"
+        assert "no active instantiation context" in str(exc_info.value), (
+            "AttributeError message should mention 'no active instantiation context', "
+            f"got {str(exc_info.value)!r}"
         )
     finally:
-        _instantiation_context.reset(token)
+        _fixture_context.reset(token)
 
 
 def test_plugin_fixture_provider_injected():
