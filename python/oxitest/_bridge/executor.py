@@ -319,6 +319,7 @@ def _build_execution_chain(
     default_timeout: int | None,
     shared_session: SharedAsyncSession | None = None,
     plugin_registry: PluginRegistry | None = None,
+    session: _SessionProtocol | None = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable from wrappers and base runner.
 
@@ -382,9 +383,9 @@ def _build_execution_chain(
 
     # Compose wrappers: last appended = outermost
     if inspect.iscoroutinefunction(fn):
-        from oxitest._bridge._async_backend import get_async_backend
+        from oxitest._bridge._async_backend import AsyncioBackend
 
-        backend = get_async_backend()
+        backend = getattr(session, "_async_backend", None) or AsyncioBackend()
 
         async def _async_core() -> TestResult:  # pragma: no cover
             # Resolve async fixture values (coroutines and async generators).
@@ -515,6 +516,7 @@ def run_test(
             default_timeout,
             shared_session=_shared_session if _used_shared else None,
             plugin_registry=_plugin_registry,
+            session=effective_session,
         )
         return execute()
     finally:
