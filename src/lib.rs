@@ -9,6 +9,7 @@ mod cache;
 mod collector;
 mod config;
 mod filter;
+mod import_graph;
 mod marker;
 mod parallel;
 mod pipeline;
