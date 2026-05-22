@@ -10,7 +10,7 @@ use crate::bridge::{self, RawViolation};
 use crate::config::Config;
 use crate::parallel;
 use crate::reporter::Reporter;
-use crate::types::{CollectError, TestItem, TestOutcome, TestTiming};
+use crate::types::{CollectError, TestItem, TestOutcome};
 
 // ─── Trait definitions ──────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ pub(crate) trait ParallelRunner {
         workers: usize,
         conftest_files: &[Utf8PathBuf],
         rep: &mut dyn Reporter,
-    ) -> (bool, Vec<TestTiming>);
+    ) -> parallel::PhaseResult;
 }
 
 // ─── Real implementations ───────────────────────────────────────────────────
@@ -122,7 +122,7 @@ impl ParallelRunner for DefaultParallelRunner {
         workers: usize,
         conftest_files: &[Utf8PathBuf],
         rep: &mut dyn Reporter,
-    ) -> (bool, Vec<TestTiming>) {
+    ) -> parallel::PhaseResult {
         parallel::run_phase_parallel(groups, cfg, workers, conftest_files, rep)
     }
 }

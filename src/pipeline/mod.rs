@@ -161,7 +161,7 @@ fn run_phase(
     groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
     ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,
-) -> (bool, Vec<types::TestTiming>) {
+) -> parallel::PhaseResult {
     let mut acc = types::FailureAccumulator::new(ctx.cfg.maxfail);
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::new();
@@ -206,7 +206,10 @@ fn run_phase(
         rep.record_teardown_warning("end_session", &e.to_string());
     }
 
-    (interrupted, timings)
+    parallel::PhaseResult {
+        interrupted,
+        timings,
+    }
 }
 
 #[derive(Debug)]
@@ -413,7 +416,7 @@ fn execute(
     all_violations: Vec<strict::StrictViolation>,
     ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,
-) -> (bool, Vec<types::TestTiming>) {
+) -> parallel::PhaseResult {
     // Immediately report violated items as Error outcomes (no worker dispatch).
     for item in &violated_items {
         // Per-test items may have multiple violations; we report only the first to keep
@@ -482,13 +485,20 @@ fn execute(
                  that can be function-scoped"
             );
         }
-        ctx.parallel.run_parallel(
+        let parallel::PhaseResult {
+            interrupted,
+            timings,
+        } = ctx.parallel.run_parallel(
             groups,
             ctx.cfg,
             optimal_worker_count,
             ctx.conftest_files,
             rep,
-        )
+        );
+        parallel::PhaseResult {
+            interrupted,
+            timings,
+        }
     } else {
         run_phase(py, groups, ctx, rep)
     }
@@ -624,7 +634,10 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         parallel: &parallel_impl,
     };
 
-    let (interrupted, timings) = execute(
+    let parallel::PhaseResult {
+        interrupted,
+        timings,
+    } = execute(
         py,
         items,
         violated_items,
