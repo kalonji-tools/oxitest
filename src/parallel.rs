@@ -215,6 +215,48 @@ fn handle_drain_outcome(
     }
 }
 
+/// Bundles subprocess communication state for a single worker.
+///
+/// Encapsulates the stdin writer, stdout line receiver, and watchdog duration
+/// so that `spawn_worker()` can express the task dispatch loop in terms of
+/// `send_task()` / `drain_results()` instead of juggling three locals.
+struct WorkerSession {
+    stdin: std::io::BufWriter<std::process::ChildStdin>,
+    line_rx: crossbeam_channel::Receiver<String>,
+    watchdog: std::time::Duration,
+}
+
+impl WorkerSession {
+    fn new(
+        stdin: std::io::BufWriter<std::process::ChildStdin>,
+        line_rx: crossbeam_channel::Receiver<String>,
+        watchdog: std::time::Duration,
+    ) -> Self {
+        Self {
+            stdin,
+            line_rx,
+            watchdog,
+        }
+    }
+
+    /// Serializes `task` as a single JSON line and flushes it to the worker's stdin.
+    fn send_task(&mut self, task: &WorkerTask<'_>) -> std::io::Result<()> {
+        use std::io::Write;
+        serde_json::to_writer(&mut self.stdin, task).map_err(std::io::Error::other)?;
+        writeln!(self.stdin)?;
+        self.stdin.flush()
+    }
+
+    /// Drains up to `expected` result lines from the worker, forwarding each to `tx`.
+    fn drain_results(
+        &self,
+        expected: usize,
+        tx: &crossbeam_channel::Sender<WorkerResult>,
+    ) -> (DrainOutcome, usize) {
+        drain_worker_results(&self.line_rx, expected, self.watchdog, tx)
+    }
+}
+
 pub(crate) fn spawn_worker(
     python_bin: String,
     sched: std::sync::Arc<scheduler::Scheduler>,
@@ -223,7 +265,6 @@ pub(crate) fn spawn_worker(
     timeout_secs: Option<u64>,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
-    use std::io::Write;
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
@@ -239,11 +280,12 @@ pub(crate) fn spawn_worker(
         .unwrap_or(Duration::from_secs(600));
 
     std::thread::spawn(move || {
-        let (mut child, mut worker_stdin, line_rx) = match setup_worker_process(&python_bin) {
+        let (mut child, worker_stdin, line_rx) = match setup_worker_process(&python_bin) {
             Some(v) => v,
             None => return,
         };
 
+        let mut session = WorkerSession::new(worker_stdin, line_rx, watchdog);
         let mut subprocess_alive = true;
 
         while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
@@ -262,24 +304,11 @@ pub(crate) fn spawn_worker(
                 conftest_paths: &conftest_json,
                 timeout_secs,
             };
-            let task_json = match serde_json::to_string(&task) {
-                Ok(j) => j,
-                Err(e) => {
-                    tracing::error!(
-                        module = %group.module_path,
-                        error = %e,
-                        "failed to serialize WorkerTask — emitting error for all group items"
-                    );
-                    for item in &group.items {
-                        let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
-                    }
-                    break;
-                }
-            };
 
-            if writeln!(worker_stdin, "{task_json}").is_err() || worker_stdin.flush().is_err() {
+            if let Err(e) = session.send_task(&task) {
                 tracing::warn!(
                     module = %group.module_path,
+                    error = %e,
                     "failed to send task to worker — emitting error for all group items"
                 );
                 for item in &group.items {
@@ -289,7 +318,7 @@ pub(crate) fn spawn_worker(
             }
 
             let expected = group.items.len();
-            let (drain_outcome, received) = drain_worker_results(&line_rx, expected, watchdog, &tx);
+            let (drain_outcome, received) = session.drain_results(expected, &tx);
 
             subprocess_alive = handle_drain_outcome(
                 drain_outcome,
@@ -302,7 +331,7 @@ pub(crate) fn spawn_worker(
             );
         }
 
-        drop(worker_stdin);
+        drop(session);
         let _ = child.wait();
     })
 }
