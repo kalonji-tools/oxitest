@@ -411,6 +411,7 @@ pub(crate) fn run_phase_parallel(
     use std::sync::Arc;
 
     let worker_count = worker_count.max(1).min(groups.len().max(1));
+    let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
     // Build node_id → Arc<TestItem> before groups are consumed by the scheduler.
     // Items are already Arc-wrapped from collection — no deep clone needed.
     let item_lookup: ahash::AHashMap<String, std::sync::Arc<types::TestItem>> = groups
@@ -444,7 +445,7 @@ pub(crate) fn run_phase_parallel(
 
     let mut acc = types::FailureAccumulator::new(cfg.maxfail);
     let mut interrupted = false;
-    let mut timings: Vec<types::TestTiming> = Vec::new();
+    let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
     for result in rx {
         let Some(outcome) = handle_worker_result(&result, &item_lookup, rep, &mut timings) else {
