@@ -91,4 +91,8 @@ pub struct Cli {
     /// Print environment information (oxitest version, Python, rustc, OS) and exit
     #[arg(long)]
     pub capture_environment: bool,
+
+    /// Watch for file changes and re-run affected tests
+    #[arg(long)]
+    pub watch: bool,
 }

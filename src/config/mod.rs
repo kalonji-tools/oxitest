@@ -100,6 +100,8 @@ pub struct Config {
     pub plugins: Vec<String>,
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub async_backend: String,
+    pub watch: bool,
+    pub watchpaths: Vec<String>,
 }
 
 impl Default for Config {
@@ -138,6 +140,8 @@ impl Default for Config {
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
+            watch: false,
+            watchpaths: vec![],
         }
     }
 }
@@ -215,6 +219,12 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     config.plugin_settings = tc.plugin_settings;
     if let Some(ab) = tc.async_backend {
         config.async_backend = ab;
+    }
+    if let Some(w) = tc.watch {
+        config.watch = w;
+    }
+    if let Some(wp) = tc.watchpaths {
+        config.watchpaths = wp;
     }
 }
 
@@ -328,6 +338,9 @@ impl Config {
         }
         if let Some(timeout) = cli.timeout {
             self.timeout_secs = Some(timeout);
+        }
+        if cli.watch {
+            self.watch = true;
         }
         self
     }
@@ -1338,5 +1351,43 @@ async_backend = "trio"
 "#;
         let cfg = Config::from_str(toml).unwrap();
         assert_eq!(cfg.async_backend, "trio");
+    }
+
+    #[test]
+    fn test_watch_default_is_false() {
+        let cfg = Config::default();
+        assert!(!cfg.watch);
+    }
+
+    #[test]
+    fn test_watch_from_pyproject() {
+        let toml = "[tool.oxitest]\nwatch = true\n";
+        let cfg = Config::from_str(toml).unwrap();
+        assert!(cfg.watch);
+    }
+
+    #[test]
+    fn test_watchpaths_default_is_empty() {
+        let cfg = Config::default();
+        assert!(cfg.watchpaths.is_empty());
+    }
+
+    #[test]
+    fn test_watchpaths_from_pyproject() {
+        let toml = "[tool.oxitest]\nwatchpaths = [\"src\"]\n";
+        let cfg = Config::from_str(toml).unwrap();
+        assert_eq!(cfg.watchpaths, vec!["src"]);
+    }
+
+    #[test]
+    fn test_cli_watch_flag() {
+        let cli = Cli::try_parse_from(["oxitest", "--watch"]).unwrap();
+        assert!(cli.watch);
+    }
+
+    #[test]
+    fn test_cli_watch_default_is_false() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(!cli.watch);
     }
 }
