@@ -7,6 +7,8 @@
 
 pub(crate) mod traits;
 
+use std::sync::Arc;
+
 use crate::{
     bridge, cache, collector, config, filter, marker, parallel, reporter, scheduler, strict, types,
 };
@@ -34,11 +36,11 @@ fn collect_items(
     collector: &dyn ModuleCollector,
     cache: &mut cache::TestCache,
 ) -> (
-    Vec<types::TestItem>,
+    Vec<Arc<types::TestItem>>,
     Vec<types::CollectError>,
     Vec<bridge::RawViolation>,
 ) {
-    let mut items = Vec::new();
+    let mut items: Vec<Arc<types::TestItem>> = Vec::new();
     let mut errors = Vec::new();
     let mut raw_violations: Vec<bridge::RawViolation> = Vec::new();
     let collect_violations = cfg.strict.is_some();
@@ -57,13 +59,15 @@ fn collect_items(
         }
         match collector.collect_module(py, file, session, collect_violations) {
             Ok((file_items, file_violations)) => {
+                let arc_items: Vec<Arc<types::TestItem>> =
+                    file_items.into_iter().map(Arc::new).collect();
                 // Skip cache write in strict mode: violations are not cached,
                 // so the cached entry would silently drop violation data on the next run.
                 if mtime != 0 && !collect_violations {
-                    cache.update_module_cache(file, mtime, &file_items);
+                    cache.update_module_cache(file, mtime, &arc_items);
                 }
                 raw_violations.extend(file_violations);
-                items.extend(file_items);
+                items.extend(arc_items);
             }
             Err(e) => errors.push(e),
         }
@@ -158,7 +162,7 @@ fn early_exit_with_error(
 
 fn run_phase(
     py: Python<'_>,
-    groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
+    groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
     ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,
 ) -> parallel::PhaseResult {
@@ -272,8 +276,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 
 #[derive(Debug)]
 struct StrictResult {
-    clean_items: Vec<types::TestItem>,
-    violated_items: Vec<types::TestItem>,
+    clean_items: Vec<Arc<types::TestItem>>,
+    violated_items: Vec<Arc<types::TestItem>>,
     all_violations: Vec<strict::StrictViolation>,
     suite_lines: Vec<String>,
 }
@@ -283,7 +287,7 @@ struct StrictResult {
 /// detects violations (caller should propagate as `Ok(3)`).
 fn apply_strict(
     cfg: &config::Config,
-    items: Vec<types::TestItem>,
+    items: Vec<Arc<types::TestItem>>,
     raw_violations: Vec<bridge::RawViolation>,
     use_color: bool,
 ) -> Result<StrictResult, i32> {
@@ -343,12 +347,12 @@ fn apply_strict(
 /// Returns the filtered item list, or `Err(code)` for an invalid `-m` expression
 /// (code 2, surfaced via the error reporter supplied by `make_error_rep`).
 fn apply_filters(
-    items: Vec<types::TestItem>,
+    items: Vec<Arc<types::TestItem>>,
     cli: &config::Cli,
     cfg: &config::Config,
     cache: &cache::TestCache,
     make_error_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
-) -> Result<Vec<types::TestItem>, i32> {
+) -> Result<Vec<Arc<types::TestItem>>, i32> {
     // Keyword filter (-k).
     let items = filter::filter_items(items, cli.keyword.as_deref());
 
@@ -411,8 +415,8 @@ fn apply_filters(
 /// because they feed directly into the parallel-dispatch decision.
 fn execute(
     py: Python<'_>,
-    clean_items: Vec<types::TestItem>,
-    violated_items: Vec<types::TestItem>,
+    clean_items: Vec<Arc<types::TestItem>>,
+    violated_items: Vec<Arc<types::TestItem>>,
     all_violations: Vec<strict::StrictViolation>,
     ctx: &ExecutionContext<'_>,
     rep: &mut dyn reporter::Reporter,

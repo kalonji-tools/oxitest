@@ -538,14 +538,14 @@ mod tests {
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(10.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -565,14 +565,14 @@ mod tests {
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             make_failed("oops", "t.py", 1, "assert x"),
             DurationMs::new(1.0),
         );
@@ -589,14 +589,14 @@ mod tests {
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Skipped {
                 reason: "not ready".to_string(),
             },
@@ -615,26 +615,26 @@ mod tests {
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             make_failed("oops", "t.py", 1, "assert x"),
             DurationMs::new(1.0),
         );
         buf.push(
-            make_item("test_add"),
+            (*make_item("test_add")).clone(),
             TestOutcome::Skipped {
                 reason: "skip".to_string(),
             },

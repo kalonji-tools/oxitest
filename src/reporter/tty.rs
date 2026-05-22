@@ -591,8 +591,8 @@ mod tests {
             no_message_lines: vec![],
         };
         let mut group = ParametrizeBuffer::new("test_math".to_string());
-        group.push(item.clone(), outcome.clone(), DurationMs::new(2.0));
-        group.push(item.clone(), outcome.clone(), DurationMs::new(2.6));
+        group.push((*item).clone(), outcome.clone(), DurationMs::new(2.0));
+        group.push((*item).clone(), outcome.clone(), DurationMs::new(2.6));
         // flush_param_group consumes group and prints via pb — capture output by
         // checking the format directly via the inner logic instead.
         // Verify the format string produces duration-first output:
@@ -631,7 +631,7 @@ mod tests {
             no_message_lines: vec![],
         };
         let mut group = ParametrizeBuffer::new("test_single".to_string());
-        group.push(item, outcome, DurationMs::new(3.0));
+        group.push((*item).clone(), outcome, DurationMs::new(3.0));
 
         let w = reporter.opts.name_width;
         let formatted = format!(
