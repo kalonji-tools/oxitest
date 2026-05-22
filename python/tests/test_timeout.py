@@ -13,9 +13,8 @@ from oxitest._bridge.result import StatusKind, TestResult
 
 
 def test_timeout_context_raises_on_expiry():
-    with raises(OxitestTimeoutError):
-        with _timeout_context(1):
-            time.sleep(5)
+    with raises(OxitestTimeoutError), _timeout_context(1):
+        time.sleep(5)
 
 
 def test_timeout_context_does_not_raise_when_fast():

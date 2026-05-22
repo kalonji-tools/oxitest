@@ -12,15 +12,13 @@ def test_warns_catches_expected_warning():
 
 
 def test_warns_no_warning_raises_assertion_error():
-    with raises(AssertionError, match="No warning"):
-        with warns(UserWarning):
-            pass
+    with raises(AssertionError, match="No warning"), warns(UserWarning):
+        pass
 
 
 def test_warns_wrong_category_raises_assertion_error():
-    with raises(AssertionError, match="No warning"):
-        with warns(UserWarning):
-            warnings.warn("something", DeprecationWarning)
+    with raises(AssertionError, match="No warning"), warns(UserWarning):
+        warnings.warn("something", DeprecationWarning)
 
 
 def test_warns_match_passes_when_pattern_found():
