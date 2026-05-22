@@ -9,15 +9,13 @@ def test_raises_catches_expected_exception():
 
 
 def test_raises_no_exception_raises_assertion_error():
-    with raises(AssertionError, match="Expected ValueError"):
-        with raises(ValueError):
-            pass  # nothing raised
+    with raises(AssertionError, match="Expected ValueError"), raises(ValueError):
+        pass  # nothing raised
 
 
 def test_raises_wrong_type_reraises():
-    with raises(TypeError):
-        with raises(ValueError):
-            raise TypeError("wrong type")
+    with raises(TypeError), raises(ValueError):
+        raise TypeError("wrong type")
 
 
 def test_raises_match_passes_when_pattern_found():
@@ -74,9 +72,8 @@ def test_raises_tuple_catches_second_type():
 
 
 def test_raises_tuple_wrong_type_reraises():
-    with raises(KeyError):
-        with raises((ValueError, TypeError)):
-            raise KeyError("neither")
+    with raises(KeyError), raises((ValueError, TypeError)):
+        raise KeyError("neither")
 
 
 def test_raises_tuple_no_exception_names_all_types():

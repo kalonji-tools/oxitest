@@ -457,7 +457,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_merge_cli_maxfail_sets_maxfail() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());

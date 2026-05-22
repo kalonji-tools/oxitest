@@ -15,6 +15,7 @@ __all__ = [
 ]
 
 import asyncio
+import contextlib
 import warnings
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
@@ -83,10 +84,8 @@ class AsyncioSharedSession:
 
     def close(self) -> None:
         if self._loop is not None and not self._loop.is_closed():
-            try:
+            with contextlib.suppress(Exception):
                 self._loop.run_until_complete(self._loop.shutdown_asyncgens())
-            except Exception:
-                pass
             self._loop.close()
         self._loop = None
 

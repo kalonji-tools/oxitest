@@ -585,7 +585,7 @@ mod tests {
     fn test_flush_param_group_all_passed_duration_before_cases() {
         use crate::reporter::ParametrizeBuffer;
 
-        let mut reporter = make_tty_reporter();
+        let reporter = make_tty_reporter();
         let item = make_item("test_math");
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],

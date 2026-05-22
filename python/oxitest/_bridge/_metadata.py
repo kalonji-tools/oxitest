@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import weakref
 from typing import Any, get_type_hints as _stdlib_hints
 
@@ -40,10 +41,9 @@ def get_type_hints_cached(fn: Any) -> dict[str, Any]:
         if cached is not None:
             return cached
         hints = _stdlib_hints(fn, include_extras=True)
-        try:
+        # fn is not weakly referenceable (e.g. C extension)
+        with contextlib.suppress(TypeError):
             _hints_cache[fn] = hints
-        except TypeError:
-            pass  # fn is not weakly referenceable (e.g. C extension)
         return hints
     except Exception:
         # Fall back to uncached on any error (e.g. unresolvable forward refs).
