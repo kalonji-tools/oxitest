@@ -33,6 +33,7 @@ from oxitest._bridge._loader import (
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import (
     ExecutionWrapper,
+    MarkHandler,
     _HandlerContext,
     evaluate_marks,
 )
@@ -47,7 +48,6 @@ from oxitest._bridge.ast_rewriter import (
 )
 from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
 
 _REPR_MAX = 80
@@ -319,36 +319,16 @@ def _build_execution_chain(
     wrappers: list[ExecutionWrapper],
     default_timeout: int | None,
     shared_session: SharedAsyncSession | None = None,
-    plugin_registry: PluginRegistry | None = None,
     session: _SessionProtocol | None = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable from wrappers and base runner.
 
-    Appends default-timeout and plugin wrappers to the list, then composes
+    Appends default-timeout wrapper to the list, then composes
     them around ``_run_base`` so the last-appended wrapper is outermost.
     """
     # Apply global default timeout if no per-test @timeout mark
     if default_timeout is not None and not any(m.name == "timeout" for m in marks):
         wrappers.append(make_timeout_wrapper(default_timeout))
-
-    # Plugin execution wrappers — match by marker name
-    _plugin_reg = plugin_registry or PluginRegistry()
-
-    for pw in _plugin_reg.execution_wrappers:  # pragma: no cover
-        for mark in marks:
-            if mark.name == pw.marker:
-                marker_args = {**dict(enumerate(mark.args)), **mark.kwargs}
-                _pw, _args = pw, marker_args  # capture for closure
-
-                def _plugin_wrapper(
-                    next_fn: Callable[[], TestResult],
-                    _w: Any = _pw,
-                    _a: dict[int | str, Any] = _args,
-                ) -> TestResult:
-                    return _w.wrap(next_fn, _a)
-
-                wrappers.append(_plugin_wrapper)
-                break  # one match per wrapper per test
 
     # Bare-assert map lookup
     # _oxitest_bare_asserts is set by ast_rewriter.py during module import.
@@ -491,14 +471,25 @@ def run_test(
     )
     try:
         marks: list[MarkInfo] = get_marks(fn_raw)
-        short_circuit, wrappers = evaluate_marks(marks, ctx)
+
+        # Build plugin mark handlers for unified dispatch
+        _plugin_registry = getattr(effective_session, "_plugin_registry", None)
+        _plugin_handlers: list[MarkHandler] = []
+        if _plugin_registry is not None:  # pragma: no cover
+            from oxitest._bridge._mark_registry import _PluginMarkHandler
+
+            _plugin_handlers = [
+                _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
+            ]
+
+        short_circuit, wrappers = evaluate_marks(
+            marks, ctx, plugin_handlers=_plugin_handlers or None
+        )
         if short_circuit is not None:
             return short_circuit
 
         _shared_session = getattr(effective_session, "_shared_session", None)
         _used_shared = getattr(effective_session, "_used_shared_async", False)
-
-        _plugin_registry = getattr(effective_session, "_plugin_registry", None)
 
         execute = _build_execution_chain(
             module,
@@ -510,7 +501,6 @@ def run_test(
             wrappers,
             default_timeout,
             shared_session=_shared_session if _used_shared else None,
-            plugin_registry=_plugin_registry,
             session=effective_session,
         )
         return execute()
