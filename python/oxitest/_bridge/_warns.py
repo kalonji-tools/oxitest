@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["warns"]
+
 import re
 import warnings
 from contextlib import contextmanager

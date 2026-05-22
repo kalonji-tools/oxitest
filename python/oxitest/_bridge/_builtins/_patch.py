@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["_Patcher", "_PatcherFixture"]
+
 import os
 from collections.abc import Callable
 from typing import Any

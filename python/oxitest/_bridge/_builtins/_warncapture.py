@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__all__ = ["_WarnCapture", "_WarnCaptureFixture"]
+
 import warnings
 
 from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext

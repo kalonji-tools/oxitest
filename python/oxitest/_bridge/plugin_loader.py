@@ -7,6 +7,8 @@ plugin module paths and their per-plugin config dicts.
 from __future__ import annotations
 
 import functools
+
+__all__ = ["init_plugins", "load_plugins", "get_registry", "PluginRegistry"]
 import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any

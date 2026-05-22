@@ -6,6 +6,16 @@ swapped in via the plugin system.
 
 from __future__ import annotations
 
+__all__ = [
+    "AsyncBackend",
+    "SharedAsyncSession",
+    "AsyncioBackend",
+    "AsyncioSharedSession",
+    "get_async_backend",
+    "set_async_backend",
+    "resolve_backend",
+]
+
 import asyncio
 import warnings
 from collections.abc import Coroutine

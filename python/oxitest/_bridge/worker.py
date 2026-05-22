@@ -31,6 +31,8 @@ Result schema (stdout, one line per test):
 
 from __future__ import annotations
 
+__all__ = ["main", "run"]
+
 import json
 import sys
 import time

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+__all__ = [
+    "FixtureDef",
+    "FixtureRegistry",
+    "_fixture_inner_type",
+    "_fixture_ref_inner_type",
+]
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Generic, TypeVar, get_args, get_origin
