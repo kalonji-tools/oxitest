@@ -54,11 +54,11 @@ where
     use serde::ser::SerializeMap;
     let mut entries: Vec<(&str, &V)> = map.iter().map(|(k, v)| (k.as_str(), v)).collect();
     entries.sort_unstable_by_key(|(k, _)| *k);
-    let mut map_ser = serializer.serialize_map(Some(entries.len()))?;
+    let mut state = serializer.serialize_map(Some(entries.len()))?;
     for (k, v) in entries {
-        map_ser.serialize_entry(k, v)?;
+        state.serialize_entry(k, v)?;
     }
-    map_ser.end()
+    state.end()
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
