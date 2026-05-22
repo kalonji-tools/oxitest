@@ -1390,4 +1390,12 @@ async_backend = "trio"
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
         assert!(!cli.watch);
     }
+
+    #[test]
+    fn test_cli_watch_and_serial_compatible() {
+        // --watch and --serial can be used together
+        let cli = Cli::try_parse_from(["oxitest", "--watch", "--serial"]).unwrap();
+        assert!(cli.watch);
+        assert!(cli.serial);
+    }
 }
