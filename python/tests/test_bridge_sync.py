@@ -14,11 +14,11 @@ import dataclasses
 
 def test_test_result_fields_match_rust_test_result():
     """TestResult fields must exactly match TestResult in src/bridge.rs."""
-    from oxitest._bridge.result import TestResult
+    from oxitest._bridge.result import StatusKind, TestResult
 
     # Construct with all fields — TypeError if any field is missing or renamed.
     result = TestResult(
-        status="passed",
+        status=StatusKind.PASSED,
         message="",
         file="",
         lineno=0,

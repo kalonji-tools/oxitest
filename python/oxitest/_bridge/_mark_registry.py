@@ -14,7 +14,7 @@ from typing import Any
 
 from oxitest._bridge._fixture_session import _SessionProtocol
 from oxitest._bridge._mark_api import MarkInfo
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import StatusKind, TestResult
 
 ExecutionWrapper = Callable[[Callable[[], TestResult]], TestResult]
 
@@ -73,7 +73,7 @@ class _SkipHandler(MarkHandler):
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
         return MarkEvalResult(
-            short_circuit=TestResult(status="skipped", message=str(reason))
+            short_circuit=TestResult(status=StatusKind.SKIPPED, message=str(reason))
         )
 
 
@@ -84,7 +84,7 @@ class _SkipIfHandler(MarkHandler):
         if mark.args[0]:
             reason = str(mark.kwargs.get("reason", ""))
             return MarkEvalResult(
-                short_circuit=TestResult(status="skipped", message=reason)
+                short_circuit=TestResult(status=StatusKind.SKIPPED, message=reason)
             )
         return MarkEvalResult()
 
@@ -99,13 +99,13 @@ class _XFailHandler(MarkHandler):
 
         def xfail_wrapper(next_fn: Callable[[], TestResult]) -> TestResult:
             result = next_fn()
-            if result.status == "skipped":
+            if result.status is StatusKind.SKIPPED:
                 return result
-            if result.status in ("passed", "warned"):
-                return TestResult(status="xpassed", strict=bool(strict))
+            if result.status in (StatusKind.PASSED, StatusKind.WARNED):
+                return TestResult(status=StatusKind.XPASSED, strict=bool(strict))
             if raises is not None and result.exc_type != raises.__name__:  # ty: ignore[unresolved-attribute]
                 return result
-            return TestResult(status="xfailed", message=str(reason))
+            return TestResult(status=StatusKind.XFAILED, message=str(reason))
 
         return MarkEvalResult(wrapper=xfail_wrapper)
 

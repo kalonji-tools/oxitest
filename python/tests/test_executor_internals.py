@@ -9,7 +9,7 @@ from oxitest._bridge.executor import (
     _handle_assertion_error,
     _handle_runtime_exception,
 )
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import StatusKind, TestResult
 
 
 def test_plain_assertion_returns_failed():
@@ -115,11 +115,11 @@ def test_compose_wraps_inner():
     """wrapper sees inner's result and can transform it."""
 
     def inner():
-        return TestResult(status="passed")
+        return TestResult(status=StatusKind.PASSED)
 
     def transform(next_fn):
         next_fn()
-        return TestResult(status="warned", message="wrapped")
+        return TestResult(status=StatusKind.WARNED, message="wrapped")
 
     composed = _compose(transform, inner)
     result = composed()
@@ -130,7 +130,7 @@ def test_compose_wraps_inner():
 
 def test_compose_passes_through():
     def inner():
-        return TestResult(status="failed")
+        return TestResult(status=StatusKind.FAILED)
 
     def wrapper(next_fn):
         return next_fn()
@@ -155,7 +155,7 @@ def test_compose_chains_left_to_right():
         return next_fn()
 
     def base():
-        return TestResult(status="passed")
+        return TestResult(status=StatusKind.PASSED)
 
     # Simulates: for wrapper in reversed([w1, w2]):
     #   execute = _compose(wrapper, execute)
