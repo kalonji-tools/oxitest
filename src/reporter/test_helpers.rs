@@ -97,3 +97,17 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
         frames: vec![],
     }
 }
+
+/// Build an `Arc<TestItem>` with an explicit module path and line number.
+pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestItem> {
+    Arc::new(TestItem {
+        node_id: NodeId::new(module, name, None),
+        module_path: Utf8PathBuf::from(module),
+        fn_name: name.to_string(),
+        lineno,
+        markers: vec![],
+        param_id: None,
+        param_values: vec![],
+        is_async: false,
+    })
+}
