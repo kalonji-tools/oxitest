@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import functools
 
-__all__ = ["init_plugins", "load_plugins", "get_registry", "PluginRegistry"]
+__all__ = ["load_plugins", "PluginRegistry"]
 import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -91,28 +91,6 @@ class PluginRegistry:
             for entry in self.entries
             if entry.plugin.async_backend is not None
         ]
-
-
-_registry: PluginRegistry | None = None
-
-
-def get_registry() -> PluginRegistry:
-    """Get the active plugin registry. Returns empty registry if not initialized."""
-    return _registry or PluginRegistry()
-
-
-def init_plugins(plugin_modules: list[str], settings_json: str) -> None:
-    """Called from Rust to initialize the plugin system.
-
-    Args:
-        plugin_modules: List of plugin module paths.
-        settings_json: JSON string of per-plugin config dicts.
-    """
-    import json
-
-    global _registry  # noqa: PLW0603
-    plugin_configs = json.loads(settings_json) if settings_json else {}
-    _registry = load_plugins(plugin_modules, plugin_configs)
 
 
 def load_plugins(

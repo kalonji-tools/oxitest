@@ -912,12 +912,7 @@ def test_logcapture_includes_plugin_backends():
     mod.oxitest_plugin = lambda config=None: Plugin(log_backends=[fake_backend])  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["fake_log_plugin"] = mod
     try:
-        from oxitest._bridge import plugin_loader
-
-        old_registry = plugin_loader._registry
-        plugin_loader._registry = load_plugins(["fake_log_plugin"], {})
-
-        registry = plugin_loader.get_registry()
+        registry = load_plugins(["fake_log_plugin"], {})
         backends = [StdlibLogBackend()] + list(registry.log_backends)
         cap = _LogCapture(backends)
 
@@ -933,5 +928,4 @@ def test_logcapture_includes_plugin_backends():
             "Plugin log backend should be uninstalled after teardown"
         )
     finally:
-        plugin_loader._registry = old_registry
         sys.modules.pop("fake_log_plugin", None)

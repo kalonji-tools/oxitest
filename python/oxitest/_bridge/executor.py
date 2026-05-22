@@ -46,6 +46,7 @@ from oxitest._bridge.ast_rewriter import (
 )
 from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
+from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
 
 _REPR_MAX = 80
@@ -317,6 +318,7 @@ def _build_execution_chain(
     wrappers: list[ExecutionWrapper],
     default_timeout: int | None,
     shared_session: SharedAsyncSession | None = None,
+    plugin_registry: PluginRegistry | None = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable from wrappers and base runner.
 
@@ -330,9 +332,9 @@ def _build_execution_chain(
         wrappers.append(make_timeout_wrapper(default_timeout))
 
     # Plugin execution wrappers — match by marker name
-    from oxitest._bridge.plugin_loader import get_registry  # pragma: no cover
+    _plugin_reg = plugin_registry or PluginRegistry()
 
-    for pw in get_registry().execution_wrappers:  # pragma: no cover
+    for pw in _plugin_reg.execution_wrappers:  # pragma: no cover
         for mark in marks:
             if mark.name == pw.marker:
                 marker_args = {**dict(enumerate(mark.args)), **mark.kwargs}
@@ -500,6 +502,8 @@ def run_test(
         _shared_session = getattr(effective_session, "_shared_session", None)
         _used_shared = getattr(effective_session, "_used_shared_async", False)
 
+        _plugin_registry = getattr(effective_session, "_plugin_registry", None)
+
         execute = _build_execution_chain(
             module,
             fn_raw,
@@ -510,6 +514,7 @@ def run_test(
             wrappers,
             default_timeout,
             shared_session=_shared_session if _used_shared else None,
+            plugin_registry=_plugin_registry,
         )
         return execute()
     finally:
