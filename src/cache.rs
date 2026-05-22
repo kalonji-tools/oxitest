@@ -45,15 +45,20 @@ struct ModuleCache {
     items: Vec<CachedItemData>,
 }
 
-/// Serialize an AHashMap through a BTreeMap to ensure deterministic, alphabetically sorted JSON output.
+/// Serialize an AHashMap in alphabetically sorted order for deterministic JSON output.
 fn serialize_sorted<S, V>(map: &AHashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
     V: serde::Serialize,
 {
-    use std::collections::BTreeMap;
-    let sorted: BTreeMap<&str, &V> = map.iter().map(|(k, v)| (k.as_str(), v)).collect();
-    serde::Serialize::serialize(&sorted, serializer)
+    use serde::ser::SerializeMap;
+    let mut entries: Vec<(&str, &V)> = map.iter().map(|(k, v)| (k.as_str(), v)).collect();
+    entries.sort_unstable_by_key(|(k, _)| *k);
+    let mut map_ser = serializer.serialize_map(Some(entries.len()))?;
+    for (k, v) in entries {
+        map_ser.serialize_entry(k, v)?;
+    }
+    map_ser.end()
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
