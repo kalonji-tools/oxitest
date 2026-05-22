@@ -106,8 +106,10 @@ def make_timeout_wrapper(seconds: int) -> Any:
             with _timeout_context(seconds):
                 return next_fn()
         except OxitestTimeoutError:
-            from oxitest._bridge.result import TestResult
+            from oxitest._bridge.result import StatusKind, TestResult
 
-            return TestResult(status="timeout", message=f"Timed out after {seconds}s")
+            return TestResult(
+                status=StatusKind.TIMEOUT, message=f"Timed out after {seconds}s"
+            )
 
     return wrapper

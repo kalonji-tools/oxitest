@@ -44,7 +44,7 @@ from oxitest._bridge.ast_rewriter import (
 )
 from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.result import Frame, TestResult, _error_result
+from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
 
 _REPR_MAX = 80
 _repr = reprlib.Repr()
@@ -122,7 +122,7 @@ def _handle_assertion_error(exc: AssertionError) -> TestResult:
         msg = str(exc) if str(exc) else ""
         left_repr = right_repr = op = ""
     return TestResult(
-        status="failed",
+        status=StatusKind.FAILED,
         message=msg,
         file=file,
         lineno=lineno,
@@ -139,11 +139,11 @@ def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
     """Map a non-assertion BaseException to a TestResult, or None to re-raise."""
     exc_type = type(exc).__name__
     if exc_type in ("Skipped", "SkipTest"):
-        return TestResult(status="skipped", message=str(exc))
+        return TestResult(status=StatusKind.SKIPPED, message=str(exc))
     if isinstance(exc, Exception):
         file, lineno, source_line = _get_location(exc)
         return TestResult(
-            status="error",
+            status=StatusKind.ERROR,
             message=f"{type(exc).__name__}: {exc}",
             file=file,
             lineno=lineno,
@@ -182,11 +182,11 @@ def _run_base(
         ]
         if caught:
             return TestResult(
-                status="warned",
+                status=StatusKind.WARNED,
                 message="\n".join(str(c) for c in caught),
                 no_message_lines=no_message_lines,
             )
-        return TestResult(status="passed", no_message_lines=no_message_lines)
+        return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except AssertionError as exc:
@@ -215,11 +215,11 @@ async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
         ]
         if caught:
             return TestResult(
-                status="warned",
+                status=StatusKind.WARNED,
                 message="\n".join(str(c) for c in caught),
                 no_message_lines=no_message_lines,
             )
-        return TestResult(status="passed", no_message_lines=no_message_lines)
+        return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except AssertionError as exc:

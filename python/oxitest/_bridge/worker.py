@@ -36,6 +36,8 @@ import sys
 import time
 from typing import Any
 
+from oxitest._bridge.result import StatusKind
+
 
 def _build_node_id(module_path: str, fn_name: str, param_id: str | None) -> str:
     node_id = f"{module_path}::{fn_name}"
@@ -45,7 +47,14 @@ def _build_node_id(module_path: str, fn_name: str, param_id: str | None) -> str:
 
 
 NON_FAILURE_STATUSES = frozenset(
-    {"passed", "skipped", "warned", "xfailed", "xpassed", "timeout"}
+    {
+        StatusKind.PASSED,
+        StatusKind.SKIPPED,
+        StatusKind.WARNED,
+        StatusKind.XFAILED,
+        StatusKind.XPASSED,
+        StatusKind.TIMEOUT,
+    }
 )
 
 
