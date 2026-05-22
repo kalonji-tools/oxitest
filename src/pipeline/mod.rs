@@ -521,24 +521,21 @@ fn finalize(
     cache.save(rootdir);
 }
 
-pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
-    let SetupContext {
-        cfg,
-        mut cache,
-        cli,
-        rootdir,
-        is_tty,
-        use_color,
-        base,
-    } = match setup(py, &args)? {
-        Err(code) => return Ok(code),
-        Ok(ctx) => *ctx,
+fn run_once(py: Python<'_>, ctx: &mut SetupContext, is_tty: bool) -> PyResult<i32> {
+    // Reload cache from disk — file changes between watch iterations may
+    // have invalidated cached items.
+    ctx.cache = cache::TestCache::load(&ctx.rootdir);
+
+    let make_error_rep = || {
+        reporter::make_reporter(
+            ctx.base.clone().verbose(false).build(),
+            is_tty,
+            None,
+            vec![],
+        )
     };
 
-    let make_error_rep =
-        || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None, vec![]);
-
-    let (test_files, conftest_files) = collector::collect_files(&cfg);
+    let (test_files, conftest_files) = collector::collect_files(&ctx.cfg);
 
     // Load conftest before importing test files — conftest_loader registers
     // sys.modules["conftest"] so test files can do `from conftest import my_fixture`.
@@ -552,15 +549,15 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     // Load plugins declared in [tool.oxitest] plugins = [...]
-    if !cfg.plugins.is_empty() {
-        if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
+    if !ctx.cfg.plugins.is_empty() {
+        if let Err(e) = session.load_plugins(py, &ctx.cfg.plugins, &ctx.cfg.plugin_settings) {
             let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
             return Ok(early_exit_with_error(&[err], &make_error_rep));
         }
     }
 
     // Resolve and set the async backend
-    if let Err(e) = session.init_async_backend(py, &cfg.async_backend) {
+    if let Err(e) = session.init_async_backend(py, &ctx.cfg.async_backend) {
         let err = types::CollectError::PyError(format!("Async backend init failed: {}", e));
         return Ok(early_exit_with_error(&[err], &make_error_rep));
     }
@@ -569,9 +566,15 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let runner_impl = traits::BridgeRunner;
     let parallel_impl = traits::DefaultParallelRunner;
 
-    cache.invalidate_modules();
-    let (items, errors, raw_violations) =
-        collect_items(py, &test_files, &cfg, &session, &collector_impl, &mut cache);
+    ctx.cache.invalidate_modules();
+    let (items, errors, raw_violations) = collect_items(
+        py,
+        &test_files,
+        &ctx.cfg,
+        &session,
+        &collector_impl,
+        &mut ctx.cache,
+    );
 
     if !errors.is_empty() {
         return Ok(early_exit_with_error(&errors, &make_error_rep));
@@ -582,12 +585,12 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         violated_items,
         all_violations,
         suite_lines,
-    } = match apply_strict(&cfg, items, raw_violations, use_color) {
+    } = match apply_strict(&ctx.cfg, items, raw_violations, ctx.use_color) {
         Ok(r) => r,
         Err(code) => return Ok(code),
     };
 
-    let items = match apply_filters(clean_items, &cli, &cfg, &cache, &make_error_rep) {
+    let items = match apply_filters(clean_items, &ctx.cli, &ctx.cfg, &ctx.cache, &make_error_rep) {
         Ok(items) => items,
         Err(code) => return Ok(code),
     };
@@ -600,10 +603,10 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         .map(|i| i.fn_name.len())
         .max()
         .unwrap_or(30);
-    cache.invalidate(&items);
+    ctx.cache.invalidate(&items);
 
     // Fetch plugin reporters from Python registry.
-    let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !cfg.plugins.is_empty() {
+    let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !ctx.cfg.plugins.is_empty() {
         bridge::get_plugin_reporters(py, &session)
             .unwrap_or_default()
             .into_iter()
@@ -617,19 +620,21 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     let mut rep = reporter::make_reporter(
-        base.total(total)
+        ctx.base
+            .clone()
+            .total(total)
             .async_count(async_count)
             .name_width(max_name_width)
             .strict_suite_lines(suite_lines)
             .build(),
         is_tty,
-        cli.json.clone(),
+        ctx.cli.json.clone(),
         plugin_reporters,
     );
 
-    let ctx = ExecutionContext {
-        cfg: &cfg,
-        cache: &cache,
+    let exec_ctx = ExecutionContext {
+        cfg: &ctx.cfg,
+        cache: &ctx.cache,
         session: &session,
         conftest_files: &conftest_files,
         runner: &runner_impl,
@@ -644,13 +649,136 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         items,
         violated_items,
         all_violations,
-        &ctx,
+        &exec_ctx,
         rep.as_mut(),
     );
 
-    finalize(&mut cache, &timings, cfg.cache_max_age, &rootdir);
+    finalize(
+        &mut ctx.cache,
+        &timings,
+        ctx.cfg.cache_max_age,
+        &ctx.rootdir,
+    );
 
     Ok(rep.finish(&[], interrupted).code())
+}
+
+fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
+    use crate::watch;
+    use notify_debouncer_mini::new_debouncer;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    // Initial full run
+    let is_tty = ctx.is_tty;
+    let mut last_exit = run_once(py, ctx, is_tty)?;
+
+    // Set up file watcher
+    let (tx, rx) = mpsc::channel();
+    let mut debouncer = new_debouncer(
+        Duration::from_millis(200),
+        move |res: notify_debouncer_mini::DebounceEventResult| {
+            if let Ok(events) = res {
+                let paths: Vec<std::path::PathBuf> = events.into_iter().map(|e| e.path).collect();
+                let _ = tx.send(paths);
+            }
+        },
+    )
+    .expect("failed to create file watcher");
+
+    // Watch testpaths + watchpaths
+    for dir in &ctx.cfg.testpaths {
+        let _ = debouncer
+            .watcher()
+            .watch(dir.as_std_path(), notify::RecursiveMode::Recursive);
+    }
+    for wp in &ctx.cfg.watchpaths {
+        let _ = debouncer.watcher().watch(
+            camino::Utf8Path::new(wp).as_std_path(),
+            notify::RecursiveMode::Recursive,
+        );
+    }
+
+    let graph = crate::import_graph::ImportGraph::new();
+    let test_files = crate::collector::collect_files(&ctx.cfg).0;
+
+    let _ = crossterm::terminal::enable_raw_mode();
+
+    watch::print_status_line();
+
+    loop {
+        // Check keyboard (50ms poll)
+        if let Some(action) = watch::poll_keyboard(Duration::from_millis(50)) {
+            match action {
+                watch::WatchAction::Quit => {
+                    let _ = crossterm::terminal::disable_raw_mode();
+                    eprintln!("\n  Watch mode stopped.");
+                    return Ok(last_exit);
+                }
+                watch::WatchAction::RunAll => {
+                    last_exit = run_once(py, ctx, is_tty)?;
+                    watch::print_status_line();
+                }
+                watch::WatchAction::RunFailed => {
+                    let original = ctx.cfg.failed;
+                    ctx.cfg.failed = Some(crate::config::FailedMode::Only);
+                    last_exit = run_once(py, ctx, is_tty)?;
+                    ctx.cfg.failed = original;
+                    watch::print_status_line();
+                }
+                watch::WatchAction::RunAffected(_) => {}
+            }
+            continue;
+        }
+
+        // Check file changes
+        if let Ok(paths) = rx.try_recv() {
+            let changed = watch::filter_changed_paths(paths);
+            if changed.is_empty() {
+                continue;
+            }
+            eprintln!(
+                "\n  File change detected: {}",
+                changed
+                    .iter()
+                    .map(|p| p.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            match watch::classify_changes(&changed, &graph, &test_files) {
+                watch::WatchAction::RunAffected(affected) => {
+                    let original = ctx.cfg.testpaths.clone();
+                    ctx.cfg.testpaths = affected;
+                    last_exit = run_once(py, ctx, is_tty)?;
+                    ctx.cfg.testpaths = original;
+                }
+                watch::WatchAction::RunAll | watch::WatchAction::RunFailed => {
+                    last_exit = run_once(py, ctx, is_tty)?;
+                }
+                watch::WatchAction::Quit => unreachable!(),
+            }
+            watch::print_status_line();
+        }
+    }
+}
+
+pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
+    let mut ctx = match setup(py, &args)? {
+        Err(code) => return Ok(code),
+        Ok(ctx) => *ctx,
+    };
+
+    if ctx.cfg.watch && !ctx.is_tty {
+        tracing::warn!("--watch ignored in non-TTY environment");
+    }
+
+    if ctx.cfg.watch && ctx.is_tty {
+        watch_loop(py, &mut ctx)
+    } else {
+        let is_tty = ctx.is_tty;
+        run_once(py, &mut ctx, is_tty)
+    }
 }
 
 #[cfg(test)]

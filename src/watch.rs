@@ -20,9 +20,7 @@ const IGNORE_PATTERNS: &[&str] = &[
 pub(crate) enum WatchAction {
     RunAffected(Vec<Utf8PathBuf>),
     RunAll,
-    #[allow(dead_code)]
     RunFailed,
-    #[allow(dead_code)]
     Quit,
 }
 
@@ -79,7 +77,6 @@ pub(crate) fn classify_changes(
 }
 
 /// Print the watch mode status line.
-#[allow(dead_code)]
 pub(crate) fn print_status_line() {
     eprintln!();
     eprintln!("  Watching for changes... (press q to quit, a to run all, f to run failed, Enter to re-run)");
@@ -87,7 +84,6 @@ pub(crate) fn print_status_line() {
 
 /// Poll for a keyboard event with timeout.
 /// Returns `Some(action)` if the user pressed a recognized key.
-#[allow(dead_code)]
 pub(crate) fn poll_keyboard(timeout: Duration) -> Option<WatchAction> {
     if !event::poll(timeout).unwrap_or(false) {
         return None;

@@ -21,6 +21,7 @@ impl ImportGraph {
     }
 
     /// Record that `test_file` imports from `source_file`.
+    #[allow(dead_code)] // used by tests; production wiring pending import-graph population
     pub(crate) fn add_edge(&mut self, source_file: Utf8PathBuf, test_file: Utf8PathBuf) {
         self.deps.entry(source_file).or_default().insert(test_file);
     }
@@ -56,6 +57,7 @@ impl ImportGraph {
     }
 
     /// Remove all edges for a given test file (used when re-collecting).
+    #[allow(dead_code)] // used by tests; production wiring pending import-graph population
     pub(crate) fn remove_test_file(&mut self, test_file: &Utf8Path) {
         for dependents in self.deps.values_mut() {
             dependents.remove(test_file);
