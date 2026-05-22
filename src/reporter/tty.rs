@@ -81,7 +81,7 @@ impl TtyReporter {
                         &format!(
                             "{:<width$} {:.1}ms",
                             item.fn_name,
-                            duration_ms,
+                            raw_ms,
                             width = NAME_WIDTH
                         ),
                         c,
@@ -404,6 +404,20 @@ mod tests {
         assert!(
             line.contains("42"),
             "duration must appear in line: {line:?}"
+        );
+    }
+
+    #[test]
+    fn test_format_test_line_passed_no_double_ms_suffix() {
+        let reporter = make_tty_reporter();
+        let item = make_item("test_add");
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        let line = reporter.format_test_line(&item, &outcome, DurationMs::new(42.0));
+        assert!(
+            !line.contains("msms"),
+            "duration must not contain double ms suffix: {line:?}"
         );
     }
 
