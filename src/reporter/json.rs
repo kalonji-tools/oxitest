@@ -145,12 +145,12 @@ mod tests {
     use crate::types::TestOutcome;
     use tempfile::TempDir;
 
-    fn run_reporter(outcomes: Vec<(TestItem, TestOutcome)>) -> String {
+    fn run_reporter(outcomes: Vec<(std::sync::Arc<TestItem>, TestOutcome)>) -> String {
         let dir = TempDir::new().unwrap();
         let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
         let mut rep = JsonReporter::new(path.clone());
-        for (item, outcome) in outcomes {
-            rep.test_completed(&item, &outcome, DurationMs::new(1.0));
+        for (item, outcome) in &outcomes {
+            rep.test_completed(item, outcome, DurationMs::new(1.0));
         }
         rep.finish(&[], false);
         std::fs::read_to_string(&path).unwrap()

@@ -4,6 +4,8 @@
 //! [`Logos`]-based lexer and recursive descent parser. Evaluates expressions
 //! against the set of marker names attached to each test item.
 
+use std::sync::Arc;
+
 use logos::Logos;
 
 use crate::types::TestItem;
@@ -146,7 +148,10 @@ impl MarkerParser {
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
-pub fn filter_by_marker_expr(items: Vec<TestItem>, expr: &str) -> Result<Vec<TestItem>, String> {
+pub fn filter_by_marker_expr(
+    items: Vec<Arc<TestItem>>,
+    expr: &str,
+) -> Result<Vec<Arc<TestItem>>, String> {
     let mut parser = MarkerParser::new(expr)?;
     let ast = parser.parse_expr()?;
     if parser.pos < parser.tokens.len() {
@@ -163,8 +168,8 @@ mod tests {
     use super::*;
     use camino::Utf8PathBuf;
 
-    fn make_marked(name: &str, markers: Vec<&str>) -> TestItem {
-        TestItem {
+    fn make_marked(name: &str, markers: Vec<&str>) -> Arc<TestItem> {
+        Arc::new(TestItem {
             node_id: crate::types::NodeId::new("tests/test_mod.py", name, None),
             module_path: Utf8PathBuf::from("tests/test_mod.py"),
             fn_name: name.to_string(),
@@ -173,7 +178,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-        }
+        })
     }
 
     #[test]

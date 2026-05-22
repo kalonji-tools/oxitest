@@ -186,7 +186,7 @@ fn setup_worker_process(
 fn handle_drain_outcome(
     outcome: DrainOutcome,
     child: &mut std::process::Child,
-    items: &[crate::types::TestItem],
+    items: &[std::sync::Arc<crate::types::TestItem>],
     received: usize,
     watchdog: std::time::Duration,
     module_path: &camino::Utf8Path,
@@ -401,7 +401,7 @@ pub(crate) struct PhaseResult {
 }
 
 pub(crate) fn run_phase_parallel(
-    groups: Vec<(camino::Utf8PathBuf, Vec<types::TestItem>)>,
+    groups: Vec<(camino::Utf8PathBuf, Vec<std::sync::Arc<types::TestItem>>)>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
     conftest_paths: &[camino::Utf8PathBuf],
@@ -412,11 +412,11 @@ pub(crate) fn run_phase_parallel(
 
     let worker_count = worker_count.max(1).min(groups.len().max(1));
     // Build node_id → Arc<TestItem> before groups are consumed by the scheduler.
-    // Arc avoids a full TestItem clone on every result received from workers.
+    // Items are already Arc-wrapped from collection — no deep clone needed.
     let item_lookup: ahash::AHashMap<String, std::sync::Arc<types::TestItem>> = groups
         .iter()
         .flat_map(|(_, items)| items.iter())
-        .map(|item| (item.node_id.to_string(), std::sync::Arc::new(item.clone())))
+        .map(|item| (item.node_id.to_string(), Arc::clone(item)))
         .collect();
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -987,8 +987,8 @@ mod drain_tests {
         use camino::Utf8PathBuf;
         use std::sync::Arc;
 
-        fn make_test_item(path: &str, fn_name: &str) -> TestItem {
-            TestItem {
+        fn make_test_item(path: &str, fn_name: &str) -> Arc<TestItem> {
+            Arc::new(TestItem {
                 node_id: NodeId::new(path, fn_name, None),
                 module_path: Utf8PathBuf::from(path),
                 fn_name: fn_name.to_string(),
@@ -997,7 +997,7 @@ mod drain_tests {
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
-            }
+            })
         }
 
         let all_items = vec![
@@ -1006,14 +1006,14 @@ mod drain_tests {
             make_test_item("tests/b.py", "test_gamma"),
         ];
 
-        let groups: Vec<(camino::Utf8PathBuf, Vec<TestItem>)> = vec![
+        let groups: Vec<(camino::Utf8PathBuf, Vec<Arc<TestItem>>)> = vec![
             (
                 camino::Utf8PathBuf::from("tests/a.py"),
-                vec![all_items[0].clone(), all_items[1].clone()],
+                vec![Arc::clone(&all_items[0]), Arc::clone(&all_items[1])],
             ),
             (
                 camino::Utf8PathBuf::from("tests/b.py"),
-                vec![all_items[2].clone()],
+                vec![Arc::clone(&all_items[2])],
             ),
         ];
 
@@ -1021,7 +1021,7 @@ mod drain_tests {
 
         let item_lookup: ahash::AHashMap<String, Arc<TestItem>> = all_items
             .iter()
-            .map(|i| (i.node_id.to_string(), Arc::new(i.clone())))
+            .map(|i| (i.node_id.to_string(), Arc::clone(i)))
             .collect();
 
         struct CrashCollector {

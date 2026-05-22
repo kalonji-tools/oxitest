@@ -3,6 +3,8 @@
 //! Each trait abstracts one PyO3 or subprocess boundary so pipeline branching
 //! logic can be unit-tested with in-memory test doubles.
 
+use std::sync::Arc;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
@@ -48,7 +50,7 @@ pub(crate) trait TestRunner {
 pub(crate) trait ParallelRunner {
     fn run_parallel(
         &self,
-        groups: Vec<(Utf8PathBuf, Vec<TestItem>)>,
+        groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
         cfg: &Config,
         workers: usize,
         conftest_files: &[Utf8PathBuf],
@@ -117,7 +119,7 @@ pub(crate) struct DefaultParallelRunner;
 impl ParallelRunner for DefaultParallelRunner {
     fn run_parallel(
         &self,
-        groups: Vec<(Utf8PathBuf, Vec<TestItem>)>,
+        groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
         cfg: &Config,
         workers: usize,
         conftest_files: &[Utf8PathBuf],

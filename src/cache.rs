@@ -8,6 +8,7 @@
 //! The file format is versioned ([`CACHE_VERSION`]) to allow future migration.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ahash::AHashMap;
@@ -105,7 +106,7 @@ impl TestCache {
         }
     }
 
-    pub fn invalidate(&mut self, items: &[TestItem]) {
+    pub fn invalidate(&mut self, items: &[Arc<TestItem>]) {
         let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
         let before = self.inner.timings.len();
         self.inner.timings.retain(|key, _| live.contains(key));
@@ -127,7 +128,7 @@ impl TestCache {
     }
 
     /// Returns `(total_duration_ms, covered_count)` for items present in the timing cache.
-    fn sum_and_count(&self, items: &[TestItem]) -> (f64, usize) {
+    fn sum_and_count(&self, items: &[Arc<TestItem>]) -> (f64, usize) {
         let mut total = 0.0f64;
         let mut count = 0usize;
         for item in items {
@@ -139,7 +140,7 @@ impl TestCache {
         (total, count)
     }
 
-    fn module_duration_sum(&self, items: &[TestItem]) -> Option<f64> {
+    fn module_duration_sum(&self, items: &[Arc<TestItem>]) -> Option<f64> {
         let (total, count) = self.sum_and_count(items);
         if count > 0 {
             Some(total)
@@ -148,11 +149,12 @@ impl TestCache {
         }
     }
 
-    pub(crate) fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>) {
+    pub(crate) fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) {
         // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
         // Avoids re-running module_duration_sum inside the comparator, which would be
         // O(N log N × M) because the comparator fires once per sort comparison.
-        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<TestItem>)> =
+        #[allow(clippy::type_complexity)]
+        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<Arc<TestItem>>)> =
             std::mem::take(groups)
                 .into_iter()
                 .map(|(path, items)| {
@@ -178,7 +180,7 @@ impl TestCache {
     }
 
     #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
-    pub fn estimated_duration(&self, items: &[TestItem]) -> Option<Duration> {
+    pub fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration> {
         if items.is_empty() {
             return None;
         }
@@ -282,7 +284,7 @@ impl TestCache {
         &self,
         path: &Utf8Path,
         current_mtime_secs: u64,
-    ) -> Option<Vec<TestItem>> {
+    ) -> Option<Vec<Arc<TestItem>>> {
         let key = path.as_str();
         let mc = self.inner.modules.get(key)?;
         if mc.mtime_secs != current_mtime_secs {
@@ -291,15 +293,17 @@ impl TestCache {
         let items = mc
             .items
             .iter()
-            .map(|d| TestItem {
-                node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
-                module_path: path.to_owned(),
-                fn_name: d.fn_name.clone(),
-                lineno: d.lineno,
-                markers: d.markers.clone(),
-                param_id: d.param_id.clone(),
-                param_values: d.param_values.clone(),
-                is_async: d.is_async,
+            .map(|d| {
+                Arc::new(TestItem {
+                    node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
+                    module_path: path.to_owned(),
+                    fn_name: d.fn_name.clone(),
+                    lineno: d.lineno,
+                    markers: d.markers.clone(),
+                    param_id: d.param_id.clone(),
+                    param_values: d.param_values.clone(),
+                    is_async: d.is_async,
+                })
             })
             .collect();
         Some(items)
@@ -307,7 +311,12 @@ impl TestCache {
 
     /// Store the collection result for `path` with the given mtime.
     /// Sets dirty = true.
-    pub fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[TestItem]) {
+    pub fn update_module_cache(
+        &mut self,
+        path: &Utf8Path,
+        mtime_secs: u64,
+        items: &[Arc<TestItem>],
+    ) {
         let key = path.as_str().to_string();
         let cached_items = items
             .iter()
@@ -843,8 +852,8 @@ mod tests {
         let _dir = assert_fs::TempDir::new().unwrap();
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
-        let items = vec![
-            TestItem {
+        let items: Vec<Arc<TestItem>> = vec![
+            Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_a", None),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_a".to_string(),
@@ -853,8 +862,8 @@ mod tests {
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
-            },
-            TestItem {
+            }),
+            Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_b".to_string(),
@@ -863,7 +872,7 @@ mod tests {
                 param_id: Some("x0".to_string()),
                 param_values: vec![("x".to_string(), "0".to_string())],
                 is_async: false,
-            },
+            }),
         ];
         cache.update_module_cache(module_path, 12345, &items);
 
@@ -884,7 +893,7 @@ mod tests {
     fn cached_module_items_returns_none_on_mtime_mismatch() {
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
-        let items = vec![TestItem {
+        let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
@@ -893,7 +902,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-        }];
+        })];
         cache.update_module_cache(module_path, 12345, &items);
         assert!(cache.cached_module_items(module_path, 99999).is_none());
     }
@@ -961,7 +970,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
-        let items = vec![TestItem {
+        let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
@@ -970,7 +979,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-        }];
+        })];
         cache.update_module_cache(module_path, 9999, &items);
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         cache.save(utf8_dir);

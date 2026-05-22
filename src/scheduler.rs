@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use camino::Utf8PathBuf;
 
 use crate::cache::TestCache;
@@ -9,7 +11,7 @@ use crate::types::TestItem;
 /// Called *before* `Scheduler::new()` — the scheduler itself always
 /// processes groups in insertion order, so the ordering happens here.
 pub(crate) fn apply_schedule_strategy(
-    groups: &mut Vec<(Utf8PathBuf, Vec<TestItem>)>,
+    groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
     strategy: ScheduleStrategy,
     cache: &TestCache,
     failed_ids: &std::collections::HashSet<String>,
@@ -42,11 +44,11 @@ pub(crate) fn apply_schedule_strategy(
 #[derive(Debug, Clone)]
 pub(crate) struct ModuleGroup {
     pub(crate) module_path: Utf8PathBuf,
-    pub(crate) items: Vec<TestItem>,
+    pub(crate) items: Vec<Arc<TestItem>>,
 }
 
 impl ModuleGroup {
-    pub(crate) fn new(module_path: Utf8PathBuf, items: Vec<TestItem>) -> Self {
+    pub(crate) fn new(module_path: Utf8PathBuf, items: Vec<Arc<TestItem>>) -> Self {
         Self { module_path, items }
     }
 }
@@ -69,7 +71,7 @@ pub(crate) struct Scheduler {
 
 impl Scheduler {
     /// Build from a list of (path, items) groups. Preserves insertion order (cache already sorted by duration).
-    pub(crate) fn new(groups: Vec<(Utf8PathBuf, Vec<TestItem>)>) -> Self {
+    pub(crate) fn new(groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) -> Self {
         let groups: Vec<ModuleGroup> = groups
             .into_iter()
             .map(|(p, items)| ModuleGroup::new(p, items))
@@ -97,18 +99,20 @@ mod tests {
     use super::*;
     use crate::types::NodeId;
 
-    fn make_group(path: &str, count: usize) -> (Utf8PathBuf, Vec<TestItem>) {
+    fn make_group(path: &str, count: usize) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
         let p = Utf8PathBuf::from(path);
         let items = (0..count)
-            .map(|i| TestItem {
-                node_id: NodeId::new(path, &format!("test_{i}"), None),
-                module_path: p.clone(),
-                fn_name: format!("test_{i}"),
-                lineno: i,
-                markers: vec![],
-                param_id: None,
-                param_values: vec![],
-                is_async: false,
+            .map(|i| {
+                Arc::new(TestItem {
+                    node_id: NodeId::new(path, &format!("test_{i}"), None),
+                    module_path: p.clone(),
+                    fn_name: format!("test_{i}"),
+                    lineno: i,
+                    markers: vec![],
+                    param_id: None,
+                    param_values: vec![],
+                    is_async: false,
+                })
             })
             .collect();
         (p, items)
