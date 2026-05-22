@@ -4,25 +4,27 @@
 //! [`TestOutcome`] (the eight possible results of running a test), [`CollectError`],
 //! and [`TestTiming`].
 
+use std::sync::Arc;
+
 use camino::Utf8PathBuf;
 
 /// Stable test identifier used throughout the runner.
 /// Format: `module_path::fn_name` or `module_path::fn_name[param_id]`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NodeId(String);
+pub struct NodeId(Arc<str>);
 
 impl NodeId {
     pub fn new(module_path: &str, fn_name: &str, param_id: Option<&str>) -> Self {
         let base = format!("{}::{}", module_path, fn_name);
         match param_id {
-            Some(id) => NodeId(format!("{}[{}]", base, id)),
-            None => NodeId(base),
+            Some(id) => NodeId(format!("{}[{}]", base, id).into()),
+            None => NodeId(base.into()),
         }
     }
 
     /// Create a NodeId from an already-formatted string (e.g. received from a worker subprocess).
     pub fn from_raw(s: &str) -> Self {
-        NodeId(s.to_string())
+        NodeId(Arc::from(s))
     }
 }
 
