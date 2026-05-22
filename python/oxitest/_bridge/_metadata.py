@@ -3,6 +3,8 @@ from __future__ import annotations
 import weakref
 from typing import Any, get_type_hints as _stdlib_hints
 
+from oxitest._bridge._fn_metadata import get_metadata
+
 __all__ = [
     "get_marks",
     "get_fixture_name",
@@ -17,15 +19,11 @@ _hints_cache: weakref.WeakKeyDictionary[Any, dict[str, Any]] = (
 
 def get_marks(obj: object) -> list[Any]:
     """Return the list of oxitest marks attached to obj, or [] if none."""
-    from oxitest._bridge._fn_metadata import get_metadata
-
     return get_metadata(obj).marks
 
 
 def get_fixture_name(fn: object, fallback: str = "") -> str:
     """Return the registered fixture name for fn, falling back to fallback."""
-    from oxitest._bridge._fn_metadata import get_metadata
-
     name = get_metadata(fn).fixture_name
     return name if name else (getattr(fn, "__name__", None) or fallback)
 
