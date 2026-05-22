@@ -106,12 +106,12 @@ def _load_and_resolve(
     fn_name: str,
     session: _SessionProtocol,
     param_id: str | None,
+    unique_name: str,
 ) -> TestResult | _ResolvedTest:
     """Load module, resolve function, parametrize, and fixtures.
 
     Returns _ResolvedTest on success, or TestResult on module/fn/resolve errors.
     """
-    unique_name = _exec_unique_name(module_path)
     _cache = getattr(session, "_module_cache", None)
     _cached = _cache.get(module_path) if _cache is not None else None
     if _cached is not None:
@@ -231,7 +231,9 @@ def run_test(
         session if session is not None else _NULL_SESSION
     )
     unique_name = _exec_unique_name(module_path)
-    resolved = _load_and_resolve(module_path, fn_name, effective_session, param_id)
+    resolved = _load_and_resolve(
+        module_path, fn_name, effective_session, param_id, unique_name
+    )
     if isinstance(resolved, TestResult):
         return resolved
     module = resolved.module
