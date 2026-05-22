@@ -9,7 +9,7 @@ from oxitest._bridge._fixture_session import _NullFixtureSession
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import _HandlerContext, _TimeoutHandler
 from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import StatusKind, TestResult
 
 
 def test_timeout_context_raises_on_expiry():
@@ -121,7 +121,7 @@ def test_timeout_handler_wrapper_passes_fast_test():
     result = _TimeoutHandler().handle(MarkInfo("timeout", (), {"seconds": 5}), ctx)
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
-    fast_result = TestResult(status="passed")
+    fast_result = TestResult(status=StatusKind.PASSED)
     assert wrapper(lambda: fast_result).status == "passed", (
         "timeout wrapper should pass through 'passed' result when test finishes quickly"
     )
@@ -135,7 +135,7 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry():
 
     def slow_next():
         time.sleep(5)
-        return TestResult(status="passed")
+        return TestResult(status=StatusKind.PASSED)
 
     outcome = wrapper(slow_next)
     assert outcome.status == "timeout", (

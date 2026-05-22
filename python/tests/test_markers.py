@@ -22,7 +22,7 @@ from oxitest._bridge.fixtures import (
     FixtureRegistry,
     FixtureSession,
 )
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import StatusKind, TestResult
 
 
 def test_mark_info_stores_name_args_kwargs():
@@ -391,7 +391,7 @@ def test_xfail_wrapper_converts_failed_to_xfailed():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known bug"}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    failed_result = TestResult(status="failed", message="oops")
+    failed_result = TestResult(status=StatusKind.FAILED, message="oops")
     assert wrapper(lambda: failed_result).status == "xfailed", (
         "xfail wrapper should convert 'failed' result to 'xfailed'"
     )
@@ -402,7 +402,7 @@ def test_xfail_wrapper_converts_passed_to_xpassed():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known"}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    passed_result = TestResult(status="passed")
+    passed_result = TestResult(status=StatusKind.PASSED)
     assert wrapper(lambda: passed_result).status == "xpassed", (
         "xfail wrapper should convert unexpectedly 'passed' result to 'xpassed'"
     )
@@ -413,7 +413,7 @@ def test_xfail_wrapper_passes_through_skipped():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    skipped_result = TestResult(status="skipped", message="not my test")
+    skipped_result = TestResult(status=StatusKind.SKIPPED, message="not my test")
     final = wrapper(lambda: skipped_result)
     assert final.status == "skipped", (
         f"xfail wrapper should pass through 'skipped' result unchanged, got "

@@ -14,6 +14,24 @@ class Frame:
     line: str
 
 
+class StatusKind(StrEnum):
+    """Status of a completed test.
+
+    StrEnum values are plain strings — PyO3's FromPyObject extracts them
+    as String without custom glue because isinstance(StatusKind.PASSED,
+    str) is True. Wire format (JSON serialization) is unchanged.
+    """
+
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
+    SKIPPED = "skipped"
+    XFAILED = "xfailed"
+    XPASSED = "xpassed"
+    TIMEOUT = "timeout"
+    WARNED = "warned"
+
+
 @dataclass
 class TestResult:
     """Bridge result returned by executor.run_test and consumed by Rust bridge.
@@ -21,7 +39,7 @@ class TestResult:
     Field names must match the Rust TestResult struct in src/bridge.rs.
     """
 
-    status: str
+    status: StatusKind
     message: str = ""
     file: str = ""
     lineno: int = 0
@@ -39,7 +57,11 @@ def _error_result(
     msg: str, file: str = "", lineno: int = 0, source_line: str = ""
 ) -> TestResult:
     return TestResult(
-        status="error", message=msg, file=file, lineno=lineno, source_line=source_line
+        status=StatusKind.ERROR,
+        message=msg,
+        file=file,
+        lineno=lineno,
+        source_line=source_line,
     )
 
 
