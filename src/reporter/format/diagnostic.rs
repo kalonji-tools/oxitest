@@ -412,13 +412,20 @@ mod tests {
 
     #[test]
     fn test_diagnostic_shows_params_block_when_param_values_present() {
-        let mut item = make_item("test_add");
-        item.param_id = Some("basic".to_string());
-        item.param_values = vec![
-            ("x".to_string(), "1".to_string()),
-            ("y".to_string(), "2".to_string()),
-            ("expected".to_string(), "3".to_string()),
-        ];
+        let item = std::sync::Arc::new(TestItem {
+            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
+            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: "test_add".to_string(),
+            lineno: 0,
+            markers: vec![],
+            param_id: Some("basic".to_string()),
+            param_values: vec![
+                ("x".to_string(), "1".to_string()),
+                ("y".to_string(), "2".to_string()),
+                ("expected".to_string(), "3".to_string()),
+            ],
+            is_async: false,
+        });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x + y == expected");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         assert!(block.contains("params"), "missing params header");
@@ -430,9 +437,16 @@ mod tests {
 
     #[test]
     fn test_diagnostic_params_appear_between_path_and_source() {
-        let mut item = make_item("test_add");
-        item.param_id = Some("basic".to_string());
-        item.param_values = vec![("x".to_string(), "1".to_string())];
+        let item = std::sync::Arc::new(TestItem {
+            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
+            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: "test_add".to_string(),
+            lineno: 0,
+            markers: vec![],
+            param_id: Some("basic".to_string()),
+            param_values: vec![("x".to_string(), "1".to_string())],
+            is_async: false,
+        });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
         let path_pos = block.find("tests/test_foo.py:8").unwrap();

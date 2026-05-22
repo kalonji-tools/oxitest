@@ -1,14 +1,16 @@
 //! Shared test helpers for reporter unit tests.
 #![cfg(test)]
 
+use std::sync::Arc;
+
 use camino::Utf8PathBuf;
 
 use crate::types::{NodeId, TestItem, TestOutcome};
 
-/// Build a `TestItem` whose `node_id` is constructed via `NodeId::new` using
+/// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
 /// the canonical test module path `"tests/test_foo.py"`.
-pub(crate) fn make_item(name: &str) -> TestItem {
-    TestItem {
+pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
+    Arc::new(TestItem {
         node_id: NodeId::new("tests/test_foo.py", name, None),
         module_path: Utf8PathBuf::from("tests/test_foo.py"),
         fn_name: name.to_string(),
@@ -17,14 +19,14 @@ pub(crate) fn make_item(name: &str) -> TestItem {
         param_id: None,
         param_values: vec![],
         is_async: false,
-    }
+    })
 }
 
-/// Build a `TestItem` from an already-formatted `node_id` string (e.g.
+/// Build an `Arc<TestItem>` from an already-formatted `node_id` string (e.g.
 /// `"tests/test_foo.py::test_fn"`).  Used by modules that receive raw node
 /// IDs from workers or other external sources.
-pub(crate) fn make_item_raw(node_id: &str) -> TestItem {
-    TestItem {
+pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
+    Arc::new(TestItem {
         node_id: NodeId::from_raw(node_id),
         module_path: Utf8PathBuf::from("tests/test_foo.py"),
         fn_name: node_id.to_string(),
@@ -33,13 +35,13 @@ pub(crate) fn make_item_raw(node_id: &str) -> TestItem {
         param_id: None,
         param_values: vec![],
         is_async: false,
-    }
+    })
 }
 
-/// Build a `TestItem` with an explicit `module` path, constructing the
+/// Build an `Arc<TestItem>` with an explicit `module` path, constructing the
 /// `node_id` via `NodeId::new(module, name, None)`.
-pub(crate) fn make_item_in(name: &str, module: &str) -> TestItem {
-    TestItem {
+pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
+    Arc::new(TestItem {
         node_id: NodeId::new(module, name, None),
         module_path: Utf8PathBuf::from(module),
         fn_name: name.to_string(),
@@ -48,24 +50,26 @@ pub(crate) fn make_item_in(name: &str, module: &str) -> TestItem {
         param_id: None,
         param_values: vec![],
         is_async: false,
-    }
+    })
 }
 
-/// Build a `(Utf8PathBuf, Vec<TestItem>)` group for `module`, one item per
+/// Build a `(Utf8PathBuf, Vec<Arc<TestItem>>)` group for `module`, one item per
 /// name in `names`.
-pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<TestItem>) {
+pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
     let path = Utf8PathBuf::from(module);
     let items = names
         .iter()
-        .map(|name| TestItem {
-            node_id: NodeId::new(module, name, None),
-            module_path: path.clone(),
-            fn_name: name.to_string(),
-            lineno: 0,
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-            is_async: false,
+        .map(|name| {
+            Arc::new(TestItem {
+                node_id: NodeId::new(module, name, None),
+                module_path: path.clone(),
+                fn_name: name.to_string(),
+                lineno: 0,
+                markers: vec![],
+                param_id: None,
+                param_values: vec![],
+                is_async: false,
+            })
         })
         .collect();
     (path, items)

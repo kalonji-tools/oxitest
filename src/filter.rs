@@ -7,6 +7,8 @@
 //! Marker *names* are collected here; marker *conditions* (e.g. `skipif(...)`) are
 //! evaluated at execution time by `python/oxitest/_bridge/marks.py`.
 
+use std::sync::Arc;
+
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
@@ -20,7 +22,7 @@ use crate::types::{CollectError, TestItem};
 const BUILTIN_MARKERS: &[&str] = &["skip", "skipif", "xfail", "usefixtures", "timeout"];
 
 pub fn validate_markers(
-    items: &[TestItem],
+    items: &[Arc<TestItem>],
     registered: &std::collections::HashSet<&str>,
 ) -> Vec<CollectError> {
     items
@@ -42,7 +44,7 @@ pub fn validate_markers(
 }
 
 #[must_use = "returns filtered items; original is consumed"]
-pub fn filter_items(items: Vec<TestItem>, keyword: Option<&str>) -> Vec<TestItem> {
+pub fn filter_items(items: Vec<Arc<TestItem>>, keyword: Option<&str>) -> Vec<Arc<TestItem>> {
     items
         .into_iter()
         .filter(|item| {
@@ -54,9 +56,9 @@ pub fn filter_items(items: Vec<TestItem>, keyword: Option<&str>) -> Vec<TestItem
 }
 
 fn partition_by_failed(
-    items: Vec<TestItem>,
+    items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
-) -> (Vec<TestItem>, Vec<TestItem>) {
+) -> (Vec<Arc<TestItem>>, Vec<Arc<TestItem>>) {
     items
         .into_iter()
         .partition(|item| failed_ids.contains(item.node_id.as_ref()))
@@ -66,9 +68,9 @@ fn partition_by_failed(
 /// Used by `--lf` (last-failed) mode.
 #[must_use = "returns filtered items; original is consumed"]
 pub fn filter_last_failed(
-    items: Vec<TestItem>,
+    items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
-) -> Vec<TestItem> {
+) -> Vec<Arc<TestItem>> {
     partition_by_failed(items, failed_ids).0
 }
 
@@ -76,9 +78,9 @@ pub fn filter_last_failed(
 /// Used by `--ff` (failed-first) mode.
 #[must_use = "returns reordered items; original is consumed"]
 pub fn sort_failed_first(
-    items: Vec<TestItem>,
+    items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
-) -> Vec<TestItem> {
+) -> Vec<Arc<TestItem>> {
     let (mut failed, rest) = partition_by_failed(items, failed_ids);
     failed.extend(rest);
     failed
@@ -86,8 +88,8 @@ pub fn sort_failed_first(
 
 /// Group items by module path, preserving insertion order within each group.
 #[must_use = "returns grouped items; original is consumed"]
-pub fn group_by_module(items: Vec<TestItem>) -> Vec<(Utf8PathBuf, Vec<TestItem>)> {
-    let mut groups: IndexMap<Utf8PathBuf, Vec<TestItem>> = IndexMap::new();
+pub fn group_by_module(items: Vec<Arc<TestItem>>) -> Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> {
+    let mut groups: IndexMap<Utf8PathBuf, Vec<Arc<TestItem>>> = IndexMap::new();
     for item in items {
         groups
             .entry(item.module_path.clone())
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_group_by_module_empty_input() {
-        let groups = group_by_module(vec![]);
+        let groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = group_by_module(vec![]);
         assert!(groups.is_empty());
     }
 
@@ -286,7 +288,7 @@ mod tests {
     fn module_path_as_str_does_not_require_unwrap() {
         // Utf8PathBuf::as_str() returns &str directly — no Option, no unwrap.
         // This fails to compile if module_path is PathBuf (PathBuf has no as_str()).
-        let item = make_item_in("test_a", "tests/test_mod.py");
+        let item: Arc<TestItem> = make_item_in("test_a", "tests/test_mod.py");
         let _s: &str = item.module_path.as_str();
     }
 }
