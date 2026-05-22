@@ -9,8 +9,9 @@ __all__ = [
     "_error_result",
 ]
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
+from typing import Any
 
 
 @dataclass
@@ -41,6 +42,18 @@ class StatusKind(StrEnum):
     WARNED = "warned"
 
 
+_NON_FAILURE_STATUSES = frozenset(
+    {
+        StatusKind.PASSED,
+        StatusKind.SKIPPED,
+        StatusKind.WARNED,
+        StatusKind.XFAILED,
+        StatusKind.XPASSED,
+        StatusKind.TIMEOUT,
+    }
+)
+
+
 @dataclass
 class TestResult:
     """Bridge result returned by executor.run_test and consumed by Rust bridge.
@@ -60,6 +73,56 @@ class TestResult:
     strict: bool = True
     exc_type: str = ""
     frames: list[Frame] = field(default_factory=list)
+
+    @property
+    def failure_repr(self) -> str | None:
+        """Human-readable failure string, or None for non-failure outcomes."""
+        if self.status in _NON_FAILURE_STATUSES:
+            return None
+        parts: list[str] = []
+        if self.message:
+            parts.append(self.message)
+        if self.file:
+            location = f"{self.file}:{self.lineno}"
+            if self.source_line:
+                location += f"  {self.source_line}"
+            parts.append(location)
+        if self.left:
+            if self.right and self.op:
+                parts.append(f"assert {self.left} {self.op} {self.right}")
+            else:
+                parts.append(f"assert {self.left}")
+        return "\n".join(parts) if parts else f"Test {self.status}"
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        """Serialize for the worker JSON protocol.
+
+        Produces a compact dict: only non-falsy optional fields are included.
+        The Rust ``WorkerResult`` uses ``#[serde(default)]`` on all optional
+        fields, so missing keys deserialize correctly.
+        """
+        # Fields the worker computes (not on TestResult)
+        output: dict[str, Any] = {
+            "node_id": node_id,
+            "outcome": self.status,
+            "duration_ms": duration_ms,
+        }
+        # Optional fields — omit falsy values for compact JSON
+        optional = {
+            "failure_repr": self.failure_repr,
+            "message": self.message,
+            "file": self.file,
+            "lineno": self.lineno,
+            "source_line": self.source_line,
+            "no_message_lines": self.no_message_lines,
+            "left": self.left,
+            "right": self.right,
+            "op": self.op,
+            "strict": self.strict,
+            "frames": [asdict(f) for f in self.frames],
+        }
+        output.update({k: v for k, v in optional.items() if v})
+        return output
 
 
 def _error_result(
