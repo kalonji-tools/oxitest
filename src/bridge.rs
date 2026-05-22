@@ -97,7 +97,7 @@ impl FixtureSession {
         let backend_mod = py.import("oxitest._bridge._async_backend")?;
         let registry = self.0.bind(py).getattr("_plugin_registry")?;
         let backend = backend_mod.call_method1("resolve_backend", (backend_name, registry))?;
-        backend_mod.call_method1("set_async_backend", (backend,))?;
+        self.0.bind(py).setattr("_async_backend", backend)?;
         Ok(())
     }
 

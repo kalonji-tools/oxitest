@@ -11,8 +11,6 @@ __all__ = [
     "SharedAsyncSession",
     "AsyncioBackend",
     "AsyncioSharedSession",
-    "get_async_backend",
-    "set_async_backend",
     "resolve_backend",
 ]
 
@@ -105,20 +103,6 @@ class AsyncioBackend:
 
     def create_shared_session(self) -> SharedAsyncSession:
         return AsyncioSharedSession()
-
-
-_backend: AsyncBackend = AsyncioBackend()
-
-
-def get_async_backend() -> AsyncBackend:
-    """Return the active async backend."""
-    return _backend
-
-
-def set_async_backend(backend: AsyncBackend) -> None:
-    """Set the active async backend (called during session init)."""
-    global _backend  # noqa: PLW0603
-    _backend = backend
 
 
 def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
