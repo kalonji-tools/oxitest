@@ -19,3 +19,4 @@ result
 bench/generated/
 bench/results.json
 bench/results_*.json
+.bacon-locations
