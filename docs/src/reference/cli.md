@@ -18,12 +18,12 @@ current working directory when omitted.
 |------|-------|------|---------|-------------|
 | `-k` | — | `EXPR` | — | Filter tests by keyword expression. Only tests whose names contain the expression are run. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression (`and`/`or`/`not` supported). Only tests carrying a matching mark are run. |
-| `--verbose` | `-v` | flag | `false` | Enable verbose output. Prints each test name as it runs. |
+| `--verbose` | `-v` | flag | `false` | Enable verbose output. Prints each test name and result as it runs. Without `-v`, only failures are shown after the progress bar completes. |
 | `-x` | — | flag | `false` | Stop immediately after the first test failure or error. |
 | `--maxfail` | — | integer | `0` | Stop after `N` failures. `0` means unlimited. |
 | `--tb` | — | `long\|short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
 | `--tips` | — | flag | `false` | Expand assertion tip output from a count to a full `file:line` list (see [Tips](#tips)). |
-| `--warnings` | — | flag | `false` | Enable display of Python warnings captured during test execution. |
+| `--warnings` | — | flag | `false` | Expand warning details. Without this flag, only a count is shown. With it, each warning is displayed in a box with the test function name and warning type/message. Warnings captured by `WarnCapture` or `oxitest.warns()` are excluded. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. `auto` detects TTY. `always` forces color (useful in pipes). `never` disables color. |
 | `--serial` | — | flag | `false` | Run all tests in a single process. Disables parallel workers. Conflicts with `--workers`. |
 | `--workers` | `-n` | `auto\|integer` | cpu count | Number of parallel worker processes. `auto` uses all available CPUs. Conflicts with `--serial`. |
@@ -42,10 +42,24 @@ progressively less detail:
 
 | Value | Behaviour |
 |-------|-----------|
-| `long` | Full call-chain frames showing how execution reached the failure, plus operand values. |
-| `short` | The failing source line together with the operand values. Default. |
+| `long` | Full call-chain frames (including oxitest internals), color-coded diff, and fix suggestions. |
+| `short` | The failing source line, color-coded diff, and fix suggestions. Internal framework frames hidden. Default. |
 | `line` | One compact line per failure: `STATUS  node_id  :lineno  message`. |
 | `no` | Suppresses traceback output entirely. Only the summary count is shown. |
+
+Example `--tb=short` output (default):
+
+```
+FAILED  tests/test_math.py::test_add
+        ┌─ tests/test_math.py:4
+        │
+      4 │    assert x == y
+        │
+        ├─  diff
+        │  - left:  41
+        │  + right: 42
+        └─ why:   values should match
+```
 
 Example `--tb=long` output:
 
