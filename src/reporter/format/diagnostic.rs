@@ -116,6 +116,11 @@ pub(crate) fn fmt_diagnostic_block(
                 // Use colorized diff instead of plain left/right labels.
                 let diff = fmt_diff(left, right, op, use_color);
                 if !diff.is_empty() {
+                    diff_section.push_str(&format!(
+                        "        {}  {}\n",
+                        color_dim(BOX_BRANCH, use_color),
+                        color_dim("diff", use_color),
+                    ));
                     for line in diff.lines() {
                         diff_section.push_str(&format!(
                             "        {}  {}\n",
