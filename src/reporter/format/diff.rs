@@ -1,6 +1,6 @@
 use similar::{ChangeTag, TextDiff};
 
-use crate::reporter::colors::{color_dim, color_dim_green, color_fail};
+use crate::reporter::colors::{color_dim, color_fail, color_pass};
 
 /// Returns a character-level diff marker string (carets at the first differing position).
 /// Only produced for `==` comparisons on single-line values.
@@ -17,7 +17,7 @@ fn char_diff_marker(left: &str, right: &str) -> String {
 /// Renders a colored inline diff for a pair of single-line left/right values.
 fn fmt_single_line_diff(left: &str, right: &str, op: &str, use_color: bool) -> String {
     let left_line = format!("- left:  {}", color_fail(left, use_color));
-    let right_line = format!("+ right: {}", color_dim_green(right, use_color));
+    let right_line = format!("+ right: {}", color_pass(right, use_color));
 
     if op == "==" {
         let marker = char_diff_marker(left, right);
@@ -50,7 +50,7 @@ fn fmt_multi_line_diff(left: &str, right: &str, use_color: bool) -> String {
             ChangeTag::Insert => {
                 out.push_str(&format!(
                     "{}\n",
-                    color_dim_green(&format!("+ {line}"), use_color)
+                    color_pass(&format!("+ {line}"), use_color)
                 ));
             }
             ChangeTag::Equal => {
