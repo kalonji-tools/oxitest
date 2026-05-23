@@ -64,7 +64,7 @@ Available jobs:
 
 | Job | What it does |
 |-----|-------------|
-| `oxitest` (default) | Runs `just test` — builds the extension and runs the Python test suite |
+| `oxitest` (default) | Runs the Python test suite (requires `just build` first) |
 | `ruff` | Lints Python code with ruff |
 | `ty` | Type-checks Python code with ty |
 | `clippy` | Lints Rust code with clippy |
