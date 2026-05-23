@@ -32,3 +32,11 @@ command = ["ruff", "format", "--check", "python/"]
 need_stdout = true
 analyzer = "python_ruff"
 watch = ["python/"]
+
+[keybindings]
+o = "job:oxitest"
+r = "job:ruff"
+t = "job:ty"
+c = "job:clippy"
+u = "job:test-rust"
+m = "job:fmt"

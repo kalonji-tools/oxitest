@@ -62,14 +62,14 @@ $ bacon -j ruff
 
 Available jobs:
 
-| Job | What it does |
-|-----|-------------|
-| `oxitest` (default) | Runs the Python test suite (requires `just build` first) |
-| `ruff` | Lints Python code with ruff |
-| `ty` | Type-checks Python code with ty |
-| `clippy` | Lints Rust code with clippy |
-| `test-rust` | Runs Rust unit tests |
-| `fmt` | Checks Python formatting with ruff |
+| Key | Job | What it does |
+|-----|-----|-------------|
+| `o` | `oxitest` (default) | Runs the Python test suite (requires `just build` first) |
+| `r` | `ruff` | Lints Python code with ruff |
+| `t` | `ty` | Type-checks Python code with ty |
+| `c` | `clippy` | Lints Rust code with clippy |
+| `u` | `test-rust` | Runs Rust unit tests |
+| `m` | `fmt` | Checks Python formatting with ruff |
 
 bacon watches the relevant source directories and re-runs automatically when files change.
 Press `h` inside bacon for keyboard shortcuts.
