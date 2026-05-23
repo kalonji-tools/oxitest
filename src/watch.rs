@@ -31,6 +31,7 @@ pub(crate) enum WatchEvent {
     /// User pressed a key.
     Key(WatchAction),
     /// No event within the poll window.
+    #[expect(dead_code)]
     Idle,
 }
 
