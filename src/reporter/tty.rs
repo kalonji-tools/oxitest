@@ -125,14 +125,17 @@ impl TtyReporter {
                 ),
                 &color_dim(reason, c),
             ),
-            TestOutcome::Warned { reason, .. } => self.fmt_line(
-                outcome_label(outcome, c),
-                &pad_to(
-                    &truncate_name(&item.fn_name, self.opts.name_width),
-                    self.opts.name_width,
-                ),
-                &color_warn(reason, c),
-            ),
+            TestOutcome::Warned { reason, .. } => {
+                let inline = reason.replace('\n', "; ");
+                self.fmt_line(
+                    outcome_label(outcome, c),
+                    &pad_to(
+                        &truncate_name(&item.fn_name, self.opts.name_width),
+                        self.opts.name_width,
+                    ),
+                    &color_warn(&inline, c),
+                )
+            }
             TestOutcome::XFailed { reason } => self.fmt_line(
                 outcome_label(outcome, c),
                 &pad_to(

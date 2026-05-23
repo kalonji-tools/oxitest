@@ -64,7 +64,7 @@ impl RunStats {
     ) {
         self.warned += 1;
         self.warning_msgs
-            .push((item.node_id.to_string(), reason.to_string()));
+            .push((item.fn_name.clone(), reason.to_string()));
         self.collect_tips(item, no_message_lines);
     }
 
