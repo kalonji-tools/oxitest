@@ -71,17 +71,26 @@ fn render_label_block(label_items: &[String], use_color: bool) -> String {
     let n = label_items.len();
     let mut out = String::new();
     for (i, item) in label_items.iter().enumerate() {
-        if i == n - 1 {
+        let is_last = i == n - 1;
+        let prefix = if is_last { BOX_BOT_LEFT } else { BOX_VERT };
+        let spacer = if is_last { " " } else { "  " };
+
+        let mut lines = item.lines();
+        // First line gets the normal prefix (└─ or │)
+        if let Some(first) = lines.next() {
             out.push_str(&format!(
-                "        {} {}\n",
-                color_dim(BOX_BOT_LEFT, use_color),
-                item
+                "        {}{}{}\n",
+                color_dim(prefix, use_color),
+                spacer,
+                first
             ));
-        } else {
+        }
+        // Continuation lines get │ prefix with padding to align under the value
+        for cont in lines {
             out.push_str(&format!(
                 "        {}  {}\n",
                 color_dim(BOX_VERT, use_color),
-                item
+                cont
             ));
         }
     }
@@ -231,7 +240,8 @@ pub(crate) fn fmt_diagnostic_block(
     if visible_frames.is_empty() && !file.is_empty() {
         let lineno_padded = format!("{:>4}", lineno);
         out.push_str(&format!(
-            "   {} {} {}\n",
+            "        {}   {} {} {}\n",
+            color_dim(BOX_VERT, use_color),
             color_dim(&lineno_padded, use_color),
             color_dim(BOX_VERT, use_color),
             color_bold_white(&format!("   {}", source_line), use_color)
@@ -715,5 +725,40 @@ mod tests {
         }];
         let filtered = filter_frames(&frames, &TbStyle::Short);
         assert_eq!(filtered.len(), 1, "should show at least the last frame");
+    }
+
+    #[test]
+    fn test_diagnostic_multiline_why_stays_inside_box() {
+        let item = make_item("test_sub");
+        let outcome = make_failed(
+            "missing value:\ncollected 1 item\n\nFAILURES\nFAILED test.py::test_x",
+            "tests/test_foo.py",
+            10,
+            "assert x in out",
+        );
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
+        // Every non-empty continuation line must be prefixed with BOX_VERT
+        for line in block.lines().skip(1) {
+            let trimmed = line.trim_start();
+            if trimmed.is_empty() {
+                continue;
+            }
+            assert!(
+                trimmed.starts_with(BOX_VERT)
+                    || trimmed.starts_with(BOX_BOT_LEFT)
+                    || trimmed.starts_with(BOX_BRANCH)
+                    || trimmed.starts_with(BOX_TOP_LEFT),
+                "line escapes diagnostic box: {line:?}"
+            );
+        }
+        // The multi-line content must still appear
+        assert!(
+            block.contains("collected 1 item"),
+            "multi-line content must be present"
+        );
+        assert!(
+            block.contains("FAILURES"),
+            "multi-line content must be present"
+        );
     }
 }
