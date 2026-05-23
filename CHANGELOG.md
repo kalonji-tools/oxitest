@@ -1,6 +1,58 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.4.0] - 2026-05-23
+
+### Bug Fixes
+
+
+- Remove double 'ms' suffix in TTY reporter (#364)
+- Align parametrize duration column with regular test lines (#364)
+- Use singular 'case' for single parametrize result (#366)
+- Use .cases for len check on parametrize types
+- Rename map_ser to state (codespell)
+- Add 'ser' to codespell ignore-words-list (serde::ser)
+- Use line-buffered stdout instead of per-group flush
+- Suppress ty unresolved-attribute for stdout.reconfigure
+- Read warned message from message field, not failure_repr
+- Box-style warning output and suppress WarnCapture leaks
+- Show duration and warning type only in inline WARN lines
+- Use bold green for diff right value, distinct from dim green why
+- Use neutral dim gray for why/value labels in failure blocks
+- Add diff section header in diagnostic box
+
+### Features
+
+
+- Dynamic name width with truncation for aligned duration column (#364)
+- Route tracing output through indicatif to prevent scrollback artifacts (#364)
+- Add SINGLE_CASE_PARAMETRIZE violation kind
+- Detect single-case parametrize at collection time
+- Add SingleCaseParametrize to Rust ViolationKind
+- Add SingleCaseParametrize violation type, mapping, and formatting
+- Color-coded assertion diffs using similar crate
+- Hide internal oxitest frames in short traceback mode
+- Add fix suggestions for common error patterns
+- Failures-only output in non-verbose mode
+- Show multiple running test names during parallel execution
+
+### Performance
+
+
+- Reuse line buffer in worker reader thread (#373)
+- Pre-allocate timings Vec with capacity (#374)
+- Single-pass finalize via merge_timings/record_timing_outcomes (#375)
+- Sorted Vec instead of BTreeMap in serialize_sorted (#376)
+- In-place sort_by_key for FailedFirst strategy (#377)
+- Move _middleware import to module scope (#378)
+- Direct field access in _build_failure_repr (#379)
+- Cache frozenset(fixref_fields) on _DataclassCases (#380)
+- Compute unique_name once, pass to _load_and_resolve (#381)
+- Move _PluginMarkHandler import to module scope (#382)
+- Flush stdout per group instead of per test (#383)
+- Pre-serialize conftest_paths as RawValue (#384)
+- Compact result format — omit null/empty fields (#385)
+
 ## [0.3.0] - 2026-05-22
 
 ### Bug Fixes
