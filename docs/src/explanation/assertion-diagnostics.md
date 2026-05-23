@@ -94,12 +94,49 @@ In CI mode (where output is not a TTY), passing tests with bare asserts emit a `
 marker in the progress stream rather than `.` (a clean pass). This makes them visually distinct
 in the output log.
 
+## Color-coded diffs
+
+When a comparison assertion fails, oxitest renders the left and right values with color
+to make differences immediately visible:
+
+- **`- left:`** value in **bold red** — what the expression produced
+- **`+ right:`** value in **bold green** — what was expected
+- **`why:`** in **dim gray** — the assertion message (neutral context)
+
+For multi-line string comparisons, oxitest produces a unified diff (similar to `git diff`)
+using the `similar` crate. Each removed line is prefixed with `-` and each added line
+with `+`.
+
+## Fix suggestions
+
+When oxitest can diagnose the likely cause of an error, it appends a `hint:` line to the
+failure output. Current patterns:
+
+| Error | Hint |
+|-------|------|
+| Async/sync fixture mismatch (`can't be used in 'await'`) | Mark the fixture `async def` or make the test synchronous. |
+| `SharedFixtureMutationError` | Use `shared=False` for a mutable per-test copy. |
+| Fixture not found | Check the `@fixtures.fixture` definition and `Fixture[T]` annotation. |
+| Unknown marker (strict mode) | Fuzzy-matches against registered markers ("Did you mean `slow`?"). |
+
+Suggestions use `strsim` for Levenshtein distance matching (threshold ≤ 2).
+
+## Frame truncation
+
+In `--tb short` mode (the default), oxitest hides internal framework frames from
+tracebacks. Only user code frames are shown. Frames from `oxitest/_bridge/`,
+`oxitest/_builtins/`, and `oxitest/plugin` are filtered out. At least one frame (the
+innermost) is always shown.
+
+In `--tb long` mode, all frames are shown including oxitest internals.
+
 ## The `--tb` styles
 
 The `--tb` flag controls how much of the diagnostic block is printed for each failure.
 
 === "`--tb short` (default)"
-    Shows the source line of the failing assertion and the captured operand values.
+    Shows the source line of the failing assertion, color-coded diff of operand values,
+    and any fix suggestions. Internal framework frames are hidden.
 
     ```text
     FAILED  ./test_diag.py::test_comparison
@@ -107,16 +144,41 @@ The `--tb` flag controls how much of the diagnostic block is printed for each fa
             │
           4 │    assert x == y
             │
-            │  left:  41
-            └─ right: 42
+            ├─  diff
+            │  - left:  41
+            │  + right: 42
+            └─ why:   values should match
+    ```
+
+=== "`--tb long`"
+    Full call-chain frames (including oxitest internals), plus the diff and suggestions.
+
+    ```text
+    FAILED  ./test_diag.py::test_comparison
+            ┌─ ./test_diag.py:4
+            │
+            ├─  frames
+            │    test_diag.py:4  test_comparison
+            │      assert x == y
+            │
+            ├─  diff
+            │  - left:  41
+            │  + right: 42
+            └─ why:   values should match
     ```
 
 === "`--tb line`"
-    Shows the file path and line number and the captured operand values, but omits the
-    source code line. Useful when the goal is failure locations and values without the
-    surrounding source context.
+    One compact line per failure: `STATUS  node_id  :lineno  message`.
 
 === "`--tb no`"
     Suppresses the diagnostic block entirely. Only the test name and FAILED status are
     shown. Useful for scripting or piping output to another tool that will process failures
     programmatically.
+
+## Default output mode
+
+By default (without `-v`), oxitest shows only the progress bar during execution. Passing
+tests are silent. Failures are printed at the end before the summary.
+
+With `-v` (verbose), every test result is printed as it completes — including passing tests
+with their duration.
