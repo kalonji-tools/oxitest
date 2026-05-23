@@ -42,6 +42,38 @@ Rendered HTML is written to `docs/site/`. To serve the docs locally with live re
 mkdocs serve --dev-addr localhost:8000
 ```
 
+## Using bacon
+
+[bacon](https://dystroy.org/bacon/) is a background code checker that watches source files and
+re-runs commands on change. It is included in the Nix devshell.
+
+Start it with the default job (runs oxitest tests):
+
+```console
+$ bacon
+```
+
+Switch jobs with `-j`:
+
+```console
+$ bacon -j clippy
+$ bacon -j ruff
+```
+
+Available jobs:
+
+| Job | What it does |
+|-----|-------------|
+| `oxitest` (default) | Runs `just test` — builds the extension and runs the Python test suite |
+| `ruff` | Lints Python code with ruff |
+| `ty` | Type-checks Python code with ty |
+| `clippy` | Lints Rust code with clippy |
+| `test-rust` | Runs Rust unit tests |
+| `fmt` | Checks Python formatting with ruff |
+
+bacon watches the relevant source directories and re-runs automatically when files change.
+Press `h` inside bacon for keyboard shortcuts.
+
 ## Non-Nix
 
 Without Nix, install the following manually.
