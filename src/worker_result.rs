@@ -70,15 +70,16 @@ pub(crate) struct WorkerResult {
 
 impl WorkerResult {
     pub fn to_outcome(&self) -> types::TestOutcome {
-        // skipped/xfailed/timeout/warned carry their human-readable reason in
-        // failure_repr.  For failed/error, use message only — failure_repr is a
+        // skipped/xfailed/timeout carry their human-readable reason in
+        // failure_repr.  For failed/error/warned, use message — failure_repr is a
         // legacy fallback that predates structured diagnostic fields; using it as
         // a message masks the left/right/op display in the reporter.
+        // Warned uses message because failure_repr returns None for non-failure
+        // statuses (warned is in _NON_FAILURE_STATUSES on the Python side).
         let message: String = match self.outcome {
             types::OutcomeKind::Skipped
             | types::OutcomeKind::XFailed
-            | types::OutcomeKind::Timeout
-            | types::OutcomeKind::Warned => {
+            | types::OutcomeKind::Timeout => {
                 self.failure_repr.as_deref().unwrap_or_default().to_owned()
             }
             _ => self.message.as_deref().unwrap_or_default().to_owned(),
