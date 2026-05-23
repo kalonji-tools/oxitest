@@ -96,6 +96,30 @@ mod tracing_tests {
     }
 }
 
+mod color_tests {
+    use super::*;
+    use crate::config::ColorMode;
+
+    #[test]
+    fn always_enables_console_colors() {
+        console::set_colors_enabled(false);
+        let result = resolve_color(ColorMode::Always, false);
+        assert!(result);
+        assert!(console::colors_enabled());
+        console::set_colors_enabled(false);
+    }
+
+    #[test]
+    fn never_returns_false() {
+        assert!(!resolve_color(ColorMode::Never, true));
+    }
+
+    #[test]
+    fn auto_returns_false_when_not_tty() {
+        assert!(!resolve_color(ColorMode::Auto, false));
+    }
+}
+
 mod strict_pipeline_tests {
     use super::*;
     use crate::config::Config;
