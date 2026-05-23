@@ -4,7 +4,7 @@ use crate::config::TbStyle;
 use crate::types::{TestItem, TestOutcome};
 
 use super::fmt_diff;
-use crate::reporter::colors::{color_bold_white, color_dim, color_dim_cyan, color_dim_green};
+use crate::reporter::colors::{color_bold_white, color_dim, color_dim_cyan};
 
 const BOX_TOP_LEFT: &str = "┌─";
 const BOX_VERT: &str = "│";
@@ -126,25 +126,13 @@ pub(crate) fn fmt_diagnostic_block(
                 }
             } else if !op.is_empty() {
                 // op set but right is empty — show left only
-                label_items.push(format!(
-                    "{:<7}{}",
-                    "left:",
-                    color_dim_green(left, use_color)
-                ));
+                label_items.push(format!("{:<7}{}", "left:", color_dim(left, use_color)));
             } else if !left.is_empty() {
-                label_items.push(format!(
-                    "{:<7}{}",
-                    "value:",
-                    color_dim_green(left, use_color)
-                ));
+                label_items.push(format!("{:<7}{}", "value:", color_dim(left, use_color)));
             }
 
             if !message.is_empty() {
-                label_items.push(format!(
-                    "{:<7}{}",
-                    "why:",
-                    color_dim_green(message, use_color)
-                ));
+                label_items.push(format!("{:<7}{}", "why:", color_dim(message, use_color)));
             }
 
             let extra = format!(
