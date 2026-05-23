@@ -110,18 +110,25 @@ pub(crate) fn fmt_warning_block(
     }
     let label = color_warn("warn", use_color);
     if show_warnings {
-        let lines: Vec<String> = warning_msgs
-            .iter()
-            .map(|(node_id, reason)| {
-                color_dim(&format!("        {} — {}", node_id, reason), use_color)
-            })
-            .collect();
-        format!(
-            "  {}  {} warnings:\n{}\n",
-            label,
-            warning_msgs.len(),
-            lines.join("\n")
-        )
+        let mut block = format!("  {}  {} warnings:\n", label, warning_msgs.len());
+        for (fn_name, reason) in warning_msgs {
+            block.push_str(&format!(
+                "        {} {}\n",
+                color_dim("┌─", use_color),
+                color_dim(fn_name, use_color),
+            ));
+            for line in reason.split('\n') {
+                if !line.is_empty() {
+                    block.push_str(&format!(
+                        "        {}  {}\n",
+                        color_dim("│", use_color),
+                        color_warn(line, use_color),
+                    ));
+                }
+            }
+            block.push_str(&format!("        {}\n", color_dim("└─", use_color)));
+        }
+        block
     } else {
         let count = warning_msgs.len();
         format!(
