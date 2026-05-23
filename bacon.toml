@@ -1,10 +1,11 @@
 default_job = "oxitest"
 
 [jobs.oxitest]
-command = ["just", "test"]
+command = ["python", "-m", "oxitest"]
+env.PYTHONPATH = "python"
 need_stdout = true
 analyzer = "python_pytest"
-watch = ["python/", "src/"]
+watch = ["python/"]
 
 [jobs.ruff]
 command = ["ruff", "check", "python/"]
