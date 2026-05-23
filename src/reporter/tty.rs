@@ -126,14 +126,24 @@ impl TtyReporter {
                 &color_dim(reason, c),
             ),
             TestOutcome::Warned { reason, .. } => {
-                let inline = reason.replace('\n', "; ");
+                // Extract unique warning types (e.g. "UserWarning" from "UserWarning: hello")
+                let mut types: Vec<&str> = reason
+                    .split('\n')
+                    .filter_map(|line| line.split_once(':').map(|(t, _)| t.trim()))
+                    .collect();
+                types.dedup();
+                let types_str = if types.is_empty() {
+                    String::new()
+                } else {
+                    format!("  {}", color_warn(&types.join(", "), c))
+                };
                 self.fmt_line(
                     outcome_label(outcome, c),
                     &pad_to(
                         &truncate_name(&item.fn_name, self.opts.name_width),
                         self.opts.name_width,
                     ),
-                    &color_warn(&inline, c),
+                    &format!("{}{}", ms, types_str),
                 )
             }
             TestOutcome::XFailed { reason } => self.fmt_line(
