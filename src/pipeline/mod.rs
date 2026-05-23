@@ -98,6 +98,17 @@ fn resolve_timeout(
     }
 }
 
+fn resolve_color(mode: config::ColorMode, is_tty: bool) -> bool {
+    match mode {
+        config::ColorMode::Always => {
+            console::set_colors_enabled(true);
+            true
+        }
+        config::ColorMode::Never => false,
+        config::ColorMode::Auto => is_tty && console::colors_enabled(),
+    }
+}
+
 /// Returns a human-readable OS description, e.g. "Ubuntu 24.04.2 LTS x86_64".
 fn os_info() -> String {
     let arch = std::env::consts::ARCH;
@@ -253,14 +264,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let cache = cache::TestCache::load(&rootdir);
 
     let is_tty = std::io::stdout().is_terminal();
-    let use_color = match cfg.color {
-        config::ColorMode::Always => {
-            console::set_colors_enabled(true);
-            true
-        }
-        config::ColorMode::Never => false,
-        config::ColorMode::Auto => is_tty && console::colors_enabled(),
-    };
+    let use_color = resolve_color(cfg.color, is_tty);
     let resolved_tb = cli.tb.clone().unwrap_or(cfg.tb.clone());
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color)
         .tb(resolved_tb)
