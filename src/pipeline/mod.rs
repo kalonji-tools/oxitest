@@ -717,6 +717,7 @@ fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
                 }
                 watch::WatchAction::RunAll => {
                     last_exit = run_once(py, ctx, is_tty)?;
+                    while rx.try_recv().is_ok() {}
                     watch::print_status_line();
                 }
                 watch::WatchAction::RunFailed => {
@@ -724,6 +725,7 @@ fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
                     ctx.cfg.failed = Some(crate::config::FailedMode::Only);
                     last_exit = run_once(py, ctx, is_tty)?;
                     ctx.cfg.failed = original;
+                    while rx.try_recv().is_ok() {}
                     watch::print_status_line();
                 }
                 watch::WatchAction::RunAffected(_) => {}
@@ -758,6 +760,8 @@ fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
                 }
                 watch::WatchAction::Quit => unreachable!(),
             }
+            // Drain stale events to prevent re-triggering
+            while rx.try_recv().is_ok() {}
             watch::print_status_line();
         }
     }
