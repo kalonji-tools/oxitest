@@ -26,11 +26,14 @@ class _WarnCapture:
 
     def __init__(self) -> None:
         self.list: list[warnings.WarningMessage] = []
+        self._all_captured_ids: set[int] = set()
         self._orig_showwarnmsg = getattr(warnings, "_showwarnmsg")
         _captured = self.list
+        _all_ids = self._all_captured_ids
 
         def _intercepting_showwarnmsg(msg: warnings.WarningMessage) -> None:
             _captured.append(msg)
+            _all_ids.add(id(msg))
             self._orig_showwarnmsg(msg)
 
         setattr(warnings, "_showwarnmsg", _intercepting_showwarnmsg)

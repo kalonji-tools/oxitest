@@ -21,6 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import ExecutionWrapper
 from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
@@ -153,10 +154,16 @@ async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             await fn(**all_kwargs)
+        # Exclude warnings already captured by WarnCapture or FixtureTeardownWarning
+        warn_capture = next(
+            (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
+        )
+        captured_ids = warn_capture._all_captured_ids if warn_capture else set()
         caught: list[str] = [
             f"{wi.category.__name__}: {wi.message}"
             for wi in w
             if not issubclass(wi.category, FixtureTeardownWarning)
+            and id(wi) not in captured_ids
         ]
         if caught:
             return TestResult(
