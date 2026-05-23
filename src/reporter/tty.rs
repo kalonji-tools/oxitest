@@ -335,7 +335,7 @@ impl Reporter for TtyReporter {
         } else {
             // Non-verbose mode: only defer hard failures; passing/skipped/xfailed are silent
             if let Some(group) = self.pending_group.take() {
-                self.flush_param_group(group);
+                self.dispatch_param_group(group);
             }
             if outcome.is_hard_failure() {
                 self.deferred_failures
