@@ -254,7 +254,10 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 
     let is_tty = std::io::stdout().is_terminal();
     let use_color = match cfg.color {
-        config::ColorMode::Always => true,
+        config::ColorMode::Always => {
+            console::set_colors_enabled(true);
+            true
+        }
         config::ColorMode::Never => false,
         config::ColorMode::Auto => is_tty && console::colors_enabled(),
     };
