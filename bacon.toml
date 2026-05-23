@@ -1,0 +1,33 @@
+default_job = "oxitest"
+
+[jobs.oxitest]
+command = ["just", "test"]
+need_stdout = true
+analyzer = "python_pytest"
+watch = ["python/", "src/"]
+
+[jobs.ruff]
+command = ["ruff", "check", "python/"]
+need_stdout = true
+analyzer = "python_ruff"
+watch = ["python/"]
+
+[jobs.ty]
+command = ["ty", "check", "python/oxitest/"]
+need_stdout = true
+watch = ["python/"]
+
+[jobs.clippy]
+command = ["cargo", "clippy"]
+watch = ["src/"]
+
+[jobs.test-rust]
+command = ["cargo", "test"]
+need_stdout = true
+watch = ["src/"]
+
+[jobs.fmt]
+command = ["ruff", "format", "--check", "python/"]
+need_stdout = true
+analyzer = "python_ruff"
+watch = ["python/"]
