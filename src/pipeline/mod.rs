@@ -707,34 +707,9 @@ fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
     watch::print_status_line();
 
     loop {
-        // Check keyboard (50ms poll)
-        if let Some(action) = watch::poll_keyboard(Duration::from_millis(50)) {
-            match action {
-                watch::WatchAction::Quit => {
-                    let _ = crossterm::terminal::disable_raw_mode();
-                    eprintln!("\n  Watch mode stopped.");
-                    return Ok(last_exit);
-                }
-                watch::WatchAction::RunAll => {
-                    last_exit = run_once(py, ctx, is_tty)?;
-                    while rx.try_recv().is_ok() {}
-                    watch::print_status_line();
-                }
-                watch::WatchAction::RunFailed => {
-                    let original = ctx.cfg.failed;
-                    ctx.cfg.failed = Some(crate::config::FailedMode::Only);
-                    last_exit = run_once(py, ctx, is_tty)?;
-                    ctx.cfg.failed = original;
-                    while rx.try_recv().is_ok() {}
-                    watch::print_status_line();
-                }
-                watch::WatchAction::RunAffected(_) => {}
-            }
-            continue;
-        }
-
-        // Check file changes
-        if let Ok(paths) = rx.try_recv() {
+        let event = if let Some(action) = watch::poll_keyboard(Duration::from_millis(50)) {
+            watch::WatchEvent::Key(action)
+        } else if let Ok(paths) = rx.try_recv() {
             let changed = watch::filter_changed_paths(paths);
             if changed.is_empty() {
                 continue;
@@ -747,22 +722,39 @@ fn watch_loop(py: Python<'_>, ctx: &mut SetupContext) -> PyResult<i32> {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
+            watch::WatchEvent::FilesChanged(changed)
+        } else {
+            continue;
+        };
 
-            match watch::classify_changes(&changed, &graph, &test_files) {
-                watch::WatchAction::RunAffected(affected) => {
-                    let original = ctx.cfg.testpaths.clone();
-                    ctx.cfg.testpaths = affected;
-                    last_exit = run_once(py, ctx, is_tty)?;
-                    ctx.cfg.testpaths = original;
-                }
-                watch::WatchAction::RunAll | watch::WatchAction::RunFailed => {
-                    last_exit = run_once(py, ctx, is_tty)?;
-                }
-                watch::WatchAction::Quit => unreachable!(),
+        match watch::handle_watch_event(event, &graph, &test_files) {
+            watch::LoopAction::Quit => {
+                let _ = crossterm::terminal::disable_raw_mode();
+                eprintln!("\n  Watch mode stopped.");
+                return Ok(last_exit);
             }
-            // Drain stale events to prevent re-triggering
-            while rx.try_recv().is_ok() {}
-            watch::print_status_line();
+            watch::LoopAction::Continue => continue,
+            watch::LoopAction::Run(scope) => {
+                match scope {
+                    watch::RunScope::All => {
+                        last_exit = run_once(py, ctx, is_tty)?;
+                    }
+                    watch::RunScope::Affected(files) => {
+                        let original = ctx.cfg.testpaths.clone();
+                        ctx.cfg.testpaths = files;
+                        last_exit = run_once(py, ctx, is_tty)?;
+                        ctx.cfg.testpaths = original;
+                    }
+                    watch::RunScope::FailedOnly => {
+                        let original = ctx.cfg.failed;
+                        ctx.cfg.failed = Some(crate::config::FailedMode::Only);
+                        last_exit = run_once(py, ctx, is_tty)?;
+                        ctx.cfg.failed = original;
+                    }
+                }
+                while rx.try_recv().is_ok() {}
+                watch::print_status_line();
+            }
         }
     }
 }

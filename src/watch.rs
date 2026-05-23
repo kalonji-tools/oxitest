@@ -24,6 +24,80 @@ pub(crate) enum WatchAction {
     Quit,
 }
 
+/// Events the watch loop can receive.
+pub(crate) enum WatchEvent {
+    /// File system paths changed (already converted to Utf8).
+    FilesChanged(Vec<Utf8PathBuf>),
+    /// User pressed a key.
+    Key(WatchAction),
+    /// No event within the poll window.
+    Idle,
+}
+
+/// What the watch loop should do after processing an event.
+#[derive(Debug)]
+pub(crate) enum LoopAction {
+    /// Run tests with the given scope.
+    Run(RunScope),
+    /// Do nothing, continue polling.
+    Continue,
+    /// Exit watch mode.
+    Quit,
+}
+
+/// Scope of a test run triggered by a watch event.
+#[derive(Debug)]
+pub(crate) enum RunScope {
+    /// Run all tests.
+    All,
+    /// Run only the given test files.
+    Affected(Vec<Utf8PathBuf>),
+    /// Run only previously-failed tests.
+    FailedOnly,
+}
+
+/// Pure event handler — decides what the watch loop should do next.
+pub(crate) fn handle_watch_event(
+    event: WatchEvent,
+    graph: &ImportGraph,
+    test_files: &[Utf8PathBuf],
+) -> LoopAction {
+    match event {
+        WatchEvent::Idle => LoopAction::Continue,
+        WatchEvent::Key(WatchAction::Quit) => LoopAction::Quit,
+        WatchEvent::Key(WatchAction::RunAll) => LoopAction::Run(RunScope::All),
+        WatchEvent::Key(WatchAction::RunFailed) => LoopAction::Run(RunScope::FailedOnly),
+        WatchEvent::Key(WatchAction::RunAffected(_)) => LoopAction::Run(RunScope::All),
+        WatchEvent::FilesChanged(changed) => {
+            let filtered = filter_watch_paths(&changed);
+            if filtered.is_empty() {
+                return LoopAction::Continue;
+            }
+            match classify_changes(&filtered, graph, test_files) {
+                WatchAction::RunAffected(files) => LoopAction::Run(RunScope::Affected(files)),
+                WatchAction::RunAll | WatchAction::RunFailed => LoopAction::Run(RunScope::All),
+                WatchAction::Quit => unreachable!(),
+            }
+        }
+    }
+}
+
+/// Filter already-converted Utf8 paths for watch events.
+///
+/// Keeps `.py` files (excluding noise) and special config files that trigger
+/// a full re-run regardless of extension (e.g. `pyproject.toml`).
+fn filter_watch_paths(paths: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+    paths
+        .iter()
+        .filter(|p| {
+            let is_py = p.extension() == Some("py") && !is_noise(p);
+            let is_special = p.file_name() == Some("pyproject.toml");
+            is_py || is_special
+        })
+        .cloned()
+        .collect()
+}
+
 fn is_noise(path: &Utf8Path) -> bool {
     let s = path.as_str();
     IGNORE_PATTERNS.iter().any(|pat| s.contains(pat))
@@ -185,5 +259,121 @@ mod tests {
         let paths = vec![std::path::PathBuf::from(".oxitest_cache/timings.json")];
         let result = filter_changed_paths(paths);
         assert!(result.is_empty());
+    }
+
+    // ── handle_watch_event ──────────────────────────────────────────────
+
+    #[test]
+    fn event_idle_returns_continue() {
+        let graph = ImportGraph::new();
+        assert!(matches!(
+            handle_watch_event(WatchEvent::Idle, &graph, &[]),
+            LoopAction::Continue
+        ));
+    }
+
+    #[test]
+    fn event_key_quit_returns_quit() {
+        let graph = ImportGraph::new();
+        assert!(matches!(
+            handle_watch_event(WatchEvent::Key(WatchAction::Quit), &graph, &[]),
+            LoopAction::Quit
+        ));
+    }
+
+    #[test]
+    fn event_key_run_all_returns_run_all() {
+        let graph = ImportGraph::new();
+        assert!(matches!(
+            handle_watch_event(WatchEvent::Key(WatchAction::RunAll), &graph, &[]),
+            LoopAction::Run(RunScope::All)
+        ));
+    }
+
+    #[test]
+    fn event_key_run_failed_returns_run_failed_only() {
+        let graph = ImportGraph::new();
+        assert!(matches!(
+            handle_watch_event(WatchEvent::Key(WatchAction::RunFailed), &graph, &[]),
+            LoopAction::Run(RunScope::FailedOnly)
+        ));
+    }
+
+    #[test]
+    fn event_empty_files_returns_continue() {
+        let graph = ImportGraph::new();
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(vec![]), &graph, &[]),
+            LoopAction::Continue
+        ));
+    }
+
+    #[test]
+    fn event_non_py_files_returns_continue() {
+        let graph = ImportGraph::new();
+        let changed = vec![Utf8PathBuf::from("README.md")];
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(changed), &graph, &[]),
+            LoopAction::Continue
+        ));
+    }
+
+    #[test]
+    fn event_noise_files_returns_continue() {
+        let graph = ImportGraph::new();
+        let changed = vec![Utf8PathBuf::from(
+            "tests/__pycache__/test_foo.cpython-312.pyc",
+        )];
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(changed), &graph, &[]),
+            LoopAction::Continue
+        ));
+    }
+
+    #[test]
+    fn event_known_test_file_returns_run_affected() {
+        let graph = ImportGraph::new();
+        let test = Utf8PathBuf::from("tests/test_foo.py");
+        match handle_watch_event(
+            WatchEvent::FilesChanged(vec![test.clone()]),
+            &graph,
+            &[test.clone()],
+        ) {
+            LoopAction::Run(RunScope::Affected(files)) => {
+                assert_eq!(files, vec![test]);
+            }
+            other => panic!("expected Run(Affected), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_unknown_source_returns_run_all() {
+        let graph = ImportGraph::new();
+        let changed = vec![Utf8PathBuf::from("src/unknown.py")];
+        let test_files = vec![Utf8PathBuf::from("tests/test_foo.py")];
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(changed), &graph, &test_files),
+            LoopAction::Run(RunScope::All)
+        ));
+    }
+
+    #[test]
+    fn event_conftest_returns_run_all() {
+        let graph = ImportGraph::new();
+        let changed = vec![Utf8PathBuf::from("tests/conftest.py")];
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(changed), &graph, &[]),
+            LoopAction::Run(RunScope::All)
+        ));
+    }
+
+    #[test]
+    fn event_pyproject_returns_run_all() {
+        let graph = ImportGraph::new();
+        let changed = vec![Utf8PathBuf::from("pyproject.toml")];
+        assert!(matches!(
+            handle_watch_event(WatchEvent::FilesChanged(changed), &graph, &[]),
+            LoopAction::Run(RunScope::All)
+        ));
     }
 }
