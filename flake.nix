@@ -51,6 +51,9 @@
             # Benchmarking
             hyperfine
 
+            # File watcher
+            bacon
+
             # Release tooling
             git-cliff
           ];
@@ -80,6 +83,7 @@
             echo "  ruff   : $(ruff --version)"
             echo "  ty     : $(ty --version)"
             echo "  prek   : $(prek --version)"
+            echo "  bacon  : $(bacon --version)"
 
             # Install git hooks and set hooksPath so worktrees share them
             if git rev-parse --git-dir > /dev/null 2>&1; then
