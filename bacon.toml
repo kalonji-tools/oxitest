@@ -1,7 +1,7 @@
 default_job = "oxitest"
 
 [jobs.oxitest]
-command = ["python", "-m", "oxitest"]
+command = ["python", "-m", "oxitest", "--color=always"]
 env.PYTHONPATH = "python"
 need_stdout = true
 analyzer = "python_pytest"
