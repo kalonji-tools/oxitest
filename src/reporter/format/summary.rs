@@ -113,7 +113,21 @@ pub(crate) fn fmt_warning_block(
         let lines: Vec<String> = warning_msgs
             .iter()
             .map(|(node_id, reason)| {
-                color_dim(&format!("        {} — {}", node_id, reason), use_color)
+                let prefix = format!("        {} — ", node_id);
+                let indent = " ".repeat(prefix.len());
+                let formatted = reason
+                    .split('\n')
+                    .enumerate()
+                    .map(|(i, line)| {
+                        if i == 0 {
+                            format!("{}{}", prefix, line)
+                        } else {
+                            format!("{}{}", indent, line)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                color_dim(&formatted, use_color)
             })
             .collect();
         format!(
