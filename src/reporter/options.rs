@@ -2,6 +2,10 @@ const DEFAULT_NAME_WIDTH: usize = 45;
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
+/// Configuration snapshot consumed by reporter implementations.
+///
+/// Built once per run via [`ReporterOptsBuilder`] and passed to [`make_reporter`](super::make_reporter).
+/// Fields are `pub(crate)` — reporters read them directly without accessor methods.
 #[derive(Debug)]
 pub struct ReporterOpts {
     pub(crate) total: usize,
@@ -18,6 +22,11 @@ pub struct ReporterOpts {
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
+/// Builder for [`ReporterOpts`].
+///
+/// Use [`ReporterOptsBuilder::new`] in tests (sensible defaults, color off) or
+/// [`ReporterOptsBuilder::from_config`] in production to derive settings from a
+/// resolved [`Config`](crate::config::Config). Chain setters then call `.build()`.
 #[derive(Clone, Debug)]
 pub struct ReporterOptsBuilder {
     total: usize,

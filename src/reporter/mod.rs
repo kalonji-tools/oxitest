@@ -37,7 +37,11 @@ pub(crate) use format::sep_width;
 
 // ─── ParametrizeBuffer ───────────────────────────────────────────────────────
 
-/// Buffers results for a single parametrized function group.
+/// Buffers results for all cases of a single parametrized test function.
+///
+/// Parametrized cases are accumulated here so the reporter can emit a combined
+/// summary line (e.g. `test_add — 3 passed, 1 failed`) once all cases finish,
+/// rather than one line per case.
 pub(crate) struct ParametrizeBuffer {
     pub fn_name: String,
     pub results: Vec<(
@@ -106,6 +110,14 @@ impl ExitVote {
 
 // ─── Trait ───────────────────────────────────────────────────────────────────
 
+/// Event sink for test results, progress, and the final summary.
+///
+/// Lifecycle per test: `test_started` → `test_completed`. After all tests,
+/// `finish` is called once with any collection errors and an interrupted flag.
+/// `finish` returns an [`ExitVote`] that contributes to the process exit code.
+///
+/// Implementers: [`TtyReporter`], [`CiReporter`], [`JsonReporter`], [`PyPluginReporter`],
+/// [`CompositeReporter`].
 pub trait Reporter {
     fn test_started(&mut self, item: &crate::types::TestItem);
     fn test_completed(
@@ -124,7 +136,11 @@ pub trait Reporter {
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-/// Fans reporter events to every inner reporter; returns the highest voted exit code.
+/// Fans all reporter events to a list of inner reporters.
+///
+/// `finish` collects [`ExitVote`]s from every inner reporter and returns the
+/// maximum code voted (treating `Abstain` as 0). Used when multiple reporters
+/// are active simultaneously (e.g. TTY + JSON + plugin reporter).
 pub struct CompositeReporter {
     reporters: Vec<Box<dyn Reporter>>,
 }
@@ -172,6 +188,11 @@ impl Reporter for CompositeReporter {
     }
 }
 
+/// Build the active reporter from resolved options.
+///
+/// Chooses [`TtyReporter`] or [`CiReporter`] based on `is_tty`. If a JSON path
+/// or plugin reporters are provided, wraps everything in a [`CompositeReporter`].
+/// When only one reporter is active, returns it directly to avoid the fan-out overhead.
 pub fn make_reporter(
     opts: ReporterOpts,
     is_tty: bool,

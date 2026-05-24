@@ -21,6 +21,11 @@ use crate::types::{CollectError, TestItem};
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
 const BUILTIN_MARKERS: &[&str] = &["skip", "skipif", "xfail", "usefixtures", "timeout"];
 
+/// Check that every marker name on every item is either a built-in or registered.
+///
+/// Returns one [`CollectError`] per unknown marker, each with a hint showing the
+/// `[tool.oxitest]` TOML snippet needed to register it. Built-in markers
+/// (`skip`, `skipif`, `xfail`, `usefixtures`, `timeout`) are always allowed.
 pub fn validate_markers(
     items: &[Arc<TestItem>],
     registered: &std::collections::HashSet<&str>,
@@ -43,6 +48,11 @@ pub fn validate_markers(
         .collect()
 }
 
+/// Filter `items` by the `-k` keyword, retaining those whose node ID contains the substring.
+///
+/// `keyword = None` is a no-op (returns all items). The check is against the full
+/// `node_id` string (`"path::fn_name[param]"`), which already includes `fn_name`,
+/// so a single `contains` call is sufficient.
 #[must_use = "returns filtered items; original is consumed"]
 pub fn filter_items(items: Vec<Arc<TestItem>>, keyword: Option<&str>) -> Vec<Arc<TestItem>> {
     items

@@ -14,6 +14,10 @@ use crate::types::{NodeId, TestOutcome};
 
 // ── Violation types ───────────────────────────────────────────────────────────
 
+/// A strict-mode violation that is tied to a specific test item.
+///
+/// Reported alongside the test result when `strict = "enforce"`, or causes the
+/// run to abort before execution when `strict = "abort"`.
 #[derive(Debug, PartialEq)]
 pub enum PerTestViolation {
     BareAssert { node_id: NodeId, lines: Vec<usize> },
@@ -33,11 +37,21 @@ impl PerTestViolation {
     }
 }
 
+/// A strict-mode violation that applies to the entire suite, not a single test.
+///
+/// Currently only `MarkerNoDescription` — a marker registered without a description
+/// string in `[tool.oxitest] markers`. Suite violations are shown in the `STRICT`
+/// section after all tests finish, not inlined into test output.
 #[derive(Debug, PartialEq)]
 pub enum SuiteViolation {
     MarkerNoDescription { marker_name: String },
 }
 
+/// A strict-mode violation, either per-test or suite-level.
+///
+/// The split into [`PerTestViolation`] and [`SuiteViolation`] eliminates the
+/// `unreachable!()` that would be needed if both were flattened into a single enum.
+/// Use [`StrictViolation::node_id`] to distinguish at call sites.
 #[derive(Debug, PartialEq)]
 pub enum StrictViolation {
     PerTest(PerTestViolation),
@@ -55,6 +69,10 @@ impl StrictViolation {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/// Check for suite-level violations derivable from the config alone.
+///
+/// Currently produces one [`SuiteViolation::MarkerNoDescription`] per marker in
+/// `config.markers_without_description`. Called before collection begins.
 pub fn check_config(config: &Config) -> Vec<StrictViolation> {
     config
         .markers_without_description
@@ -67,6 +85,12 @@ pub fn check_config(config: &Config) -> Vec<StrictViolation> {
         .collect()
 }
 
+/// Convert raw violation data from Python collection into typed [`StrictViolation`]s.
+///
+/// Called after `collect_module` returns with `collect_violations = true`. Each
+/// [`RawViolation`] carries a `ViolationKind` enum and a `detail` string whose
+/// format depends on the kind (e.g. space-separated line numbers for `BareAssert`).
+/// Unknown kinds are silently discarded.
 pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
     raw.into_iter()
         .filter_map(|r| {
@@ -101,6 +125,10 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
         .collect()
 }
 
+/// Extract only the suite-level violations from a mixed slice.
+///
+/// Used to separate violations that belong in the `STRICT` summary section
+/// (suite-level) from those reported inline with each test (per-test).
 pub fn suite_level(violations: &[StrictViolation]) -> Vec<&SuiteViolation> {
     violations
         .iter()
@@ -170,6 +198,10 @@ impl std::fmt::Display for StrictViolation {
     }
 }
 
+/// Format a single violation as a fixed-width tabular line for the `STRICT` output block.
+///
+/// Format: `<node_id padded to 60 chars>  <violation-kind>  [extra detail]`.
+/// Delegates to the `Display` impl on each variant.
 pub fn format_violation_line(v: &StrictViolation) -> String {
     v.to_string()
 }

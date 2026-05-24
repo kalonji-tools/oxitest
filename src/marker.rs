@@ -148,6 +148,12 @@ impl MarkerParser {
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
+/// Filter `items` by the `-m` boolean marker expression.
+///
+/// Parses `expr` (e.g. `"slow and not db"`) using a [`logos`]-based lexer and
+/// recursive-descent parser, then evaluates the resulting AST against each item's
+/// marker list. Returns a parse error string if the expression is syntactically
+/// invalid.
 pub fn filter_by_marker_expr(
     items: Vec<Arc<TestItem>>,
     expr: &str,

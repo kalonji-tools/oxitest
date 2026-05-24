@@ -38,6 +38,10 @@ fn filter_frames<'a>(
     }
 }
 
+/// Returns the terminal width for separator lines, capped at 100 columns.
+///
+/// Queried once and cached; subsequent calls return the same value. The 100-column
+/// cap keeps output readable on wide terminals.
 pub(crate) fn sep_width() -> usize {
     static WIDTH: OnceLock<usize> = OnceLock::new();
     *WIDTH.get_or_init(|| {
@@ -46,6 +50,10 @@ pub(crate) fn sep_width() -> usize {
     })
 }
 
+/// Returns the separator string between parametrize case identifiers.
+///
+/// Color mode gets a middle dot (`·`) for visual polish; plain mode gets a hyphen
+/// to stay safe in environments that don't support Unicode.
 pub(crate) fn case_sep(use_color: bool) -> &'static str {
     if use_color {
         " · "
@@ -97,6 +105,12 @@ fn render_label_block(label_items: &[String], use_color: bool) -> String {
     out
 }
 
+/// Render a box-style diagnostic block for a failing test.
+///
+/// Produces the indented `┌─ ... └─` box shown below each failure, including the
+/// assertion source line, left/right diff (for `Failed`), traceback frames, and
+/// error message. Returns an empty string for `TbStyle::No` and `TbStyle::Line`
+/// (those styles suppress the block entirely).
 pub(crate) fn fmt_diagnostic_block(
     item: &TestItem,
     outcome: &TestOutcome,

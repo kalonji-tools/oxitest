@@ -84,6 +84,12 @@ pub(crate) fn drain_worker_results(
     }
 }
 
+/// Choose the number of worker subprocesses for this run.
+///
+/// Priority: serial flag → explicit `--workers N` → heuristic.
+/// The heuristic caps at `cpu_count` and, when a timing estimate is available,
+/// avoids spawning more workers than the estimated total runtime warrants given
+/// the subprocess spawn overhead (`spawn_overhead_ms` per worker).
 pub(crate) fn compute_optimal_workers(
     explicit_workers: Option<crate::config::WorkerCount>,
     serial: bool,
@@ -240,7 +246,10 @@ impl WorkerSession {
         }
     }
 
-    /// Serializes `task` as a single JSON line and flushes it to the worker's stdin.
+    /// Serialize `task` as a compact JSON line and flush it to the worker's stdin.
+    ///
+    /// The worker blocks on `sys.stdin.readline()`, so the newline terminator and
+    /// flush are both required for the message to be delivered immediately.
     fn send_task(&mut self, task: &WorkerTask<'_>) -> std::io::Result<()> {
         use std::io::Write;
         serde_json::to_writer(&mut self.stdin, task).map_err(std::io::Error::other)?;
