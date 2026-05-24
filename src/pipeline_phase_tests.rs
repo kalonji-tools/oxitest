@@ -1,5 +1,24 @@
 use super::*;
 
+fn make_ctx() -> PipelineContext {
+    let cfg = config::Config::default();
+    let cli = config::Cli::default_for_test();
+    let rootdir = camino::Utf8PathBuf::from(".");
+    let is_tty = false;
+    let use_color = false;
+    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color);
+    let cache = cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
+    PipelineContext::from_setup(SetupContext {
+        cfg,
+        cache,
+        cli,
+        rootdir,
+        is_tty,
+        use_color,
+        base,
+    })
+}
+
 mod phase_outcome_tests {
     use super::*;
 
@@ -22,28 +41,9 @@ mod phase_outcome_tests {
 mod pipeline_context_tests {
     use super::*;
 
-    fn make_test_context() -> PipelineContext {
-        let cfg = config::Config::default();
-        let cli = config::Cli::default_for_test();
-        let rootdir = camino::Utf8PathBuf::from(".");
-        let is_tty = false;
-        let use_color = false;
-        let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color);
-        let cache = cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
-        PipelineContext::from_setup(SetupContext {
-            cfg,
-            cache,
-            cli,
-            rootdir,
-            is_tty,
-            use_color,
-            base,
-        })
-    }
-
     #[test]
     fn context_starts_with_empty_items() {
-        let ctx = make_test_context();
+        let ctx = make_ctx();
         assert!(ctx.items.is_empty());
         assert!(ctx.violated_items.is_empty());
         assert!(ctx.all_violations.is_empty());
@@ -56,8 +56,38 @@ mod pipeline_context_tests {
 
     #[test]
     fn context_session_starts_none() {
-        let ctx = make_test_context();
+        let ctx = make_ctx();
         assert!(ctx.session.is_none());
         assert!(ctx.reporter.is_none());
+    }
+}
+
+mod file_collection_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::FileCollectionPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod affected_phase_tests {
+    use super::*;
+
+    #[test]
+    fn skips_when_no_affected_config() {
+        let ctx = make_ctx();
+        let phase = phases::AffectedPhase;
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_affected_set() {
+        let mut ctx = make_ctx();
+        ctx.cfg.affected = Some("HEAD~1".to_string());
+        let phase = phases::AffectedPhase;
+        assert!(phase.should_run(&ctx));
     }
 }
