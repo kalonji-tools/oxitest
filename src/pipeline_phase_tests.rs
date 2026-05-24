@@ -135,3 +135,61 @@ mod collection_phase_tests {
         assert!(phase.should_run(&ctx));
     }
 }
+
+mod strict_phase_tests {
+    use super::*;
+    use crate::config::StrictMode;
+
+    #[test]
+    fn skips_when_strict_none() {
+        let ctx = make_ctx();
+        let phase = phases::StrictPhase;
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_strict_abort() {
+        let mut ctx = make_ctx();
+        ctx.cfg.strict = Some(StrictMode::Abort);
+        let phase = phases::StrictPhase;
+        assert!(phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_strict_enforce() {
+        let mut ctx = make_ctx();
+        ctx.cfg.strict = Some(StrictMode::Enforce);
+        let phase = phases::StrictPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod filter_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::FilterPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod list_phase_tests {
+    use super::*;
+
+    #[test]
+    fn skips_when_list_not_set() {
+        let ctx = make_ctx();
+        let phase = phases::ListPhase;
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_list_set() {
+        let mut ctx = make_ctx();
+        ctx.cli.list = true;
+        let phase = phases::ListPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
