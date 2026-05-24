@@ -40,6 +40,8 @@ class ExecutionError(OxitestError):  # pragma: no cover
 
 
 class FixtureNotFoundError(FixtureError):
+    """Raised when a requested fixture name cannot be found in the registry."""
+
     def __init__(self, name: str, *, namespace: str = "") -> None:
         if namespace:
             super().__init__(f"fixture '{name}' not found in namespace '{namespace}'")
@@ -50,18 +52,28 @@ class FixtureNotFoundError(FixtureError):
 
 
 class FixtureCycleError(FixtureError):
+    """Raised when a circular dependency is detected in the fixture graph."""
+
     def __init__(self, name: str, chain: set[str]) -> None:
         path = " → ".join(sorted(chain)) + f" → {name}"
         super().__init__(f"fixture cycle detected: {path}")
 
 
 class FixtureSetupError(FixtureError):
+    """Raised when a fixture function raises an exception during setup."""
+
     def __init__(self, name: str, cause: Exception) -> None:
         super().__init__(f"Error in fixture '{name}': {cause}")
         self.fixture_name = name
 
 
 class UnannotatedFixtureParamError(FixtureError):
+    """Raised when a parameter matches a fixture name but lacks `Fixture[T]`.
+
+    Oxitest requires explicit opt-in to fixture injection via the `Fixture[T]`
+    type annotation.  Unannotated parameters are never resolved automatically.
+    """
+
     def __init__(self, param_name: str, fn_name: str) -> None:
         super().__init__(
             f"parameter '{param_name}' in {fn_name} is not injected.\n"

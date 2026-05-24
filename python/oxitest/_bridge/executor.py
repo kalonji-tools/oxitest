@@ -1,3 +1,11 @@
+"""Test execution orchestration for the oxitest bridge.
+
+Loads the target module, resolves fixtures and parametrize values, evaluates
+marks, builds the middleware pipeline, and returns a `TestResult`.  This is
+the single entry point called by the Rust core (via PyO3) and by the parallel
+worker subprocess.
+"""
+
 from __future__ import annotations
 
 __all__ = ["run_test"]
@@ -229,11 +237,22 @@ def run_test(
     param_id: str | None = None,
     default_timeout: int | None = None,
 ) -> TestResult:
-    """Run a test function and return a TestResult.
+    """Load, resolve, and execute a single test function.
 
-    Status values: "passed", "failed", "error", "skipped", "warned", "xfailed",
-    "xpassed".
-    session: optional FixtureSession for fixture injection.
+    Args:
+        module_path: Absolute filesystem path to the test module.
+        fn_name: Name of the test function (or method) to run.
+        session: Active `FixtureSession` for fixture injection.  When `None`
+            a null session is used, meaning no user fixtures are available.
+        param_id: Parametrize case identifier (e.g. ``"case0"``).  `None`
+            for non-parametrized tests.
+        default_timeout: Per-test timeout in seconds inherited from config.
+            Overridden by a ``@mark.timeout`` decorator on the test.
+
+    Returns:
+        A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
+        ``"error"``, ``"skipped"``, ``"warned"``, ``"xfailed"``, or
+        ``"xpassed"``.
     """
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION

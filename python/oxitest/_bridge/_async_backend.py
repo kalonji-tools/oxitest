@@ -62,6 +62,15 @@ class AsyncioSharedSession:
         self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
 
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Execute a coroutine on the persistent event loop and return its result.
+
+        After the coroutine completes, any tasks that were created during
+        execution but not awaited (stray tasks) are cancelled and awaited to
+        prevent resource leaks.  A warning is emitted for each cancelled task.
+
+        Raises:
+            RuntimeError: If the session has already been closed.
+        """
         if self._loop is None or self._loop.is_closed():
             msg = "SharedAsyncSession is closed"
             raise RuntimeError(msg)

@@ -177,6 +177,13 @@ def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
 
 
 class _SessionProtocol(Protocol):
+    """Structural protocol for objects that can provide fixtures to a test.
+
+    Both `FixtureSession` (full session with a registry) and `_NullFixtureSession`
+    (no-op used when no conftest is present) satisfy this protocol, allowing
+    `run_test` to treat them uniformly without None guards.
+    """
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
@@ -370,6 +377,26 @@ async def _task_group_factory():  # type: ignore[return-value]
 
 
 class FixtureSession:
+    """Manages fixture lifecycle for a single oxitest run.
+
+    Owns three fixture scopes:
+
+    - **function scope** (per-test teardown list, `fn_teardowns`) — default
+      for all user-defined fixtures.
+    - **shared scope** (`_shared_scope`) — for fixtures declared with
+      ``shared=True``; initialised once and torn down at `end_session`.
+    - **session scope** (`_session_scope`) — for built-in session-lifetime
+      fixtures such as `TempDirFactory`.
+
+    Built-in fixtures (e.g. `TempDir`, `LogCapture`) are injected by type via
+    `Fixture[T]` annotations.  User fixtures are looked up by parameter name in
+    the `FixtureRegistry`.  Async fixtures are delegated to the configured
+    `AsyncBackend`.
+
+    The session is constructed once by `conftest_loader` and passed into every
+    `run_test` call for the duration of the run.
+    """
+
     def __init__(
         self,
         registry: FixtureRegistry,
