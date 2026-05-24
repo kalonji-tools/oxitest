@@ -157,7 +157,7 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) parallel: &'a dyn ParallelRunner,
 }
 
-pub(super) fn early_exit_with_error(
+pub(in crate::pipeline) fn early_exit_with_error(
     errors: &[types::CollectError],
     make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
 ) -> i32 {
