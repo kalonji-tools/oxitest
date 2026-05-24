@@ -28,6 +28,8 @@ struct CacheEntry {
     age: u32,
     #[serde(default)]
     last_outcome: Option<OutcomeKind>,
+    #[serde(default)]
+    flaky_count: u32,
 }
 
 /// Serialized representation of a single TestItem (module_path and node_id are derived).
@@ -258,6 +260,7 @@ impl TestCache {
                     duration_ms: 0.0,
                     age: 0,
                     last_outcome: None,
+                    flaky_count: 0,
                 }); // initial values overwritten below
             entry.duration_ms = *duration_ms;
             entry.age = 0;
@@ -290,6 +293,7 @@ impl TestCache {
                     duration_ms: 0.0,
                     age: 0,
                     last_outcome: None,
+                    flaky_count: 0,
                 });
             entry.duration_ms = t.duration_ms.as_f64();
             entry.age = 0;
@@ -315,6 +319,9 @@ impl TestCache {
         for t in timings {
             if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
                 entry.last_outcome = Some(t.outcome.clone());
+                if t.outcome == OutcomeKind::Flaky {
+                    entry.flaky_count = entry.flaky_count.saturating_add(1);
+                }
                 changed = true;
             }
         }
@@ -456,6 +463,7 @@ mod tests {
                         duration_ms: *ms,
                         age: 0,
                         last_outcome: None,
+                        flaky_count: 0,
                     },
                 )
             })
@@ -1094,6 +1102,7 @@ mod tests {
                 duration_ms: 10.0,
                 age: 0,
                 last_outcome: None,
+                flaky_count: 0,
             },
         );
         timings.insert(
@@ -1102,6 +1111,7 @@ mod tests {
                 duration_ms: 20.0,
                 age: 1,
                 last_outcome: None,
+                flaky_count: 0,
             },
         );
         timings.insert(
@@ -1110,6 +1120,7 @@ mod tests {
                 duration_ms: 30.0,
                 age: 2,
                 last_outcome: None,
+                flaky_count: 0,
             },
         );
 
@@ -1292,5 +1303,27 @@ mod tests {
         )];
         cache.record_timing_outcomes(&timings);
         assert!(cache.dirty);
+    }
+
+    #[test]
+    fn test_flaky_count_increments_on_flaky_outcome() {
+        use crate::types::{DurationMs, TestTiming};
+        let mut cache = TestCache::empty();
+        let timings = vec![TestTiming {
+            node_id: NodeId::from_raw("tests/test_a.py::test_x"),
+            duration_ms: DurationMs::new(100.0),
+            outcome: OutcomeKind::Flaky,
+        }];
+        cache.merge_timings(&timings, 50);
+        cache.record_timing_outcomes(&timings);
+        let failed_ids = cache.last_failed_ids();
+        assert!(
+            !failed_ids.contains("tests/test_a.py::test_x"),
+            "flaky should not be in last_failed_ids"
+        );
+        assert_eq!(
+            cache.inner.timings["tests/test_a.py::test_x"].flaky_count, 1,
+            "flaky_count should be incremented"
+        );
     }
 }
