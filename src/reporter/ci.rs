@@ -114,6 +114,10 @@ impl Reporter for CiReporter {
             TestOutcome::Failed { .. }
             | TestOutcome::Error { .. }
             | TestOutcome::Timeout { .. } => self.push_deferred_diag(item, outcome),
+            TestOutcome::Flaky { .. } => {
+                let node_str = item.node_id.as_ref();
+                self.deferred_diags.retain(|d| !d.contains(node_str));
+            }
             _ => {}
         }
         self.stats.record(item, outcome);

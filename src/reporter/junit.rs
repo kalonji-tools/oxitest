@@ -83,6 +83,7 @@ fn to_junit_outcome(outcome: &TestOutcome) -> JunitOutcome {
         TestOutcome::Timeout { message } => JunitOutcome::Error {
             message: message.clone(),
         },
+        TestOutcome::Flaky { .. } => JunitOutcome::Passed,
     }
 }
 

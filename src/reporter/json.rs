@@ -69,6 +69,7 @@ fn outcome_status(outcome: &TestOutcome) -> &'static str {
         TestOutcome::XPassed { strict: true } => "failed",
         TestOutcome::XPassed { strict: false } => "passed",
         TestOutcome::Timeout { .. } => "failed",
+        TestOutcome::Flaky { .. } => "passed",
     }
 }
 
@@ -84,7 +85,7 @@ fn outcome_message(outcome: &TestOutcome) -> Option<String> {
     match outcome {
         TestOutcome::Failed { message, .. } => non_empty(message),
         TestOutcome::Error { message, .. } => non_empty(message),
-        TestOutcome::Timeout { message } => non_empty(message),
+        TestOutcome::Timeout { message } | TestOutcome::Flaky { message } => non_empty(message),
         _ => None,
     }
 }

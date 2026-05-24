@@ -56,6 +56,9 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
             use_color,
         ));
     }
+    if stats.flaky > 0 {
+        parts.push(color_warn(&format!("{} flaky", stats.flaky), use_color));
+    }
     if collect_err_count > 0 {
         parts.push(format!(
             "{} collection error{}",
@@ -165,6 +168,7 @@ mod tests {
             xfailed,
             xpassed,
             xpassed_strict,
+            flaky: 0,
             ..RunStats::new()
         }
     }
@@ -309,6 +313,25 @@ mod tests {
         assert!(s.contains("tests/test_foo.py::test_a"));
         assert!(s.contains("use new_api() instead"));
         assert!(!s.contains("--warnings to expand"));
+    }
+
+    #[test]
+    fn test_summary_flaky_appears_when_nonzero() {
+        let s = fmt_summary(
+            &RunStats {
+                flaky: 2,
+                ..RunStats::new()
+            },
+            0,
+            false,
+        );
+        assert!(s.contains("2 flaky"));
+    }
+
+    #[test]
+    fn test_summary_flaky_absent_when_zero() {
+        let s = fmt_summary(&RunStats::new(), 0, false);
+        assert!(!s.contains("flaky"));
     }
 
     #[test]
