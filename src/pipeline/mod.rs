@@ -10,7 +10,8 @@ pub(crate) mod traits;
 use std::sync::Arc;
 
 use crate::{
-    bridge, cache, collector, config, filter, marker, parallel, reporter, scheduler, strict, types,
+    affected, bridge, cache, collector, config, filter, marker, parallel, reporter, scheduler,
+    strict, types,
 };
 use clap::Parser;
 use pyo3::prelude::*;
@@ -616,6 +617,36 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     };
 
     let (test_files, conftest_files) = collector::collect_files(&cfg);
+
+    // --affected: filter test files to only those affected by git changes.
+    let test_files = if let Some(base) = &cli.affected {
+        match affected::filter_affected_test_files(py, &test_files, &cfg.rootdir, base) {
+            Ok(Some(files)) => {
+                if files.is_empty() {
+                    println!("no changes detected — nothing to test");
+                    return Ok(0);
+                }
+                let total = test_files.len();
+                tracing::info!(
+                    affected = files.len(),
+                    total,
+                    base = base.as_str(),
+                    "running affected tests only"
+                );
+                files
+            }
+            Ok(None) => {
+                tracing::info!("pyproject.toml changed — running all tests");
+                test_files
+            }
+            Err(e) => {
+                let err = types::CollectError::PyError(e.to_string());
+                return Ok(early_exit_with_error(&[err], &make_error_rep));
+            }
+        }
+    } else {
+        test_files
+    };
 
     // Load conftest before importing test files — conftest_loader registers
     // sys.modules["conftest"] so test files can do `from conftest import my_fixture`.
