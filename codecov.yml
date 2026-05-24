@@ -28,6 +28,8 @@ ignore:
   - "src/bridge.rs"
   - "src/lib.rs"
   - "src/pipeline/traits.rs"
+  # Retry: calls Python via TestRunner trait, not unit-testable without interpreter
+  - "src/retry.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
@@ -40,3 +42,5 @@ ignore:
   # Protocol stubs — method bodies are `...`, never executed
   - "python/oxitest/plugin.py"
   - "python/oxitest/_bridge/_async_backend.py"
+  # Import graph: only called from Rust via --affected, has own test suite
+  - "python/oxitest/_bridge/import_graph.py"
