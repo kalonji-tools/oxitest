@@ -162,6 +162,9 @@ pub enum TestOutcome {
     Timeout {
         message: String,
     },
+    Flaky {
+        message: String,
+    },
 }
 
 impl TestOutcome {
@@ -188,6 +191,7 @@ impl TestOutcome {
             Self::XFailed { .. } => 'x',
             Self::XPassed { .. } => 'X',
             Self::Timeout { .. } => 'T',
+            Self::Flaky { .. } => 'f',
         }
     }
 
@@ -201,6 +205,7 @@ impl TestOutcome {
             Self::XFailed { .. } => "XFAIL",
             Self::XPassed { .. } => "XPASS",
             Self::Timeout { .. } => "TIME ",
+            Self::Flaky { .. } => "FLAKY",
             Self::Passed { .. } => "",
         }
     }
@@ -216,6 +221,7 @@ impl TestOutcome {
             Self::XFailed { .. } => "xfailed",
             Self::XPassed { .. } => "xpassed",
             Self::Timeout { .. } => "timeout",
+            Self::Flaky { .. } => "flaky",
         }
     }
 }
@@ -246,6 +252,7 @@ pub enum OutcomeKind {
     #[serde(rename = "xpassed")]
     XPassed,
     Timeout,
+    Flaky,
     /// Catch-all for unrecognised outcome strings from workers.
     #[serde(other)]
     Unknown,
@@ -268,6 +275,7 @@ impl OutcomeKind {
             Self::XFailed => "xfailed",
             Self::XPassed => "xpassed",
             Self::Timeout => "timeout",
+            Self::Flaky => "flaky",
             Self::Unknown => "unknown",
         }
     }
@@ -290,6 +298,7 @@ impl From<&TestOutcome> for OutcomeKind {
             TestOutcome::XFailed { .. } => Self::XFailed,
             TestOutcome::XPassed { .. } => Self::XPassed,
             TestOutcome::Timeout { .. } => Self::Timeout,
+            TestOutcome::Flaky { .. } => Self::Flaky,
         }
     }
 }
@@ -950,6 +959,35 @@ mod tests {
     }
 
     #[test]
+    fn test_flaky_outcome_is_not_hard_failure() {
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        assert!(!outcome.is_hard_failure());
+    }
+
+    #[test]
+    fn test_flaky_outcome_as_str() {
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        assert_eq!(outcome.as_str(), "flaky");
+    }
+
+    #[test]
+    fn test_flaky_outcome_kind() {
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        assert_eq!(OutcomeKind::from(&outcome), OutcomeKind::Flaky);
+    }
+
+    #[test]
+    fn test_flaky_outcome_kind_is_not_failure() {
+        assert!(!OutcomeKind::Flaky.is_failure());
+    }
+
+    #[test]
     fn test_collect_error_import_display_shows_path_and_traceback() {
         use camino::Utf8PathBuf;
         let err = CollectError::ImportError {
@@ -1098,12 +1136,16 @@ mod tests {
         // These are the literal strings emitted as result.status by
         // python/oxitest/_bridge/executor.py and python/oxitest/_bridge/marks.py,
         // then forwarded by python/oxitest/_bridge/worker.py via the "outcome" JSON key.
+        // NOTE: "flaky" is NOT in this set — Flaky is a Rust-synthesised outcome
+        // produced by the retry logic after a test fails then passes; Python workers
+        // never emit it directly.
         let worker_strings: HashSet<&str> = [
             "passed", "failed", "error", "skipped", "warned", "xfailed", "xpassed", "timeout",
         ]
         .into_iter()
         .collect();
 
+        // Exclude Flaky — it is synthesised by Rust, not emitted by workers.
         let outcome_strings: HashSet<&str> = [
             TestOutcome::Passed {
                 no_message_lines: vec![],
@@ -1146,8 +1188,9 @@ mod tests {
 
         assert_eq!(
             worker_strings, outcome_strings,
-            "Worker status strings must exactly match TestOutcome::as_str() values.\n\
-             If you add a new outcome, update both worker.py and this test."
+            "Worker status strings must exactly match TestOutcome::as_str() values \
+             (excluding Rust-synthesised outcomes like Flaky).\n\
+             If you add a new outcome from the Python side, update both worker.py and this test."
         );
     }
 }
