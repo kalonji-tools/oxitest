@@ -44,7 +44,10 @@ python = ".venv"
 
 [tool.oxitest]
 testpaths = ["python/tests"]
+python_files = ["test_*.py"]
 strict = "abort"
+timeout = 30
+affected_base = "main"
 
 [tool.codespell]
 skip = "target,Cargo.lock,flake.lock"
