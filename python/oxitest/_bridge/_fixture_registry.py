@@ -29,6 +29,14 @@ class FixtureDef(Generic[T]):
 
 
 class FixtureRegistry:
+    """Registry of all fixture definitions collected from conftest files.
+
+    Each fixture name maps to an ordered list of `FixtureDef` entries, one per
+    conftest that defines it, from the root conftest to the most-local leaf.
+    Resolution always picks the last (most-local) entry, implementing pytest's
+    locality-wins override semantics.
+    """
+
     def __init__(self) -> None:
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
         self._defs: dict[str, list[FixtureDef[Any]]] = {}

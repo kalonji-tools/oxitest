@@ -70,6 +70,7 @@ class _UsefixturesHandler(MarkHandler):
     mark_name = "usefixtures"
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        """Resolve each named fixture for side effects, without injecting its value."""
         # NOTE: name guard removed — registry dispatch already filtered by name
         for fx_name in mark.args:
             ctx.session.get_fixture(str(fx_name), ctx.module_path, ctx.fn_teardowns)
@@ -80,6 +81,7 @@ class _SkipHandler(MarkHandler):
     mark_name = "skip"
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        """Short-circuit test execution with a `skipped` result."""
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
         return MarkEvalResult(
             short_circuit=TestResult(status=StatusKind.SKIPPED, message=str(reason))
@@ -90,6 +92,7 @@ class _SkipIfHandler(MarkHandler):
     mark_name = "skipif"
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        """Short-circuit with `skipped` when the condition (first arg) is truthy."""
         if mark.args[0]:
             reason = str(mark.kwargs.get("reason", ""))
             return MarkEvalResult(
@@ -102,6 +105,7 @@ class _XFailHandler(MarkHandler):
     mark_name = "xfail"
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        """Wrap execution to convert failures to `xfailed` and passes to `xpassed`."""
         strict = mark.kwargs.get("strict", True)
         reason = mark.kwargs.get("reason", "")
         raises = mark.kwargs.get("raises", None)
@@ -123,6 +127,7 @@ class _TimeoutHandler(MarkHandler):
     mark_name = "timeout"
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+        """Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded."""
         seconds = int(mark.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
         return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
 
