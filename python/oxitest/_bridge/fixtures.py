@@ -53,7 +53,7 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class FixtureAccessor:
-    """Returned by `Fixtures.__getattr__`; serves two roles:
+    """Returned by `Fixtures.__getattr__`; serves two roles.
 
     1. **FixtureRef target** — carries `_oxitest_fixture_name` and wraps the
        underlying fixture function (`_fa_func`) so the executor can resolve it
@@ -208,6 +208,7 @@ class Fixtures:
         type checkers enforce the field types without a plugin.
 
         Args:
+            fn: The fixture function (when used as a bare decorator).
             autouse: If `True`, fixture runs for every test without being
                 explicitly requested.
             name: Override the fixture name. Defaults to the function name.

@@ -21,7 +21,7 @@ from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
 
 @dataclass
 class CaptureResult:
-    """Captured stdout and stderr returned by `readouterr()`.
+    r"""Captured stdout and stderr returned by `readouterr()`.
 
     Attributes:
         out: Everything written to stdout since the last `readouterr()` call.
@@ -42,7 +42,7 @@ class CaptureResult:
 
 
 class _StdCapture:
-    """Captures `sys.stdout` and `sys.stderr` at the Python stream level.
+    r"""Captures `sys.stdout` and `sys.stderr` at the Python stream level.
 
     Replaces `sys.stdout` and `sys.stderr` with in-memory `StringIO`
     objects for the duration of the test. Does **not** capture output from C
