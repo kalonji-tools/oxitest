@@ -121,6 +121,7 @@ pub struct Config {
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub async_backend: String,
     pub affected: Option<String>,
+    pub affected_base: String,
 }
 
 impl Default for Config {
@@ -160,6 +161,7 @@ impl Default for Config {
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
             affected: None,
+            affected_base: "HEAD".to_string(),
         }
     }
 }
@@ -237,6 +239,9 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     config.plugin_settings = tc.plugin_settings;
     if let Some(ab) = tc.async_backend {
         config.async_backend = ab;
+    }
+    if let Some(ab) = tc.affected_base {
+        config.affected_base = ab;
     }
 }
 
@@ -351,8 +356,13 @@ impl Config {
         if let Some(timeout) = cli.timeout {
             self.timeout_secs = Some(timeout);
         }
-        if cli.affected.is_some() {
-            self.affected = cli.affected.clone();
+        if let Some(ref val) = cli.affected {
+            if val.is_empty() {
+                // Bare --affected: use affected_base from pyproject.toml (default: HEAD).
+                self.affected = Some(self.affected_base.clone());
+            } else {
+                self.affected = cli.affected.clone();
+            }
         }
         self
     }
@@ -1372,9 +1382,46 @@ async_backend = "trio"
     }
 
     #[test]
-    fn test_cli_affected_bare_defaults_to_head() {
+    fn test_cli_affected_bare_is_empty_sentinel() {
         let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
-        assert_eq!(cli.affected, Some("HEAD".to_string()));
+        assert_eq!(cli.affected, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_affected_bare_resolves_to_config_base() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\naffected_base = \"main\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.affected, Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_affected_bare_defaults_to_head_without_config() {
+        let dir = TempDir::new().unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.affected, Some("HEAD".to_string()));
+    }
+
+    #[test]
+    fn test_affected_explicit_overrides_config_base() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\naffected_base = \"main\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--affected=develop"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.affected, Some("develop".to_string()));
     }
 
     #[test]
