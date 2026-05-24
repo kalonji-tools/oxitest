@@ -18,6 +18,10 @@ use crate::types::{NodeId, OutcomeKind, TestItem};
 
 const CACHE_VERSION: u32 = 1;
 
+/// Timing and outcome record for a single test, stored by node ID.
+///
+/// `age` counts how many runs have elapsed since this test last executed.
+/// Entries with `age > cache_max_age` are pruned during [`TestCache::merge_timings`].
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct CacheEntry {
     duration_ms: f64,
@@ -38,14 +42,22 @@ struct CachedItemData {
     is_async: bool,
 }
 
-/// Per-module fast-collection cache. Invalidated when mtime_secs changes.
+/// Per-module collection cache keyed by file path.
+///
+/// Stores the list of [`CachedItemData`] items collected from a module, tagged
+/// with the file's mtime at collection time. When `mtime_secs` no longer matches
+/// the file on disk, the cache entry is stale and Python collection runs again.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ModuleCache {
     mtime_secs: u64,
     items: Vec<CachedItemData>,
 }
 
-/// Serialize an AHashMap in alphabetically sorted order for deterministic JSON output.
+/// Serialize an `AHashMap` in alphabetically sorted key order.
+///
+/// `AHashMap` iteration order is non-deterministic. Without sorting, the cache
+/// file would diff on every write even when no data changed, breaking VCS workflows
+/// and making it harder to audit what actually changed between runs.
 fn serialize_sorted<S, V>(map: &AHashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -61,6 +73,12 @@ where
     state.end()
 }
 
+/// On-disk representation of the timing cache, written to `.oxitest_cache/timings.json`.
+///
+/// The `version` field guards against incompatible format changes — mismatches
+/// cause `load()` to silently return an empty cache rather than failing. Both
+/// `timings` and `modules` maps are serialized in sorted key order for
+/// deterministic output (see [`serialize_sorted`]).
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct CacheFile {
     version: u32,
@@ -70,6 +88,14 @@ struct CacheFile {
     modules: AHashMap<String, ModuleCache>,
 }
 
+/// Persists per-test timing and outcome data across runs.
+///
+/// Loaded at startup from `.oxitest_cache/timings.json` and saved after each run
+/// if the data changed (`dirty` flag). Used by the scheduler to sort module groups
+/// heaviest-first, and by `--lf`/`--ff` to identify previously-failed tests.
+///
+/// Errors during `load()` are silently swallowed — a missing or corrupt cache file
+/// just means a cold start with no timing data.
 #[derive(Debug)]
 pub struct TestCache {
     inner: CacheFile,
@@ -92,6 +118,10 @@ impl TestCache {
         }
     }
 
+    /// Load the cache from `<rootdir>/.oxitest_cache/timings.json`.
+    ///
+    /// Returns an empty cache on any error (missing file, parse failure, version
+    /// mismatch) so callers never need to handle a `Result`.
     pub fn load(rootdir: &Utf8Path) -> Self {
         let path = Self::cache_path(rootdir);
         let content = match std::fs::read_to_string(&path) {
@@ -111,6 +141,10 @@ impl TestCache {
         }
     }
 
+    /// Remove timing entries whose node IDs are not in the current item list.
+    ///
+    /// Called after collection to prune stale entries (e.g. deleted or renamed tests).
+    /// Sets `dirty = true` if any entries were removed, triggering a cache save.
     pub fn invalidate(&mut self, items: &[Arc<TestItem>]) {
         let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
         let before = self.inner.timings.len();
@@ -154,6 +188,12 @@ impl TestCache {
         }
     }
 
+    /// Sort module groups heaviest-first for optimal parallel scheduling.
+    ///
+    /// Groups with known total duration are sorted by descending sum of cached
+    /// durations. Uncached groups fall back to descending item count. Assigning
+    /// the heaviest module to the first worker minimises tail latency by ensuring
+    /// the longest-running work starts immediately.
     pub(crate) fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) {
         // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
         // Avoids re-running module_duration_sum inside the comparator, which would be

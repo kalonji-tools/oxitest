@@ -38,6 +38,12 @@ pub(crate) struct FrameEntry {
     pub line: String,
 }
 
+/// Deserialized JSON result for a single test, written by a worker subprocess.
+///
+/// Workers print one `WorkerResult` line per test to stdout. All optional
+/// diagnostic fields use `#[serde(default)]` so compact wire messages (which
+/// omit falsy fields) deserialize without error. Use [`to_outcome`](WorkerResult::to_outcome)
+/// to convert into the richer [`TestOutcome`](crate::types::TestOutcome) enum.
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct WorkerResult {
     pub node_id: String,
@@ -69,6 +75,11 @@ pub(crate) struct WorkerResult {
 }
 
 impl WorkerResult {
+    /// Convert the flat wire representation into a typed [`TestOutcome`](types::TestOutcome).
+    ///
+    /// Message selection differs by outcome: `Skipped`, `XFailed`, and `Timeout` use
+    /// `failure_repr` (the human-readable reason string); everything else uses `message`
+    /// (the structured diagnostic field) so that `left`/`right`/`op` reach the reporter.
     pub fn to_outcome(&self) -> types::TestOutcome {
         // skipped/xfailed/timeout carry their human-readable reason in
         // failure_repr.  For failed/error/warned, use message — failure_repr is a
