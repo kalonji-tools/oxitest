@@ -101,9 +101,9 @@ def load_plugins(
 
     Args:
         plugin_modules: Ordered list of plugin module paths from
-            ``[tool.oxitest] plugins = [...]``
+            `[tool.oxitest] plugins = [...]`
         plugin_configs: Per-plugin config dicts from
-            ``[tool.oxitest.plugin_settings.<name>]`` sections.
+            `[tool.oxitest.plugin_settings.<name>]` sections.
 
     Returns:
         A PluginRegistry containing all loaded plugins.

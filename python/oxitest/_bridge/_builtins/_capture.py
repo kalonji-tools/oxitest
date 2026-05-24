@@ -21,11 +21,11 @@ from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
 
 @dataclass
 class CaptureResult:
-    """Captured stdout and stderr returned by ``readouterr()``.
+    """Captured stdout and stderr returned by `readouterr()`.
 
     Attributes:
-        out: Everything written to stdout since the last ``readouterr()`` call.
-        err: Everything written to stderr since the last ``readouterr()`` call.
+        out: Everything written to stdout since the last `readouterr()` call.
+        err: Everything written to stderr since the last `readouterr()` call.
 
     Example:
         ```python
@@ -42,12 +42,12 @@ class CaptureResult:
 
 
 class _StdCapture:
-    """Captures ``sys.stdout`` and ``sys.stderr`` at the Python stream level.
+    """Captures `sys.stdout` and `sys.stderr` at the Python stream level.
 
-    Replaces ``sys.stdout`` and ``sys.stderr`` with in-memory ``StringIO``
+    Replaces `sys.stdout` and `sys.stderr` with in-memory `StringIO`
     objects for the duration of the test. Does **not** capture output from C
     extensions or subprocesses that write directly to file descriptors — use
-    ``FdCapture`` for that.
+    `FdCapture` for that.
 
     Example:
         ```python
@@ -70,7 +70,7 @@ class _StdCapture:
         """Return and clear all captured output since the last call.
 
         Returns:
-            A ``CaptureResult`` with ``.out`` and ``.err`` strings.
+            A `CaptureResult` with `.out` and `.err` strings.
         """
         out = self._out_buf.getvalue()
         err = self._err_buf.getvalue()
@@ -124,7 +124,7 @@ class _FdCapture:
         """Return and clear all captured output since the last call.
 
         Returns:
-            A ``CaptureResult`` with ``.out`` and ``.err`` strings.
+            A `CaptureResult` with `.out` and `.err` strings.
         """
         sys.stdout.flush()
         sys.stderr.flush()

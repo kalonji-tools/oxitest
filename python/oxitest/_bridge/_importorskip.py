@@ -11,9 +11,9 @@ def importorskip(modname: str, *, reason: str | None = None) -> Any:
     """Import a module, skipping the test if it is not installed.
 
     Args:
-        modname: Name of the module to import (e.g. ``"loguru"``).
+        modname: Name of the module to import (e.g. `"loguru"`).
         reason: Optional skip message. Defaults to
-                ``"could not import '<modname>': <error>"``.
+                `"could not import '<modname>': <error>"`.
 
     Returns:
         The imported module.

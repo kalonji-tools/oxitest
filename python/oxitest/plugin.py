@@ -70,7 +70,7 @@ class Reporter(Protocol):
 class Plugin:
     """Typed declaration of what a plugin provides.
 
-    Returned by the plugin's ``oxitest_plugin()`` entry point function.
+    Returned by the plugin's `oxitest_plugin()` entry point function.
     """
 
     # Fixture-adjacent hooks (lazy — activated on first use)

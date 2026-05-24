@@ -11,7 +11,7 @@ class _FixtureMarker:
 class _FixtureType:
     """Injection signal for oxitest fixtures.
 
-    Annotating a test or fixture parameter with ``Fixture[T]`` tells oxitest
+    Annotating a test or fixture parameter with `Fixture[T]` tells oxitest
     to inject the matching fixture at runtime. The annotation is the injection
     signal — an unannotated parameter is NOT injected, even if its name matches
     a registered fixture.
@@ -21,8 +21,8 @@ class _FixtureType:
         def test_example(numbers: Fixture[list[int]]) -> None:
             assert sum(numbers) > 0
 
-    The type parameter ``T`` is the fixture's return type. IDEs and type
-    checkers resolve ``Fixture[list[int]]`` as ``list[int]`` at the call site
+    The type parameter `T` is the fixture's return type. IDEs and type
+    checkers resolve `Fixture[list[int]]` as `list[int]` at the call site
     — no plugin required.
 
     Incorrect (unannotated — oxitest will not inject this)::
@@ -43,9 +43,9 @@ class _FixtureRefMarker:
 
 
 class _FixtureRefType:
-    """Annotation for fixture references inside ``@oxitest.parametrize`` kwargs.
+    """Annotation for fixture references inside `@oxitest.parametrize` kwargs.
 
-    Use ``FixtureRef[T]`` as the type annotation on a frozen dataclass field to
+    Use `FixtureRef[T]` as the type annotation on a frozen dataclass field to
     signal that the field's value is a fixture function, not a literal value.
     The runner resolves it to the live fixture instance before each test.
 
@@ -78,10 +78,10 @@ FixtureRef = _FixtureRefType
 class _YieldsAlias:
     """Return-type annotation for yield-based fixture teardown.
 
-    ``Yields[T]`` is shorthand for ``Generator[T, None, None]`` — the correct
-    return annotation for a fixture that uses ``yield`` to separate setup from
+    `Yields[T]` is shorthand for `Generator[T, None, None]` — the correct
+    return annotation for a fixture that uses `yield` to separate setup from
     teardown. Without it, type checkers flag yield fixtures with an incorrect
-    return type and require ``# type: ignore[return]`` suppressions.
+    return type and require `# type: ignore[return]` suppressions.
 
     This is a **return-type annotation only** — it does not carry an injection
     marker and will not cause oxitest to inject anything.

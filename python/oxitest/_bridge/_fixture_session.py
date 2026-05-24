@@ -260,14 +260,14 @@ class _Node(NamedTuple):
 class _TestContext:
     """Provides imperative teardown registration for a single test.
 
-    Injected when a test parameter is annotated with ``TestContext``::
+    Injected when a test parameter is annotated with `TestContext`::
 
         def test_example(ctx: TestContext) -> None:
             resource = acquire()
             ctx.addfinalizer(resource.close)
             ...
 
-    Use ``addfinalizer`` (or its alias ``on_teardown``) to register cleanup
+    Use `addfinalizer` (or its alias `on_teardown`) to register cleanup
     callbacks. All registered callbacks run after the test completes, in LIFO
     order, regardless of pass or fail.
     """
@@ -305,7 +305,7 @@ from oxitest._bridge._builtins._base import (  # noqa: E402
 class FixtureTeardownWarning(UserWarning):
     """Emitted when an exception occurs inside a yield-fixture teardown.
 
-    Captured by ``WarnCapture`` when a test annotates ``warn: WarnCapture``.
+    Captured by `WarnCapture` when a test annotates `warn: WarnCapture`.
     """
 
 
@@ -346,7 +346,7 @@ class _Scope:
 async def _task_group_factory():  # type: ignore[return-value]
     """Built-in async yield fixture providing a managed asyncio.TaskGroup.
 
-    Tracks all tasks created via ``task_group.create_task()`` and cancels any
+    Tracks all tasks created via `task_group.create_task()` and cancels any
     that are still running when the test body returns, preventing hangs on
     teardown.
     """

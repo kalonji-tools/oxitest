@@ -1,11 +1,11 @@
 """Built-in fixtures for oxitest.
 
 Importing this package registers all built-in fixture implementations via
-``BuiltinFixture.__init_subclass__``. ``oxitest/__init__.py`` triggers this
+`BuiltinFixture.__init_subclass__`. `oxitest/__init__.py` triggers this
 import so registrations are in place before any test runs.
 
-Public type aliases (all carry ``_FixtureMarker`` so users write them bare,
-without wrapping in ``Fixture[...]``):
+Public type aliases (all carry `_FixtureMarker` so users write them bare,
+without wrapping in `Fixture[...]`):
 
     tmp: TempDir              # unique temp directory, deleted after test
     factory: TempDirFactory   # session-scoped factory for multiple temp dirs
@@ -67,7 +67,7 @@ class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
 
 # ── Public type aliases ───────────────────────────────────────────────────────
 # Each alias IS already Annotated[..., _FixtureMarker()], so users write the
-# name bare in annotations — no ``Fixture[TempDir]`` wrapping needed.
+# name bare in annotations — no `Fixture[TempDir]` wrapping needed.
 
 TempDir = Annotated[_TempDir, _FixtureMarker()]
 TempDirFactory = Annotated[_TempDirFactory, _FixtureMarker()]

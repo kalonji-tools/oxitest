@@ -15,8 +15,8 @@ class FrozenProxy:
     All attribute and item reads pass through to the wrapped object.
     Any write attempt raises SharedFixtureMutationError.
 
-    Note: method calls that mutate the underlying object (e.g. ``proxy.list.append(x)``)
-    are not intercepted at runtime — use ``ty`` with ``Fixture[T]`` annotations to
+    Note: method calls that mutate the underlying object (e.g. `proxy.list.append(x)`)
+    are not intercepted at runtime — use `ty` with `Fixture[T]` annotations to
     catch those at the call site.
     """
 

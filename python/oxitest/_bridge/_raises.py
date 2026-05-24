@@ -48,12 +48,12 @@ def raises(exc_type: _ExcType, *, match: str | None = None) -> _RaisesContext:
 
     Args:
         exc_type: The exception type, or a tuple of types, expected to be raised.
-        match: Optional regex pattern checked against ``str(exc)`` via
-               ``re.search``. Raises ``AssertionError`` if the pattern is
+        match: Optional regex pattern checked against `str(exc)` via
+               `re.search`. Raises `AssertionError` if the pattern is
                not found in the exception message.
 
     Returns:
-        A context manager. Use ``as exc_info`` to access ``exc_info.value``
+        A context manager. Use `as exc_info` to access `exc_info.value`
         (the caught exception) after the block.
 
     Example::

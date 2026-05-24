@@ -67,7 +67,7 @@ class _Patcher:
         """Temporarily change the working directory, restoring it after the test.
 
         Args:
-            path: Directory to change into. Accepts any ``os.fspath``-compatible value.
+            path: Directory to change into. Accepts any `os.fspath`-compatible value.
         """
         old = Path.cwd()
         os.chdir(path)

@@ -55,7 +55,7 @@ class NamespaceProxy(_CachingProxy):
     """Lazy proxy for a single user-defined Fixtures() namespace.
 
     Attribute access resolves the named fixture from the given namespace.
-    Results are cached on first access so that ``fx.db.conn`` always returns
+    Results are cached on first access so that `fx.db.conn` always returns
     the same instance within a single test.
     """
 
@@ -94,8 +94,8 @@ class OxiNamespaceProxy(_CachingProxy):
     Maps short names to built-in fixture types:
         tmp, tmp_factory, cap, fd_cap, patch, log, ctx
 
-    Built-in values are cached on first access so that e.g. ``fx.oxi.log`` always
-    returns the same ``_LogCapture`` instance within a single test.
+    Built-in values are cached on first access so that e.g. `fx.oxi.log` always
+    returns the same `_LogCapture` instance within a single test.
     """
 
     __slots__ = ("_session", "_module_path", "_fn_teardowns", "_fn_name", "_cache")
@@ -151,7 +151,7 @@ class FixturesProxy(_CachingProxy):
     Attribute access returns a NamespaceProxy for user-defined namespaces,
     or OxiNamespaceProxy for the reserved 'oxi' namespace.
 
-    Namespace proxies are cached on first access so that ``fx.oxi`` and ``fx.db``
+    Namespace proxies are cached on first access so that `fx.oxi` and `fx.db`
     each return the same proxy object on repeated accesses within one test.
     """
 

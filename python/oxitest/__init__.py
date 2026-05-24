@@ -18,41 +18,41 @@ Fixture[T] — Injection signal for test and fixture parameters. An annotation
         assert db.is_connected()
 
 Yields[T]  — Return type for yield fixtures: Generator[T, None, None]. Eliminates
-             ``# type: ignore[return]`` on yield-based fixtures.
+             `# type: ignore[return]` on yield-based fixtures.
 
 parametrize — First-class decorator for named test cases:
-              ``@oxitest.parametrize(basic=MyCase(x=1))``.
+              `@oxitest.parametrize(basic=MyCase(x=1))`.
               Accepts frozen dataclass instances (dataclass mode) or plain dicts
-              (dict mode). See ``help(oxitest.parametrize)`` for full docs.
+              (dict mode). See `help(oxitest.parametrize)` for full docs.
 
 mark       — Decorator namespace: mark.skip, mark.skipif, mark.xfail,
              and any custom mark registered in pyproject.toml.
 
-TestContext — Injected bare (``ctx: TestContext``); provides addfinalizer /
+TestContext — Injected bare (`ctx: TestContext`); provides addfinalizer /
               on_teardown for imperative cleanup.
 
-TempDir        — Injected bare (``tmp: TempDir``); unique temp dir deleted after test.
-TempDirFactory — Session-scoped factory; ``factory.mktemp("label")`` → TempDir.
-StdCapture     — Capture ``sys.stdout``/``sys.stderr``; ``cap.readouterr()``
+TempDir        — Injected bare (`tmp: TempDir`); unique temp dir deleted after test.
+TempDirFactory — Session-scoped factory; `factory.mktemp("label")` → TempDir.
+StdCapture     — Capture `sys.stdout`/`sys.stderr`; `cap.readouterr()`
                  → CaptureResult.
 FdCapture      — Capture at fd level (C extensions); same readouterr() API.
-Patcher        — Temp overrides: ``patch.setattr``, ``patch.setenv``,
-                 ``patch.delenv``, ``patch.chdir``.
-CaptureResult  — ``out`` and ``err`` strings returned by ``readouterr()``.
-LogCapture     — Capture logging records; ``log.records``, ``log.text``,
-                 ``log.set_level()``.
+Patcher        — Temp overrides: `patch.setattr`, `patch.setenv`,
+                 `patch.delenv`, `patch.chdir`.
+CaptureResult  — `out` and `err` strings returned by `readouterr()`.
+LogCapture     — Capture logging records; `log.records`, `log.text`,
+                 `log.set_level()`.
 WarnCapture    — Capture all warnings.warn() calls during a test:
-                 ``warn.list``, ``warn.clear()``.
+                 `warn.list`, `warn.clear()`.
 raises         — Assert a block raises an exception:
-                 ``with oxitest.raises(ValueError, match="pattern"):``.
+                 `with oxitest.raises(ValueError, match="pattern"):`.
 warns          — Assert a block emits a warning:
-                 ``with oxitest.warns(UserWarning, match="pattern"):``.
+                 `with oxitest.warns(UserWarning, match="pattern"):`.
 importorskip   — Skip test if module not installed:
-                 ``oxitest.importorskip("loguru")``.
+                 `oxitest.importorskip("loguru")`.
 
 Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture and
       TempDirFactory already carry the injection marker — annotate parameters
-      directly (``tmp: TempDir``) without wrapping in ``Fixture[T]``.
+      directly (`tmp: TempDir`) without wrapping in `Fixture[T]`.
 """
 
 from __future__ import annotations
