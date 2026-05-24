@@ -107,4 +107,14 @@ pub struct Cli {
     /// List collected tests and exit (no execution)
     #[arg(long)]
     pub list: bool,
+
+    /// Run only tests affected by git changes (default ref: HEAD)
+    #[arg(
+        long,
+        value_name = "REF",
+        default_missing_value = "HEAD",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub affected: Option<String>,
 }
