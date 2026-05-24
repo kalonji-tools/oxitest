@@ -100,7 +100,7 @@ def make_timeout_wrapper(seconds: int) -> Any:
     """Return an execution wrapper that enforces a timeout of *seconds*.
 
     The returned wrapper has the ExecutionWrapper signature:
-    ``wrapper(next_fn: Callable[[], TestResult]) -> TestResult``.
+    `wrapper(next_fn: Callable[[], TestResult]) -> TestResult`.
     """
 
     def wrapper(next_fn: Any) -> Any:

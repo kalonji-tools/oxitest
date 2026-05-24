@@ -91,7 +91,7 @@ class AsyncioSharedSession:
 
 
 class AsyncioBackend:
-    """Default async backend using ``asyncio``."""
+    """Default async backend using `asyncio`."""
 
     @property
     def name(self) -> str:

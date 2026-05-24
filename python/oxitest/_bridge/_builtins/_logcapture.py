@@ -19,7 +19,7 @@ class LogBackend(Protocol):
 
     Implement this to integrate a custom logging library with LogCapture.
     Each backend owns its install/uninstall lifecycle and produces stdlib
-    ``logging.LogRecord`` objects so the unified API stays consistent.
+    `logging.LogRecord` objects so the unified API stays consistent.
     """
 
     def install(self) -> None: ...
@@ -32,8 +32,8 @@ class LogBackend(Protocol):
 class _CapturingHandler(logging.Handler):
     """Private handler that buffers records in memory instead of emitting them.
 
-    Records are accumulated in ``_records`` and accessed via the owning
-    ``StdlibLogBackend.records`` property.
+    Records are accumulated in `_records` and accessed via the owning
+    `StdlibLogBackend.records` property.
     """
 
     def __init__(self) -> None:
@@ -45,10 +45,10 @@ class _CapturingHandler(logging.Handler):
 
 
 class StdlibLogBackend:
-    """Captures records from Python's stdlib ``logging`` module.
+    """Captures records from Python's stdlib `logging` module.
 
-    Attaches a handler to the root logger on ``install()`` and removes it on
-    ``uninstall()``. Produces ``logging.LogRecord`` objects directly.
+    Attaches a handler to the root logger on `install()` and removes it on
+    `uninstall()`. Produces `logging.LogRecord` objects directly.
     """
 
     def __init__(self, level: int = logging.WARNING) -> None:
@@ -88,8 +88,8 @@ class StdlibLogBackend:
 class _LogCapture:
     """Aggregates log records from all registered backends.
 
-    Constructed with a list of ``LogBackend`` instances. Each backend is
-    installed immediately; all are uninstalled on ``_teardown()``.
+    Constructed with a list of `LogBackend` instances. Each backend is
+    installed immediately; all are uninstalled on `_teardown()`.
     Records from all backends are merged and sorted by creation time.
     """
 
@@ -108,7 +108,7 @@ class _LogCapture:
 
     @property
     def text(self) -> str:
-        """Formatted log output — one ``'LEVEL    message'`` line per record."""
+        """Formatted log output — one `'LEVEL    message'` line per record."""
         lines = [f"{r.levelname:<8} {r.getMessage()}" for r in self.records]
         return "\n".join(lines) + ("\n" if lines else "")
 
@@ -116,8 +116,8 @@ class _LogCapture:
         """Set the minimum capture level, filtering out records below *level*.
 
         Args:
-            level: Logging level integer (e.g. ``logging.DEBUG``, ``logging.WARNING``).
-            logger: Name of the logger to configure. ``None`` applies the level
+            level: Logging level integer (e.g. `logging.DEBUG`, `logging.WARNING`).
+            logger: Name of the logger to configure. `None` applies the level
                 to the root logger.
         """
         for b in self._backends:
@@ -131,8 +131,8 @@ class _LogCapture:
         """Context manager that temporarily sets the log level then restores it.
 
         Args:
-            level: Logging level integer (e.g. ``logging.DEBUG``).
-            logger: Logger name, or ``None`` for the root logger.
+            level: Logging level integer (e.g. `logging.DEBUG`).
+            logger: Logger name, or `None` for the root logger.
 
         Example:
             ```python

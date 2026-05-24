@@ -62,11 +62,11 @@ def _const(value: object) -> ast.Constant:
 class _BareAssertCollector(ast.NodeVisitor):
     """Collect bare assert line numbers grouped by outermost function name.
 
-    A bare assert is ``assert expr`` with no message argument.
+    A bare assert is `assert expr` with no message argument.
     Line numbers are 1-based absolute (file-level), matching the adjusted
-    values produced by ``_find_bare_asserts`` in executor.py.
+    values produced by `_find_bare_asserts` in executor.py.
     Bare asserts inside nested functions are attributed to the outermost
-    test function, matching the behaviour of ``inspect.getsourcelines``-based
+    test function, matching the behaviour of `inspect.getsourcelines`-based
     detection.
     """
 

@@ -17,8 +17,8 @@ class _TempDir:
     Created fresh for each test and deleted (with all contents) after the test
     completes, regardless of pass or fail.
 
-    Use the ``.path`` attribute to get a ``pathlib.Path``, or use the object
-    directly anywhere a path is accepted (``/`` operator, ``os.fspath``, ``str``).
+    Use the `.path` attribute to get a `pathlib.Path`, or use the object
+    directly anywhere a path is accepted (`/` operator, `os.fspath`, `str`).
 
     Example:
         ```python
@@ -44,8 +44,8 @@ class _TempDir:
 class _TempDirFactory:
     """Session-scoped factory for creating multiple named temp directories.
 
-    Injected as ``factory: TempDirFactory``. Each call to ``mktemp`` returns a
-    new ``TempDir`` with a unique name. All directories are deleted at the end
+    Injected as `factory: TempDirFactory`. Each call to `mktemp` returns a
+    new `TempDir` with a unique name. All directories are deleted at the end
     of the test session.
 
     Example:
@@ -68,7 +68,7 @@ class _TempDirFactory:
                 debugging. Does not need to be unique across calls.
 
         Returns:
-            A new ``TempDir`` pointing at the created directory.
+            A new `TempDir` pointing at the created directory.
         """
         d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
         self._dirs.append(d)

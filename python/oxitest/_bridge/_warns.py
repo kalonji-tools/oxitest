@@ -13,13 +13,13 @@ def warns(category: type[Warning], *, match: str | None = None):
 
     Args:
         category: The warning category expected to be emitted.
-        match: Optional regex pattern checked against ``str(warning.message)``
-               via ``re.search``. Raises ``AssertionError`` if no matching
+        match: Optional regex pattern checked against `str(warning.message)`
+               via `re.search`. Raises `AssertionError` if no matching
                warning's message contains the pattern.
 
     Raises:
-        AssertionError: If no warning of ``category`` is emitted, or if
-                        ``match`` is given and no matching warning's message
+        AssertionError: If no warning of `category` is emitted, or if
+                        `match` is given and no matching warning's message
                         contains the pattern.
 
     Example::

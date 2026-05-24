@@ -16,7 +16,7 @@ _T = TypeVar("_T")
 def skip(reason: str = "") -> None:
     """Unconditionally skip the current test.
 
-    Equivalent to ``@mark.skip`` but callable from inside the test body to
+    Equivalent to `@mark.skip` but callable from inside the test body to
     skip at runtime after setup has already begun.
 
     Args:
@@ -46,7 +46,7 @@ class MarkInfo:
     Collected at import time and read by the runner before each test.
 
     Attributes:
-        name: The mark name (e.g. ``"skip"``, ``"xfail"``, ``"timeout"``).
+        name: The mark name (e.g. `"skip"`, `"xfail"`, `"timeout"`).
         args: Positional arguments passed to the mark decorator call.
         kwargs: Keyword arguments passed to the mark decorator call.
     """
@@ -64,8 +64,8 @@ class _Mark:
     """A mark factory for a single named mark.
 
     Calling an instance decorates the target function and records a
-    ``MarkInfo``. Supports both bare application (``@mark.skip``) and
-    call-with-args (``@mark.skip(reason="...")``).
+    `MarkInfo`. Supports both bare application (`@mark.skip`) and
+    call-with-args (`@mark.skip(reason="...")`).
     """
 
     def __init__(self, name: str) -> None:
@@ -114,18 +114,18 @@ _SPECIAL_MARKS: dict[str, type] = {
 class _MarkNamespace:
     """Decorator namespace for built-in and custom test marks.
 
-    Access via ``oxitest.mark``. Each attribute returns a decorator factory.
+    Access via `oxitest.mark`. Each attribute returns a decorator factory.
 
     Built-in marks:
 
-    - ``mark.skip(reason="...")`` — unconditionally skip.
-    - ``mark.skipif(condition, reason="...")`` — skip when *condition* is truthy.
-    - ``mark.xfail(reason="...", strict=True, raises=None)`` — expect failure.
-    - ``mark.timeout(seconds)`` — fail if the test exceeds *seconds*.
-    - ``mark.usefixtures(*names)`` — inject fixtures by name without a parameter.
-    - ``mark.parametrize(**cases)`` — alias for ``@oxitest.parametrize``.
+    - `mark.skip(reason="...")` — unconditionally skip.
+    - `mark.skipif(condition, reason="...")` — skip when *condition* is truthy.
+    - `mark.xfail(reason="...", strict=True, raises=None)` — expect failure.
+    - `mark.timeout(seconds)` — fail if the test exceeds *seconds*.
+    - `mark.usefixtures(*names)` — inject fixtures by name without a parameter.
+    - `mark.parametrize(**cases)` — alias for `@oxitest.parametrize`.
 
-    Custom marks declared in ``[tool.oxitest] markers`` are also accessible here
+    Custom marks declared in `[tool.oxitest] markers` are also accessible here
     and carry no built-in behaviour beyond identification.
 
     Example:
