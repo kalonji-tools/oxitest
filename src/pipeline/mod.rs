@@ -10,8 +10,8 @@ pub(crate) mod traits;
 use std::sync::Arc;
 
 use crate::{
-    affected, bridge, cache, collector, config, filter, marker, parallel, reporter, scheduler,
-    strict, types,
+    affected, bridge, cache, collector, config, filter, marker, parallel, reporter, retry,
+    scheduler, strict, types,
 };
 use clap::Parser;
 use pyo3::prelude::*;
@@ -774,6 +774,8 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         parallel: &parallel_impl,
     };
 
+    let all_items = items.clone(); // Keep for retry phase
+
     let parallel::PhaseResult {
         interrupted,
         timings,
@@ -785,6 +787,52 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         &ctx,
         rep.as_mut(),
     );
+
+    // ── Retry phase: re-run failed tests if --retries > 0 ────────────
+    let (timings, interrupted) = if cfg.retries > 0 && !interrupted {
+        let failed_node_ids: std::collections::HashSet<&str> = timings
+            .iter()
+            .filter(|t| t.outcome.is_failure())
+            .map(|t| t.node_id.as_ref())
+            .collect();
+
+        if failed_node_ids.is_empty() {
+            (timings, interrupted)
+        } else {
+            let failed_items: Vec<std::sync::Arc<types::TestItem>> = all_items
+                .iter()
+                .filter(|i| failed_node_ids.contains(i.node_id.as_ref()))
+                .cloned()
+                .collect();
+
+            let retry_ctx = retry::RetryContext {
+                py,
+                max_retries: cfg.retries,
+                delay_secs: cfg.retries_delay_secs,
+                session: &session,
+                runner: &runner_impl,
+                timeout_secs: cfg.timeout_secs,
+            };
+            let retry::RetryResult {
+                flaky_ids,
+                retry_timings,
+            } = retry::run_retries(&retry_ctx, &failed_items, rep.as_mut());
+
+            // Replace timings for flaky tests with their retry timings.
+            let flaky_set: std::collections::HashSet<&str> =
+                flaky_ids.iter().map(|id| id.as_ref()).collect();
+
+            let mut merged_timings: Vec<types::TestTiming> = timings
+                .into_iter()
+                .filter(|t| !flaky_set.contains(t.node_id.as_ref()))
+                .collect();
+            merged_timings.extend(retry_timings);
+
+            (merged_timings, interrupted)
+        }
+    } else {
+        (timings, interrupted)
+    };
 
     finalize(&mut cache, &timings, cfg.cache_max_age, &rootdir);
 
