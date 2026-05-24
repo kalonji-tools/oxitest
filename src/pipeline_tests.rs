@@ -120,6 +120,78 @@ mod color_tests {
     }
 }
 
+mod list_tests {
+    use super::*;
+    use crate::types::{NodeId, TestItem};
+    use camino::Utf8PathBuf;
+    use std::sync::Arc;
+
+    fn make_item(module: &str, fn_name: &str, markers: &[&str], is_async: bool) -> Arc<TestItem> {
+        let node_id = format!("{module}::{fn_name}");
+        Arc::new(TestItem {
+            node_id: NodeId::from_raw(&node_id),
+            module_path: Utf8PathBuf::from(module),
+            fn_name: fn_name.to_string(),
+            lineno: 1,
+            markers: markers.iter().map(|s| s.to_string()).collect(),
+            param_id: None,
+            param_values: vec![],
+            is_async,
+        })
+    }
+
+    #[test]
+    fn test_list_empty() {
+        let result = format_test_list(&[], false);
+        assert_eq!(result, "no tests collected");
+    }
+
+    #[test]
+    fn test_list_empty_verbose() {
+        let result = format_test_list(&[], true);
+        assert_eq!(result, "no tests collected");
+    }
+
+    #[test]
+    fn test_list_plain_mode() {
+        let items = vec![
+            make_item("tests/test_a.py", "test_one", &[], false),
+            make_item("tests/test_b.py", "test_two", &["slow"], true),
+        ];
+        let result = format_test_list(&items, false);
+        assert_eq!(
+            result,
+            "tests/test_a.py::test_one\ntests/test_b.py::test_two"
+        );
+    }
+
+    #[test]
+    fn test_list_verbose_mode() {
+        let items = vec![
+            make_item("tests/test_a.py", "test_one", &[], false),
+            make_item("tests/test_a.py", "test_two", &["slow", "network"], true),
+        ];
+        let result = format_test_list(&items, true);
+        assert!(result.contains("module"));
+        assert!(result.contains("function"));
+        assert!(result.contains("async"));
+        assert!(result.contains("markers"));
+        assert!(result.contains("test_one"));
+        assert!(result.contains("test_two"));
+        assert!(result.contains("yes")); // async flag for test_two
+        assert!(result.contains("slow, network"));
+        assert!(result.contains("2 tests"));
+    }
+
+    #[test]
+    fn test_list_single_test_singular() {
+        let items = vec![make_item("tests/test_a.py", "test_one", &[], false)];
+        let result = format_test_list(&items, true);
+        assert!(result.contains("1 test"));
+        assert!(!result.contains("1 tests"));
+    }
+}
+
 mod strict_pipeline_tests {
     use super::*;
     use crate::config::Config;
