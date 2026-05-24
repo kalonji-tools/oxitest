@@ -98,7 +98,7 @@ class TestResult:
         """Serialize for the worker JSON protocol.
 
         Produces a compact dict: only non-falsy optional fields are included.
-        The Rust ``WorkerResult`` uses ``#[serde(default)]`` on all optional
+        The Rust `WorkerResult` uses `#[serde(default)]` on all optional
         fields, so missing keys deserialize correctly.
         """
         # Fields the worker computes (not on TestResult)

@@ -195,7 +195,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
 
     **Expanded mode** — use field-name parameters to receive individual values.
     Any parameter whose name matches a dataclass field (and is not annotated
-    ``Fixture[T]``) receives that field's value::
+    `Fixture[T]`) receives that field's value::
 
         @oxitest.parametrize(basic=AddCase(x=1, y=2, expected=3))
         def test_add(x: int, y: int, expected: int) -> None:
@@ -203,7 +203,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
 
     **Compact mode** — annotate a single parameter with the dataclass type to
     receive the whole instance. oxitest detects compact mode when exactly one
-    non-``Fixture[T]`` parameter is annotated with the case type::
+    non-`Fixture[T]` parameter is annotated with the case type::
 
         @oxitest.parametrize(basic=AddCase(x=1, y=2, expected=3))
         def test_add(params: AddCase) -> None:

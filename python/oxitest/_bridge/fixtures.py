@@ -53,16 +53,16 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 
 class FixtureAccessor:
-    """Returned by ``Fixtures.__getattr__``; serves two roles:
+    """Returned by `Fixtures.__getattr__`; serves two roles:
 
-    1. **FixtureRef target** — carries ``_oxitest_fixture_name`` and wraps the
-       underlying fixture function (``_fa_func``) so the executor can resolve it
-       as a callable fixture reference in ``@oxitest.parametrize``.  The
-       namespace is looked up via ``FixtureDef.namespace`` in the registry.
+    1. **FixtureRef target** — carries `_oxitest_fixture_name` and wraps the
+       underlying fixture function (`_fa_func`) so the executor can resolve it
+       as a callable fixture reference in `@oxitest.parametrize`.  The
+       namespace is looked up via `FixtureDef.namespace` in the registry.
 
     2. **Lazy attribute proxy** — when attribute access happens *inside* a
        test or fixture body, it resolves the live fixture instance via the
-       ``_fixture_context`` contextvar and proxies the attribute.
+       `_fixture_context` contextvar and proxies the attribute.
 
     Example::
 
@@ -123,10 +123,10 @@ class FixtureAccessor:
 class Fixtures:
     """Instance-based fixture registry. Create one per conftest.py.
 
-    The optional ``name`` parameter sets the namespace name used when accessing
-    fixtures via ``fx: Fixtures`` (e.g. ``fx.db.conn``). If omitted, the name
-    is derived from the variable name in conftest.py (``db = Fixtures()`` →
-    namespace ``"db"``).
+    The optional `name` parameter sets the namespace name used when accessing
+    fixtures via `fx: Fixtures` (e.g. `fx.db.conn`). If omitted, the name
+    is derived from the variable name in conftest.py (`db = Fixtures()` →
+    namespace `"db"`).
 
     Usage:
         fixtures = Fixtures()
@@ -188,8 +188,8 @@ class Fixtures:
                 shutil.rmtree(tmp_path) # teardown: runs after the test
 
         **Return types:** Prefer a typed return over a plain dict for fixtures that
-        produce multiple values. A ``dict`` return is opaque at the call site —
-        ``Fixture[dict]`` tells a reader nothing about available keys. A dataclass
+        produce multiple values. A `dict` return is opaque at the call site —
+        `Fixture[dict]` tells a reader nothing about available keys. A dataclass
         or TypedDict makes the contract visible::
 
             from dataclasses import dataclass
@@ -203,16 +203,16 @@ class Fixtures:
             def workspace_env(tmp: Fixture[Path]) -> WorkspaceEnv:
                 return WorkspaceEnv(root=tmp, log=tmp / "run.log")
 
-        At the call site, ``workspace_env: Fixture[WorkspaceEnv]`` gives IDE
-        completion on ``workspace_env.root`` and ``workspace_env.log``, and
+        At the call site, `workspace_env: Fixture[WorkspaceEnv]` gives IDE
+        completion on `workspace_env.root` and `workspace_env.log`, and
         type checkers enforce the field types without a plugin.
 
         Args:
-            autouse: If ``True``, fixture runs for every test without being
+            autouse: If `True`, fixture runs for every test without being
                 explicitly requested.
             name: Override the fixture name. Defaults to the function name.
-            shared: If ``True``, fixture is session-lifetime and immutable
-                (wrapped with ``FrozenProxy``).
+            shared: If `True`, fixture is session-lifetime and immutable
+                (wrapped with `FrozenProxy`).
         """
 
         def _register(f: _F) -> _F:
@@ -238,7 +238,7 @@ class Fixtures:
     def __getattr__(self, name: str) -> FixtureAccessor:
         """Return a FixtureAccessor for the named fixture.
 
-        Enables both FixtureRef usage in ``@oxitest.parametrize`` and lazy
+        Enables both FixtureRef usage in `@oxitest.parametrize` and lazy
         attribute-proxying inside fixture/test bodies::
 
             backend=kvault.store          # FixtureRef: resolves at test time

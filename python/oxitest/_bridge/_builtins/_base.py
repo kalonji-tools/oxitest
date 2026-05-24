@@ -24,8 +24,8 @@ class _BuiltinContext:
 class BuiltinFixture:
     """Base class for built-in fixtures.
 
-    Subclasses declare the type they provide via ``fixture_type=`` and are
-    auto-registered in ``_registry``. No central dict to maintain — adding a
+    Subclasses declare the type they provide via `fixture_type=` and are
+    auto-registered in `_registry`. No central dict to maintain — adding a
     new built-in requires touching only its own module.
 
     Usage::
@@ -45,7 +45,7 @@ class BuiltinFixture:
 
     @classmethod
     def for_type(cls, inner: type) -> type[BuiltinFixture] | None:
-        """Return the registered implementation class for ``inner``, or None."""
+        """Return the registered implementation class for `inner`, or None."""
         return cls._registry.get(inner)
 
     def create(self, ctx: _BuiltinContext) -> Any:

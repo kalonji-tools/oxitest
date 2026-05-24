@@ -3,9 +3,9 @@
 Replaces scattered setattr/getattr calls with magic string keys
 (_oxitest_marks, _oxitest_param_cases, _oxitest_fixture_name).
 
-Metadata is stored as a single ``_oxitest_meta`` attribute on the
+Metadata is stored as a single `_oxitest_meta` attribute on the
 function object itself, so it is garbage-collected with the function
-and there is no stale-id problem from ``id()`` reuse.
+and there is no stale-id problem from `id()` reuse.
 """
 
 from __future__ import annotations
