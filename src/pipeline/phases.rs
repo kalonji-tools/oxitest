@@ -7,9 +7,9 @@
 use pyo3::prelude::*;
 
 use super::helpers;
-use super::traits::ModuleCollector;
+use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
-use crate::{affected, bridge, collector, reporter, types};
+use crate::{affected, bridge, collector, parallel, reporter, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
 
@@ -244,6 +244,99 @@ impl PipelinePhase for ListPhase {
     fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
         println!("{}", helpers::format_test_list(&ctx.items, ctx.cli.verbose));
         Ok(PhaseOutcome::EarlyExit(0))
+    }
+}
+
+// ─── ExecutionPhase ──────────────────────────────────────────────────────────
+
+/// Creates the reporter, dispatches serial or parallel execution, and stores
+/// timings + interrupted flag on the context.
+pub(crate) struct ExecutionPhase<'a> {
+    pub runner: &'a dyn TestRunner,
+    pub parallel: &'a dyn ParallelRunner,
+}
+
+impl PipelinePhase for ExecutionPhase<'_> {
+    fn name(&self) -> &'static str {
+        "execution"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+
+        let total = ctx.violated_items.len() + ctx.items.len();
+        let async_count = ctx.items.iter().filter(|i| i.is_async).count();
+        let max_name_width = ctx
+            .items
+            .iter()
+            .chain(ctx.violated_items.iter())
+            .map(|i| i.fn_name.len())
+            .max()
+            .unwrap_or(30);
+        ctx.cache.invalidate(&ctx.items);
+
+        // Fetch plugin reporters from Python registry.
+        let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !ctx.cfg.plugins.is_empty() {
+            bridge::get_plugin_reporters(py, session)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|obj| {
+                    Box::new(reporter::plugin::PyPluginReporter::new(obj))
+                        as Box<dyn reporter::Reporter>
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        let rep = reporter::make_reporter(
+            ctx.base
+                .clone()
+                .total(total)
+                .async_count(async_count)
+                .name_width(max_name_width)
+                .strict_suite_lines(std::mem::take(&mut ctx.suite_lines))
+                .build(),
+            ctx.is_tty,
+            ctx.cli.json.clone(),
+            ctx.cli.junit_xml.clone(),
+            plugin_reporters,
+        );
+        ctx.reporter = Some(rep);
+
+        let violated_items = std::mem::take(&mut ctx.violated_items);
+        let all_violations = std::mem::take(&mut ctx.all_violations);
+        let items = std::mem::take(&mut ctx.items);
+
+        let exec_ctx = helpers::ExecutionContext {
+            cfg: &ctx.cfg,
+            cache: &ctx.cache,
+            session,
+            conftest_files: &ctx.conftest_files,
+            runner: self.runner,
+            parallel: self.parallel,
+        };
+
+        let parallel::PhaseResult {
+            interrupted,
+            timings,
+        } = helpers::execute(
+            py,
+            items.clone(),
+            violated_items,
+            all_violations,
+            &exec_ctx,
+            ctx.reporter.as_deref_mut().expect("just created"),
+        );
+
+        ctx.items = items; // Restore for RetryPhase
+        ctx.timings = timings;
+        ctx.interrupted = interrupted;
+        Ok(PhaseOutcome::Continue)
     }
 }
 
