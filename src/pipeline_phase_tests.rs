@@ -207,3 +207,49 @@ mod execution_phase_tests {
         assert!(phase.should_run(&ctx));
     }
 }
+
+mod retry_phase_tests {
+    use super::*;
+
+    #[test]
+    fn skips_when_retries_zero() {
+        let ctx = make_ctx();
+        let phase = phases::RetryPhase {
+            runner: &crate::pipeline::traits::BridgeRunner,
+        };
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn skips_when_interrupted() {
+        let mut ctx = make_ctx();
+        ctx.cfg.retries = 2;
+        ctx.interrupted = true;
+        let phase = phases::RetryPhase {
+            runner: &crate::pipeline::traits::BridgeRunner,
+        };
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_retries_set_and_not_interrupted() {
+        let mut ctx = make_ctx();
+        ctx.cfg.retries = 2;
+        ctx.interrupted = false;
+        let phase = phases::RetryPhase {
+            runner: &crate::pipeline::traits::BridgeRunner,
+        };
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod finalize_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::FinalizePhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
