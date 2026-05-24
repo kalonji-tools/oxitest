@@ -619,8 +619,8 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let (test_files, conftest_files) = collector::collect_files(&cfg);
 
     // --affected: filter test files to only those affected by git changes.
-    let test_files = if let Some(base) = &cli.affected {
-        match affected::filter_affected_test_files(py, &test_files, &cfg.rootdir, base) {
+    let test_files = if let Some(base_ref) = &cfg.affected {
+        match affected::filter_affected_test_files(py, &test_files, &cfg.rootdir, base_ref) {
             Ok(Some(files)) => {
                 if files.is_empty() {
                     println!("no changes detected — nothing to test");
@@ -630,7 +630,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 tracing::info!(
                     affected = files.len(),
                     total,
-                    base = base.as_str(),
+                    base = base_ref.as_str(),
                     "running affected tests only"
                 );
                 files
