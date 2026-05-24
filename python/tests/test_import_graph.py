@@ -1,7 +1,6 @@
 """Tests for import graph analysis."""
 
 from oxitest import Fixture, TempDir
-
 from oxitest._bridge.import_graph import (
     _extract_imported_modules,
     _file_to_modules,
