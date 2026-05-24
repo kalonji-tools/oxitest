@@ -4,6 +4,7 @@
 
 use pyo3::prelude::*;
 
+mod affected;
 mod bridge;
 mod cache;
 mod collector;
