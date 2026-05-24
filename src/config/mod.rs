@@ -122,6 +122,8 @@ pub struct Config {
     pub async_backend: String,
     pub affected: Option<String>,
     pub affected_base: String,
+    pub retries: usize,
+    pub retries_delay_secs: u64,
 }
 
 impl Default for Config {
@@ -162,6 +164,8 @@ impl Default for Config {
             async_backend: "asyncio".to_string(),
             affected: None,
             affected_base: "HEAD".to_string(),
+            retries: 0,
+            retries_delay_secs: 0,
         }
     }
 }
@@ -242,6 +246,12 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
     }
     if let Some(ab) = tc.affected_base {
         config.affected_base = ab;
+    }
+    if let Some(n) = tc.retries {
+        config.retries = n;
+    }
+    if let Some(s) = tc.retries_delay {
+        config.retries_delay_secs = s;
     }
 }
 
@@ -363,6 +373,12 @@ impl Config {
             } else {
                 self.affected = cli.affected.clone();
             }
+        }
+        if let Some(n) = cli.retries {
+            self.retries = n;
+        }
+        if let Some(s) = cli.retries_delay {
+            self.retries_delay_secs = s;
         }
         self
     }
@@ -1434,5 +1450,55 @@ async_backend = "trio"
     fn test_cli_affected_with_commit() {
         let cli = Cli::try_parse_from(["oxitest", "--affected=abc123"]).unwrap();
         assert_eq!(cli.affected, Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_cli_retries_absent_is_none() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(cli.retries.is_none());
+    }
+
+    #[test]
+    fn test_cli_retries_flag() {
+        let cli = Cli::try_parse_from(["oxitest", "--retries", "3"]).unwrap();
+        assert_eq!(cli.retries, Some(3));
+    }
+
+    #[test]
+    fn test_cli_retries_delay_flag() {
+        let cli = Cli::try_parse_from(["oxitest", "--retries-delay", "2"]).unwrap();
+        assert_eq!(cli.retries_delay, Some(2));
+    }
+
+    #[test]
+    fn test_retries_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nretries = 2\n").unwrap();
+        assert_eq!(cfg.retries, 2);
+    }
+
+    #[test]
+    fn test_retries_delay_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nretries_delay = 5\n").unwrap();
+        assert_eq!(cfg.retries_delay_secs, 5);
+    }
+
+    #[test]
+    fn test_retries_default_is_zero() {
+        let cfg = Config::default();
+        assert_eq!(cfg.retries, 0);
+    }
+
+    #[test]
+    fn test_retries_cli_overrides_pyproject() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nretries = 2\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--retries", "5"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.retries, 5);
     }
 }
