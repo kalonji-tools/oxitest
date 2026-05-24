@@ -91,4 +91,12 @@ pub struct Cli {
     /// Print environment information (oxitest version, Python, rustc, OS) and exit
     #[arg(long)]
     pub capture_environment: bool,
+
+    /// List all registered fixtures and exit
+    #[arg(long, visible_alias = "fx")]
+    pub fixtures: bool,
+
+    /// Quiet output (minimal detail for --fixtures)
+    #[arg(short = 'q', long)]
+    pub quiet: bool,
 }
