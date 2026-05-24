@@ -6,6 +6,7 @@
 //! Both serial and parallel execution paths converge through this module.
 
 mod helpers;
+pub(crate) mod phases;
 pub(crate) mod traits;
 
 use std::sync::Arc;
