@@ -528,6 +528,72 @@ fn finalize(
     cache.save(rootdir);
 }
 
+/// Format collected tests as a string. Plain mode: one node ID per line.
+/// Verbose mode: aligned table with module, function, markers, async flag.
+fn format_test_list(items: &[Arc<types::TestItem>], verbose: bool) -> String {
+    use std::fmt::Write;
+
+    if items.is_empty() {
+        return "no tests collected".to_string();
+    }
+
+    let mut out = String::new();
+
+    if !verbose {
+        for item in items {
+            writeln!(out, "{}", item.node_id).unwrap();
+        }
+        // Remove trailing newline
+        out.truncate(out.trim_end().len());
+        return out;
+    }
+
+    // Verbose: table with columns
+    let mod_width = items
+        .iter()
+        .map(|i| i.module_path.as_str().len())
+        .max()
+        .unwrap_or(6);
+    let fn_width = items.iter().map(|i| i.fn_name.len()).max().unwrap_or(8);
+
+    writeln!(
+        out,
+        "{:<mod_width$}  {:<fn_width$}  {:>5}  markers",
+        "module", "function", "async",
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "{:<mod_width$}  {:<fn_width$}  {:>5}  -------",
+        "------", "--------", "-----",
+    )
+    .unwrap();
+
+    for item in items {
+        let markers = if item.markers.is_empty() {
+            String::new()
+        } else {
+            item.markers.join(", ")
+        };
+        let async_flag = if item.is_async { "yes" } else { "" };
+        writeln!(
+            out,
+            "{:<mod_width$}  {:<fn_width$}  {:>5}  {}",
+            item.module_path, item.fn_name, async_flag, markers,
+        )
+        .unwrap();
+    }
+
+    write!(
+        out,
+        "\n{} test{}",
+        items.len(),
+        if items.len() == 1 { "" } else { "s" }
+    )
+    .unwrap();
+    out
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let SetupContext {
         cfg,
@@ -628,6 +694,12 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Ok(items) => items,
         Err(code) => return Ok(code),
     };
+
+    // --list: print collected tests and exit without execution.
+    if cli.list {
+        println!("{}", format_test_list(&items, cli.verbose));
+        return Ok(0);
+    }
 
     let total = violated_items.len() + items.len();
     let async_count = items.iter().filter(|i| i.is_async).count();
