@@ -47,6 +47,10 @@ pub struct Cli {
     #[arg(long, value_name = "PATH")]
     pub json: Option<Utf8PathBuf>,
 
+    /// Write JUnit XML results to PATH
+    #[arg(long, value_name = "PATH")]
+    pub junit_xml: Option<Utf8PathBuf>,
+
     /// Only run tests matching the marker expression
     #[arg(short = 'm', long = "marker", value_name = "EXPR")]
     pub marker: Option<String>,
