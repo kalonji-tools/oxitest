@@ -145,6 +145,7 @@ mod tests {
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
             affected: None,
+            affected_base: "HEAD".to_string(),
         }
     }
 
@@ -220,6 +221,7 @@ mod tests {
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
             affected: None,
+            affected_base: "HEAD".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -261,6 +263,7 @@ mod tests {
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
             affected: None,
+            affected_base: "HEAD".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -341,6 +344,7 @@ mod tests {
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
             affected: None,
+            affected_base: "HEAD".to_string(),
         };
         let (files, _) = collect_files(&config);
         assert_eq!(

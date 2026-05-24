@@ -36,6 +36,7 @@ pub(super) struct OxitestConfig {
     #[serde(default)]
     pub(super) plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub(super) async_backend: Option<String>,
+    pub(super) affected_base: Option<String>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {

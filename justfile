@@ -24,6 +24,10 @@ build *args:
 test *args: build
     PYTHONPATH=python uv run python -m oxitest {{args}}
 
+# Run only tests affected by uncommitted changes (or vs a given ref)
+test-affected *args:
+    just test --affected {{args}}
+
 # Run Rust unit tests
 test-rust *args:
     cargo test {{args}}

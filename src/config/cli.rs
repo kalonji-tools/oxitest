@@ -108,11 +108,11 @@ pub struct Cli {
     #[arg(long)]
     pub list: bool,
 
-    /// Run only tests affected by git changes (default ref: HEAD)
+    /// Run only tests affected by git changes (default ref from affected_base config, or HEAD)
     #[arg(
         long,
         value_name = "REF",
-        default_missing_value = "HEAD",
+        default_missing_value = "",
         num_args = 0..=1,
         require_equals = true,
     )]
