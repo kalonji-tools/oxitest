@@ -572,6 +572,29 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         return Ok(early_exit_with_error(&[err], &make_error_rep));
     }
 
+    // --fixtures: list registered fixtures and exit.
+    if cli.fixtures {
+        let verbosity = if cli.quiet {
+            0
+        } else if cli.verbose {
+            2
+        } else {
+            1
+        };
+        match session.list_fixtures(py, verbosity, cli.keyword.as_deref(), use_color) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    println!("{output}");
+                }
+            }
+            Err(e) => {
+                eprintln!("Error listing fixtures: {e}");
+                return Ok(1);
+            }
+        }
+        return Ok(0);
+    }
+
     let collector_impl = traits::BridgeCollector;
     let runner_impl = traits::BridgeRunner;
     let parallel_impl = traits::DefaultParallelRunner;
