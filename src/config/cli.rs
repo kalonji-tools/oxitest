@@ -103,4 +103,8 @@ pub struct Cli {
     /// Quiet output (minimal detail for --fixtures)
     #[arg(short = 'q', long)]
     pub quiet: bool,
+
+    /// List collected tests and exit (no execution)
+    #[arg(long)]
+    pub list: bool,
 }
