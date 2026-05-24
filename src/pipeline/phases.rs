@@ -7,6 +7,7 @@
 use pyo3::prelude::*;
 
 use super::helpers;
+use super::traits::ModuleCollector;
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
 use crate::{affected, bridge, collector, types};
 
@@ -118,6 +119,45 @@ impl PipelinePhase for FixturesPhase {
             }
         }
         Ok(PhaseOutcome::EarlyExit(0))
+    }
+}
+
+// ─── CollectionPhase ─────────────────────────────────────────────────────────
+
+/// Imports test modules and collects test items + violations.
+pub(crate) struct CollectionPhase<'a> {
+    pub collector: &'a dyn ModuleCollector,
+}
+
+impl PipelinePhase for CollectionPhase<'_> {
+    fn name(&self) -> &'static str {
+        "collection"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+        ctx.cache.invalidate_modules();
+        let (items, errors, raw_violations) = helpers::collect_items(
+            py,
+            &ctx.test_files,
+            &ctx.cfg,
+            session,
+            self.collector,
+            &mut ctx.cache,
+        );
+        if !errors.is_empty() {
+            return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
+                &errors,
+                &|| ctx.make_error_reporter(),
+            )));
+        }
+        ctx.items = items;
+        ctx.raw_violations = raw_violations;
+        Ok(PhaseOutcome::Continue)
     }
 }
 
