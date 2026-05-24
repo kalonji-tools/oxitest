@@ -117,4 +117,12 @@ pub struct Cli {
         require_equals = true,
     )]
     pub affected: Option<String>,
+
+    /// Retry failed tests up to N times
+    #[arg(long, value_name = "N")]
+    pub retries: Option<usize>,
+
+    /// Seconds to wait between retries
+    #[arg(long, value_name = "SECS")]
+    pub retries_delay: Option<u64>,
 }

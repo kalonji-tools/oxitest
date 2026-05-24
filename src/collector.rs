@@ -146,6 +146,8 @@ mod tests {
             async_backend: "asyncio".to_string(),
             affected: None,
             affected_base: "HEAD".to_string(),
+            retries: 0,
+            retries_delay_secs: 0,
         }
     }
 
@@ -222,6 +224,8 @@ mod tests {
             async_backend: "asyncio".to_string(),
             affected: None,
             affected_base: "HEAD".to_string(),
+            retries: 0,
+            retries_delay_secs: 0,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -264,6 +268,8 @@ mod tests {
             async_backend: "asyncio".to_string(),
             affected: None,
             affected_base: "HEAD".to_string(),
+            retries: 0,
+            retries_delay_secs: 0,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -345,6 +351,8 @@ mod tests {
             async_backend: "asyncio".to_string(),
             affected: None,
             affected_base: "HEAD".to_string(),
+            retries: 0,
+            retries_delay_secs: 0,
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
