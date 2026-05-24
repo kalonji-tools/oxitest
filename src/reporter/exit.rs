@@ -1,5 +1,12 @@
 use super::stats::RunStats;
 
+/// Compute the process exit code from the final run statistics.
+///
+/// Priority (highest wins):
+/// - **3** — one or more collection errors (import failures, syntax errors).
+/// - **2** — the run was interrupted (e.g. Ctrl-C / SIGINT).
+/// - **1** — at least one hard failure (failed, errored, timed out, strict-xpassed, or suite violation).
+/// - **0** — all tests passed (or were skipped / xfailed).
 pub(crate) fn compute_exit_code(
     stats: &RunStats,
     collect_err_count: usize,

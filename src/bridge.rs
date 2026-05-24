@@ -166,7 +166,11 @@ pub(crate) struct RawViolation {
     pub detail: String,
 }
 
-/// Fetch plugin reporter objects from the session's plugin registry.
+/// Fetch reporter plugin objects from the session's plugin registry via PyO3.
+///
+/// Calls `_plugin_registry.reporters` on the Python session object and extracts
+/// the list as owned `Py<PyAny>` handles. Each object is later wrapped in a
+/// [`PyPluginReporter`](crate::reporter::plugin::PyPluginReporter).
 pub fn get_plugin_reporters(py: Python<'_>, session: &FixtureSession) -> PyResult<Vec<Py<PyAny>>> {
     let registry = session.0.bind(py).getattr("_plugin_registry")?;
     let reporters: Vec<Py<PyAny>> = registry.getattr("reporters")?.extract::<Vec<Py<PyAny>>>()?;

@@ -94,6 +94,10 @@ impl std::ops::Sub for DurationMs {
     }
 }
 
+/// A collected test with all metadata needed for execution and reporting.
+///
+/// Produced by `bridge::collect_module` after Python imports the test file.
+/// Fields are `pub(crate)` — external code interacts with tests via [`NodeId`].
 #[derive(Debug, Clone)]
 pub struct TestItem {
     pub(crate) node_id: NodeId,
@@ -115,6 +119,11 @@ pub struct Frame {
     pub line: String,
 }
 
+/// The eight possible results of running a single test.
+///
+/// Variants carry structured diagnostic data (file, line, left/right values for diffs,
+/// traceback frames) so the reporter can render rich output without re-parsing strings.
+/// Use [`TestOutcome::is_hard_failure`] to determine whether the run exits with code 1.
 #[derive(Debug, Clone)]
 pub enum TestOutcome {
     Passed {
@@ -293,7 +302,10 @@ pub struct TestTiming {
     pub outcome: OutcomeKind,
 }
 
-/// Tracks hard failures and determines when to stop (maxfail).
+/// Tracks hard failures across the test run and implements the `--maxfail` stop condition.
+///
+/// Every call to [`record`](FailureAccumulator::record) returns `true` once the failure
+/// count reaches `maxfail`. A `maxfail` of 0 disables the limit (never stops early).
 pub(crate) struct FailureAccumulator {
     count: usize,
     max: usize,

@@ -16,7 +16,10 @@ use crate::types::{CollectError, TestItem, TestOutcome};
 
 // ─── Trait definitions ──────────────────────────────────────────────────────
 
-/// Abstracts `bridge::FixtureSession` lifecycle.
+/// Abstracts the `bridge::FixtureSession` lifecycle for pipeline unit testing.
+///
+/// The real implementation wraps a live PyO3 session object. Test doubles can
+/// implement this trait to exercise pipeline branching logic without Python.
 pub(crate) trait Session {
     fn end_module(&self, py: Python<'_>, module_path: &Utf8Path) -> PyResult<()>;
     fn end_session(&self, py: Python<'_>) -> PyResult<()>;
@@ -24,7 +27,10 @@ pub(crate) trait Session {
     fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny>;
 }
 
-/// Abstracts `bridge::collect_module`.
+/// Abstracts `bridge::collect_module` for pipeline unit testing.
+///
+/// The real implementation (`BridgeCollector`) calls into Python via PyO3.
+/// Test doubles can return pre-built item lists without touching the interpreter.
 pub(crate) trait ModuleCollector {
     fn collect_module(
         &self,
@@ -35,7 +41,10 @@ pub(crate) trait ModuleCollector {
     ) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError>;
 }
 
-/// Abstracts `bridge::run_test`.
+/// Abstracts `bridge::run_test` for pipeline unit testing.
+///
+/// The real implementation (`BridgeRunner`) calls the Python executor. Test
+/// doubles can return fixed outcomes to exercise reporter and accumulator logic.
 pub(crate) trait TestRunner {
     fn run_test(
         &self,
@@ -46,7 +55,11 @@ pub(crate) trait TestRunner {
     ) -> TestOutcome;
 }
 
-/// Abstracts `parallel::run_phase_parallel`.
+/// Abstracts `parallel::run_phase_parallel` for pipeline unit testing.
+///
+/// The real implementation (`DefaultParallelRunner`) spawns worker subprocesses.
+/// Test doubles can return synthetic `PhaseResult`s to test the serial/parallel
+/// decision logic without forking any processes.
 pub(crate) trait ParallelRunner {
     fn run_parallel(
         &self,

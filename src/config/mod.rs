@@ -6,6 +6,10 @@ pub use cli::Cli;
 mod pyproject;
 use pyproject::{OxitestConfig, PyprojectToml};
 
+/// Number of parallel worker subprocesses to use.
+///
+/// `Auto` resolves to the number of logical CPU cores at runtime (see
+/// [`Config::worker_count`]). `Fixed(n)` pins to exactly `n` workers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerCount {
     Auto,
@@ -25,6 +29,12 @@ fn parse_workers(s: &str) -> Result<WorkerCount, String> {
     Ok(WorkerCount::Fixed(n))
 }
 
+/// Traceback display style for test failures.
+///
+/// - `Long` — full traceback with all frames.
+/// - `Short` — user frames only (oxitest internal frames filtered out).
+/// - `Line` — single-line summary, no frame block.
+/// - `No` — suppress traceback entirely.
 #[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TbStyle {
@@ -34,6 +44,11 @@ pub enum TbStyle {
     No,
 }
 
+/// Strict-mode enforcement level.
+///
+/// - `Abort` — violations are hard errors; the run exits with code 3 before tests execute.
+/// - `Enforce` — violations are reported as per-test errors in the normal output but do
+///   not prevent other tests from running.
 #[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum StrictMode {
@@ -74,6 +89,11 @@ pub enum ColorMode {
     Never,
 }
 
+/// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
+///
+/// CLI flags take precedence over `pyproject.toml` values. Construct via
+/// `Config::load(rootdir)` then `config.merge_cli(&cli)`. Defaults come from
+/// `Config::default()`.
 #[derive(Debug)]
 pub struct Config {
     pub rootdir: Utf8PathBuf,
