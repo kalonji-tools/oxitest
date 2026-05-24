@@ -73,6 +73,36 @@ mod file_collection_phase_tests {
     }
 }
 
+mod session_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::SessionPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod fixtures_phase_tests {
+    use super::*;
+
+    #[test]
+    fn skips_when_fixtures_flag_not_set() {
+        let ctx = make_ctx();
+        let phase = phases::FixturesPhase;
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn runs_when_fixtures_flag_set() {
+        let mut ctx = make_ctx();
+        ctx.cli.fixtures = true;
+        let phase = phases::FixturesPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
 mod affected_phase_tests {
     use super::*;
 
