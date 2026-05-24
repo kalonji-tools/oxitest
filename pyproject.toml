@@ -22,18 +22,22 @@ target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "T20", "A", "C4", "SIM", "RET", "PTH", "PERF"]
-ignore = ["B009", "B010"]  # getattr/setattr used intentionally for ty compatibility
+select = ["E", "F", "I", "UP", "B", "T20", "A", "C4", "SIM", "RET", "PTH", "PERF", "D"]
+ignore = ["B009", "B010", "D105", "D107"]  # getattr/setattr used intentionally for ty compatibility
 
 [tool.ruff.lint.per-file-ignores]
-"python/oxitest/_bridge/worker.py" = ["T201"]
+"python/oxitest/_bridge/worker.py" = ["T201", "D"]
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
-"python/tests/*" = ["T201", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109"]
-"scripts/*" = ["T201"]
-"bench/*.py" = ["T201", "E501"]
+"python/oxitest/_bridge/_*.py" = ["D100", "D101", "D102", "D103", "D104"]
+"python/tests/*" = ["T201", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D"]
+"scripts/*" = ["T201", "D"]
+"bench/*.py" = ["T201", "E501", "D"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ty.environment]
 python = ".venv"
