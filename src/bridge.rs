@@ -270,6 +270,24 @@ pub(crate) fn run_test_with_session_obj(
     })
 }
 
+/// Call Python's `import_graph.resolve_affected()` to find test files
+/// that import any of the changed source files.
+pub(crate) fn resolve_affected_tests(
+    py: Python<'_>,
+    test_files: &[camino::Utf8PathBuf],
+    changed_sources: &[String],
+    rootdir: &camino::Utf8Path,
+) -> Result<Vec<String>, pyo3::PyErr> {
+    let module = py.import("oxitest._bridge.import_graph")?;
+    let func = module.getattr("resolve_affected")?;
+    let test_strs: Vec<&str> = test_files.iter().map(|p| p.as_str()).collect();
+    let source_strs: Vec<&str> = changed_sources.iter().map(String::as_str).collect();
+    let result: Vec<String> = func
+        .call1((test_strs, source_strs, rootdir.as_str()))?
+        .extract()?;
+    Ok(result)
+}
+
 fn try_run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,

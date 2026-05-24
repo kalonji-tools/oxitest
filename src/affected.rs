@@ -5,10 +5,12 @@
 //! list to only affected files.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use pyo3::prelude::*;
+
+use crate::bridge;
 
 /// Error from `--affected` processing.
 #[derive(Debug)]
-#[allow(dead_code)] // Used by git_changed_files; callers land in Tasks 5-6.
 pub(crate) enum AffectedError {
     /// Not inside a git repository.
     NotAGitRepo,
@@ -35,7 +37,6 @@ fn parse_diff_output(stdout: &str) -> Vec<String> {
 }
 
 /// Run `git diff --name-only <base>` and return changed file paths (relative to rootdir).
-#[allow(dead_code)] // Wired into the pipeline in Tasks 5-6.
 pub(crate) fn git_changed_files(
     rootdir: &Utf8Path,
     base: &str,
@@ -130,6 +131,76 @@ fn directly_changed_tests(
         .filter(|tf| changed_abs.contains(*tf))
         .cloned()
         .collect()
+}
+
+/// Filter `test_files` to only those affected by git changes.
+///
+/// Returns:
+/// - `Ok(Some(filtered))` — filtered list of affected test files.
+/// - `Ok(None)` — `pyproject.toml` changed or root conftest changed; run all.
+/// - `Err(e)` — git error or import analysis error.
+pub(crate) fn filter_affected_test_files(
+    py: Python<'_>,
+    test_files: &[Utf8PathBuf],
+    rootdir: &Utf8Path,
+    base_ref: &str,
+) -> Result<Option<Vec<Utf8PathBuf>>, AffectedError> {
+    let changed = git_changed_files(rootdir, base_ref)?;
+
+    if changed.is_empty() {
+        return Ok(Some(vec![]));
+    }
+
+    let classified = classify_changed_files(&changed);
+
+    if classified.run_all {
+        return Ok(None);
+    }
+
+    let mut affected: std::collections::HashSet<Utf8PathBuf> = std::collections::HashSet::new();
+
+    // 1. Test files that were directly changed.
+    affected.extend(directly_changed_tests(
+        test_files,
+        &classified.source_files,
+        rootdir,
+    ));
+
+    // 2. Test files in conftest subtrees.
+    affected.extend(conftest_affected_tests(
+        test_files,
+        &classified.conftest_files,
+        rootdir,
+    ));
+
+    // 3. Test files that import changed source files (via Python AST analysis).
+    //    Only analyze files not already marked affected.
+    let remaining: Vec<Utf8PathBuf> = test_files
+        .iter()
+        .filter(|f| !affected.contains(*f))
+        .cloned()
+        .collect();
+
+    if !remaining.is_empty() && !classified.source_files.is_empty() {
+        let import_affected =
+            bridge::resolve_affected_tests(py, &remaining, &classified.source_files, rootdir)
+                .map_err(|e| {
+                    AffectedError::GitCommandFailed(format!("import analysis failed: {e}"))
+                })?;
+
+        for path_str in import_affected {
+            affected.insert(Utf8PathBuf::from(path_str));
+        }
+    }
+
+    // Preserve original ordering from test_files.
+    let result: Vec<Utf8PathBuf> = test_files
+        .iter()
+        .filter(|f| affected.contains(*f))
+        .cloned()
+        .collect();
+
+    Ok(Some(result))
 }
 
 #[cfg(test)]
