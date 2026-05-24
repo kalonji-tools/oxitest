@@ -15,6 +15,7 @@ mod colors;
 mod exit;
 mod format;
 pub(crate) mod json;
+pub(crate) mod junit;
 mod options;
 pub(crate) mod plugin;
 mod stats;
@@ -197,10 +198,13 @@ pub fn make_reporter(
     opts: ReporterOpts,
     is_tty: bool,
     json_path: Option<camino::Utf8PathBuf>,
+    junit_xml_path: Option<camino::Utf8PathBuf>,
     plugin_reporters: Vec<Box<dyn Reporter>>,
 ) -> Box<dyn Reporter> {
     let json_reporter =
         json_path.map(|path| Box::new(json::JsonReporter::new(path)) as Box<dyn Reporter>);
+    let junit_reporter =
+        junit_xml_path.map(|path| Box::new(junit::JunitReporter::new(path)) as Box<dyn Reporter>);
 
     let primary: Box<dyn Reporter> = if is_tty {
         Box::new(TtyReporter::new(opts))
@@ -211,6 +215,9 @@ pub fn make_reporter(
     let mut reporters = vec![primary];
     if let Some(jr) = json_reporter {
         reporters.push(jr);
+    }
+    if let Some(xr) = junit_reporter {
+        reporters.push(xr);
     }
     reporters.extend(plugin_reporters);
 
@@ -771,14 +778,14 @@ mod tests {
     #[test]
     fn test_make_reporter_returns_single_reporter_when_tty_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
-        let mut reporter = make_reporter(opts, true, None, vec![]);
+        let mut reporter = make_reporter(opts, true, None, None, vec![]);
         assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
     #[test]
     fn test_make_reporter_returns_single_reporter_when_ci_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
-        let mut reporter = make_reporter(opts, false, None, vec![]);
+        let mut reporter = make_reporter(opts, false, None, None, vec![]);
         assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
@@ -787,7 +794,7 @@ mod tests {
         use camino::Utf8PathBuf;
         let opts = ReporterOptsBuilder::new().build();
         let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
-        let mut reporter = make_reporter(opts, false, Some(path), vec![]);
+        let mut reporter = make_reporter(opts, false, Some(path), None, vec![]);
         assert_eq!(reporter.finish(&[], false).code(), 0);
     }
 
@@ -818,7 +825,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let opts = ReporterOptsBuilder::new().build();
         let plugins: Vec<Box<dyn Reporter>> = vec![Box::new(CountingStub(Arc::clone(&calls)))];
-        let mut reporter = make_reporter(opts, true, None, plugins);
+        let mut reporter = make_reporter(opts, true, None, None, plugins);
         let item = make_item("test_x");
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
