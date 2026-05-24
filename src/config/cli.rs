@@ -126,3 +126,11 @@ pub struct Cli {
     #[arg(long, value_name = "SECS")]
     pub retries_delay: Option<u64>,
 }
+
+#[cfg(test)]
+impl Cli {
+    /// Construct a `Cli` with all defaults, equivalent to running `oxitest` with no arguments.
+    pub fn default_for_test() -> Self {
+        Self::try_parse_from(["oxitest"]).expect("default CLI args must parse")
+    }
+}

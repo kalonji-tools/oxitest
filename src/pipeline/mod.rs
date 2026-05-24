@@ -18,6 +18,107 @@ use pyo3::prelude::*;
 use std::io::IsTerminal;
 use traits::{ModuleCollector, ParallelRunner, Session, TestRunner};
 
+/// The outcome of a single pipeline phase execution.
+#[derive(Debug)]
+pub(crate) enum PhaseOutcome {
+    /// The phase completed normally; continue to the next phase.
+    Continue,
+    /// The phase requests an early exit with the given exit code.
+    EarlyExit(i32),
+}
+
+/// A discrete stage of the test pipeline.
+///
+/// Implementers should be unit-testable: each phase reads from and writes to
+/// [`PipelineContext`], with side effects limited to the phase's own scope.
+#[allow(dead_code)] // Scaffolding for #450 — phases not yet wired into run().
+pub(crate) trait PipelinePhase {
+    /// Human-readable name used in diagnostics and tracing spans.
+    fn name(&self) -> &'static str;
+
+    /// Whether this phase should run given the current context.
+    ///
+    /// Return `false` to skip the phase entirely (e.g. `ListPhase` when
+    /// `--list` was not passed).
+    fn should_run(&self, ctx: &PipelineContext) -> bool;
+
+    /// Execute the phase, mutating `ctx` as needed.
+    ///
+    /// Returns [`PhaseOutcome::Continue`] to proceed, or
+    /// [`PhaseOutcome::EarlyExit(code)`] to stop the pipeline and return
+    /// `code` as the process exit code.
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32>;
+}
+
+/// Shared mutable state that flows through every pipeline phase.
+///
+/// Populated incrementally: early phases (file collection, session setup)
+/// fill the inputs; later phases (collection, execution, reporting) consume
+/// and augment the results.
+#[allow(dead_code)] // Scaffolding for #450 — not yet fully wired into run().
+pub(crate) struct PipelineContext {
+    pub(crate) cfg: config::Config,
+    pub(crate) cli: config::Cli,
+    pub(crate) rootdir: camino::Utf8PathBuf,
+    pub(crate) is_tty: bool,
+    pub(crate) use_color: bool,
+    pub(crate) base: reporter::ReporterOptsBuilder,
+    pub(crate) cache: cache::TestCache,
+    pub(crate) test_files: Vec<camino::Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<camino::Utf8PathBuf>,
+    pub(crate) session: Option<bridge::FixtureSession>,
+    pub(crate) items: Vec<Arc<types::TestItem>>,
+    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
+    pub(crate) all_violations: Vec<strict::StrictViolation>,
+    pub(crate) suite_lines: Vec<String>,
+    pub(crate) timings: Vec<types::TestTiming>,
+    pub(crate) interrupted: bool,
+    pub(crate) reporter: Option<Box<dyn reporter::Reporter>>,
+}
+
+impl PipelineContext {
+    /// Construct a context from the result of the setup phase.
+    ///
+    /// All incremental fields (files, items, timings, etc.) start empty or
+    /// `None`; they are populated by subsequent phases.
+    pub(crate) fn from_setup(s: SetupContext) -> Self {
+        Self {
+            cfg: s.cfg,
+            cli: s.cli,
+            rootdir: s.rootdir,
+            is_tty: s.is_tty,
+            use_color: s.use_color,
+            base: s.base,
+            cache: s.cache,
+            test_files: Vec::new(),
+            conftest_files: Vec::new(),
+            session: None,
+            items: Vec::new(),
+            violated_items: Vec::new(),
+            all_violations: Vec::new(),
+            suite_lines: Vec::new(),
+            timings: Vec::new(),
+            interrupted: false,
+            reporter: None,
+        }
+    }
+
+    /// Build a minimal error reporter suitable for pre-execution failures.
+    ///
+    /// Uses the base options with verbose disabled, no JSON/JUnit output, and
+    /// no plugin reporters.
+    #[allow(dead_code)] // Scaffolding for #450 — not yet called outside tests.
+    pub(crate) fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
+        reporter::make_reporter(
+            self.base.clone().verbose(false).build(),
+            self.is_tty,
+            None,
+            None,
+            vec![],
+        )
+    }
+}
+
 fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
@@ -230,14 +331,14 @@ fn run_phase(
 }
 
 #[derive(Debug)]
-struct SetupContext {
-    cfg: config::Config,
-    cache: cache::TestCache,
-    cli: config::Cli,
-    rootdir: camino::Utf8PathBuf,
-    is_tty: bool,
-    use_color: bool,
-    base: reporter::ReporterOptsBuilder,
+pub(crate) struct SetupContext {
+    pub(crate) cfg: config::Config,
+    pub(crate) cache: cache::TestCache,
+    pub(crate) cli: config::Cli,
+    pub(crate) rootdir: camino::Utf8PathBuf,
+    pub(crate) is_tty: bool,
+    pub(crate) use_color: bool,
+    pub(crate) base: reporter::ReporterOptsBuilder,
 }
 
 fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, i32>> {
@@ -842,3 +943,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 #[cfg(test)]
 #[path = "../pipeline_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../pipeline_phase_tests.rs"]
+mod phase_tests;
