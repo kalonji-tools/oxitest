@@ -540,12 +540,8 @@ fn format_test_list(items: &[Arc<types::TestItem>], verbose: bool) -> String {
     let mut out = String::new();
 
     if !verbose {
-        for item in items {
-            writeln!(out, "{}", item.node_id).unwrap();
-        }
-        // Remove trailing newline
-        out.truncate(out.trim_end().len());
-        return out;
+        let lines: Vec<&str> = items.iter().map(|i| i.node_id.as_ref()).collect();
+        return lines.join("\n");
     }
 
     // Verbose: table with columns
@@ -564,8 +560,9 @@ fn format_test_list(items: &[Arc<types::TestItem>], verbose: bool) -> String {
     .unwrap();
     writeln!(
         out,
-        "{:<mod_width$}  {:<fn_width$}  {:>5}  -------",
-        "------", "--------", "-----",
+        "{}  {}  -----  -------",
+        "-".repeat(mod_width),
+        "-".repeat(fn_width),
     )
     .unwrap();
 
