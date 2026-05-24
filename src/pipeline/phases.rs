@@ -4,12 +4,14 @@
 //! from and write to [`PipelineContext`], delegating to helper functions
 //! in [`super::helpers`] for the actual work.
 
+use std::collections::HashSet;
+
 use pyo3::prelude::*;
 
 use super::helpers;
 use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
-use crate::{affected, bridge, collector, parallel, reporter, types};
+use crate::{affected, bridge, collector, parallel, reporter, retry, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
 
@@ -337,6 +339,101 @@ impl PipelinePhase for ExecutionPhase<'_> {
         ctx.timings = timings;
         ctx.interrupted = interrupted;
         Ok(PhaseOutcome::Continue)
+    }
+}
+
+// ─── RetryPhase ──────────────────────────────────────────────────────────────
+
+/// Re-runs failed tests serially when `--retries > 0`.
+pub(crate) struct RetryPhase<'a> {
+    pub runner: &'a dyn TestRunner,
+}
+
+impl PipelinePhase for RetryPhase<'_> {
+    fn name(&self) -> &'static str {
+        "retry"
+    }
+
+    fn should_run(&self, ctx: &PipelineContext) -> bool {
+        ctx.cfg.retries > 0 && !ctx.interrupted
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+        let rep = ctx
+            .reporter
+            .as_deref_mut()
+            .expect("ExecutionPhase must run first");
+
+        let failed_node_ids: HashSet<&str> = ctx
+            .timings
+            .iter()
+            .filter(|t| t.outcome.is_failure())
+            .map(|t| t.node_id.as_ref())
+            .collect();
+
+        if failed_node_ids.is_empty() {
+            return Ok(PhaseOutcome::Continue);
+        }
+
+        let failed_items: Vec<std::sync::Arc<types::TestItem>> = ctx
+            .items
+            .iter()
+            .filter(|i| failed_node_ids.contains(i.node_id.as_ref()))
+            .cloned()
+            .collect();
+
+        let retry_ctx = retry::RetryContext {
+            py,
+            max_retries: ctx.cfg.retries,
+            delay_secs: ctx.cfg.retries_delay_secs,
+            session,
+            runner: self.runner,
+            timeout_secs: ctx.cfg.timeout_secs,
+        };
+        let retry::RetryResult {
+            flaky_ids,
+            retry_timings,
+        } = retry::run_retries(&retry_ctx, &failed_items, rep);
+
+        let flaky_set: HashSet<&str> = flaky_ids.iter().map(|id| id.as_ref()).collect();
+        let original_timings = std::mem::take(&mut ctx.timings);
+        let mut merged: Vec<types::TestTiming> = original_timings
+            .into_iter()
+            .filter(|t| !flaky_set.contains(t.node_id.as_ref()))
+            .collect();
+        merged.extend(retry_timings);
+        ctx.timings = merged;
+
+        Ok(PhaseOutcome::Continue)
+    }
+}
+
+// ─── FinalizePhase ───────────────────────────────────────────────────────────
+
+/// Persists cache and finishes the reporter. Always returns `EarlyExit` with
+/// the final exit code.
+pub(crate) struct FinalizePhase;
+
+impl PipelinePhase for FinalizePhase {
+    fn name(&self) -> &'static str {
+        "finalize"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        helpers::finalize(
+            &mut ctx.cache,
+            &ctx.timings,
+            ctx.cfg.cache_max_age,
+            &ctx.rootdir,
+        );
+        let mut rep = ctx.reporter.take().expect("ExecutionPhase must run first");
+        let code = rep.finish(&[], ctx.interrupted).code();
+        Ok(PhaseOutcome::EarlyExit(code))
     }
 }
 
