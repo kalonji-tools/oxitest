@@ -10,6 +10,7 @@ pub(crate) struct RunStats {
     pub(crate) xpassed: usize,
     pub(crate) xpassed_strict: usize,
     pub(crate) timeout: usize,
+    pub(crate) flaky: usize,
     pub(crate) strict_suite: usize,
     pub(crate) tip_lines: Vec<(String, usize)>,
     pub(crate) warning_msgs: Vec<(String, String)>,
@@ -28,6 +29,7 @@ impl RunStats {
             xpassed: 0,
             xpassed_strict: 0,
             timeout: 0,
+            flaky: 0,
             strict_suite: 0,
             tip_lines: Vec::new(),
             warning_msgs: Vec::new(),
@@ -50,6 +52,21 @@ impl RunStats {
 
     pub(crate) fn record_timeout(&mut self) {
         self.timeout += 1;
+    }
+
+    /// Record a flaky outcome, undoing the original failure count.
+    ///
+    /// A flaky test was counted as a failure in the initial run. Since we
+    /// don't track which failure type, decrement in priority order.
+    pub(crate) fn record_flaky(&mut self) {
+        self.flaky += 1;
+        if self.failed > 0 {
+            self.failed -= 1;
+        } else if self.errored > 0 {
+            self.errored -= 1;
+        } else if self.timeout > 0 {
+            self.timeout -= 1;
+        }
     }
 
     pub(crate) fn record_skipped(&mut self) {
@@ -88,6 +105,7 @@ impl RunStats {
             TestOutcome::XFailed { .. } => self.record_xfailed(),
             TestOutcome::XPassed { strict } => self.record_xpassed(*strict),
             TestOutcome::Timeout { .. } => self.record_timeout(),
+            TestOutcome::Flaky { .. } => self.record_flaky(),
         }
     }
 
@@ -131,6 +149,14 @@ impl RunStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_record_flaky_increments_counter() {
+        let mut stats = RunStats::new();
+        stats.record_flaky();
+        assert_eq!(stats.flaky, 1);
+        assert_eq!(stats.failed, 0);
+    }
 
     #[test]
     fn test_record_timeout_increments_counter() {

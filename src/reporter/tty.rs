@@ -39,6 +39,7 @@ fn outcome_label(outcome: &TestOutcome, use_color: bool) -> String {
         TestOutcome::Warned { .. } | TestOutcome::XPassed { strict: false } => color_warn(text, c),
         TestOutcome::XFailed { .. } => color_dim(text, c),
         TestOutcome::Timeout { .. } => color_timeout(text, c),
+        TestOutcome::Flaky { .. } => color_warn(text, c),
     }
 }
 
@@ -309,6 +310,12 @@ impl Reporter for TtyReporter {
         }
         self.stats.record(item, outcome);
         self.stats.record_timing(item.node_id.as_ref(), duration_ms);
+
+        // Flaky: remove original failure from deferred list.
+        if matches!(outcome, TestOutcome::Flaky { .. }) {
+            self.deferred_failures
+                .retain(|(i, _, _)| i.node_id != item.node_id);
+        }
 
         if item.param_id.is_some() && !self.opts.verbose {
             // Flush pending group if fn_name changed
