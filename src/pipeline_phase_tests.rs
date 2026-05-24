@@ -193,3 +193,17 @@ mod list_phase_tests {
         assert!(phase.should_run(&ctx));
     }
 }
+
+mod execution_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::ExecutionPhase {
+            runner: &crate::pipeline::traits::BridgeRunner,
+            parallel: &crate::pipeline::traits::DefaultParallelRunner,
+        };
+        assert!(phase.should_run(&ctx));
+    }
+}
