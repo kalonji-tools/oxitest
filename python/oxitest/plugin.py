@@ -19,11 +19,18 @@ if TYPE_CHECKING:
 class LogBackend(Protocol):
     """Protocol for log-capture backends."""
 
-    def install(self) -> None: ...
-    def uninstall(self) -> None: ...
+    def install(self) -> None:
+        """Install the log-capture backend."""
+        ...
+
+    def uninstall(self) -> None:
+        """Uninstall the log-capture backend."""
+        ...
 
     @property
-    def records(self) -> list[Any]: ...
+    def records(self) -> list[Any]:
+        """Return captured log records."""
+        ...
 
 
 @runtime_checkable
@@ -31,13 +38,22 @@ class FixtureProvider(Protocol):
     """Protocol for plugin-provided fixtures."""
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """Return the fixture name."""
+        ...
 
     @property
-    def fixture_type(self) -> type: ...
+    def fixture_type(self) -> type:
+        """Return the type this fixture provides."""
+        ...
 
-    def create(self, ctx: Any) -> object: ...
-    def teardown(self, value: object) -> None: ...
+    def create(self, ctx: Any) -> object:
+        """Create and return the fixture value."""
+        ...
+
+    def teardown(self, value: object) -> None:
+        """Tear down the fixture value."""
+        ...
 
 
 @runtime_checkable
@@ -45,25 +61,39 @@ class ExecutionWrapper(Protocol):
     """Protocol for marker-triggered execution wrappers."""
 
     @property
-    def marker(self) -> str: ...
+    def marker(self) -> str:
+        """Return the marker name that triggers this wrapper."""
+        ...
 
-    def wrap(self, test_fn: Any, marker_args: dict[str, Any]) -> Any: ...
+    def wrap(self, test_fn: Any, marker_args: dict[str, Any]) -> Any:
+        """Wrap the test function with marker-triggered behavior."""
+        ...
 
 
 @runtime_checkable
 class Collector(Protocol):
     """Protocol for custom test collectors."""
 
-    def collect(self, path: str, module: object) -> list[Any]: ...
+    def collect(self, path: str, module: object) -> list[Any]:
+        """Collect tests from the given module."""
+        ...
 
 
 @runtime_checkable
 class Reporter(Protocol):
     """Protocol for plugin reporters."""
 
-    def test_started(self, item: Any) -> None: ...
-    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None: ...
-    def finish(self, collect_errors: list[Any], interrupted: bool) -> None: ...
+    def test_started(self, item: Any) -> None:
+        """Called when a test begins execution."""
+        ...
+
+    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None:
+        """Called when a test finishes with its outcome."""
+        ...
+
+    def finish(self, collect_errors: list[Any], interrupted: bool) -> None:
+        """Called after all tests complete."""
+        ...
 
 
 @dataclass
