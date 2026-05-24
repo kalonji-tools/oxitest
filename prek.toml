@@ -93,3 +93,11 @@ language = "system"
 entry = "python scripts/check_bridge_sync.py"
 pass_filenames = false
 files = "(bridge\\.rs|result\\.py)$"
+
+[[repos.hooks]]
+id = "affected-tests"
+name = "affected tests"
+language = "system"
+entry = "bash -c 'PYTHONPATH=python uv run python -m oxitest --affected'"
+pass_filenames = false
+stages = ["pre-push"]
