@@ -542,8 +542,15 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Ok(ctx) => *ctx,
     };
 
-    let make_error_rep =
-        || reporter::make_reporter(base.clone().verbose(false).build(), is_tty, None, vec![]);
+    let make_error_rep = || {
+        reporter::make_reporter(
+            base.clone().verbose(false).build(),
+            is_tty,
+            None,
+            None,
+            vec![],
+        )
+    };
 
     let (test_files, conftest_files) = collector::collect_files(&cfg);
 
@@ -654,6 +661,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             .build(),
         is_tty,
         cli.json.clone(),
+        cli.junit_xml.clone(),
         plugin_reporters,
     );
 
