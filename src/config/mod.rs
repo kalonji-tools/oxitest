@@ -120,6 +120,7 @@ pub struct Config {
     pub plugins: Vec<String>,
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub async_backend: String,
+    pub affected: Option<String>,
 }
 
 impl Default for Config {
@@ -158,6 +159,7 @@ impl Default for Config {
             plugins: vec![],
             plugin_settings: std::collections::HashMap::new(),
             async_backend: "asyncio".to_string(),
+            affected: None,
         }
     }
 }
@@ -348,6 +350,9 @@ impl Config {
         }
         if let Some(timeout) = cli.timeout {
             self.timeout_secs = Some(timeout);
+        }
+        if cli.affected.is_some() {
+            self.affected = cli.affected.clone();
         }
         self
     }
@@ -1358,5 +1363,29 @@ async_backend = "trio"
 "#;
         let cfg = Config::from_str(toml).unwrap();
         assert_eq!(cfg.async_backend, "trio");
+    }
+
+    #[test]
+    fn test_cli_affected_absent_is_none() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(cli.affected.is_none());
+    }
+
+    #[test]
+    fn test_cli_affected_bare_defaults_to_head() {
+        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
+        assert_eq!(cli.affected, Some("HEAD".to_string()));
+    }
+
+    #[test]
+    fn test_cli_affected_with_branch() {
+        let cli = Cli::try_parse_from(["oxitest", "--affected=main"]).unwrap();
+        assert_eq!(cli.affected, Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_cli_affected_with_commit() {
+        let cli = Cli::try_parse_from(["oxitest", "--affected=abc123"]).unwrap();
+        assert_eq!(cli.affected, Some("abc123".to_string()));
     }
 }
