@@ -14,6 +14,7 @@ mod marker;
 mod parallel;
 mod pipeline;
 mod reporter;
+mod retry;
 mod scheduler;
 mod strict;
 mod types;
