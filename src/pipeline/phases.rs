@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use super::helpers;
 use super::traits::ModuleCollector;
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
-use crate::{affected, bridge, collector, types};
+use crate::{affected, bridge, collector, reporter, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
 
@@ -158,6 +158,92 @@ impl PipelinePhase for CollectionPhase<'_> {
         ctx.items = items;
         ctx.raw_violations = raw_violations;
         Ok(PhaseOutcome::Continue)
+    }
+}
+
+// ─── StrictPhase ─────────────────────────────────────────────────────────────
+
+/// Checks strict-mode violations. Abort mode exits early; enforce mode
+/// partitions items into clean vs violated.
+pub(crate) struct StrictPhase;
+
+impl PipelinePhase for StrictPhase {
+    fn name(&self) -> &'static str {
+        "strict"
+    }
+
+    fn should_run(&self, ctx: &PipelineContext) -> bool {
+        ctx.cfg.strict.is_some()
+    }
+
+    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        let raw_violations = std::mem::take(&mut ctx.raw_violations);
+        let items = std::mem::take(&mut ctx.items);
+        match helpers::apply_strict(&ctx.cfg, items, raw_violations, ctx.use_color) {
+            Ok(strict_result) => {
+                ctx.items = strict_result.clean_items;
+                ctx.violated_items = strict_result.violated_items;
+                ctx.all_violations = strict_result.all_violations;
+                ctx.suite_lines = strict_result.suite_lines;
+                Ok(PhaseOutcome::Continue)
+            }
+            Err(code) => Ok(PhaseOutcome::EarlyExit(code)),
+        }
+    }
+}
+
+// ─── FilterPhase ─────────────────────────────────────────────────────────────
+
+/// Applies keyword (-k), marker (-m), and last-failed filters.
+pub(crate) struct FilterPhase;
+
+impl PipelinePhase for FilterPhase {
+    fn name(&self) -> &'static str {
+        "filter"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        let items = std::mem::take(&mut ctx.items);
+        let make_rep = || {
+            reporter::make_reporter(
+                ctx.base.clone().verbose(false).build(),
+                ctx.is_tty,
+                None,
+                None,
+                vec![],
+            )
+        };
+        match helpers::apply_filters(items, &ctx.cli, &ctx.cfg, &ctx.cache, &make_rep) {
+            Ok(filtered) => {
+                ctx.items = filtered;
+                Ok(PhaseOutcome::Continue)
+            }
+            Err(code) => Ok(PhaseOutcome::EarlyExit(code)),
+        }
+    }
+}
+
+// ─── ListPhase ───────────────────────────────────────────────────────────────
+
+/// Handles `--list`: prints collected tests and exits without execution.
+pub(crate) struct ListPhase;
+
+impl PipelinePhase for ListPhase {
+    fn name(&self) -> &'static str {
+        "list"
+    }
+
+    fn should_run(&self, ctx: &PipelineContext) -> bool {
+        ctx.cli.list
+    }
+
+    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+        println!("{}", helpers::format_test_list(&ctx.items, ctx.cli.verbose));
+        Ok(PhaseOutcome::EarlyExit(0))
     }
 }
 
