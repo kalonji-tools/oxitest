@@ -45,6 +45,7 @@ mod pipeline_context_tests {
     fn context_starts_with_empty_items() {
         let ctx = make_ctx();
         assert!(ctx.items.is_empty());
+        assert!(ctx.raw_violations.is_empty());
         assert!(ctx.violated_items.is_empty());
         assert!(ctx.all_violations.is_empty());
         assert!(ctx.suite_lines.is_empty());
@@ -118,6 +119,19 @@ mod affected_phase_tests {
         let mut ctx = make_ctx();
         ctx.cfg.affected = Some("HEAD~1".to_string());
         let phase = phases::AffectedPhase;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
+mod collection_phase_tests {
+    use super::*;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::CollectionPhase {
+            collector: &crate::pipeline::traits::BridgeCollector,
+        };
         assert!(phase.should_run(&ctx));
     }
 }
