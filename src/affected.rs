@@ -49,7 +49,7 @@ pub(crate) fn git_changed_files(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("not a git repository") {
+        if stderr.to_ascii_lowercase().contains("not a git repository") {
             return Err(AffectedError::NotAGitRepo);
         }
         return Err(AffectedError::GitCommandFailed(stderr.into_owned()));
