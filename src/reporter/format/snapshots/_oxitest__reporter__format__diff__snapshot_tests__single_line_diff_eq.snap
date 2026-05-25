@@ -1,0 +1,7 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+- left:  42
++ right: 43
+          ^
