@@ -38,6 +38,12 @@ plugins:
           options:
             docstring_style: google
 
+extra_css:
+  - stylesheets/mermaid.css
+
+extra_javascript:
+  - javascripts/mermaid-zoom.js
+
 markdown_extensions:
   - admonition
   - pymdownx.details
