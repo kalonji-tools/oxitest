@@ -197,35 +197,12 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         let f = dir.child("test_specific.py");
         f.touch().unwrap();
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = Config {
-            rootdir: camino::Utf8Path::from_path(dir.path()).unwrap().to_owned(),
             testpaths: vec![camino::Utf8Path::from_path(f.path()).unwrap().to_owned()],
             python_files: vec!["test_*.py".to_string()],
             norecursedirs: vec![],
-            maxfail: 0,
-            registered_markers: vec![],
-            timeout_secs: None,
-            serial: false,
-            workers: None,
-            cache_max_age: 50,
-            min_parallel_tests: 100,
-            timeout_multiplier: None,
-            spawn_overhead_ms: 250.0,
-            strict: None,
-            markers_without_description: vec![],
-            schedule: crate::config::ScheduleStrategy::LongestFirst,
-            failed: None,
-            tb: crate::config::TbStyle::Short,
-            verbose: false,
-            durations: None,
-            color: crate::config::ColorMode::Auto,
-            plugins: vec![],
-            plugin_settings: std::collections::HashMap::new(),
-            async_backend: "asyncio".to_string(),
-            affected: None,
-            affected_base: "HEAD".to_string(),
-            retries: 0,
-            retries_delay_secs: 0,
+            ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
@@ -242,34 +219,9 @@ mod tests {
         dir.child("helper.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = Config {
-            rootdir: utf8_dir.to_owned(),
-            testpaths: vec![utf8_dir.to_owned()],
             python_files: vec!["test_*_integration.py".to_string()],
             norecursedirs: vec![],
-            maxfail: 0,
-            registered_markers: vec![],
-            timeout_secs: None,
-            serial: false,
-            workers: None,
-            cache_max_age: 50,
-            min_parallel_tests: 100,
-            timeout_multiplier: None,
-            spawn_overhead_ms: 250.0,
-            strict: None,
-            markers_without_description: vec![],
-            schedule: crate::config::ScheduleStrategy::LongestFirst,
-            failed: None,
-            tb: crate::config::TbStyle::Short,
-            verbose: false,
-            durations: None,
-            color: crate::config::ColorMode::Auto,
-            plugins: vec![],
-            plugin_settings: std::collections::HashMap::new(),
-            async_backend: "asyncio".to_string(),
-            affected: None,
-            affected_base: "HEAD".to_string(),
-            retries: 0,
-            retries_delay_secs: 0,
+            ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config);
         assert_eq!(files.len(), 1);
@@ -325,34 +277,9 @@ mod tests {
         dir.child("test_foo.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = Config {
-            rootdir: utf8_dir.to_owned(),
-            testpaths: vec![utf8_dir.to_owned()],
             python_files: vec!["test_*.py".to_string(), "[".to_string()],
             norecursedirs: vec![],
-            maxfail: 0,
-            registered_markers: vec![],
-            timeout_secs: None,
-            serial: false,
-            workers: None,
-            cache_max_age: 50,
-            min_parallel_tests: 100,
-            timeout_multiplier: None,
-            spawn_overhead_ms: 250.0,
-            strict: None,
-            markers_without_description: vec![],
-            schedule: crate::config::ScheduleStrategy::LongestFirst,
-            failed: None,
-            tb: crate::config::TbStyle::Short,
-            verbose: false,
-            durations: None,
-            color: crate::config::ColorMode::Auto,
-            plugins: vec![],
-            plugin_settings: std::collections::HashMap::new(),
-            async_backend: "asyncio".to_string(),
-            affected: None,
-            affected_base: "HEAD".to_string(),
-            retries: 0,
-            retries_delay_secs: 0,
+            ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config);
         assert_eq!(
