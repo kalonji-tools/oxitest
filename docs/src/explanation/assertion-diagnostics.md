@@ -119,8 +119,6 @@ failure output. Current patterns:
 | Fixture not found | Check the `@fixtures.fixture` definition and `Fixture[T]` annotation. |
 | Unknown marker (strict mode) | Fuzzy-matches against registered markers ("Did you mean `slow`?"). |
 
-Suggestions use `strsim` for Levenshtein distance matching (threshold ≤ 2).
-
 ## Frame truncation
 
 In `--tb short` mode (the default), oxitest hides internal framework frames from

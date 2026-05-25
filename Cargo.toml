@@ -31,7 +31,6 @@ camino = "1"
 rand = "0.10.1"
 similar = "2"
 quick-xml = { version = "0.37", features = ["serialize"] }
-strsim = "0.11"
 
 [dev-dependencies]
 tempfile = "3"
