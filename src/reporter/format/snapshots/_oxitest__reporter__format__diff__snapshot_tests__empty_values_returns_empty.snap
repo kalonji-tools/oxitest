@@ -1,0 +1,5 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+
