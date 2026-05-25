@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 use crate::bridge;
 
 /// Error from `--affected` processing.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum AffectedError {
     /// Not inside a git repository.
     #[error("--affected requires a git repository")]
