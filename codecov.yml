@@ -30,6 +30,8 @@ ignore:
   - "src/pipeline/traits.rs"
   # Retry: calls Python via TestRunner trait, not unit-testable without interpreter
   - "src/retry.rs"
+  # Pipeline phases: execute() methods call into Python via trait objects, not unit-testable
+  - "src/pipeline/phases.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
