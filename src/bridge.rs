@@ -176,7 +176,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
 
 /// Raw violation extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `CollectedViolation`.
-#[derive(pyo3::FromPyObject, Debug)]
+#[derive(pyo3::FromPyObject, Debug, Clone)]
 pub(crate) struct RawViolation {
     pub node_id: String,
     pub kind: ViolationKind,
