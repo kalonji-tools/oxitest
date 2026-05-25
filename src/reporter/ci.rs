@@ -120,7 +120,12 @@ impl Reporter for CiReporter {
         self.stats.record_timing(item.node_id.as_ref(), duration_ms);
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
+    fn finish(
+        &mut self,
+        collect_errors: &[CollectError],
+        interrupted: bool,
+        _stats: &super::RunStats,
+    ) -> super::ExitVote {
         self.pre_finish();
         let stats = self.stats.clone();
         super::standard_finish(self, &stats, collect_errors, interrupted)
@@ -225,7 +230,12 @@ mod tests {
             },
             DurationMs::ZERO,
         );
-        assert_eq!(reporter.finish(&[], false).code(), 0);
+        assert_eq!(
+            reporter
+                .finish(&[], false, &crate::reporter::RunStats::new())
+                .code(),
+            0
+        );
     }
 
     #[test]
@@ -242,7 +252,12 @@ mod tests {
             &make_failed("x", "f.py", 1, "assert"),
             DurationMs::ZERO,
         );
-        assert_eq!(reporter.finish(&[], false).code(), 1);
+        assert_eq!(
+            reporter
+                .finish(&[], false, &crate::reporter::RunStats::new())
+                .code(),
+            1
+        );
     }
 
     #[test]
@@ -259,7 +274,12 @@ mod tests {
             &make_failed("x", "f.py", 1, "assert"),
             DurationMs::ZERO,
         );
-        assert_eq!(reporter.finish(&[], true).code(), 2);
+        assert_eq!(
+            reporter
+                .finish(&[], true, &crate::reporter::RunStats::new())
+                .code(),
+            2
+        );
     }
 
     #[test]
@@ -314,7 +334,12 @@ mod tests {
                 .build(),
         );
         let errors = vec![CollectError::PyError("import failed".to_string())];
-        assert_eq!(reporter.finish(&errors, false).code(), 3);
+        assert_eq!(
+            reporter
+                .finish(&errors, false, &crate::reporter::RunStats::new())
+                .code(),
+            3
+        );
     }
 
     #[test]
@@ -385,7 +410,7 @@ mod tests {
                 .tb(crate::config::TbStyle::No)
                 .build(),
         );
-        reporter.finish(&[], false);
+        reporter.finish(&[], false, &crate::reporter::RunStats::new());
         assert_eq!(reporter.stats.strict_suite, 1);
     }
 
