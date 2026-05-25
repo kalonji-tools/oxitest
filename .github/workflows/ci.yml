@@ -68,9 +68,13 @@ jobs:
 
       - run: uv sync --group test --group typecheck
 
+      - name: Install cargo-insta
+        if: matrix.python-version == '3.12'
+        run: cargo install cargo-insta --locked
+
       - name: Rust tests
         if: matrix.python-version == '3.12'
-        run: cargo test
+        run: cargo insta test --unreferenced=reject
 
       - name: Build extension
         run: uv run maturin develop
