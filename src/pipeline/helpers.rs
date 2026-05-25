@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
 use crate::{bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict, types};
 use pyo3::prelude::*;
 use traits::{ModuleCollector, ParallelRunner, Session, TestRunner};

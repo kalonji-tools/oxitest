@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::cache::TestCache;
+use crate::cache::{TestCache, TimingCache};
 use crate::config::ScheduleStrategy;
 use crate::types::TestItem;
 
