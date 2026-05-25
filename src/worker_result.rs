@@ -481,3 +481,81 @@ mod wire_round_trip_tests {
         assert_eq!(r.outcome, types::OutcomeKind::Unknown);
     }
 }
+
+#[cfg(test)]
+mod compact_and_error_tests {
+    use super::*;
+
+    #[test]
+    fn compact_passed_only_required_fields() {
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
+        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        assert!(r.failure_repr.is_none());
+        assert!(r.message.is_none());
+        assert!(r.file.is_none());
+        assert!(r.lineno.is_none());
+        assert!(r.source_line.is_none());
+        assert!(r.no_message_lines.is_empty());
+        assert!(r.left.is_none());
+        assert!(r.right.is_none());
+        assert!(r.op.is_none());
+        assert!(!r.strict);
+        assert!(r.frames.is_empty());
+    }
+
+    #[test]
+    fn no_message_lines_deserializes_as_vec() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "passed",
+            "duration_ms": 0.0,
+            "no_message_lines": [5, 10, 15]
+        }"#;
+        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        assert_eq!(r.no_message_lines, vec![5_i64, 10_i64, 15_i64]);
+    }
+
+    #[test]
+    fn missing_node_id_is_error() {
+        let json = r#"{"outcome":"passed","duration_ms":0.0}"#;
+        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+    }
+
+    #[test]
+    fn missing_outcome_is_error() {
+        let json = r#"{"node_id":"t","duration_ms":0.0}"#;
+        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+    }
+
+    #[test]
+    fn missing_duration_ms_is_error() {
+        let json = r#"{"node_id":"t","outcome":"passed"}"#;
+        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+    }
+
+    #[test]
+    fn truncated_json_is_error() {
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":"#;
+        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+    }
+
+    #[test]
+    fn wrong_type_for_duration_is_error() {
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":"slow"}"#;
+        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+    }
+
+    #[test]
+    fn extra_unknown_fields_are_ignored() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "passed",
+            "duration_ms": 0.5,
+            "future_field": "some_value",
+            "another_extra": 42
+        }"#;
+        let r: WorkerResult = serde_json::from_str(json).expect("extra fields should be ignored");
+        assert_eq!(r.outcome, types::OutcomeKind::Passed);
+        assert!((r.duration_ms - 0.5).abs() < 1e-9);
+    }
+}
