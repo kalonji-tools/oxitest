@@ -29,6 +29,39 @@ pub(crate) struct RetryContext<'a> {
     pub timeout_secs: Option<u64>,
 }
 
+/// Identify test items whose timings show a failure outcome.
+pub(crate) fn identify_failed_items(
+    items: &[Arc<TestItem>],
+    timings: &[TestTiming],
+) -> Vec<Arc<TestItem>> {
+    let failed_ids: std::collections::HashSet<&str> = timings
+        .iter()
+        .filter(|t| t.outcome.is_failure())
+        .map(|t| t.node_id.as_ref())
+        .collect();
+    items
+        .iter()
+        .filter(|i| failed_ids.contains(i.node_id.as_ref()))
+        .cloned()
+        .collect()
+}
+
+/// Merge retry timings into the original timing list.
+pub(crate) fn merge_flaky_timings(
+    original: Vec<TestTiming>,
+    flaky_ids: &[NodeId],
+    retry_timings: Vec<TestTiming>,
+) -> Vec<TestTiming> {
+    let flaky_set: std::collections::HashSet<&str> =
+        flaky_ids.iter().map(|id| id.as_ref()).collect();
+    let mut merged: Vec<TestTiming> = original
+        .into_iter()
+        .filter(|t| !flaky_set.contains(t.node_id.as_ref()))
+        .collect();
+    merged.extend(retry_timings);
+    merged
+}
+
 /// Re-run failed tests serially, up to `max_retries` attempts each.
 ///
 /// Returns which tests are flaky (passed on retry) and updated timings.
@@ -89,6 +122,7 @@ pub(crate) fn run_retries(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reporter::test_helpers::{make_item_raw, make_timing};
 
     #[test]
     fn test_retry_result_default_empty() {
@@ -98,5 +132,66 @@ mod tests {
         };
         assert!(result.flaky_ids.is_empty());
         assert!(result.retry_timings.is_empty());
+    }
+
+    #[test]
+    fn identify_failed_items_returns_only_failures() {
+        let item_a = make_item_raw("tests/test_a.py::test_pass");
+        let item_b = make_item_raw("tests/test_a.py::test_fail");
+        let item_c = make_item_raw("tests/test_a.py::test_err");
+        let items = vec![item_a, item_b, item_c];
+        let timings = vec![
+            make_timing("tests/test_a.py::test_pass", OutcomeKind::Passed),
+            make_timing("tests/test_a.py::test_fail", OutcomeKind::Failed),
+            make_timing("tests/test_a.py::test_err", OutcomeKind::Error),
+        ];
+        let failed = identify_failed_items(&items, &timings);
+        assert_eq!(failed.len(), 2);
+        assert!(failed.iter().any(|i| i.node_id.contains("test_fail")));
+        assert!(failed.iter().any(|i| i.node_id.contains("test_err")));
+    }
+
+    #[test]
+    fn identify_failed_items_empty_when_all_pass() {
+        let item = make_item_raw("tests/test_a.py::test_ok");
+        let items = vec![item];
+        let timings = vec![make_timing("tests/test_a.py::test_ok", OutcomeKind::Passed)];
+        let failed = identify_failed_items(&items, &timings);
+        assert!(failed.is_empty());
+    }
+
+    #[test]
+    fn merge_flaky_timings_replaces_failed_entries() {
+        let original = vec![
+            make_timing("tests/test_a.py::test_pass", OutcomeKind::Passed),
+            make_timing("tests/test_a.py::test_flaky", OutcomeKind::Failed),
+        ];
+        let flaky_ids = vec![NodeId::from_raw("tests/test_a.py::test_flaky")];
+        let retry = vec![make_timing(
+            "tests/test_a.py::test_flaky",
+            OutcomeKind::Flaky,
+        )];
+        let merged = merge_flaky_timings(original, &flaky_ids, retry);
+        assert_eq!(merged.len(), 2);
+        let flaky = merged
+            .iter()
+            .find(|t| t.node_id.contains("test_flaky"))
+            .unwrap();
+        assert_eq!(flaky.outcome, OutcomeKind::Flaky);
+        let pass = merged
+            .iter()
+            .find(|t| t.node_id.contains("test_pass"))
+            .unwrap();
+        assert_eq!(pass.outcome, OutcomeKind::Passed);
+    }
+
+    #[test]
+    fn merge_flaky_timings_no_flaky_returns_original() {
+        let original = vec![
+            make_timing("tests/test_a.py::test_a", OutcomeKind::Passed),
+            make_timing("tests/test_a.py::test_b", OutcomeKind::Failed),
+        ];
+        let merged = merge_flaky_timings(original, &[], vec![]);
+        assert_eq!(merged.len(), 2);
     }
 }
