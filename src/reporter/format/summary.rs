@@ -367,4 +367,50 @@ mod tests {
     fn test_plural_many() {
         assert_eq!(plural(5), "s");
     }
+
+    mod snapshot_tests {
+        use super::*;
+        use insta::assert_snapshot;
+
+        #[test]
+        fn summary_all_passed() {
+            let stats = make_stats(5, 0, 0, 0, 0, 0, 0, 0);
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+
+        #[test]
+        fn summary_mixed_outcomes() {
+            let stats = make_stats(10, 2, 1, 3, 0, 0, 0, 0);
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+
+        #[test]
+        fn summary_all_failed() {
+            let stats = make_stats(0, 8, 0, 0, 0, 0, 0, 0);
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+
+        #[test]
+        fn summary_with_warnings_and_flaky() {
+            let stats = RunStats {
+                passed: 15,
+                warned: 2,
+                flaky: 1,
+                ..RunStats::new()
+            };
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+
+        #[test]
+        fn summary_no_tests_ran() {
+            let stats = RunStats::new();
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+
+        #[test]
+        fn summary_xfail_and_xpass() {
+            let stats = make_stats(3, 0, 0, 0, 0, 2, 1, 0);
+            assert_snapshot!(fmt_summary(&stats, 0, false));
+        }
+    }
 }
