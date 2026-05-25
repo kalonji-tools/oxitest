@@ -465,19 +465,18 @@ pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
 
 pub(crate) trait StandardReporter {
     fn pre_finish(&mut self);
-    fn run_stats(&self) -> &RunStats;
     fn run_opts(&self) -> &ReporterOpts;
 }
 
 pub(crate) fn standard_finish(
     r: &mut impl StandardReporter,
+    stats: &RunStats,
     collect_errors: &[CollectError],
     interrupted: bool,
 ) -> ExitVote {
-    r.pre_finish();
     print_collect_errors(collect_errors, r.run_opts().use_color);
     ExitVote::Code(print_summary_section(
-        r.run_stats(),
+        stats,
         r.run_opts(),
         collect_errors,
         interrupted,
@@ -504,31 +503,22 @@ mod tests {
     // ── StandardReporter / standard_finish ─────────────────────────────────────
 
     #[test]
-    fn test_standard_finish_calls_pre_finish_and_returns_zero_on_clean_run() {
+    fn test_standard_finish_returns_zero_on_clean_run() {
         struct Stub {
-            stats: RunStats,
             opts: ReporterOpts,
-            pre_finish_called: bool,
         }
         impl StandardReporter for Stub {
-            fn pre_finish(&mut self) {
-                self.pre_finish_called = true;
-            }
-            fn run_stats(&self) -> &RunStats {
-                &self.stats
-            }
+            fn pre_finish(&mut self) {}
             fn run_opts(&self) -> &ReporterOpts {
                 &self.opts
             }
         }
         let mut s = Stub {
-            stats: RunStats::new(),
             opts: ReporterOptsBuilder::new().build(),
-            pre_finish_called: false,
         };
-        let vote = standard_finish(&mut s, &[], false);
+        let stats = RunStats::new();
+        let vote = standard_finish(&mut s, &stats, &[], false);
         assert_eq!(vote.code(), 0);
-        assert!(s.pre_finish_called);
     }
 
     #[test]

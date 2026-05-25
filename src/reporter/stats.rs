@@ -1,5 +1,6 @@
 use crate::types::{DurationMs, TestItem, TestOutcome};
 
+#[derive(Clone)]
 pub(crate) struct RunStats {
     pub(crate) passed: usize,
     pub(crate) failed: usize,
