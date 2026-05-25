@@ -36,47 +36,6 @@
   margin-top: 0.5rem;
 }
 
-/*
- * Dark mode: swap light fills to dark equivalents.
- *
- * Mermaid renders style directives as inline `style` attributes on SVG
- * rects: style="fill:#fef3e2;stroke:#e67e22;" (no spaces).
- * We match by the exact hex value and override with !important.
- *
- * Confirmed via SVG inspection:
- *   - Subgraph rects: <rect style="fill:#xxx;stroke:#yyy;">
- *   - Cluster class: "cluster default flowchart-label"
- *   - Subgraph IDs match source: id="Rust", id="CLI", id="Python"
- */
-
-/* Architecture — subgraph fills (target by ID for reliability) */
-[data-md-color-scheme="slate"] #CLI > rect,
-[data-md-color-scheme="slate"] rect[style*="#f5f5f5"] {
-  fill: #2d2d2d !important;
-}
-[data-md-color-scheme="slate"] #Rust > rect,
-[data-md-color-scheme="slate"] rect[style*="#fef3e2"] {
-  fill: #3d2800 !important;
-}
-[data-md-color-scheme="slate"] #Python > rect,
-[data-md-color-scheme="slate"] rect[style*="#e8f4fd"] {
-  fill: #0d2137 !important;
-}
-
-/* Pipeline — phase node fills */
-[data-md-color-scheme="slate"] rect[style*="#fff3e0"],
-[data-md-color-scheme="slate"] polygon[style*="#fff3e0"] {
-  fill: #3d2200 !important;
-}
-[data-md-color-scheme="slate"] rect[style*="#e3f2fd"],
-[data-md-color-scheme="slate"] polygon[style*="#e3f2fd"] {
-  fill: #0a1929 !important;
-}
-[data-md-color-scheme="slate"] rect[style*="#fff9c4"],
-[data-md-color-scheme="slate"] polygon[style*="#fff9c4"] {
-  fill: #3d3400 !important;
-}
-[data-md-color-scheme="slate"] rect[style*="#f3e5f5"],
-[data-md-color-scheme="slate"] polygon[style*="#f3e5f5"] {
-  fill: #2d1f33 !important;
-}
+/* Dark mode fill overrides are handled by mermaid-zoom.js which
+ * directly swaps inline fill values on SVG elements when the color
+ * scheme toggles. This avoids CSS-vs-inline-style specificity issues. */
