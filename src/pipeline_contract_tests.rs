@@ -1,26 +1,8 @@
 use super::*;
+use crate::reporter::test_helpers::make_ctx;
 use crate::test_doubles::doubles::{
     make_test_item, MockPhase, RecordingSession, StubCollector, StubRunner,
 };
-
-fn make_ctx() -> PipelineContext {
-    let cfg = config::Config::default();
-    let cli = config::Cli::default_for_test();
-    let rootdir = camino::Utf8PathBuf::from(".");
-    let is_tty = false;
-    let use_color = false;
-    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color);
-    let cache = cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
-    PipelineContext::from_setup(SetupContext {
-        cfg,
-        cache,
-        cli,
-        rootdir,
-        is_tty,
-        use_color,
-        base,
-    })
-}
 
 mod loop_tests {
     use super::*;
@@ -120,5 +102,40 @@ mod double_tests {
             assert!(phase.was_called());
             assert!(matches!(outcome, PhaseOutcome::Continue));
         });
+    }
+}
+
+mod helper_tests {
+    use super::*;
+    use crate::types::{DurationMs, OutcomeKind};
+
+    #[test]
+    fn make_timing_creates_timing_with_zero_duration() {
+        let timing =
+            reporter::test_helpers::make_timing("tests/test_a.py::test_one", OutcomeKind::Passed);
+        assert_eq!(timing.node_id.as_ref(), "tests/test_a.py::test_one");
+        assert_eq!(timing.duration_ms, DurationMs::ZERO);
+        assert_eq!(timing.outcome, OutcomeKind::Passed);
+    }
+
+    #[test]
+    fn make_outcome_passed() {
+        let outcome = reporter::test_helpers::make_outcome("passed");
+        assert!(matches!(outcome, types::TestOutcome::Passed { .. }));
+    }
+
+    #[test]
+    fn make_outcome_failed() {
+        let outcome = reporter::test_helpers::make_outcome("failed");
+        assert!(matches!(outcome, types::TestOutcome::Failed { .. }));
+    }
+
+    #[test]
+    fn make_ctx_creates_empty_context() {
+        let ctx = reporter::test_helpers::make_ctx();
+        assert!(ctx.items.is_empty());
+        assert!(ctx.test_files.is_empty());
+        assert!(!ctx.interrupted);
+        assert!(ctx.session.is_none());
     }
 }

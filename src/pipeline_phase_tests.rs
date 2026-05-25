@@ -1,23 +1,5 @@
 use super::*;
-
-fn make_ctx() -> PipelineContext {
-    let cfg = config::Config::default();
-    let cli = config::Cli::default_for_test();
-    let rootdir = camino::Utf8PathBuf::from(".");
-    let is_tty = false;
-    let use_color = false;
-    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color);
-    let cache = cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
-    PipelineContext::from_setup(SetupContext {
-        cfg,
-        cache,
-        cli,
-        rootdir,
-        is_tty,
-        use_color,
-        base,
-    })
-}
+use crate::reporter::test_helpers::make_ctx;
 
 mod phase_outcome_tests {
     use super::*;
