@@ -42,6 +42,7 @@ pub(crate) fn drain_worker_results(
     // Empty lines do NOT reset it — a subprocess spamming blank output cannot
     // prevent the watchdog from firing.
     let mut result_deadline = Instant::now() + watchdog;
+    let mut version_warned = false;
 
     loop {
         if received >= expected {
@@ -63,6 +64,16 @@ pub(crate) fn drain_worker_results(
                 match serde_json::from_str::<WorkerResult>(trimmed) {
                     Ok(r) => {
                         received += 1;
+                        if !version_warned
+                            && r.protocol_version != crate::worker_result::PROTOCOL_VERSION
+                        {
+                            tracing::warn!(
+                                expected = crate::worker_result::PROTOCOL_VERSION,
+                                got = r.protocol_version,
+                                "Worker protocol version mismatch — results may be unreliable"
+                            );
+                            version_warned = true;
+                        }
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
                         let _ = tx.send(r);
@@ -841,7 +852,10 @@ mod drain_tests {
     use std::time::Duration;
 
     fn valid_json(node_id: &str) -> String {
-        format!(r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":1.0}}"#)
+        format!(
+            r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":1.0,"protocol_version":{}}}"#,
+            crate::worker_result::PROTOCOL_VERSION
+        )
     }
 
     // ── Test 1 ──────────────────────────────────────────────────────────────
@@ -1110,6 +1124,31 @@ mod drain_tests {
         let mut timings: Vec<crate::types::TestTiming> = vec![];
         drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings);
         assert!(timings.is_empty());
+    }
+
+    // ── Test 9 ──────────────────────────────────────────────────────────────────
+    // A result with a mismatched protocol_version must still be forwarded (not
+    // dropped).  The runner warns about the mismatch but the result is valid.
+    #[test]
+    fn version_mismatch_still_forwards_result() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded();
+        // Send a result with protocol_version 99 (mismatch)
+        line_tx
+            .send(
+                r#"{"node_id":"t","outcome":"passed","duration_ms":1.0,"protocol_version":99}"#
+                    .to_string(),
+            )
+            .unwrap();
+        drop(line_tx);
+
+        let (outcome, count) =
+            drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx);
+        assert_eq!(outcome, DrainOutcome::Complete);
+        assert_eq!(count, 1);
+        // Result must still be forwarded despite version mismatch
+        let r = result_rx.try_recv().expect("result should be forwarded");
+        assert_eq!(r.protocol_version, 99);
     }
 }
 
