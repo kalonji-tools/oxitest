@@ -20,6 +20,9 @@ mod strict;
 mod types;
 mod worker_result;
 
+#[cfg(test)]
+mod test_doubles;
+
 #[pyfunction]
 fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     pipeline::run(py, args)
