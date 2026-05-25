@@ -87,6 +87,17 @@ pub(crate) trait ParallelRunner {
     ) -> parallel::PhaseResult;
 }
 
+/// Abstraction over test execution strategies (serial, parallel).
+///
+/// Given grouped test items, executes them and returns timing results.
+pub(crate) trait ExecutionHarness {
+    fn execute_groups(
+        &self,
+        groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+        rep: &mut dyn crate::reporter::Reporter,
+    ) -> crate::parallel::PhaseResult;
+}
+
 // ─── Real implementations ───────────────────────────────────────────────────
 
 impl Session for bridge::FixtureSession {
