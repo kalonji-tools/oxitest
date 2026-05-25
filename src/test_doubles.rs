@@ -228,6 +228,27 @@ pub(crate) mod doubles {
         }
     }
 
+    // ─── StubHarness ─────────────────────────────────────────────────────────
+
+    /// Stub harness that returns a configurable [`PhaseResult`].
+    #[allow(dead_code)] // Used by later tasks (execution harness contract tests).
+    pub(crate) struct StubHarness {
+        pub result: PhaseResult,
+    }
+
+    impl crate::pipeline::traits::ExecutionHarness for StubHarness {
+        fn execute_groups(
+            &self,
+            _groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+            _rep: &mut dyn Reporter,
+        ) -> PhaseResult {
+            PhaseResult {
+                interrupted: self.result.interrupted,
+                timings: self.result.timings.clone(),
+            }
+        }
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     /// Build a minimal [`TestItem`] with the given node-id string.

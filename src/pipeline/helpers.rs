@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::{bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict, types};
 use pyo3::prelude::*;
-use traits::{ModuleCollector, ParallelRunner, Session, TestRunner};
+use traits::{ExecutionHarness, ModuleCollector, ParallelRunner, Session, TestRunner};
 
 use super::traits;
 
@@ -78,7 +78,7 @@ pub(super) fn collect_items(
 }
 
 pub(super) fn resolve_timeout(
-    cache: &impl cache::TimingCache,
+    cache: &(impl cache::TimingCache + ?Sized),
     item: &types::TestItem,
     global: Option<u64>,
     multiplier: Option<f64>,
@@ -167,58 +167,91 @@ pub(in crate::pipeline) fn early_exit_with_error(
         .code()
 }
 
-pub(super) fn run_phase(
-    py: Python<'_>,
-    groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
-    ctx: &ExecutionContext<'_>,
-    rep: &mut dyn reporter::Reporter,
-) -> parallel::PhaseResult {
-    let mut acc = types::FailureAccumulator::new(ctx.cfg.maxfail);
-    let mut interrupted = false;
-    let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
-    let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
+// ─── Execution Harnesses ─────────────────────────────────────────────────────
 
-    'run: for (module_path, items) in &groups {
-        for item in items {
-            rep.test_started(item);
-            let timeout = resolve_timeout(
-                ctx.cache,
-                item,
-                ctx.cfg.timeout_secs,
-                ctx.cfg.timeout_multiplier,
-            );
-            let (outcome, duration_ms) = ctx.runner.run_timed(py, item, ctx.session, timeout);
-            timings.push(types::TestTiming {
-                node_id: item.node_id.clone(),
-                duration_ms,
-                outcome: types::OutcomeKind::from(&outcome),
-            });
-            rep.test_completed(item, &outcome, duration_ms);
-            if acc.record(&outcome) {
-                interrupted = true;
-                if let Err(e) = ctx.session.end_module(py, module_path) {
-                    tracing::warn!(%e, module = %module_path, "teardown error in end_module");
-                    rep.record_teardown_warning(
-                        &format!("end_module({})", module_path),
-                        &e.to_string(),
-                    );
+/// Serial execution harness — runs tests in-process, one at a time.
+pub(super) struct SerialHarness<'a> {
+    pub py: Python<'a>,
+    pub runner: &'a dyn super::traits::TestRunner,
+    pub session: &'a dyn super::traits::Session,
+    pub cache: &'a dyn cache::TimingCache,
+    pub timeout_secs: Option<u64>,
+    pub timeout_multiplier: Option<f64>,
+    pub maxfail: usize,
+}
+
+impl super::traits::ExecutionHarness for SerialHarness<'_> {
+    fn execute_groups(
+        &self,
+        groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+        rep: &mut dyn reporter::Reporter,
+    ) -> parallel::PhaseResult {
+        let mut acc = types::FailureAccumulator::new(self.maxfail);
+        let mut interrupted = false;
+        let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
+        let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
+
+        'run: for (module_path, items) in &groups {
+            for item in items {
+                rep.test_started(item);
+                let timeout =
+                    resolve_timeout(self.cache, item, self.timeout_secs, self.timeout_multiplier);
+                let (outcome, duration_ms) =
+                    self.runner.run_timed(self.py, item, self.session, timeout);
+                timings.push(types::TestTiming {
+                    node_id: item.node_id.clone(),
+                    duration_ms,
+                    outcome: types::OutcomeKind::from(&outcome),
+                });
+                rep.test_completed(item, &outcome, duration_ms);
+                if acc.record(&outcome) {
+                    interrupted = true;
+                    if let Err(e) = self.session.end_module(self.py, module_path) {
+                        tracing::warn!(%e, module = %module_path, "teardown error in end_module");
+                        rep.record_teardown_warning(
+                            &format!("end_module({})", module_path),
+                            &e.to_string(),
+                        );
+                    }
+                    break 'run;
                 }
-                break 'run;
+            }
+            if let Err(e) = self.session.end_module(self.py, module_path) {
+                tracing::warn!(%e, module = %module_path, "teardown error in end_module");
+                rep.record_teardown_warning(
+                    &format!("end_module({})", module_path),
+                    &e.to_string(),
+                );
             }
         }
-        if let Err(e) = ctx.session.end_module(py, module_path) {
-            tracing::warn!(%e, module = %module_path, "teardown error in end_module");
-            rep.record_teardown_warning(&format!("end_module({})", module_path), &e.to_string());
+        if let Err(e) = self.session.end_session(self.py) {
+            tracing::warn!(%e, "teardown error in end_session");
+            rep.record_teardown_warning("end_session", &e.to_string());
+        }
+
+        parallel::PhaseResult {
+            interrupted,
+            timings,
         }
     }
-    if let Err(e) = ctx.session.end_session(py) {
-        tracing::warn!(%e, "teardown error in end_session");
-        rep.record_teardown_warning("end_session", &e.to_string());
-    }
+}
 
-    parallel::PhaseResult {
-        interrupted,
-        timings,
+/// Parallel execution harness — delegates to worker subprocesses.
+pub(super) struct ParallelHarness<'a> {
+    pub parallel: &'a dyn super::traits::ParallelRunner,
+    pub cfg: &'a config::Config,
+    pub workers: usize,
+    pub conftest_files: &'a [camino::Utf8PathBuf],
+}
+
+impl super::traits::ExecutionHarness for ParallelHarness<'_> {
+    fn execute_groups(
+        &self,
+        groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+        rep: &mut dyn reporter::Reporter,
+    ) -> parallel::PhaseResult {
+        self.parallel
+            .run_parallel(groups, self.cfg, self.workers, self.conftest_files, rep)
     }
 }
 
@@ -438,22 +471,24 @@ pub(super) fn execute(
                  that can be function-scoped"
             );
         }
-        let parallel::PhaseResult {
-            interrupted,
-            timings,
-        } = ctx.parallel.run_parallel(
-            groups,
-            ctx.cfg,
-            optimal_worker_count,
-            ctx.conftest_files,
-            rep,
-        );
-        parallel::PhaseResult {
-            interrupted,
-            timings,
-        }
+        let harness = ParallelHarness {
+            parallel: ctx.parallel,
+            cfg: ctx.cfg,
+            workers: optimal_worker_count,
+            conftest_files: ctx.conftest_files,
+        };
+        harness.execute_groups(groups, rep)
     } else {
-        run_phase(py, groups, ctx, rep)
+        let harness = SerialHarness {
+            py,
+            runner: ctx.runner,
+            session: ctx.session,
+            cache: ctx.cache,
+            timeout_secs: ctx.cfg.timeout_secs,
+            timeout_multiplier: ctx.cfg.timeout_multiplier,
+            maxfail: ctx.cfg.maxfail,
+        };
+        harness.execute_groups(groups, rep)
     }
 }
 
