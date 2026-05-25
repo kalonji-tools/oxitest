@@ -4,7 +4,8 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
+
+from oxitest import TempDir
 
 
 def _run_worker(task: dict) -> list[dict]:
@@ -25,10 +26,10 @@ def _run_worker(task: dict) -> list[dict]:
     return [json.loads(line) for line in lines]
 
 
-def test_worker_runs_passing_test():
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
-        f.write("def test_pass():\n    assert 1 == 1\n")
-        path = f.name
+def test_worker_runs_passing_test(tmp: TempDir):
+    test_file = tmp / "test_pass.py"
+    test_file.write_text("def test_pass():\n    assert 1 == 1\n")
+    path = str(test_file)
 
     results = _run_worker(
         {
@@ -47,10 +48,10 @@ def test_worker_runs_passing_test():
     )
 
 
-def test_worker_runs_failing_test():
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
-        f.write("def test_fail():\n    assert 1 == 2\n")
-        path = f.name
+def test_worker_runs_failing_test(tmp: TempDir):
+    test_file = tmp / "test_fail.py"
+    test_file.write_text("def test_fail():\n    assert 1 == 2\n")
+    path = str(test_file)
 
     results = _run_worker(
         {
@@ -67,10 +68,10 @@ def test_worker_runs_failing_test():
     )
 
 
-def test_worker_result_has_required_fields():
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
-        f.write("def test_x():\n    pass\n")
-        path = f.name
+def test_worker_result_has_required_fields(tmp: TempDir):
+    test_file = tmp / "test_fields.py"
+    test_file.write_text("def test_x():\n    pass\n")
+    path = str(test_file)
 
     results = _run_worker(
         {
@@ -92,10 +93,12 @@ def test_worker_result_has_required_fields():
     )
 
 
-def test_worker_emits_structured_failure_fields():
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
-        f.write("def test_simple_assert():\n    x = 1\n    y = 2\n    assert x == y\n")
-        path = f.name
+def test_worker_emits_structured_failure_fields(tmp: TempDir):
+    test_file = tmp / "test_structured.py"
+    test_file.write_text(
+        "def test_simple_assert():\n    x = 1\n    y = 2\n    assert x == y\n"
+    )
+    path = str(test_file)
 
     results = _run_worker(
         {
