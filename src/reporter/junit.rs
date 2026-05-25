@@ -230,6 +230,46 @@ impl JunitReporter {
 }
 
 #[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+    use crate::reporter::test_helpers::{make_item, make_outcome};
+    use crate::reporter::Reporter;
+    use crate::types::DurationMs;
+    use insta::assert_snapshot;
+
+    fn run_and_read(items: &[(&str, &str)]) -> String {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let path = camino::Utf8PathBuf::try_from(tmp.path().to_path_buf()).unwrap();
+        let mut rep = JunitReporter::new(path.clone());
+        for (name, status) in items {
+            let item = make_item(name);
+            let outcome = make_outcome(status);
+            rep.test_started(&item);
+            rep.test_completed(&item, &outcome, DurationMs::ZERO);
+        }
+        rep.finish(&[], false);
+        std::fs::read_to_string(&path).unwrap()
+    }
+
+    #[test]
+    fn junit_mixed_outcomes() {
+        let xml = run_and_read(&[
+            ("test_pass", "passed"),
+            ("test_fail", "failed"),
+            ("test_skip", "skipped"),
+            ("test_err", "error"),
+        ]);
+        assert_snapshot!(xml);
+    }
+
+    #[test]
+    fn junit_all_passed() {
+        let xml = run_and_read(&[("test_a", "passed"), ("test_b", "passed")]);
+        assert_snapshot!(xml);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::reporter::test_helpers::{make_error, make_failed, make_item, make_item_in};
