@@ -232,6 +232,8 @@ pub enum CollectError {
     ImportError { path: Utf8PathBuf, message: String },
     #[error("{0}")]
     PyError(String),
+    #[error(transparent)]
+    Affected(#[from] crate::affected::AffectedError),
 }
 
 /// Lightweight tag for the kind of test outcome — no payload, just the label.

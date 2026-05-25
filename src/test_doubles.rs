@@ -47,6 +47,7 @@ pub(crate) mod doubles {
                         message: message.clone(),
                     },
                     CollectError::PyError(msg) => CollectError::PyError(msg.clone()),
+                    CollectError::Affected(err) => CollectError::Affected(err.clone()),
                 }),
                 None => Ok((vec![], vec![])),
             }
