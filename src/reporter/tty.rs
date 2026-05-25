@@ -5,7 +5,6 @@ use super::colors::{
     color_timeout, color_warn,
 };
 use super::format::{case_sep, fmt_diagnostic_block, pad_to, plural};
-use super::stats::RunStats;
 use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -45,7 +44,6 @@ fn outcome_label(outcome: &TestOutcome, use_color: bool) -> String {
 
 pub struct TtyReporter {
     opts: ReporterOpts,
-    stats: RunStats,
     pb: ProgressBar,
     pending_group: Option<ParametrizeBuffer>,
     deferred_failures: Vec<(
@@ -73,7 +71,6 @@ impl TtyReporter {
         super::tracing_writer::register(pb.clone());
         Self {
             opts,
-            stats: RunStats::new(),
             pb,
             pending_group: None,
             deferred_failures: Vec::new(),
@@ -286,7 +283,7 @@ impl StandardReporter for TtyReporter {
         }
         self.pb.finish_and_clear();
         super::tracing_writer::deregister();
-        super::print_strict_suite_section(&self.opts, &mut self.stats);
+        super::print_strict_suite_section(&self.opts);
     }
 
     fn run_opts(&self) -> &ReporterOpts {
@@ -304,8 +301,6 @@ impl Reporter for TtyReporter {
         if let Some(pos) = self.running_tests.iter().position(|n| n == &item.fn_name) {
             self.running_tests.remove(pos);
         }
-        self.stats.record(item, outcome);
-        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
 
         // Flaky: remove original failure from deferred list.
         if matches!(outcome, TestOutcome::Flaky { .. }) {
@@ -354,17 +349,10 @@ impl Reporter for TtyReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        _stats: &super::RunStats,
+        stats: &super::RunStats,
     ) -> super::ExitVote {
         self.pre_finish();
-        let stats = self.stats.clone();
-        super::standard_finish(self, &stats, collect_errors, interrupted)
-    }
-
-    fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .warning_msgs
-            .push((context.to_string(), error.to_string()));
+        super::standard_finish(self, stats, collect_errors, interrupted)
     }
 }
 
@@ -653,18 +641,6 @@ mod tests {
         let name = "é".repeat(30); // 60 bytes, over max_width=45
         let result = truncate_name(&name, 45);
         assert!(result.ends_with("..."));
-    }
-
-    #[test]
-    fn test_record_teardown_warning_pushes_to_warning_msgs() {
-        let mut reporter = make_tty_reporter();
-        reporter.record_teardown_warning("end_module(tests/test_foo.py)", "RuntimeError: boom");
-        assert_eq!(reporter.stats.warning_msgs.len(), 1);
-        assert_eq!(
-            reporter.stats.warning_msgs[0].0,
-            "end_module(tests/test_foo.py)"
-        );
-        assert_eq!(reporter.stats.warning_msgs[0].1, "RuntimeError: boom");
     }
 
     // ── flush_param_group ────────────────────────────────────────────────────

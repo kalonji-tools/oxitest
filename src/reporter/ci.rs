@@ -2,12 +2,10 @@ use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{color_dim, color_error_token, color_fail};
 use super::format::{case_sep, fmt_diagnostic_block};
-use super::stats::RunStats;
 use super::{sep_width, Reporter, ReporterOpts, StandardReporter};
 
 pub struct CiReporter {
     opts: ReporterOpts,
-    pub(super) stats: RunStats,
     deferred_diags: Vec<String>,
     pub(super) dot_buf: String,
 }
@@ -17,7 +15,6 @@ impl CiReporter {
         super::print_collected(opts.total, opts.async_count);
         Self {
             opts,
-            stats: RunStats::new(),
             deferred_diags: Vec::new(),
             dot_buf: String::new(),
         }
@@ -93,7 +90,7 @@ impl StandardReporter for CiReporter {
                 println!("{}", d);
             }
         }
-        super::print_strict_suite_section(&self.opts, &mut self.stats);
+        super::print_strict_suite_section(&self.opts);
     }
 
     fn run_opts(&self) -> &ReporterOpts {
@@ -104,7 +101,7 @@ impl StandardReporter for CiReporter {
 impl Reporter for CiReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, _duration_ms: DurationMs) {
         self.dot_buf.push(outcome.dot_char());
         match outcome {
             TestOutcome::Failed { .. }
@@ -116,25 +113,16 @@ impl Reporter for CiReporter {
             }
             _ => {}
         }
-        self.stats.record(item, outcome);
-        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
     }
 
     fn finish(
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        _stats: &super::RunStats,
+        stats: &super::RunStats,
     ) -> super::ExitVote {
         self.pre_finish();
-        let stats = self.stats.clone();
-        super::standard_finish(self, &stats, collect_errors, interrupted)
-    }
-
-    fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .warning_msgs
-            .push((context.to_string(), error.to_string()));
+        super::standard_finish(self, stats, collect_errors, interrupted)
     }
 }
 
@@ -188,7 +176,6 @@ mod tests {
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert_eq!(reporter.dot_buf, "F");
-        assert_eq!(reporter.stats.failed, 1);
     }
 
     #[test]
@@ -223,19 +210,13 @@ mod tests {
                 .build(),
         );
         let item = make_item("test_a");
-        reporter.test_completed(
-            &item,
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::ZERO,
-        );
-        assert_eq!(
-            reporter
-                .finish(&[], false, &crate::reporter::RunStats::new())
-                .code(),
-            0
-        );
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        let mut stats = crate::reporter::RunStats::new();
+        stats.record(&item, &outcome);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        assert_eq!(reporter.finish(&[], false, &stats).code(), 0);
     }
 
     #[test]
@@ -247,17 +228,11 @@ mod tests {
                 .build(),
         );
         let item = make_item("test_a");
-        reporter.test_completed(
-            &item,
-            &make_failed("x", "f.py", 1, "assert"),
-            DurationMs::ZERO,
-        );
-        assert_eq!(
-            reporter
-                .finish(&[], false, &crate::reporter::RunStats::new())
-                .code(),
-            1
-        );
+        let outcome = make_failed("x", "f.py", 1, "assert");
+        let mut stats = crate::reporter::RunStats::new();
+        stats.record(&item, &outcome);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        assert_eq!(reporter.finish(&[], false, &stats).code(), 1);
     }
 
     #[test]
@@ -269,17 +244,11 @@ mod tests {
                 .build(),
         );
         let item = make_item("test_a");
-        reporter.test_completed(
-            &item,
-            &make_failed("x", "f.py", 1, "assert"),
-            DurationMs::ZERO,
-        );
-        assert_eq!(
-            reporter
-                .finish(&[], true, &crate::reporter::RunStats::new())
-                .code(),
-            2
-        );
+        let outcome = make_failed("x", "f.py", 1, "assert");
+        let mut stats = crate::reporter::RunStats::new();
+        stats.record(&item, &outcome);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        assert_eq!(reporter.finish(&[], true, &stats).code(), 2);
     }
 
     #[test]
@@ -294,7 +263,6 @@ mod tests {
             DurationMs::ZERO,
         );
         assert_eq!(reporter.dot_buf, "x");
-        assert_eq!(reporter.stats.xfailed, 1);
     }
 
     #[test]
@@ -307,12 +275,10 @@ mod tests {
             DurationMs::ZERO,
         );
         assert_eq!(reporter.dot_buf, "X");
-        assert_eq!(reporter.stats.xpassed, 1);
-        assert_eq!(reporter.stats.xpassed_strict, 1);
     }
 
     #[test]
-    fn test_ci_reporter_xpassed_lenient_increments_xpassed_not_strict() {
+    fn test_ci_reporter_xpassed_lenient_shows_capital_x() {
         let mut reporter = make_ci_reporter(TbStyle::Short);
         let item = make_item("test_a");
         reporter.test_completed(
@@ -321,8 +287,6 @@ mod tests {
             DurationMs::ZERO,
         );
         assert_eq!(reporter.dot_buf, "X");
-        assert_eq!(reporter.stats.xpassed, 1);
-        assert_eq!(reporter.stats.xpassed_strict, 0);
     }
 
     #[test]
@@ -399,30 +363,6 @@ mod tests {
         assert!(
             line.contains("ValueError: something broke"),
             "must contain message"
-        );
-    }
-
-    #[test]
-    fn test_ci_reporter_strict_suite_lines_recorded_in_stats() {
-        let mut reporter = CiReporter::new(
-            crate::reporter::ReporterOptsBuilder::new()
-                .strict_suite_lines(vec!["markers[\"smoke\"]   no description".to_string()])
-                .tb(crate::config::TbStyle::No)
-                .build(),
-        );
-        reporter.finish(&[], false, &crate::reporter::RunStats::new());
-        assert_eq!(reporter.stats.strict_suite, 1);
-    }
-
-    #[test]
-    fn test_record_teardown_warning_pushes_to_warning_msgs() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
-        reporter.record_teardown_warning("end_session", "PyErr: interpreter shutdown");
-        assert_eq!(reporter.stats.warning_msgs.len(), 1);
-        assert_eq!(reporter.stats.warning_msgs[0].0, "end_session");
-        assert_eq!(
-            reporter.stats.warning_msgs[0].1,
-            "PyErr: interpreter shutdown"
         );
     }
 }
