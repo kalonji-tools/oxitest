@@ -1,0 +1,40 @@
+---
+source: src/reporter/json.rs
+expression: json
+---
+{
+  "results": {
+    "tool": {
+      "name": "oxitest"
+    },
+    "summary": {
+      "tests": 4,
+      "passed": 1,
+      "failed": 2,
+      "skipped": 1,
+      "other": 0
+    },
+    "tests": [
+      {
+        "name": "tests/test_foo.py::test_err",
+        "status": "failed",
+        "duration": 0.0
+      },
+      {
+        "name": "tests/test_foo.py::test_fail",
+        "status": "failed",
+        "duration": 0.0
+      },
+      {
+        "name": "tests/test_foo.py::test_pass",
+        "status": "passed",
+        "duration": 0.0
+      },
+      {
+        "name": "tests/test_foo.py::test_skip",
+        "status": "skipped",
+        "duration": 0.0
+      }
+    ]
+  }
+}

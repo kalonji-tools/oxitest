@@ -1,0 +1,30 @@
+---
+source: src/reporter/json.rs
+expression: json
+---
+{
+  "results": {
+    "tool": {
+      "name": "oxitest"
+    },
+    "summary": {
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "other": 0
+    },
+    "tests": [
+      {
+        "name": "tests/test_foo.py::test_a",
+        "status": "passed",
+        "duration": 0.0
+      },
+      {
+        "name": "tests/test_foo.py::test_b",
+        "status": "passed",
+        "duration": 0.0
+      }
+    ]
+  }
+}

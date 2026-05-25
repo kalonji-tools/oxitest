@@ -1,0 +1,11 @@
+---
+source: src/reporter/junit.rs
+expression: xml
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="2" failures="0" errors="0" time="0.000">
+  <testsuite name="oxitest" tests="2" failures="0" errors="0" skipped="0" time="0.000">
+    <testcase classname="tests.test_foo" name="test_a" time="0.000"/>
+    <testcase classname="tests.test_foo" name="test_b" time="0.000"/>
+  </testsuite>
+</testsuites>
