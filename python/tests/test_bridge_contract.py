@@ -11,15 +11,17 @@ import json
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest._bridge.result import Frame, StatusKind, TestResult
+from oxitest._bridge.result import PROTOCOL_VERSION, Frame, StatusKind, TestResult
 
 NODE_ID = "tests/test_foo.py::test_example"
 DURATION_MS = 42.5
 
 
-def _wire(result: TestResult) -> dict:
+def _wire(
+    result: TestResult, node_id: str = NODE_ID, duration_ms: float = DURATION_MS
+) -> dict:
     """Serialize and re-parse to simulate the JSON round-trip."""
-    raw = result.to_wire(NODE_ID, DURATION_MS)
+    raw = result.to_wire(node_id, duration_ms)
     return json.loads(json.dumps(raw))
 
 
@@ -31,6 +33,7 @@ def test_required_fields_passed_has_required_fields():
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
     assert "duration_ms" in wire, "duration_ms must be present"
+    assert "protocol_version" in wire, "protocol_version must be present"
     assert wire["node_id"] == NODE_ID, "wrong node_id"
     assert wire["duration_ms"] == DURATION_MS, "wrong duration"
 
@@ -40,6 +43,7 @@ def test_required_fields_failed_has_required_fields():
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
     assert "duration_ms" in wire, "duration_ms must be present"
+    assert "protocol_version" in wire, "protocol_version must be present"
     assert wire["node_id"] == NODE_ID, "wrong node_id"
     assert wire["duration_ms"] == DURATION_MS, "wrong duration"
 
@@ -222,3 +226,12 @@ def test_frame_multiple_frames_preserved():
     assert len(wire["frames"]) == 2, "both frames needed"
     assert wire["frames"][0]["file"] == "src/a.py", "frame[0] file"
     assert wire["frames"][1]["file"] == "tests/test_a.py", "frame[1] file"
+
+
+def test_protocol_version_always_present():
+    result = TestResult(status=StatusKind.PASSED)
+    wire = _wire(result, "t.py::test_a", 1.0)
+    assert "protocol_version" in wire, "protocol_version must always be in wire output"
+    assert wire["protocol_version"] == PROTOCOL_VERSION, (
+        f"expected {PROTOCOL_VERSION}, got {wire['protocol_version']}"
+    )
