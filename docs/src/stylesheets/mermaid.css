@@ -35,3 +35,31 @@
   color: var(--md-default-fg-color--light);
   margin-top: 0.5rem;
 }
+
+/*
+ * Dark mode overrides for Mermaid inline styles.
+ *
+ * Inline `style` directives use light-mode fills. In dark mode we swap
+ * fills to near-transparent so the colored strokes still carry the
+ * semantic meaning (orange = Rust, blue = Python, etc.) while the
+ * background stays readable.
+ */
+[data-md-color-scheme="slate"] .mermaid .cluster rect {
+  fill: #ffffff08 !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node rect,
+[data-md-color-scheme="slate"] .mermaid .node polygon {
+  fill: #ffffff10 !important;
+  color: #fff !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node .label {
+  color: #e0e0e0 !important;
+}
+
+/* Keep terminal nodes (START/DONE) solid green in both modes */
+[data-md-color-scheme="slate"] .mermaid .node rect[style*="#4CAF50"],
+[data-md-color-scheme="slate"] .mermaid .node polygon[style*="#4CAF50"] {
+  fill: #4CAF50 !important;
+}
