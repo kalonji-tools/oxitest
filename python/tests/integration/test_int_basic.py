@@ -19,8 +19,7 @@ def _run(tmp: TempDir, *extra: str) -> tuple[str, int]:
 
 def test_all_pass_exits_zero(tmp: TempDir):
     (tmp / "test_ok.py").write_text(
-        "def test_a(): assert 1 == 1\n"
-        "def test_b(): assert True\n"
+        "def test_a(): assert 1 == 1\ndef test_b(): assert True\n"
     )
     out, rc = _run(tmp)
     assert rc == 0, f"all-pass should exit 0, got {rc}"
@@ -58,8 +57,7 @@ def test_xfail_exits_zero(tmp: TempDir):
 
 def test_mixed_pass_and_fail(tmp: TempDir):
     (tmp / "test_mix.py").write_text(
-        "def test_good(): assert True\n"
-        "def test_bad(): assert False\n"
+        "def test_good(): assert True\ndef test_bad(): assert False\n"
     )
     out, rc = _run(tmp)
     assert rc == 1, f"mixed should exit 1, got {rc}"
