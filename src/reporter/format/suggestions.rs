@@ -44,30 +44,6 @@ pub(crate) fn suggest_fix(outcome: &TestOutcome, use_color: bool) -> Option<Stri
     None
 }
 
-/// Fuzzy-match `unknown` against `registered` marker names using Levenshtein
-/// distance. Returns a formatted hint string if any registered marker is within
-/// edit distance 2; returns `None` otherwise.
-#[allow(dead_code)] // wired in when strict mode calls it
-pub(crate) fn suggest_marker(
-    unknown: &str,
-    registered: &[String],
-    use_color: bool,
-) -> Option<String> {
-    let best = registered
-        .iter()
-        .map(|r| (strsim::levenshtein(unknown, r.as_str()), r))
-        .filter(|(dist, _)| *dist <= 2)
-        .min_by_key(|(dist, _)| *dist)
-        .map(|(_, name)| name.as_str());
-
-    best.map(|name| {
-        hint_line(
-            &format!("Unknown marker '{unknown}'. Did you mean '{name}'?"),
-            use_color,
-        )
-    })
-}
-
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
@@ -95,13 +71,6 @@ mod snapshot_tests {
             frames: vec![],
         };
         let hint = suggest_fix(&outcome, false);
-        insta::assert_snapshot!(hint.unwrap_or_default());
-    }
-
-    #[test]
-    fn fuzzy_marker_suggestion() {
-        let registered = vec!["slow".to_string(), "network".to_string()];
-        let hint = suggest_marker("slwo", &registered, false);
         insta::assert_snapshot!(hint.unwrap_or_default());
     }
 }
@@ -165,20 +134,6 @@ mod tests {
             frames: vec![],
         };
         assert!(suggest_fix(&outcome, false).is_none());
-    }
-
-    #[test]
-    fn suggest_marker_close_match() {
-        let registered = vec!["slow".to_string(), "integration".to_string()];
-        let hint = suggest_marker("slwo", &registered, false);
-        assert!(hint.is_some());
-        assert!(hint.unwrap().contains("slow"));
-    }
-
-    #[test]
-    fn suggest_marker_no_match() {
-        let registered = vec!["slow".to_string()];
-        assert!(suggest_marker("zzzzz", &registered, false).is_none());
     }
 
     #[test]
