@@ -3,30 +3,173 @@
 !!! abstract "Contributing"
     A map of oxitest's internal modules and pipeline execution order.
 
-## Pipeline overview
+## Architecture layers
 
-All test execution flows through the `run()` function in `src/lib.rs`. This function owns the
-full lifecycle: discovery, collection, filtering, scheduling, execution, and cache update.
+oxitest has two layers: a Rust core that orchestrates the full test pipeline, and a Python
+bridge that handles module import and test execution. The layers communicate via PyO3
+(in-process) and stdio JSON (parallel workers).
 
-```text
-collect_files          — walk the filesystem; find test files and conftest files
- FixtureSession::new    — import conftest modules; register fixtures
-cache.invalidate_modules — drop cached entries for deleted modules
-collect_items          — import test modules; extract TestItem list; consult cache
-filter_items           — apply -k keyword filter
-filter_by_marker_expr  — apply -m marker expression
-filter_last_failed /   — apply --lf or --ff against cached outcomes
-sort_failed_first
-cache.invalidate       — prune timing cache to match final item set
-group_by_module        — partition items by source file
-session.register_module_count — tell fixture session the test count per module
-cache.sort_groups      — sort groups by cached duration, heaviest-first
-parallel vs serial     — decide based on cold/warm cache thresholds
-run_phase /            — execute tests; collect TestTiming results
-run_phase_parallel
-cache.merge            — update timing entries for executed tests
-cache.record_outcomes  — record pass/fail for --lf/--ff
-cache.save             — write updated cache to disk
+```mermaid
+graph TD
+    subgraph CLI["CLI Entry Point"]
+        A["python -m oxitest"]
+    end
+
+    subgraph Rust["Rust Core (src/)"]
+        LIB["lib.rs<br/>PyO3 entry point"]
+        CONFIG["config/<br/>CLI + pyproject.toml"]
+        PIPELINE["pipeline/<br/>11-phase orchestrator"]
+
+        subgraph Discovery
+            COLLECTOR["collector.rs<br/>filesystem walk"]
+            AFFECTED["affected.rs<br/>git-aware filtering"]
+        end
+
+        subgraph Filtering
+            FILTER["filter.rs<br/>-k / -m / --lf / --ff"]
+            MARKER["marker.rs<br/>boolean expression parser"]
+            STRICT["strict.rs<br/>violation checking"]
+        end
+
+        subgraph Scheduling
+            CACHE["cache.rs<br/>timing cache + 3 traits"]
+            SCHEDULER["scheduler.rs<br/>work-stealing"]
+        end
+
+        subgraph Execution
+            PARALLEL["parallel.rs<br/>subprocess worker pool"]
+            WORKER_RESULT["worker_result.rs<br/>JSON wire contract"]
+            RETRY["retry.rs<br/>flaky detection"]
+        end
+
+        subgraph Reporting
+            REPORTER["reporter/<br/>tty · ci · json · junit"]
+            FORMAT["format/<br/>diagnostics · diffs · suggestions"]
+        end
+
+        TYPES["types.rs<br/>TestItem · TestOutcome · NodeId"]
+        BRIDGE["bridge.rs<br/>PyO3 ↔ Python calls"]
+    end
+
+    subgraph Python["Python Bridge (python/oxitest/_bridge/)"]
+        IMPORTER["importer.py<br/>collect test functions"]
+        EXECUTOR["executor.py<br/>run single test"]
+        WORKER["worker.py<br/>subprocess entry point"]
+        CONFTEST["conftest_loader.py<br/>fixture registration"]
+        AST["ast_rewriter.py<br/>assert rewriting"]
+
+        subgraph Fixtures
+            FX_SESSION["_fixture_session.py<br/>resolution + lifecycle"]
+            FX_REG["_fixture_registry.py<br/>FixtureDef registry"]
+            FX_PUB["fixtures.py<br/>public API"]
+        end
+
+        subgraph Marks
+            MARK_API["_mark_api.py<br/>mark · skip · skipif"]
+            MARK_REG["_mark_registry.py<br/>evaluate_marks"]
+        end
+
+        RESULT["result.py<br/>TestResult + to_wire()"]
+        PLUGIN["plugin_loader.py<br/>plugin registry"]
+    end
+
+    A --> LIB
+    LIB --> CONFIG
+    LIB --> PIPELINE
+    PIPELINE --> Discovery
+    PIPELINE --> Filtering
+    PIPELINE --> Scheduling
+    PIPELINE --> Execution
+    PIPELINE --> Reporting
+
+    BRIDGE --> IMPORTER
+    BRIDGE --> EXECUTOR
+    BRIDGE --> CONFTEST
+    PARALLEL -->|"stdio JSON"| WORKER
+    WORKER --> EXECUTOR
+    WORKER --> RESULT
+    RESULT -->|"JSON lines"| WORKER_RESULT
+
+    style CLI fill:#f5f5f5,stroke:#333
+    style Rust fill:#fef3e2,stroke:#e67e22
+    style Python fill:#e8f4fd,stroke:#2980b9
+```
+
+## Pipeline flow
+
+The pipeline is a sequence of 11 phases, each implementing the `PipelinePhase` trait.
+Phases can be conditionally skipped (`should_run`) and may exit early (`PhaseOutcome::Abort`).
+
+```mermaid
+flowchart TD
+    START(["run()"])
+
+    FC["1. FileCollection<br/>walk filesystem → test files + conftests"]
+    AF{"2. Affected<br/>--affected flag?"}
+    AF_Y["filter to git-changed files"]
+    SE["3. Session<br/>import conftests → FixtureSession"]
+    FX{"4. Fixtures<br/>--fixtures flag?"}
+    FX_Y["list fixtures → exit"]
+    CO["5. Collection<br/>import modules → TestItem list"]
+    ST{"6. Strict<br/>strict mode?"}
+    ST_Y["check violations → abort if any"]
+    FI["7. Filter<br/>apply -k / -m / --lf / --ff"]
+    LI{"8. List<br/>--collect-only?"}
+    LI_Y["print items → exit"]
+
+    EX["9. Execution"]
+    DECIDE{"warm cache?"}
+    SERIAL["Serial<br/>run in-process via bridge"]
+    PAR["Parallel<br/>spawn N worker subprocesses"]
+    PAR_DETAIL["scheduler distributes groups<br/>workers stream JSON results"]
+
+    RT{"10. Retry<br/>retries > 0 &<br/>failures exist?"}
+    RT_Y["re-run failed tests serially<br/>mark pass-on-retry as Flaky"]
+
+    FIN["11. Finalize<br/>merge timings → save cache<br/>reporter.finish() → exit code"]
+
+    DONE(["exit"])
+
+    START --> FC
+    FC --> AF
+    AF -->|yes| AF_Y --> SE
+    AF -->|no| SE
+    SE --> FX
+    FX -->|yes| FX_Y --> DONE
+    FX -->|no| CO
+    CO --> ST
+    ST -->|yes| ST_Y
+    ST_Y -->|violations| DONE
+    ST_Y -->|clean| FI
+    ST -->|no| FI
+    FI --> LI
+    LI -->|yes| LI_Y --> DONE
+    LI -->|no| EX
+
+    EX --> DECIDE
+    DECIDE -->|"serial: est ≤ overhead × workers"| SERIAL
+    DECIDE -->|"parallel: est > overhead × workers"| PAR
+    PAR --> PAR_DETAIL
+    SERIAL --> RT
+    PAR_DETAIL --> RT
+
+    RT -->|yes| RT_Y --> FIN
+    RT -->|no| FIN
+    FIN --> DONE
+
+    style START fill:#4CAF50,color:#fff
+    style DONE fill:#4CAF50,color:#fff
+    style FC fill:#fff3e0
+    style SE fill:#fff3e0
+    style CO fill:#fff3e0
+    style EX fill:#fff3e0
+    style FIN fill:#fff3e0
+    style SERIAL fill:#e3f2fd
+    style PAR fill:#e3f2fd
+    style PAR_DETAIL fill:#e3f2fd
+    style RT_Y fill:#fff9c4
+    style FX_Y fill:#f3e5f5
+    style LI_Y fill:#f3e5f5
 ```
 
 **Parallel vs serial decision:**
