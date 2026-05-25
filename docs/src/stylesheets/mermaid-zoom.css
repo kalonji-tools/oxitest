@@ -1,0 +1,33 @@
+.mermaid-zoom {
+  position: relative;
+  overflow: auto;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  padding: 1rem;
+  cursor: zoom-in;
+}
+
+.mermaid-zoom.zoomed {
+  position: fixed;
+  inset: 2rem;
+  z-index: 200;
+  background: var(--md-default-bg-color);
+  cursor: zoom-out;
+  overflow: auto;
+  padding: 2rem;
+}
+
+.mermaid-zoom.zoomed::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: -1;
+}
+
+.mermaid-zoom-hint {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--md-default-fg-color--light);
+  margin-top: 0.5rem;
+}
