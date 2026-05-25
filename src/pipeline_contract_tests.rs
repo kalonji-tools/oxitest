@@ -105,6 +105,81 @@ mod double_tests {
     }
 }
 
+mod orchestration_tests {
+    use super::*;
+    use crate::test_doubles::doubles::MockPhase;
+
+    #[test]
+    fn skipped_phases_are_not_called() {
+        Python::initialize();
+        Python::attach(|py| {
+            let skipped = MockPhase::new("skipped", false, PhaseOutcome::Continue);
+            let active = MockPhase::new("active", true, PhaseOutcome::Continue);
+            let mut ctx = make_ctx();
+            let pipeline: &[&dyn PipelinePhase] = &[&skipped, &active];
+
+            let result = run_pipeline(py, pipeline, &mut ctx);
+
+            assert_eq!(result, Ok(0));
+            assert!(!skipped.was_called());
+            assert!(active.was_called());
+        });
+    }
+
+    #[test]
+    fn early_exit_stops_pipeline() {
+        Python::initialize();
+        Python::attach(|py| {
+            let first = MockPhase::new("first", true, PhaseOutcome::Continue);
+            let exiter = MockPhase::new("exiter", true, PhaseOutcome::EarlyExit(3));
+            let after = MockPhase::new("after", true, PhaseOutcome::Continue);
+            let mut ctx = make_ctx();
+            let pipeline: &[&dyn PipelinePhase] = &[&first, &exiter, &after];
+
+            let result = run_pipeline(py, pipeline, &mut ctx);
+
+            assert_eq!(result, Ok(3));
+            assert!(first.was_called());
+            assert!(exiter.was_called());
+            assert!(!after.was_called());
+        });
+    }
+
+    #[test]
+    fn early_exit_zero_is_success() {
+        Python::initialize();
+        Python::attach(|py| {
+            let exiter = MockPhase::new("exiter", true, PhaseOutcome::EarlyExit(0));
+            let after = MockPhase::new("after", true, PhaseOutcome::Continue);
+            let mut ctx = make_ctx();
+            let pipeline: &[&dyn PipelinePhase] = &[&exiter, &after];
+
+            let result = run_pipeline(py, pipeline, &mut ctx);
+
+            assert_eq!(result, Ok(0));
+            assert!(exiter.was_called());
+            assert!(!after.was_called());
+        });
+    }
+
+    #[test]
+    fn all_phases_skipped_returns_zero() {
+        Python::initialize();
+        Python::attach(|py| {
+            let first = MockPhase::new("first", false, PhaseOutcome::Continue);
+            let second = MockPhase::new("second", false, PhaseOutcome::EarlyExit(1));
+            let mut ctx = make_ctx();
+            let pipeline: &[&dyn PipelinePhase] = &[&first, &second];
+
+            let result = run_pipeline(py, pipeline, &mut ctx);
+
+            assert_eq!(result, Ok(0));
+            assert!(!first.was_called());
+            assert!(!second.was_called());
+        });
+    }
+}
+
 mod helper_tests {
     use super::*;
     use crate::types::{DurationMs, OutcomeKind};
@@ -137,5 +212,256 @@ mod helper_tests {
         assert!(ctx.test_files.is_empty());
         assert!(!ctx.interrupted);
         assert!(ctx.session.is_none());
+    }
+}
+
+mod strict_phase_contract_tests {
+    use super::*;
+    use crate::bridge::{RawViolation, ViolationKind};
+    use crate::config::StrictMode;
+    use crate::reporter::test_helpers::make_item_raw;
+
+    #[test]
+    fn strict_enforce_partitions_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = Some(StrictMode::Enforce);
+            ctx.items.push(make_item_raw("tests/test_a.py::test_good"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_bad"));
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 5".to_string(),
+            });
+
+            let result = phases::StrictPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
+            assert_eq!(ctx.items.len(), 1);
+            assert_eq!(ctx.items[0].node_id.as_ref(), "tests/test_a.py::test_good");
+            assert_eq!(ctx.violated_items.len(), 1);
+            assert_eq!(
+                ctx.violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad"
+            );
+        });
+    }
+
+    #[test]
+    fn strict_abort_with_violations_exits_3() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = Some(StrictMode::Abort);
+            ctx.items.push(make_item_raw("tests/test_a.py::test_one"));
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_one".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 3".to_string(),
+            });
+
+            let result = phases::StrictPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(3)));
+        });
+    }
+
+    #[test]
+    fn strict_enforce_no_violations_passes_all_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = Some(StrictMode::Enforce);
+            ctx.items.push(make_item_raw("tests/test_a.py::test_clean"));
+
+            let result = phases::StrictPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.violated_items.is_empty());
+        });
+    }
+}
+
+mod filter_phase_contract_tests {
+    use super::*;
+    use crate::reporter::test_helpers::make_item_raw;
+
+    #[test]
+    fn keyword_filter_reduces_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.items.push(make_item_raw("tests/test_a.py::test_alpha"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_beta"));
+            ctx.cli.keyword = Some("alpha".to_string());
+
+            let result = phases::FilterPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.items[0].node_id.as_ref().contains("alpha"));
+        });
+    }
+
+    #[test]
+    fn no_filters_passes_all_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.items.push(make_item_raw("tests/test_a.py::test_one"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_two"));
+
+            let result = phases::FilterPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
+            assert_eq!(ctx.items.len(), 2);
+        });
+    }
+}
+
+mod list_phase_contract_tests {
+    use super::*;
+    use crate::reporter::test_helpers::make_item_raw;
+
+    #[test]
+    fn list_phase_returns_early_exit_zero() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.items.push(make_item_raw("tests/test_a.py::test_one"));
+
+            let result = phases::ListPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(0)));
+        });
+    }
+
+    #[test]
+    fn list_phase_empty_items_still_exits_zero() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+
+            let result = phases::ListPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(0)));
+        });
+    }
+}
+
+mod context_threading_tests {
+    use super::*;
+    use crate::bridge::{RawViolation, ViolationKind};
+    use crate::config::StrictMode;
+    use crate::reporter::test_helpers::make_item_raw;
+
+    #[test]
+    fn strict_then_filter_threads_clean_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = Some(StrictMode::Enforce);
+            ctx.items.push(make_item_raw("tests/test_a.py::test_bad"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_alpha"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_beta"));
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 5".to_string(),
+            });
+
+            let strict_result = phases::StrictPhase.execute(py, &mut ctx);
+            assert!(matches!(strict_result, Ok(PhaseOutcome::Continue)));
+            assert_eq!(ctx.items.len(), 2);
+            assert_eq!(ctx.violated_items.len(), 1);
+
+            ctx.cli.keyword = Some("alpha".to_string());
+            let filter_result = phases::FilterPhase.execute(py, &mut ctx);
+            assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.items[0].node_id.as_ref().contains("alpha"));
+            assert_eq!(ctx.violated_items.len(), 1);
+        });
+    }
+
+    #[test]
+    fn strict_skipped_preserves_all_items_for_filter() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = None;
+            ctx.items.push(make_item_raw("tests/test_a.py::test_one"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_two"));
+
+            assert!(!phases::StrictPhase.should_run(&ctx));
+
+            let filter_result = phases::FilterPhase.execute(py, &mut ctx);
+            assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
+            assert_eq!(ctx.items.len(), 2);
+        });
+    }
+
+    #[test]
+    fn filter_then_list_threads_filtered_items() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.items.push(make_item_raw("tests/test_a.py::test_alpha"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_beta"));
+            ctx.cli.keyword = Some("alpha".to_string());
+
+            let filter_result = phases::FilterPhase.execute(py, &mut ctx);
+            assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
+            assert_eq!(ctx.items.len(), 1);
+
+            ctx.cli.list = true;
+            let list_result = phases::ListPhase.execute(py, &mut ctx);
+            assert!(matches!(list_result, Ok(PhaseOutcome::EarlyExit(0))));
+            assert_eq!(ctx.items.len(), 1);
+        });
+    }
+
+    #[test]
+    fn full_pure_rust_chain_strict_filter_list() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.cfg.strict = Some(StrictMode::Enforce);
+            ctx.cli.keyword = Some("good".to_string());
+            ctx.cli.list = true;
+            ctx.items.push(make_item_raw("tests/test_a.py::test_good"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_bad"));
+            ctx.items.push(make_item_raw("tests/test_a.py::test_other"));
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 3".to_string(),
+            });
+
+            let pipeline: &[&dyn PipelinePhase] = &[
+                &phases::StrictPhase,
+                &phases::FilterPhase,
+                &phases::ListPhase,
+            ];
+            let result = run_pipeline(py, pipeline, &mut ctx);
+
+            assert_eq!(result, Ok(0));
+            assert_eq!(ctx.items.len(), 1);
+            assert_eq!(ctx.items[0].node_id.as_ref(), "tests/test_a.py::test_good");
+            assert_eq!(ctx.violated_items.len(), 1);
+            assert_eq!(
+                ctx.violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad"
+            );
+        });
     }
 }
