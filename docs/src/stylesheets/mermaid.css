@@ -37,29 +37,37 @@
 }
 
 /*
- * Dark mode overrides for Mermaid inline styles.
- *
- * Inline `style` directives use light-mode fills. In dark mode we swap
- * fills to near-transparent so the colored strokes still carry the
- * semantic meaning (orange = Rust, blue = Python, etc.) while the
- * background stays readable.
+ * Dark mode: swap light fills to dark equivalents.
+ * Target rects by their exact inline fill color (set by Mermaid style
+ * directives we control). Strokes are untouched — they carry color
+ * meaning in both modes.
  */
-[data-md-color-scheme="slate"] .mermaid .cluster rect {
-  fill: #ffffff08 !important;
+
+/* Architecture — subgraph fills */
+[data-md-color-scheme="slate"] rect[style*="#f5f5f5"] {
+  fill: #2d2d2d !important;
+}
+[data-md-color-scheme="slate"] rect[style*="#fef3e2"] {
+  fill: #3d2800 !important;
+}
+[data-md-color-scheme="slate"] rect[style*="#e8f4fd"] {
+  fill: #0d2137 !important;
 }
 
-[data-md-color-scheme="slate"] .mermaid .node rect,
-[data-md-color-scheme="slate"] .mermaid .node polygon {
-  fill: #ffffff10 !important;
-  color: #fff !important;
+/* Pipeline — phase node fills */
+[data-md-color-scheme="slate"] rect[style*="#fff3e0"],
+[data-md-color-scheme="slate"] polygon[style*="#fff3e0"] {
+  fill: #3d2200 !important;
 }
-
-[data-md-color-scheme="slate"] .mermaid .node .label {
-  color: #e0e0e0 !important;
+[data-md-color-scheme="slate"] rect[style*="#e3f2fd"],
+[data-md-color-scheme="slate"] polygon[style*="#e3f2fd"] {
+  fill: #0a1929 !important;
 }
-
-/* Keep terminal nodes (START/DONE) solid green in both modes */
-[data-md-color-scheme="slate"] .mermaid .node rect[style*="#4CAF50"],
-[data-md-color-scheme="slate"] .mermaid .node polygon[style*="#4CAF50"] {
-  fill: #4CAF50 !important;
+[data-md-color-scheme="slate"] rect[style*="#fff9c4"],
+[data-md-color-scheme="slate"] polygon[style*="#fff9c4"] {
+  fill: #3d3400 !important;
+}
+[data-md-color-scheme="slate"] rect[style*="#f3e5f5"],
+[data-md-color-scheme="slate"] polygon[style*="#f3e5f5"] {
+  fill: #2d1f33 !important;
 }
