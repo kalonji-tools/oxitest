@@ -652,7 +652,6 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
- "strsim",
  "tempfile",
  "thiserror",
  "toml",
