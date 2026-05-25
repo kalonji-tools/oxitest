@@ -313,3 +313,171 @@ mod lineno_cast_tests {
         let _ = result.to_outcome();
     }
 }
+
+#[cfg(test)]
+mod wire_round_trip_tests {
+    use super::*;
+
+    fn deser(json: &str) -> WorkerResult {
+        serde_json::from_str(json).expect("valid JSON")
+    }
+
+    #[test]
+    fn passed_minimal() {
+        let r = deser(r#"{"node_id":"t.py::test_a","outcome":"passed","duration_ms":1.2}"#);
+        assert_eq!(r.node_id, "t.py::test_a");
+        assert_eq!(r.outcome, types::OutcomeKind::Passed);
+        assert!((r.duration_ms - 1.2).abs() < 1e-9);
+        assert!(r.failure_repr.is_none());
+        assert!(r.message.is_none());
+        assert!(r.file.is_none());
+        assert!(r.lineno.is_none());
+        assert!(r.source_line.is_none());
+        assert!(r.no_message_lines.is_empty());
+        assert!(r.left.is_none());
+        assert!(r.right.is_none());
+        assert!(r.op.is_none());
+        assert!(!r.strict);
+        assert!(r.frames.is_empty());
+    }
+
+    #[test]
+    fn failed_full() {
+        let json = r#"{
+            "node_id": "t.py::test_b",
+            "outcome": "failed",
+            "duration_ms": 5.0,
+            "failure_repr": "AssertionError: 1 != 2",
+            "message": "assert 1 == 2",
+            "file": "t.py",
+            "lineno": 10,
+            "source_line": "assert x == 2",
+            "left": "1",
+            "right": "2",
+            "op": "=="
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Failed);
+        assert_eq!(r.failure_repr.as_deref(), Some("AssertionError: 1 != 2"));
+        assert_eq!(r.message.as_deref(), Some("assert 1 == 2"));
+        assert_eq!(r.file.as_deref(), Some("t.py"));
+        assert_eq!(r.lineno, Some(10));
+        assert_eq!(r.source_line.as_deref(), Some("assert x == 2"));
+        assert_eq!(r.left.as_deref(), Some("1"));
+        assert_eq!(r.right.as_deref(), Some("2"));
+        assert_eq!(r.op.as_deref(), Some("=="));
+    }
+
+    #[test]
+    fn error_full() {
+        let json = r#"{
+            "node_id": "t.py::test_c",
+            "outcome": "error",
+            "duration_ms": 2.5,
+            "message": "RuntimeError: boom",
+            "file": "t.py",
+            "lineno": 7,
+            "frames": [
+                {"file": "t.py", "lineno": 7, "name": "test_c", "line": "raise RuntimeError"}
+            ]
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Error);
+        assert_eq!(r.message.as_deref(), Some("RuntimeError: boom"));
+        assert_eq!(r.file.as_deref(), Some("t.py"));
+        assert_eq!(r.lineno, Some(7));
+        assert_eq!(r.frames.len(), 1);
+        assert_eq!(r.frames[0].name, "test_c");
+    }
+
+    #[test]
+    fn skipped() {
+        let json = r#"{
+            "node_id": "t.py::test_d",
+            "outcome": "skipped",
+            "duration_ms": 0.1,
+            "failure_repr": "Skipped: needs network"
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Skipped);
+        assert_eq!(r.failure_repr.as_deref(), Some("Skipped: needs network"));
+    }
+
+    #[test]
+    fn xfailed() {
+        let json = r#"{
+            "node_id": "t.py::test_e",
+            "outcome": "xfailed",
+            "duration_ms": 0.3,
+            "failure_repr": "known bug #42"
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::XFailed);
+        assert_eq!(r.failure_repr.as_deref(), Some("known bug #42"));
+    }
+
+    #[test]
+    fn xpassed_strict() {
+        let json = r#"{
+            "node_id": "t.py::test_f",
+            "outcome": "xpassed",
+            "duration_ms": 0.4,
+            "strict": true
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::XPassed);
+        assert!(r.strict);
+    }
+
+    #[test]
+    fn xpassed_lenient() {
+        let json = r#"{
+            "node_id": "t.py::test_g",
+            "outcome": "xpassed",
+            "duration_ms": 0.4
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::XPassed);
+        assert!(!r.strict);
+    }
+
+    #[test]
+    fn warned() {
+        let json = r#"{
+            "node_id": "t.py::test_h",
+            "outcome": "warned",
+            "duration_ms": 1.1,
+            "message": "DeprecationWarning: old_api is deprecated"
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Warned);
+        assert_eq!(
+            r.message.as_deref(),
+            Some("DeprecationWarning: old_api is deprecated")
+        );
+    }
+
+    #[test]
+    fn timeout() {
+        let json = r#"{
+            "node_id": "t.py::test_i",
+            "outcome": "timeout",
+            "duration_ms": 5000.0,
+            "failure_repr": "Test timed out after 5s"
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Timeout);
+        assert_eq!(r.failure_repr.as_deref(), Some("Test timed out after 5s"));
+    }
+
+    #[test]
+    fn unknown_outcome() {
+        let json = r#"{
+            "node_id": "t.py::test_j",
+            "outcome": "completely_made_up",
+            "duration_ms": 0.0
+        }"#;
+        let r = deser(json);
+        assert_eq!(r.outcome, types::OutcomeKind::Unknown);
+    }
+}
