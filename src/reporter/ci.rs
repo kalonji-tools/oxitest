@@ -96,10 +96,6 @@ impl StandardReporter for CiReporter {
         super::print_strict_suite_section(&self.opts, &mut self.stats);
     }
 
-    fn run_stats(&self) -> &RunStats {
-        &self.stats
-    }
-
     fn run_opts(&self) -> &ReporterOpts {
         &self.opts
     }
@@ -125,7 +121,9 @@ impl Reporter for CiReporter {
     }
 
     fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
-        super::standard_finish(self, collect_errors, interrupted)
+        self.pre_finish();
+        let stats = self.stats.clone();
+        super::standard_finish(self, &stats, collect_errors, interrupted)
     }
 
     fn record_teardown_warning(&mut self, context: &str, error: &str) {
