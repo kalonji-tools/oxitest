@@ -1,21 +1,13 @@
 """Integration tests: serial and parallel produce identical outcomes."""
 
 import re
-import subprocess
 import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from helpers import run_oxitest
 from oxitest import TempDir
-
-
-def _run(tmp: TempDir, *extra: str) -> tuple[str, int]:
-    """Run oxitest against a temp dir, return (stdout, exit_code)."""
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", str(tmp), "--color", "never", *extra],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return result.stdout, result.returncode
 
 
 def _parse_counts(out: str) -> dict[str, int]:
@@ -34,8 +26,8 @@ def test_serial_and_default_same_counts(tmp: TempDir):
     (tmp / "test_b.py").write_text(
         "def test_fail(): assert False\ndef test_pass(): assert True\n"
     )
-    serial_out, _ = _run(tmp, "--serial")
-    default_out, _ = _run(tmp)
+    serial_out, _ = run_oxitest(tmp, "--serial")
+    default_out, _ = run_oxitest(tmp)
     serial_counts = _parse_counts(serial_out)
     default_counts = _parse_counts(default_out)
     assert serial_counts == default_counts, (
@@ -50,7 +42,7 @@ def test_serial_and_default_both_pass(tmp: TempDir):
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    _, serial_rc = _run(tmp, "--serial")
-    _, default_rc = _run(tmp)
+    _, serial_rc = run_oxitest(tmp, "--serial")
+    _, default_rc = run_oxitest(tmp)
     assert serial_rc == 0, f"serial run should exit 0, got {serial_rc}"
     assert default_rc == 0, f"default run should exit 0, got {default_rc}"
