@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::types::{NodeId, TestItem, TestOutcome};
+use crate::types::{
+    DurationMs, NodeId, OutcomeKind, RawOutcome, TestItem, TestOutcome, TestTiming,
+};
 
 /// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
 /// the canonical test module path `"tests/test_foo.py"`.
@@ -109,5 +111,56 @@ pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestI
         param_id: None,
         param_values: vec![],
         is_async: false,
+    })
+}
+
+/// Build a zero-duration [`TestTiming`] for the given `node_id` string and `outcome`.
+pub(crate) fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
+    TestTiming {
+        node_id: NodeId::from_raw(node_id),
+        duration_ms: DurationMs::ZERO,
+        outcome,
+    }
+}
+
+/// Build a [`TestOutcome`] from a bare status string (e.g. `"passed"`, `"failed"`).
+///
+/// All optional diagnostic fields are left empty. Useful for outcome-routing tests
+/// that do not care about failure messages or tracebacks.
+pub(crate) fn make_outcome(status: &str) -> TestOutcome {
+    TestOutcome::from_raw(RawOutcome {
+        status,
+        message: "",
+        file: "",
+        lineno: 0,
+        source_line: "",
+        no_message_lines: &[],
+        left: "",
+        right: "",
+        op: "",
+        strict: false,
+        frames: &[],
+    })
+}
+
+/// Build a minimal [`crate::pipeline::PipelineContext`] suitable for unit tests.
+///
+/// Uses default config, no-op CLI flags, a missing-path cache (loads empty), and
+/// `is_tty = false` / `use_color = false`. All incremental fields start empty.
+pub(crate) fn make_ctx() -> crate::pipeline::PipelineContext {
+    let cfg = crate::config::Config::default();
+    let cli = crate::config::Cli::default_for_test();
+    let cache = crate::cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
+    let rootdir = camino::Utf8PathBuf::from(".");
+    let use_color = false;
+    let base = super::ReporterOptsBuilder::from_config(&cfg, use_color);
+    crate::pipeline::PipelineContext::from_setup(crate::pipeline::SetupContext {
+        cfg,
+        cache,
+        cli,
+        rootdir,
+        is_tty: false,
+        use_color,
+        base,
     })
 }
