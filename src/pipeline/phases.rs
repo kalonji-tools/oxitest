@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 use super::helpers;
 use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
+use crate::cache::{ModuleCache, TimingCache};
 use crate::{affected, bridge, collector, parallel, reporter, retry, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────

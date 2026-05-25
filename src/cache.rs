@@ -50,7 +50,7 @@ struct CachedItemData {
 /// with the file's mtime at collection time. When `mtime_secs` no longer matches
 /// the file on disk, the cache entry is stale and Python collection runs again.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct ModuleCache {
+struct ModuleCacheEntry {
     mtime_secs: u64,
     items: Vec<CachedItemData>,
 }
@@ -87,7 +87,34 @@ struct CacheFile {
     #[serde(serialize_with = "serialize_sorted")]
     timings: AHashMap<String, CacheEntry>,
     #[serde(default, serialize_with = "serialize_sorted")]
-    modules: AHashMap<String, ModuleCache>,
+    modules: AHashMap<String, ModuleCacheEntry>,
+}
+
+/// Cache for mtime-based module collection results.
+pub trait ModuleCache {
+    fn cached_module_items(
+        &self,
+        path: &Utf8Path,
+        current_mtime_secs: u64,
+    ) -> Option<Vec<Arc<TestItem>>>;
+    fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[Arc<TestItem>]);
+    fn invalidate_modules(&mut self);
+}
+
+/// Cache for test timing data (scheduling, timeout suggestions, duration estimates).
+pub trait TimingCache {
+    #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
+    fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration>;
+    fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64>;
+    fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>);
+    fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32);
+    fn invalidate(&mut self, items: &[Arc<TestItem>]);
+}
+
+/// Cache for test outcome history (--lf/--ff, flaky tracking).
+pub trait OutcomeCache {
+    fn last_failed_ids(&self) -> std::collections::HashSet<String>;
+    fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]);
 }
 
 /// Persists per-test timing and outcome data across runs.
@@ -143,29 +170,19 @@ impl TestCache {
         }
     }
 
-    /// Remove timing entries whose node IDs are not in the current item list.
-    ///
-    /// Called after collection to prune stale entries (e.g. deleted or renamed tests).
-    /// Sets `dirty = true` if any entries were removed, triggering a cache save.
-    pub fn invalidate(&mut self, items: &[Arc<TestItem>]) {
-        let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
-        let before = self.inner.timings.len();
-        self.inner.timings.retain(|key, _| live.contains(key));
-        if self.inner.timings.len() != before {
-            self.dirty = true;
+    pub fn save(&self, rootdir: &Utf8Path) {
+        if !self.dirty {
+            return;
         }
-    }
-
-    /// Remove module cache entries for paths that no longer exist on disk.
-    /// Sets dirty = true if any entries were pruned.
-    pub fn invalidate_modules(&mut self) {
-        let before = self.inner.modules.len();
-        self.inner
-            .modules
-            .retain(|key, _| Utf8Path::new(key).exists());
-        if self.inner.modules.len() != before {
-            self.dirty = true;
+        let dir = rootdir.join(".oxitest_cache");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
         }
+        let content = match serde_json::to_string_pretty(&self.inner) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let _ = std::fs::write(dir.join("timings.json"), content);
     }
 
     /// Returns `(total_duration_ms, covered_count)` for items present in the timing cache.
@@ -188,63 +205,6 @@ impl TestCache {
         } else {
             None
         }
-    }
-
-    /// Sort module groups heaviest-first for optimal parallel scheduling.
-    ///
-    /// Groups with known total duration are sorted by descending sum of cached
-    /// durations. Uncached groups fall back to descending item count. Assigning
-    /// the heaviest module to the first worker minimises tail latency by ensuring
-    /// the longest-running work starts immediately.
-    pub(crate) fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) {
-        // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
-        // Avoids re-running module_duration_sum inside the comparator, which would be
-        // O(N log N × M) because the comparator fires once per sort comparison.
-        #[allow(clippy::type_complexity)]
-        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<Arc<TestItem>>)> =
-            std::mem::take(groups)
-                .into_iter()
-                .map(|(path, items)| {
-                    let sum = self.module_duration_sum(&items);
-                    let len = items.len();
-                    (sum, len, path, items)
-                })
-                .collect();
-
-        keyed.sort_by(
-            |(sum_a, len_a, ..), (sum_b, len_b, ..)| match (sum_a, sum_b) {
-                (Some(da), Some(db)) => db.partial_cmp(da).unwrap_or(std::cmp::Ordering::Equal),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => len_b.cmp(len_a),
-            },
-        );
-
-        *groups = keyed
-            .into_iter()
-            .map(|(_, _, path, items)| (path, items))
-            .collect();
-    }
-
-    #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
-    pub fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration> {
-        if items.is_empty() {
-            return None;
-        }
-        let (total_ms, covered) = self.sum_and_count(items);
-        if covered * 2 < items.len() {
-            return None;
-        }
-        Some(Duration::from_millis(total_ms as u64))
-    }
-
-    /// Returns a suggested timeout in whole seconds for `item`, scaled by `multiplier`.
-    /// Returns `None` if the item has no cached timing (caller should use global timeout).
-    /// Result is `ceil(cached_duration_secs * multiplier)`, minimum 1 second.
-    pub fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
-        let entry = self.inner.timings.get(item.node_id.as_ref())?;
-        let scaled_secs = (entry.duration_ms / 1000.0) * multiplier;
-        Some((scaled_secs.ceil() as u64).max(1))
     }
 
     #[allow(dead_code)]
@@ -280,8 +240,153 @@ impl TestCache {
         }
     }
 
+    /// Update `last_outcome` for entries that appear in `outcomes`.
+    /// Entries not in `outcomes` are unchanged.
+    /// Sets dirty = true if any entry was updated.
+    #[allow(dead_code)]
+    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, OutcomeKind)]) {
+        let mut changed = false;
+        for (node_id, outcome) in outcomes {
+            if let Some(entry) = self.inner.timings.get_mut(node_id.as_ref()) {
+                entry.last_outcome = Some(outcome.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            self.dirty = true;
+        }
+    }
+}
+
+impl ModuleCache for TestCache {
+    /// Returns cached TestItems for `path` if the file's mtime matches `current_mtime_secs`.
+    /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
+    fn cached_module_items(
+        &self,
+        path: &Utf8Path,
+        current_mtime_secs: u64,
+    ) -> Option<Vec<Arc<TestItem>>> {
+        let key = path.as_str();
+        let mc = self.inner.modules.get(key)?;
+        if mc.mtime_secs != current_mtime_secs {
+            return None;
+        }
+        let items = mc
+            .items
+            .iter()
+            .map(|d| {
+                Arc::new(TestItem {
+                    node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
+                    module_path: path.to_owned(),
+                    fn_name: d.fn_name.clone(),
+                    lineno: d.lineno,
+                    markers: d.markers.clone(),
+                    param_id: d.param_id.clone(),
+                    param_values: d.param_values.clone(),
+                    is_async: d.is_async,
+                })
+            })
+            .collect();
+        Some(items)
+    }
+
+    /// Store the collection result for `path` with the given mtime.
+    /// Sets dirty = true.
+    fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[Arc<TestItem>]) {
+        let key = path.as_str().to_string();
+        let cached_items = items
+            .iter()
+            .map(|item| CachedItemData {
+                fn_name: item.fn_name.clone(),
+                lineno: item.lineno,
+                markers: item.markers.clone(),
+                param_id: item.param_id.clone(),
+                param_values: item.param_values.clone(),
+                is_async: item.is_async,
+            })
+            .collect();
+        self.inner.modules.insert(
+            key,
+            ModuleCacheEntry {
+                mtime_secs,
+                items: cached_items,
+            },
+        );
+        self.dirty = true;
+    }
+
+    /// Remove module cache entries for paths that no longer exist on disk.
+    /// Sets dirty = true if any entries were pruned.
+    fn invalidate_modules(&mut self) {
+        let before = self.inner.modules.len();
+        self.inner
+            .modules
+            .retain(|key, _| Utf8Path::new(key).exists());
+        if self.inner.modules.len() != before {
+            self.dirty = true;
+        }
+    }
+}
+
+impl TimingCache for TestCache {
+    fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration> {
+        if items.is_empty() {
+            return None;
+        }
+        let (total_ms, covered) = self.sum_and_count(items);
+        if covered * 2 < items.len() {
+            return None;
+        }
+        Some(Duration::from_millis(total_ms as u64))
+    }
+
+    /// Returns a suggested timeout in whole seconds for `item`, scaled by `multiplier`.
+    /// Returns `None` if the item has no cached timing (caller should use global timeout).
+    /// Result is `ceil(cached_duration_secs * multiplier)`, minimum 1 second.
+    fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
+        let entry = self.inner.timings.get(item.node_id.as_ref())?;
+        let scaled_secs = (entry.duration_ms / 1000.0) * multiplier;
+        Some((scaled_secs.ceil() as u64).max(1))
+    }
+
+    /// Sort module groups heaviest-first for optimal parallel scheduling.
+    ///
+    /// Groups with known total duration are sorted by descending sum of cached
+    /// durations. Uncached groups fall back to descending item count. Assigning
+    /// the heaviest module to the first worker minimises tail latency by ensuring
+    /// the longest-running work starts immediately.
+    fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) {
+        // Pre-compute (duration_sum, item_count) for each group once — O(N×M) total.
+        // Avoids re-running module_duration_sum inside the comparator, which would be
+        // O(N log N × M) because the comparator fires once per sort comparison.
+        #[allow(clippy::type_complexity)]
+        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<Arc<TestItem>>)> =
+            std::mem::take(groups)
+                .into_iter()
+                .map(|(path, items)| {
+                    let sum = self.module_duration_sum(&items);
+                    let len = items.len();
+                    (sum, len, path, items)
+                })
+                .collect();
+
+        keyed.sort_by(
+            |(sum_a, len_a, ..), (sum_b, len_b, ..)| match (sum_a, sum_b) {
+                (Some(da), Some(db)) => db.partial_cmp(da).unwrap_or(std::cmp::Ordering::Equal),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => len_b.cmp(len_a),
+            },
+        );
+
+        *groups = keyed
+            .into_iter()
+            .map(|(_, _, path, items)| (path, items))
+            .collect();
+    }
+
     /// Merge test timings directly from `&[TestTiming]`, avoiding intermediate allocations.
-    pub fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32) {
+    fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32) {
         let executed: HashSet<&str> = timings.iter().map(|t| t.node_id.as_ref()).collect();
 
         for t in timings {
@@ -313,43 +418,24 @@ impl TestCache {
         }
     }
 
-    /// Record outcomes from `&[TestTiming]` directly.
-    pub fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]) {
-        let mut changed = false;
-        for t in timings {
-            if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
-                entry.last_outcome = Some(t.outcome.clone());
-                if t.outcome == OutcomeKind::Flaky {
-                    entry.flaky_count = entry.flaky_count.saturating_add(1);
-                }
-                changed = true;
-            }
-        }
-        if changed {
+    /// Remove timing entries whose node IDs are not in the current item list.
+    ///
+    /// Called after collection to prune stale entries (e.g. deleted or renamed tests).
+    /// Sets `dirty = true` if any entries were removed, triggering a cache save.
+    fn invalidate(&mut self, items: &[Arc<TestItem>]) {
+        let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
+        let before = self.inner.timings.len();
+        self.inner.timings.retain(|key, _| live.contains(key));
+        if self.inner.timings.len() != before {
             self.dirty = true;
         }
     }
+}
 
-    /// Update `last_outcome` for entries that appear in `outcomes`.
-    /// Entries not in `outcomes` are unchanged.
-    /// Sets dirty = true if any entry was updated.
-    #[allow(dead_code)]
-    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, OutcomeKind)]) {
-        let mut changed = false;
-        for (node_id, outcome) in outcomes {
-            if let Some(entry) = self.inner.timings.get_mut(node_id.as_ref()) {
-                entry.last_outcome = Some(outcome.clone());
-                changed = true;
-            }
-        }
-        if changed {
-            self.dirty = true;
-        }
-    }
-
+impl OutcomeCache for TestCache {
     /// Returns node IDs whose last recorded outcome was a failure
     /// (failed, error, or timeout).
-    pub fn last_failed_ids(&self) -> std::collections::HashSet<String> {
+    fn last_failed_ids(&self) -> std::collections::HashSet<String> {
         self.inner
             .timings
             .iter()
@@ -363,80 +449,21 @@ impl TestCache {
             .collect()
     }
 
-    pub fn save(&self, rootdir: &Utf8Path) {
-        if !self.dirty {
-            return;
+    /// Record outcomes from `&[TestTiming]` directly.
+    fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]) {
+        let mut changed = false;
+        for t in timings {
+            if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
+                entry.last_outcome = Some(t.outcome.clone());
+                if t.outcome == OutcomeKind::Flaky {
+                    entry.flaky_count = entry.flaky_count.saturating_add(1);
+                }
+                changed = true;
+            }
         }
-        let dir = rootdir.join(".oxitest_cache");
-        if std::fs::create_dir_all(&dir).is_err() {
-            return;
+        if changed {
+            self.dirty = true;
         }
-        let content = match serde_json::to_string_pretty(&self.inner) {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-        let _ = std::fs::write(dir.join("timings.json"), content);
-    }
-
-    /// Returns cached TestItems for `path` if the file's mtime matches `current_mtime_secs`.
-    /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
-    pub fn cached_module_items(
-        &self,
-        path: &Utf8Path,
-        current_mtime_secs: u64,
-    ) -> Option<Vec<Arc<TestItem>>> {
-        let key = path.as_str();
-        let mc = self.inner.modules.get(key)?;
-        if mc.mtime_secs != current_mtime_secs {
-            return None;
-        }
-        let items = mc
-            .items
-            .iter()
-            .map(|d| {
-                Arc::new(TestItem {
-                    node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
-                    module_path: path.to_owned(),
-                    fn_name: d.fn_name.clone(),
-                    lineno: d.lineno,
-                    markers: d.markers.clone(),
-                    param_id: d.param_id.clone(),
-                    param_values: d.param_values.clone(),
-                    is_async: d.is_async,
-                })
-            })
-            .collect();
-        Some(items)
-    }
-
-    /// Store the collection result for `path` with the given mtime.
-    /// Sets dirty = true.
-    pub fn update_module_cache(
-        &mut self,
-        path: &Utf8Path,
-        mtime_secs: u64,
-        items: &[Arc<TestItem>],
-    ) {
-        let key = path.as_str().to_string();
-        let cached_items = items
-            .iter()
-            .map(|item| CachedItemData {
-                fn_name: item.fn_name.clone(),
-                lineno: item.lineno,
-                markers: item.markers.clone(),
-                param_id: item.param_id.clone(),
-                param_values: item.param_values.clone(),
-                is_async: item.is_async,
-            })
-            .collect();
-        self.inner.modules.insert(
-            key,
-            ModuleCache {
-                mtime_secs,
-                items: cached_items,
-            },
-        );
-        self.dirty = true;
     }
 }
 
