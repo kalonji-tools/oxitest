@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated, get_args, get_origin, get_type_hints
 
+import oxitest as oxi
 from oxitest._bridge._fixture_type import Fixture, _FixtureMarker, _FixtureType
 
 
@@ -13,45 +15,30 @@ class _TestCtx:
     pass
 
 
-def test_fixture_database_is_annotated():
-    result = Fixture[_Database]
+@dataclass(frozen=True)
+class Case:
+    inner_type: type
+    expected_inner: type
+
+
+@oxi.parametrize(
+    database=Case(inner_type=_Database, expected_inner=_Database),
+    none=Case(inner_type=type(None), expected_inner=type(None)),
+    test_context=Case(inner_type=_TestCtx, expected_inner=_TestCtx),
+)
+def test_fixture_type_is_annotated(inner_type, expected_inner):
+    result = Fixture[inner_type]
     assert get_origin(result) is Annotated, (
-        f"Fixture[_Database] should have Annotated origin, got {get_origin(result)!r}"
+        f"Fixture[{inner_type.__name__}] should have Annotated origin, "
+        f"got {get_origin(result)!r}"
     )
     inner, *meta = get_args(result)
-    assert inner is _Database, (
-        f"Fixture[_Database] inner type should be _Database, got {inner!r}"
+    assert inner is expected_inner, (
+        f"Fixture[{inner_type.__name__}] inner type should be {expected_inner!r}, "
+        f"got {inner!r}"
     )
     assert any(isinstance(m, _FixtureMarker) for m in meta), (
-        "Fixture[_Database] metadata should contain a _FixtureMarker"
-    )
-
-
-def test_fixture_none_is_annotated():
-    result = Fixture[None]
-    assert get_origin(result) is Annotated, (
-        f"Fixture[None] should have Annotated origin, got {get_origin(result)!r}"
-    )
-    inner, *meta = get_args(result)
-    assert inner is type(None), (
-        f"Fixture[None] inner type should be NoneType, got {inner!r}"
-    )
-    assert any(isinstance(m, _FixtureMarker) for m in meta), (
-        "Fixture[None] metadata should contain a _FixtureMarker"
-    )
-
-
-def test_fixture_test_context_is_annotated():
-    result = Fixture[_TestCtx]
-    assert get_origin(result) is Annotated, (
-        f"Fixture[_TestCtx] should have Annotated origin, got {get_origin(result)!r}"
-    )
-    inner, *meta = get_args(result)
-    assert inner is _TestCtx, (
-        f"Fixture[_TestCtx] inner type should be _TestCtx, got {inner!r}"
-    )
-    assert any(isinstance(m, _FixtureMarker) for m in meta), (
-        "Fixture[_TestCtx] metadata should contain a _FixtureMarker"
+        f"Fixture[{inner_type.__name__}] metadata should contain a _FixtureMarker"
     )
 
 
