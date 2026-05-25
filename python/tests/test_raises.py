@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import oxitest as oxi
 from oxitest._bridge._raises import raises
 
 
@@ -61,14 +64,18 @@ def test_raises_exported_from_oxitest():
     assert "raises" in oxitest.__all__, "'raises' should be listed in oxitest.__all__"
 
 
-def test_raises_tuple_catches_first_type():
-    with raises((ValueError, TypeError)):
-        raise ValueError("first")
+@dataclass(frozen=True)
+class TupleCatchCase:
+    exc_class: type
 
 
-def test_raises_tuple_catches_second_type():
+@oxi.parametrize(
+    first_type=TupleCatchCase(exc_class=ValueError),
+    second_type=TupleCatchCase(exc_class=TypeError),
+)
+def test_raises_tuple_catches_matching_type(exc_class):
     with raises((ValueError, TypeError)):
-        raise TypeError("second")
+        raise exc_class("msg")
 
 
 def test_raises_tuple_wrong_type_reraises():
