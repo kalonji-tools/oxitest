@@ -4,8 +4,6 @@
 //! from and write to [`PipelineContext`], delegating to helper functions
 //! in [`super::helpers`] for the actual work.
 
-use std::collections::HashSet;
-
 use pyo3::prelude::*;
 
 use super::helpers;
@@ -365,23 +363,10 @@ impl PipelinePhase for RetryPhase<'_> {
             .as_deref_mut()
             .expect("ExecutionPhase must run first");
 
-        let failed_node_ids: HashSet<&str> = ctx
-            .timings
-            .iter()
-            .filter(|t| t.outcome.is_failure())
-            .map(|t| t.node_id.as_ref())
-            .collect();
-
-        if failed_node_ids.is_empty() {
+        let failed_items = retry::identify_failed_items(&ctx.items, &ctx.timings);
+        if failed_items.is_empty() {
             return Ok(PhaseOutcome::Continue);
         }
-
-        let failed_items: Vec<std::sync::Arc<types::TestItem>> = ctx
-            .items
-            .iter()
-            .filter(|i| failed_node_ids.contains(i.node_id.as_ref()))
-            .cloned()
-            .collect();
 
         let retry_ctx = retry::RetryContext {
             py,
@@ -396,14 +381,8 @@ impl PipelinePhase for RetryPhase<'_> {
             retry_timings,
         } = retry::run_retries(&retry_ctx, &failed_items, rep);
 
-        let flaky_set: HashSet<&str> = flaky_ids.iter().map(|id| id.as_ref()).collect();
         let original_timings = std::mem::take(&mut ctx.timings);
-        let mut merged: Vec<types::TestTiming> = original_timings
-            .into_iter()
-            .filter(|t| !flaky_set.contains(t.node_id.as_ref()))
-            .collect();
-        merged.extend(retry_timings);
-        ctx.timings = merged;
+        ctx.timings = retry::merge_flaky_timings(original_timings, &flaky_ids, retry_timings);
 
         Ok(PhaseOutcome::Continue)
     }
