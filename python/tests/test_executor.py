@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import make_session_with
 from oxitest import Fixture, FixtureTeardownWarning, TempDir, WarnCapture, parametrize
 from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
@@ -270,12 +275,6 @@ def test_assertion_operands(
 # ── Fixture integration ───────────────────────────────────────────────────────
 
 
-def _make_session_with(name: str, factory) -> FixtureSession:
-    reg = FixtureRegistry()
-    reg.register(FixtureDef(name, factory, False, None, "/c.py"))
-    return FixtureSession(reg)
-
-
 def test_run_test_without_session_backward_compat(tmp: TempDir):
     f = tmp / "test_simple.py"
     f.write_text("def test_ok(): assert 1 == 1\n")
@@ -292,7 +291,7 @@ def test_run_test_with_fixture_injected(tmp: TempDir):
         "from oxitest import Fixture\n"
         "def test_uses_val(val: Fixture[int]) -> None: assert val == 99\n"
     )
-    session = _make_session_with("val", lambda: 99)
+    session = make_session_with("val", lambda: 99)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
@@ -311,7 +310,7 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
     def bad_factory():
         raise RuntimeError("db is down")
 
-    session = _make_session_with("bad", bad_factory)
+    session = make_session_with("bad", bad_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
@@ -358,7 +357,7 @@ def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir):
         yield 99
         torn_down.append(True)
 
-    session = _make_session_with("val", factory)
+    session = make_session_with("val", factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_fail", session)
     assert result.status == "failed", (
@@ -387,7 +386,7 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         torn_down.append("ran")
         raise RuntimeError("teardown exploded")
 
-    session = _make_session_with("val", factory)
+    session = make_session_with("val", factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
@@ -556,7 +555,7 @@ def test_compact_parametrize_mixed_with_fixture(tmp: TempDir):
         "    assert params.x == 10\n"
         "    assert db == 99\n"
     )
-    session = _make_session_with("db", lambda: 99)
+    session = make_session_with("db", lambda: 99)
     session.begin_module(str(f))
     result = run_test(str(f), "test_mixed", session, param_id="case1")
     assert result.status == "passed", (
@@ -748,7 +747,7 @@ def test_async_test_with_async_fixture(tmp: TempDir):
     async def async_factory():
         return 99
 
-    session = _make_session_with("val", async_factory)
+    session = make_session_with("val", async_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
@@ -764,7 +763,7 @@ def test_async_test_with_sync_fixture(tmp: TempDir):
         "async def test_uses_val(val: Fixture[int]) -> None:\n"
         "    assert val == 42\n"
     )
-    session = _make_session_with("val", lambda: 42)
+    session = make_session_with("val", lambda: 42)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
@@ -784,7 +783,7 @@ def test_async_fixture_setup_error(tmp: TempDir):
     async def bad_factory():
         raise RuntimeError("db is down")
 
-    session = _make_session_with("bad", bad_factory)
+    session = make_session_with("bad", bad_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
@@ -807,7 +806,7 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
     async def async_factory():
         return 99
 
-    session = _make_session_with("val", async_factory)
+    session = make_session_with("val", async_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "error", (
@@ -836,7 +835,7 @@ def test_async_yield_fixture_provides_value(tmp: TempDir):
     async def async_yield_factory():
         yield 42
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
@@ -860,7 +859,7 @@ def test_async_yield_fixture_teardown_runs(tmp: TempDir):
         yield log
         log.append("teardown")
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
@@ -885,7 +884,7 @@ def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir):
         yield 42
         torn_down.append(True)
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_fail", session)
     assert result.status == "failed", f"test should fail, got status={result.status!r}"
@@ -908,7 +907,7 @@ def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir):
         yield 42
         torn_down.append(True)
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_err", session)
     assert result.status == "error", f"test should error, got status={result.status!r}"
@@ -966,7 +965,7 @@ def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCaptur
         yield 42
         raise RuntimeError("teardown exploded")
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
@@ -991,7 +990,7 @@ def test_async_yield_fixture_setup_error(tmp: TempDir):
         raise RuntimeError("setup failed")
         yield  # noqa: RET503
 
-    session = _make_session_with("bad", bad_factory)
+    session = make_session_with("bad", bad_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
@@ -1013,7 +1012,7 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir):
     async def async_yield_factory():
         yield 42
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_uses_val", session)
     assert result.status == "error", (
@@ -1091,7 +1090,7 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
         yield 42
         torn_down.append(True)
 
-    session = _make_session_with("val", async_yield_factory)
+    session = make_session_with("val", async_yield_factory)
     session.begin_module(str(f))
     result = run_test(str(f), "test_slow", session)
     assert result.status == "timeout", (

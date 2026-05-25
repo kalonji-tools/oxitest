@@ -10,22 +10,14 @@ worker subprocess.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import run_oxitest
 from oxitest import TempDir
-
-
-def _run_oxitest(tmp: TempDir, *extra_args: str) -> tuple[str, int]:
-    """Run oxitest CLI against tmp and return (stdout, returncode)."""
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", str(tmp), "--color", "never", *extra_args],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return result.stdout, result.returncode
 
 
 def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
@@ -41,10 +33,10 @@ def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
     )
 
     # Serial: runs tests in-process via the PyO3 bridge (run_phase)
-    serial_out, serial_rc = _run_oxitest(tmp, "--serial")
+    serial_out, serial_rc = run_oxitest(tmp, "--serial")
 
     # Parallel: forces the subprocess-worker path (run_phase_parallel) even for 1 test
-    parallel_out, parallel_rc = _run_oxitest(tmp, "--workers", "2")
+    parallel_out, parallel_rc = run_oxitest(tmp, "--workers", "2")
 
     assert serial_rc != 0, f"Expected serial run to fail, got rc={serial_rc}"
     assert parallel_rc != 0, f"Expected parallel run to fail, got rc={parallel_rc}"
