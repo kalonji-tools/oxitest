@@ -1,0 +1,13 @@
+---
+source: src/reporter/format/diagnostic.rs
+expression: block
+---
+        ┌─ tests/test_errors.py:10
+        │
+        ├─  frames
+        │    tests/test_errors.py:10  test_raises
+        │      result = process(data)
+        │    src/processor.py:42  process
+        │      raise ValueError("invalid input")
+        │
+        └─ ValueError: invalid input

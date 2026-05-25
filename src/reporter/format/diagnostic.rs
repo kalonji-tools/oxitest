@@ -775,4 +775,71 @@ mod tests {
             "multi-line content must be present"
         );
     }
+
+    mod snapshot_tests {
+        use super::*;
+        use insta::assert_snapshot;
+
+        #[test]
+        fn failed_assertion_with_diff() {
+            let item = make_item_at("test_compare", "tests/test_math.py", 15);
+            let outcome = make_failed("assert x == y", "tests/test_math.py", 15, "assert x == y");
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
+            assert_snapshot!(block);
+        }
+
+        #[test]
+        fn error_with_frames() {
+            use crate::types::Frame;
+
+            let item = make_item_at("test_raises", "tests/test_errors.py", 10);
+            let outcome = TestOutcome::Error {
+                message: "ValueError: invalid input".to_string(),
+                file: "tests/test_errors.py".to_string(),
+                lineno: 10,
+                source_line: "result = process(data)".to_string(),
+                frames: vec![
+                    Frame {
+                        file: "tests/test_errors.py".to_string(),
+                        lineno: 10,
+                        name: "test_raises".to_string(),
+                        line: "result = process(data)".to_string(),
+                    },
+                    Frame {
+                        file: "src/processor.py".to_string(),
+                        lineno: 42,
+                        name: "process".to_string(),
+                        line: "raise ValueError(\"invalid input\")".to_string(),
+                    },
+                ],
+            };
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Long, false);
+            assert_snapshot!(block);
+        }
+
+        #[test]
+        fn failed_with_left_right_op() {
+            let item = make_item_at("test_equality", "tests/test_values.py", 7);
+            let outcome = TestOutcome::Failed {
+                message: String::new(),
+                file: "tests/test_values.py".to_string(),
+                lineno: 7,
+                source_line: "assert result == expected".to_string(),
+                left: "1".to_string(),
+                right: "2".to_string(),
+                op: "==".to_string(),
+                frames: vec![],
+            };
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Short, false);
+            assert_snapshot!(block);
+        }
+
+        #[test]
+        fn tb_no_returns_empty() {
+            let item = make_item_at("test_something", "tests/test_mod.py", 5);
+            let outcome = make_failed("should pass", "tests/test_mod.py", 5, "assert x");
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false);
+            assert_snapshot!(block);
+        }
+    }
 }
