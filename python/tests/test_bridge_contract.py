@@ -33,9 +33,7 @@ class TestRequiredFields:
         assert wire["duration_ms"] == DURATION_MS, "wrong duration"
 
     def test_failed_has_required_fields(self):
-        wire = _wire(
-            TestResult(status=StatusKind.FAILED, message="boom")
-        )
+        wire = _wire(TestResult(status=StatusKind.FAILED, message="boom"))
         assert "node_id" in wire, "node_id must be present"
         assert "outcome" in wire, "outcome must be present"
         assert "duration_ms" in wire, "duration_ms must be present"
@@ -47,9 +45,7 @@ class TestCompactFormat:
     """Optional fields omitted when falsy for compact wire payload."""
 
     def test_passed_omits_all_optional_fields(self):
-        wire = _wire(
-            TestResult(status=StatusKind.PASSED, strict=False)
-        )
+        wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
         optional_keys = {
             "failure_repr",
             "message",
@@ -67,9 +63,7 @@ class TestCompactFormat:
         assert not present, f"optional fields present: {present}"
 
     def test_strict_true_is_included(self):
-        wire = _wire(
-            TestResult(status=StatusKind.XPASSED, strict=True)
-        )
+        wire = _wire(TestResult(status=StatusKind.XPASSED, strict=True))
         assert "strict" in wire, "strict=True must be present"
         assert wire["strict"] is True, "strict must be True"
 
@@ -97,16 +91,11 @@ class TestFailedShape:
             ],
         )
         wire = _wire(result)
-        assert wire["message"] == "AssertionError: values differ", (
-            "message must round-trip"
-        )
-        assert wire["file"] == "tests/test_foo.py", (
-            "file must round-trip"
-        )
+        expected_msg = "AssertionError: values differ"
+        assert wire["message"] == expected_msg, "message must round-trip"
+        assert wire["file"] == "tests/test_foo.py", "file must round-trip"
         assert wire["lineno"] == 12, "lineno must round-trip"
-        assert wire["source_line"] == "assert x == y", (
-            "source_line must round-trip"
-        )
+        assert wire["source_line"] == "assert x == y", "source_line must round-trip"
         assert wire["left"] == "1", "left must round-trip"
         assert wire["right"] == "2", "right must round-trip"
         assert wire["op"] == "==", "op must round-trip"
@@ -129,9 +118,8 @@ class TestFailedShape:
         wire = _wire(result)
         assert wire["outcome"] == "error", "wrong outcome"
         assert "message" in wire, "message must be present"
-        assert wire["message"] == "ImportError: no module named foo", (
-            "message must round-trip"
-        )
+        expected_msg = "ImportError: no module named foo"
+        assert wire["message"] == expected_msg, "message must round-trip"
         assert "frames" in wire, "frames must be present"
 
 
@@ -139,21 +127,15 @@ class TestEveryStatus:
     """Each StatusKind round-trips correctly through wire format."""
 
     def test_passed(self):
-        wire = _wire(
-            TestResult(status=StatusKind.PASSED, strict=False)
-        )
+        wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
         assert wire["outcome"] == "passed", "wrong outcome"
 
     def test_failed(self):
-        wire = _wire(
-            TestResult(status=StatusKind.FAILED, message="oops")
-        )
+        wire = _wire(TestResult(status=StatusKind.FAILED, message="oops"))
         assert wire["outcome"] == "failed", "wrong outcome"
 
     def test_error(self):
-        wire = _wire(
-            TestResult(status=StatusKind.ERROR, message="err")
-        )
+        wire = _wire(TestResult(status=StatusKind.ERROR, message="err"))
         assert wire["outcome"] == "error", "wrong outcome"
 
     def test_skipped(self):
@@ -177,9 +159,7 @@ class TestEveryStatus:
         assert wire["outcome"] == "xfailed", "wrong outcome"
 
     def test_xpassed(self):
-        wire = _wire(
-            TestResult(status=StatusKind.XPASSED, strict=False)
-        )
+        wire = _wire(TestResult(status=StatusKind.XPASSED, strict=False))
         assert wire["outcome"] == "xpassed", "wrong outcome"
 
     def test_warned(self):
@@ -223,9 +203,7 @@ class TestFrameSerialization:
         assert "frames" in wire, "frames must be present"
         frame = wire["frames"][0]
         expected = {"file", "lineno", "name", "line"}
-        assert set(frame.keys()) == expected, (
-            f"wrong frame keys: {set(frame.keys())}"
-        )
+        assert set(frame.keys()) == expected, f"wrong frame keys: {set(frame.keys())}"
 
     def test_multiple_frames_preserved(self):
         result = TestResult(
@@ -249,9 +227,5 @@ class TestFrameSerialization:
         wire = _wire(result)
         assert "frames" in wire, "frames must be present"
         assert len(wire["frames"]) == 2, "both frames needed"
-        assert wire["frames"][0]["file"] == "src/a.py", (
-            "first frame file must round-trip"
-        )
-        assert wire["frames"][1]["file"] == "tests/test_a.py", (
-            "second frame file must round-trip"
-        )
+        assert wire["frames"][0]["file"] == "src/a.py", "frame[0] file"
+        assert wire["frames"][1]["file"] == "tests/test_a.py", "frame[1] file"
