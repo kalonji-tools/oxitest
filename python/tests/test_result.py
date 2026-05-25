@@ -7,16 +7,6 @@ from oxitest._bridge.result import Frame, StatusKind, TestResult
 # ── failure_repr ─────────────────────────────────────────────────────────
 
 
-def test_failure_repr_returns_none_for_passed():
-    r = TestResult(status=StatusKind.PASSED)
-    assert r.failure_repr is None, "passed should have no failure_repr"
-
-
-def test_failure_repr_returns_none_for_skipped():
-    r = TestResult(status=StatusKind.SKIPPED, message="reason")
-    assert r.failure_repr is None, "skipped should have no failure_repr"
-
-
 def test_failure_repr_returns_none_for_all_non_failure_statuses():
     for status in (
         StatusKind.PASSED,

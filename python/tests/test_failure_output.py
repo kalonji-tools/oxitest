@@ -8,121 +8,90 @@ fix suggestions.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import textwrap
+from dataclasses import dataclass, field
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import oxitest as oxi
+from helpers import run_oxitest
 from oxitest import TempDir
 
 
-def _run_oxitest(tmp: TempDir, *extra_args: str) -> tuple[str, int]:
-    """Run oxitest CLI against tmp and return (stdout, returncode)."""
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", str(tmp), "--color", "never", *extra_args],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    return result.stdout, result.returncode
+@dataclass(frozen=True)
+class OutputCase:
+    """Parameters for a single failure-output integration test case."""
+
+    test_code: str
+    expected: tuple[str, ...] = field(default_factory=tuple)
+    not_expected: tuple[str, ...] = field(default_factory=tuple)
+    extra_args: tuple[str, ...] = ("--serial",)
 
 
-# ── Color-coded diffs ────────────────────────────────────────────────
+# ── Color-coded diffs + frame truncation + fix suggestions ───────────
 
 
-def test_diff_shows_left_and_right(tmp: TempDir) -> None:
-    """Assertion failures with left/right values show diff labels."""
-    test_file = tmp / "test_diff.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_values():
-            assert 3 == 4, ""
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial")
+@oxi.parametrize(
+    diff_left_right=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_values():
+                assert 3 == 4, ""
+        """),
+        expected=("- left:", "+ right:", "3", "4"),
+    ),
+    diff_string_values=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_strings():
+                left = "hello"
+                right = "world"
+                assert left == right, ""
+        """),
+        expected=("- left:", "+ right:", "hello", "world"),
+    ),
+    diff_not_shown_for_bool=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_falsy():
+                assert False, ""
+        """),
+        not_expected=("- left:",),
+    ),
+    short_tb_hides_internal_frames=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_error():
+                raise ValueError("boom")
+        """),
+        not_expected=("executor.py", "_middleware.py"),
+    ),
+    long_tb_shows_test_file=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_error():
+                raise ValueError("boom")
+        """),
+        expected=("test_check.py",),
+        extra_args=("--serial", "--tb", "long"),
+    ),
+    no_hint_for_plain_assertion=OutputCase(
+        test_code=textwrap.dedent("""\
+            def test_plain():
+                assert 1 == 2, ""
+        """),
+        not_expected=("hint:",),
+    ),
+)
+def test_failure_output(
+    tmp: TempDir,
+    test_code: str,
+    expected: tuple[str, ...],
+    not_expected: tuple[str, ...],
+    extra_args: tuple[str, ...],
+) -> None:
+    """Failure output matches expected patterns for each scenario."""
+    (tmp / "test_check.py").write_text(test_code)
+    out, rc = run_oxitest(tmp, *extra_args)
     assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "- left:" in out, f"missing left diff label:\n{out}"
-    assert "+ right:" in out, f"missing right diff label:\n{out}"
-    assert "3" in out, f"missing left value:\n{out}"
-    assert "4" in out, f"missing right value:\n{out}"
-
-
-def test_diff_shows_inline_for_string_values(tmp: TempDir) -> None:
-    """String assertion failures show inline diff with left/right labels."""
-    test_file = tmp / "test_string_diff.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_strings():
-            left = "hello"
-            right = "world"
-            assert left == right, ""
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial")
-    assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "- left:" in out, f"missing left diff label:\n{out}"
-    assert "+ right:" in out, f"missing right diff label:\n{out}"
-    assert "hello" in out, f"missing left value:\n{out}"
-    assert "world" in out, f"missing right value:\n{out}"
-
-
-def test_diff_not_shown_for_bool_assert(tmp: TempDir) -> None:
-    """Bool assertions show value label, not left/right diff."""
-    test_file = tmp / "test_bool.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_falsy():
-            assert False, ""
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial")
-    assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "- left:" not in out, f"left diff should not appear for bool:\n{out}"
-
-
-# ── Frame truncation ────────────────────────────────────────────────
-
-
-def test_short_tb_hides_internal_frames(tmp: TempDir) -> None:
-    """Default --tb short hides oxitest internal frames."""
-    test_file = tmp / "test_frames.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_error():
-            raise ValueError("boom")
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial")
-    assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "executor.py" not in out, f"internal frame should be hidden:\n{out}"
-    assert "_middleware.py" not in out, f"internal frame should be hidden:\n{out}"
-
-
-def test_long_tb_shows_test_file(tmp: TempDir) -> None:
-    """--tb long shows test file in output."""
-    test_file = tmp / "test_frames_long.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_error():
-            raise ValueError("boom")
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial", "--tb", "long")
-    assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "test_frames_long.py" in out, f"test file should appear:\n{out}"
-
-
-# ── Fix suggestions ─────────────────────────────────────────────────
-
-
-def test_no_hint_for_plain_assertion(tmp: TempDir) -> None:
-    """Plain assertion failures should not produce hint lines."""
-    test_file = tmp / "test_no_hint.py"
-    test_file.write_text(
-        textwrap.dedent("""\
-        def test_plain():
-            assert 1 == 2, ""
-    """)
-    )
-    out, rc = _run_oxitest(tmp, "--serial")
-    assert rc != 0, f"expected non-zero exit code:\n{out}"
-    assert "hint:" not in out, f"no hint expected for plain assertion:\n{out}"
+    for s in expected:
+        assert s in out, f"expected {s!r} in output:\n{out}"
+    for s in not_expected:
+        assert s not in out, f"did not expect {s!r} in output:\n{out}"

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import sys
 import time
+from dataclasses import dataclass
 
 import oxitest
+import oxitest as oxi
 from oxitest import raises
 from oxitest._bridge._fixture_session import _NullFixtureSession
 from oxitest._bridge._mark_api import MarkInfo
@@ -70,18 +72,19 @@ def _timeout_ctx(default_timeout=None):
     )
 
 
-def test_timeout_mark_validates_seconds_gt_zero():
+@dataclass(frozen=True)
+class InvalidTimeout:
+    seconds: int
+
+
+@oxi.parametrize(
+    zero=InvalidTimeout(seconds=0),
+    negative=InvalidTimeout(seconds=-1),
+)
+def test_timeout_mark_rejects_invalid_seconds(seconds):
     with raises(ValueError, match="seconds > 0"):
 
-        @oxitest.mark.timeout(seconds=0)
-        def test_bad():
-            pass
-
-
-def test_timeout_mark_validates_negative():
-    with raises(ValueError, match="seconds > 0"):
-
-        @oxitest.mark.timeout(seconds=-1)
+        @oxitest.mark.timeout(seconds=seconds)
         def test_bad():
             pass
 
