@@ -1,0 +1,178 @@
+"""Contract tests for TestResult.to_wire() output shape.
+
+Verifies that the JSON produced by Python's to_wire() matches what
+Rust's WorkerResult expects: required fields always present, optional
+fields omitted when falsy, correct types for all values.
+"""
+
+from __future__ import annotations
+
+import json
+
+from oxitest._bridge.result import Frame, StatusKind, TestResult
+
+NODE_ID = "tests/test_foo.py::test_example"
+DURATION_MS = 42.5
+
+
+def _wire(result: TestResult) -> dict:
+    """Serialize and re-parse to simulate the JSON round-trip."""
+    return json.loads(json.dumps(result.to_wire(NODE_ID, DURATION_MS)))
+
+
+class TestRequiredFields:
+    """Required wire fields must always be present regardless of outcome."""
+
+    def test_passed_has_required_fields(self):
+        wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
+        assert "node_id" in wire, "node_id must always be present"
+        assert "outcome" in wire, "outcome must always be present"
+        assert "duration_ms" in wire, "duration_ms must always be present"
+        assert wire["node_id"] == NODE_ID, f"node_id should be {NODE_ID!r}"
+        assert wire["duration_ms"] == DURATION_MS, f"duration_ms should be {DURATION_MS}"
+
+    def test_failed_has_required_fields(self):
+        wire = _wire(TestResult(status=StatusKind.FAILED, message="boom"))
+        assert "node_id" in wire, "node_id must always be present"
+        assert "outcome" in wire, "outcome must always be present"
+        assert "duration_ms" in wire, "duration_ms must always be present"
+        assert wire["node_id"] == NODE_ID, f"node_id should be {NODE_ID!r}"
+        assert wire["duration_ms"] == DURATION_MS, f"duration_ms should be {DURATION_MS}"
+
+
+class TestCompactFormat:
+    """Optional fields must be omitted when falsy to keep the wire payload compact."""
+
+    def test_passed_omits_all_optional_fields(self):
+        # strict=False so the bool-falsy value is also omitted
+        wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
+        optional_keys = {
+            "failure_repr",
+            "message",
+            "file",
+            "lineno",
+            "source_line",
+            "no_message_lines",
+            "left",
+            "right",
+            "op",
+            "strict",
+            "frames",
+        }
+        present = optional_keys & wire.keys()
+        assert not present, f"optional fields should be omitted when falsy: {present}"
+
+    def test_strict_true_is_included(self):
+        # xpassed with strict=True — strict must appear in the wire output
+        wire = _wire(TestResult(status=StatusKind.XPASSED, strict=True))
+        assert "strict" in wire, "strict=True must be included in wire output"
+        assert wire["strict"] is True, "strict value must be True"
+
+
+class TestFailedShape:
+    """Failed and error outcomes must carry all diagnostic fields Rust needs."""
+
+    def test_failed_includes_diagnostic_fields(self):
+        result = TestResult(
+            status=StatusKind.FAILED,
+            message="AssertionError: values differ",
+            file="tests/test_foo.py",
+            lineno=12,
+            source_line="assert x == y",
+            left="1",
+            right="2",
+            op="==",
+            frames=[Frame(file="tests/test_foo.py", lineno=12, name="test_example", line="assert x == y")],
+        )
+        wire = _wire(result)
+        assert wire["message"] == "AssertionError: values differ", "message must round-trip"
+        assert wire["file"] == "tests/test_foo.py", "file must round-trip"
+        assert wire["lineno"] == 12, "lineno must round-trip"
+        assert wire["source_line"] == "assert x == y", "source_line must round-trip"
+        assert wire["left"] == "1", "left must round-trip"
+        assert wire["right"] == "2", "right must round-trip"
+        assert wire["op"] == "==", "op must round-trip"
+        assert "failure_repr" in wire, "failure_repr must be present for failed outcome"
+        assert "frames" in wire, "frames must be present when provided"
+
+    def test_error_includes_message_and_frames(self):
+        result = TestResult(
+            status=StatusKind.ERROR,
+            message="ImportError: no module named foo",
+            frames=[
+                Frame(file="tests/test_foo.py", lineno=1, name="<module>", line="import foo"),
+            ],
+        )
+        wire = _wire(result)
+        assert wire["outcome"] == "error", "outcome must be 'error'"
+        assert "message" in wire, "message must be present for error outcome"
+        assert wire["message"] == "ImportError: no module named foo", "message must round-trip"
+        assert "frames" in wire, "frames must be present when provided"
+
+
+class TestEveryStatus:
+    """Each StatusKind value must round-trip correctly through the wire format."""
+
+    def test_passed(self):
+        wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
+        assert wire["outcome"] == "passed", "outcome must be 'passed'"
+
+    def test_failed(self):
+        wire = _wire(TestResult(status=StatusKind.FAILED, message="oops"))
+        assert wire["outcome"] == "failed", "outcome must be 'failed'"
+
+    def test_error(self):
+        wire = _wire(TestResult(status=StatusKind.ERROR, message="err"))
+        assert wire["outcome"] == "error", "outcome must be 'error'"
+
+    def test_skipped(self):
+        wire = _wire(TestResult(status=StatusKind.SKIPPED, message="reason", strict=False))
+        assert wire["outcome"] == "skipped", "outcome must be 'skipped'"
+
+    def test_xfailed(self):
+        wire = _wire(TestResult(status=StatusKind.XFAILED, message="expected", strict=False))
+        assert wire["outcome"] == "xfailed", "outcome must be 'xfailed'"
+
+    def test_xpassed(self):
+        wire = _wire(TestResult(status=StatusKind.XPASSED, strict=False))
+        assert wire["outcome"] == "xpassed", "outcome must be 'xpassed'"
+
+    def test_warned(self):
+        wire = _wire(TestResult(status=StatusKind.WARNED, message="DeprecationWarning", strict=False))
+        assert wire["outcome"] == "warned", "outcome must be 'warned'"
+
+    def test_timeout(self):
+        wire = _wire(TestResult(status=StatusKind.TIMEOUT, message="timed out", strict=False))
+        assert wire["outcome"] == "timeout", "outcome must be 'timeout'"
+
+
+class TestFrameSerialization:
+    """Frame objects must serialize to dicts with exactly the expected keys."""
+
+    def test_frame_keys(self):
+        result = TestResult(
+            status=StatusKind.FAILED,
+            message="err",
+            frames=[Frame(file="src/foo.py", lineno=5, name="test_bar", line="assert val")],
+        )
+        wire = _wire(result)
+        assert "frames" in wire, "frames must be present when provided"
+        frame = wire["frames"][0]
+        assert set(frame.keys()) == {"file", "lineno", "name", "line"}, (
+            f"frame must have exactly {{file, lineno, name, line}}, got {set(frame.keys())}"
+        )
+
+    def test_multiple_frames_preserved(self):
+        result = TestResult(
+            status=StatusKind.FAILED,
+            message="err",
+            frames=[
+                Frame(file="src/a.py", lineno=1, name="helper", line="raise ValueError"),
+                Frame(file="tests/test_a.py", lineno=9, name="test_thing", line="helper()"),
+            ],
+        )
+        wire = _wire(result)
+        assert "frames" in wire, "frames must be present when provided"
+        assert len(wire["frames"]) == 2, "both frames must be preserved"
+        assert wire["frames"][0]["file"] == "src/a.py", "first frame file must round-trip"
+        assert wire["frames"][1]["file"] == "tests/test_a.py", "second frame file must round-trip"
