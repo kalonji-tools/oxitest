@@ -69,6 +69,44 @@ pub(crate) fn suggest_marker(
 }
 
 #[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn async_mismatch_suggestion() {
+        let outcome = TestOutcome::Error {
+            message: "TypeError: object X can't be used in 'await' expression".to_string(),
+            file: "test.py".to_string(),
+            lineno: 5,
+            source_line: "await fx".to_string(),
+            frames: vec![],
+        };
+        let hint = suggest_fix(&outcome, false);
+        insta::assert_snapshot!(hint.unwrap_or_default());
+    }
+
+    #[test]
+    fn no_suggestion_for_normal_error() {
+        let outcome = TestOutcome::Error {
+            message: "ValueError: bad input".to_string(),
+            file: "test.py".to_string(),
+            lineno: 3,
+            source_line: "raise ValueError".to_string(),
+            frames: vec![],
+        };
+        let hint = suggest_fix(&outcome, false);
+        insta::assert_snapshot!(hint.unwrap_or_default());
+    }
+
+    #[test]
+    fn fuzzy_marker_suggestion() {
+        let registered = vec!["slow".to_string(), "network".to_string()];
+        let hint = suggest_marker("slwo", &registered, false);
+        insta::assert_snapshot!(hint.unwrap_or_default());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

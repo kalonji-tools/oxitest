@@ -1,0 +1,5 @@
+---
+source: src/reporter/format/suggestions.rs
+expression: hint.unwrap_or_default()
+---
+        hint: Unknown marker 'slwo'. Did you mean 'slow'?

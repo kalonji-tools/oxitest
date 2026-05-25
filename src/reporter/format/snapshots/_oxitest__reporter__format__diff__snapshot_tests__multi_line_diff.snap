@@ -1,0 +1,8 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+  line1
+- line2
++ changed
+  line3

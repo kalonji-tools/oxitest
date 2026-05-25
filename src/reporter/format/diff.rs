@@ -87,6 +87,35 @@ pub(crate) fn fmt_diff(left: &str, right: &str, op: &str, use_color: bool) -> St
 }
 
 #[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn single_line_diff_eq() {
+        let result = fmt_diff("42", "43", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn multi_line_diff() {
+        let result = fmt_diff("line1\nline2\nline3", "line1\nchanged\nline3", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn empty_values_returns_empty() {
+        let result = fmt_diff("", "", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn identical_values_returns_empty() {
+        let result = fmt_diff("hello", "hello", "==", false);
+        insta::assert_snapshot!(result);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
