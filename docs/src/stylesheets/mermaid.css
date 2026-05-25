@@ -38,18 +38,27 @@
 
 /*
  * Dark mode: swap light fills to dark equivalents.
- * Target rects by their exact inline fill color (set by Mermaid style
- * directives we control). Strokes are untouched — they carry color
- * meaning in both modes.
+ *
+ * Mermaid renders style directives as inline `style` attributes on SVG
+ * rects: style="fill:#fef3e2;stroke:#e67e22;" (no spaces).
+ * We match by the exact hex value and override with !important.
+ *
+ * Confirmed via SVG inspection:
+ *   - Subgraph rects: <rect style="fill:#xxx;stroke:#yyy;">
+ *   - Cluster class: "cluster default flowchart-label"
+ *   - Subgraph IDs match source: id="Rust", id="CLI", id="Python"
  */
 
-/* Architecture — subgraph fills */
+/* Architecture — subgraph fills (target by ID for reliability) */
+[data-md-color-scheme="slate"] #CLI > rect,
 [data-md-color-scheme="slate"] rect[style*="#f5f5f5"] {
   fill: #2d2d2d !important;
 }
+[data-md-color-scheme="slate"] #Rust > rect,
 [data-md-color-scheme="slate"] rect[style*="#fef3e2"] {
   fill: #3d2800 !important;
 }
+[data-md-color-scheme="slate"] #Python > rect,
 [data-md-color-scheme="slate"] rect[style*="#e8f4fd"] {
   fill: #0d2137 !important;
 }

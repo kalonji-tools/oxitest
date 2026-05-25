@@ -1,16 +1,16 @@
-// Wrap each mermaid diagram in a zoomable container
+// Wrap rendered mermaid SVGs in a zoomable container.
+// Waits for Mermaid to replace <pre class="mermaid"> with <svg> before wrapping.
 document.addEventListener("DOMContentLoaded", function () {
-  // MutationObserver waits for mermaid to render SVGs
-  const observer = new MutationObserver(function () {
-    document.querySelectorAll("pre.mermaid:not(.zoom-ready)").forEach(function (pre) {
-      pre.classList.add("zoom-ready");
+  var observer = new MutationObserver(function () {
+    document.querySelectorAll("svg[id^='mermaid-']:not(.zoom-ready)").forEach(function (svg) {
+      svg.classList.add("zoom-ready");
 
-      const wrapper = document.createElement("div");
+      var wrapper = document.createElement("div");
       wrapper.className = "mermaid-zoom";
-      pre.parentNode.insertBefore(wrapper, pre);
-      wrapper.appendChild(pre);
+      svg.parentNode.insertBefore(wrapper, svg);
+      wrapper.appendChild(svg);
 
-      const hint = document.createElement("div");
+      var hint = document.createElement("div");
       hint.className = "mermaid-zoom-hint";
       hint.textContent = "Click to zoom";
       wrapper.appendChild(hint);
