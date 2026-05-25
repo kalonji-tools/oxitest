@@ -170,6 +170,25 @@ impl Default for Config {
     }
 }
 
+/// Applies an `Option` value to a config field when `Some`.
+///
+/// Two variants:
+///   `apply_if_some!(cfg, field, value)` — assigns the inner value directly.
+///   `apply_if_some!(cfg, field, value, wrap)` — wraps the inner value in `Some`
+///     (for fields where the target is `Option<T>`).
+macro_rules! apply_if_some {
+    ($config:expr, $field:ident, $value:expr) => {
+        if let Some(v) = $value {
+            $config.$field = v;
+        }
+    };
+    ($config:expr, $field:ident, $value:expr, wrap) => {
+        if let Some(v) = $value {
+            $config.$field = Some(v);
+        }
+    };
+}
+
 /// Apply fields from a parsed `[tool.oxitest]` section onto `config`.
 /// `rootdir` controls how `testpaths` are resolved:
 ///   - `Some(root)` → each path is joined to root (used by `Config::load`)
@@ -181,12 +200,26 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
             None => paths.into_iter().map(Utf8PathBuf::from).collect(),
         };
     }
-    if let Some(files) = tc.python_files {
-        config.python_files = files;
-    }
-    if let Some(dirs) = tc.norecursedirs {
-        config.norecursedirs = dirs;
-    }
+
+    apply_if_some!(config, python_files, tc.python_files);
+    apply_if_some!(config, norecursedirs, tc.norecursedirs);
+    apply_if_some!(config, tb, tc.tb);
+    apply_if_some!(config, verbose, tc.verbose);
+    apply_if_some!(config, maxfail, tc.maxfail);
+    apply_if_some!(config, serial, tc.serial);
+    apply_if_some!(config, color, tc.color);
+    apply_if_some!(config, schedule, tc.schedule);
+    apply_if_some!(config, plugins, tc.plugins);
+    apply_if_some!(config, async_backend, tc.async_backend);
+    apply_if_some!(config, affected_base, tc.affected_base);
+    apply_if_some!(config, retries, tc.retries);
+    apply_if_some!(config, retries_delay_secs, tc.retries_delay);
+
+    apply_if_some!(config, strict, tc.strict, wrap);
+    apply_if_some!(config, failed, tc.failed, wrap);
+    apply_if_some!(config, workers, tc.workers, wrap);
+    apply_if_some!(config, durations, tc.durations, wrap);
+
     if let Some(raw_markers) = tc.markers {
         let mut names = Vec::new();
         let mut no_desc = Vec::new();
@@ -202,57 +235,14 @@ fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<
         config.registered_markers = names;
         config.markers_without_description = no_desc;
     }
-    if let Some(s) = tc.strict {
-        config.strict = Some(s);
-    }
-    config.timeout_secs = tc.timeout;
+
     config.cache_max_age = tc.cache_max_age.unwrap_or(config.cache_max_age);
     config.min_parallel_tests = tc.min_parallel_tests.unwrap_or(config.min_parallel_tests);
-    config.timeout_multiplier = tc.timeout_multiplier;
     config.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(config.spawn_overhead_ms);
-    if tc.workers.is_some() {
-        config.workers = tc.workers;
-    }
-    if let Some(s) = tc.schedule {
-        config.schedule = s;
-    }
-    if let Some(f) = tc.failed {
-        config.failed = Some(f);
-    }
-    if let Some(tb) = tc.tb {
-        config.tb = tb;
-    }
-    if let Some(v) = tc.verbose {
-        config.verbose = v;
-    }
-    if let Some(n) = tc.maxfail {
-        config.maxfail = n;
-    }
-    if tc.durations.is_some() {
-        config.durations = tc.durations;
-    }
-    if let Some(s) = tc.serial {
-        config.serial = s;
-    }
-    if let Some(c) = tc.color {
-        config.color = c;
-    }
-    if let Some(plugins) = tc.plugins {
-        config.plugins = plugins;
-    }
+
+    config.timeout_secs = tc.timeout;
+    config.timeout_multiplier = tc.timeout_multiplier;
     config.plugin_settings = tc.plugin_settings;
-    if let Some(ab) = tc.async_backend {
-        config.async_backend = ab;
-    }
-    if let Some(ab) = tc.affected_base {
-        config.affected_base = ab;
-    }
-    if let Some(n) = tc.retries {
-        config.retries = n;
-    }
-    if let Some(s) = tc.retries_delay {
-        config.retries_delay_secs = s;
-    }
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
