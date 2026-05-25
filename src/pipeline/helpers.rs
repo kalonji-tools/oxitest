@@ -181,15 +181,13 @@ pub(super) fn run_phase(
     'run: for (module_path, items) in &groups {
         for item in items {
             rep.test_started(item);
-            let start = std::time::Instant::now();
             let timeout = resolve_timeout(
                 ctx.cache,
                 item,
                 ctx.cfg.timeout_secs,
                 ctx.cfg.timeout_multiplier,
             );
-            let outcome = ctx.runner.run_test(py, item, ctx.session, timeout);
-            let duration_ms = types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
+            let (outcome, duration_ms) = ctx.runner.run_timed(py, item, ctx.session, timeout);
             timings.push(types::TestTiming {
                 node_id: item.node_id.clone(),
                 duration_ms,
