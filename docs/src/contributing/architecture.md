@@ -90,6 +90,9 @@ graph TD
     WORKER --> RESULT
     RESULT -->|"JSON lines"| WORKER_RESULT
 
+    style CLI fill:#9e9e9e20,stroke:#9e9e9e
+    style Rust fill:#e67e2225,stroke:#e67e22
+    style Python fill:#2980b925,stroke:#2980b9
 ```
 
 ## Pipeline flow
@@ -154,6 +157,19 @@ flowchart TD
     RT -->|no| FIN
     FIN --> DONE
 
+    style START fill:#4CAF50,color:#fff
+    style DONE fill:#4CAF50,color:#fff
+    style FC fill:#ff980020
+    style SE fill:#ff980020
+    style CO fill:#ff980020
+    style EX fill:#ff980020
+    style FIN fill:#ff980020
+    style SERIAL fill:#42a5f525
+    style PAR fill:#42a5f525
+    style PAR_DETAIL fill:#42a5f525
+    style RT_Y fill:#ffeb3b30
+    style FX_Y fill:#ce93d830
+    style LI_Y fill:#ce93d830
 ```
 
 **Parallel vs serial decision:**
