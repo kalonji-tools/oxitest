@@ -1,0 +1,13 @@
+---
+source: src/reporter/format/diagnostic.rs
+expression: block
+---
+        ┌─ tests/test_values.py:7
+        │
+        │      7 │    assert result == expected
+        │
+        ├─  diff
+        │  - left:  1
+        │  + right: 2
+        │           ^
+        └─
