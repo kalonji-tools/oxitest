@@ -450,9 +450,8 @@ impl PipelinePhase for AffectedPhase {
                 tracing::info!("pyproject.toml changed — running all tests");
             }
             Err(e) => {
-                let err = types::CollectError::PyError(e.to_string());
                 return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
-                    &[err],
+                    &[e.into()],
                     &|| ctx.make_error_reporter(),
                 )));
             }
