@@ -224,6 +224,47 @@ impl TestOutcome {
             Self::Flaky { .. } => "flaky",
         }
     }
+
+    /// Returns the message or reason field from any variant that carries one.
+    ///
+    /// - `Passed` and `XPassed` have no message → `None`.
+    /// - For variants with a `message` or `reason` field, returns `Some` only
+    ///   when the string is non-empty (empty strings map to `None`).
+    pub fn message(&self) -> Option<&str> {
+        let s = match self {
+            Self::Passed { .. } | Self::XPassed { .. } => return None,
+            Self::Failed { message, .. }
+            | Self::Error { message, .. }
+            | Self::Timeout { message }
+            | Self::Flaky { message } => message.as_str(),
+            Self::Skipped { reason } | Self::Warned { reason, .. } | Self::XFailed { reason } => {
+                reason.as_str()
+            }
+        };
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
+    /// Maps the outcome to a CTRF status string (`"passed"`, `"failed"`, or `"skipped"`).
+    ///
+    /// CTRF defines only three statuses. This method centralises the mapping so
+    /// reporter code does not duplicate match arms.
+    pub fn ctrf_status(&self) -> &'static str {
+        match self {
+            Self::Passed { .. }
+            | Self::Warned { .. }
+            | Self::XPassed { strict: false }
+            | Self::Flaky { .. } => "passed",
+            Self::Failed { .. }
+            | Self::Error { .. }
+            | Self::XPassed { strict: true }
+            | Self::Timeout { .. } => "failed",
+            Self::Skipped { .. } | Self::XFailed { .. } => "skipped",
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -1194,6 +1235,241 @@ mod tests {
              (excluding Rust-synthesised outcomes like Flaky).\n\
              If you add a new outcome from the Python side, update both worker.py and this test."
         );
+    }
+}
+
+#[cfg(test)]
+mod message_tests {
+    use super::*;
+
+    #[test]
+    fn passed_returns_none() {
+        let o = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        assert!(o.message().is_none());
+    }
+
+    #[test]
+    fn failed_returns_message() {
+        let o = TestOutcome::Failed {
+            message: "assertion failed".to_string(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.message(), Some("assertion failed"));
+    }
+
+    #[test]
+    fn failed_empty_message_returns_none() {
+        let o = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert!(o.message().is_none());
+    }
+
+    #[test]
+    fn error_returns_message() {
+        let o = TestOutcome::Error {
+            message: "ImportError".to_string(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.message(), Some("ImportError"));
+    }
+
+    #[test]
+    fn error_empty_message_returns_none() {
+        let o = TestOutcome::Error {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        };
+        assert!(o.message().is_none());
+    }
+
+    #[test]
+    fn skipped_returns_reason() {
+        let o = TestOutcome::Skipped {
+            reason: "not ready".to_string(),
+        };
+        assert_eq!(o.message(), Some("not ready"));
+    }
+
+    #[test]
+    fn skipped_empty_reason_returns_none() {
+        let o = TestOutcome::Skipped {
+            reason: String::new(),
+        };
+        assert!(o.message().is_none());
+    }
+
+    #[test]
+    fn warned_returns_reason() {
+        let o = TestOutcome::Warned {
+            reason: "DeprecationWarning".to_string(),
+            no_message_lines: vec![],
+        };
+        assert_eq!(o.message(), Some("DeprecationWarning"));
+    }
+
+    #[test]
+    fn xfailed_returns_reason() {
+        let o = TestOutcome::XFailed {
+            reason: "known bug".to_string(),
+        };
+        assert_eq!(o.message(), Some("known bug"));
+    }
+
+    #[test]
+    fn xfailed_empty_reason_returns_none() {
+        let o = TestOutcome::XFailed {
+            reason: String::new(),
+        };
+        assert!(o.message().is_none());
+    }
+
+    #[test]
+    fn xpassed_returns_none() {
+        assert!(TestOutcome::XPassed { strict: true }.message().is_none());
+        assert!(TestOutcome::XPassed { strict: false }.message().is_none());
+    }
+
+    #[test]
+    fn timeout_returns_message() {
+        let o = TestOutcome::Timeout {
+            message: "exceeded 5s".to_string(),
+        };
+        assert_eq!(o.message(), Some("exceeded 5s"));
+    }
+
+    #[test]
+    fn flaky_returns_message() {
+        let o = TestOutcome::Flaky {
+            message: "flaky test".to_string(),
+        };
+        assert_eq!(o.message(), Some("flaky test"));
+    }
+
+    #[test]
+    fn flaky_empty_message_returns_none() {
+        let o = TestOutcome::Flaky {
+            message: String::new(),
+        };
+        assert!(o.message().is_none());
+    }
+}
+
+#[cfg(test)]
+mod ctrf_status_tests {
+    use super::*;
+
+    #[test]
+    fn passed_is_passed() {
+        let o = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        assert_eq!(o.ctrf_status(), "passed");
+    }
+
+    #[test]
+    fn warned_is_passed() {
+        let o = TestOutcome::Warned {
+            reason: String::new(),
+            no_message_lines: vec![],
+        };
+        assert_eq!(o.ctrf_status(), "passed");
+    }
+
+    #[test]
+    fn failed_is_failed() {
+        let o = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.ctrf_status(), "failed");
+    }
+
+    #[test]
+    fn error_is_failed() {
+        let o = TestOutcome::Error {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.ctrf_status(), "failed");
+    }
+
+    #[test]
+    fn skipped_is_skipped() {
+        let o = TestOutcome::Skipped {
+            reason: String::new(),
+        };
+        assert_eq!(o.ctrf_status(), "skipped");
+    }
+
+    #[test]
+    fn xfailed_is_skipped() {
+        let o = TestOutcome::XFailed {
+            reason: String::new(),
+        };
+        assert_eq!(o.ctrf_status(), "skipped");
+    }
+
+    #[test]
+    fn xpassed_strict_is_failed() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: true }.ctrf_status(),
+            "failed"
+        );
+    }
+
+    #[test]
+    fn xpassed_lenient_is_passed() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: false }.ctrf_status(),
+            "passed"
+        );
+    }
+
+    #[test]
+    fn timeout_is_failed() {
+        let o = TestOutcome::Timeout {
+            message: String::new(),
+        };
+        assert_eq!(o.ctrf_status(), "failed");
+    }
+
+    #[test]
+    fn flaky_is_passed() {
+        let o = TestOutcome::Flaky {
+            message: String::new(),
+        };
+        assert_eq!(o.ctrf_status(), "passed");
     }
 }
 
