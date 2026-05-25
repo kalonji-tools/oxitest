@@ -67,6 +67,46 @@ def parse_python_classes(path: Path) -> dict[str, set[str]]:
     return classes
 
 
+WIRE_RUST_PATH = ROOT / "src" / "worker_result.rs"
+
+
+def parse_worker_result_fields(path: Path) -> set[str]:
+    """Extract field names from the WorkerResult serde struct."""
+    text = path.read_text()
+    pattern = re.compile(
+        r"struct\s+WorkerResult\s*\{([^}]+)\}",
+        re.DOTALL,
+    )
+    field_pattern = re.compile(r"^\s*pub\s+(\w+)\s*:", re.MULTILINE)
+    m = pattern.search(text)
+    if m is None:
+        return set()
+    return set(field_pattern.findall(m.group(1)))
+
+
+def parse_to_wire_fields(path: Path) -> set[str]:
+    """Extract field names emitted by TestResult.to_wire().
+
+    Parses the output dict literal and optional dict in to_wire().
+    """
+    text = path.read_text()
+    fields: set[str] = set()
+    # Match quoted keys in dict literals within to_wire method
+    # Required: "node_id", "outcome", "duration_ms"
+    # Optional: "failure_repr", "message", "file", etc.
+    in_to_wire = False
+    for line in text.splitlines():
+        if "def to_wire" in line:
+            in_to_wire = True
+            continue
+        if in_to_wire:
+            if line and not line[0].isspace() and not line.strip().startswith("#"):
+                break  # next top-level def/class
+            for m in re.finditer(r'"(\w+)":', line):
+                fields.add(m.group(1))
+    return fields
+
+
 def main() -> int:
     rust = parse_rust_structs(RUST_PATH)
     python = parse_python_classes(PYTHON_PATH)
@@ -93,8 +133,29 @@ def main() -> int:
                 print(f"  Python-only fields: {sorted(py_only)}")
             errors += 1
 
+    # ── Wire format check ─────────────────────────────────────────────
+    rust_wire = parse_worker_result_fields(WIRE_RUST_PATH)
+    py_wire = parse_to_wire_fields(PYTHON_PATH)
+
+    if not rust_wire:
+        print(f"ERROR: WorkerResult not found in {WIRE_RUST_PATH}")
+        errors += 1
+    elif not py_wire:
+        print(f"ERROR: to_wire() fields not found in {PYTHON_PATH}")
+        errors += 1
+    else:
+        rust_only = rust_wire - py_wire
+        py_only = py_wire - rust_wire
+        if rust_only or py_only:
+            print("MISMATCH: WorkerResult (Rust wire) vs to_wire() (Python wire)")
+            if rust_only:
+                print(f"  Rust-only wire fields: {sorted(rust_only)}")
+            if py_only:
+                print(f"  Python-only wire fields: {sorted(py_only)}")
+            errors += 1
+
     if errors == 0:
-        print(f"OK: all {len(PAIRS)} bridge contracts in sync")
+        print(f"OK: all {len(PAIRS)} bridge contracts + wire format in sync")
     return 1 if errors else 0
 
 
