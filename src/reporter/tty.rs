@@ -350,7 +350,12 @@ impl Reporter for TtyReporter {
         self.update_running_message();
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> super::ExitVote {
+    fn finish(
+        &mut self,
+        collect_errors: &[CollectError],
+        interrupted: bool,
+        _stats: &super::RunStats,
+    ) -> super::ExitVote {
         self.pre_finish();
         let stats = self.stats.clone();
         super::standard_finish(self, &stats, collect_errors, interrupted)

@@ -411,7 +411,9 @@ impl PipelinePhase for FinalizePhase {
             &ctx.rootdir,
         );
         let mut rep = ctx.reporter.take().expect("ExecutionPhase must run first");
-        let code = rep.finish(&[], ctx.interrupted).code();
+        let code = rep
+            .finish(&[], ctx.interrupted, &reporter::RunStats::new())
+            .code();
         Ok(PhaseOutcome::EarlyExit(code))
     }
 }

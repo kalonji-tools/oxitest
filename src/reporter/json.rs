@@ -109,7 +109,12 @@ impl Reporter for JsonReporter {
         });
     }
 
-    fn finish(&mut self, _collect_errors: &[CollectError], _interrupted: bool) -> super::ExitVote {
+    fn finish(
+        &mut self,
+        _collect_errors: &[CollectError],
+        _interrupted: bool,
+        _stats: &super::RunStats,
+    ) -> super::ExitVote {
         let passed = self.tests.iter().filter(|t| t.status == "passed").count();
         let failed = self.tests.iter().filter(|t| t.status == "failed").count();
         let skipped = self.tests.iter().filter(|t| t.status == "skipped").count();
@@ -157,7 +162,7 @@ mod snapshot_tests {
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
         }
-        rep.finish(&[], false);
+        rep.finish(&[], false, &crate::reporter::RunStats::new());
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -193,7 +198,7 @@ mod tests {
         for (item, outcome) in &outcomes {
             rep.test_completed(item, outcome, DurationMs::new(1.0));
         }
-        rep.finish(&[], false);
+        rep.finish(&[], false, &crate::reporter::RunStats::new());
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -285,7 +290,7 @@ mod tests {
             },
             DurationMs::new(1.0),
         );
-        let vote = rep.finish(&[], false);
+        let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
         assert_eq!(
             vote.code(),
             4,
@@ -305,7 +310,7 @@ mod tests {
             },
             DurationMs::new(1.0),
         );
-        let vote = rep.finish(&[], false);
+        let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
         assert!(
             matches!(vote, crate::reporter::ExitVote::Abstain),
             "must return Abstain on successful write"

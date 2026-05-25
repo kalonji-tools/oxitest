@@ -31,7 +31,7 @@ pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub use tty::TtyReporter;
 
 use format::{fmt_summary, fmt_tip_block, fmt_warning_block};
-use stats::RunStats;
+pub(crate) use stats::RunStats;
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
 pub(crate) use format::sep_width;
@@ -127,7 +127,12 @@ pub trait Reporter {
         outcome: &crate::types::TestOutcome,
         duration_ms: DurationMs,
     );
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> ExitVote;
+    fn finish(
+        &mut self,
+        collect_errors: &[CollectError],
+        interrupted: bool,
+        stats: &RunStats,
+    ) -> ExitVote;
 
     /// Record a teardown warning (default: no-op).
     /// `context` identifies what failed (e.g. "end_module(path)" or "end_session").
@@ -170,10 +175,15 @@ impl Reporter for CompositeReporter {
         }
     }
 
-    fn finish(&mut self, collect_errors: &[CollectError], interrupted: bool) -> ExitVote {
+    fn finish(
+        &mut self,
+        collect_errors: &[CollectError],
+        interrupted: bool,
+        stats: &RunStats,
+    ) -> ExitVote {
         self.reporters
             .iter_mut()
-            .map(|r| r.finish(collect_errors, interrupted))
+            .map(|r| r.finish(collect_errors, interrupted, stats))
             .filter_map(|v| match v {
                 ExitVote::Code(c) => Some(c),
                 ExitVote::Abstain => None,
@@ -268,7 +278,7 @@ mod json_tests {
             },
             DurationMs::new(12.5),
         );
-        rep.finish(&[], false);
+        rep.finish(&[], false, &RunStats::new());
 
         let content = std::fs::read_to_string(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -308,7 +318,7 @@ mod json_tests {
             },
             DurationMs::new(8.0),
         );
-        rep.finish(&[], false);
+        rep.finish(&[], false, &RunStats::new());
 
         let content = std::fs::read_to_string(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -344,7 +354,7 @@ mod json_tests {
             },
             DurationMs::new(5.0),
         );
-        rep.finish(&[], false);
+        rep.finish(&[], false, &RunStats::new());
 
         let content = std::fs::read_to_string(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -679,7 +689,7 @@ mod tests {
                 _: DurationMs,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 self.0
             }
         }
@@ -690,7 +700,7 @@ mod tests {
             Box::new(StubReporter(ExitVote::Code(0))),
         ]);
         assert_eq!(
-            composite.finish(&[], false).code(),
+            composite.finish(&[], false, &RunStats::new()).code(),
             1,
             "CompositeReporter::finish should return the max exit code across all reporters"
         );
@@ -700,7 +710,7 @@ mod tests {
     fn test_composite_reporter_finish_with_no_reporters_returns_zero() {
         let mut composite = CompositeReporter::new(vec![]);
         assert_eq!(
-            composite.finish(&[], false).code(),
+            composite.finish(&[], false, &RunStats::new()).code(),
             0,
             "CompositeReporter with no reporters should return exit code 0"
         );
@@ -718,7 +728,7 @@ mod tests {
                 _: DurationMs,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 self.0
             }
         }
@@ -729,7 +739,7 @@ mod tests {
             Box::new(StubReporter(ExitVote::Abstain)),
         ]);
         assert_eq!(
-            composite.finish(&[], false).code(),
+            composite.finish(&[], false, &RunStats::new()).code(),
             1,
             "CompositeReporter::finish should ignore Abstain votes"
         );
@@ -747,7 +757,7 @@ mod tests {
                 _: DurationMs,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 self.0
             }
         }
@@ -757,7 +767,7 @@ mod tests {
             Box::new(StubReporter(ExitVote::Abstain)),
         ]);
         assert_eq!(
-            composite.finish(&[], false).code(),
+            composite.finish(&[], false, &RunStats::new()).code(),
             0,
             "CompositeReporter with all Abstain should return exit code 0"
         );
@@ -769,14 +779,14 @@ mod tests {
     fn test_make_reporter_returns_single_reporter_when_tty_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, true, None, None, vec![]);
-        assert_eq!(reporter.finish(&[], false).code(), 0);
+        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
     }
 
     #[test]
     fn test_make_reporter_returns_single_reporter_when_ci_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, false, None, None, vec![]);
-        assert_eq!(reporter.finish(&[], false).code(), 0);
+        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
     }
 
     #[test]
@@ -785,7 +795,7 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
         let mut reporter = make_reporter(opts, false, Some(path), None, vec![]);
-        assert_eq!(reporter.finish(&[], false).code(), 0);
+        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
     }
 
     #[test]
@@ -808,7 +818,7 @@ mod tests {
             ) {
                 self.0.fetch_add(1, Ordering::Relaxed);
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 ExitVote::Abstain
             }
         }
@@ -826,7 +836,7 @@ mod tests {
             calls.load(Ordering::Relaxed) >= 2,
             "plugin reporter should receive test_started and test_completed events"
         );
-        assert_eq!(reporter.finish(&[], false).code(), 0);
+        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
     }
 
     #[test]
@@ -846,7 +856,7 @@ mod tests {
                 _: DurationMs,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 ExitVote::Abstain
             }
         }
@@ -878,7 +888,7 @@ mod tests {
                 _: DurationMs,
             ) {
             }
-            fn finish(&mut self, _: &[CollectError], _: bool) -> ExitVote {
+            fn finish(&mut self, _: &[CollectError], _: bool, _: &RunStats) -> ExitVote {
                 ExitVote::Abstain
             }
             fn record_teardown_warning(&mut self, context: &str, error: &str) {
