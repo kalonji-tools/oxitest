@@ -206,56 +206,6 @@ impl TestCache {
             None
         }
     }
-
-    #[allow(dead_code)]
-    pub fn merge(&mut self, results: &[(NodeId, f64)], max_age: u32) {
-        let executed: HashSet<&str> = results.iter().map(|(id, _)| id.as_ref()).collect();
-
-        for (node_id, duration_ms) in results {
-            let entry = self
-                .inner
-                .timings
-                .entry(node_id.to_string())
-                .or_insert(CacheEntry {
-                    duration_ms: 0.0,
-                    age: 0,
-                    last_outcome: None,
-                    flaky_count: 0,
-                }); // initial values overwritten below
-            entry.duration_ms = *duration_ms;
-            entry.age = 0;
-        }
-
-        let before = self.inner.timings.len();
-        self.inner.timings.retain(|key, entry| {
-            if executed.contains(key.as_str()) {
-                return true;
-            }
-            entry.age += 1;
-            entry.age <= max_age
-        });
-
-        if !results.is_empty() || self.inner.timings.len() != before {
-            self.dirty = true;
-        }
-    }
-
-    /// Update `last_outcome` for entries that appear in `outcomes`.
-    /// Entries not in `outcomes` are unchanged.
-    /// Sets dirty = true if any entry was updated.
-    #[allow(dead_code)]
-    pub fn record_outcomes(&mut self, outcomes: &[(crate::types::NodeId, OutcomeKind)]) {
-        let mut changed = false;
-        for (node_id, outcome) in outcomes {
-            if let Some(entry) = self.inner.timings.get_mut(node_id.as_ref()) {
-                entry.last_outcome = Some(outcome.clone());
-                changed = true;
-            }
-        }
-        if changed {
-            self.dirty = true;
-        }
-    }
 }
 
 impl ModuleCache for TestCache {
@@ -705,107 +655,6 @@ mod tests {
     }
 
     #[test]
-    fn merge_updates_duration_and_resets_age() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
-        // Manually set age to non-zero
-        cache
-            .inner
-            .timings
-            .get_mut("tests/test_foo.py::test_a")
-            .unwrap()
-            .age = 5;
-        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 42.0)];
-        cache.merge(&results, 50);
-        let entry = &cache.inner.timings["tests/test_foo.py::test_a"];
-        assert!((entry.duration_ms - 42.0).abs() < 0.01);
-        assert_eq!(entry.age, 0);
-    }
-
-    #[test]
-    fn merge_increments_age_for_unexecuted_tests() {
-        let mut cache = cache_with_entries(&[
-            ("tests/test_foo.py::test_a", 10.0),
-            ("tests/test_foo.py::test_b", 20.0),
-        ]);
-        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 10.0)];
-        cache.merge(&results, 50);
-        assert_eq!(cache.inner.timings["tests/test_foo.py::test_b"].age, 1);
-    }
-
-    #[test]
-    fn merge_drops_entries_exceeding_max_age() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
-        // After merge with no results, age: 50 + 1 = 51 > 50 → dropped
-        cache
-            .inner
-            .timings
-            .get_mut("tests/test_foo.py::test_old")
-            .unwrap()
-            .age = 50;
-        cache.merge(&[], 50);
-        assert!(!cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
-    }
-
-    #[test]
-    fn merge_keeps_entries_at_max_age() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
-        // After merge, age: 49 + 1 = 50 <= 50 → kept
-        cache
-            .inner
-            .timings
-            .get_mut("tests/test_foo.py::test_old")
-            .unwrap()
-            .age = 49;
-        cache.merge(&[], 50);
-        assert!(cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
-    }
-
-    #[test]
-    fn merge_adds_new_entry_for_first_time_test() {
-        let mut cache = TestCache::empty();
-        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_new"), 15.0)];
-        cache.merge(&results, 50);
-        assert!(cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_new"));
-        assert_eq!(cache.inner.timings["tests/test_foo.py::test_new"].age, 0);
-    }
-
-    #[test]
-    fn merge_sets_dirty_when_results_present() {
-        let mut cache = TestCache::empty();
-        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 10.0)];
-        cache.merge(&results, 50);
-        assert!(cache.dirty);
-    }
-
-    #[test]
-    fn merge_sets_dirty_when_only_entries_are_dropped() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_old", 10.0)]);
-        // Set age to max_age so one more merge will drop it (50 + 1 = 51 > 50)
-        cache
-            .inner
-            .timings
-            .get_mut("tests/test_foo.py::test_old")
-            .unwrap()
-            .age = 50;
-        // Empty results — no tests ran, but one entry gets dropped due to age
-        cache.merge(&[], 50);
-        assert!(!cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
-        assert!(cache.dirty);
-    }
-
-    #[test]
     fn save_noop_when_not_dirty() {
         let dir = assert_fs::TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
@@ -836,9 +685,13 @@ mod tests {
     fn save_then_load_round_trips() {
         let dir = assert_fs::TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
-        let results = vec![(NodeId::from_raw("tests/test_foo.py::test_a"), 77.5)];
+        let timings = vec![make_timing(
+            "tests/test_foo.py::test_a",
+            77.5,
+            OutcomeKind::Passed,
+        )];
         let mut cache = TestCache::empty();
-        cache.merge(&results, 50);
+        cache.merge_timings(&timings, 50);
         cache.save(utf8_dir);
 
         let loaded = TestCache::load(utf8_dir);
@@ -882,33 +735,6 @@ mod tests {
     }
 
     #[test]
-    fn record_outcomes_sets_last_outcome_on_known_entries() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
-        let outcomes = vec![(
-            NodeId::from_raw("tests/test_foo.py::test_a"),
-            OutcomeKind::Failed,
-        )];
-        cache.record_outcomes(&outcomes);
-        assert_eq!(
-            cache.inner.timings["tests/test_foo.py::test_a"].last_outcome,
-            Some(OutcomeKind::Failed)
-        );
-        assert!(cache.dirty);
-    }
-
-    #[test]
-    fn record_outcomes_ignores_unknown_node_ids() {
-        let mut cache = TestCache::empty();
-        let outcomes = vec![(
-            NodeId::from_raw("tests/test_foo.py::test_unknown"),
-            OutcomeKind::Failed,
-        )];
-        cache.record_outcomes(&outcomes);
-        assert!(cache.inner.timings.is_empty());
-        assert!(!cache.dirty, "unknown node_id must not mark cache as dirty");
-    }
-
-    #[test]
     fn last_failed_ids_returns_failed_and_error_and_timeout() {
         let mut cache = cache_with_entries(&[
             ("tests/test_foo.py::test_a", 10.0),
@@ -916,25 +742,13 @@ mod tests {
             ("tests/test_foo.py::test_c", 30.0),
             ("tests/test_foo.py::test_d", 40.0),
         ]);
-        let outcomes = vec![
-            (
-                NodeId::from_raw("tests/test_foo.py::test_a"),
-                OutcomeKind::Failed,
-            ),
-            (
-                NodeId::from_raw("tests/test_foo.py::test_b"),
-                OutcomeKind::Passed,
-            ),
-            (
-                NodeId::from_raw("tests/test_foo.py::test_c"),
-                OutcomeKind::Error,
-            ),
-            (
-                NodeId::from_raw("tests/test_foo.py::test_d"),
-                OutcomeKind::Timeout,
-            ),
+        let timings = vec![
+            make_timing("tests/test_foo.py::test_a", 10.0, OutcomeKind::Failed),
+            make_timing("tests/test_foo.py::test_b", 20.0, OutcomeKind::Passed),
+            make_timing("tests/test_foo.py::test_c", 30.0, OutcomeKind::Error),
+            make_timing("tests/test_foo.py::test_d", 40.0, OutcomeKind::Timeout),
         ];
-        cache.record_outcomes(&outcomes);
+        cache.record_timing_outcomes(&timings);
         let failed = cache.last_failed_ids();
         assert!(failed.contains("tests/test_foo.py::test_a"));
         assert!(!failed.contains("tests/test_foo.py::test_b"));
@@ -946,17 +760,6 @@ mod tests {
     fn last_failed_ids_returns_empty_on_cold_cache() {
         let cache = TestCache::empty();
         assert!(cache.last_failed_ids().is_empty());
-    }
-
-    #[test]
-    fn record_outcomes_sets_dirty() {
-        let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
-        let outcomes = vec![(
-            NodeId::from_raw("tests/test_foo.py::test_a"),
-            OutcomeKind::Passed,
-        )];
-        cache.record_outcomes(&outcomes);
-        assert!(cache.dirty);
     }
 
     #[test]
