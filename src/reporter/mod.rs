@@ -144,16 +144,23 @@ pub trait Reporter {
 
 /// Fans all reporter events to a list of inner reporters.
 ///
+/// Owns the single [`RunStats`] for the run: records stats once in
+/// `test_completed` and passes them to sub-reporters via `finish`.
 /// `finish` collects [`ExitVote`]s from every inner reporter and returns the
-/// maximum code voted (treating `Abstain` as 0). Used when multiple reporters
-/// are active simultaneously (e.g. TTY + JSON + plugin reporter).
+/// maximum code voted (treating `Abstain` as 0).
 pub struct CompositeReporter {
     reporters: Vec<Box<dyn Reporter>>,
+    stats: RunStats,
+    strict_suite_count: usize,
 }
 
 impl CompositeReporter {
-    pub fn new(reporters: Vec<Box<dyn Reporter>>) -> Self {
-        Self { reporters }
+    pub fn new(reporters: Vec<Box<dyn Reporter>>, strict_suite_count: usize) -> Self {
+        Self {
+            reporters,
+            stats: RunStats::new(),
+            strict_suite_count,
+        }
     }
 }
 
@@ -170,6 +177,8 @@ impl Reporter for CompositeReporter {
         outcome: &crate::types::TestOutcome,
         duration_ms: DurationMs,
     ) {
+        self.stats.record(item, outcome);
+        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
         for r in &mut self.reporters {
             r.test_completed(item, outcome, duration_ms);
         }
@@ -179,11 +188,12 @@ impl Reporter for CompositeReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        stats: &RunStats,
+        _stats: &RunStats,
     ) -> ExitVote {
+        self.stats.record_strict_suite(self.strict_suite_count);
         self.reporters
             .iter_mut()
-            .map(|r| r.finish(collect_errors, interrupted, stats))
+            .map(|r| r.finish(collect_errors, interrupted, &self.stats))
             .filter_map(|v| match v {
                 ExitVote::Code(c) => Some(c),
                 ExitVote::Abstain => None,
@@ -193,6 +203,9 @@ impl Reporter for CompositeReporter {
     }
 
     fn record_teardown_warning(&mut self, context: &str, error: &str) {
+        self.stats
+            .warning_msgs
+            .push((context.to_string(), error.to_string()));
         for r in &mut self.reporters {
             r.record_teardown_warning(context, error);
         }
@@ -201,9 +214,9 @@ impl Reporter for CompositeReporter {
 
 /// Build the active reporter from resolved options.
 ///
-/// Chooses [`TtyReporter`] or [`CiReporter`] based on `is_tty`. If a JSON path
-/// or plugin reporters are provided, wraps everything in a [`CompositeReporter`].
-/// When only one reporter is active, returns it directly to avoid the fan-out overhead.
+/// Chooses [`TtyReporter`] or [`CiReporter`] based on `is_tty`, then wraps
+/// all reporters (including optional JSON, JUnit, and plugin reporters) in a
+/// [`CompositeReporter`] which owns the single [`RunStats`] for the run.
 pub fn make_reporter(
     opts: ReporterOpts,
     is_tty: bool,
@@ -211,6 +224,8 @@ pub fn make_reporter(
     junit_xml_path: Option<camino::Utf8PathBuf>,
     plugin_reporters: Vec<Box<dyn Reporter>>,
 ) -> Box<dyn Reporter> {
+    let strict_suite_count = opts.strict_suite_lines.len();
+
     let json_reporter =
         json_path.map(|path| Box::new(json::JsonReporter::new(path)) as Box<dyn Reporter>);
     let junit_reporter =
@@ -231,11 +246,7 @@ pub fn make_reporter(
     }
     reporters.extend(plugin_reporters);
 
-    if reporters.len() == 1 {
-        reporters.into_iter().next().unwrap()
-    } else {
-        Box::new(CompositeReporter::new(reporters))
-    }
+    Box::new(CompositeReporter::new(reporters, strict_suite_count))
 }
 
 #[cfg(test)]
@@ -447,7 +458,7 @@ pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: b
     }
 }
 
-pub(crate) fn print_strict_suite_section(opts: &ReporterOpts, stats: &mut RunStats) {
+pub(crate) fn print_strict_suite_section(opts: &ReporterOpts) {
     if !opts.strict_suite_lines.is_empty() {
         let hdr = format!(
             "STRICT {}",
@@ -460,7 +471,6 @@ pub(crate) fn print_strict_suite_section(opts: &ReporterOpts, stats: &mut RunSta
         for line in &opts.strict_suite_lines {
             println!("  {}", line);
         }
-        stats.record_strict_suite(opts.strict_suite_lines.len());
     }
 }
 
@@ -694,11 +704,14 @@ mod tests {
             }
         }
 
-        let mut composite = CompositeReporter::new(vec![
-            Box::new(StubReporter(ExitVote::Code(0))),
-            Box::new(StubReporter(ExitVote::Code(1))),
-            Box::new(StubReporter(ExitVote::Code(0))),
-        ]);
+        let mut composite = CompositeReporter::new(
+            vec![
+                Box::new(StubReporter(ExitVote::Code(0))),
+                Box::new(StubReporter(ExitVote::Code(1))),
+                Box::new(StubReporter(ExitVote::Code(0))),
+            ],
+            0,
+        );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
             1,
@@ -708,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_composite_reporter_finish_with_no_reporters_returns_zero() {
-        let mut composite = CompositeReporter::new(vec![]);
+        let mut composite = CompositeReporter::new(vec![], 0);
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
             0,
@@ -733,11 +746,14 @@ mod tests {
             }
         }
 
-        let mut composite = CompositeReporter::new(vec![
-            Box::new(StubReporter(ExitVote::Code(1))),
-            Box::new(StubReporter(ExitVote::Abstain)),
-            Box::new(StubReporter(ExitVote::Abstain)),
-        ]);
+        let mut composite = CompositeReporter::new(
+            vec![
+                Box::new(StubReporter(ExitVote::Code(1))),
+                Box::new(StubReporter(ExitVote::Abstain)),
+                Box::new(StubReporter(ExitVote::Abstain)),
+            ],
+            0,
+        );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
             1,
@@ -762,10 +778,13 @@ mod tests {
             }
         }
 
-        let mut composite = CompositeReporter::new(vec![
-            Box::new(StubReporter(ExitVote::Abstain)),
-            Box::new(StubReporter(ExitVote::Abstain)),
-        ]);
+        let mut composite = CompositeReporter::new(
+            vec![
+                Box::new(StubReporter(ExitVote::Abstain)),
+                Box::new(StubReporter(ExitVote::Abstain)),
+            ],
+            0,
+        );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
             0,
@@ -862,10 +881,13 @@ mod tests {
         }
 
         let count = Arc::new(Mutex::new(0usize));
-        let mut composite = CompositeReporter::new(vec![
-            Box::new(CountingReporter(Arc::clone(&count))),
-            Box::new(CountingReporter(Arc::clone(&count))),
-        ]);
+        let mut composite = CompositeReporter::new(
+            vec![
+                Box::new(CountingReporter(Arc::clone(&count))),
+                Box::new(CountingReporter(Arc::clone(&count))),
+            ],
+            0,
+        );
         composite.test_started(&make_item("test_foo"));
         assert_eq!(
             *count.lock().unwrap(),
@@ -900,10 +922,13 @@ mod tests {
         }
 
         let warnings = Arc::new(Mutex::new(Vec::new()));
-        let mut composite = CompositeReporter::new(vec![
-            Box::new(WarningCollector(Arc::clone(&warnings))),
-            Box::new(WarningCollector(Arc::clone(&warnings))),
-        ]);
+        let mut composite = CompositeReporter::new(
+            vec![
+                Box::new(WarningCollector(Arc::clone(&warnings))),
+                Box::new(WarningCollector(Arc::clone(&warnings))),
+            ],
+            0,
+        );
         composite.record_teardown_warning("end_module(tests/test_foo.py)", "RuntimeError: boom");
         let collected = warnings.lock().unwrap();
         assert_eq!(
