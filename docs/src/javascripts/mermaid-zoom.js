@@ -3,13 +3,17 @@
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     new MutationObserver(function () {
-      document.querySelectorAll("svg[id^='mermaid-']:not(.zoom-ready)").forEach(function (svg) {
+      document.querySelectorAll(".mermaid svg:not(.zoom-ready), svg[id^='mermaid-']:not(.zoom-ready)").forEach(function (svg) {
         svg.classList.add("zoom-ready");
+
+        // Wrap the .mermaid container (not just the SVG) so layout stays clean.
+        var container = svg.closest(".mermaid") || svg;
+        if (container.parentElement && container.parentElement.classList.contains("mermaid-zoom")) return;
 
         var wrapper = document.createElement("div");
         wrapper.className = "mermaid-zoom";
-        svg.parentNode.insertBefore(wrapper, svg);
-        wrapper.appendChild(svg);
+        container.parentNode.insertBefore(wrapper, container);
+        wrapper.appendChild(container);
 
         var hint = document.createElement("div");
         hint.className = "mermaid-zoom-hint";
