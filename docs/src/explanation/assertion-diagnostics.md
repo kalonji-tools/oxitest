@@ -117,7 +117,6 @@ failure output. Current patterns:
 | Async/sync fixture mismatch (`can't be used in 'await'`) | Mark the fixture `async def` or make the test synchronous. |
 | `SharedFixtureMutationError` | Use `shared=False` for a mutable per-test copy. |
 | Fixture not found | Check the `@fixtures.fixture` definition and `Fixture[T]` annotation. |
-| Unknown marker (strict mode) | Fuzzy-matches against registered markers ("Did you mean `slow`?"). |
 
 ## Frame truncation
 
