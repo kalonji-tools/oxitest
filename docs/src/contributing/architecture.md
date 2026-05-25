@@ -89,10 +89,6 @@ graph TD
     WORKER --> EXECUTOR
     WORKER --> RESULT
     RESULT -->|"JSON lines"| WORKER_RESULT
-
-    style CLI fill:#f5f5f5,stroke:#9e9e9e,stroke-width:2px
-    style Rust fill:#fef3e2,stroke:#e67e22,stroke-width:2px
-    style Python fill:#e8f4fd,stroke:#2980b9,stroke-width:2px
 ```
 
 ## Pipeline flow
@@ -156,20 +152,6 @@ flowchart TD
     RT -->|yes| RT_Y --> FIN
     RT -->|no| FIN
     FIN --> DONE
-
-    style START fill:#4CAF50,color:#fff,stroke:#4CAF50
-    style DONE fill:#4CAF50,color:#fff,stroke:#4CAF50
-    style FC fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style SE fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style CO fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style EX fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style FIN fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style SERIAL fill:#e3f2fd,stroke:#42a5f5,stroke-width:2px
-    style PAR fill:#e3f2fd,stroke:#42a5f5,stroke-width:2px
-    style PAR_DETAIL fill:#e3f2fd,stroke:#42a5f5,stroke-width:2px
-    style RT_Y fill:#fff9c4,stroke:#ffc107,stroke-width:2px
-    style FX_Y fill:#f3e5f5,stroke:#ce93d8,stroke-width:2px
-    style LI_Y fill:#f3e5f5,stroke:#ce93d8,stroke-width:2px
 ```
 
 **Parallel vs serial decision:**
