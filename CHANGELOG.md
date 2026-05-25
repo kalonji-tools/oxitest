@@ -1,6 +1,43 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.5.0] - 2026-05-25
+
+### Bug Fixes
+
+
+- Keep multi-line assertion messages inside diagnostic box (#433)
+- Use python -m oxitest directly in bacon.toml
+- Force color output in bacon oxitest job
+- --color=always now forces console crate colors
+- Case-insensitive git repo detection + review fixes
+- Use oxitest TempDir instead of pytest tmp_path
+- Use separate --skip flags for prek pre-push hooks
+- Move pyo3/extension-module to maturin-only feature
+
+### Features
+
+
+- Ship bacon.toml with default dev jobs (#421)
+- Add bacon to nix devshell (#422)
+- Add bacon keybindings for job switching
+- Add --fixtures/--fx and -q/--quiet flags
+- Add --fixtures listing with box-style output
+- Add --junit-xml flag and quick-xml dependency
+- Add JUnit XML reporter for CI integration
+- Add --list flag to print collected tests and exit
+- Add --affected flag for git-aware test selection
+- Add git diff and file classification module
+- Add AST-based import graph for --affected
+- Integrate --affected into test pipeline
+- Add affected_base setting for default --affected ref
+- Add affected-tests pre-push hook
+- Add --retries and --retries-delay flags
+- Add Flaky outcome with stats and summary
+- Add flaky_count tracking and retry module
+- Integrate retry phase after test execution
+- Extend bridge-sync with wire format validation
+
 ## [0.4.0] - 2026-05-23
 
 ### Bug Fixes
