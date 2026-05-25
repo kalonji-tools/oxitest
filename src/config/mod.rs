@@ -332,43 +332,25 @@ impl Config {
         if cli.verbose {
             self.verbose = true;
         }
-        if cli.durations.is_some() {
-            self.durations = cli.durations;
-        }
-        if let Some(c) = cli.color {
-            self.color = c;
-        }
-        if cli.workers.is_some() {
-            self.workers = cli.workers;
-        }
-        if cli.strict.is_some() {
-            self.strict = cli.strict.clone();
-        }
-        if let Some(schedule) = cli.schedule {
-            self.schedule = schedule;
-        }
-        if cli.failed.is_some() {
-            self.failed = cli.failed;
-        }
-        if let Some(tb) = cli.tb.clone() {
-            self.tb = tb;
-        }
-        if let Some(timeout) = cli.timeout {
-            self.timeout_secs = Some(timeout);
-        }
+
+        apply_if_some!(self, color, cli.color);
+        apply_if_some!(self, schedule, cli.schedule);
+        apply_if_some!(self, tb, cli.tb.clone());
+        apply_if_some!(self, retries, cli.retries);
+        apply_if_some!(self, retries_delay_secs, cli.retries_delay);
+
+        apply_if_some!(self, workers, cli.workers, wrap);
+        apply_if_some!(self, strict, cli.strict.clone(), wrap);
+        apply_if_some!(self, failed, cli.failed, wrap);
+        apply_if_some!(self, durations, cli.durations, wrap);
+        apply_if_some!(self, timeout_secs, cli.timeout, wrap);
+
         if let Some(ref val) = cli.affected {
             if val.is_empty() {
-                // Bare --affected: use affected_base from pyproject.toml (default: HEAD).
                 self.affected = Some(self.affected_base.clone());
             } else {
                 self.affected = cli.affected.clone();
             }
-        }
-        if let Some(n) = cli.retries {
-            self.retries = n;
-        }
-        if let Some(s) = cli.retries_delay {
-            self.retries_delay_secs = s;
         }
         self
     }
