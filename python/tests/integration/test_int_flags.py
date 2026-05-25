@@ -37,8 +37,7 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
 def test_list_verbose_shows_table(tmp: TempDir):
     """--list -v shows a table with module and function columns."""
     (tmp / "test_table.py").write_text(
-        "def test_one(): assert True\n"
-        "def test_two(): assert True\n"
+        "def test_one(): assert True\ndef test_two(): assert True\n"
     )
     out, rc = _run(tmp, "--list", "-v")
     assert rc == 0, f"--list -v should exit 0, got {rc}"
@@ -49,8 +48,7 @@ def test_list_verbose_shows_table(tmp: TempDir):
 def test_keyword_filter(tmp: TempDir):
     """Only tests matching the -k keyword should run."""
     (tmp / "test_kw.py").write_text(
-        "def test_alpha(): assert True\n"
-        "def test_beta(): assert False\n"
+        "def test_alpha(): assert True\ndef test_beta(): assert False\n"
     )
     out, rc = _run(tmp, "-k", "alpha")
     assert rc == 0, f"-k alpha should exit 0 (only matching test runs), got {rc}"
@@ -60,8 +58,7 @@ def test_keyword_filter(tmp: TempDir):
 def test_serial_flag(tmp: TempDir):
     """--serial flag runs tests without parallel workers."""
     (tmp / "test_serial.py").write_text(
-        "def test_a(): assert True\n"
-        "def test_b(): assert True\n"
+        "def test_a(): assert True\ndef test_b(): assert True\n"
     )
     out, rc = _run(tmp, "--serial")
     assert rc == 0, f"--serial should exit 0, got {rc}"
@@ -71,8 +68,7 @@ def test_serial_flag(tmp: TempDir):
 def test_json_output(tmp: TempDir):
     """--json writes a valid CTRF JSON file with summary.passed >= 2."""
     (tmp / "test_js.py").write_text(
-        "def test_one(): assert True\n"
-        "def test_two(): assert True\n"
+        "def test_one(): assert True\ndef test_two(): assert True\n"
     )
     json_path = Path(tmp) / "results.json"
     out, rc = _run(tmp, "--json", str(json_path))
@@ -86,8 +82,7 @@ def test_json_output(tmp: TempDir):
 def test_junit_xml_output(tmp: TempDir):
     """--junit-xml writes a valid JUnit XML file with expected structure."""
     (tmp / "test_jx.py").write_text(
-        "def test_first(): assert True\n"
-        "def test_second(): assert True\n"
+        "def test_first(): assert True\ndef test_second(): assert True\n"
     )
     xml_path = Path(tmp) / "results.xml"
     out, rc = _run(tmp, "--junit-xml", str(xml_path))

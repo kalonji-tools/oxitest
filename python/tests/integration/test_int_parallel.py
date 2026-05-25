@@ -29,12 +29,10 @@ def _parse_counts(out: str) -> dict[str, int]:
 def test_serial_and_default_same_counts(tmp: TempDir):
     """Serial and default (parallel) runs produce the same outcome counts."""
     (tmp / "test_a.py").write_text(
-        "def test_one(): assert True\n"
-        "def test_two(): assert True\n"
+        "def test_one(): assert True\ndef test_two(): assert True\n"
     )
     (tmp / "test_b.py").write_text(
-        "def test_fail(): assert False\n"
-        "def test_pass(): assert True\n"
+        "def test_fail(): assert False\ndef test_pass(): assert True\n"
     )
     serial_out, _ = _run(tmp, "--serial")
     default_out, _ = _run(tmp)
