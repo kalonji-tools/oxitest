@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::{bridge, cache, config, reporter, strict, types};
 use clap::Parser;
-use helpers::*;
+use helpers::{env_string, resolve_color};
 use pyo3::prelude::*;
 use std::io::IsTerminal;
 

@@ -1,3 +1,4 @@
+use super::helpers;
 use super::*;
 
 mod mtime_tests {
@@ -5,13 +6,13 @@ mod mtime_tests {
 
     #[test]
     fn file_mtime_secs_returns_nonzero_for_existing_file() {
-        let mtime = file_mtime_secs(camino::Utf8Path::new(file!()));
+        let mtime = helpers::file_mtime_secs(camino::Utf8Path::new(file!()));
         assert!(mtime > 0, "mtime must be non-zero for an existing file");
     }
 
     #[test]
     fn file_mtime_secs_returns_zero_for_missing_file() {
-        let mtime = file_mtime_secs(camino::Utf8Path::new("/nonexistent/path/xyz.py"));
+        let mtime = helpers::file_mtime_secs(camino::Utf8Path::new("/nonexistent/path/xyz.py"));
         assert_eq!(mtime, 0);
     }
 }
@@ -25,14 +26,17 @@ mod timeout_tests {
     fn no_multiplier_returns_global() {
         let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
         let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(resolve_timeout(&cache, &item, Some(30), None), Some(30));
+        assert_eq!(
+            helpers::resolve_timeout(&cache, &item, Some(30), None),
+            Some(30)
+        );
     }
 
     #[test]
     fn no_multiplier_no_global_returns_none() {
         let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
         let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(resolve_timeout(&cache, &item, None, None), None);
+        assert_eq!(helpers::resolve_timeout(&cache, &item, None, None), None);
     }
 
     #[test]
@@ -40,7 +44,7 @@ mod timeout_tests {
         let cache = TestCache::load(camino::Utf8Path::new("/nonexistent")); // No cached entry → falls back to global
         let item = make_item("tests/test_foo.py::test_a");
         assert_eq!(
-            resolve_timeout(&cache, &item, Some(30), Some(3.0)),
+            helpers::resolve_timeout(&cache, &item, Some(30), Some(3.0)),
             Some(30)
         );
     }
@@ -49,7 +53,10 @@ mod timeout_tests {
     fn multiplier_with_no_global_and_no_cache_returns_none() {
         let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
         let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(resolve_timeout(&cache, &item, None, Some(3.0)), None);
+        assert_eq!(
+            helpers::resolve_timeout(&cache, &item, None, Some(3.0)),
+            None
+        );
     }
 }
 
@@ -103,7 +110,7 @@ mod color_tests {
     #[test]
     fn always_enables_console_colors() {
         console::set_colors_enabled(false);
-        let result = resolve_color(ColorMode::Always, false);
+        let result = helpers::resolve_color(ColorMode::Always, false);
         assert!(result);
         assert!(console::colors_enabled());
         console::set_colors_enabled(false);
@@ -111,12 +118,12 @@ mod color_tests {
 
     #[test]
     fn never_returns_false() {
-        assert!(!resolve_color(ColorMode::Never, true));
+        assert!(!helpers::resolve_color(ColorMode::Never, true));
     }
 
     #[test]
     fn auto_returns_false_when_not_tty() {
-        assert!(!resolve_color(ColorMode::Auto, false));
+        assert!(!helpers::resolve_color(ColorMode::Auto, false));
     }
 }
 
@@ -142,13 +149,13 @@ mod list_tests {
 
     #[test]
     fn test_list_empty() {
-        let result = format_test_list(&[], false);
+        let result = helpers::format_test_list(&[], false);
         assert_eq!(result, "no tests collected");
     }
 
     #[test]
     fn test_list_empty_verbose() {
-        let result = format_test_list(&[], true);
+        let result = helpers::format_test_list(&[], true);
         assert_eq!(result, "no tests collected");
     }
 
@@ -158,7 +165,7 @@ mod list_tests {
             make_item("tests/test_a.py", "test_one", &[], false),
             make_item("tests/test_b.py", "test_two", &["slow"], true),
         ];
-        let result = format_test_list(&items, false);
+        let result = helpers::format_test_list(&items, false);
         assert_eq!(
             result,
             "tests/test_a.py::test_one\ntests/test_b.py::test_two"
@@ -171,7 +178,7 @@ mod list_tests {
             make_item("tests/test_a.py", "test_one", &[], false),
             make_item("tests/test_a.py", "test_two", &["slow", "network"], true),
         ];
-        let result = format_test_list(&items, true);
+        let result = helpers::format_test_list(&items, true);
         assert!(result.contains("module"));
         assert!(result.contains("function"));
         assert!(result.contains("async"));
@@ -186,7 +193,7 @@ mod list_tests {
     #[test]
     fn test_list_single_test_singular() {
         let items = vec![make_item("tests/test_a.py", "test_one", &[], false)];
-        let result = format_test_list(&items, true);
+        let result = helpers::format_test_list(&items, true);
         assert!(result.contains("1 test"));
         assert!(!result.contains("1 tests"));
     }
