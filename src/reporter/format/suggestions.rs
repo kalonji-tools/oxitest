@@ -10,9 +10,7 @@ fn hint_line(text: &str, use_color: bool) -> String {
 /// all other outcomes or when no pattern matches.
 pub(crate) fn suggest_fix(outcome: &TestOutcome, use_color: bool) -> Option<String> {
     let message = match outcome {
-        TestOutcome::Failed { message, .. } | TestOutcome::Error { message, .. } => {
-            message.as_str()
-        }
+        TestOutcome::Failed { .. } | TestOutcome::Error { .. } => outcome.message()?,
         _ => return None,
     };
 
