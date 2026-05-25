@@ -54,7 +54,6 @@ pub(crate) struct WorkerResult {
     pub outcome: types::OutcomeKind,
     pub duration_ms: f64,
     #[serde(default)]
-    #[allow(dead_code)] // consumed by version-mismatch check (Task 2)
     pub protocol_version: u32,
     #[serde(default)]
     pub failure_repr: Option<String>,
