@@ -172,6 +172,26 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     })))
 }
 
+/// Execute a sequence of pipeline phases against a context.
+///
+/// Returns the exit code: 0 if all phases complete, or the code from the
+/// first phase that returns [`PhaseOutcome::EarlyExit`].
+pub(crate) fn run_pipeline(
+    py: Python<'_>,
+    pipeline: &[&dyn PipelinePhase],
+    ctx: &mut PipelineContext,
+) -> Result<i32, i32> {
+    for phase in pipeline {
+        if phase.should_run(ctx) {
+            match phase.execute(py, ctx)? {
+                PhaseOutcome::Continue => {}
+                PhaseOutcome::EarlyExit(code) => return Ok(code),
+            }
+        }
+    }
+    Ok(0)
+}
+
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let setup_ctx = match setup(py, &args)? {
         Err(code) => return Ok(code),
@@ -205,17 +225,9 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         &phases::FinalizePhase,
     ];
 
-    for phase in pipeline {
-        if phase.should_run(&ctx) {
-            match phase.execute(py, &mut ctx) {
-                Ok(PhaseOutcome::Continue) => {}
-                Ok(PhaseOutcome::EarlyExit(code)) | Err(code) => return Ok(code),
-            }
-        }
+    match run_pipeline(py, pipeline, &mut ctx) {
+        Ok(code) | Err(code) => Ok(code),
     }
-
-    // Unreachable in practice — FinalizePhase always returns EarlyExit.
-    Ok(0)
 }
 
 #[cfg(test)]
@@ -225,3 +237,7 @@ mod tests;
 #[cfg(test)]
 #[path = "../pipeline_phase_tests.rs"]
 mod phase_tests;
+
+#[cfg(test)]
+#[path = "../pipeline_contract_tests.rs"]
+mod contract_tests;
