@@ -62,28 +62,22 @@ fn to_testname(item: &TestItem) -> String {
 }
 
 fn to_junit_outcome(outcome: &TestOutcome) -> JunitOutcome {
+    let msg = || outcome.message().unwrap_or_default().to_owned();
     match outcome {
-        TestOutcome::Passed { .. } | TestOutcome::Warned { .. } => JunitOutcome::Passed,
-        TestOutcome::Failed { message, .. } => JunitOutcome::Failed {
-            message: message.clone(),
-        },
-        TestOutcome::Error { message, .. } => JunitOutcome::Error {
-            message: message.clone(),
-        },
-        TestOutcome::Skipped { reason } => JunitOutcome::Skipped {
-            message: reason.clone(),
-        },
-        TestOutcome::XFailed { reason } => JunitOutcome::Skipped {
-            message: reason.clone(),
-        },
+        TestOutcome::Passed { .. }
+        | TestOutcome::Warned { .. }
+        | TestOutcome::XPassed { strict: false }
+        | TestOutcome::Flaky { .. } => JunitOutcome::Passed,
+        TestOutcome::Failed { .. } => JunitOutcome::Failed { message: msg() },
+        TestOutcome::Error { .. } | TestOutcome::Timeout { .. } => {
+            JunitOutcome::Error { message: msg() }
+        }
+        TestOutcome::Skipped { .. } | TestOutcome::XFailed { .. } => {
+            JunitOutcome::Skipped { message: msg() }
+        }
         TestOutcome::XPassed { strict: true } => JunitOutcome::Failed {
             message: "expected failure but test passed (strict xfail)".to_string(),
         },
-        TestOutcome::XPassed { strict: false } => JunitOutcome::Passed,
-        TestOutcome::Timeout { message } => JunitOutcome::Error {
-            message: message.clone(),
-        },
-        TestOutcome::Flaky { .. } => JunitOutcome::Passed,
     }
 }
 

@@ -59,33 +59,17 @@ impl JsonReporter {
     }
 }
 
-fn outcome_status(outcome: &TestOutcome) -> &'static str {
-    match outcome {
-        TestOutcome::Passed { .. } | TestOutcome::Warned { .. } => "passed",
-        TestOutcome::Failed { .. } => "failed",
-        TestOutcome::Error { .. } => "failed",
-        TestOutcome::Skipped { .. } => "skipped",
-        TestOutcome::XFailed { .. } => "skipped",
-        TestOutcome::XPassed { strict: true } => "failed",
-        TestOutcome::XPassed { strict: false } => "passed",
-        TestOutcome::Timeout { .. } => "failed",
-        TestOutcome::Flaky { .. } => "passed",
-    }
-}
-
-fn non_empty(s: &str) -> Option<String> {
-    if s.is_empty() {
-        None
-    } else {
-        Some(s.to_owned())
-    }
-}
-
+/// Returns the CTRF message for a test outcome.
+///
+/// CTRF messages are only emitted for failure-like outcomes (failed, error,
+/// timeout, flaky). Skip/xfail reasons are intentionally omitted — CTRF
+/// consumers use the `status` field for those.
 fn outcome_message(outcome: &TestOutcome) -> Option<String> {
     match outcome {
-        TestOutcome::Failed { message, .. } => non_empty(message),
-        TestOutcome::Error { message, .. } => non_empty(message),
-        TestOutcome::Timeout { message } | TestOutcome::Flaky { message } => non_empty(message),
+        TestOutcome::Failed { .. }
+        | TestOutcome::Error { .. }
+        | TestOutcome::Timeout { .. }
+        | TestOutcome::Flaky { .. } => outcome.message().map(str::to_owned),
         _ => None,
     }
 }
@@ -103,7 +87,7 @@ impl Reporter for JsonReporter {
     fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
         self.tests.push(CtrfTest {
             name: item.node_id.to_string(),
-            status: outcome_status(outcome),
+            status: outcome.ctrf_status(),
             duration: duration_ms.as_f64(),
             message: outcome_message(outcome),
         });
