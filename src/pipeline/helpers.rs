@@ -161,7 +161,9 @@ pub(in crate::pipeline) fn early_exit_with_error(
     errors: &[types::CollectError],
     make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
 ) -> i32 {
-    make_rep().finish(errors, false).code()
+    make_rep()
+        .finish(errors, false, &reporter::RunStats::new())
+        .code()
 }
 
 pub(super) fn run_phase(
@@ -315,6 +317,7 @@ pub(super) fn apply_filters(
                             e
                         ))],
                         false,
+                        &reporter::RunStats::new(),
                     )
                     .code();
                 return Err(code);

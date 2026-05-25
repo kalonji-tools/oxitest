@@ -99,7 +99,12 @@ impl Reporter for JunitReporter {
         });
     }
 
-    fn finish(&mut self, _collect_errors: &[CollectError], _interrupted: bool) -> super::ExitVote {
+    fn finish(
+        &mut self,
+        _collect_errors: &[CollectError],
+        _interrupted: bool,
+        _stats: &super::RunStats,
+    ) -> super::ExitVote {
         if let Err(e) = self.write_xml() {
             eprintln!("error: failed to write JUnit XML to {}: {e}", self.path);
             return super::ExitVote::Code(4);
@@ -247,7 +252,7 @@ mod snapshot_tests {
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
         }
-        rep.finish(&[], false);
+        rep.finish(&[], false, &crate::reporter::RunStats::new());
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -283,7 +288,7 @@ mod tests {
         for (item, outcome) in &outcomes {
             rep.test_completed(item, outcome, DurationMs::new(42.0));
         }
-        rep.finish(&[], false);
+        rep.finish(&[], false, &crate::reporter::RunStats::new());
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -429,7 +434,7 @@ mod tests {
             },
             DurationMs::new(1.0),
         );
-        let vote = rep.finish(&[], false);
+        let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
         assert_eq!(
             vote.code(),
             4,
