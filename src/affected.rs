@@ -10,21 +10,14 @@ use pyo3::prelude::*;
 use crate::bridge;
 
 /// Error from `--affected` processing.
-#[derive(Debug)]
-pub(crate) enum AffectedError {
+#[derive(thiserror::Error, Debug)]
+pub enum AffectedError {
     /// Not inside a git repository.
+    #[error("--affected requires a git repository")]
     NotAGitRepo,
     /// `git diff` returned a non-zero exit code.
+    #[error("git diff failed: {0}")]
     GitCommandFailed(String),
-}
-
-impl std::fmt::Display for AffectedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotAGitRepo => write!(f, "--affected requires a git repository"),
-            Self::GitCommandFailed(msg) => write!(f, "git diff failed: {msg}"),
-        }
-    }
 }
 
 /// Parse the raw output of `git diff --name-only` into relative path strings.
