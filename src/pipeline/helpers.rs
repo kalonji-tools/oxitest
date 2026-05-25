@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
+use crate::cache::{OutcomeCache, TimingCache};
 use crate::{bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict, types};
 use pyo3::prelude::*;
 use traits::{ModuleCollector, ParallelRunner, Session, TestRunner};
@@ -28,7 +28,7 @@ pub(super) fn collect_items(
     cfg: &config::Config,
     session: &dyn Session,
     collector: &dyn ModuleCollector,
-    cache: &mut cache::TestCache,
+    cache: &mut impl cache::ModuleCache,
 ) -> (
     Vec<Arc<types::TestItem>>,
     Vec<types::CollectError>,
@@ -78,7 +78,7 @@ pub(super) fn collect_items(
 }
 
 pub(super) fn resolve_timeout(
-    cache: &cache::TestCache,
+    cache: &impl cache::TimingCache,
     item: &types::TestItem,
     global: Option<u64>,
     multiplier: Option<f64>,
@@ -300,7 +300,7 @@ pub(super) fn apply_filters(
     items: Vec<Arc<types::TestItem>>,
     cli: &config::Cli,
     cfg: &config::Config,
-    cache: &cache::TestCache,
+    cache: &impl cache::OutcomeCache,
     make_error_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
 ) -> Result<Vec<Arc<types::TestItem>>, i32> {
     // Keyword filter (-k).
