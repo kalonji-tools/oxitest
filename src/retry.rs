@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::pipeline::traits::{Session, TestRunner};
 use crate::reporter::Reporter;
-use crate::types::{DurationMs, NodeId, OutcomeKind, TestItem, TestOutcome, TestTiming};
+use crate::types::{NodeId, OutcomeKind, TestItem, TestOutcome, TestTiming};
 
 /// Result of the retry phase.
 pub(crate) struct RetryResult {
@@ -83,11 +83,9 @@ pub(crate) fn run_retries(
                 std::thread::sleep(std::time::Duration::from_secs(ctx.delay_secs));
             }
 
-            let start = std::time::Instant::now();
-            let outcome = ctx
-                .runner
-                .run_test(ctx.py, item, ctx.session, ctx.timeout_secs);
-            let duration_ms = DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
+            let (outcome, duration_ms) =
+                ctx.runner
+                    .run_timed(ctx.py, item, ctx.session, ctx.timeout_secs);
 
             if !outcome.is_hard_failure() {
                 let flaky_outcome = TestOutcome::Flaky {

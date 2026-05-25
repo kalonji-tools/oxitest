@@ -53,6 +53,22 @@ pub(crate) trait TestRunner {
         session: &dyn Session,
         timeout: Option<u64>,
     ) -> TestOutcome;
+
+    /// Run a test and return the outcome with elapsed duration.
+    ///
+    /// Default implementation wraps `run_test()` with `Instant::now()` timing.
+    fn run_timed(
+        &self,
+        py: Python<'_>,
+        item: &TestItem,
+        session: &dyn Session,
+        timeout: Option<u64>,
+    ) -> (TestOutcome, crate::types::DurationMs) {
+        let start = std::time::Instant::now();
+        let outcome = self.run_test(py, item, session, timeout);
+        let duration_ms = crate::types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
+        (outcome, duration_ms)
+    }
 }
 
 /// Abstracts `parallel::run_phase_parallel` for pipeline unit testing.
