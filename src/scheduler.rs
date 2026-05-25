@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::cache::{TestCache, TimingCache};
+use crate::cache::TimingCache;
 use crate::config::ScheduleStrategy;
 use crate::types::TestItem;
 
@@ -13,7 +13,7 @@ use crate::types::TestItem;
 pub(crate) fn apply_schedule_strategy(
     groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
     strategy: ScheduleStrategy,
-    cache: &TestCache,
+    cache: &impl TimingCache,
     failed_ids: &std::collections::HashSet<String>,
 ) {
     match strategy {
