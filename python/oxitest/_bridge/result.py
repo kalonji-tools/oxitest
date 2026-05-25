@@ -7,6 +7,7 @@ __all__ = [
     "ViolationKind",
     "CollectedViolation",
     "_error_result",
+    "PROTOCOL_VERSION",
 ]
 
 from dataclasses import asdict, dataclass, field
@@ -52,6 +53,8 @@ _NON_FAILURE_STATUSES = frozenset(
         StatusKind.TIMEOUT,
     }
 )
+
+PROTOCOL_VERSION: int = 1
 
 
 @dataclass
@@ -106,6 +109,7 @@ class TestResult:
             "node_id": node_id,
             "outcome": self.status,
             "duration_ms": duration_ms,
+            "protocol_version": PROTOCOL_VERSION,
         }
         # Optional fields — omit falsy values for compact JSON
         optional = {

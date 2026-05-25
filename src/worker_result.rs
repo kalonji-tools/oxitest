@@ -10,6 +10,10 @@
 
 use crate::types::{self, Frame};
 
+/// Current version of the worker ↔ runner JSON protocol.
+/// Bump when adding/removing/renaming wire fields.
+pub(crate) const PROTOCOL_VERSION: u32 = 1;
+
 /// A JSON task sent to a worker subprocess over stdin.
 ///
 /// One task describes a single module group: the module file to import, the
@@ -49,6 +53,9 @@ pub(crate) struct WorkerResult {
     pub node_id: String,
     pub outcome: types::OutcomeKind,
     pub duration_ms: f64,
+    #[serde(default)]
+    #[allow(dead_code)] // consumed by version-mismatch check (Task 2)
+    pub protocol_version: u32,
     #[serde(default)]
     pub failure_repr: Option<String>,
     // Structured diagnostic fields from worker JSON
@@ -145,6 +152,7 @@ impl WorkerResult {
             node_id,
             outcome: types::OutcomeKind::Error,
             duration_ms,
+            protocol_version: PROTOCOL_VERSION,
             failure_repr: Some(message.clone()),
             message: Some(message),
             file: None,
@@ -557,6 +565,26 @@ mod compact_and_error_tests {
         let r: WorkerResult = serde_json::from_str(json).expect("extra fields should be ignored");
         assert_eq!(r.outcome, types::OutcomeKind::Passed);
         assert!((r.duration_ms - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn protocol_version_round_trips() {
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":1}"#;
+        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        assert_eq!(r.protocol_version, PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn missing_protocol_version_defaults_to_zero() {
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
+        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        assert_eq!(r.protocol_version, 0);
+    }
+
+    #[test]
+    fn error_sentinel_uses_current_protocol_version() {
+        let r = WorkerResult::error_sentinel("t".into(), "boom".into(), 0.0);
+        assert_eq!(r.protocol_version, PROTOCOL_VERSION);
     }
 }
 
