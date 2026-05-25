@@ -41,6 +41,7 @@ convention = "google"
 
 [tool.ty.environment]
 python = ".venv"
+extra-paths = ["python/tests"]
 
 [tool.oxitest]
 testpaths = ["python/tests"]

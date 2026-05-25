@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import make_session
 from oxitest import TempDir
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._builtins._logcapture import _LogCapture
@@ -16,19 +22,11 @@ from oxitest._bridge.fixtures import (
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
 
-
-def _make_session(*defs: FixtureDef) -> FixtureSession:  # type: ignore[type-arg]
-    reg = FixtureRegistry()
-    for d in defs:
-        reg.register(d)
-    return FixtureSession(reg)
-
-
 # ── NamespaceProxy ─────────────────────────────────────────────────────────
 
 
 def test_namespace_proxy_resolves_fixture():
-    session = _make_session(
+    session = make_session(
         FixtureDef("conn", lambda: "db-val", False, None, "", namespace="db")
     )
     session.begin_module("/fake/test.py")
@@ -45,7 +43,7 @@ def test_namespace_proxy_is_lazy():
         called.append(1)
         return "val"
 
-    session = _make_session(
+    session = make_session(
         FixtureDef("conn", make_conn, False, None, "", namespace="db")
     )
     session.begin_module("/fake/test.py")
@@ -59,7 +57,7 @@ def test_namespace_proxy_is_lazy():
 
 
 def test_namespace_proxy_isolates_namespaces():
-    session = _make_session(
+    session = make_session(
         FixtureDef("conn", lambda: "db-conn", False, None, "", namespace="db"),
         FixtureDef("conn", lambda: "http-conn", False, None, "", namespace="http"),
     )
@@ -79,7 +77,7 @@ def test_namespace_proxy_isolates_namespaces():
 
 
 def test_fixtures_proxy_getattr_returns_namespace_proxy():
-    session = _make_session(
+    session = make_session(
         FixtureDef("conn", lambda: 1, False, None, "", namespace="db")
     )
     session.begin_module("/fake/test.py")
@@ -91,7 +89,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy():
 
 
 def test_fixtures_proxy_getattr_returns_oxi_proxy():
-    session = _make_session()
+    session = make_session()
     session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     oxi = proxy.oxi
@@ -102,7 +100,7 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy():
 
 
 def test_fixtures_proxy_unknown_namespace_raises():
-    session = _make_session()
+    session = make_session()
     session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     try:
@@ -188,7 +186,7 @@ def test_oxi_proxy_unknown_raises_with_available_list(tmp: TempDir):
 
 def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
     """shared=True fixture accessed via fx.db.conn should be FrozenProxy-wrapped."""
-    session = _make_session(
+    session = make_session(
         FixtureDef(
             "conn",
             lambda: {"host": "localhost", "port": 5432},
