@@ -559,3 +559,159 @@ mod compact_and_error_tests {
         assert!((r.duration_ms - 0.5).abs() < 1e-9);
     }
 }
+
+#[cfg(test)]
+mod to_outcome_tests {
+    use super::*;
+
+    fn make_result(json: &str) -> WorkerResult {
+        serde_json::from_str(json).expect("valid JSON")
+    }
+
+    #[test]
+    fn passed_to_outcome() {
+        let r = make_result(
+            r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
+        );
+        match r.to_outcome() {
+            types::TestOutcome::Passed { no_message_lines } => {
+                assert_eq!(no_message_lines, vec![3usize, 7usize]);
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_to_outcome_uses_message_not_failure_repr() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "failed",
+            "duration_ms": 1.0,
+            "message": "structured message",
+            "failure_repr": "fallback repr"
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::Failed { message, .. } => {
+                assert_eq!(message, "structured message");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn skipped_to_outcome_uses_failure_repr() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "skipped",
+            "duration_ms": 0.0,
+            "failure_repr": "Skipped: no network",
+            "message": "should not be used"
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::Skipped { reason } => {
+                assert_eq!(reason, "Skipped: no network");
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xfailed_to_outcome_uses_failure_repr() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "xfailed",
+            "duration_ms": 0.0,
+            "failure_repr": "known bug #99",
+            "message": "should not be used"
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::XFailed { reason } => {
+                assert_eq!(reason, "known bug #99");
+            }
+            other => panic!("expected XFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xpassed_strict_to_outcome() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "xpassed",
+            "duration_ms": 0.0,
+            "strict": true
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::XPassed { strict } => {
+                assert!(strict);
+            }
+            other => panic!("expected XPassed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn timeout_to_outcome_uses_failure_repr() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "timeout",
+            "duration_ms": 5000.0,
+            "failure_repr": "Test timed out after 5s",
+            "message": "should not be used"
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::Timeout { message } => {
+                assert_eq!(message, "Test timed out after 5s");
+            }
+            other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn warned_to_outcome_uses_message() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "warned",
+            "duration_ms": 0.5,
+            "message": "DeprecationWarning: use new_api instead"
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::Warned { reason, .. } => {
+                assert_eq!(reason, "DeprecationWarning: use new_api instead");
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_to_outcome_carries_frames() {
+        let json = r#"{
+            "node_id": "t",
+            "outcome": "error",
+            "duration_ms": 0.5,
+            "message": "ImportError: no module",
+            "frames": [
+                {"file": "conftest.py", "lineno": 3, "name": "<module>", "line": "import missing"},
+                {"file": "conftest.py", "lineno": 1, "name": "setup", "line": "from missing import x"}
+            ]
+        }"#;
+        let r = make_result(json);
+        match r.to_outcome() {
+            types::TestOutcome::Error {
+                message, frames, ..
+            } => {
+                assert_eq!(message, "ImportError: no module");
+                assert_eq!(frames.len(), 2);
+                assert_eq!(frames[0].file, "conftest.py");
+                assert_eq!(frames[0].lineno, 3);
+                assert_eq!(frames[0].name, "<module>");
+                assert_eq!(frames[1].name, "setup");
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+}
