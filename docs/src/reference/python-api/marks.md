@@ -11,36 +11,24 @@ each function's `_oxitest_marks` list and acts on them before executing the test
 
 ## mark.skip
 
-Skip the test unconditionally.
+Skip the test unconditionally, or conditionally when `when` is truthy.
 
 ```python
 @oxitest.mark.skip(reason="not implemented yet")
 def test_feature() -> None:
     ...
-```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `reason` | `str` | Human-readable explanation shown in the report. Optional. |
-
----
-
-## mark.skipif
-
-Skip the test when a condition is truthy at collection time.
-
-```python
-import sys
-
-@oxitest.mark.skipif(sys.platform == "win32", reason="POSIX only")
+@oxitest.mark.skip(when=sys.platform == "win32", reason="POSIX only")
 def test_symlinks() -> None:
     ...
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `condition` | `bool` | Evaluated at import time. Test is skipped when truthy. |
-| `reason` | `str` | Human-readable explanation. Keyword-only. |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `when` | `bool` | `True` | Evaluated at import time. Test is skipped when truthy. When falsy, no mark is attached. |
+| `reason` | `str` | `""` | Human-readable explanation shown in the report. |
+
+Both parameters are keyword-only. Positional arguments are rejected.
 
 ---
 
