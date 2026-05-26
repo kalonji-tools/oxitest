@@ -31,13 +31,13 @@ ty (type checking), and codespell — all enforced by pre-commit hooks.
 
 ### Isolated environment
 
-A Nix flake defines the exact toolchain: Rust compiler, Python interpreter, maturin,
-uv, and CLI tools. Every contributor — human or AI — enters the same shell with the
-same versions. No "works on my machine."
+A [Nix](https://nixos.org/) flake defines the exact toolchain: Rust compiler, Python
+interpreter, maturin, uv, and CLI tools. Every contributor — human or AI — enters the
+same shell with the same versions. No "works on my machine."
 
-A `justfile` exposes the common commands (`just build`, `just test`, `just lint`,
-`just fmt`). The AI hits the same entry points a human would. No hidden scripts, no
-magic incantations.
+A [justfile](https://github.com/casey/just) exposes the common commands (`just build`,
+`just test`, `just lint`, `just fmt`). The AI hits the same entry points a human would.
+No hidden scripts, no magic incantations.
 
 ### Pre-commit and pre-push hooks
 
@@ -57,9 +57,10 @@ the issue and try again — the same feedback loop a human developer follows.
 
 ### Git worktrees for parallel work
 
-oxitest uses a bare repo with worktrees. When the AI works on multiple issues
-simultaneously, each gets its own worktree and branch. No rebasing over half-finished
-work, no accidental cross-contamination between features.
+oxitest uses a bare repo with worktrees managed by
+[worktrunk](https://github.com/anthropics/worktrunk). When the AI works on multiple
+issues simultaneously, each gets its own worktree and branch. No rebasing over
+half-finished work, no accidental cross-contamination between features.
 
 ### Memory and conventions
 
@@ -72,9 +73,10 @@ source of truth, not tribal knowledge scattered across chat histories.
 
 ### 1. Brainstorm and specify
 
-Every feature starts with a design conversation. The AI asks clarifying questions,
-explores trade-offs, and drafts a design spec. The spec captures what will be built,
-why, and what the acceptance criteria are.
+Every feature starts with a design conversation driven by
+[superpowers](https://github.com/anthropics/superpowers-marketplace) skills. The AI
+asks clarifying questions, explores trade-offs, and drafts a design spec. The spec
+captures what will be built, why, and what the acceptance criteria are.
 
 ### 2. Break into issues
 
@@ -113,11 +115,11 @@ take manually.
 But speed without structure is just chaos delivered faster. The value comes from the
 combination:
 
-- **Nix** ensures reproducibility.
-- **Hooks** enforce quality at the commit boundary.
+- [**Nix**](https://nixos.org/) ensures reproducibility.
+- [**prek**](https://github.com/kalonji-tools/prek) enforces quality at the commit boundary.
 - **Rust's compiler** catches mistakes before review.
-- **Worktrees** enable safe parallelism.
-- **Specs and plans** make the AI's work reviewable before it starts.
+- [**worktrunk**](https://github.com/anthropics/worktrunk) enables safe parallel worktrees.
+- [**Superpowers**](https://github.com/anthropics/superpowers-marketplace) skills drive spec-driven development.
 - **PR gates** keep a human in the loop for every merge.
 
 The AI is boxed in by tooling and conventions, not by removing its capabilities.
