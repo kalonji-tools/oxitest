@@ -86,12 +86,13 @@ def test_platform_specific():
 import sys
 import oxitest
 
-@oxitest.mark.skipif(sys.platform == "win32", reason="POSIX only")
+@oxitest.mark.skip(when=sys.platform == "win32", reason="POSIX only")
 def test_symlinks():
     ...
 ```
 
-The first argument is any boolean expression evaluated at collection time.
+The `when` argument is any expression evaluated at collection time. When falsy, the mark
+is not applied and the test runs normally.
 
 ## Mark a test as expected to fail
 

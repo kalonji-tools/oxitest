@@ -71,7 +71,12 @@ def test_heavy():
     ...
 ```
 
-Built-in marks — `skip`, `skipif`, `xfail`, `timeout` — work without registration.
+Built-in marks — `skip`, `xfail`, `timeout` — work without registration.
+
+!!! note "skipif replaced by skip(when=...)"
+    pytest's `@pytest.mark.skipif(condition, reason="...")` becomes
+    `@oxitest.mark.skip(when=condition, reason="...")`. The `skipif` mark
+    does not exist in oxitest.
 
 ## Use parametrize
 

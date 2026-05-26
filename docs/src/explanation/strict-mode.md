@@ -53,8 +53,8 @@ Detection: `_oxitest_param_type` attribute on the decorated function at collecti
 @oxitest.mark.skip                          # triggers
 @oxitest.mark.skip(reason="...")            # clean
 
-@oxitest.mark.skipif(condition)             # triggers
-@oxitest.mark.skipif(condition, reason="")  # clean
+@oxitest.mark.skip(when=condition)             # triggers
+@oxitest.mark.skip(when=condition, reason="")  # clean
 
 @oxitest.mark.xfail                         # triggers
 @oxitest.mark.xfail(reason="...")           # clean
