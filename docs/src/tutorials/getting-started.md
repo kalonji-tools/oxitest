@@ -10,7 +10,7 @@ working setup and know enough to test your own code.
 
 ## Prerequisites
 
-- Python 3.10 or newer
+- Python 3.11 or newer
 - `pip` available in your shell
 - No prior knowledge of oxitest is required
 
