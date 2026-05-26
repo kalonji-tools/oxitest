@@ -20,14 +20,17 @@ automatically, and at the point where violations are cheapest to fix: before the
 ### Bare assert
 
 ```python
-assert result          # triggers
-assert result, "..."   # clean
+assert result                  # triggers — no comparison operator
+assert result == expected      # clean — oxitest captures left/right
+assert result, "explanation"   # also clean — message explains intent
 ```
 
-A bare `assert` with no message string produces an `AssertionError` with no explanation when it
-fires. The enriched diagnostic block oxitest shows on failure partially compensates, but a
-message makes the intent explicit and the failure immediately understandable without reading the
-test code.
+A bare `assert` without a comparison operator (e.g. `assert result` rather than
+`assert result == expected`) prevents oxitest from generating enriched diagnostics that show
+both sides of the comparison. When it fails you see only `AssertionError` with no context about
+what the actual vs expected values were.
+
+Adding either a comparison operator or a message string satisfies the check.
 
 Detection: AST walk of the test function body at collection time.
 
