@@ -51,3 +51,8 @@ testpaths     = ["tests", "integration"]
 python_files  = ["test_*.py", "*_test.py"]
 norecursedirs = [".git", "__pycache__", ".venv", "venv", ".tox", "dist", "build", "node_modules"]
 ```
+
+## See also
+
+- [Filter tests](filter-tests.md) — run a subset by keyword or file path
+- [Configuration reference](../reference/configuration.md) — all `pyproject.toml` keys

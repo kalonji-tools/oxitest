@@ -107,3 +107,9 @@ Use `-k` to run a specific variant:
 ```console
 $ oxitest -k "test_add[basic]"
 ```
+
+## See also
+
+- [Use fixtures](use-fixtures.md) — fixture injection and `FixtureRef[T]` for parametrize cases
+- [Filter tests](filter-tests.md) — run a specific parametrized variant with `-k`
+- [Strict mode](../explanation/strict-mode.md) — why strict mode requires dataclasses over dicts

@@ -67,3 +67,9 @@ cache_max_age = 100   # keep entries for longer
 
 The cache degrades gracefully: oxitest silently ignores a missing or corrupt cache
 file and writes a fresh cache at the end of the run.
+
+## See also
+
+- [Use retries](use-retries.md) — retry failed tests and detect flaky tests
+- [Run in parallel](run-in-parallel.md) — how the cache drives the serial/parallel decision
+- [Configuration reference](../reference/configuration.md) — `cache_max_age` and other keys
