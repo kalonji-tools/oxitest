@@ -38,7 +38,7 @@ def test_greeting(greeting: Fixture[str]) -> None:
 Run it:
 
 ```console
-$ python -m oxitest tests/
+$ oxitest tests/
 ```
 
 ## Next steps

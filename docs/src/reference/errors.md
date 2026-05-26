@@ -278,14 +278,18 @@ bare assert at line(s) <N, N, ...>
 comparison operator, preventing oxitest from generating enriched assertion
 diagnostics.
 
-**Fix:** Use comparison assertions so oxitest can show both sides on failure:
+**Fix:** Use a comparison operator so oxitest can show both sides on failure,
+or add a message string that explains intent:
 
 ```python
 # Before (bare assert -- no diagnostics)
 assert is_valid(x)
 
-# After (comparison -- oxitest shows expected vs actual)
-assert is_valid(x) == True
+# After — comparison (oxitest shows expected vs actual)
+assert validate(x).status == "valid"
+
+# After — message string (explains intent on failure)
+assert is_valid(x), "x should be valid after transform"
 ```
 
 For exception testing, use `oxitest.raises()` instead of bare `assert`.
