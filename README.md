@@ -33,12 +33,9 @@ goals were concrete:
   core and a Python API.
 - **Practice Spec Driven Development** — writing design specs before touching
   code, then deleting them once the feature ships.
-- **Work responsibly with AI** — 2025 was a turbulent year. Multiple clients
-  greenlighted AI in the workplace at once, and the result was a wave of sloppy,
-  oversized PRs that were hard to review and, in the worst cases, got merged
-  anyway. This project is a counter-experiment: use AI as a disciplined
-  collaborator, keep changes small and reviewable, and let the spec drive the
-  work rather than the autocomplete.
+- **[Work responsibly with AI](https://kalonji-tools.github.io/oxitest/explanation/why-ai/)** —
+  use AI as a disciplined collaborator, boxed in by tooling, conventions, and
+  review gates rather than by stripping out its capabilities.
 
 ---
 
@@ -156,3 +153,4 @@ Run: `oxitest tests/` — three cases run as `test_add[basic]`, `test_add[negati
 - Yield teardown: `yield value` in a fixture; code after yield runs as teardown
 - `TestContext` / `on_teardown`: imperative cleanup inside fixtures
 - `@inject_fixtures`: bundle many fixtures into a typed `NamedTuple` (advanced)
+- [Working with AI](https://kalonji-tools.github.io/oxitest/explanation/why-ai/) — how this project uses AI as a disciplined collaborator
