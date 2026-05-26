@@ -33,7 +33,7 @@ def test_skip_no_reason():
 
 
 def test_mark_attribute_callable_without_error():
-    oxitest.mark.skip("reason")
+    oxitest.mark.skip(reason="reason")
     oxitest.mark.xfail
     oxitest.mark.anything("value")
 
