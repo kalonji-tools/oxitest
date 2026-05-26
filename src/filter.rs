@@ -4,8 +4,8 @@
 //! handles `--lf`/`--ff` (last-failed / failed-first) logic, and groups items by
 //! source module for parallel dispatch.
 //!
-//! Marker *names* are collected here; marker *conditions* (e.g. `skipif(...)`) are
-//! evaluated at execution time by `python/oxitest/_bridge/marks.py`.
+//! Marker *names* are collected here; marker *conditions* (e.g. `skip(when=...)`) are
+//! evaluated at execution time by `python/oxitest/_bridge/_mark_registry.py`.
 
 use std::sync::Arc;
 
@@ -16,16 +16,16 @@ use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
 // The names populate TestItem::markers and are used for -m expression filtering.
-// Marker *conditions* — skipif(condition), xfail — are evaluated at execution time
-// by the mark handler registry in python/oxitest/_bridge/marks.py (_MARK_REGISTRY).
+// Marker *conditions* — skip(when=condition), xfail — are evaluated at execution time
+// by the mark handler registry in python/oxitest/_bridge/_mark_registry.py (_MARK_REGISTRY).
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
-const BUILTIN_MARKERS: &[&str] = &["skip", "skipif", "xfail", "usefixtures", "timeout"];
+const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "usefixtures", "timeout"];
 
 /// Check that every marker name on every item is either a built-in or registered.
 ///
 /// Returns one [`CollectError`] per unknown marker, each with a hint showing the
 /// `[tool.oxitest]` TOML snippet needed to register it. Built-in markers
-/// (`skip`, `skipif`, `xfail`, `usefixtures`, `timeout`) are always allowed.
+/// (`skip`, `xfail`, `usefixtures`, `timeout`) are always allowed.
 pub fn validate_markers(
     items: &[Arc<TestItem>],
     registered: &std::collections::HashSet<&str>,
@@ -215,10 +215,6 @@ mod tests {
             "'skip' missing — add SkipHandler to marks.py _MARK_REGISTRY"
         );
         assert!(
-            BUILTIN_MARKERS.contains(&"skipif"),
-            "'skipif' missing — add SkipIfHandler to marks.py _MARK_REGISTRY"
-        );
-        assert!(
             BUILTIN_MARKERS.contains(&"xfail"),
             "'xfail' missing — add XFailHandler to marks.py _MARK_REGISTRY"
         );
@@ -230,10 +226,9 @@ mod tests {
             BUILTIN_MARKERS.contains(&"timeout"),
             "'timeout' missing — add TimeoutHandler to marks.py _MARK_REGISTRY"
         );
-        let expected: std::collections::HashSet<&str> =
-            ["skip", "skipif", "xfail", "usefixtures", "timeout"]
-                .into_iter()
-                .collect();
+        let expected: std::collections::HashSet<&str> = ["skip", "xfail", "usefixtures", "timeout"]
+            .into_iter()
+            .collect();
         let actual: std::collections::HashSet<&str> = BUILTIN_MARKERS.iter().copied().collect();
         assert_eq!(
             actual,
