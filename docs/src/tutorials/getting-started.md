@@ -189,7 +189,7 @@ values in `pyproject.toml`.
 - How to set persistent defaults in `pyproject.toml`
 
 !!! tip "Next steps"
-    - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.skipif`, `@mark.xfail`, custom marks, `-m` filter
+    - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.xfail`, custom marks, `-m` filter
     - [Use parametrize](../how-to/use-parametrize.md) — run one test against multiple named cases
     - [Use fixtures](../how-to/use-fixtures.md) — the `Fixtures()` registry, `shared=True`, yield teardown
     - [Use built-in fixtures](../how-to/use-builtin-fixtures.md) — `TempDir`, `StdCapture`, `Patcher`, `LogCapture`

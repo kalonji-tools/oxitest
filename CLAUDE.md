@@ -63,7 +63,7 @@ just clean
 - `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
 - `ast_rewriter.py` — rewrites `assert` statements into `_OxitestAssertionError` calls for enriched failure output
 - `parametrize.py` — resolves `@mark.parametrize` kwargs into per-case values
-- `marks.py` — mark evaluation: skip, skipif, xfail, timeout, and custom marks
+- `marks.py` — mark evaluation: skip, xfail, timeout, and custom marks
 - `proxy.py` / `proxy_ns.py` — `FrozenProxy` (shared fixtures) and `FixturesProxy` (namespace-aware `fx: Fixtures` injection)
 - `_fixture_type.py` — `Fixture[T]`, `FixtureRef[T]`, `Yields[T]` type aliases
 - `_builtins/` — built-in injectable fixtures: `TempDir`, `TempDirFactory`, `StdCapture`, `FdCapture`, `Patcher`, `LogCapture`, `TestContext`

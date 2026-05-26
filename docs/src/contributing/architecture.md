@@ -65,7 +65,7 @@ graph TD
         end
 
         subgraph Marks
-            MARK_API["_mark_api.py<br/>mark · skip · skipif"]
+            MARK_API["_mark_api.py<br/>mark · skip"]
             MARK_REG["_mark_registry.py<br/>evaluate_marks"]
         end
 

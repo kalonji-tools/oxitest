@@ -130,7 +130,7 @@ oxitest tests/ -m slow          # run only slow tests
 oxitest tests/ -m "not slow"    # skip slow tests
 ```
 
-Built-in marks — `skip`, `skipif`, `xfail`, `timeout` — work without registration.
+Built-in marks — `skip`, `xfail`, `timeout` — work without registration.
 
 ## Documentation
 

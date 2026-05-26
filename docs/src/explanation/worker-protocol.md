@@ -105,7 +105,7 @@ For each test item, the worker writes exactly one JSON line to stdout:
 | `passed` | Test completed successfully |
 | `failed` | Assertion failed |
 | `error` | Unexpected exception (not AssertionError) |
-| `skipped` | Test was skipped (via `skip()` or `skipif`) |
+| `skipped` | Test was skipped (via `skip()` or `@mark.skip`) |
 | `xfailed` | Expected failure occurred |
 | `xpassed` | Expected failure did NOT occur (unexpected pass) |
 | `warned` | Test passed but emitted warnings |
