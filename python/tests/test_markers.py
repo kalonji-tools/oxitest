@@ -12,7 +12,6 @@ from oxitest._bridge._mark_registry import (
     _HandlerContext,
     _PluginMarkHandler,
     _SkipHandler,
-    _SkipIfHandler,
     _UsefixturesHandler,
     _XFailHandler,
     evaluate_marks,
@@ -98,19 +97,110 @@ def test_mark_parameterised_decorator_stores_args():
     )
 
 
-def test_mark_skipif_stores_condition():
-    @oxitest.mark.skipif(True, reason="always skip")
+def test_mark_skip_when_true_stores_via_decorator():
+    @oxitest.mark.skip(when=True, reason="always skip")
     def test_fn():
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
 
     m = get_metadata(test_fn).marks[0]
-    assert m.name == "skipif", f"mark name should be 'skipif', got {m.name!r}"
-    assert m.args == (True,), f"skipif args should be (True,), got {m.args!r}"
+    assert m.name == "skip", f"mark name should be 'skip', got {m.name!r}"
     assert m.kwargs == {"reason": "always skip"}, (
-        f"skipif kwargs should be {{'reason': 'always skip'}}, got {m.kwargs!r}"
+        f"skip kwargs should be {{'reason': 'always skip'}}, got {m.kwargs!r}"
     )
+
+
+def test_skip_mark_rejects_positional_args():
+    with oxitest.raises(TypeError, match="positional"):
+
+        @oxitest.mark.skip(True, reason="nope")
+        def test_fn():
+            pass
+
+
+def test_skip_mark_when_true_attaches_mark():
+    @oxitest.mark.skip(when=True, reason="not ready")
+    def test_fn():
+        pass
+
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert len(meta.marks) == 1, f"expected 1 mark, got {len(meta.marks)}"
+    assert meta.marks[0].name == "skip", (
+        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+    )
+    assert meta.marks[0].kwargs == {"reason": "not ready"}, (
+        f"expected kwargs={{'reason': 'not ready'}}, got {meta.marks[0].kwargs!r}"
+    )
+
+
+def test_skip_mark_when_false_does_not_attach():
+    @oxitest.mark.skip(when=False, reason="never")
+    def test_fn():
+        pass
+
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert len(get_metadata(test_fn).marks) == 0, (
+        "when=False should not attach any mark"
+    )
+
+
+def test_skip_mark_bare_still_works():
+    @oxitest.mark.skip
+    def test_fn():
+        pass
+
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert len(meta.marks) == 1, "bare @mark.skip should attach mark"
+    assert meta.marks[0].name == "skip", (
+        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+    )
+    assert meta.marks[0].kwargs == {"reason": ""}, (
+        f"bare @mark.skip should have reason='', got {meta.marks[0].kwargs!r}"
+    )
+
+
+def test_skip_mark_empty_parens_same_as_bare():
+    @oxitest.mark.skip()
+    def test_fn():
+        pass
+
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert len(meta.marks) == 1, "@mark.skip() should attach mark"
+    assert meta.marks[0].name == "skip", (
+        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+    )
+    assert meta.marks[0].kwargs == {"reason": ""}, (
+        f"@mark.skip() should have reason='', got {meta.marks[0].kwargs!r}"
+    )
+
+
+def test_skip_mark_reason_only():
+    @oxitest.mark.skip(reason="WIP")
+    def test_fn():
+        pass
+
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    meta = get_metadata(test_fn)
+    assert meta.marks[0].kwargs == {"reason": "WIP"}, (
+        f"expected kwargs={{'reason': 'WIP'}}, got {meta.marks[0].kwargs!r}"
+    )
+
+
+def test_skip_mark_rejects_unknown_kwargs():
+    with oxitest.raises(TypeError, match="unexpected keyword"):
+
+        @oxitest.mark.skip(bogus=True)
+        def test_fn():
+            pass
 
 
 def test_mark_xfail_stores_strict_false():
@@ -183,15 +273,15 @@ class MarkerCase:
         code="@oxitest.mark.skip\ndef test_foo(): assert False\n",
         expected_status="skipped",
     ),
-    skipif_true=MarkerCase(
+    skip_when_true=MarkerCase(
         code=(
-            "@oxitest.mark.skipif(True, reason='always')\n"
+            "@oxitest.mark.skip(when=True, reason='always')\n"
             "def test_foo(): assert False\n"
         ),
         expected_status="skipped",
     ),
-    skipif_false=MarkerCase(
-        code="@oxitest.mark.skipif(False, reason='never')\ndef test_foo(): pass\n",
+    skip_when_false=MarkerCase(
+        code="@oxitest.mark.skip(when=False, reason='never')\ndef test_foo(): pass\n",
         expected_status="passed",
     ),
     xfail_failing=MarkerCase(
@@ -363,32 +453,17 @@ def test_skip_handler_returns_short_circuit():
     assert result.wrapper is None, "_SkipHandler should not produce a wrapper"
 
 
-def test_skipif_handler_short_circuits_when_true():
-    ctx = _make_ctx()
-    result = _SkipIfHandler().handle(MarkInfo("skipif", (True,), {"reason": "no"}), ctx)
-    assert result.short_circuit is not None, (
-        "_SkipIfHandler with condition=True should short-circuit"
-    )
-    assert result.short_circuit.status == "skipped", (
-        f"_SkipIfHandler(True) short_circuit status should be 'skipped', got "
-        f"{result.short_circuit.status!r}"
-    )
-    assert result.short_circuit.message == "no", (
-        f"_SkipIfHandler(True) message should be 'no', got "
-        f"{result.short_circuit.message!r}"
-    )
+def test_skip_when_false_not_in_marks():
+    """when=False means no mark attached, so handler is never invoked."""
 
+    @oxitest.mark.skip(when=False, reason="never")
+    def test_fn():
+        pass
 
-def test_skipif_handler_passes_when_false():
-    ctx = _make_ctx()
-    result = _SkipIfHandler().handle(
-        MarkInfo("skipif", (False,), {"reason": "no"}), ctx
-    )
-    assert result.short_circuit is None, (
-        "_SkipIfHandler with condition=False should NOT short-circuit"
-    )
-    assert result.wrapper is None, (
-        "_SkipIfHandler with condition=False should produce no wrapper"
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    assert len(get_metadata(test_fn).marks) == 0, (
+        "when=False should not attach skip mark"
     )
 
 
@@ -458,7 +533,7 @@ def test_evaluate_marks_skip_returns_short_circuit():
 
 
 def test_all_builtin_handlers_registered():
-    expected = {"usefixtures", "skip", "skipif", "xfail", "timeout"}
+    expected = {"usefixtures", "skip", "xfail", "timeout"}
     assert set(_MARK_REGISTRY.keys()) == expected, (
         f"expected builtin mark handlers {expected}, got {set(_MARK_REGISTRY.keys())}"
     )
