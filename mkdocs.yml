@@ -72,6 +72,9 @@ nav:
     - Use fixtures: how-to/use-fixtures.md
     - Use built-in fixtures: how-to/use-builtin-fixtures.md
     - Run tests in parallel: how-to/run-in-parallel.md
+    - Use retries and flaky detection: how-to/use-retries.md
+    - Run affected tests: how-to/run-affected-tests.md
+    - Use async tests: how-to/use-async-tests.md
     - Use the test cache: how-to/use-test-cache.md
     - Use class-based tests: how-to/use-class-based-tests.md
     - Use raises, warns, and importorskip: how-to/use-raises-warns.md
