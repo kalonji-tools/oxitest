@@ -106,7 +106,53 @@ class _TimeoutMark:
         return decorator
 
 
+class _SkipMark:
+    """Decorator factory for @oxitest.mark.skip(when=True, reason="").
+
+    Validates keyword-only ``when`` and ``reason`` at decoration time.
+    When ``when`` is falsy, no mark is attached — the test runs normally.
+    """
+
+    def __call__(self, *args: Any, **kwargs: Any) -> _F | Callable[[_F], _F]:
+        # Bare: @mark.skip (no parens — function is the single arg)
+        if len(args) == 1 and callable(args[0]) and not kwargs:
+            _append_mark(args[0], MarkInfo("skip", (), {"reason": ""}))
+            return args[0]  # type: ignore[return-value]
+
+        if args:
+            msg = (
+                "@oxitest.mark.skip() does not accept positional arguments. "
+                "Use keyword arguments: @mark.skip(when=..., reason='...')"
+            )
+            raise TypeError(msg)
+
+        when = kwargs.pop("when", True)
+        reason = kwargs.pop("reason", "")
+        if kwargs:
+            msg = (
+                f"@oxitest.mark.skip() got unexpected keyword arguments: "
+                f"{', '.join(sorted(kwargs))}"
+            )
+            raise TypeError(msg)
+
+        if not when:
+
+            def identity(f: _F) -> _F:
+                return f
+
+            return identity
+
+        info = MarkInfo("skip", (), {"reason": str(reason)})
+
+        def decorator(f: _F) -> _F:
+            _append_mark(f, info)
+            return f
+
+        return decorator
+
+
 _SPECIAL_MARKS: dict[str, type] = {
+    "skip": _SkipMark,
     "timeout": _TimeoutMark,
 }
 
@@ -118,8 +164,7 @@ class _MarkNamespace:
 
     Built-in marks:
 
-    - `mark.skip(reason="...")` — unconditionally skip.
-    - `mark.skipif(condition, reason="...")` — skip when *condition* is truthy.
+    - `mark.skip(when=True, reason="...")` — skip when *when* is truthy.
     - `mark.xfail(reason="...", strict=True, raises=None)` — expect failure.
     - `mark.timeout(seconds)` — fail if the test exceeds *seconds*.
     - `mark.usefixtures(*names)` — inject fixtures by name without a parameter.
@@ -130,7 +175,7 @@ class _MarkNamespace:
 
     Example:
         ```python
-        @oxitest.mark.skipif(sys.platform == "win32", reason="POSIX only")
+        @oxitest.mark.skip(when=sys.platform == "win32", reason="POSIX only")
         def test_symlinks() -> None:
             ...
 
