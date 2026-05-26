@@ -1,4 +1,4 @@
-"""Mark handler registry for skip/skipif/xfail/timeout/usefixtures evaluation.
+"""Mark handler registry for skip/xfail/timeout/usefixtures evaluation.
 
 Marker *conditions* are evaluated here at test execution time.
 Marker *names* are collected at collection time by validate_markers() in
@@ -88,19 +88,6 @@ class _SkipHandler(MarkHandler):
         )
 
 
-class _SkipIfHandler(MarkHandler):
-    mark_name = "skipif"
-
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
-        """Short-circuit with `skipped` when the condition (first arg) is truthy."""
-        if mark.args[0]:
-            reason = str(mark.kwargs.get("reason", ""))
-            return MarkEvalResult(
-                short_circuit=TestResult(status=StatusKind.SKIPPED, message=reason)
-            )
-        return MarkEvalResult()
-
-
 class _XFailHandler(MarkHandler):
     mark_name = "xfail"
 
@@ -160,7 +147,6 @@ _MARK_REGISTRY: dict[str, MarkHandler] = {
     for h in [
         _UsefixturesHandler(),
         _SkipHandler(),
-        _SkipIfHandler(),
         _XFailHandler(),
         _TimeoutHandler(),
     ]
