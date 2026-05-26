@@ -86,6 +86,7 @@ nav:
     - Exit codes: reference/exit-codes.md
     - Errors: reference/errors.md
     - JSON output format: reference/json-output.md
+    - JUnit XML output: reference/junit-output.md
     - Python API:
       - Marks: reference/python-api/marks.md
       - Fixture types: reference/python-api/fixture-types.md

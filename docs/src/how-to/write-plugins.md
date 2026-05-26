@@ -505,3 +505,9 @@ async_backend = "trio"
   found, oxitest raises `BackendNotFoundError`.
 - The built-in `"asyncio"` backend is always available. Plugins must not use the
   name `"asyncio"`.
+
+## See also
+
+- [Use async tests](use-async-tests.md) — how async backends are used from the test author's perspective
+- [Configuration reference](../reference/configuration.md) — `plugins` and `plugin_settings` keys
+- [Error reference](../reference/errors.md#plugin-errors) — plugin error messages

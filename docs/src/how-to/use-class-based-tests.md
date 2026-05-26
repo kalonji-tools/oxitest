@@ -80,3 +80,9 @@ class TestExpensive:
   instead.
 - **`self` is not injected.** The `self` parameter is the class instance, not a
   fixture. oxitest creates a new instance per test method.
+
+## See also
+
+- [Use fixtures](use-fixtures.md) — fixture injection, scopes, and teardown
+- [Use markers](use-markers.md) — apply marks to classes or methods
+- [Use parametrize](use-parametrize.md) — share parametrize cases across class methods

@@ -179,6 +179,38 @@ def test_export(fx: Fixtures) -> None:
     Using `oxi` as a `Fixtures()` variable name is reserved and raises a `ValueError`
     at load time.
 
+## Inject fixtures without a parameter
+
+Use `@oxitest.mark.usefixtures("name")` when a fixture should run for its side
+effects but its return value is not needed in the test body:
+
+```python
+@oxitest.mark.usefixtures("reset_db")
+def test_insert_user() -> None:
+    db.execute("INSERT INTO users VALUES (1, 'Alice')")
+    assert db.query("SELECT count(*) FROM users") == 1
+```
+
+The fixture runs (including any teardown) exactly as it would if requested via a
+`Fixture[T]` parameter — the only difference is that the value is discarded.
+
+**How it differs from `autouse=True`:** `autouse=True` on a fixture declaration
+makes it run for *every* test in the session. `@mark.usefixtures` is per-test —
+it opts a single test (or a class of tests) into the fixture without affecting
+anything else.
+
+**How it differs from `Fixture[T]` injection:** a `Fixture[T]` parameter gives
+the test access to the fixture's value. `@mark.usefixtures` is the right choice
+when only the side effect matters and no parameter is wanted.
+
+Multiple fixture names can be passed in a single decorator:
+
+```python
+@oxitest.mark.usefixtures("reset_db", "clear_cache")
+def test_cold_start() -> None:
+    ...
+```
+
 ## Understand conftest.py loading
 
 oxitest discovers `conftest.py` files by walking up the directory tree from each
