@@ -96,6 +96,7 @@ nav:
     - Strict mode: explanation/strict-mode.md
     - Parallelism: explanation/parallelism.md
     - Worker protocol: explanation/worker-protocol.md
+    - Working with AI: explanation/why-ai.md
   - Contributing:
     - Build setup: contributing/build-setup.md
     - Architecture: contributing/architecture.md
