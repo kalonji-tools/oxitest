@@ -74,5 +74,6 @@ oxitest writes the file at the end of the run. If the file already exists, oxite
 | `XFailed` | `skipped` |
 | `XPassed` (strict=false) | `passed` |
 | `XPassed` (strict=true) | `failed` |
+| `Flaky` | `passed` |
 
 oxitest sorts tests in the output file alphabetically by `name`.
