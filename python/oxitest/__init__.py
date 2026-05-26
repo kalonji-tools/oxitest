@@ -25,7 +25,7 @@ parametrize — First-class decorator for named test cases:
               Accepts frozen dataclass instances (dataclass mode) or plain dicts
               (dict mode). See `help(oxitest.parametrize)` for full docs.
 
-mark       — Decorator namespace: mark.skip, mark.skipif, mark.xfail,
+mark       — Decorator namespace: mark.skip, mark.xfail, mark.timeout,
              and any custom mark registered in pyproject.toml.
 
 TestContext — Injected bare (`ctx: TestContext`); provides addfinalizer /
