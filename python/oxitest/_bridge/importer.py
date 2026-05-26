@@ -24,7 +24,7 @@ def _propagate_class_marks(fn: object, cls: object) -> None:
     """Copy usefixtures marks from a class onto a test method.
 
     Called at collection time when a test method is collected from a class
-    that carries @oxitest.mark.usefixtures. skip/skipif/xfail are NOT
+    that carries @oxitest.mark.usefixtures. skip/xfail are NOT
     propagated — those are function-level concerns only.
     """
     for m in get_marks(cls):
@@ -93,7 +93,7 @@ def _check_missing_mark_reason(
 ) -> list[CollectedViolation]:
     """Return MISSING_MARK_REASON violations for marks without reason=.
 
-    Applies to skip, skipif, and xfail marks.
+    Applies to skip and xfail marks.
     """
     node_id = f"{path}::{fn_name}"
     return [
@@ -103,7 +103,7 @@ def _check_missing_mark_reason(
             detail=mark.name,
         )
         for mark in get_marks(fn)
-        if mark.name in ("skip", "skipif", "xfail") and "reason" not in mark.kwargs
+        if mark.name in ("skip", "xfail") and not mark.kwargs.get("reason")
     ]
 
 
