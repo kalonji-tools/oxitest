@@ -185,14 +185,14 @@ UnannotatedFixtureParamError: parameter '<name>' has no Fixture[T] annotation
 **Cause:** A test function has a parameter that is not annotated with
 `Fixture[T]`. oxitest requires explicit type annotations to inject fixtures.
 
-**Fix:** Annotate the parameter with the appropriate fixture type:
+**Fix:** Annotate the parameter with the appropriate fixture type. Built-in
+fixtures use bare type annotations — no `Fixture[T]` wrapper needed:
 
 ```python
-from oxitest import Fixture
-from oxitest.builtins import TempDir
+from oxitest import TempDir
 
 
-def test_example(tmp: Fixture[TempDir]):
+def test_example(tmp: TempDir):
     ...
 ```
 
@@ -314,12 +314,12 @@ class AddCase:
     expected: int
 
 
-@oxitest.mark.parametrize(
-    case=AddCase,
-    cases=[AddCase(1, 2, 3), AddCase(0, 0, 0)],
+@oxitest.parametrize(
+    basic=AddCase(a=1, b=2, expected=3),
+    zero=AddCase(a=0, b=0, expected=0),
 )
-def test_add(case: AddCase):
-    assert case.a + case.b == case.expected
+def test_add(a: int, b: int, expected: int) -> None:
+    assert a + b == expected
 ```
 
 ---

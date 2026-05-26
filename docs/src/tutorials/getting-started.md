@@ -28,18 +28,18 @@ $ pip install oxitest
 
 ## Step 2 — Create a project directory
 
-Create a fresh directory to work in and enter it.
+Create a fresh directory to work in, along with a `tests/` subdirectory, and enter it.
 
 ```console
-$ mkdir my_project && cd my_project
+$ mkdir -p my_project/tests && cd my_project
 ```
 
 ## Step 3 — Write a test file
 
-Create a file called `test_math.py` with the following content:
+Create a file called `tests/test_math.py` with the following content:
 
 ```python
-# test_math.py
+# tests/test_math.py
 
 def test_addition():
     assert 1 + 1 == 2
@@ -90,7 +90,7 @@ to diagnose.
 ## Step 5 — Make a test fail
 
 Understanding failure output is just as important as understanding success.
-Edit `test_math.py` and introduce a deliberate mistake in `test_multiplication`:
+Edit `tests/test_math.py` and introduce a deliberate mistake in `test_multiplication`:
 
 ```python
 def test_multiplication():
