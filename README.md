@@ -6,7 +6,20 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://kalonji-tools.github.io/oxitest/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A pytest rewrite in Rust.
+**A fast, typed, and explicit Python test framework backed by a Rust runner.**
+
+oxitest rewrites the slow parts of test infrastructure in Rust while keeping
+your test code in pure Python. Collection, scheduling, parallelism, caching,
+and reporting are all handled by the Rust core; your fixtures, marks, and
+assertions stay in the Python you already know.
+
+## Why oxitest?
+
+- **Explicit injection** — only parameters annotated with `Fixture[T]` are injected. No magic name-matching.
+- **Typed fixtures** — fixture return types flow through to the test, so your type checker works end-to-end. No plugin required.
+- **Parallel by default** — the Rust scheduler spawns worker subprocesses and distributes tests automatically.
+- **Fast startup** — the Rust binary starts in milliseconds; Python is only loaded per worker, not per test. [2–3x faster than pytest](https://kalonji-tools.github.io/oxitest/explanation/benchmarks/) on runner overhead.
+- **Strict mode** — opt-in checks for bare asserts, dict parametrize, and marks missing a `reason`.
 
 ## Installation
 
@@ -22,87 +35,40 @@ uv add oxitest
 
 Requires Python 3.11+.
 
----
+## Quick start
 
-## Background
-
-This project started as a personal learning exercise, not a production tool. The
-goals were concrete:
-
-- **Learn Rust and FFI** — specifically PyO3 and the boundary between a Rust
-  core and a Python API.
-- **Practice Spec Driven Development** — writing design specs before touching
-  code, then deleting them once the feature ships.
-- **[Work responsibly with AI](https://kalonji-tools.github.io/oxitest/explanation/why-ai/)** —
-  use AI as a disciplined collaborator, boxed in by tooling, conventions, and
-  review gates rather than by stripping out its capabilities.
-
----
-
-## Getting Started in 5 minutes
-
-### 1. Bare test function
+### Write a test
 
 A test is a function whose name starts with `test_`. Use plain Python `assert`.
 
 ```python
 # tests/test_math.py
-from mylib.math import add
 
 def test_add():
-    assert add(1, 2) == 3
+    assert 1 + 2 == 3
 ```
 
-Run: `oxitest tests/`
+Run it:
 
----
-
-### 2. Custom mark (with registration)
-
-Use `@oxitest.mark.<name>` to tag tests. Custom mark names must be registered
-in `pyproject.toml` — unregistered marks abort the run with an error.
-
-```toml
-# pyproject.toml
-[tool.oxitest]
-markers = ["slow: marks tests as slow", "integration: integration tests"]
+```bash
+oxitest tests/
 ```
 
-```python
-import oxitest
+### Add a fixture
 
-@oxitest.mark.slow
-def test_large_computation():
-    ...
-```
-
-Run only slow tests: `oxitest tests/ -m slow`
-
----
-
-### 3. Fixtures — `Fixtures()` registry
-
-Create a `Fixtures()` instance in `conftest.py` and decorate with
-`@fixtures.fixture`. Import the fixture functions into your test files.
+Create a `Fixtures()` registry in `conftest.py`. Annotate test parameters with
+`Fixture[T]` to inject them.
 
 ```python
 # conftest.py
-from __future__ import annotations
 import oxitest
 
-fixtures = oxitest.Fixtures()
+fx = oxitest.Fixtures()
 
-@fixtures.fixture
+@fx.fixture
 def sample_numbers() -> list[int]:
     return [1, 2, 3, 4, 5]
 ```
-
----
-
-### 4. Requesting a fixture — `Fixture[T]`
-
-Annotate a test parameter with `Fixture[T]` to inject a fixture. The
-annotation is the injection signal — an unannotated parameter is NOT injected.
 
 ```python
 # tests/test_example.py
@@ -113,14 +79,12 @@ def test_sum(sample_numbers: Fixture[list[int]]) -> None:
     assert sum(sample_numbers) == 15
 ```
 
-Your IDE (ty, pylance) knows `sample_numbers` is `list[int]` — no plugin
-needed.
+Your IDE knows `sample_numbers` is `list[int]` — no plugin needed.
 
----
+### Parametrize with named cases
 
-### 5. Parametrized test
-
-Use keyword arguments as case labels. Each kwarg is a named test case.
+Use keyword arguments as case labels. Frozen dataclasses give you type safety
+and readable test IDs.
 
 ```python
 from dataclasses import dataclass
@@ -132,7 +96,7 @@ class AddCase:
     y: int
     expected: int
 
-@oxitest.mark.parametrize(
+@oxitest.parametrize(
     basic=AddCase(x=1, y=2, expected=3),
     negative=AddCase(x=-5, y=3, expected=-2),
     zero=AddCase(x=0, y=0, expected=0),
@@ -141,16 +105,47 @@ def test_add(x: int, y: int, expected: int) -> None:
     assert x + y == expected
 ```
 
-Run: `oxitest tests/` — three cases run as `test_add[basic]`, `test_add[negative]`,
-`test_add[zero]`.
+Runs as `test_add[basic]`, `test_add[negative]`, `test_add[zero]`.
 
----
+### Use marks
 
-## Further reading
+Tag tests with `@oxitest.mark.<name>`. Custom marks must be registered in
+`pyproject.toml`.
 
-- Built-in marks: `skip`, `skipif`, `xfail`
-- Fixture scopes: `function`, `module`, `session`
-- Yield teardown: `yield value` in a fixture; code after yield runs as teardown
-- `TestContext` / `on_teardown`: imperative cleanup inside fixtures
-- `@inject_fixtures`: bundle many fixtures into a typed `NamedTuple` (advanced)
-- [Working with AI](https://kalonji-tools.github.io/oxitest/explanation/why-ai/) — how this project uses AI as a disciplined collaborator
+```toml
+[tool.oxitest]
+markers = ["slow: marks tests as slow"]
+```
+
+```python
+import oxitest
+
+@oxitest.mark.slow
+def test_large_computation():
+    ...
+```
+
+```bash
+oxitest tests/ -m slow          # run only slow tests
+oxitest tests/ -m "not slow"    # skip slow tests
+```
+
+Built-in marks — `skip`, `skipif`, `xfail`, `timeout` — work without registration.
+
+## Documentation
+
+Full documentation is at [kalonji-tools.github.io/oxitest](https://kalonji-tools.github.io/oxitest/).
+
+- [Getting started tutorial](https://kalonji-tools.github.io/oxitest/tutorials/getting-started/) — from installation to your first fixture
+- [How-to guides](https://kalonji-tools.github.io/oxitest/how-to/use-fixtures/) — fixtures, markers, parametrize, parallel, async, retries, and more
+- [CLI reference](https://kalonji-tools.github.io/oxitest/reference/cli/) — all command-line options
+- [Configuration](https://kalonji-tools.github.io/oxitest/reference/configuration/) — `pyproject.toml` keys
+- [Why Rust + Python](https://kalonji-tools.github.io/oxitest/explanation/why-rust-python/) — the architectural reasoning
+
+## Background
+
+This project started as a learning exercise — specifically to learn Rust/PyO3
+FFI, practice [Spec Driven Development](https://www.specdriven.dev/), and
+explore [working responsibly with AI](https://kalonji-tools.github.io/oxitest/explanation/why-ai/).
+The constraints and workflow are documented in the explanation section of the
+docs for anyone interested in the approach.
