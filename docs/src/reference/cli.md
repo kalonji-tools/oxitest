@@ -31,9 +31,16 @@ current working directory when omitted.
 | `--timeout` | — | integer (seconds) | — | Per-test timeout. Tests exceeding this are killed and marked failed. Overrides pyproject.toml `timeout`. |
 | `--durations` | — | integer | — | Show the N slowest tests at end of run. |
 | `--json` | — | `PATH` | — | Write CTRF-format JSON results to `PATH`. |
+| `--junit-xml` | — | `PATH` | — | Write JUnit XML results to `PATH`. |
 | `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
 | `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
+| `--fixtures` | — | flag | `false` | List all registered fixtures and exit. Alias: `--fx`. |
+| `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail for `--fixtures`). |
+| `--list` | — | flag | `false` | List collected tests and exit (no execution). |
+| `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
+| `--retries` | — | integer | — | Retry failed tests up to N times. |
+| `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. |
 
 ## Traceback styles
 

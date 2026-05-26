@@ -110,6 +110,7 @@ For each test item, the worker writes exactly one JSON line to stdout:
 | `xpassed` | Expected failure did NOT occur (unexpected pass) |
 | `warned` | Test passed but emitted warnings |
 | `timeout` | Test exceeded the configured timeout |
+| `flaky` | Test failed initially but passed on retry |
 
 ## Error Handling
 

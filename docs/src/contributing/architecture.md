@@ -26,7 +26,7 @@ graph TD
         end
 
         subgraph Filtering
-            FILTER["filter.rs<br/>-k / -m / --lf / --ff"]
+            FILTER["filter.rs<br/>-k / -m / --failed=only / --failed=first"]
             MARKER["marker.rs<br/>boolean expression parser"]
             STRICT["strict.rs<br/>violation checking"]
         end
@@ -113,8 +113,8 @@ flowchart TD
     CO["5. Collection<br/>import modules → TestItem list"]
     ST{"6. Strict<br/>strict mode?"}
     ST_Y["check violations → abort if any"]
-    FI["7. Filter<br/>apply -k / -m / --lf / --ff"]
-    LI{"8. List<br/>--collect-only?"}
+    FI["7. Filter<br/>apply -k / -m / --failed=only / --failed=first"]
+    LI{"8. List<br/>--list?"}
     LI_Y["print items → exit"]
 
     EX["9. Execution"]
@@ -193,7 +193,7 @@ all in Rust, without GIL contention at the coordination layer.
 | `bridge` | `src/bridge.rs` | PyO3 bridge: imports Python modules, collects `TestItem` list, runs individual tests. `_with_session_obj` variants take `Bound<'_, PyAny>`. |
 | `types` | `src/types.rs` | Core data types: `TestItem`, `TestOutcome`, `OutcomeKind`, `NodeId`, `CollectError`, `TestTiming`, `Frame`, `FailureAccumulator` |
 | `worker_result` | `src/worker_result.rs` | Worker subprocess JSON contract: `WorkerResult` (receive), `WorkerTask`/`WorkerTaskItem` (send) |
-| `filter` | `src/filter.rs` | Keyword filtering, marker name validation, `--lf`/`--ff` logic, `group_by_module` |
+| `filter` | `src/filter.rs` | Keyword filtering, marker name validation, `--failed=only`/`--failed=first` logic, `group_by_module` |
 | `marker` | `src/marker.rs` | Marker expression parser and evaluator (`and`/`or`/`not`) |
 | `cache` | `src/cache.rs` | Timing cache: load/save `timings.json`, invalidation, duration estimation, `sort_groups` |
 | `scheduler` | `src/scheduler.rs` | Work-stealing scheduler; preserves insertion order; cache pre-sorts groups by duration |
