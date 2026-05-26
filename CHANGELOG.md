@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.6.0] - 2026-05-26
+
+### Features
+
+
+- Add protocol_version field to wire format (#455)
+- Warn on protocol version mismatch (#455)
+- Add _SkipMark decorator with when=/reason= validation
+
 ## [0.5.0] - 2026-05-25
 
 ### Bug Fixes
