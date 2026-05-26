@@ -149,3 +149,10 @@ the key becomes the test ID (e.g. `test_add[basic]`).
    - name: Run tests
      run: oxitest --tb short -v
    ```
+
+## See also
+
+- [Use fixtures](use-fixtures.md) — oxitest's typed fixture system
+- [Use markers](use-markers.md) — `@oxitest.mark.*` decorators
+- [Use parametrize](use-parametrize.md) — named keyword-argument cases
+- [Configuration reference](../reference/configuration.md) — all `[tool.oxitest]` keys

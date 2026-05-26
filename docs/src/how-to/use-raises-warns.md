@@ -103,3 +103,8 @@ pd = oxitest.importorskip("pandas", reason="pandas required for CSV tests")
 ```
 
 `reason` overrides the default skip message.
+
+## See also
+
+- [Use built-in fixtures](use-builtin-fixtures.md) — `WarnCapture` for capturing all warnings in a test
+- [Utilities reference](../reference/python-api/utilities.md) — API docs for `raises`, `warns`, `importorskip`

@@ -147,3 +147,9 @@ $ oxitest --failed=only
 # Run failures first, then everything else
 $ oxitest --failed=first
 ```
+
+## See also
+
+- [CLI reference](../reference/cli.md) — full list of command-line options
+- [Error reference](../reference/errors.md) — catalog of error messages with causes and fixes
+- [Exit codes](../reference/exit-codes.md) — what each exit code means

@@ -38,9 +38,12 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `schedule` | string | `"longest-first"` | Group scheduling strategy for parallel runs. One of: `"longest-first"` (modules in descending duration order), `"failed-first"` (failed modules first, then by duration), `"random"` (random order). |
 | `failed` | string | — | Failed-test mode. `"only"` runs just previously-failed tests; `"first"` runs failures before the rest. When omitted, all tests run in normal order. |
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
+| `affected_base` | string | — | Default git ref for `--affected`. When set, bare `--affected` compares against this ref instead of `HEAD`. CLI `--affected=REF` overrides. |
 | `tb` | string | `"short"` | Traceback style on failure. One of: `"long"`, `"short"`, `"line"`, `"no"`. CLI `--tb` overrides this value. |
 | `verbose` | boolean | `false` | Enable verbose output (show each test name). CLI `-v` overrides. |
 | `maxfail` | integer | `0` | Stop after N failures. `0` means unlimited. CLI `--maxfail` overrides. |
+| `retries` | integer | — | Number of times to retry a failed test before recording it as failed. When omitted, no retries are performed. |
+| `retries_delay` | integer | — | Delay in seconds between retry attempts. When omitted, retries run immediately. |
 | `durations` | integer | — | Show the N slowest tests at end of run. CLI `--durations` overrides. |
 | `serial` | boolean | `false` | Run all tests in a single process. CLI `--serial` overrides. |
 | `color` | string | `"auto"` | Color output mode. One of: `"auto"`, `"always"`, `"never"`. CLI `--color` overrides. |
