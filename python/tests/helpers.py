@@ -21,6 +21,7 @@ __all__ = [
     "make_session",
     "make_session_with",
     "run_oxitest",
+    "run_oxitest_full",
     "run_test",
     "write_test_file",
 ]
@@ -112,6 +113,31 @@ def run_oxitest(
         timeout=60,
     )
     return result.stdout, result.returncode
+
+
+def run_oxitest_full(
+    tmp_path,
+    *extra_args: str,
+) -> tuple[str, str, int]:
+    """Run oxitest as a subprocess and return ``(stdout, stderr, returncode)``.
+
+    Like :func:`run_oxitest` but also returns stderr for error message testing.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            str(tmp_path),
+            "--color",
+            "never",
+            *extra_args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return result.stdout, result.stderr, result.returncode
 
 
 def make_meta(
