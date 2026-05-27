@@ -25,6 +25,10 @@ parametrize — First-class decorator for named test cases:
               Accepts frozen dataclass instances (dataclass mode) or plain dicts
               (dict mode). See `help(oxitest.parametrize)` for full docs.
 
+partial     — Create a partial case for parametrize composition:
+              `oxi.partial(MyCase, x=1)`. Stack multiple `@parametrize`
+              decorators with partial values to express cartesian products.
+
 mark       — Decorator namespace: mark.skip, mark.xfail, mark.timeout,
              and any custom mark registered in pyproject.toml.
 
