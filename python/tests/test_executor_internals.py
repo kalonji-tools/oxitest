@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import run_test
 from oxitest import TempDir
 from oxitest._bridge._middleware import (
     _compose,
@@ -244,8 +250,6 @@ def test_frames_empty_when_no_traceback():
 
 
 def test_bad_module_path_returns_error(tmp: TempDir):
-    from oxitest._bridge.executor import run_test
-
     result = run_test(str(tmp / "nonexistent.py"), "test_foo")
     assert result.status == "error", (
         f"run_test with nonexistent module should return status='error', got "
@@ -254,8 +258,6 @@ def test_bad_module_path_returns_error(tmp: TempDir):
 
 
 def test_bad_fn_name_returns_error(tmp: TempDir):
-    from oxitest._bridge.executor import run_test
-
     module = tmp / "test_mod.py"
     module.write_text("def test_real(): pass\n")
     result = run_test(str(module), "test_missing")

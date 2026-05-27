@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import make_meta
+
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
 from oxitest import Fixture, TempDir, raises  # noqa: F401
@@ -14,6 +21,7 @@ from oxitest._bridge._builtins import (  # noqa: F401
     TestContext,  # noqa: F401
 )
 from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
+from oxitest._bridge._test_meta import TestMeta
 
 # ── BuiltinFixture base ───────────────────────────────────────────────────────
 
@@ -43,7 +51,9 @@ def test_builtin_fixture_for_type_unknown_returns_none():
 
 def test_builtin_fixture_create_raises_not_implemented():
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=[]
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=[],
     )
     with raises(NotImplementedError):
         BuiltinFixture().create(ctx)
@@ -57,7 +67,9 @@ def test_tempdir_fixture_creates_directory():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     tmp = _TempDirFixture().create(ctx)
 
@@ -76,10 +88,9 @@ def test_tempdir_fixture_directory_name_includes_fn_name():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py",
+        meta=TestMeta(module_path="t.py", fn_name="my_test", node_id=""),
         inject_scope="function",
         teardown_stack=teardowns,
-        fn_name="my_test",
     )
     tmp = _TempDirFixture().create(ctx)
 
@@ -99,7 +110,9 @@ def test_tempdir_fixture_teardown_removes_directory():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
@@ -118,7 +131,9 @@ def test_tempdir_factory_mktemp_creates_distinct_dirs():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="session", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="session",
+        teardown_stack=teardowns,
     )
     factory = _TempDirFactoryFixture().create(ctx)
 
@@ -142,7 +157,9 @@ def test_tempdir_factory_teardown_removes_all_dirs():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="session", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="session",
+        teardown_stack=teardowns,
     )
     factory = _TempDirFactoryFixture().create(ctx)
 
@@ -177,7 +194,9 @@ def test_stdcapture_captures_print():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _StdCaptureFixture().create(ctx)
 
@@ -199,7 +218,9 @@ def test_stdcapture_readouterr_resets_buffer():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _StdCaptureFixture().create(ctx)
 
@@ -222,7 +243,9 @@ def test_stdcapture_disabled_passes_through(cap_outer: StdCapture):
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _StdCaptureFixture().create(ctx)
 
@@ -246,7 +269,9 @@ def test_stdcapture_teardown_restores_streams():
     real_stdout = sys.stdout
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     _StdCaptureFixture().create(ctx)
 
@@ -269,7 +294,9 @@ def test_fdcapture_captures_fd_write():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _FdCaptureFixture().create(ctx)
 
@@ -289,7 +316,9 @@ def test_fdcapture_readouterr_resets_buffer():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _FdCaptureFixture().create(ctx)
 
@@ -312,7 +341,9 @@ def test_fdcapture_disabled_passes_through():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     cap = _FdCaptureFixture().create(ctx)
 
@@ -337,7 +368,9 @@ def test_fdcapture_teardown_restores_fds():
     saved_fd = os.dup(1)  # save a reference to the current real stdout fd
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     _FdCaptureFixture().create(ctx)
 
@@ -360,7 +393,9 @@ def test_patcher_setattr_overrides_attribute():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -378,7 +413,9 @@ def test_patcher_setattr_restores_on_teardown():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -401,7 +438,9 @@ def test_patcher_setenv_sets_and_restores():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -427,7 +466,9 @@ def test_patcher_delenv_removes_and_restores():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -453,7 +494,9 @@ def test_patcher_chdir_changes_and_restores(tmp: TempDir):
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -475,7 +518,9 @@ def test_patcher_teardown_undoes_in_lifo_order():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     patch = _PatcherFixture().create(ctx)
 
@@ -549,7 +594,7 @@ def test_tempdir_injected_via_session():
     def fn(tmp: TempDir) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, "t.py")
+    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
     tmp = kwargs["tmp"]
     assert tmp.path.is_dir(), (
         f"TempDir injected via session should be an existing directory, got "
@@ -574,8 +619,8 @@ def test_tempdir_factory_session_scoped():
     def fn(factory: TempDirFactory) -> None:  # type: ignore[valid-type]
         pass
 
-    k1, _ = session.resolve_for_test(fn, "t.py")
-    k2, _ = session.resolve_for_test(fn, "t.py")
+    k1, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, make_meta("t.py"))
     assert k1["factory"] is k2["factory"], (
         "TempDirFactory is session-scoped and should return the same instance across "
         "resolves"
@@ -593,7 +638,7 @@ def test_stdcapture_injected_via_session():
     def fn(cap: StdCapture) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, "t.py")
+    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
     cap = kwargs["cap"]
     print("captured")
     result = cap.readouterr()
@@ -617,7 +662,7 @@ def test_patcher_injected_via_session():
     def fn(patch: Patcher) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, "t.py")
+    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
     patch = kwargs["patch"]
 
     obj = types.SimpleNamespace(x=1)
@@ -648,7 +693,7 @@ def test_testcontext_still_works_via_builtin_dispatch():
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, "t.py")
+    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
     assert kwargs["thing"] == "ok", (
         f"fixture depending on Fixture[TestContext] via builtin dispatch should return "
         f"'ok', got {kwargs['thing']!r}"
@@ -846,7 +891,9 @@ def test_logcapture_fixture_registers_teardown():
 
     teardowns: list = []
     ctx = _BuiltinContext(
-        module_path="t.py", inject_scope="function", teardown_stack=teardowns
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
     )
     _LogCaptureFixture().create(ctx)
 
@@ -872,7 +919,7 @@ def test_logcapture_injected_via_session():
     def fn(log: LogCapture) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, "t.py")
+    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
     assert "log" in kwargs, (
         f"LogCapture should be injected as 'log' into kwargs via session, got keys: "
         f"{list(kwargs)}"

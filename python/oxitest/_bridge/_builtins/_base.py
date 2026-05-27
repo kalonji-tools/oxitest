@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.plugin_loader import PluginRegistry
 
 
@@ -14,11 +15,18 @@ if TYPE_CHECKING:
 class _BuiltinContext:
     """Passed to BuiltinFixture.create() — carries injection-site metadata."""
 
-    module_path: str
+    meta: TestMeta
     inject_scope: str  # "function" for test-level injections
     teardown_stack: list[Callable[[], None]]
-    fn_name: str = ""  # test function name, used for debuggable temp dir names
     plugin_registry: PluginRegistry | None = field(default=None, repr=False)
+
+    @property
+    def module_path(self) -> str:
+        return self.meta.module_path
+
+    @property
+    def fn_name(self) -> str:
+        return self.meta.fn_name
 
 
 class BuiltinFixture:

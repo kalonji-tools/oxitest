@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import oxitest
+from helpers import run_test
 from oxitest import TempDir, parametrize
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
@@ -16,7 +21,6 @@ from oxitest._bridge._mark_registry import (
     _XFailHandler,
     evaluate_marks,
 )
-from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
     FixtureDef,
     FixtureRegistry,

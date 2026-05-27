@@ -295,12 +295,27 @@ fn try_run_test_with_session_obj(
     default_timeout: Option<u64>,
 ) -> PyResult<TestOutcome> {
     let executor = py.import("oxitest._bridge.executor")?;
-    let path_str = item.module_path.as_str();
+
+    // Construct a Python TestMeta object with test identity fields.
+    let test_meta_mod = py.import("oxitest._bridge._test_meta")?;
+    let test_meta_cls = test_meta_mod.getattr("TestMeta")?;
 
     let param_id_obj: Bound<'_, PyAny> = match &item.param_id {
         Some(pid) => pid.as_str().into_pyobject(py)?.into_any(),
         None => py.None().into_bound(py),
     };
+
+    let markers_list = pyo3::types::PyList::new(py, &item.markers)?;
+    let markers_frozen = pyo3::types::PyFrozenSet::new(py, markers_list)?;
+
+    let node_id_str: &str = &item.node_id;
+    let meta_obj = test_meta_cls.call1((
+        item.module_path.as_str(),
+        item.fn_name.as_str(),
+        node_id_str,
+        &param_id_obj,
+        markers_frozen,
+    ))?;
 
     let timeout_obj: Bound<'_, PyAny> = match default_timeout {
         Some(t) => (t as i64).into_pyobject(py)?.into_any(),
@@ -308,16 +323,7 @@ fn try_run_test_with_session_obj(
     };
 
     let r: TestResult = executor
-        .call_method1(
-            "run_test",
-            (
-                path_str,
-                item.fn_name.as_str(),
-                session_obj,
-                &param_id_obj,
-                &timeout_obj,
-            ),
-        )?
+        .call_method1("run_test", (meta_obj, session_obj, &timeout_obj))?
         .extract()?;
 
     let frames: Vec<Frame> = r
