@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterable
 from types import ModuleType
 from typing import Any, cast
 
+from oxitest._bridge._ast_utils import walk_bare_asserts
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import _append_mark
@@ -207,27 +208,6 @@ def _check_fn_violations(
     return [v for checker in _FN_VIOLATION_CHECKERS for v in checker(path, fn_name, fn)]
 
 
-def _shallow_walk_asserts(
-    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> list[int]:
-    """Return line numbers of bare `assert` statements in func_node.
-
-    Does NOT descend into nested function definitions, so inner helpers
-    whose bare asserts should not be attributed to the enclosing test are
-    correctly excluded.
-    """
-    lines: list[int] = []
-    queue = list(ast.iter_child_nodes(func_node))
-    while queue:
-        node = queue.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue  # prune: do not recurse into nested functions
-        if isinstance(node, ast.Assert) and node.msg is None:
-            lines.append(node.lineno)
-        queue.extend(ast.iter_child_nodes(node))
-    return sorted(lines)
-
-
 def _collect_bare_asserts(path: str) -> list[CollectedViolation]:
     """Parse the source file and return bare-assert violations for test functions."""
     try:
@@ -242,7 +222,7 @@ def _collect_bare_asserts(path: str) -> list[CollectedViolation]:
         if isinstance(
             node, (ast.FunctionDef, ast.AsyncFunctionDef)
         ) and node.name.startswith("test_"):
-            lines = _shallow_walk_asserts(node)
+            lines = walk_bare_asserts(node)
             if lines:
                 violations.append(
                     CollectedViolation(
@@ -256,7 +236,7 @@ def _collect_bare_asserts(path: str) -> list[CollectedViolation]:
                 if isinstance(
                     item, (ast.FunctionDef, ast.AsyncFunctionDef)
                 ) and item.name.startswith("test_"):
-                    lines = _shallow_walk_asserts(item)
+                    lines = walk_bare_asserts(item)
                     if lines:
                         violations.append(
                             CollectedViolation(

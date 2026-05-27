@@ -10,7 +10,6 @@ __all__ = [
     "build_pipeline",
 ]
 
-import ast
 import inspect
 import linecache
 import reprlib
@@ -21,6 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from oxitest._bridge._ast_utils import find_bare_assert_lines
 from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import ExecutionWrapper
@@ -161,13 +161,9 @@ def _find_bare_asserts(fn: object) -> list[int]:
     try:
         source_lines, start_line = inspect.getsourcelines(cast(Any, fn))
         source = textwrap.dedent("".join(source_lines))
-        tree = ast.parse(source)
-        return [
-            n.lineno + start_line - 1
-            for n in ast.walk(tree)
-            if isinstance(n, ast.Assert) and n.msg is None
-        ]
-    except (OSError, TypeError, SyntaxError):
+        return sorted(find_bare_assert_lines(source, start_line=start_line))
+    except (OSError, TypeError):
+        # SyntaxError is handled inside find_bare_assert_lines.
         return []
 
 
