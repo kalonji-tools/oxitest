@@ -92,6 +92,89 @@ def test_query(db: Fixture[object], query: str, expected_rows: int) -> None:
 
 The fixture is resolved at run time with the same scope/teardown rules as any other fixture.
 
+## Compose parametrize layers
+
+When a test has multiple independent dimensions (e.g. database backends × operations),
+writing every combination by hand is tedious. Stack multiple `@oxitest.parametrize`
+decorators with `oxitest.partial()` to express the cartesian product:
+
+```python
+from dataclasses import dataclass
+import oxitest
+from oxitest import Fixture, FixtureRef, partial
+
+@dataclass
+class QueryCase:
+    db: FixtureRef[object]
+    query: str
+    expected_rows: int
+
+@oxitest.parametrize(
+    real=partial(QueryCase, db=real_db),
+    mock=partial(QueryCase, db=mock_db),
+)
+@oxitest.parametrize(
+    users=partial(QueryCase, query="SELECT * FROM users", expected_rows=3),
+    empty=partial(QueryCase, query="SELECT * FROM empty", expected_rows=0),
+)
+def test_query(db: Fixture[object], query: str, expected_rows: int) -> None:
+    rows = db.execute(query).fetchall()
+    assert len(rows) == expected_rows
+```
+
+This produces 4 test variants: `test_query[real-users]`, `test_query[real-empty]`,
+`test_query[mock-users]`, `test_query[mock-empty]`.
+
+### How it works
+
+1. Each `@oxitest.parametrize` layer provides a **subset** of the dataclass fields
+   via `partial()`.
+2. At collection time, oxitest takes the cartesian product of all layers and merges
+   the partial fields into a complete instance.
+3. The test function receives the same kwargs as a regular parametrized test — the
+   signature does not change.
+
+### Rules
+
+- All `partial()` calls across layers must target the **same dataclass type**.
+- Each layer must provide **disjoint fields** — no field may appear in two layers.
+- The **union** of all layers must cover every field on the dataclass.
+- Composition requires **at least 2** stacked `@parametrize` layers. A single layer
+  with `partial()` values is an error — use a full dataclass instance instead.
+- The source dataclass does **not** need to be frozen. Only full (non-composed)
+  parametrize cases require `@dataclass(frozen=True)`.
+
+### Compact mode
+
+Compact mode works with composition. Annotate a single parameter with the dataclass
+type to receive the merged instance:
+
+```python
+@oxitest.parametrize(real=partial(QueryCase, db=real_db))
+@oxitest.parametrize(users=partial(QueryCase, query="SELECT 1", expected_rows=1))
+def test_query_compact(case: QueryCase) -> None:
+    rows = case.db.execute(case.query).fetchall()
+    assert len(rows) == case.expected_rows
+```
+
+### Test IDs
+
+Composed test IDs join each layer's case name with a dash, outer decorator first:
+
+```text
+test_query[real-users]
+test_query[real-empty]
+test_query[mock-users]
+test_query[mock-empty]
+```
+
+Filter with `-k` as usual:
+
+```console
+$ oxitest -k "real"        # all real-db variants
+$ oxitest -k "real-users"  # one specific combination
+```
+
 ## Understand test IDs
 
 oxitest names parametrized variants using the keyword argument key:
