@@ -1,0 +1,44 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install tools
+        run: |
+          uv tool install prek
+          uv sync --only-group lint --only-group typecheck --only-group test
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run quality checks
+        run: prek run --all-files --show-diff-on-failure --skip no-commit-to-branch
+
+      - name: Run pre-push checks
+        run: prek run --all-files --stage pre-push --skip no-commit-to-branch --skip affected-tests
