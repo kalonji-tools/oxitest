@@ -226,7 +226,7 @@ mod strict_pipeline_tests {
             make_item("tests/test_foo.py::test_bad"),
             make_item("tests/test_foo.py::test_good"),
         ];
-        let violations = vec![StrictViolation::PerTest(PerTestViolation::BareAssert {
+        let violations = [StrictViolation::PerTest(PerTestViolation::BareAssert {
             node_id: NodeId::from_raw("tests/test_foo.py::test_bad"),
             lines: vec![5],
         })];

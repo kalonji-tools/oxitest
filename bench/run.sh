@@ -9,36 +9,50 @@ python bench/generate.py
 
 RESULTS_DIR="bench"
 WARMUP=3
-RUNS=10
+RUNS="${BENCH_RUNS:-10}"
+
+# Build pytest comparison commands only if pytest is available
+PYTEST_CMDS=()
+if command -v pytest &>/dev/null; then
+  PYTEST_CMDS=("pytest")
+  echo "pytest found — including comparison benchmarks"
+else
+  echo "pytest not found — running oxitest-only benchmarks"
+fi
 
 echo ""
 echo "=== Tier: startup ==="
+STARTUP_CMDS=('oxitest bench/generated/startup/')
+[[ ${#PYTEST_CMDS[@]} -gt 0 ]] && STARTUP_CMDS+=('pytest bench/generated/startup/')
 hyperfine \
   --warmup "$WARMUP" \
   --runs "$RUNS" \
   --export-json "$RESULTS_DIR/results_startup.json" \
-  'oxitest bench/generated/startup/' \
-  'pytest bench/generated/startup/'
+  "${STARTUP_CMDS[@]}"
 
 echo ""
 echo "=== Tier: below_threshold (serial only) ==="
+BT_CMDS=('oxitest --serial bench/generated/below_threshold/oxitest/')
+[[ ${#PYTEST_CMDS[@]} -gt 0 ]] && BT_CMDS+=('pytest bench/generated/below_threshold/pytest/')
 hyperfine \
   --warmup "$WARMUP" \
   --runs "$RUNS" \
   --export-json "$RESULTS_DIR/results_below_threshold.json" \
-  'oxitest --serial bench/generated/below_threshold/oxitest/' \
-  'pytest bench/generated/below_threshold/pytest/'
+  "${BT_CMDS[@]}"
 
 for tier in s m l; do
   echo ""
   echo "=== Tier: $tier (serial + parallel) ==="
+  TIER_CMDS=(
+    "oxitest --serial bench/generated/${tier}/oxitest/"
+    "oxitest bench/generated/${tier}/oxitest/"
+  )
+  [[ ${#PYTEST_CMDS[@]} -gt 0 ]] && TIER_CMDS+=("pytest bench/generated/${tier}/pytest/")
   hyperfine \
     --warmup "$WARMUP" \
     --runs "$RUNS" \
     --export-json "$RESULTS_DIR/results_${tier}.json" \
-    "oxitest --serial bench/generated/${tier}/oxitest/" \
-    "oxitest bench/generated/${tier}/oxitest/" \
-    "pytest bench/generated/${tier}/pytest/"
+    "${TIER_CMDS[@]}"
 
   echo ""
   echo "=== Tier: $tier (cache cold) ==="
