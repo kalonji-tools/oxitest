@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.7.0] - 2026-05-27
+
+### Bug Fixes
+
+
+- Collect Python coverage from worker subprocesses
+- Resolve clippy lints, benchmark pytest, and release Cargo.lock
+
+### Features
+
+
+- Add oxi.partial() for parametrize composition
+- Tuple-based param_cases and _PartialCases type
+- Cartesian product expansion for composed parametrize
+- Composed parametrize resolution with expand/compact/FixtureRef
+- Add ColorCategory/JunitCategory enums and simplify reporters (#516)
+
 ## [0.6.0] - 2026-05-26
 
 ### Features
