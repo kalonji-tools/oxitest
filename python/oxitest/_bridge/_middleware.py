@@ -113,6 +113,33 @@ def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
     return None
 
 
+def _check_warnings(
+    caught: list[warnings.WarningMessage],
+    all_kwargs: dict[str, Any],
+) -> tuple[bool, str]:
+    """Filter caught warnings, excluding captured and teardown warnings."""
+    warn_capture = next(
+        (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
+    )
+    captured_ids = warn_capture._all_captured_ids if warn_capture else set()
+    relevant: list[str] = [
+        f"{wi.category.__name__}: {wi.message}"
+        for wi in caught
+        if not issubclass(wi.category, FixtureTeardownWarning)
+        and id(wi) not in captured_ids
+    ]
+    if not relevant:
+        return False, ""
+    return True, "\n".join(relevant)
+
+
+def _dispatch_exception(exc: BaseException) -> TestResult | None:
+    """Map exception to TestResult. Returns None to signal re-raise."""
+    if isinstance(exc, AssertionError):
+        return _handle_assertion_error(exc)
+    return _handle_runtime_exception(exc)
+
+
 def _compose(
     wrapper: ExecutionWrapper, inner: Callable[[], TestResult]
 ) -> Callable[[], TestResult]:
@@ -154,30 +181,18 @@ async def _run_base_async(
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             await fn(**all_kwargs)
-        # Exclude warnings already captured by WarnCapture or FixtureTeardownWarning
-        warn_capture = next(
-            (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
-        )
-        captured_ids = warn_capture._all_captured_ids if warn_capture else set()
-        caught: list[str] = [
-            f"{wi.category.__name__}: {wi.message}"
-            for wi in w
-            if not issubclass(wi.category, FixtureTeardownWarning)
-            and id(wi) not in captured_ids
-        ]
-        if caught:
+        has_warnings, warning_msg = _check_warnings(w, all_kwargs)
+        if has_warnings:
             return TestResult(
                 status=StatusKind.WARNED,
-                message="\n".join(str(c) for c in caught),
+                message=warning_msg,
                 no_message_lines=no_message_lines,
             )
         return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
-    except AssertionError as exc:
-        return _handle_assertion_error(exc)
-    except Exception as exc:
-        result = _handle_runtime_exception(exc)
+    except BaseException as exc:
+        result = _dispatch_exception(exc)
         if result is not None:
             return result
         raise
