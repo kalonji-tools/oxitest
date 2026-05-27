@@ -108,8 +108,9 @@ impl Reporter for CiReporter {
             | TestOutcome::Error { .. }
             | TestOutcome::Timeout { .. } => self.push_deferred_diag(item, outcome),
             TestOutcome::Flaky { .. } => {
-                let node_str = item.node_id.as_ref();
-                self.deferred_diags.retain(|d| !d.contains(node_str));
+                super::remove_if_flaky(&mut self.deferred_diags, outcome, item, |d, target| {
+                    d.contains(target)
+                });
             }
             _ => {}
         }
