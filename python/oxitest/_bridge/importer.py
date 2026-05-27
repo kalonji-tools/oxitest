@@ -16,7 +16,7 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge.fixtures import Fixtures
-from oxitest._bridge.parametrize import _DataclassCases, _DictCases
+from oxitest._bridge.parametrize import _DictCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
 
@@ -40,8 +40,8 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     is_async = inspect.iscoroutinefunction(fn)
-    param_cases: _DictCases | _DataclassCases | None = get_metadata(fn).param_cases
-    if param_cases is None:
+    layers = get_metadata(fn).param_cases
+    if layers is None:
         return [
             CollectedItem(
                 fn_name=fn_name,
@@ -52,6 +52,20 @@ def _expand_item(
                 is_async=is_async,
             )
         ]
+    # Single-layer: iterate directly over the layer's items
+    if len(layers) == 1:
+        return [
+            CollectedItem(
+                fn_name=fn_name,
+                lineno=lineno,
+                markers=marker_names,
+                param_id=case_id,
+                param_values=list(pv),
+                is_async=is_async,
+            )
+            for case_id, pv in layers[0].items()
+        ]
+    # Multi-layer (composition): expansion implemented in Task 3
     return [
         CollectedItem(
             fn_name=fn_name,
@@ -61,7 +75,7 @@ def _expand_item(
             param_values=list(pv),
             is_async=is_async,
         )
-        for case_id, pv in param_cases.items()
+        for case_id, pv in layers[0].items()
     ]
 
 
@@ -74,8 +88,10 @@ def _check_dict_parametrize(
 
     Dict-parametrize: _oxitest_param_cases is a _DictCases instance.
     """
-    param_cases = get_metadata(fn).param_cases
-    if isinstance(param_cases, _DictCases):
+    layers = get_metadata(fn).param_cases
+    if isinstance(layers, tuple) and any(
+        isinstance(layer, _DictCases) for layer in layers
+    ):
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",
@@ -113,8 +129,8 @@ def _check_single_case_parametrize(
     fn: object,
 ) -> list[CollectedViolation]:
     """Return a SINGLE_CASE_PARAMETRIZE violation if only one case is defined."""
-    param_cases = get_metadata(fn).param_cases
-    if param_cases is not None and len(param_cases.cases) == 1:
+    layers = get_metadata(fn).param_cases
+    if layers is not None and len(layers) == 1 and len(layers[0].cases) == 1:
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",
