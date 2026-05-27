@@ -248,6 +248,34 @@ impl TestOutcome {
         }
     }
 
+    /// Classifies the outcome for color/style selection in TTY output.
+    pub fn color_category(&self) -> ColorCategory {
+        match self {
+            Self::Passed { .. } => ColorCategory::Pass,
+            Self::Failed { .. } | Self::XPassed { strict: true } => ColorCategory::Fail,
+            Self::Error { .. } => ColorCategory::Error,
+            Self::Skipped { .. } => ColorCategory::Skip,
+            Self::Warned { .. } | Self::XPassed { strict: false } | Self::Flaky { .. } => {
+                ColorCategory::Warn
+            }
+            Self::XFailed { .. } => ColorCategory::Dim,
+            Self::Timeout { .. } => ColorCategory::Timeout,
+        }
+    }
+
+    /// Classifies the outcome for JUnit XML element selection.
+    pub fn junit_category(&self) -> JunitCategory {
+        match self {
+            Self::Passed { .. }
+            | Self::Warned { .. }
+            | Self::XPassed { strict: false }
+            | Self::Flaky { .. } => JunitCategory::Passed,
+            Self::Failed { .. } | Self::XPassed { strict: true } => JunitCategory::Failed,
+            Self::Error { .. } | Self::Timeout { .. } => JunitCategory::Error,
+            Self::Skipped { .. } | Self::XFailed { .. } => JunitCategory::Skipped,
+        }
+    }
+
     /// Maps the outcome to a CTRF status string (`"passed"`, `"failed"`, or `"skipped"`).
     ///
     /// CTRF defines only three statuses. This method centralises the mapping so
@@ -265,6 +293,27 @@ impl TestOutcome {
             Self::Skipped { .. } | Self::XFailed { .. } => "skipped",
         }
     }
+}
+
+/// Classification of a [`TestOutcome`] for color/style selection in TTY output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorCategory {
+    Pass,
+    Fail,
+    Error,
+    Skip,
+    Warn,
+    Dim,
+    Timeout,
+}
+
+/// Classification of a [`TestOutcome`] for JUnit XML element selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JunitCategory {
+    Passed,
+    Failed,
+    Error,
+    Skipped,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -1470,6 +1519,236 @@ mod ctrf_status_tests {
             message: String::new(),
         };
         assert_eq!(o.ctrf_status(), "passed");
+    }
+}
+
+#[cfg(test)]
+mod color_category_tests {
+    use super::*;
+
+    #[test]
+    fn passed_is_pass() {
+        assert_eq!(
+            TestOutcome::Passed {
+                no_message_lines: vec![]
+            }
+            .color_category(),
+            ColorCategory::Pass
+        );
+    }
+
+    #[test]
+    fn failed_is_fail() {
+        let o = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.color_category(), ColorCategory::Fail);
+    }
+
+    #[test]
+    fn error_is_error() {
+        let o = TestOutcome::Error {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.color_category(), ColorCategory::Error);
+    }
+
+    #[test]
+    fn skipped_is_skip() {
+        assert_eq!(
+            TestOutcome::Skipped {
+                reason: String::new()
+            }
+            .color_category(),
+            ColorCategory::Skip
+        );
+    }
+
+    #[test]
+    fn warned_is_warn() {
+        assert_eq!(
+            TestOutcome::Warned {
+                reason: String::new(),
+                no_message_lines: vec![]
+            }
+            .color_category(),
+            ColorCategory::Warn
+        );
+    }
+
+    #[test]
+    fn xfailed_is_dim() {
+        assert_eq!(
+            TestOutcome::XFailed {
+                reason: String::new()
+            }
+            .color_category(),
+            ColorCategory::Dim
+        );
+    }
+
+    #[test]
+    fn xpassed_strict_is_fail() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: true }.color_category(),
+            ColorCategory::Fail
+        );
+    }
+
+    #[test]
+    fn xpassed_lenient_is_warn() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: false }.color_category(),
+            ColorCategory::Warn
+        );
+    }
+
+    #[test]
+    fn timeout_is_timeout() {
+        assert_eq!(
+            TestOutcome::Timeout {
+                message: String::new()
+            }
+            .color_category(),
+            ColorCategory::Timeout
+        );
+    }
+
+    #[test]
+    fn flaky_is_warn() {
+        assert_eq!(
+            TestOutcome::Flaky {
+                message: String::new()
+            }
+            .color_category(),
+            ColorCategory::Warn
+        );
+    }
+}
+
+#[cfg(test)]
+mod junit_category_tests {
+    use super::*;
+
+    #[test]
+    fn passed_is_passed() {
+        assert_eq!(
+            TestOutcome::Passed {
+                no_message_lines: vec![]
+            }
+            .junit_category(),
+            JunitCategory::Passed
+        );
+    }
+
+    #[test]
+    fn failed_is_failed() {
+        let o = TestOutcome::Failed {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.junit_category(), JunitCategory::Failed);
+    }
+
+    #[test]
+    fn error_is_error() {
+        let o = TestOutcome::Error {
+            message: String::new(),
+            file: String::new(),
+            lineno: 0,
+            source_line: String::new(),
+            frames: vec![],
+        };
+        assert_eq!(o.junit_category(), JunitCategory::Error);
+    }
+
+    #[test]
+    fn skipped_is_skipped() {
+        assert_eq!(
+            TestOutcome::Skipped {
+                reason: String::new()
+            }
+            .junit_category(),
+            JunitCategory::Skipped
+        );
+    }
+
+    #[test]
+    fn warned_is_passed() {
+        assert_eq!(
+            TestOutcome::Warned {
+                reason: String::new(),
+                no_message_lines: vec![]
+            }
+            .junit_category(),
+            JunitCategory::Passed
+        );
+    }
+
+    #[test]
+    fn xfailed_is_skipped() {
+        assert_eq!(
+            TestOutcome::XFailed {
+                reason: String::new()
+            }
+            .junit_category(),
+            JunitCategory::Skipped
+        );
+    }
+
+    #[test]
+    fn xpassed_strict_is_failed() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: true }.junit_category(),
+            JunitCategory::Failed
+        );
+    }
+
+    #[test]
+    fn xpassed_lenient_is_passed() {
+        assert_eq!(
+            TestOutcome::XPassed { strict: false }.junit_category(),
+            JunitCategory::Passed
+        );
+    }
+
+    #[test]
+    fn timeout_is_error() {
+        assert_eq!(
+            TestOutcome::Timeout {
+                message: String::new()
+            }
+            .junit_category(),
+            JunitCategory::Error
+        );
+    }
+
+    #[test]
+    fn flaky_is_passed() {
+        assert_eq!(
+            TestOutcome::Flaky {
+                message: String::new()
+            }
+            .junit_category(),
+            JunitCategory::Passed
+        );
     }
 }
 
