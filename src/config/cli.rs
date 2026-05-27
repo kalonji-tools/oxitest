@@ -127,10 +127,159 @@ pub struct Cli {
     pub retries_delay: Option<u64>,
 }
 
+impl Cli {
+    /// Check for conflicting flag combinations.
+    ///
+    /// Returns `Err` with a human-readable message if flags contradict each other.
+    /// Called after `Cli::parse()` and before any filesystem or config work.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.exitfirst && self.maxfail.is_some() {
+            return Err(
+                "-x and --maxfail both control when to stop after failures. Use one or the other."
+                    .to_string(),
+            );
+        }
+
+        if self.verbose && self.quiet {
+            return Err(
+                "--verbose and --quiet are opposite output modes. Use one or the other."
+                    .to_string(),
+            );
+        }
+
+        if self.schedule.is_some() && self.serial {
+            return Err(
+                "--schedule controls parallel worker ordering, which has no effect with --serial."
+                    .to_string(),
+            );
+        }
+
+        if self.retries_delay.is_some() && self.retries.is_none() {
+            return Err("--retries-delay has no effect without --retries.".to_string());
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 impl Cli {
     /// Construct a `Cli` with all defaults, equivalent to running `oxitest` with no arguments.
     pub fn default_for_test() -> Self {
         Self::try_parse_from(["oxitest"]).expect("default CLI args must parse")
+    }
+}
+
+#[cfg(test)]
+mod validate_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn test_exitfirst_conflicts_with_maxfail() {
+        let cli = Cli::try_parse_from(["oxitest", "-x", "--maxfail", "5"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("-x"), "error should mention -x: {err}");
+        assert!(
+            err.contains("--maxfail"),
+            "error should mention --maxfail: {err}"
+        );
+    }
+
+    #[test]
+    fn test_exitfirst_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "-x"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_maxfail_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--maxfail", "3"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_no_flags_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_verbose_conflicts_with_quiet() {
+        let cli = Cli::try_parse_from(["oxitest", "-v", "-q"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--verbose"),
+            "error should mention --verbose: {err}"
+        );
+        assert!(
+            err.contains("--quiet"),
+            "error should mention --quiet: {err}"
+        );
+    }
+
+    #[test]
+    fn test_verbose_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "-v"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_quiet_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "-q"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_schedule_conflicts_with_serial() {
+        let cli = Cli::try_parse_from(["oxitest", "--schedule", "random", "--serial"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--schedule"),
+            "error should mention --schedule: {err}"
+        );
+        assert!(
+            err.contains("--serial"),
+            "error should mention --serial: {err}"
+        );
+    }
+
+    #[test]
+    fn test_schedule_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--schedule", "random"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_serial_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--serial"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_retries_delay_requires_retries() {
+        let cli = Cli::try_parse_from(["oxitest", "--retries-delay", "5"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--retries-delay"),
+            "error should mention --retries-delay: {err}"
+        );
+        assert!(
+            err.contains("--retries"),
+            "error should mention --retries: {err}"
+        );
+    }
+
+    #[test]
+    fn test_retries_with_delay_is_valid() {
+        let cli =
+            Cli::try_parse_from(["oxitest", "--retries", "3", "--retries-delay", "5"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_retries_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--retries", "3"]).unwrap();
+        assert!(cli.validate().is_ok());
     }
 }
