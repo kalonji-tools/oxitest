@@ -59,21 +59,6 @@ impl JsonReporter {
     }
 }
 
-/// Returns the CTRF message for a test outcome.
-///
-/// CTRF messages are only emitted for failure-like outcomes (failed, error,
-/// timeout, flaky). Skip/xfail reasons are intentionally omitted — CTRF
-/// consumers use the `status` field for those.
-fn outcome_message(outcome: &TestOutcome) -> Option<String> {
-    match outcome {
-        TestOutcome::Failed { .. }
-        | TestOutcome::Error { .. }
-        | TestOutcome::Timeout { .. }
-        | TestOutcome::Flaky { .. } => outcome.message().map(str::to_owned),
-        _ => None,
-    }
-}
-
 impl JsonReporter {
     fn write_json(&self, output: &CtrfOutput) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(output).map_err(std::io::Error::other)?;
@@ -89,7 +74,7 @@ impl Reporter for JsonReporter {
             name: item.node_id.to_string(),
             status: outcome.ctrf_status(),
             duration: duration_ms.as_f64(),
-            message: outcome_message(outcome),
+            message: outcome.message().map(|s| s.to_string()),
         });
     }
 

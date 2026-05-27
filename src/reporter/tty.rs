@@ -1,4 +1,4 @@
-use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
+use crate::types::{CollectError, ColorCategory, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{
     color_cyan, color_dim, color_dim_green, color_error_token, color_fail, color_skip,
@@ -30,15 +30,14 @@ fn fmt_quiet_line(symbol: String, body: String) -> String {
 fn outcome_label(outcome: &TestOutcome, use_color: bool) -> String {
     let text = outcome.label();
     let c = use_color;
-    match outcome {
-        TestOutcome::Passed { .. } => String::new(),
-        TestOutcome::Failed { .. } | TestOutcome::XPassed { strict: true } => color_fail(text, c),
-        TestOutcome::Error { .. } => color_error_token(text, c),
-        TestOutcome::Skipped { .. } => color_skip(text, c),
-        TestOutcome::Warned { .. } | TestOutcome::XPassed { strict: false } => color_warn(text, c),
-        TestOutcome::XFailed { .. } => color_dim(text, c),
-        TestOutcome::Timeout { .. } => color_timeout(text, c),
-        TestOutcome::Flaky { .. } => color_warn(text, c),
+    match outcome.color_category() {
+        ColorCategory::Pass => String::new(),
+        ColorCategory::Fail => color_fail(text, c),
+        ColorCategory::Error => color_error_token(text, c),
+        ColorCategory::Skip => color_skip(text, c),
+        ColorCategory::Warn => color_warn(text, c),
+        ColorCategory::Dim => color_dim(text, c),
+        ColorCategory::Timeout => color_timeout(text, c),
     }
 }
 
