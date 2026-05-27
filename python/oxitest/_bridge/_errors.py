@@ -24,15 +24,15 @@ if TYPE_CHECKING:
     from oxitest._bridge.result import TestResult
 
 
-class OxitestError(Exception):  # pragma: no cover
+class OxitestError(Exception):
     """Base for all oxitest internal errors."""
 
 
-class FixtureError(OxitestError):  # pragma: no cover
+class FixtureError(OxitestError):
     """Fixture-related errors."""
 
 
-class ExecutionError(OxitestError):  # pragma: no cover
+class ExecutionError(OxitestError):
     """Test execution errors."""
 
 
