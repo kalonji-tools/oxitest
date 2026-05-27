@@ -24,7 +24,11 @@ def test_parametrize_stamps_function():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"parametrize should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DataclassCases), (
         "parametrize decorator should stamp '_oxitest_param_cases' as _DataclassCases"
     )
@@ -50,7 +54,11 @@ def test_parametrize_multiple_cases():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"parametrize should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DataclassCases), (
         "decorator should stamp _DataclassCases"
     )
@@ -64,7 +72,7 @@ def test_parametrize_multiple_cases():
 
 def test_parametrize_rejects_non_dataclass():
     with raises(
-        TypeError, match="case values must be dicts or frozen dataclass instances"
+        TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
 
         @parametrize(basic=object())
@@ -493,7 +501,11 @@ def test_parametrize_dict_mode_stamps_function():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"dict mode should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -512,7 +524,11 @@ def test_parametrize_dict_mode_multiple_cases():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"dict mode should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -557,7 +573,11 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"dict mode should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DictCases), (
         f"dict mode should stamp _DictCases, got {type(param_cases)!r}"
     )
@@ -680,7 +700,11 @@ def test_parametrize_inferred_type_stamps_function():
 
     from oxitest._bridge._fn_metadata import get_metadata
 
-    param_cases = get_metadata(test_foo).param_cases
+    raw = get_metadata(test_foo).param_cases
+    assert isinstance(raw, tuple) and len(raw) == 1, (
+        f"dataclass mode should store a 1-tuple, got {raw!r}"
+    )
+    param_cases = raw[0]
     assert isinstance(param_cases, _DataclassCases), (
         f"dataclass mode should stamp _DataclassCases, got {type(param_cases)!r}"
     )
@@ -695,7 +719,7 @@ def test_parametrize_inferred_type_stamps_function():
 def test_parametrize_rejects_invalid_case_type():
     """Non-dict, non-dataclass case value raises TypeError at decoration time."""
     with raises(
-        TypeError, match="case values must be dicts or frozen dataclass instances"
+        TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
 
         @parametrize(basic=42)
@@ -985,7 +1009,7 @@ def test_parametrize_rejects_non_dataclass_non_dict_direct():
     from oxitest._bridge.parametrize import parametrize
 
     with raises(
-        TypeError, match="case values must be dicts or frozen dataclass instances"
+        TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
 
         @parametrize(basic=42)
@@ -1054,3 +1078,116 @@ def test_partial_rejects_non_callable_fixref():
 
     with raises(TypeError, match="FixtureRef"):
         partial(DbCase, db=42)
+
+
+# ── _PartialCases tests ─────────────────────────────────────────────────────
+
+
+def test_partial_cases_items_yields_field_repr_pairs():
+    from oxitest._bridge.parametrize import _PartialCases
+
+    p = partial(MathCase, x=1, y=2, expected=3)
+    pc = _PartialCases(
+        cases={"add": p},
+        param_type=MathCase,
+        provided_fields=frozenset({"x", "y", "expected"}),
+        fixref_fields=[],
+    )
+
+    result = list(pc.items())
+    assert result == [("add", [("x", "1"), ("y", "2"), ("expected", "3")])], (
+        f"_PartialCases.items() should yield (case_id, [(field, repr(val))...]),"
+        f" got {result}"
+    )
+
+
+def test_parametrize_stacks_partial_layers():
+    from oxitest._bridge._fn_metadata import get_metadata
+    from oxitest._bridge.parametrize import _PartialCases
+
+    @parametrize(pg=partial(MathCase, x=1))
+    @parametrize(add=partial(MathCase, y=2, expected=3))
+    def test_fn(x: int, y: int, expected: int) -> None:
+        pass
+
+    meta = get_metadata(test_fn)
+    assert isinstance(meta.param_cases, tuple), (
+        f"stacked parametrize should produce a tuple, got {type(meta.param_cases)!r}"
+    )
+    assert len(meta.param_cases) == 2, (
+        f"two stacked decorators should produce 2-tuple, got {len(meta.param_cases)}"
+    )
+    assert all(isinstance(layer, _PartialCases) for layer in meta.param_cases), (
+        f"all layers should be _PartialCases,"
+        f" got {[type(layer).__name__ for layer in meta.param_cases]}"
+    )
+
+
+def test_parametrize_single_full_dataclass_is_1_tuple():
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    @parametrize(basic=AddCase(x=1, y=2, expected=3))
+    def test_fn(x: int, y: int, expected: int) -> None:
+        pass
+
+    meta = get_metadata(test_fn)
+    assert isinstance(meta.param_cases, tuple), (
+        f"single parametrize should produce a tuple, got {type(meta.param_cases)!r}"
+    )
+    assert len(meta.param_cases) == 1, (
+        f"single decorator should produce 1-tuple, got {len(meta.param_cases)}"
+    )
+    assert isinstance(meta.param_cases[0], _DataclassCases), (
+        f"layer should be _DataclassCases, got {type(meta.param_cases[0]).__name__}"
+    )
+
+
+def test_parametrize_single_dict_is_1_tuple():
+    from oxitest._bridge._fn_metadata import get_metadata
+
+    @parametrize(basic=dict(x=1, y=2, expected=3))
+    def test_fn(x: int, y: int, expected: int) -> None:
+        pass
+
+    meta = get_metadata(test_fn)
+    assert isinstance(meta.param_cases, tuple), (
+        "single dict parametrize should produce a tuple,"
+        f" got {type(meta.param_cases)!r}"
+    )
+    assert len(meta.param_cases) == 1, (
+        f"single dict decorator should produce 1-tuple, got {len(meta.param_cases)}"
+    )
+    assert isinstance(meta.param_cases[0], _DictCases), (
+        f"layer should be _DictCases, got {type(meta.param_cases[0]).__name__}"
+    )
+
+
+def test_parametrize_rejects_mixing_partial_and_full():
+    with raises(TypeError, match="cannot mix"):
+
+        @parametrize(pg=partial(MathCase, x=1))
+        @parametrize(basic=AddCase(x=1, y=2, expected=3))
+        def test_fn(x: int, y: int, expected: int) -> None:
+            pass
+
+
+def test_parametrize_rejects_partial_different_target_type():
+    @dataclass
+    class OtherCase:
+        z: int
+
+    with raises(TypeError, match="same dataclass type"):
+
+        @parametrize(pg=partial(MathCase, x=1))
+        @parametrize(add=partial(OtherCase, z=2))
+        def test_fn(x: int, z: int) -> None:
+            pass
+
+
+def test_parametrize_rejects_overlapping_fields():
+    with raises(TypeError, match="overlap"):
+
+        @parametrize(pg=partial(MathCase, x=1, y=2))
+        @parametrize(add=partial(MathCase, y=3, expected=4))
+        def test_fn(x: int, y: int, expected: int) -> None:
+            pass
