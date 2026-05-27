@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from oxitest import Fixture, TempDir, parametrize, raises
+from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
 from oxitest._bridge.executor import run_test as executor_run_test
 from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
@@ -474,7 +474,6 @@ def test_fixture_ref_no_session_returns_error(tmp: TempDir):
 
 def test_parametrize_rejects_non_callable_for_fixture_ref_field():
     """FixtureRef[T] fields must hold callables — non-callable raises TypeError."""
-    from oxitest import FixtureRef
 
     @dataclass(frozen=True)
     class RefCase:
@@ -992,3 +991,66 @@ def test_parametrize_rejects_non_dataclass_non_dict_direct():
         @parametrize(basic=42)
         def test_fn(x: int) -> None:
             pass
+
+
+# ── partial() tests ─────────────────────────────────────────────────────────
+
+
+@dataclass
+class MathCase:
+    x: int
+    y: int
+    expected: int
+
+
+def test_partial_stores_target_type_and_fields():
+    p = partial(MathCase, x=1, y=2)
+
+    assert p.target_type is MathCase, (
+        f"partial should store target type, got {p.target_type!r}"
+    )
+    assert p.fields == {"x": 1, "y": 2}, (
+        f"partial should store provided fields, got {p.fields!r}"
+    )
+    assert p.provided_fields == frozenset({"x", "y"}), (
+        f"partial should store provided field names, got {p.provided_fields!r}"
+    )
+
+
+def test_partial_rejects_non_dataclass():
+    with raises(TypeError, match="must be a dataclass"):
+        partial(int, x=1)
+
+
+def test_partial_rejects_empty_fields():
+    with raises(TypeError, match="at least one field"):
+        partial(MathCase)
+
+
+def test_partial_rejects_unknown_field():
+    with raises(TypeError, match="unknown field"):
+        partial(MathCase, x=1, typo=2)
+
+
+def test_partial_detects_fixref_fields():
+    @dataclass
+    class DbCase:
+        db: FixtureRef[str]
+        label: str
+
+    def my_db():
+        return "pg"
+
+    p = partial(DbCase, db=my_db)
+    assert p.fixref_fields == ["db"], (
+        f"partial should detect FixtureRef fields, got {p.fixref_fields!r}"
+    )
+
+
+def test_partial_rejects_non_callable_fixref():
+    @dataclass
+    class DbCase:
+        db: FixtureRef[str]
+
+    with raises(TypeError, match="FixtureRef"):
+        partial(DbCase, db=42)
