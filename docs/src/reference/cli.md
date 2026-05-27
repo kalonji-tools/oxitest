@@ -19,7 +19,7 @@ current working directory when omitted.
 | `-k` | — | `EXPR` | — | Filter tests by keyword expression. Only tests whose names contain the expression are run. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression (`and`/`or`/`not` supported). Only tests carrying a matching mark are run. |
 | `--verbose` | `-v` | flag | `false` | Enable verbose output. Prints each test name and result as it runs. Without `-v`, only failures are shown after the progress bar completes. |
-| `-x` | — | flag | `false` | Stop immediately after the first test failure or error. |
+| `-x` | — | flag | `false` | Stop immediately after the first test failure or error. Equivalent to `--maxfail 1`. Conflicts with `--maxfail`. |
 | `--maxfail` | — | integer | `0` | Stop after `N` failures. `0` means unlimited. |
 | `--tb` | — | `long\|short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
 | `--tips` | — | flag | `false` | Expand assertion tip output from a count to a full `file:line` list (see [Tips](#tips)). |
@@ -40,7 +40,28 @@ current working directory when omitted.
 | `--list` | — | flag | `false` | List collected tests and exit (no execution). |
 | `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
 | `--retries` | — | integer | — | Retry failed tests up to N times. |
-| `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. |
+| `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. Has no effect without `--retries`. |
+
+## Flag interactions
+
+!!! info "Conflicting flags"
+    Some flags contradict each other. Passing both produces a descriptive error
+    and [exit code 4](exit-codes.md) before any tests run.
+
+| Flag A | Flag B | Why they conflict |
+|--------|--------|-------------------|
+| `-x` | `--maxfail` | Both control when to stop after failures. Use one or the other. |
+| `--verbose` / `-v` | `--quiet` / `-q` | Opposite output modes. Use one or the other. |
+| `--serial` | `--workers` | Mutually exclusive execution modes. |
+| `--serial` | `--schedule` | Schedule controls parallel worker ordering; no effect in serial mode. |
+| `--retries-delay` | *(without `--retries`)* | Delay has no effect without retries. |
+
+Example:
+
+```console
+$ oxitest -x --maxfail 5
+error: -x and --maxfail both control when to stop after failures. Use one or the other.
+```
 
 ## Traceback styles
 
