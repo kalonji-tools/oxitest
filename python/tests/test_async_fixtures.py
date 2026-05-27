@@ -2,22 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._fixture_session import SharedAsyncManager
 
 # ── Stub backend / session ────────────────────────────────────────────────────
-
-
-def _make_stub_backend():
-    """Return a mock AsyncBackend whose shared session tracks run() calls."""
-    backend = MagicMock(spec=["create_shared_session", "name"])
-    backend.name = "stub"
-    session = MagicMock(spec=["run", "close"])
-    session.run.side_effect = lambda coro: _exhaust_coro(coro)
-    backend.create_shared_session.return_value = session
-    return backend, session
 
 
 def _exhaust_coro(coro):
@@ -27,6 +15,41 @@ def _exhaust_coro(coro):
     except StopIteration as e:
         return e.value
     raise RuntimeError("coroutine did not complete in one step")
+
+
+class _StubSession:
+    """Minimal SharedAsyncSession that synchronously exhausts coroutines."""
+
+    def __init__(self):
+        self.run_count = 0
+
+    def run(self, coro):
+        self.run_count += 1
+        return _exhaust_coro(coro)
+
+    def close(self):
+        pass
+
+
+class _StubBackend:
+    """Minimal AsyncBackend that returns a _StubSession."""
+
+    name = "stub"
+
+    def __init__(self):
+        self._session = _StubSession()
+        self.create_count = 0
+
+    def create_shared_session(self):
+        self.create_count += 1
+        return self._session
+
+
+def _make_stub_backend():
+    """Return a stub AsyncBackend and its shared session."""
+    backend = _StubBackend()
+    session = backend._session
+    return backend, session
 
 
 # ── Initial state ─────────────────────────────────────────────────────────────
@@ -80,7 +103,7 @@ def test_resolve_creates_session_lazily():
 
     assert mgr.session is session, "session should be created on first resolve"
     assert value == 42, "resolved value should be 42"
-    backend.create_shared_session.assert_called_once()
+    assert backend.create_count == 1, "session should be created exactly once"
 
 
 def test_resolve_reuses_existing_session():
@@ -96,7 +119,7 @@ def test_resolve_reuses_existing_session():
     mgr.resolve(fx_a, {})
     mgr.resolve(fx_b, {})
 
-    backend.create_shared_session.assert_called_once()
+    assert backend.create_count == 1, "session should be created exactly once"
 
 
 def test_resolve_sets_was_used():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from oxitest import raises, warns
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
 
 
@@ -26,11 +27,8 @@ def test_asyncio_backend_propagates_exception():
     async def coro():
         raise ValueError("boom")
 
-    try:
+    with raises(ValueError, match="boom"):
         backend.run(coro())
-        assert False, "expected ValueError"  # noqa: PT015
-    except ValueError as exc:
-        assert "boom" in str(exc), f"expected 'boom' in error, got {exc!r}"
 
 
 def test_asyncio_backend_creates_shared_session():
@@ -69,15 +67,8 @@ def test_shared_session_cleans_stray_tasks():
         asyncio.ensure_future(background())
         return "done"
 
-    import warnings
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    with warns(UserWarning, match="(?i)leaked"):
         result = session.run(spawner())
 
     assert result == "done", f"expected 'done', got {result!r}"
-    assert len(caught) == 1, f"expected 1 warning, got {len(caught)}"
-    assert "leaked" in str(caught[0].message).lower(), (
-        f"expected 'leaked' in warning, got {caught[0].message!r}"
-    )
     session.close()
