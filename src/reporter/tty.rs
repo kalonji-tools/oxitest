@@ -302,10 +302,12 @@ impl Reporter for TtyReporter {
         }
 
         // Flaky: remove original failure from deferred list.
-        if matches!(outcome, TestOutcome::Flaky { .. }) {
-            self.deferred_failures
-                .retain(|(i, _, _)| i.node_id != item.node_id);
-        }
+        super::remove_if_flaky(
+            &mut self.deferred_failures,
+            outcome,
+            item,
+            |(i, _, _), target| i.node_id.as_ref() == target,
+        );
 
         if item.param_id.is_some() && !self.opts.verbose {
             // Flush pending group if fn_name changed
