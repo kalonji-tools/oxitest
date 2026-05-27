@@ -1,0 +1,122 @@
+# Benchmark CI workflow — runs bench suite on release tags
+# See: docs/superpowers/specs/2026-05-27-bench-ci-workflow.md
+# See: docs/superpowers/plans/2026-05-27-bench-ci-workflow.md
+name: Benchmarks
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: 'Number of hyperfine runs per benchmark (default: 10)'
+        required: false
+        default: '10'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bench:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          uv sync --group test
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build oxitest
+        run: uv run maturin develop --release
+
+      - name: Install hyperfine
+        run: |
+          HYPERFINE_VERSION="1.19.0"
+          curl -sL "https://github.com/sharkdp/hyperfine/releases/download/v${HYPERFINE_VERSION}/hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz --strip-components=1 -C /usr/local/bin "hyperfine-v${HYPERFINE_VERSION}-x86_64-unknown-linux-musl/hyperfine"
+
+      - name: Download previous baseline
+        id: baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow benchmarks.yml \
+            --status completed \
+            --event push \
+            --json databaseId \
+            --jq '.[0].databaseId' \
+            --limit 1)
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            gh run download "$RUN_ID" --name bench-results --dir /tmp/prev-bench
+            cp /tmp/prev-bench/results.json bench/baseline.json
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Baseline downloaded from run $RUN_ID"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No previous benchmark run found — skipping baseline"
+          fi
+
+      - name: Validate inputs
+        env:
+          BENCH_RUNS: ${{ inputs.runs || '10' }}
+        run: |
+          if ! [[ "$BENCH_RUNS" =~ ^[0-9]+$ ]]; then
+            echo "::error::BENCH_RUNS must be a positive integer, got: $BENCH_RUNS"
+            exit 1
+          fi
+
+      - name: Run benchmarks
+        run: bash bench/run.sh
+        env:
+          BENCH_RUNS: ${{ inputs.runs || '10' }}
+
+      - name: Compare results
+        continue-on-error: true
+        env:
+          BASELINE_FOUND: ${{ steps.baseline.outputs.found }}
+        run: |
+          {
+            echo '## Benchmark Results'
+            echo ''
+            echo '```'
+            python bench/compare.py 2>&1
+            echo '```'
+            echo ''
+            if [ "$BASELINE_FOUND" = "true" ]; then
+              echo '_Compared against previous release._'
+            else
+              echo '_No previous release baseline available._'
+            fi
+            echo ''
+            echo "_Tag: \`${GITHUB_REF_NAME}\` · Runner: \`$(uname -m)\` · [Workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})_"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-results
+          path: bench/results.json
+          retention-days: 90
