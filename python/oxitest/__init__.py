@@ -94,7 +94,10 @@ from oxitest._bridge.fixtures import (
     Fixtures as Fixtures,
     FixtureTeardownWarning as FixtureTeardownWarning,
 )
-from oxitest._bridge.parametrize import parametrize as parametrize
+from oxitest._bridge.parametrize import (
+    parametrize as parametrize,
+    partial as partial,
+)
 from oxitest.plugin import Plugin as Plugin
 
 __all__ = [
@@ -108,6 +111,7 @@ __all__ = [
     "LogCapture",
     "Patcher",
     "parametrize",
+    "partial",
     "raises",
     "SharedAsyncSession",
     "SharedFixtureMutationError",
