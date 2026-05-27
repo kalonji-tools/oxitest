@@ -164,7 +164,8 @@ jobs:
 
       - name: Run Python coverage
         run: |
-          PYTHONPATH=python uv run coverage run --source=python/oxitest -m oxitest python/tests/
+          COVERAGE_PROCESS_START=pyproject.toml PYTHONPATH=python:python/tests uv run coverage run -m oxitest python/tests/
+          uv run coverage combine
           uv run coverage xml
 
       - name: Summarise Python coverage
