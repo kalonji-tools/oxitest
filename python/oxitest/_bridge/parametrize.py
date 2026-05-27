@@ -10,6 +10,7 @@ __all__ = [
     "_DictCases",
     "_DataclassCases",
     "_Partial",
+    "_PartialCases",
 ]
 
 import dataclasses
@@ -95,6 +96,54 @@ def partial(target_type: type, **fields: Any) -> _Partial:
         fields=dict(fields),
         provided_fields=frozenset(fields.keys()),
         fixref_fields=fixref_fields,
+    )
+
+
+@dataclass(frozen=True)
+class _PartialCases:
+    """Encapsulates partial-mode parametrize cases for one composition layer."""
+
+    cases: dict[str, _Partial]
+    param_type: type
+    provided_fields: frozenset[str]
+    fixref_fields: list[str]
+
+    def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
+        for case_id, p in self.cases.items():
+            yield (
+                case_id,
+                [(k, repr(v)) for k, v in p.fields.items()],
+            )
+
+
+def _build_partial_cases(cases: dict[str, Any]) -> _PartialCases:
+    """Validate and build a _PartialCases object from Partial values."""
+    if not cases:
+        raise TypeError("parametrize requires at least one case")
+    first = next(iter(cases.values()))
+    if not isinstance(first, _Partial):
+        raise TypeError("internal error: expected _Partial instances")
+    target_type = first.target_type
+    for case_id, case in cases.items():
+        if not isinstance(case, _Partial):
+            raise TypeError(
+                f"parametrize: all case values must be partial instances,"
+                f" case '{case_id}' is {type(case)!r}."
+                " Do not mix partial() with full dataclass instances."
+            )
+        if case.target_type is not target_type:
+            raise TypeError(
+                f"parametrize: all partial() calls must target the same dataclass type."
+                f" Expected '{target_type.__name__}', case '{case_id}'"
+                f" targets '{case.target_type.__name__}'."
+            )
+    provided = first.provided_fields
+    fixref = first.fixref_fields
+    return _PartialCases(
+        cases=cases,
+        param_type=target_type,
+        provided_fields=provided,
+        fixref_fields=fixref,
     )
 
 
@@ -263,8 +312,8 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> _DataclassCases:
 def parametrize(**cases: Any) -> Callable[[_F], _F]:
     """Register named test cases on a test function.
 
-    Each keyword argument is a named test case. Case values must all be dicts
-    or all be frozen dataclass instances — mixing is not allowed.
+    Each keyword argument is a named test case. Case values must all be dicts,
+    frozen dataclass instances, or ``partial()`` instances — mixing is not allowed.
 
     **Expanded mode** — use field-name parameters to receive individual values.
     Any parameter whose name matches a dataclass field (and is not annotated
@@ -282,6 +331,12 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
         def test_add(params: AddCase) -> None:
             assert params.x + params.y == params.expected
 
+    **Composition mode** — use ``partial()`` with stacked decorators::
+
+        @oxitest.parametrize(pg=oxi.partial(Case, db=pg_db))
+        @oxitest.parametrize(add=oxi.partial(Case, x=1, y=2))
+        def test_math(db: Fixture[str], x: int, y: int) -> None: ...
+
     The decorator itself is identical in both modes — the function signature
     expresses intent.
     """
@@ -292,25 +347,74 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
 
     if isinstance(first, dict):
 
-        def decorator(fn: _F) -> _F:
-            get_or_create(fn).param_cases = _build_dict_cases(cases, fn)
+        def dict_decorator(fn: _F) -> _F:
+            meta = get_or_create(fn)
+            layer = _build_dict_cases(cases, fn)
+            if meta.param_cases is not None:
+                raise TypeError(
+                    "parametrize: cannot mix dict-mode with stacked decorators."
+                    " Use a single @parametrize call for dict mode."
+                )
+            meta.param_cases = (layer,)
             return fn
 
-        return decorator
+        return dict_decorator
+
+    if isinstance(first, _Partial):
+        new_layer = _build_partial_cases(cases)
+
+        def partial_decorator(fn: _F) -> _F:
+            meta = get_or_create(fn)
+            existing = meta.param_cases
+            if existing is None:
+                meta.param_cases = (new_layer,)
+            elif isinstance(existing, tuple):
+                for layer in existing:
+                    if not isinstance(layer, _PartialCases):
+                        raise TypeError(
+                            "parametrize: cannot mix partial() with"
+                            " full dataclass or dict cases."
+                            " All stacked @parametrize layers must use partial()."
+                        )
+                if existing[0].param_type is not new_layer.param_type:
+                    raise TypeError(
+                        "parametrize: all partial() calls must target the"
+                        " same dataclass type."
+                        f" Expected '{existing[0].param_type.__name__}',"
+                        f" got '{new_layer.param_type.__name__}'."
+                    )
+                for layer in existing:
+                    overlap = layer.provided_fields & new_layer.provided_fields
+                    if overlap:
+                        raise TypeError(
+                            "parametrize: field overlap between layers:"
+                            f" {sorted(overlap)!r}."
+                            " Each layer must provide disjoint fields."
+                        )
+                meta.param_cases = (new_layer, *existing)
+            return fn
+
+        return partial_decorator
 
     if not dataclasses.is_dataclass(first):
         raise TypeError(
-            "parametrize: case values must be dicts or frozen dataclass instances,"
-            f" got {type(first)!r}"
+            "parametrize: case values must be dicts, frozen dataclass instances,"
+            f" or partial() instances, got {type(first)!r}"
         )
 
-    param_cases = _build_dataclass_cases(cases)
+    param_cases_layer = _build_dataclass_cases(cases)
 
-    def decorator(fn: _F) -> _F:
-        get_or_create(fn).param_cases = param_cases
+    def dataclass_decorator(fn: _F) -> _F:
+        meta = get_or_create(fn)
+        if meta.param_cases is not None:
+            raise TypeError(
+                "parametrize: cannot mix full dataclass cases with stacked"
+                " decorators. Use partial() for composition."
+            )
+        meta.param_cases = (param_cases_layer,)
         return fn
 
-    return decorator
+    return dataclass_decorator
 
 
 _MISSING = object()
@@ -329,12 +433,16 @@ def resolve_parametrize(
     if param_id is None:
         return {}, frozenset()
     meta = get_metadata(fn_raw)
-    param_cases = meta.param_cases if meta.param_cases is not None else _MISSING
-    if param_cases is _MISSING:
+    layers = meta.param_cases if meta.param_cases is not None else _MISSING
+    if layers is _MISSING:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
         raise ParametrizeError(
-            f"resolve_parametrize: {fn_name!r} has no '_oxitest_param_cases' attribute"
+            f"resolve_parametrize: {fn_name!r} has no parametrize cases"
             f" but param_id={param_id!r} was requested."
             " Use @oxitest.parametrize to register cases."
         )
-    return cast(_DictCases | _DataclassCases, param_cases).resolve(fn, param_id)
+    layers = cast(tuple, layers)
+    if len(layers) == 1 and not isinstance(layers[0], _PartialCases):
+        return layers[0].resolve(fn, param_id)
+    # Composition resolution — implemented in Task 4
+    raise ParametrizeError("composition resolve not yet implemented")
