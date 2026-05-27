@@ -1307,3 +1307,136 @@ def test_collect_composed_3_layers(tmp: TempDir):
     items, _ = collect_module(str(f))
     assert len(items) == 1, f"1x1x1 should yield 1 item, got {len(items)}"
     assert items[0].param_id == "a-b-c", f"expected 'a-b-c', got {items[0].param_id!r}"
+
+
+# ── Composed resolution tests ─────────────────────────────────────────────────
+
+
+def test_executor_composed_parametrize_passes(tmp: TempDir):
+    f = tmp / "test_math.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "    expected: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(c=partial(Case, y=2, expected=3))\n"
+        "def test_add(x: int, y: int, expected: int) -> None:\n"
+        "    assert x + y == expected\n"
+    )
+    result = executor_run_test(str(f), "test_add", session=None, param_id="a-c")
+    assert result.status == "passed", (
+        f"composed parametrize should pass, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_executor_composed_parametrize_failure(tmp: TempDir):
+    f = tmp / "test_math.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "    expected: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(c=partial(Case, y=2, expected=99))\n"
+        "def test_add(x: int, y: int, expected: int) -> None:\n"
+        "    assert x + y == expected\n"
+    )
+    result = executor_run_test(str(f), "test_add", session=None, param_id="a-c")
+    assert result.status == "failed", (
+        f"wrong expected should fail, got status={result.status!r}"
+    )
+
+
+def test_executor_composed_with_fixture(tmp: TempDir):
+    conftest = tmp / "conftest.py"
+    conftest.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def multiplier():\n"
+        "    return 10\n"
+    )
+    f = tmp / "test_mul.py"
+    f.write_text(
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import Fixture, partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    expected: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=2))\n"
+        "@oxitest.parametrize(c=partial(Case, expected=20))\n"
+        "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
+        "    assert x * multiplier == expected\n"
+    )
+    session = create_session([str(conftest)])
+    session.begin_module(str(f))
+    result = executor_run_test(str(f), "test_mul", session=session, param_id="a-c")
+    assert result.status == "passed", result.message
+
+
+def test_executor_composed_compact_mode(tmp: TempDir):
+    f = tmp / "test_compact.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(c=partial(Case, y=2))\n"
+        "def test_compact(case: Case) -> None:\n"
+        "    assert case.x + case.y == 3\n"
+    )
+    result = executor_run_test(str(f), "test_compact", session=None, param_id="a-c")
+    assert result.status == "passed", (
+        f"compact mode with composition should pass, got status={result.status!r}, "
+        f"msg={result.message!r}"
+    )
+
+
+def test_executor_composed_with_fixture_ref(tmp: TempDir):
+    conftest = tmp / "conftest.py"
+    conftest.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def pg_db():\n"
+        "    return 'postgres'\n"
+    )
+    f = tmp / "test_db.py"
+    f.write_text(
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import Fixture, FixtureRef, partial\n"
+        "_fixtures = oxitest.Fixtures()\n"
+        "@_fixtures.fixture\n"
+        "def pg_db(): return 'postgres'\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    db: FixtureRef[str]\n"
+        "    expected: str\n"
+        "@oxitest.parametrize(pg=partial(Case, db=pg_db))\n"
+        "@oxitest.parametrize(check=partial(Case, expected='postgres'))\n"
+        "def test_db(db: Fixture[str], expected: str) -> None:\n"
+        "    assert db == expected\n"
+    )
+    session = create_session([str(conftest)])
+    session.begin_module(str(f))
+    result = executor_run_test(str(f), "test_db", session=session, param_id="pg-check")
+    assert result.status == "passed", result.message

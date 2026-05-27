@@ -116,6 +116,51 @@ class _PartialCases:
             )
 
 
+def _resolve_composed(
+    layers: tuple,
+    fn: Callable[..., Any],
+    param_id: str,
+) -> tuple[dict[str, Any], frozenset[str]]:
+    """Resolve a composed param_id into merged kwargs and fixref names."""
+    parts = param_id.split("-")
+    if len(parts) != len(layers):
+        raise ParametrizeError(
+            f"resolve_parametrize: compound param_id '{param_id}' has"
+            f" {len(parts)} parts but there are {len(layers)} layers."
+        )
+    merged_fields: dict[str, Any] = {}
+    all_fixref: list[str] = []
+    target_type = layers[0].param_type
+    for layer, case_id in zip(layers, parts, strict=True):
+        p = layer.cases.get(case_id)
+        if p is None:
+            raise ParametrizeError(
+                f"resolve_parametrize: case '{case_id}' not found in layer"
+                f" with cases {sorted(layer.cases.keys())!r}."
+            )
+        merged_fields.update(p.fields)
+        all_fixref.extend(p.fixref_fields)
+
+    # Construct the (non-frozen) dataclass instance
+    instance = target_type(**merged_fields)
+    fixref_names = frozenset(all_fixref)
+
+    is_compact, compact_param = _detect_compact_mode(fn, instance)
+    if is_compact:
+        if fixref_names:
+            raise ParametrizeError(
+                "parametrize: compact mode is incompatible with FixtureRef fields"
+                f" ({', '.join(sorted(fixref_names))})."
+                " Use expanded mode — annotate individual fields in the test"
+                " function."
+            )
+        return {compact_param: instance}, fixref_names
+    param_kwargs = {
+        f.name: getattr(instance, f.name) for f in dataclasses.fields(instance)
+    }
+    return param_kwargs, fixref_names
+
+
 def _build_partial_cases(cases: dict[str, Any]) -> _PartialCases:
     """Validate and build a _PartialCases object from Partial values."""
     if not cases:
@@ -444,5 +489,4 @@ def resolve_parametrize(
     layers = cast(tuple, layers)
     if len(layers) == 1 and not isinstance(layers[0], _PartialCases):
         return layers[0].resolve(fn, param_id)
-    # Composition resolution — implemented in Task 4
-    raise ParametrizeError("composition resolve not yet implemented")
+    return _resolve_composed(layers, fn, param_id)
