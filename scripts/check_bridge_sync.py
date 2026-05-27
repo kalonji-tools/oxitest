@@ -68,13 +68,13 @@ def parse_python_classes(path: Path) -> dict[str, set[str]]:
 
 
 WIRE_RUST_PATH = ROOT / "src" / "worker_result.rs"
+WORKER_PY_PATH = ROOT / "python" / "oxitest" / "_bridge" / "worker.py"
 
 
-def parse_worker_result_fields(path: Path) -> set[str]:
-    """Extract field names from the WorkerResult serde struct."""
-    text = path.read_text()
+def _parse_serde_struct_fields(text: str, struct_name: str) -> set[str]:
+    """Extract field names from a named serde struct."""
     pattern = re.compile(
-        r"struct\s+WorkerResult\s*\{([^}]+)\}",
+        rf"struct\s+{struct_name}\s*(?:<[^>]+>)?\s*\{{([^}}]+)\}}",
         re.DOTALL,
     )
     field_pattern = re.compile(r"^\s*pub\s+(\w+)\s*:", re.MULTILINE)
@@ -82,6 +82,30 @@ def parse_worker_result_fields(path: Path) -> set[str]:
     if m is None:
         return set()
     return set(field_pattern.findall(m.group(1)))
+
+
+def parse_worker_result_fields(path: Path) -> set[str]:
+    """Extract field names from the WorkerResult serde struct."""
+    return _parse_serde_struct_fields(path.read_text(), "WorkerResult")
+
+
+def parse_worker_task_item_fields(path: Path) -> set[str]:
+    """Extract field names from the WorkerTaskItem serde struct."""
+    return _parse_serde_struct_fields(path.read_text(), "WorkerTaskItem")
+
+
+def parse_worker_item_reads(path: Path) -> set[str]:
+    """Extract field names that worker.py reads from task item dicts.
+
+    Matches patterns like item["fn_name"] and item.get("param_id").
+    """
+    text = path.read_text()
+    fields: set[str] = set()
+    for m in re.finditer(r'item\["(\w+)"\]', text):
+        fields.add(m.group(1))
+    for m in re.finditer(r'item\.get\("(\w+)"', text):
+        fields.add(m.group(1))
+    return fields
 
 
 def parse_to_wire_fields(path: Path) -> set[str]:
@@ -154,8 +178,31 @@ def main() -> int:
                 print(f"  Python-only wire fields: {sorted(py_only)}")
             errors += 1
 
+    # ── Task input format check ────────────────────────────────────────
+    rust_task_fields = parse_worker_task_item_fields(WIRE_RUST_PATH)
+    py_task_fields = parse_worker_item_reads(WORKER_PY_PATH)
+
+    if not rust_task_fields:
+        print(f"ERROR: WorkerTaskItem not found in {WIRE_RUST_PATH}")
+        errors += 1
+    elif not py_task_fields:
+        print(f"ERROR: item field reads not found in {WORKER_PY_PATH}")
+        errors += 1
+    else:
+        rust_only = rust_task_fields - py_task_fields
+        py_only = py_task_fields - rust_task_fields
+        if rust_only or py_only:
+            print("MISMATCH: WorkerTaskItem (Rust) vs worker.py item reads (Python)")
+            if rust_only:
+                print(f"  Rust-only task fields: {sorted(rust_only)}")
+            if py_only:
+                print(f"  Python-only task fields: {sorted(py_only)}")
+            errors += 1
+
     if errors == 0:
-        print(f"OK: all {len(PAIRS)} bridge contracts + wire format in sync")
+        print(
+            f"OK: all {len(PAIRS)} bridge contracts + wire format + task format in sync"
+        )
     return 1 if errors else 0
 
 

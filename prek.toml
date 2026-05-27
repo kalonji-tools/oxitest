@@ -92,7 +92,7 @@ name = "bridge-sync"
 language = "system"
 entry = "python scripts/check_bridge_sync.py"
 pass_filenames = false
-files = "(bridge\\.rs|worker_result\\.rs|result\\.py)$"
+files = "(bridge\\.rs|worker_result\\.rs|result\\.py|worker\\.py)$"
 
 [[repos.hooks]]
 id = "affected-tests"

@@ -95,11 +95,41 @@
 
 ## TestContext
 
-::: oxitest._bridge.fixtures._TestContext
+::: oxitest._bridge._fixture_session._TestContext
     options:
       show_root_heading: false
       show_root_toc_entry: false
       heading_level: 3
       members:
+        - name
+        - module_path
+        - node_id
+        - param_id
+        - marks
+        - param
         - addfinalizer
         - on_teardown
+
+### Usage for Fixture Authors
+
+```python
+import oxitest as oxi
+from oxitest import Fixture, TestContext
+
+fixtures = oxi.Fixtures()
+
+@fixtures.fixture
+def db_schema(ctx: Fixture[TestContext]) -> str:
+    """Create a test-specific database schema."""
+    schema = f"test_{ctx.name}"
+    create_schema(schema)
+    ctx.addfinalizer(lambda: drop_schema(schema))
+    return schema
+
+def test_create_user(schema: Fixture[str], ctx: TestContext) -> None:
+    # ctx.name      → "test_create_user"
+    # ctx.node_id   → "tests/test_db.py::test_create_user"
+    # ctx.marks     → frozenset({"slow"})
+    # ctx.param_id  → None (not parametrized)
+    ...
+```

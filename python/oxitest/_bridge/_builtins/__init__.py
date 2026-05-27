@@ -55,14 +55,13 @@ from oxitest._bridge._builtins._warncapture import (
 # registers TestContext with BuiltinFixture._registry so the resolver in
 # FixtureSession._inject_builtin() handles it alongside all other built-ins —
 # no special-case needed in fixtures.py.
-from oxitest._bridge._fixture_session import _Node as _Node, _TestContext
+from oxitest._bridge._fixture_session import _TestContext
 from oxitest._bridge._fixture_type import _FixtureMarker
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
     def create(self, ctx: _BuiltinContext) -> _TestContext:
-        node = _Node(fn_name=ctx.fn_name, module_path=ctx.module_path)
-        return _TestContext(node, ctx.teardown_stack)
+        return _TestContext(ctx.meta, ctx.teardown_stack)
 
 
 # ── Public type aliases ───────────────────────────────────────────────────────

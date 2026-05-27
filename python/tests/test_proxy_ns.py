@@ -5,14 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from helpers import make_session
+from helpers import make_session, run_test
 from oxitest import TempDir
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._builtins._logcapture import _LogCapture
 from oxitest._bridge._builtins._patch import _Patcher
 from oxitest._bridge._builtins._tempdir import _TempDir
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
-from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
     FixtureDef,
     FixtureRegistry,

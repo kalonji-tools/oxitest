@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
+sys.path.insert(0, "python/tests")
+
+from helpers import make_meta, run_test as executor_run_test
 from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
-from oxitest._bridge.executor import run_test as executor_run_test
 from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import _DataclassCases, _DictCases
@@ -198,7 +201,7 @@ def test_plain_typed_param_not_resolved_as_fixture():
         pass
 
     # x and y are NOT annotated with Fixture[T] — should not raise FixtureNotFoundError
-    kwargs, _ = session.resolve_for_test(test_fn, "/fake/test_foo.py")
+    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
     assert kwargs == {}, (
         f"plain-typed params should not be resolved as fixtures, got kwargs={kwargs!r}"
     )
@@ -226,7 +229,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param():
     def test_fn(x: int, db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(test_fn, "/fake/test_foo.py")
+    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
     assert kwargs == {"db": 42}, (
         f"only Fixture[T]-annotated param 'db' should be resolved, got "
         f"kwargs={kwargs!r}"
@@ -260,7 +263,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, "/fake/test_foo.py")
+        session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
 
     msg = str(exc_info.value)
     assert "x" in msg, (

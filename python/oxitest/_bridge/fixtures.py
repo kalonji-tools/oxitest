@@ -12,7 +12,6 @@ __all__ = [
     "_SessionProtocol",
     "_fixture_inner_type",
     "_fixture_ref_inner_type",
-    "_Node",
     "_Scope",
 ]
 
@@ -41,7 +40,6 @@ from oxitest._bridge._fixture_session import (
     FixtureSession as FixtureSession,
     FixtureTeardownWarning as FixtureTeardownWarning,
     _fixture_context,
-    _Node as _Node,
     _Scope as _Scope,
     _SessionProtocol as _SessionProtocol,
     _TestContext as _TestContext,

@@ -6,9 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from helpers import make_session_with
+from helpers import make_session_with, run_test
 from oxitest import Fixture, FixtureTeardownWarning, TempDir, WarnCapture, parametrize
-from oxitest._bridge.executor import run_test
 from oxitest._bridge.fixtures import (
     FixtureDef,
     FixtureRegistry,
