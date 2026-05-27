@@ -4,10 +4,12 @@ from __future__ import annotations
 
 __all__ = [
     "parametrize",
+    "partial",
     "resolve_parametrize",
     "ParametrizeError",
     "_DictCases",
     "_DataclassCases",
+    "_Partial",
 ]
 
 import dataclasses
@@ -23,6 +25,77 @@ from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge.fixtures import _fixture_inner_type
 
 _F = TypeVar("_F", bound=Callable[..., Any])
+
+
+@dataclass(frozen=True)
+class _Partial:
+    """A partial set of fields for a dataclass, used in parametrize composition."""
+
+    target_type: type
+    fields: dict[str, Any]
+    provided_fields: frozenset[str]
+    fixref_fields: list[str]
+
+
+def partial(target_type: type, **fields: Any) -> _Partial:
+    """Create a partial case value for parametrize composition.
+
+    ``target_type`` must be a dataclass. Each keyword argument must name
+    a valid field on the dataclass. At least one field is required.
+    ``FixtureRef[T]`` fields must hold callables.
+
+    Use with stacked ``@oxi.parametrize`` decorators::
+
+        @oxi.parametrize(pg=oxi.partial(Case, db=pg_db))
+        @oxi.parametrize(add=oxi.partial(Case, x=1, y=2))
+        def test_math(db: Fixture[str], x: int, y: int) -> None: ...
+    """
+    from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
+
+    if not dataclasses.is_dataclass(target_type):
+        raise TypeError(f"partial: {target_type!r} must be a dataclass")
+    if not fields:
+        raise TypeError("partial requires at least one field")
+
+    valid_field_names = {f.name for f in dataclasses.fields(target_type)}
+    unknown = set(fields.keys()) - valid_field_names
+    if unknown:
+        raise TypeError(
+            f"partial({target_type.__name__}): unknown field(s)"
+            f" {sorted(unknown)!r}\n"
+            f"valid fields: {sorted(valid_field_names)!r}"
+        )
+
+    # Detect FixtureRef fields among provided fields
+    mod = sys.modules.get(target_type.__module__)
+    globalns = dict(vars(mod)) if mod else {}
+    globalns.setdefault("FixtureRef", FixtureRef)
+    field_hints = get_type_hints(target_type, globalns=globalns, include_extras=True)
+    fixref_fields = [
+        field_name
+        for field_name in fields
+        if field_name in field_hints
+        and get_origin(field_hints[field_name]) is Annotated
+        and any(
+            isinstance(m, _FixtureRefMarker)
+            for m in get_args(field_hints[field_name])[1:]
+        )
+    ]
+    for field_name in fixref_fields:
+        value = fields[field_name]
+        if not callable(value):
+            raise TypeError(
+                f"partial({target_type.__name__}): field '{field_name}' is annotated"
+                f" FixtureRef[...] but got {type(value)!r}"
+                f" — pass a fixture function, e.g. {field_name}=my_fixture."
+            )
+
+    return _Partial(
+        target_type=target_type,
+        fields=dict(fields),
+        provided_fields=frozenset(fields.keys()),
+        fixref_fields=fixref_fields,
+    )
 
 
 @dataclass(frozen=True)
