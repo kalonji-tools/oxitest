@@ -28,6 +28,7 @@ pub(crate) mod doubles {
     ///
     /// If the requested path has no entry, returns `Ok((vec![], vec![]))`.
     pub(crate) struct StubCollector {
+        #[allow(clippy::type_complexity)]
         pub results: HashMap<Utf8PathBuf, Result<(Vec<TestItem>, Vec<RawViolation>), CollectError>>,
     }
 

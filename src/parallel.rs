@@ -832,7 +832,7 @@ mod drain_tests {
             })
         }
 
-        let all_items = vec![
+        let all_items = [
             make_test_item("tests/a.py", "test_alpha"),
             make_test_item("tests/a.py", "test_beta"),
             make_test_item("tests/b.py", "test_gamma"),

@@ -189,8 +189,10 @@ mod tests {
 
     #[test]
     fn test_from_config_verbose_implies_show_tips_and_warnings() {
-        let mut cfg = crate::config::Config::default();
-        cfg.verbose = true;
+        let cfg = crate::config::Config {
+            verbose: true,
+            ..crate::config::Config::default()
+        };
         let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert!(opts.show_tips);
         assert!(opts.show_warnings);
@@ -228,8 +230,10 @@ mod tests {
 
     #[test]
     fn test_from_config_durations() {
-        let mut cfg = crate::config::Config::default();
-        cfg.durations = Some(5);
+        let cfg = crate::config::Config {
+            durations: Some(5),
+            ..crate::config::Config::default()
+        };
         let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert_eq!(opts.show_durations, Some(5));
     }
