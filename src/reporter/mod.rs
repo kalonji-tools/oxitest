@@ -140,6 +140,26 @@ pub trait Reporter {
     fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
 }
 
+// ─── Deferred-failure dedup ──────────────────────────────────────────────────
+
+/// Remove entries from `deferred` when a flaky outcome is reported.
+///
+/// Both [`TtyReporter`] and [`CiReporter`] maintain a deferred-failure list that
+/// must be pruned when a retry reveals a test was flaky.  The predicate
+/// `matches_node` lets each caller define how an element matches the node-id
+/// string (e.g. exact field match vs. `contains`).
+pub(crate) fn remove_if_flaky<T>(
+    deferred: &mut Vec<T>,
+    outcome: &crate::types::TestOutcome,
+    item: &crate::types::TestItem,
+    matches_node: impl Fn(&T, &str) -> bool,
+) {
+    if matches!(outcome, crate::types::TestOutcome::Flaky { .. }) {
+        let target = item.node_id.as_ref();
+        deferred.retain(|d| !matches_node(d, target));
+    }
+}
+
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 /// Fans all reporter events to a list of inner reporters.
@@ -894,6 +914,81 @@ mod tests {
             2,
             "test_started should be dispatched to every inner reporter"
         );
+    }
+
+    // ── remove_if_flaky ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_remove_if_flaky_removes_matching_entry() {
+        use crate::reporter::test_helpers::make_item;
+        use crate::types::TestOutcome;
+
+        let item = make_item("test_a");
+        let mut deferred = vec![
+            "tests/test_foo.py::test_a".to_string(),
+            "tests/test_foo.py::test_b".to_string(),
+        ];
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        super::remove_if_flaky(&mut deferred, &outcome, &item, |d, target| {
+            d.contains(target)
+        });
+        assert_eq!(deferred, vec!["tests/test_foo.py::test_b"]);
+    }
+
+    #[test]
+    fn test_remove_if_flaky_noop_for_non_flaky_outcome() {
+        use crate::reporter::test_helpers::make_item;
+        use crate::types::TestOutcome;
+
+        let item = make_item("test_a");
+        let mut deferred = vec!["tests/test_foo.py::test_a".to_string()];
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        super::remove_if_flaky(&mut deferred, &outcome, &item, |d, target| {
+            d.contains(target)
+        });
+        assert_eq!(
+            deferred,
+            vec!["tests/test_foo.py::test_a"],
+            "non-flaky outcomes must not remove deferred entries"
+        );
+    }
+
+    #[test]
+    fn test_remove_if_flaky_works_with_tuple_vec() {
+        use crate::reporter::test_helpers::make_item;
+        use crate::types::{TestItem, TestOutcome};
+        use std::sync::Arc;
+
+        let item_a = make_item("test_a");
+        let item_b = make_item("test_b");
+        let mut deferred: Vec<(Arc<TestItem>, TestOutcome, DurationMs)> = vec![
+            (
+                Arc::clone(&item_a),
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                DurationMs::new(1.0),
+            ),
+            (
+                Arc::clone(&item_b),
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                DurationMs::new(2.0),
+            ),
+        ];
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        super::remove_if_flaky(&mut deferred, &outcome, &item_a, |entry, target| {
+            entry.0.node_id.as_ref() == target
+        });
+        assert_eq!(deferred.len(), 1);
+        assert_eq!(deferred[0].0.node_id.as_ref(), item_b.node_id.as_ref());
     }
 
     #[test]
