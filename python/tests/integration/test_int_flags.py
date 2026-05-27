@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from helpers import run_oxitest
+from helpers import run_oxitest, run_oxitest_full
 from oxitest import TempDir
 
 
@@ -98,3 +98,39 @@ def test_marker_filter(tmp: TempDir):
     out, rc = run_oxitest(tmp, "-m", "slow")
     assert rc == 0, f"-m slow should exit 0, got {rc}"
     assert "1 passed" in out, "-m slow should run exactly 1 test"
+
+
+def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
+    """Flag conflict: -x and --maxfail are mutually exclusive."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = run_oxitest_full(tmp, "-x", "--maxfail", "5")
+    assert rc == 4, f"-x/--maxfail conflict should exit 4, got {rc}"
+    assert "-x" in stderr, f"stderr: {stderr!r}"
+    assert "--maxfail" in stderr, f"stderr: {stderr!r}"
+
+
+def test_verbose_conflicts_with_quiet(tmp: TempDir):
+    """Flag conflict: --verbose and --quiet are opposite modes."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = run_oxitest_full(tmp, "-v", "-q")
+    assert rc == 4, f"-v/-q conflict should exit 4, got {rc}"
+    assert "--verbose" in stderr, f"stderr: {stderr!r}"
+    assert "--quiet" in stderr, f"stderr: {stderr!r}"
+
+
+def test_schedule_conflicts_with_serial(tmp: TempDir):
+    """Flag conflict: --schedule has no effect in serial mode."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = run_oxitest_full(tmp, "--schedule", "random", "--serial")
+    assert rc == 4, f"--schedule/--serial conflict should exit 4, got {rc}"
+    assert "--schedule" in stderr, f"stderr: {stderr!r}"
+    assert "--serial" in stderr, f"stderr: {stderr!r}"
+
+
+def test_retries_delay_requires_retries(tmp: TempDir):
+    """Flag conflict: --retries-delay needs --retries."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = run_oxitest_full(tmp, "--retries-delay", "5")
+    assert rc == 4, f"--retries-delay without --retries should exit 4, got {rc}"
+    assert "--retries-delay" in stderr, f"stderr: {stderr!r}"
+    assert "--retries" in stderr, f"stderr: {stderr!r}"
