@@ -94,4 +94,13 @@ Tests in `python/tests/` must follow these rules:
 
 1. **No class-based tests.** Use standalone `def test_*()` functions. The only exception is a class that shares `@oxi.parametrize` parameters across all its methods.
 2. **Arrange, Act, Assert.** Every test should have three clear phases: set up test data (arrange), call the thing being tested (act), check the result (assert). Don't interleave setup and assertions.
-3. **Use oxitest features.** Tests should use `oxi.raises()` (not try/except), `oxi.warns()` (not raw warnings), `TempDir` fixture (not manual tempfile), `@oxi.parametrize` (for multiple similar cases), and `@oxi.mark.*` decorators.
+3. **Dogfood oxitest features.** We are our own best user feedback. Always prefer oxitest APIs over stdlib/third-party equivalents:
+   - `oxi.raises()` not `try/except` or `assertRaises`
+   - `oxi.warns()` or `WarnCapture` not `warnings.catch_warnings()`
+   - `TempDir` fixture not `tempfile.mkdtemp()` or `tempfile.TemporaryDirectory()`
+   - `Patcher` fixture not `unittest.mock.patch` or raw `os.environ` manipulation
+   - `StdCapture`/`FdCapture` not manual `sys.stdout` redirection
+   - `LogCapture` not manual `logging.Handler` setup
+   - `@oxi.parametrize` for multiple similar cases, not copy-pasted test functions
+   - Dataclass-based test doubles not `unittest.mock.MagicMock`
+   - Exception: when testing an oxitest feature itself requires bootstrapping (e.g., testing `Patcher` needs direct `os.environ` access), stdlib is acceptable in the arrange phase.
