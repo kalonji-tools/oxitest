@@ -149,6 +149,7 @@ mod tests {
     use super::*;
     use crate::reporter::stats::RunStats;
 
+    #[allow(clippy::too_many_arguments)]
     fn make_stats(
         passed: usize,
         failed: usize,
