@@ -1,5 +1,5 @@
 .worktrees/
-Cargo.lock
+.config/
 target/
 *.so
 *.pyd
@@ -10,13 +10,14 @@ dist/
 
 .superpowers/
 docs/superpowers/
-uv.lock
 docs/site/
 .oxitest_cache/
 .pytest_cache/
 .ruff_cache/
 result
 bench/generated/
+bench/baseline.json
 bench/results.json
 bench/results_*.json
+junit.xml
 .bacon-locations
