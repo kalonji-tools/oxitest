@@ -10,7 +10,7 @@ use camino::Utf8PathBuf;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
 
-use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, JunitCategory, TestItem, TestOutcome};
 
 use super::Reporter;
 
@@ -25,14 +25,8 @@ struct JunitResult {
     classname: String,
     name: String,
     time_secs: f64,
-    outcome: JunitOutcome,
-}
-
-enum JunitOutcome {
-    Passed,
-    Failed { message: String },
-    Error { message: String },
-    Skipped { message: String },
+    category: JunitCategory,
+    message: String,
 }
 
 impl JunitReporter {
@@ -61,35 +55,22 @@ fn to_testname(item: &TestItem) -> String {
     }
 }
 
-fn to_junit_outcome(outcome: &TestOutcome) -> JunitOutcome {
-    let msg = || outcome.message().unwrap_or_default().to_owned();
-    match outcome {
-        TestOutcome::Passed { .. }
-        | TestOutcome::Warned { .. }
-        | TestOutcome::XPassed { strict: false }
-        | TestOutcome::Flaky { .. } => JunitOutcome::Passed,
-        TestOutcome::Failed { .. } => JunitOutcome::Failed { message: msg() },
-        TestOutcome::Error { .. } | TestOutcome::Timeout { .. } => {
-            JunitOutcome::Error { message: msg() }
-        }
-        TestOutcome::Skipped { .. } | TestOutcome::XFailed { .. } => {
-            JunitOutcome::Skipped { message: msg() }
-        }
-        TestOutcome::XPassed { strict: true } => JunitOutcome::Failed {
-            message: "expected failure but test passed (strict xfail)".to_string(),
-        },
-    }
-}
-
 impl Reporter for JunitReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
     fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+        let message = match outcome {
+            TestOutcome::XPassed { strict: true } => {
+                "expected failure but test passed (strict xfail)".to_string()
+            }
+            _ => outcome.message().unwrap_or_default().to_owned(),
+        };
         self.results.push(JunitResult {
             classname: to_classname(item.module_path.as_str()),
             name: to_testname(item),
             time_secs: duration_ms.as_f64() / 1000.0,
-            outcome: to_junit_outcome(outcome),
+            category: outcome.junit_category(),
+            message,
         });
     }
 
@@ -120,17 +101,17 @@ impl JunitReporter {
         let failures = self
             .results
             .iter()
-            .filter(|r| matches!(r.outcome, JunitOutcome::Failed { .. }))
+            .filter(|r| r.category == JunitCategory::Failed)
             .count();
         let errors = self
             .results
             .iter()
-            .filter(|r| matches!(r.outcome, JunitOutcome::Error { .. }))
+            .filter(|r| r.category == JunitCategory::Error)
             .count();
         let skipped = self
             .results
             .iter()
-            .filter(|r| matches!(r.outcome, JunitOutcome::Skipped { .. }))
+            .filter(|r| r.category == JunitCategory::Skipped)
             .count();
         let total_time = self.start.elapsed().as_secs_f64();
 
@@ -163,18 +144,18 @@ impl JunitReporter {
             testcase.push_attribute(("name", result.name.as_str()));
             testcase.push_attribute(("time", format!("{:.3}", result.time_secs).as_str()));
 
-            match &result.outcome {
-                JunitOutcome::Passed => {
+            match result.category {
+                JunitCategory::Passed => {
                     writer
                         .write_event(Event::Empty(testcase))
                         .map_err(std::io::Error::other)?;
                 }
-                JunitOutcome::Failed { message } => {
+                JunitCategory::Failed => {
                     writer
                         .write_event(Event::Start(testcase))
                         .map_err(std::io::Error::other)?;
                     let mut failure = BytesStart::new("failure");
-                    failure.push_attribute(("message", message.as_str()));
+                    failure.push_attribute(("message", result.message.as_str()));
                     writer
                         .write_event(Event::Empty(failure))
                         .map_err(std::io::Error::other)?;
@@ -182,12 +163,12 @@ impl JunitReporter {
                         .write_event(Event::End(BytesEnd::new("testcase")))
                         .map_err(std::io::Error::other)?;
                 }
-                JunitOutcome::Error { message } => {
+                JunitCategory::Error => {
                     writer
                         .write_event(Event::Start(testcase))
                         .map_err(std::io::Error::other)?;
                     let mut error = BytesStart::new("error");
-                    error.push_attribute(("message", message.as_str()));
+                    error.push_attribute(("message", result.message.as_str()));
                     writer
                         .write_event(Event::Empty(error))
                         .map_err(std::io::Error::other)?;
@@ -195,13 +176,13 @@ impl JunitReporter {
                         .write_event(Event::End(BytesEnd::new("testcase")))
                         .map_err(std::io::Error::other)?;
                 }
-                JunitOutcome::Skipped { message } => {
+                JunitCategory::Skipped => {
                     writer
                         .write_event(Event::Start(testcase))
                         .map_err(std::io::Error::other)?;
                     let mut skip = BytesStart::new("skipped");
-                    if !message.is_empty() {
-                        skip.push_attribute(("message", message.as_str()));
+                    if !result.message.is_empty() {
+                        skip.push_attribute(("message", result.message.as_str()));
                     }
                     writer
                         .write_event(Event::Empty(skip))
