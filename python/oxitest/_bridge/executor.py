@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import SharedAsyncSession
 
-from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
 from oxitest._bridge._fixture_session import (
@@ -53,13 +52,12 @@ from oxitest._bridge._middleware import (
     BareAssertMiddleware,
     ExecutionPlan,
     TimeoutMiddleware,
+    _check_warnings,
     _compose,
-    _handle_assertion_error,
-    _handle_runtime_exception,
+    _dispatch_exception,
     build_pipeline,
 )
 from oxitest._bridge._timeout import OxitestTimeoutError
-from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import StatusKind, TestResult, _error_result
 
@@ -79,30 +77,18 @@ def _run_base(
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             fn(**all_kwargs)
-        # Exclude warnings already captured by WarnCapture or FixtureTeardownWarning
-        warn_capture = next(
-            (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
-        )
-        captured_ids = warn_capture._all_captured_ids if warn_capture else set()
-        caught: list[str] = [
-            f"{wi.category.__name__}: {wi.message}"
-            for wi in w
-            if not issubclass(wi.category, FixtureTeardownWarning)
-            and id(wi) not in captured_ids
-        ]
-        if caught:
+        has_warnings, warning_msg = _check_warnings(w, all_kwargs)
+        if has_warnings:
             return TestResult(
                 status=StatusKind.WARNED,
-                message="\n".join(str(c) for c in caught),
+                message=warning_msg,
                 no_message_lines=no_message_lines,
             )
         return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
-    except AssertionError as exc:
-        return _handle_assertion_error(exc)
-    except Exception as exc:
-        result = _handle_runtime_exception(exc)
+    except BaseException as exc:
+        result = _dispatch_exception(exc)
         if result is not None:
             return result
         raise
