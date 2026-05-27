@@ -1191,3 +1191,119 @@ def test_parametrize_rejects_overlapping_fields():
         @parametrize(add=partial(MathCase, y=3, expected=4))
         def test_fn(x: int, y: int, expected: int) -> None:
             pass
+
+
+# ── Cartesian product expansion tests ────────────────────────────────────────
+
+
+def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
+    f = tmp / "test_math.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1), b=partial(Case, x=2))\n"
+        "@oxitest.parametrize(c=partial(Case, y=10), d=partial(Case, y=20))\n"
+        "def test_math(x: int, y: int) -> None:\n"
+        "    pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 4, (
+        f"2x2 composition should yield 4 items, got {len(items)}: "
+        f"{[i.param_id for i in items]}"
+    )
+    param_ids = sorted(i.param_id for i in items)
+    assert param_ids == ["a-c", "a-d", "b-c", "b-d"], (
+        f"expected cartesian product IDs, got {param_ids}"
+    )
+
+
+def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
+    f = tmp / "test_math.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(c=partial(Case, y=10))\n"
+        "def test_math(x: int, y: int) -> None:\n"
+        "    pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"1x1 composition should yield 1 item, got {len(items)}"
+    item = items[0]
+    assert item.param_id == "a-c", f"expected 'a-c', got {item.param_id!r}"
+    assert ("x", "1") in item.param_values, (
+        f"('x', '1') should be in param_values, got {item.param_values}"
+    )
+    assert ("y", "10") in item.param_values, (
+        f"('y', '10') should be in param_values, got {item.param_values}"
+    )
+
+
+def test_collect_composed_rejects_single_partial_layer(tmp: TempDir):
+    f = tmp / "test_bad.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "def test_fn(x: int, y: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(TypeError, match="requires at least 2"):
+        collect_module(str(f))
+
+
+def test_collect_composed_rejects_incomplete_fields(tmp: TempDir):
+    f = tmp / "test_bad.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "    z: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(c=partial(Case, y=10))\n"
+        "def test_fn(x: int, y: int, z: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(TypeError, match="missing field"):
+        collect_module(str(f))
+
+
+def test_collect_composed_3_layers(tmp: TempDir):
+    f = tmp / "test_math.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "from oxitest import partial\n"
+        "@dataclass\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "    z: int\n"
+        "@oxitest.parametrize(a=partial(Case, x=1))\n"
+        "@oxitest.parametrize(b=partial(Case, y=2))\n"
+        "@oxitest.parametrize(c=partial(Case, z=3))\n"
+        "def test_fn(x: int, y: int, z: int) -> None:\n"
+        "    pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"1x1x1 should yield 1 item, got {len(items)}"
+    assert items[0].param_id == "a-b-c", f"expected 'a-b-c', got {items[0].param_id!r}"
