@@ -50,6 +50,13 @@ strict = "abort"
 timeout = 30
 affected_base = "main"
 
+[tool.coverage.run]
+source = ["python/oxitest"]
+parallel = true
+
+[tool.coverage.paths]
+source = ["python/oxitest"]
+
 [tool.codespell]
 skip = "target,Cargo.lock,flake.lock"
 ignore-words-list = "NotIn,ser"
