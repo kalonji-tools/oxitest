@@ -10,7 +10,6 @@ __all__ = [
     "_NullFixtureSession",
     "_SessionProtocol",
     "_TestContext",
-    "_Node",
     "_Scope",
     "_fixture_context",
     "_fixture_scope",
@@ -27,7 +26,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple, Protocol
+from typing import Any, Protocol
 
 from oxitest._bridge._async_backend import (
     AsyncBackend,
@@ -47,6 +46,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
+from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 
 
@@ -131,6 +131,9 @@ def _resolve_deps(
     async_policy: if provided, called as policy(dep_name, dep_val, fn_name)
     for each resolved dependency. Raises on invalid async dependency patterns.
     """
+    # Build a minimal TestMeta for fixture-to-fixture resolution (builtins
+    # only need module_path and fn_name; node_id/markers are test-level).
+    dep_meta = TestMeta(module_path=module_path, fn_name=fn_name, node_id="")
     hints = _get_hints(fn)
     deps: dict[str, Any] = {}
     for param_name, hint in hints.items():
@@ -139,9 +142,8 @@ def _resolve_deps(
         resolved, value = session._resolve_param(
             param_name,
             hint,
-            module_path,
+            dep_meta,
             fn_teardowns=fn_teardowns,
-            fn_name=fn_name,
             resolve_user_fixture=resolve_user,
         )
         if resolved:
@@ -188,7 +190,7 @@ class _SessionProtocol(Protocol):
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
-        module_path: str,
+        meta: TestMeta,
         *,
         skip_names: frozenset[str] = frozenset(),
     ) -> tuple[dict[str, Any], list[Callable[[], None]]]: ...
@@ -227,7 +229,7 @@ class _NullFixtureSession:
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
-        module_path: str,
+        meta: TestMeta,
         *,
         skip_names: frozenset[str] = frozenset(),
     ) -> tuple[dict[str, Any], list[Callable[[], None]]]:
@@ -258,22 +260,16 @@ class _NullFixtureSession:
 # ── _TestContext ──────────────────────────────────────────────────────────────
 
 
-class _Node(NamedTuple):
-    """Minimal test-node info threaded through _TestContext."""
-
-    fn_name: str
-    module_path: str
-
-
 class _TestContext:
-    """Provides imperative teardown registration for a single test.
+    """Test identity metadata and imperative teardown registration.
 
     Injected when a test parameter is annotated with `TestContext`::
 
         def test_example(ctx: TestContext) -> None:
-            resource = acquire()
+            ctx.name       # "test_example"
+            ctx.node_id    # "tests/test_example.py::test_example"
+            ctx.marks      # frozenset({"slow"})
             ctx.addfinalizer(resource.close)
-            ...
 
     Use `addfinalizer` (or its alias `on_teardown`) to register cleanup
     callbacks. All registered callbacks run after the test completes, in LIFO
@@ -284,12 +280,41 @@ class _TestContext:
 
     def __init__(
         self,
-        node: _Node,
+        meta: TestMeta,
         teardown_stack: list[Callable[[], None]],
     ) -> None:
-        self.node = node
+        self._meta = meta
         self.param: Any = None
         self._teardown_stack = teardown_stack
+
+    @property
+    def name(self) -> str:
+        """Test function name (e.g. ``"test_create"``)."""
+        return self._meta.fn_name
+
+    @property
+    def module_path(self) -> str:
+        """Absolute filesystem path to the test module."""
+        return self._meta.module_path
+
+    @property
+    def node_id(self) -> str:
+        """Full qualified test ID (e.g. ``"tests/test_db.py::test_create[case_a]"``)."""
+        return self._meta.node_id
+
+    @property
+    def param_id(self) -> str | None:
+        """Parametrize case ID string, or ``None`` for non-parametrized tests."""
+        return self._meta.param_id
+
+    @property
+    def marks(self) -> frozenset[str]:
+        """All mark names applied to this test (e.g. ``frozenset({"slow"})``).
+
+        Includes both built-in marks (``skip``, ``xfail``, ``timeout``,
+        ``usefixtures``) and custom marks.
+        """
+        return self._meta.markers
 
     def addfinalizer(self, fn: Callable[[], None]) -> None:
         """Register a cleanup function to run after this test or fixture completes."""
@@ -555,10 +580,9 @@ class FixtureSession:
     def _inject_builtin(
         self,
         impl_cls: type[BuiltinFixture],
-        module_path: str,
+        meta: TestMeta,
         inject_scope: str,
         teardown_stack: list[Callable[[], None]],
-        fn_name: str = "",
     ) -> Any:
         """Create and return a built-in fixture value, respecting its declared scope."""
         if impl_cls.scope == "session":
@@ -566,7 +590,7 @@ class FixtureSession:
                 f"__builtin_{impl_cls.__name__}",
                 lambda: impl_cls().create(
                     _BuiltinContext(
-                        module_path=module_path,
+                        meta=meta,
                         inject_scope="session",
                         teardown_stack=self._session_scope.teardowns,
                         plugin_registry=self._plugin_registry,
@@ -575,10 +599,9 @@ class FixtureSession:
             )
         return impl_cls().create(
             _BuiltinContext(
-                module_path=module_path,
+                meta=meta,
                 inject_scope=inject_scope,
                 teardown_stack=teardown_stack,
-                fn_name=fn_name,
                 plugin_registry=self._plugin_registry,
             )
         )
@@ -603,9 +626,8 @@ class FixtureSession:
         self,
         param_name: str,
         hint: Any,
-        module_path: str,
+        meta: TestMeta,
         fn_teardowns: list[Callable[[], None]],
-        fn_name: str,
         resolve_user_fixture: Callable[[str], Any],
     ) -> tuple[bool, Any]:
         """Resolve a single parameter by its type hint.
@@ -620,15 +642,15 @@ class FixtureSession:
         from oxitest._bridge.proxy_ns import FixturesProxy
 
         if hint is Fixtures:
-            return True, FixturesProxy(self, module_path, fn_teardowns, fn_name=fn_name)  # type: ignore[arg-type]
+            return True, FixturesProxy(
+                self, meta.module_path, fn_teardowns, fn_name=meta.fn_name
+            )  # type: ignore[arg-type]
         is_fx, inner = _fixture_inner_type(hint)
         if not is_fx:
             return False, None
         impl_cls = BuiltinFixture.for_type(inner)
         if impl_cls is not None:
-            return True, self._inject_builtin(
-                impl_cls, module_path, "function", fn_teardowns, fn_name=fn_name
-            )
+            return True, self._inject_builtin(impl_cls, meta, "function", fn_teardowns)
         # Check plugin fixture providers (matched by type, not name)
         plugin_value = self._try_plugin_fixture(inner, fn_teardowns)
         if plugin_value is not None:
@@ -640,7 +662,7 @@ class FixtureSession:
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
-        module_path: str,
+        meta: TestMeta,
         *,
         skip_names: frozenset[str] = frozenset(),
     ) -> tuple[dict[str, Any], list[Callable[[], None]]]:
@@ -652,9 +674,8 @@ class FixtureSession:
         """
         fn_teardowns: list[Callable[[], None]] = []
         self._async_mgr.was_used = False  # reset per-test
-        with _fixture_scope(self, module_path, fn_teardowns):
+        with _fixture_scope(self, meta.module_path, fn_teardowns):
             hints = _get_hints(fn)
-            fn_name = getattr(fn, "__name__", "")
 
             # Collect names of explicitly-requested fixtures (to skip in autouse check)
             requested_names: set[str] = set()
@@ -673,7 +694,7 @@ class FixtureSession:
             # explicitly requested
             for defn in self._registry.get_autouse():
                 if defn.name not in requested_names:
-                    self.get_fixture(defn.name, module_path, fn_teardowns)
+                    self.get_fixture(defn.name, meta.module_path, fn_teardowns)
 
             # Resolve Fixture[T]-annotated parameters
             kwargs: dict[str, Any] = {}
@@ -685,11 +706,10 @@ class FixtureSession:
                 resolved, value = self._resolve_param(
                     param_name,
                     hint,
-                    module_path,
+                    meta,
                     fn_teardowns=fn_teardowns,
-                    fn_name=fn_name,
                     resolve_user_fixture=lambda n: self.get_fixture(
-                        n, module_path, fn_teardowns
+                        n, meta.module_path, fn_teardowns
                     ),
                 )
                 if resolved:

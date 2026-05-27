@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import sys
 import textwrap
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import make_meta
 from oxitest import Fixture, TempDir, raises, warns
 from oxitest._bridge.conftest_loader import (
     create_session,
@@ -219,7 +224,7 @@ def test_create_session_populates_registry(tmp: TempDir):
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, "t.py")
+    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
     assert kwargs["db"] == 42, (
         f"fixture 'db' should resolve to 42 after loading conftest, got "
         f"{kwargs.get('db')!r}"
@@ -259,7 +264,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, str(sub / "test_x.py"))
+    kwargs, _ = session.resolve_for_test(fn, make_meta(str(sub / "test_x.py")))
     assert kwargs["val"] == "local", (
         f"more-local conftest fixture should override root conftest, got "
         f"{kwargs.get('val')!r}"

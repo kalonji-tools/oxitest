@@ -134,12 +134,18 @@ class OxiNamespaceProxy(_CachingProxy):
                     " — this is a bug"
                 )
                 raise RuntimeError(msg)
+            from oxitest._bridge._test_meta import TestMeta
+
+            meta = TestMeta(
+                module_path=self._module_path,
+                fn_name=self._fn_name,
+                node_id="",
+            )
             return self._session._inject_builtin(  # type: ignore[reportPrivateUsage]
                 impl_cls,
-                self._module_path,
+                meta,
                 "function",
                 self._fn_teardowns,
-                fn_name=self._fn_name,
             )
 
         return self._get_cached(name, _resolve)

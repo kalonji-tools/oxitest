@@ -6,7 +6,12 @@ and writes one JSON result line per test to stdout.
 Task schema (stdin):
     {
         "module_path": str,
-        "items": [{"fn_name": str, "param_id": str | null}],
+        "items": [{
+            "fn_name": str,
+            "param_id": str | null,
+            "node_id": str,
+            "markers": [str]
+        }],
         "conftest_paths": [str],
         "timeout_secs": int | null
     }
@@ -39,14 +44,8 @@ import time
 from typing import Any
 
 
-def _build_node_id(module_path: str, fn_name: str, param_id: str | None) -> str:
-    node_id = f"{module_path}::{fn_name}"
-    if param_id is not None:
-        node_id += f"[{param_id}]"
-    return node_id
-
-
 def run(task: dict) -> None:
+    from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.conftest_loader import create_session
     from oxitest._bridge.executor import run_test
     from oxitest._bridge.importer import collect_module
@@ -65,21 +64,18 @@ def run(task: dict) -> None:
     collect_module(module_path, session)
 
     for item in items:
-        fn_name: str = item["fn_name"]
-        param_id: str | None = item.get("param_id")
-
-        node_id = _build_node_id(module_path, fn_name, param_id)
+        meta = TestMeta(
+            module_path=module_path,
+            fn_name=item["fn_name"],
+            node_id=item["node_id"],
+            param_id=item.get("param_id"),
+            markers=frozenset(item.get("markers", [])),
+        )
 
         start = time.monotonic()
-        result = run_test(
-            module_path=module_path,
-            fn_name=fn_name,
-            session=session,
-            param_id=param_id,
-            default_timeout=timeout_secs,
-        )
+        result = run_test(meta, session=session, default_timeout=timeout_secs)
         duration_ms = (time.monotonic() - start) * 1000.0
-        print(json.dumps(result.to_wire(node_id, duration_ms)))
+        print(json.dumps(result.to_wire(meta.node_id, duration_ms)))
 
 
 def main() -> None:

@@ -57,6 +57,7 @@ from oxitest._bridge._middleware import (
     _dispatch_exception,
     build_pipeline,
 )
+from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge._timeout import OxitestTimeoutError
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import StatusKind, TestResult, _error_result
@@ -104,10 +105,8 @@ class _ResolvedTest:
 
 
 def _load_and_resolve(
-    module_path: str,
-    fn_name: str,
+    meta: TestMeta,
     session: _SessionProtocol,
-    param_id: str | None,
     unique_name: str,
 ) -> TestResult | _ResolvedTest:
     """Load module, resolve function, parametrize, and fixtures.
@@ -115,25 +114,25 @@ def _load_and_resolve(
     Returns _ResolvedTest on success, or TestResult on module/fn/resolve errors.
     """
     _cache = getattr(session, "_module_cache", None)
-    _cached = _cache.get(module_path) if _cache is not None else None
+    _cached = _cache.get(meta.module_path) if _cache is not None else None
     if _cached is not None:
         module = _cached
         sys.modules[unique_name] = module
     else:
         try:
-            module = _load_module(module_path, unique_name)
+            module = _load_module(meta.module_path, unique_name)
         except _LoadError as e:
             return e.result
         if _cache is not None:
-            _cache.set(module_path, module)
+            _cache.set(meta.module_path, module)
     try:
-        fn_raw, fn = _resolve_fn(module, fn_name, module_path)
+        fn_raw, fn = _resolve_fn(module, meta.fn_name, meta.module_path)
     except _LoadError as e:
         return e.result
 
     # Resolve parametrize case values
     try:
-        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, param_id)
+        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, meta.param_id)
     except ParametrizeError as exc:
         return _error_result(str(exc))
 
@@ -143,7 +142,7 @@ def _load_and_resolve(
         fixture_kwargs: dict[str, Any]
         fixture_kwargs, fn_teardowns = session.resolve_for_test(
             fn,  # type: ignore[arg-type]
-            module_path,
+            meta,
             skip_names=fixref_names,
         )
         # Resolve FixtureRef fields using each case's specific fixture function
@@ -155,11 +154,11 @@ def _load_and_resolve(
             namespace = session.get_namespace_for_func(fixture_name, fixture_fn)
             if namespace:
                 param_kwargs[field_name] = session.get_fixture_in_namespace(
-                    fixture_name, namespace, module_path, fn_teardowns
+                    fixture_name, namespace, meta.module_path, fn_teardowns
                 )
             else:
                 param_kwargs[field_name] = session.get_fixture(
-                    fixture_name, module_path, fn_teardowns
+                    fixture_name, meta.module_path, fn_teardowns
                 )
     except (FixtureSetupError, FixtureNotFoundError) as exc:
         return _error_result(str(exc))
@@ -217,21 +216,17 @@ _NULL_SESSION: _SessionProtocol = FixtureSession(_FixtureRegistry())
 
 
 def run_test(
-    module_path: str,
-    fn_name: str,
+    meta: TestMeta,
     session: _SessionProtocol | None = None,
-    param_id: str | None = None,
     default_timeout: int | None = None,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
     Args:
-        module_path: Absolute filesystem path to the test module.
-        fn_name: Name of the test function (or method) to run.
+        meta: Test identity metadata (module path, function name, node ID,
+            parametrize case ID, and marks).
         session: Active `FixtureSession` for fixture injection.  When `None`
             a null session is used, meaning no user fixtures are available.
-        param_id: Parametrize case identifier (e.g. ``"case0"``).  `None`
-            for non-parametrized tests.
         default_timeout: Per-test timeout in seconds inherited from config.
             Overridden by a ``@mark.timeout`` decorator on the test.
 
@@ -243,10 +238,8 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
-    unique_name = _exec_unique_name(module_path)
-    resolved = _load_and_resolve(
-        module_path, fn_name, effective_session, param_id, unique_name
-    )
+    unique_name = _exec_unique_name(meta.module_path)
+    resolved = _load_and_resolve(meta, effective_session, unique_name)
     if isinstance(resolved, TestResult):
         return resolved
     module = resolved.module
@@ -260,7 +253,7 @@ def run_test(
         fn=fn,
         all_kwargs=all_kwargs,
         session=effective_session,
-        module_path=module_path,
+        module_path=meta.module_path,
         fn_teardowns=fn_teardowns,
         default_timeout=default_timeout,
     )
@@ -287,7 +280,7 @@ def run_test(
         execute = _build_execution_chain(
             module,
             fn_raw,
-            fn_name,
+            meta.fn_name,
             fn,
             all_kwargs,
             marks,
