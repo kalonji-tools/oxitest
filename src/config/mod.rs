@@ -189,60 +189,32 @@ macro_rules! apply_if_some {
     };
 }
 
-/// Apply fields from a parsed `[tool.oxitest]` section onto `config`.
-/// `rootdir` controls how `testpaths` are resolved:
-///   - `Some(root)` → each path is joined to root (used by `Config::load`)
-///   - `None`       → each path is taken as-is (used by `Config::from_str`)
-fn apply_oxitest_config(config: &mut Config, tc: OxitestConfig, rootdir: Option<&Utf8Path>) {
-    if let Some(paths) = tc.testpaths {
-        config.testpaths = match rootdir {
-            Some(root) => paths.iter().map(|s| root.join(s)).collect(),
-            None => paths.into_iter().map(Utf8PathBuf::from).collect(),
-        };
-    }
+/// Resolve testpaths relative to a root directory.
+///
+/// Each path string is joined to `rootdir`, producing absolute paths for the
+/// collector to scan.
+fn resolve_testpaths(paths: &[String], rootdir: &Utf8Path) -> Vec<Utf8PathBuf> {
+    paths.iter().map(|s| rootdir.join(s)).collect()
+}
 
-    apply_if_some!(config, python_files, tc.python_files);
-    apply_if_some!(config, norecursedirs, tc.norecursedirs);
-    apply_if_some!(config, tb, tc.tb);
-    apply_if_some!(config, verbose, tc.verbose);
-    apply_if_some!(config, maxfail, tc.maxfail);
-    apply_if_some!(config, serial, tc.serial);
-    apply_if_some!(config, color, tc.color);
-    apply_if_some!(config, schedule, tc.schedule);
-    apply_if_some!(config, plugins, tc.plugins);
-    apply_if_some!(config, async_backend, tc.async_backend);
-    apply_if_some!(config, affected_base, tc.affected_base);
-    apply_if_some!(config, retries, tc.retries);
-    apply_if_some!(config, retries_delay_secs, tc.retries_delay);
-
-    apply_if_some!(config, strict, tc.strict, wrap);
-    apply_if_some!(config, failed, tc.failed, wrap);
-    apply_if_some!(config, workers, tc.workers, wrap);
-    apply_if_some!(config, durations, tc.durations, wrap);
-
-    if let Some(raw_markers) = tc.markers {
-        let mut names = Vec::new();
-        let mut no_desc = Vec::new();
-        for s in raw_markers {
-            if let Some((name, _)) = s.split_once(':') {
-                names.push(name.trim().to_owned());
-            } else {
-                let name = s.trim().to_owned();
-                no_desc.push(name.clone());
-                names.push(name);
-            }
+/// Parse raw marker strings into (registered names, names without descriptions).
+///
+/// Markers of the form `"name: description"` contribute only the name to the
+/// registered list. Markers without a `:` separator are flagged as missing a
+/// description (used for strict-mode warnings).
+fn parse_marker_descriptions(raw_markers: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut names = Vec::new();
+    let mut no_desc = Vec::new();
+    for s in raw_markers {
+        if let Some((name, _)) = s.split_once(':') {
+            names.push(name.trim().to_owned());
+        } else {
+            let name = s.trim().to_owned();
+            no_desc.push(name.clone());
+            names.push(name);
         }
-        config.registered_markers = names;
-        config.markers_without_description = no_desc;
     }
-
-    config.cache_max_age = tc.cache_max_age.unwrap_or(config.cache_max_age);
-    config.min_parallel_tests = tc.min_parallel_tests.unwrap_or(config.min_parallel_tests);
-    config.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(config.spawn_overhead_ms);
-
-    config.timeout_secs = tc.timeout;
-    config.timeout_multiplier = tc.timeout_multiplier;
-    config.plugin_settings = tc.plugin_settings;
+    (names, no_desc)
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
@@ -277,7 +249,7 @@ pub(crate) fn cpu_count() -> usize {
 
 impl Config {
     pub fn load(rootdir: &Utf8Path) -> Self {
-        let mut config = Config {
+        let config = Config {
             rootdir: rootdir.to_owned(),
             testpaths: vec![rootdir.to_owned()],
             ..Config::default()
@@ -301,11 +273,63 @@ impl Config {
         };
 
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
-        apply_oxitest_config(&mut config, tc, Some(rootdir));
-        config
+        config.merge_toml(tc, Some(rootdir))
+    }
+
+    /// Merge fields from a parsed `[tool.oxitest]` section (fluent builder).
+    ///
+    /// `rootdir` controls how `testpaths` are resolved:
+    ///   - `Some(root)` → each path is joined to root (used by `Config::load`)
+    ///   - `None`       → each path is taken as-is (used by `Config::from_str`)
+    fn merge_toml(mut self, tc: OxitestConfig, rootdir: Option<&Utf8Path>) -> Self {
+        // ── Paths ────────────────────────────────────────────────────────
+        if let Some(paths) = tc.testpaths {
+            self.testpaths = match rootdir {
+                Some(root) => resolve_testpaths(&paths, root),
+                None => paths.into_iter().map(Utf8PathBuf::from).collect(),
+            };
+        }
+        apply_if_some!(self, python_files, tc.python_files);
+        apply_if_some!(self, norecursedirs, tc.norecursedirs);
+
+        // ── Execution ────────────────────────────────────────────────────
+        apply_if_some!(self, maxfail, tc.maxfail);
+        apply_if_some!(self, serial, tc.serial);
+        apply_if_some!(self, schedule, tc.schedule);
+        apply_if_some!(self, async_backend, tc.async_backend);
+        apply_if_some!(self, retries, tc.retries);
+        apply_if_some!(self, retries_delay_secs, tc.retries_delay);
+        apply_if_some!(self, workers, tc.workers, wrap);
+        apply_if_some!(self, failed, tc.failed, wrap);
+        self.cache_max_age = tc.cache_max_age.unwrap_or(self.cache_max_age);
+        self.min_parallel_tests = tc.min_parallel_tests.unwrap_or(self.min_parallel_tests);
+        self.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(self.spawn_overhead_ms);
+        self.timeout_secs = tc.timeout;
+        self.timeout_multiplier = tc.timeout_multiplier;
+
+        // ── Output ───────────────────────────────────────────────────────
+        apply_if_some!(self, tb, tc.tb);
+        apply_if_some!(self, verbose, tc.verbose);
+        apply_if_some!(self, color, tc.color);
+        apply_if_some!(self, durations, tc.durations, wrap);
+
+        // ── Filtering & Plugins ──────────────────────────────────────────
+        apply_if_some!(self, strict, tc.strict, wrap);
+        apply_if_some!(self, plugins, tc.plugins);
+        self.plugin_settings = tc.plugin_settings;
+        apply_if_some!(self, affected_base, tc.affected_base);
+
+        if let Some(raw_markers) = tc.markers {
+            let (names, no_desc) = parse_marker_descriptions(&raw_markers);
+            self.registered_markers = names;
+            self.markers_without_description = no_desc;
+        }
+
+        self
     }
 
     pub fn merge_cli(mut self, cli: &Cli) -> Self {
+        // ── Paths ────────────────────────────────────────────────────────
         if !cli.paths.is_empty() {
             self.testpaths = cli
                 .paths
@@ -319,6 +343,8 @@ impl Config {
                 })
                 .collect();
         }
+
+        // ── Execution ────────────────────────────────────────────────────
         if cli.exitfirst {
             self.maxfail = 1;
         } else if let Some(n) = cli.maxfail {
@@ -329,22 +355,23 @@ impl Config {
         if cli.serial {
             self.serial = true;
         }
+        apply_if_some!(self, schedule, cli.schedule);
+        apply_if_some!(self, retries, cli.retries);
+        apply_if_some!(self, retries_delay_secs, cli.retries_delay);
+        apply_if_some!(self, workers, cli.workers, wrap);
+        apply_if_some!(self, failed, cli.failed, wrap);
+        apply_if_some!(self, timeout_secs, cli.timeout, wrap);
+
+        // ── Output ───────────────────────────────────────────────────────
         if cli.verbose {
             self.verbose = true;
         }
-
         apply_if_some!(self, color, cli.color);
-        apply_if_some!(self, schedule, cli.schedule);
         apply_if_some!(self, tb, cli.tb.clone());
-        apply_if_some!(self, retries, cli.retries);
-        apply_if_some!(self, retries_delay_secs, cli.retries_delay);
-
-        apply_if_some!(self, workers, cli.workers, wrap);
-        apply_if_some!(self, strict, cli.strict.clone(), wrap);
-        apply_if_some!(self, failed, cli.failed, wrap);
         apply_if_some!(self, durations, cli.durations, wrap);
-        apply_if_some!(self, timeout_secs, cli.timeout, wrap);
 
+        // ── Filtering ────────────────────────────────────────────────────
+        apply_if_some!(self, strict, cli.strict.clone(), wrap);
         if let Some(ref val) = cli.affected {
             if val.is_empty() {
                 self.affected = Some(self.affected_base.clone());
@@ -352,6 +379,7 @@ impl Config {
                 self.affected = cli.affected.clone();
             }
         }
+
         self
     }
 
@@ -373,9 +401,7 @@ impl Config {
     pub fn from_str(s: &str) -> Result<Self, toml::de::Error> {
         let pyproject: PyprojectToml = toml::from_str(s)?;
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
-        let mut config = Config::default();
-        apply_oxitest_config(&mut config, tc, None);
-        Ok(config)
+        Ok(Config::default().merge_toml(tc, None))
     }
 }
 
@@ -1472,5 +1498,85 @@ async_backend = "trio"
         let cli = Cli::try_parse_from(["oxitest", "--retries", "5"]).unwrap();
         let merged = cfg.merge_cli(&cli);
         assert_eq!(merged.retries, 5);
+    }
+
+    // ── resolve_testpaths tests ──────────────────────────────────────────
+
+    #[test]
+    fn resolve_testpaths_relative_to_rootdir() {
+        let rootdir = Utf8Path::new("/project");
+        let paths = vec!["tests".to_string(), "integration".to_string()];
+        let result = resolve_testpaths(&paths, rootdir);
+        assert_eq!(
+            result,
+            vec![
+                Utf8PathBuf::from("/project/tests"),
+                Utf8PathBuf::from("/project/integration"),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_testpaths_empty_input() {
+        let rootdir = Utf8Path::new("/project");
+        let paths: Vec<String> = vec![];
+        let result = resolve_testpaths(&paths, rootdir);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn resolve_testpaths_nested_path() {
+        let rootdir = Utf8Path::new("/project");
+        let paths = vec!["src/tests/unit".to_string()];
+        let result = resolve_testpaths(&paths, rootdir);
+        assert_eq!(result, vec![Utf8PathBuf::from("/project/src/tests/unit")]);
+    }
+
+    // ── parse_marker_descriptions tests ──────────────────────────────────
+
+    #[test]
+    fn parse_markers_with_descriptions() {
+        let raw = vec![
+            "slow: marks slow tests".to_string(),
+            "db: database tests".to_string(),
+        ];
+        let (names, no_desc) = parse_marker_descriptions(&raw);
+        assert_eq!(names, vec!["slow", "db"]);
+        assert!(no_desc.is_empty());
+    }
+
+    #[test]
+    fn parse_markers_without_descriptions() {
+        let raw = vec!["slow".to_string(), "db".to_string()];
+        let (names, no_desc) = parse_marker_descriptions(&raw);
+        assert_eq!(names, vec!["slow", "db"]);
+        assert_eq!(no_desc, vec!["slow", "db"]);
+    }
+
+    #[test]
+    fn parse_markers_mixed() {
+        let raw = vec![
+            "slow: marks slow tests".to_string(),
+            "integration".to_string(),
+        ];
+        let (names, no_desc) = parse_marker_descriptions(&raw);
+        assert_eq!(names, vec!["slow", "integration"]);
+        assert_eq!(no_desc, vec!["integration"]);
+    }
+
+    #[test]
+    fn parse_markers_empty_input() {
+        let raw: Vec<String> = vec![];
+        let (names, no_desc) = parse_marker_descriptions(&raw);
+        assert!(names.is_empty());
+        assert!(no_desc.is_empty());
+    }
+
+    #[test]
+    fn parse_markers_trims_whitespace() {
+        let raw = vec!["  slow  : marks slow tests".to_string()];
+        let (names, no_desc) = parse_marker_descriptions(&raw);
+        assert_eq!(names, vec!["slow"]);
+        assert!(no_desc.is_empty());
     }
 }
