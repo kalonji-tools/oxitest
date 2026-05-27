@@ -6,6 +6,7 @@ import ast
 import dataclasses
 import hashlib
 import inspect
+import itertools
 import pathlib
 from collections.abc import Callable, Iterable
 from types import ModuleType
@@ -16,7 +17,7 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge.fixtures import Fixtures
-from oxitest._bridge.parametrize import _DictCases
+from oxitest._bridge.parametrize import _DictCases, _PartialCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
 
@@ -32,6 +33,60 @@ def _propagate_class_marks(fn: object, cls: object) -> None:
             _append_mark(cast(Any, fn), m)
 
 
+def _validate_composition(layers: tuple) -> None:
+    """Validate composition rules for _PartialCases layers.
+
+    Raises TypeError if:
+    - Only 1 partial layer (needs 2+)
+    - Fields are incomplete (union doesn't cover all dataclass fields)
+    """
+    if len(layers) == 1:
+        raise TypeError(
+            "parametrize composition requires at least 2 stacked"
+            " @parametrize layers with partial() values."
+            " Use a full dataclass instance for single-layer parametrize."
+        )
+    target_type = layers[0].param_type
+    all_provided = frozenset().union(*(layer.provided_fields for layer in layers))
+    all_fields = {f.name for f in dataclasses.fields(target_type)}
+    missing = all_fields - all_provided
+    if missing:
+        raise TypeError(
+            f"parametrize composition: missing field(s) {sorted(missing)!r}"
+            f" on '{target_type.__name__}'."
+            " The union of all layers must cover every field."
+        )
+
+
+def _expand_composed(
+    layers: tuple,
+    fn_name: str,
+    lineno: int,
+    marker_names: list[str],
+    is_async: bool,
+) -> list[CollectedItem]:
+    """Expand composed _PartialCases layers via cartesian product."""
+    _validate_composition(layers)
+    layer_items = [list(layer.items()) for layer in layers]
+    items: list[CollectedItem] = []
+    for combo in itertools.product(*layer_items):
+        compound_id = "-".join(case_id for case_id, _ in combo)
+        merged_pv: list[tuple[str, str]] = []
+        for _, pv in combo:
+            merged_pv.extend(pv)
+        items.append(
+            CollectedItem(
+                fn_name=fn_name,
+                lineno=lineno,
+                markers=marker_names,
+                param_id=compound_id,
+                param_values=merged_pv,
+                is_async=is_async,
+            )
+        )
+    return items
+
+
 def _expand_item(
     fn_name: str,
     lineno: int,
@@ -40,8 +95,8 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     is_async = inspect.iscoroutinefunction(fn)
-    layers = get_metadata(fn).param_cases
-    if layers is None:
+    raw = get_metadata(fn).param_cases
+    if raw is None:
         return [
             CollectedItem(
                 fn_name=fn_name,
@@ -52,20 +107,11 @@ def _expand_item(
                 is_async=is_async,
             )
         ]
-    # Single-layer: iterate directly over the layer's items
-    if len(layers) == 1:
-        return [
-            CollectedItem(
-                fn_name=fn_name,
-                lineno=lineno,
-                markers=marker_names,
-                param_id=case_id,
-                param_values=list(pv),
-                is_async=is_async,
-            )
-            for case_id, pv in layers[0].items()
-        ]
-    # Multi-layer (composition): expansion implemented in Task 3
+    layers = cast(tuple, raw)
+    # Composition: all layers are _PartialCases
+    if len(layers) > 1 or isinstance(layers[0], _PartialCases):
+        return _expand_composed(layers, fn_name, lineno, marker_names, is_async)
+    # Single layer: existing behavior
     return [
         CollectedItem(
             fn_name=fn_name,
