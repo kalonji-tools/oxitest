@@ -236,3 +236,177 @@ mod pipe_tests {
         let _ = child.wait();
     }
 }
+
+#[cfg(test)]
+mod worker_session_tests {
+    use super::*;
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    /// Helper: spawn `cat` with piped stdio and build a `WorkerSession` around it.
+    fn cat_session() -> (std::process::Child, WorkerSession) {
+        let mut child = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("`cat` must be available in test environment");
+
+        let (stdin, stdout) =
+            take_child_pipes(&mut child).expect("piped child must yield stdin/stdout");
+
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        std::thread::spawn(move || {
+            let mut stdout = stdout;
+            let mut buf = String::with_capacity(256);
+            loop {
+                buf.clear();
+                match stdout.read_line(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if line_tx.send(buf.clone()).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        let session = WorkerSession::new(stdin, line_rx, Duration::from_secs(5));
+        (child, session)
+    }
+
+    /// Helper: build a minimal `WorkerTask` using the given `RawValue`.
+    fn minimal_task(conftest: &serde_json::value::RawValue) -> WorkerTask<'_> {
+        WorkerTask {
+            module_path: "tests/test_example.py",
+            items: vec![WorkerTaskItem {
+                fn_name: "test_add",
+                param_id: None,
+            }],
+            conftest_paths: conftest,
+            timeout_secs: None,
+        }
+    }
+
+    #[test]
+    fn send_task_writes_valid_json_line() {
+        // Arrange
+        let (mut child, mut session) = cat_session();
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest);
+
+        // Act
+        session.send_task(&task).expect("send_task must succeed");
+
+        // Assert — `cat` echoes the line back through the reader thread.
+        let line = session
+            .line_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("must receive echoed line");
+
+        // Must end with a newline (the worker protocol requirement).
+        assert!(line.ends_with('\n'), "echoed line must end with newline");
+
+        // Must be valid JSON.
+        let parsed: serde_json::Value =
+            serde_json::from_str(line.trim()).expect("line must be valid JSON");
+        assert_eq!(parsed["module_path"], "tests/test_example.py");
+        assert_eq!(parsed["items"][0]["fn_name"], "test_add");
+        assert_eq!(parsed["conftest_paths"], serde_json::json!([]));
+        assert!(parsed["timeout_secs"].is_null());
+
+        drop(session);
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn send_task_includes_param_id_when_present() {
+        // Arrange
+        let (mut child, mut session) = cat_session();
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = WorkerTask {
+            module_path: "tests/test_math.py",
+            items: vec![WorkerTaskItem {
+                fn_name: "test_mul",
+                param_id: Some("x=2-y=3"),
+            }],
+            conftest_paths: &conftest,
+            timeout_secs: Some(30),
+        };
+
+        // Act
+        session.send_task(&task).expect("send_task must succeed");
+
+        // Assert
+        let line = session
+            .line_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("must receive echoed line");
+        let parsed: serde_json::Value =
+            serde_json::from_str(line.trim()).expect("line must be valid JSON");
+        assert_eq!(parsed["items"][0]["param_id"], "x=2-y=3");
+        assert_eq!(parsed["timeout_secs"], 30);
+
+        drop(session);
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn send_task_echoes_back_through_line_rx() {
+        // Arrange — keep the session alive so we can read from line_rx.
+        let (mut child, mut session) = cat_session();
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest);
+
+        // Act
+        session.send_task(&task).expect("send_task must succeed");
+
+        // Assert — `cat` echoes the line back; the reader thread should
+        // deliver it through line_rx within a reasonable timeout.
+        let line = session
+            .line_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("must receive echoed line");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(line.trim()).expect("echoed line must be valid JSON");
+        assert_eq!(parsed["module_path"], "tests/test_example.py");
+
+        drop(session);
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn send_task_returns_error_on_dead_process() {
+        // Arrange — spawn a process that exits immediately, then try to write.
+        let mut child = Command::new("true")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("`true` must spawn");
+
+        let (stdin, _stdout) = take_child_pipes(&mut child).unwrap();
+        let (_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let mut session = WorkerSession::new(stdin, line_rx, Duration::from_secs(1));
+
+        // Wait for the child to exit so its stdin pipe is broken.
+        let _ = child.wait();
+
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest);
+
+        // Act — writing to a dead process should eventually error.
+        // The first write may succeed (kernel buffer), so send repeatedly.
+        let mut errored = false;
+        for _ in 0..1000 {
+            if session.send_task(&task).is_err() {
+                errored = true;
+                break;
+            }
+        }
+
+        // Assert
+        assert!(errored, "send_task must return Err after process exits");
+    }
+}
