@@ -144,7 +144,7 @@ def _find_bare_asserts(fn: object) -> list[int]:
         return []
 
 
-async def _run_base_async(  # pragma: no cover — runs inside asyncio.run()
+async def _run_base_async(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
     no_message_lines: list[int],
@@ -296,7 +296,7 @@ class AsyncBridgeMiddleware:
         if _timeout_secs is None:
             _timeout_secs = plan.default_timeout
 
-        async def _async_core() -> TestResult:  # pragma: no cover
+        async def _async_core() -> TestResult:
             resolved: dict[str, Any] = {}
             async_teardowns: list[tuple[str, Any]] = []
             for k, v in plan.kwargs.items():
