@@ -12,6 +12,35 @@ use quick_xml::Writer;
 
 use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
+fn write_element<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    tag: &str,
+    attrs: &[(&str, &str)],
+    write_children: impl FnOnce(&mut Writer<W>) -> quick_xml::Result<()>,
+) -> quick_xml::Result<()> {
+    let mut elem = BytesStart::new(tag);
+    for &(k, v) in attrs {
+        elem.push_attribute((k, v));
+    }
+    writer.write_event(Event::Start(elem))?;
+    write_children(writer)?;
+    writer.write_event(Event::End(BytesEnd::new(tag)))?;
+    Ok(())
+}
+
+fn write_empty_element<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    tag: &str,
+    attrs: &[(&str, &str)],
+) -> quick_xml::Result<()> {
+    let mut elem = BytesStart::new(tag);
+    for &(k, v) in attrs {
+        elem.push_attribute((k, v));
+    }
+    writer.write_event(Event::Empty(elem))?;
+    Ok(())
+}
+
 use super::Reporter;
 
 /// Accumulates test results and writes JUnit XML on `finish()`.
@@ -134,93 +163,82 @@ impl JunitReporter {
             .count();
         let total_time = self.start.elapsed().as_secs_f64();
 
-        // <testsuites>
-        let mut testsuites = BytesStart::new("testsuites");
-        testsuites.push_attribute(("tests", total.to_string().as_str()));
-        testsuites.push_attribute(("failures", failures.to_string().as_str()));
-        testsuites.push_attribute(("errors", errors.to_string().as_str()));
-        testsuites.push_attribute(("time", format!("{total_time:.3}").as_str()));
-        writer
-            .write_event(Event::Start(testsuites))
-            .map_err(std::io::Error::other)?;
+        let total_str = total.to_string();
+        let failures_str = failures.to_string();
+        let errors_str = errors.to_string();
+        let skipped_str = skipped.to_string();
+        let time_str = format!("{total_time:.3}");
 
-        //   <testsuite name="oxitest">
-        let mut testsuite = BytesStart::new("testsuite");
-        testsuite.push_attribute(("name", "oxitest"));
-        testsuite.push_attribute(("tests", total.to_string().as_str()));
-        testsuite.push_attribute(("failures", failures.to_string().as_str()));
-        testsuite.push_attribute(("errors", errors.to_string().as_str()));
-        testsuite.push_attribute(("skipped", skipped.to_string().as_str()));
-        testsuite.push_attribute(("time", format!("{total_time:.3}").as_str()));
-        writer
-            .write_event(Event::Start(testsuite))
-            .map_err(std::io::Error::other)?;
+        write_element(
+            &mut writer,
+            "testsuites",
+            &[
+                ("tests", &total_str),
+                ("failures", &failures_str),
+                ("errors", &errors_str),
+                ("time", &time_str),
+            ],
+            |w| {
+                write_element(
+                    w,
+                    "testsuite",
+                    &[
+                        ("name", "oxitest"),
+                        ("tests", &total_str),
+                        ("failures", &failures_str),
+                        ("errors", &errors_str),
+                        ("skipped", &skipped_str),
+                        ("time", &time_str),
+                    ],
+                    |w| {
+                        for result in &self.results {
+                            let time_secs = format!("{:.3}", result.time_secs);
+                            let tc_attrs: [(&str, &str); 3] = [
+                                ("classname", result.classname.as_str()),
+                                ("name", result.name.as_str()),
+                                ("time", &time_secs),
+                            ];
 
-        for result in &self.results {
-            //     <testcase classname="..." name="..." time="...">
-            let mut testcase = BytesStart::new("testcase");
-            testcase.push_attribute(("classname", result.classname.as_str()));
-            testcase.push_attribute(("name", result.name.as_str()));
-            testcase.push_attribute(("time", format!("{:.3}", result.time_secs).as_str()));
-
-            match &result.outcome {
-                JunitOutcome::Passed => {
-                    writer
-                        .write_event(Event::Empty(testcase))
-                        .map_err(std::io::Error::other)?;
-                }
-                JunitOutcome::Failed { message } => {
-                    writer
-                        .write_event(Event::Start(testcase))
-                        .map_err(std::io::Error::other)?;
-                    let mut failure = BytesStart::new("failure");
-                    failure.push_attribute(("message", message.as_str()));
-                    writer
-                        .write_event(Event::Empty(failure))
-                        .map_err(std::io::Error::other)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::new("testcase")))
-                        .map_err(std::io::Error::other)?;
-                }
-                JunitOutcome::Error { message } => {
-                    writer
-                        .write_event(Event::Start(testcase))
-                        .map_err(std::io::Error::other)?;
-                    let mut error = BytesStart::new("error");
-                    error.push_attribute(("message", message.as_str()));
-                    writer
-                        .write_event(Event::Empty(error))
-                        .map_err(std::io::Error::other)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::new("testcase")))
-                        .map_err(std::io::Error::other)?;
-                }
-                JunitOutcome::Skipped { message } => {
-                    writer
-                        .write_event(Event::Start(testcase))
-                        .map_err(std::io::Error::other)?;
-                    let mut skip = BytesStart::new("skipped");
-                    if !message.is_empty() {
-                        skip.push_attribute(("message", message.as_str()));
-                    }
-                    writer
-                        .write_event(Event::Empty(skip))
-                        .map_err(std::io::Error::other)?;
-                    writer
-                        .write_event(Event::End(BytesEnd::new("testcase")))
-                        .map_err(std::io::Error::other)?;
-                }
-            }
-        }
-
-        //   </testsuite>
-        writer
-            .write_event(Event::End(BytesEnd::new("testsuite")))
-            .map_err(std::io::Error::other)?;
-        // </testsuites>
-        writer
-            .write_event(Event::End(BytesEnd::new("testsuites")))
-            .map_err(std::io::Error::other)?;
+                            match &result.outcome {
+                                JunitOutcome::Passed => {
+                                    write_empty_element(w, "testcase", &tc_attrs)?;
+                                }
+                                JunitOutcome::Failed { message } => {
+                                    write_element(w, "testcase", &tc_attrs, |w| {
+                                        write_empty_element(
+                                            w,
+                                            "failure",
+                                            &[("message", message.as_str())],
+                                        )
+                                    })?;
+                                }
+                                JunitOutcome::Error { message } => {
+                                    write_element(w, "testcase", &tc_attrs, |w| {
+                                        write_empty_element(
+                                            w,
+                                            "error",
+                                            &[("message", message.as_str())],
+                                        )
+                                    })?;
+                                }
+                                JunitOutcome::Skipped { message } => {
+                                    let skip_attrs: Vec<(&str, &str)> = if message.is_empty() {
+                                        vec![]
+                                    } else {
+                                        vec![("message", message.as_str())]
+                                    };
+                                    write_element(w, "testcase", &tc_attrs, |w| {
+                                        write_empty_element(w, "skipped", &skip_attrs)
+                                    })?;
+                                }
+                            }
+                        }
+                        Ok(())
+                    },
+                )
+            },
+        )
+        .map_err(std::io::Error::other)?;
 
         let mut file = std::fs::File::create(&*self.path)?;
         file.write_all(&buf)?;
