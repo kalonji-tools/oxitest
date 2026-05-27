@@ -345,9 +345,11 @@ impl Config {
         }
 
         // ── Execution ────────────────────────────────────────────────────
+        // validate() guarantees -x and --maxfail are mutually exclusive.
         if cli.exitfirst {
             self.maxfail = 1;
-        } else if let Some(n) = cli.maxfail {
+        }
+        if let Some(n) = cli.maxfail {
             if n > 0 {
                 self.maxfail = n;
             }
