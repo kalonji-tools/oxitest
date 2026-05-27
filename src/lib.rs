@@ -19,6 +19,7 @@ mod scheduler;
 mod strict;
 mod types;
 mod worker_result;
+mod worker_session;
 
 #[cfg(test)]
 mod test_doubles;
