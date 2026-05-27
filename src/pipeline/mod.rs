@@ -143,6 +143,11 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         }
     };
 
+    if let Err(msg) = cli.validate() {
+        eprintln!("error: {msg}");
+        return Ok(Err(4));
+    }
+
     // Early-exit flags: handled before any filesystem setup.
     if cli.capture_environment {
         println!("{}", env_string(py));
