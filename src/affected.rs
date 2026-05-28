@@ -95,13 +95,15 @@ fn conftest_affected_tests(
     changed_conftests: &[String],
     rootdir: &Utf8Path,
 ) -> Vec<Utf8PathBuf> {
-    let conftest_dirs: Vec<Utf8PathBuf> = changed_conftests
+    let mut conftest_dirs: Vec<Utf8PathBuf> = changed_conftests
         .iter()
         .filter_map(|c| {
             let abs = rootdir.join(c);
             abs.parent().map(|p| p.to_owned())
         })
         .collect();
+    conftest_dirs.sort_unstable();
+    conftest_dirs.dedup();
 
     test_files
         .iter()
