@@ -51,10 +51,9 @@ def build_helpers(
         seen[name] = source
 
         scope = HelperNamespace()
-        for attr_name in vars(module):
+        for attr_name, obj in vars(module).items():
             if attr_name.startswith("_"):
                 continue
-            obj = getattr(module, attr_name)
             if isinstance(obj, Fixtures):
                 continue
             if not callable(obj):
