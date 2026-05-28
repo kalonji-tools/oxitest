@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import sys
 import textwrap
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from helpers import make_meta
+from conftest import helpers
 from oxitest import Fixture, TempDir, raises, warns
+from oxitest._bridge._helper_namespace import HelperNamespace
 from oxitest._bridge.conftest_loader import (
     create_session,
     find_conftest_paths,
@@ -224,7 +222,7 @@ def test_create_session_populates_registry(tmp: TempDir):
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert kwargs["db"] == 42, (
         f"fixture 'db' should resolve to 42 after loading conftest, got "
         f"{kwargs.get('db')!r}"
@@ -264,7 +262,9 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta(str(sub / "test_x.py")))
+    kwargs, _ = session.resolve_for_test(
+        fn, helpers.common.make_meta(str(sub / "test_x.py"))
+    )
     assert kwargs["val"] == "local", (
         f"more-local conftest fixture should override root conftest, got "
         f"{kwargs.get('val')!r}"
@@ -273,7 +273,6 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
 
 def test_load_fixtures_registers_conftest_in_sys_modules(tmp: TempDir):
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
-    import sys
 
     f = tmp / "conftest.py"
     f.write_text(
@@ -365,3 +364,119 @@ def test_load_fixtures_raises_on_explicit_name_oxi(tmp: TempDir):
     conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='oxi')\n")
     with raises(ValueError, match="reserved"):
         load_fixtures_from_conftest(str(conftest))
+
+
+def test_load_fixtures_rejects_keyword_namespace_variable(tmp: TempDir):
+    conftest = tmp / "conftest.py"
+    conftest.write_text("import oxitest\nclass_ = oxitest.Fixtures()\n")
+    # variable name "class_" is fine, but "class" would be a syntax error
+    # so test explicit name= instead
+    conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='class')\n")
+    with raises(ValueError, match="Python keyword"):
+        load_fixtures_from_conftest(str(conftest))
+
+
+def test_load_fixtures_rejects_builtin_namespace_name(tmp: TempDir):
+    conftest = tmp / "conftest.py"
+    conftest.write_text("import oxitest\nint = oxitest.Fixtures()\n")
+    with raises(ValueError, match="Python builtin"):
+        load_fixtures_from_conftest(str(conftest))
+
+
+def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir):
+    conftest = tmp / "conftest.py"
+    conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='list')\n")
+    with raises(ValueError, match="Python builtin"):
+        load_fixtures_from_conftest(str(conftest))
+
+
+# ── Helpers integration ──────────────────────────────────────────────────────
+
+
+def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
+    f = tmp / "conftest.py"
+    f.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def db():\n"
+        "    return 42\n"
+        "\n"
+        "def make_thing():\n"
+        "    return 'thing'\n"
+    )
+    import sys as _sys
+
+    _sys.modules.pop("conftest", None)
+    create_session([str(f)])
+    conftest_mod = _sys.modules["conftest"]
+    assert hasattr(conftest_mod, "helpers"), (
+        "conftest module should have a 'helpers' attribute after create_session"
+    )
+    assert isinstance(conftest_mod.helpers, HelperNamespace), (
+        "helpers should be a HelperNamespace, got "
+        f"{type(conftest_mod.helpers).__name__}"
+    )
+
+
+def test_create_session_helpers_contain_public_functions(tmp: TempDir):
+    f = tmp / "conftest.py"
+    f.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def db():\n"
+        "    return 42\n"
+        "\n"
+        "def make_thing():\n"
+        "    return 'thing'\n"
+    )
+    import sys as _sys
+
+    _sys.modules.pop("conftest", None)
+    create_session([str(f)])
+    conftest_mod = _sys.modules["conftest"]
+    ns_name = tmp.path.name  # directory name
+    scope = getattr(conftest_mod.helpers, ns_name)
+    assert scope.make_thing() == "thing", (
+        f"expected make_thing() to return 'thing', got {scope.make_thing()!r}"
+    )
+
+
+def test_create_session_helpers_only_conftest_no_fixtures_no_warning(tmp: TempDir):
+    """A conftest with only helpers (no Fixtures) should not warn."""
+    f = tmp / "conftest.py"
+    f.write_text("def make_thing():\n    return 'thing'\n")
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        create_session([str(f)])
+
+
+def test_create_session_empty_conftest_still_warns(tmp: TempDir):
+    """A conftest with NO fixtures AND NO helpers should still warn."""
+    f = tmp / "conftest.py"
+    f.write_text("")
+    with warns(UserWarning, match="no Fixtures instance"):
+        create_session([str(f)])
+
+
+def test_create_session_helpers_empty_when_no_callables(tmp: TempDir):
+    """helpers is present but scope has no attrs when conftest has only fixtures."""
+    f = tmp / "conftest.py"
+    f.write_text(
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def db():\n"
+        "    return 42\n"
+    )
+    import sys as _sys
+
+    _sys.modules.pop("conftest", None)
+    create_session([str(f)])
+    conftest_mod = _sys.modules["conftest"]
+    assert hasattr(conftest_mod, "helpers"), (
+        "conftest module should have 'helpers' even with no public callables"
+    )
