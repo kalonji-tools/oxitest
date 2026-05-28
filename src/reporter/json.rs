@@ -233,7 +233,7 @@ mod tests {
             make_item("test_empty_msg"),
             TestOutcome::Failed {
                 message: String::new(),
-                file: "tests/t.py".to_string(),
+                file: Utf8PathBuf::from("tests/t.py"),
                 lineno: LineNo::new(1),
                 source_line: String::new(),
                 left: String::new(),
