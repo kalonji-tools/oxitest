@@ -241,7 +241,7 @@ def test_frames_empty_when_no_traceback():
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
     assert result is not None, "should return a result even without traceback"
-    assert result.frames == [], f"expected empty frames, got {result.frames!r}"
+    assert result.frames == (), f"expected empty frames, got {result.frames!r}"
 
 
 def test_bad_module_path_returns_error(tmp: TempDir):

@@ -151,9 +151,9 @@ def test_to_wire_omits_strict_when_false():
 
 
 def test_to_wire_includes_no_message_lines():
-    r = TestResult(status=StatusKind.PASSED, no_message_lines=[5, 10])
+    r = TestResult(status=StatusKind.PASSED, no_message_lines=(5, 10))
     wire = r.to_wire("t.py::test_a", 1.0)
-    assert wire["no_message_lines"] == [5, 10], "no_message_lines mismatch"
+    assert wire["no_message_lines"] == (5, 10), "no_message_lines mismatch"
 
 
 def test_to_wire_omits_empty_no_message_lines():

@@ -21,7 +21,7 @@ class FixtureDef(Generic[T]):
     name: str
     func: Callable[..., T]
     autouse: bool
-    params: list[Any] | None
+    params: tuple[Any, ...] | None
     conftest_path: str  # which conftest registered this (for locality precedence)
     shared: bool = False  # True = session-lifetime, immutable (FrozenProxy-wrapped)
     namespace: str = ""  # Fixtures() instance name; empty = no namespace

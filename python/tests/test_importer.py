@@ -33,7 +33,7 @@ def test_collect_single_test_function(tmp: TempDir):
     assert items[0].lineno == 1, (
         f"expected lineno=1 for first function, got {items[0].lineno}"
     )
-    assert items[0].markers == [], (
+    assert items[0].markers == (), (
         f"expected no markers on unmarked function, got {items[0].markers}"
     )
 
@@ -92,8 +92,8 @@ def test_collect_extracts_marker_names(tmp: TempDir):
     f.write_text("import oxitest\n@oxitest.mark.slow\ndef test_query(): pass\n")
     items, _ = collect_module(str(f))
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
-    assert items[0].markers == ["slow"], (
-        f"expected markers=['slow'], got {items[0].markers}"
+    assert items[0].markers == ("slow",), (
+        f"expected markers=('slow',), got {items[0].markers}"
     )
 
 
@@ -212,18 +212,18 @@ def test_collected_item_can_be_constructed():
     item = CollectedItem(
         fn_name="test_foo",
         lineno=1,
-        markers=[],
+        markers=(),
         param_id=None,
-        param_values=[],
+        param_values=(),
         is_async=False,
     )
     assert item.fn_name == "test_foo", (
         f"expected fn_name='test_foo', got {item.fn_name!r}"
     )
     assert item.lineno == 1, f"expected lineno=1, got {item.lineno}"
-    assert item.markers == [], f"expected empty markers, got {item.markers}"
+    assert item.markers == (), f"expected empty markers, got {item.markers}"
     assert item.param_id is None, f"expected param_id=None, got {item.param_id!r}"
-    assert item.param_values == [], (
+    assert item.param_values == (), (
         f"expected empty param_values, got {item.param_values}"
     )
     assert item.is_async is False, f"expected is_async=False, got {item.is_async!r}"
@@ -233,17 +233,17 @@ def test_collected_item_with_markers_and_param():
     item = CollectedItem(
         fn_name="test_bar",
         lineno=5,
-        markers=["slow"],
+        markers=("slow",),
         param_id="case_a",
-        param_values=[("x", "1"), ("y", "2")],
+        param_values=(("x", "1"), ("y", "2")),
         is_async=False,
     )
-    assert item.markers == ["slow"], f"expected markers=['slow'], got {item.markers}"
+    assert item.markers == ("slow",), f"expected markers=('slow',), got {item.markers}"
     assert item.param_id == "case_a", (
         f"expected param_id='case_a', got {item.param_id!r}"
     )
-    assert item.param_values == [("x", "1"), ("y", "2")], (
-        f"expected param_values=[('x', '1'), ('y', '2')], got {item.param_values}"
+    assert item.param_values == (("x", "1"), ("y", "2")), (
+        f"expected param_values=(('x', '1'), ('y', '2')), got {item.param_values}"
     )
 
 

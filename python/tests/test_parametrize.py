@@ -182,7 +182,7 @@ def test_collect_non_parametrize_has_none_param_id(tmp: TempDir):
     assert items[0].param_id is None, (
         f"non-parametrized test should have param_id=None, got {items[0].param_id!r}"
     )
-    assert items[0].param_values == [], (
+    assert items[0].param_values == (), (
         f"non-parametrized test should have empty param_values, got "
         f"{items[0].param_values}"
     )
@@ -1084,7 +1084,7 @@ def test_partial_detects_fixref_fields():
         return "pg"
 
     p = partial(DbCase, db=my_db)
-    assert p.fixref_fields == ["db"], (
+    assert p.fixref_fields == ("db",), (
         f"partial should detect FixtureRef fields, got {p.fixref_fields!r}"
     )
 

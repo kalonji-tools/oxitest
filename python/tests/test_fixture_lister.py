@@ -131,7 +131,7 @@ def test_rich_shows_params():
         helpers.common.make_fixture_def(
             "browser",
             conftest_path="conftest.py",
-            params=["chrome", "firefox"],
+            params=("chrome", "firefox"),
         )
     )
     result = list_fixtures_from_registry(reg, verbosity=2, use_color=False)

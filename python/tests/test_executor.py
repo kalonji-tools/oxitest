@@ -43,7 +43,7 @@ def test_passing_function(tmp: TempDir):
     assert result.source_line == "", (
         f"passing test should have empty source_line, got {result.source_line!r}"
     )
-    assert result.no_message_lines == [1], (
+    assert result.no_message_lines == (1,), (
         f"bare assert on line 1 should appear in no_message_lines, got "
         f"{result.no_message_lines}"
     )
@@ -71,7 +71,7 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(tmp: TempDir
     assert result.status == "passed", (
         f"passing test should have status='passed', got {result.status!r}"
     )
-    assert result.no_message_lines == [], (
+    assert result.no_message_lines == (), (
         f"assert with message should not appear in no_message_lines, got "
         f"{result.no_message_lines}"
     )
@@ -91,7 +91,7 @@ def test_failing_assertion_with_message(tmp: TempDir):
     assert "assert" in result.source_line, (
         f"source_line should contain 'assert', got {result.source_line!r}"
     )
-    assert result.no_message_lines == [], (
+    assert result.no_message_lines == (), (
         f"assert with message should not appear in no_message_lines, got "
         f"{result.no_message_lines}"
     )
@@ -111,7 +111,7 @@ def test_failing_bare_assertion(tmp: TempDir):
     assert "assert" in result.source_line, (
         f"source_line should contain 'assert', got {result.source_line!r}"
     )
-    assert result.no_message_lines == [], (
+    assert result.no_message_lines == (), (
         f"failed assert line should not be in no_message_lines (only passing asserts "
         "tracked), "
         f"got {result.no_message_lines}"
@@ -133,7 +133,7 @@ def test_error_exception(tmp: TempDir):
         f"{result.message!r}"
     )
     assert result.lineno == 2, f"error lineno should be 2, got {result.lineno}"
-    assert result.no_message_lines == [], (
+    assert result.no_message_lines == (), (
         f"error result should have empty no_message_lines, got "
         f"{result.no_message_lines}"
     )
@@ -151,7 +151,7 @@ def test_skipped_via_unittest(tmp: TempDir):
     assert result.message == "reason", (
         f"skip message should be 'reason', got {result.message!r}"
     )
-    assert result.no_message_lines == [], (
+    assert result.no_message_lines == (), (
         f"skipped result should have empty no_message_lines, got "
         f"{result.no_message_lines}"
     )
