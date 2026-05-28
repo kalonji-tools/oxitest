@@ -41,7 +41,7 @@ current working directory when omitted.
 | `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
 | `--retries` | — | integer | — | Retry failed tests up to N times. |
 | `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. Has no effect without `--retries`. |
-| `--debug` | — | `post-mortem` | — | Drop into an interactive debugger on test failure. Implies `--serial`, `--maxfail 1`, and `--tb=long`. Use `--debug=MODE` with `=` (bare `--debug` defaults to `post-mortem`). See [Debug tests](../how-to/debug-tests.md). |
+| `--debug` | — | `post-mortem\|always` | — | Drop into an interactive debugger. Implies `--serial` and `--tb=long`. `post-mortem` (default) also implies `--maxfail 1`. `always` pauses before every test. Use `--debug=MODE` with `=`. See [Debug tests](../how-to/debug-tests.md). |
 
 ## Flag interactions
 

@@ -33,6 +33,34 @@ can override the traceback style with an explicit `--tb`:
 $ oxitest --debug --tb=short tests/test_math.py
 ```
 
+## Stepping through every test
+
+To drop into the debugger at the start of every test:
+
+```console
+$ oxitest --debug=always tests/test_math.py
+```
+
+oxitest pauses before each test function runs, showing:
+
+```
+── TRACE tests/test_math.py::test_add ──────────────────
+Stepping into test (type 'c' to run, 'q' to quit)
+(Pdb)
+```
+
+Type `c` to continue into the test, or `q` to stop the run. If the test
+fails, you also get a post-mortem debugger session at the failure point.
+
+Unlike `--debug` (post-mortem), `always` mode does not imply `--maxfail 1`.
+You can combine it with `-x` to stop on first failure:
+
+```console
+$ oxitest --debug=always -x tests/
+```
+
+Or let it run all tests with a debugger pause before each one.
+
 ## Using breakpoints
 
 Under `--debug`, `breakpoint()` calls in your test code work normally.
