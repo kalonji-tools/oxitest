@@ -157,7 +157,7 @@ mod snapshot_tests {
 mod tests {
     use super::*;
     use crate::reporter::test_helpers::{make_error, make_failed, make_item};
-    use crate::types::TestOutcome;
+    use crate::types::{LineNo, TestOutcome};
     use tempfile::TempDir;
 
     fn run_reporter(outcomes: Vec<(std::sync::Arc<TestItem>, TestOutcome)>) -> String {
@@ -234,7 +234,7 @@ mod tests {
             TestOutcome::Failed {
                 message: String::new(),
                 file: "tests/t.py".to_string(),
-                lineno: 1,
+                lineno: LineNo::new(1),
                 source_line: String::new(),
                 left: String::new(),
                 right: String::new(),

@@ -1,4 +1,6 @@
 use crate::reporter::colors::color_dim_cyan;
+#[cfg(test)]
+use crate::types::LineNo;
 use crate::types::TestOutcome;
 
 fn hint_line(text: &str, use_color: bool) -> String {
@@ -51,7 +53,7 @@ mod snapshot_tests {
         let outcome = TestOutcome::Error {
             message: "TypeError: object X can't be used in 'await' expression".to_string(),
             file: "test.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "await fx".to_string(),
             frames: vec![],
         };
@@ -64,7 +66,7 @@ mod snapshot_tests {
         let outcome = TestOutcome::Error {
             message: "ValueError: bad input".to_string(),
             file: "test.py".to_string(),
-            lineno: 3,
+            lineno: LineNo::new(3),
             source_line: "raise ValueError".to_string(),
             frames: vec![],
         };
@@ -82,7 +84,7 @@ mod tests {
         let outcome = TestOutcome::Error {
             message: "TypeError: object X can't be used in 'await' expression".to_string(),
             file: "test.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "await fx".to_string(),
             frames: vec![],
         };
@@ -96,7 +98,7 @@ mod tests {
         let outcome = TestOutcome::Error {
             message: "SharedFixtureMutationError: cannot mutate".to_string(),
             file: "test.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "fx.val = 1".to_string(),
             frames: vec![],
         };
@@ -110,7 +112,7 @@ mod tests {
         let outcome = TestOutcome::Error {
             message: "fixture 'db' not found".to_string(),
             file: "test.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "def test(db):".to_string(),
             frames: vec![],
         };
@@ -124,7 +126,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "assert 1 == 2".to_string(),
             file: "test.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "assert 1 == 2".to_string(),
             left: "1".to_string(),
             right: "2".to_string(),

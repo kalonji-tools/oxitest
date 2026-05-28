@@ -14,7 +14,7 @@ use std::time::Duration;
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::types::{NodeId, OutcomeKind, TestItem};
+use crate::types::{LineNo, NodeId, OutcomeKind, TestItem};
 
 const CACHE_VERSION: u32 = 1;
 
@@ -36,7 +36,7 @@ struct CacheEntry {
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 struct CachedItemData {
     fn_name: String,
-    lineno: usize,
+    lineno: LineNo,
     markers: Vec<String>,
     param_id: Option<String>,
     param_values: Vec<(String, String)>,
@@ -788,7 +788,7 @@ mod tests {
                 node_id: NodeId::new("tests/test_foo.py", "test_a", None),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_a".to_string(),
-                lineno: 5,
+                lineno: LineNo::new(5),
                 markers: vec!["slow".to_string()],
                 param_id: None,
                 param_values: vec![],
@@ -798,7 +798,7 @@ mod tests {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_b".to_string(),
-                lineno: 10,
+                lineno: LineNo::new(10),
                 markers: vec![],
                 param_id: Some("x0".to_string()),
                 param_values: vec![("x".to_string(), "0".to_string())],
@@ -810,7 +810,7 @@ mod tests {
         let cached = cache.cached_module_items(module_path, 12345).unwrap();
         assert_eq!(cached.len(), 2);
         assert_eq!(cached[0].fn_name, "test_a");
-        assert_eq!(cached[0].lineno, 5);
+        assert_eq!(cached[0].lineno, LineNo::new(5));
         assert_eq!(cached[0].markers, vec!["slow".to_string()]);
         assert_eq!(cached[1].fn_name, "test_b");
         assert_eq!(cached[1].param_id, Some("x0".to_string()));
@@ -828,7 +828,7 @@ mod tests {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -905,7 +905,7 @@ mod tests {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
-            lineno: 3,
+            lineno: LineNo::new(3),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -918,7 +918,7 @@ mod tests {
         let loaded = TestCache::load(utf8_dir);
         let cached = loaded.cached_module_items(module_path, 9999).unwrap();
         assert_eq!(cached[0].fn_name, "test_a");
-        assert_eq!(cached[0].lineno, 3);
+        assert_eq!(cached[0].lineno, LineNo::new(3));
     }
 
     #[test]

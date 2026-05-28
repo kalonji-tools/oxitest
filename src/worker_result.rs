@@ -8,7 +8,7 @@
 //! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
 //! type-checked at compile time rather than constructed with ad-hoc macros.
 
-use crate::types::{self, Frame};
+use crate::types::{self, Frame, LineNo};
 
 /// Current version of the worker ↔ runner JSON protocol.
 /// Bump when adding/removing/renaming wire fields.
@@ -124,7 +124,7 @@ impl WorkerResult {
             .iter()
             .map(|f| Frame {
                 file: f.file.clone(),
-                lineno: usize::try_from(f.lineno).unwrap_or(0),
+                lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
                 name: f.name.clone(),
                 line: f.line.clone(),
             })
@@ -134,7 +134,7 @@ impl WorkerResult {
             status: self.outcome.as_str(),
             message: &message,
             file: self.file.as_deref().unwrap_or_default(),
-            lineno: self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)),
+            lineno: LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0))),
             source_line: self.source_line.as_deref().unwrap_or_default(),
             no_message_lines: &no_message_lines,
             left: self.left.as_deref().unwrap_or_default(),
@@ -241,7 +241,7 @@ mod frame_tests {
                     frames[0],
                     Frame {
                         file: "t.py".to_string(),
-                        lineno: 10,
+                        lineno: LineNo::new(10),
                         name: "test_f".to_string(),
                         line: "do_thing()".to_string(),
                     }
@@ -250,7 +250,7 @@ mod frame_tests {
                     frames[1],
                     Frame {
                         file: "t.py".to_string(),
-                        lineno: 3,
+                        lineno: LineNo::new(3),
                         name: "do_thing".to_string(),
                         line: "raise ValueError".to_string(),
                     }
@@ -304,7 +304,7 @@ mod lineno_cast_tests {
         .unwrap();
         match r.to_outcome() {
             types::TestOutcome::Failed { lineno, .. } => {
-                assert_eq!(lineno, 42usize);
+                assert_eq!(lineno, LineNo::new(42));
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -736,7 +736,7 @@ mod to_outcome_tests {
                 assert_eq!(message, "ImportError: no module");
                 assert_eq!(frames.len(), 2);
                 assert_eq!(frames[0].file, "conftest.py");
-                assert_eq!(frames[0].lineno, 3);
+                assert_eq!(frames[0].lineno, LineNo::new(3));
                 assert_eq!(frames[0].name, "<module>");
                 assert_eq!(frames[1].name, "setup");
             }

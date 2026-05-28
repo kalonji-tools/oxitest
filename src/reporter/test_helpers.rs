@@ -6,7 +6,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 
 use crate::types::{
-    DurationMs, NodeId, OutcomeKind, RawOutcome, TestItem, TestOutcome, TestTiming,
+    DurationMs, LineNo, NodeId, OutcomeKind, RawOutcome, TestItem, TestOutcome, TestTiming,
 };
 
 /// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
@@ -16,7 +16,7 @@ pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
         node_id: NodeId::new("tests/test_foo.py", name, None),
         module_path: Utf8PathBuf::from("tests/test_foo.py"),
         fn_name: name.to_string(),
-        lineno: 0,
+        lineno: LineNo::ZERO,
         markers: vec![],
         param_id: None,
         param_values: vec![],
@@ -32,7 +32,7 @@ pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
         node_id: NodeId::from_raw(node_id),
         module_path: Utf8PathBuf::from("tests/test_foo.py"),
         fn_name: node_id.to_string(),
-        lineno: 0,
+        lineno: LineNo::ZERO,
         markers: vec![],
         param_id: None,
         param_values: vec![],
@@ -47,7 +47,7 @@ pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
         node_id: NodeId::new(module, name, None),
         module_path: Utf8PathBuf::from(module),
         fn_name: name.to_string(),
-        lineno: 0,
+        lineno: LineNo::ZERO,
         markers: vec![],
         param_id: None,
         param_values: vec![],
@@ -66,7 +66,7 @@ pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<
                 node_id: NodeId::new(module, name, None),
                 module_path: path.clone(),
                 fn_name: name.to_string(),
-                lineno: 0,
+                lineno: LineNo::ZERO,
                 markers: vec![],
                 param_id: None,
                 param_values: vec![],
@@ -81,7 +81,7 @@ pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> Te
     TestOutcome::Failed {
         message: msg.to_string(),
         file: file.to_string(),
-        lineno,
+        lineno: LineNo::new(lineno),
         source_line: src.to_string(),
         left: String::new(),
         right: String::new(),
@@ -94,7 +94,7 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
     TestOutcome::Error {
         message: msg.to_string(),
         file: file.to_string(),
-        lineno,
+        lineno: LineNo::new(lineno),
         source_line: src.to_string(),
         frames: vec![],
     }
@@ -106,7 +106,7 @@ pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestI
         node_id: NodeId::new(module, name, None),
         module_path: Utf8PathBuf::from(module),
         fn_name: name.to_string(),
-        lineno,
+        lineno: LineNo::new(lineno),
         markers: vec![],
         param_id: None,
         param_values: vec![],
@@ -132,7 +132,7 @@ pub(crate) fn make_outcome(status: &str) -> TestOutcome {
         status,
         message: "",
         file: "",
-        lineno: 0,
+        lineno: LineNo::ZERO,
         source_line: "",
         no_message_lines: &[],
         left: "",

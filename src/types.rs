@@ -94,6 +94,41 @@ impl std::ops::Sub for DurationMs {
     }
 }
 
+/// Source line number, used throughout the runner for test locations and tracebacks.
+///
+/// Wraps `usize` to prevent accidental confusion with loop counters or counts.
+/// A value of `0` means "unknown / not available" (convention from Python sentinels).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct LineNo(usize);
+
+impl LineNo {
+    pub const ZERO: LineNo = LineNo(0);
+
+    pub fn new(n: usize) -> Self {
+        LineNo(n)
+    }
+
+    #[allow(dead_code)]
+    pub fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
+impl std::ops::Deref for LineNo {
+    type Target = usize;
+    fn deref(&self) -> &usize {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for LineNo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// A collected test with all metadata needed for execution and reporting.
 ///
 /// Produced by `bridge::collect_module` after Python imports the test file.
@@ -103,7 +138,7 @@ pub struct TestItem {
     pub(crate) node_id: NodeId,
     pub(crate) module_path: Utf8PathBuf,
     pub(crate) fn_name: String,
-    pub(crate) lineno: usize,
+    pub(crate) lineno: LineNo,
     pub(crate) markers: Vec<String>,
     pub(crate) param_id: Option<String>,
     pub(crate) param_values: Vec<(String, String)>,
@@ -114,7 +149,7 @@ pub struct TestItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
     pub file: String,
-    pub lineno: usize,
+    pub lineno: LineNo,
     pub name: String,
     pub line: String,
 }
@@ -132,7 +167,7 @@ pub enum TestOutcome {
     Failed {
         message: String,
         file: String,
-        lineno: usize,
+        lineno: LineNo,
         source_line: String,
         left: String,
         right: String,
@@ -142,7 +177,7 @@ pub enum TestOutcome {
     Error {
         message: String,
         file: String,
-        lineno: usize,
+        lineno: LineNo,
         source_line: String,
         frames: Vec<Frame>,
     },
@@ -438,7 +473,7 @@ pub struct RawOutcome<'a> {
     pub status: &'a str,
     pub message: &'a str,
     pub file: &'a str,
-    pub lineno: usize,
+    pub lineno: LineNo,
     pub source_line: &'a str,
     pub no_message_lines: &'a [usize],
     pub left: &'a str,
@@ -503,7 +538,7 @@ mod failure_accumulator_tests {
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -520,7 +555,7 @@ mod failure_accumulator_tests {
         let fail = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -557,7 +592,7 @@ mod tests {
         let o = TestOutcome::Failed {
             message: "msg".to_string(),
             file: "test_foo.py".to_string(),
-            lineno: 7,
+            lineno: LineNo::new(7),
             source_line: "assert x == 1".to_string(),
             left: "0".to_string(),
             right: "1".to_string(),
@@ -572,7 +607,7 @@ mod tests {
             ..
         } = o
         {
-            assert_eq!(lineno, 7);
+            assert_eq!(lineno, LineNo::new(7));
             assert_eq!(left, "0");
             assert_eq!(right, "1");
             assert_eq!(op, "==");
@@ -630,7 +665,7 @@ mod tests {
             node_id: NodeId::new("test.py", "test_add", Some("basic")),
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_add".to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: Some("basic".to_string()),
             param_values: vec![("x".to_string(), "1".to_string())],
@@ -645,7 +680,7 @@ mod tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -660,7 +695,7 @@ mod tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -691,7 +726,7 @@ mod tests {
             node_id: NodeId::new("test.py", "test_foo", None),
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_foo".to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -707,7 +742,7 @@ mod tests {
             node_id: NodeId::new("test.py", "test_sync", None),
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_sync".to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -719,7 +754,7 @@ mod tests {
             node_id: NodeId::new("test.py", "test_async", None),
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_async".to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -806,7 +841,7 @@ mod tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -821,7 +856,7 @@ mod tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -908,7 +943,7 @@ mod tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -923,7 +958,7 @@ mod tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -997,7 +1032,7 @@ mod tests {
             TestOutcome::Failed {
                 message: String::new(),
                 file: String::new(),
-                lineno: 0,
+                lineno: LineNo::ZERO,
                 source_line: String::new(),
                 left: String::new(),
                 right: String::new(),
@@ -1011,7 +1046,7 @@ mod tests {
             TestOutcome::Error {
                 message: String::new(),
                 file: String::new(),
-                lineno: 0,
+                lineno: LineNo::ZERO,
                 source_line: String::new(),
                 frames: vec![],
             }
@@ -1134,7 +1169,7 @@ mod tests {
             status,
             message: "msg",
             file: "test.py",
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "assert x",
             no_message_lines: &[],
             left: "0",
@@ -1159,7 +1194,7 @@ mod tests {
             status: "failed",
             message: "oops",
             file: "test.py",
-            lineno: 7,
+            lineno: LineNo::new(7),
             source_line: "assert x == 1",
             no_message_lines: &[],
             left: "0",
@@ -1178,7 +1213,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(message, "oops");
-                assert_eq!(lineno, 7);
+                assert_eq!(lineno, LineNo::new(7));
                 assert_eq!(left, "0");
                 assert_eq!(right, "1");
                 assert_eq!(op, "==");
@@ -1245,7 +1280,7 @@ mod tests {
             TestOutcome::Failed {
                 message: String::new(),
                 file: String::new(),
-                lineno: 0,
+                lineno: LineNo::ZERO,
                 source_line: String::new(),
                 left: String::new(),
                 right: String::new(),
@@ -1255,7 +1290,7 @@ mod tests {
             TestOutcome::Error {
                 message: String::new(),
                 file: String::new(),
-                lineno: 0,
+                lineno: LineNo::ZERO,
                 source_line: String::new(),
                 frames: vec![],
             },
@@ -1304,7 +1339,7 @@ mod message_tests {
         let o = TestOutcome::Failed {
             message: "assertion failed".to_string(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -1319,7 +1354,7 @@ mod message_tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -1334,7 +1369,7 @@ mod message_tests {
         let o = TestOutcome::Error {
             message: "ImportError".to_string(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -1346,7 +1381,7 @@ mod message_tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -1451,7 +1486,7 @@ mod ctrf_status_tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -1466,7 +1501,7 @@ mod ctrf_status_tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -1542,7 +1577,7 @@ mod color_category_tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -1557,7 +1592,7 @@ mod color_category_tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -1657,7 +1692,7 @@ mod junit_category_tests {
         let o = TestOutcome::Failed {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
             right: String::new(),
@@ -1672,7 +1707,7 @@ mod junit_category_tests {
         let o = TestOutcome::Error {
             message: String::new(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };

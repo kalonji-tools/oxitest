@@ -139,7 +139,7 @@ mod list_tests {
             node_id: NodeId::from_raw(&node_id),
             module_path: Utf8PathBuf::from(module),
             fn_name: fn_name.to_string(),
-            lineno: 1,
+            lineno: crate::types::LineNo::new(1),
             markers: markers.iter().map(|s| s.to_string()).collect(),
             param_id: None,
             param_values: vec![],

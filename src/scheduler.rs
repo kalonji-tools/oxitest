@@ -103,7 +103,7 @@ mod tests {
                     node_id: NodeId::new(path, &format!("test_{i}"), None),
                     module_path: p.clone(),
                     fn_name: format!("test_{i}"),
-                    lineno: i,
+                    lineno: crate::types::LineNo::new(i),
                     markers: vec![],
                     param_id: None,
                     param_values: vec![],
