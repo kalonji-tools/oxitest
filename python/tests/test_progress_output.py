@@ -28,7 +28,7 @@ def test_default_hides_passing_tests(tmp: TempDir) -> None:
             assert 1 == 2, ""
     """)
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_pass_one" not in out, f"passing test should be hidden:\n{out}"
     assert "test_pass_two" not in out, f"passing test should be hidden:\n{out}"
@@ -56,7 +56,7 @@ def test_verbose_failure_node_id_shown(tmp: TempDir) -> None:
             assert 1 == 2, ""
     """)
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--serial", "-v")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial", "-v")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_fail_gamma" in out, (
         f"failing test node_id should appear in FAILURES:\n{out}"
@@ -76,7 +76,7 @@ def test_default_shows_summary_for_all_passing(tmp: TempDir) -> None:
             assert True, ""
     """)
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
     assert rc == 0, f"expected zero exit code, got rc={rc}\n{out}"
     assert "passed" in out, f"summary should appear:\n{out}"
     assert "test_one" not in out, f"test name should be hidden:\n{out}"
@@ -93,7 +93,7 @@ def test_failure_diagnostic_shown_in_default(tmp: TempDir) -> None:
             assert x == 99, ""
     """)
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_diag.py" in out, f"file location should appear:\n{out}"
     assert "assert x == 99" in out, f"source line should appear:\n{out}"

@@ -17,7 +17,7 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--list")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--list")
     assert rc == 0, f"--list should exit 0, got {rc}"
     assert "test_alpha" in out, "node ID test_alpha should appear in --list output"
     assert "test_beta" in out, "node ID test_beta should appear in --list output"
@@ -30,7 +30,7 @@ def test_list_verbose_shows_table(tmp: TempDir):
     (tmp / "test_table.py").write_text(
         "def test_one(): assert True\ndef test_two(): assert True\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--list", "-v")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--list", "-v")
     assert rc == 0, f"--list -v should exit 0, got {rc}"
     assert "module" in out, "verbose list should show 'module' column header"
     assert "function" in out, "verbose list should show 'function' column header"
@@ -41,7 +41,7 @@ def test_keyword_filter(tmp: TempDir):
     (tmp / "test_kw.py").write_text(
         "def test_alpha(): assert True\ndef test_beta(): assert False\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "-k", "alpha")
+    out, _, rc = helpers.common.run_oxitest(tmp, "-k", "alpha")
     assert rc == 0, f"-k alpha should exit 0 (only matching test runs), got {rc}"
     assert "1 passed" in out, "-k alpha should run exactly 1 test"
 
@@ -51,7 +51,7 @@ def test_serial_flag(tmp: TempDir):
     (tmp / "test_serial.py").write_text(
         "def test_a(): assert True\ndef test_b(): assert True\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
     assert rc == 0, f"--serial should exit 0, got {rc}"
     assert "passed" in out, "--serial run should report passed tests"
 
@@ -62,7 +62,7 @@ def test_json_output(tmp: TempDir):
         "def test_one(): assert True\ndef test_two(): assert True\n"
     )
     json_path = Path(tmp) / "results.json"
-    out, rc = helpers.common.run_oxitest(tmp, "--json", str(json_path))
+    out, _, rc = helpers.common.run_oxitest(tmp, "--json", str(json_path))
     assert rc == 0, f"--json run should exit 0, got {rc}"
     assert json_path.exists(), "--json should create the output file"
     data = json.loads(json_path.read_text())
@@ -76,7 +76,7 @@ def test_junit_xml_output(tmp: TempDir):
         "def test_first(): assert True\ndef test_second(): assert True\n"
     )
     xml_path = Path(tmp) / "results.xml"
-    out, rc = helpers.common.run_oxitest(tmp, "--junit-xml", str(xml_path))
+    out, _, rc = helpers.common.run_oxitest(tmp, "--junit-xml", str(xml_path))
     assert rc == 0, f"--junit-xml run should exit 0, got {rc}"
     assert xml_path.exists(), "--junit-xml should create the output file"
     xml_content = xml_path.read_text()
@@ -95,7 +95,7 @@ def test_marker_filter(tmp: TempDir):
     )
     pyproject = Path(tmp) / "pyproject.toml"
     pyproject.write_text('[tool.oxitest]\nmarkers = ["slow: slow tests"]\n')
-    out, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
+    out, _, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
     assert rc == 0, f"-m slow should exit 0, got {rc}"
     assert "1 passed" in out, "-m slow should run exactly 1 test"
 
@@ -103,7 +103,7 @@ def test_marker_filter(tmp: TempDir):
 def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
     """Flag conflict: -x and --maxfail are mutually exclusive."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "-x", "--maxfail", "5")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "-x", "--maxfail", "5")
     assert rc == 4, f"-x/--maxfail conflict should exit 4, got {rc}"
     assert "-x" in stderr, f"stderr: {stderr!r}"
     assert "--maxfail" in stderr, f"stderr: {stderr!r}"
@@ -112,7 +112,7 @@ def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
 def test_verbose_conflicts_with_quiet(tmp: TempDir):
     """Flag conflict: --verbose and --quiet are opposite modes."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "-v", "-q")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "-v", "-q")
     assert rc == 4, f"-v/-q conflict should exit 4, got {rc}"
     assert "--verbose" in stderr, f"stderr: {stderr!r}"
     assert "--quiet" in stderr, f"stderr: {stderr!r}"
@@ -121,9 +121,7 @@ def test_verbose_conflicts_with_quiet(tmp: TempDir):
 def test_schedule_conflicts_with_serial(tmp: TempDir):
     """Flag conflict: --schedule has no effect in serial mode."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(
-        tmp, "--schedule", "random", "--serial"
-    )
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--schedule", "random", "--serial")
     assert rc == 4, f"--schedule/--serial conflict should exit 4, got {rc}"
     assert "--schedule" in stderr, f"stderr: {stderr!r}"
     assert "--serial" in stderr, f"stderr: {stderr!r}"
@@ -132,7 +130,7 @@ def test_schedule_conflicts_with_serial(tmp: TempDir):
 def test_retries_delay_requires_retries(tmp: TempDir):
     """Flag conflict: --retries-delay needs --retries."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "--retries-delay", "5")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--retries-delay", "5")
     assert rc == 4, f"--retries-delay without --retries should exit 4, got {rc}"
     assert "--retries-delay" in stderr, f"stderr: {stderr!r}"
     assert "--retries" in stderr, f"stderr: {stderr!r}"
@@ -141,14 +139,14 @@ def test_retries_delay_requires_retries(tmp: TempDir):
 def test_debug_with_passing_test_exits_0(tmp: TempDir):
     """--debug on a passing test exits 0 (no pdb triggered)."""
     (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "--debug")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug")
     assert rc == 0, f"expected exit code 0, got {rc}\nstderr: {stderr!r}"
 
 
 def test_debug_conflicts_are_rejected(tmp: TempDir):
     """--debug with --workers should produce exit code 4."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "--debug", "--workers", "2")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug", "--workers", "2")
     assert rc == 4, f"expected exit code 4, got {rc}\nstderr: {stderr!r}"
     assert "--debug" in stderr, f"error should mention --debug: {stderr!r}"
     assert "--workers" in stderr, f"error should mention --workers: {stderr!r}"
@@ -157,16 +155,14 @@ def test_debug_conflicts_are_rejected(tmp: TempDir):
 def test_debug_always_is_accepted(tmp: TempDir):
     """--debug=always is a valid flag (no parse error)."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(tmp, "--debug=always", "--list")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug=always", "--list")
     assert rc == 0, f"expected exit code 0, got {rc}\nstderr: {stderr!r}"
 
 
 def test_debug_always_allows_exitfirst(tmp: TempDir):
     """--debug=always -x should be accepted (not a conflict)."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest_full(
-        tmp, "--debug=always", "-x", "--list"
-    )
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug=always", "-x", "--list")
     assert rc == 0, (
         f"--debug=always -x --list should exit 0, got rc={rc}\nstderr: {stderr!r}"
     )

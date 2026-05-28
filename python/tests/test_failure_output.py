@@ -85,7 +85,7 @@ def test_failure_output(
 ) -> None:
     """Failure output matches expected patterns for each scenario."""
     (tmp / "test_check.py").write_text(test_code)
-    out, rc = helpers.common.run_oxitest(tmp, *extra_args)
+    out, _, rc = helpers.common.run_oxitest(tmp, *extra_args)
     assert rc != 0, f"expected non-zero exit code:\n{out}"
     for s in expected:
         assert s in out, f"expected {s!r} in output:\n{out}"
