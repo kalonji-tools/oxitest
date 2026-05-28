@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import sys
 import types
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from helpers import RecordingDebugger
+from conftest import helpers
 from oxitest._bridge._errors import ConflictingDebuggerError
 from oxitest._bridge._raises import raises
 from oxitest._bridge.plugin_loader import PluginLoadError, PluginRegistry, load_plugins
@@ -141,11 +138,11 @@ def test_conflicting_debugger_backends_raises():
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
     mod_a = types.ModuleType("dbg_plugin_a")
     mod_a.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        debugger_backend=RecordingDebugger()
+        debugger_backend=helpers.common.RecordingDebugger()
     )
     mod_b = types.ModuleType("dbg_plugin_b")
     mod_b.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        debugger_backend=RecordingDebugger()
+        debugger_backend=helpers.common.RecordingDebugger()
     )
     _install_fake_module("dbg_plugin_a", mod_a)
     _install_fake_module("dbg_plugin_b", mod_b)
@@ -167,7 +164,7 @@ def test_single_debugger_backend_is_valid():
     """One plugin providing a debugger backend should not raise."""
     mod = types.ModuleType("solo_dbg")
     mod.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        debugger_backend=RecordingDebugger()
+        debugger_backend=helpers.common.RecordingDebugger()
     )
     _install_fake_module("solo_dbg", mod)
     try:

@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from helpers import make_meta
+from conftest import helpers
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
@@ -237,7 +234,6 @@ def test_stdcapture_readouterr_resets_buffer():
 
 
 def test_stdcapture_disabled_passes_through(cap_outer: StdCapture):
-    import sys
 
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
@@ -262,7 +258,6 @@ def test_stdcapture_disabled_passes_through(cap_outer: StdCapture):
 
 
 def test_stdcapture_teardown_restores_streams():
-    import sys
 
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
@@ -594,7 +589,7 @@ def test_tempdir_injected_via_session():
     def fn(tmp: TempDir) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     tmp = kwargs["tmp"]
     assert tmp.path.is_dir(), (
         f"TempDir injected via session should be an existing directory, got "
@@ -619,8 +614,8 @@ def test_tempdir_factory_session_scoped():
     def fn(factory: TempDirFactory) -> None:  # type: ignore[valid-type]
         pass
 
-    k1, _ = session.resolve_for_test(fn, make_meta("t.py"))
-    k2, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert k1["factory"] is k2["factory"], (
         "TempDirFactory is session-scoped and should return the same instance across "
         "resolves"
@@ -638,7 +633,7 @@ def test_stdcapture_injected_via_session():
     def fn(cap: StdCapture) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     cap = kwargs["cap"]
     print("captured")
     result = cap.readouterr()
@@ -662,7 +657,7 @@ def test_patcher_injected_via_session():
     def fn(patch: Patcher) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     patch = kwargs["patch"]
 
     obj = types.SimpleNamespace(x=1)
@@ -693,7 +688,7 @@ def test_testcontext_still_works_via_builtin_dispatch():
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert kwargs["thing"] == "ok", (
         f"fixture depending on Fixture[TestContext] via builtin dispatch should return "
         f"'ok', got {kwargs['thing']!r}"
@@ -919,7 +914,7 @@ def test_logcapture_injected_via_session():
     def fn(log: LogCapture) -> None:  # type: ignore[valid-type]
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "log" in kwargs, (
         f"LogCapture should be injected as 'log' into kwargs via session, got keys: "
         f"{list(kwargs)}"
@@ -931,7 +926,6 @@ def test_logcapture_injected_via_session():
 def test_logcapture_includes_plugin_backends():
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
     import logging
-    import sys
     import types
 
     from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture

@@ -1,16 +1,25 @@
-"""Shared test helpers for the oxitest test suite.
+"""Shared test infrastructure for the oxitest test suite.
 
-This module provides factory functions and utilities used across
-multiple test files. It is NOT a test file (no ``test_`` prefix)
-and will not be collected by oxitest.
+Fixtures and helper functions used across test files. Helpers are
+accessible via ``from conftest import helpers`` — see
+docs/src/explanation/conftest-helpers.md.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+__helpers_namespace__ = "common"
 
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from types import TracebackType
+
+if TYPE_CHECKING:
+    from oxitest._bridge._helper_namespace import HelperNamespace
+
+    helpers: HelperNamespace
 
 from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
