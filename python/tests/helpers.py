@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import dataclass, field
+from types import TracebackType
 
 from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
@@ -20,6 +22,7 @@ __all__ = [
     "make_meta",
     "make_session",
     "make_session_with",
+    "RecordingDebugger",
     "run_oxitest",
     "run_oxitest_full",
     "run_test",
@@ -186,3 +189,17 @@ def write_test_file(
     f = tmp_path / name
     f.write_text(code)
     return str(f)
+
+
+@dataclass
+class RecordingDebugger:
+    """Test double for DebuggerBackend that records calls."""
+
+    trace_count: int = 0
+    post_mortem_tracebacks: list[TracebackType] = field(default_factory=list)
+
+    def trace(self) -> None:
+        self.trace_count += 1
+
+    def post_mortem(self, tb: TracebackType) -> None:
+        self.post_mortem_tracebacks.append(tb)

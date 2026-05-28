@@ -1,11 +1,13 @@
 """Integration tests: flag interactions (--list, -k, --serial, --json, etc.)."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import oxitest
 from helpers import run_oxitest, run_oxitest_full
 from oxitest import TempDir
 
@@ -165,4 +167,66 @@ def test_debug_always_allows_exitfirst(tmp: TempDir):
     _, stderr, rc = run_oxitest_full(tmp, "--debug=always", "-x", "--list")
     assert rc == 0, (
         f"--debug=always -x --list should exit 0, got rc={rc}\nstderr: {stderr!r}"
+    )
+
+
+@oxitest.mark.timeout(120)
+def test_debug_always_with_plugin_backend(tmp: TempDir):
+    """A plugin-provided debugger backend should be invoked instead of pdb."""
+    plugin_dir = Path(tmp) / "marker_debugger"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "from oxitest.plugin import Plugin\n\n"
+        "class MarkerDebugger:\n"
+        "    def __init__(self, marker_path):\n"
+        "        self._path = Path(marker_path)\n"
+        "    def trace(self):\n"
+        '        self._path.write_text("traced")\n'
+        "    def post_mortem(self, tb):\n"
+        "        pass\n\n"
+        "def oxitest_plugin(config=None):\n"
+        '    return Plugin(debugger_backend=MarkerDebugger(config["marker_path"]))\n'
+    )
+
+    (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
+
+    marker_file = Path(tmp) / "debug_marker.txt"
+    (tmp / "pyproject.toml").write_text(
+        "[tool.oxitest]\n"
+        'plugins = ["marker_debugger"]\n\n'
+        "[tool.oxitest.plugin_settings.marker_debugger]\n"
+        f'marker_path = "{marker_file}"\n'
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            str(tmp),
+            "--color",
+            "never",
+            "--debug=always",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={
+            **__import__("os").environ,
+            "PYTHONPATH": str(tmp)
+            + __import__("os").pathsep
+            + __import__("os").environ.get("PYTHONPATH", ""),
+        },
+    )
+    assert result.returncode == 0, (
+        f"expected exit 0, got {result.returncode}\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert marker_file.exists(), (
+        f"marker file should exist (plugin trace() was called)\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert marker_file.read_text() == "traced", (
+        f"marker file content wrong: {marker_file.read_text()!r}"
     )
