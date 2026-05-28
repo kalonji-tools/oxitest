@@ -181,7 +181,7 @@ def _debug_post_mortem(
 def _run_base(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
-    no_message_lines: list[int],
+    no_message_lines: tuple[int, ...],
     *,
     debug_mode: str | None = None,
     node_id: str = "",
@@ -312,7 +312,7 @@ def _build_execution_chain(
         fn_name=fn_name,
         kwargs=all_kwargs,
         marks=marks,
-        no_message_lines=[],
+        no_message_lines=(),
         is_async=inspect.iscoroutinefunction(fn),
         default_timeout=default_timeout,
         backend=getattr(session, "_async_backend", None),

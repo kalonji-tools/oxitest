@@ -31,7 +31,7 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 def _extract_fixture_ref_names(
     target_type: type,
     field_names: Iterable[str],
-) -> list[str]:
+) -> tuple[str, ...]:
     """Return field names annotated with ``FixtureRef[T]``.
 
     Inspects type hints on *target_type* for the ``_FixtureRefMarker``
@@ -44,7 +44,7 @@ def _extract_fixture_ref_names(
     globalns = dict(vars(mod)) if mod else {}
     globalns.setdefault("FixtureRef", FixtureRef)
     field_hints = get_type_hints(target_type, globalns=globalns, include_extras=True)
-    return [
+    return tuple(
         name
         for name in field_names
         if name in field_hints
@@ -52,7 +52,7 @@ def _extract_fixture_ref_names(
         and any(
             isinstance(m, _FixtureRefMarker) for m in get_args(field_hints[name])[1:]
         )
-    ]
+    )
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ class _Partial:
     target_type: type
     fields: dict[str, Any]
     provided_fields: frozenset[str]
-    fixref_fields: list[str]
+    fixref_fields: tuple[str, ...]
 
 
 def partial(target_type: type, **fields: Any) -> _Partial:
@@ -117,7 +117,7 @@ class _PartialCases:
     cases: dict[str, _Partial]
     param_type: type
     provided_fields: frozenset[str]
-    fixref_fields: list[str]
+    fixref_fields: tuple[str, ...]
 
     def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
         for case_id, p in self.cases.items():
@@ -225,7 +225,8 @@ class _DataclassCases:
 
     cases: dict[str, Any]
     param_type: type
-    fixref_fields: list[str]  # precomputed at decoration time; invariant across cases
+    # precomputed at decoration time; invariant across cases
+    fixref_fields: tuple[str, ...]
 
     @cached_property
     def fixref_names(self) -> frozenset[str]:

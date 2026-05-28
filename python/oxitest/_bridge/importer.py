@@ -79,9 +79,9 @@ def _expand_composed(
             CollectedItem(
                 fn_name=fn_name,
                 lineno=lineno,
-                markers=marker_names,
+                markers=tuple(marker_names),
                 param_id=compound_id,
-                param_values=merged_pv,
+                param_values=tuple(merged_pv),
                 is_async=is_async,
             )
         )
@@ -102,9 +102,9 @@ def _expand_item(
             CollectedItem(
                 fn_name=fn_name,
                 lineno=lineno,
-                markers=marker_names,
+                markers=tuple(marker_names),
                 param_id=None,
-                param_values=[],
+                param_values=(),
                 is_async=is_async,
             )
         ]
@@ -117,9 +117,9 @@ def _expand_item(
         CollectedItem(
             fn_name=fn_name,
             lineno=lineno,
-            markers=marker_names,
+            markers=tuple(marker_names),
             param_id=case_id,
-            param_values=list(pv),
+            param_values=tuple(pv),
             is_async=is_async,
         )
         for case_id, pv in layers[0].items()

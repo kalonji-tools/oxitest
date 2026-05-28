@@ -48,7 +48,7 @@ def make_fixture_def(
     is_async: bool = False,
     conftest_path: str = "",
     doc: str = "",
-    params: list | None = None,
+    params: tuple | None = None,
 ) -> FixtureDef:
     """Create a ``FixtureDef`` with sensible defaults.
 
