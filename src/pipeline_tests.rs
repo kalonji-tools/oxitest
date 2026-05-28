@@ -104,13 +104,12 @@ mod tracing_tests {
 }
 
 mod color_tests {
-    use super::*;
     use crate::config::ColorMode;
 
     #[test]
     fn always_enables_console_colors() {
         console::set_colors_enabled(false);
-        let result = helpers::resolve_color(ColorMode::Always, false);
+        let result = ColorMode::Always.resolve(false);
         assert!(result);
         assert!(console::colors_enabled());
         console::set_colors_enabled(false);
@@ -118,12 +117,12 @@ mod color_tests {
 
     #[test]
     fn never_returns_false() {
-        assert!(!helpers::resolve_color(ColorMode::Never, true));
+        assert!(!ColorMode::Never.resolve(true));
     }
 
     #[test]
     fn auto_returns_false_when_not_tty() {
-        assert!(!helpers::resolve_color(ColorMode::Auto, false));
+        assert!(!ColorMode::Auto.resolve(false));
     }
 }
 
