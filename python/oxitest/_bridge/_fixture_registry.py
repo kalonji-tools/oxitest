@@ -7,7 +7,7 @@ __all__ = [
     "_fixture_ref_inner_type",
 ]
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Generic, TypeVar, get_args, get_origin
 
@@ -52,9 +52,9 @@ class FixtureRegistry:
         defs = self._defs.get(name)
         return defs[-1] if defs else None
 
-    def get_autouse(self) -> list[FixtureDef[Any]]:
-        """Return all autouse fixtures (most-local version of each name)."""
-        return [defs[-1] for defs in self._defs.values() if defs and defs[-1].autouse]
+    def get_autouse(self) -> Iterator[FixtureDef[Any]]:
+        """Yield all autouse fixtures (most-local version of each name)."""
+        return (defs[-1] for defs in self._defs.values() if defs and defs[-1].autouse)
 
     def get_in_namespace(self, name: str, namespace: str) -> FixtureDef[Any] | None:
         """Return the most-local FixtureDef for name within the given namespace."""
