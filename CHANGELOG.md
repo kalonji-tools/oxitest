@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.8.0] - 2026-05-28
+
+### Features
+
+
+- Extend TestContext with test identity metadata (#542)
+- Add Cli::validate() with flag conflict checks
+- Wire validate() into setup, simplify merge_cli
+- Add --debug post-mortem debugging (Rust)
+- Add pdb post-mortem integration with debug helpers
+- Add --debug=always with _suspend_and_trace and _print_trace_banner
+- Add DebuggerBackend plugin protocol
+- Add namespace validation for keywords/builtins
+- Add HelperNamespace and wire into conftest_loader
+- Migrate test suite to conftest helpers namespace
+
 ## [0.7.0] - 2026-05-27
 
 ### Bug Fixes
