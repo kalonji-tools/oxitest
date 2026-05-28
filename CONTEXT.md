@@ -70,6 +70,8 @@
 
 **Parallel Execution** — Tests distributed across worker subprocesses by the scheduler.
 
+**Debug Mode** — An interactive execution mode that runs tests serially, stops on the first failure or error, and transfers control to a debugger for live inspection of the failure state.
+
 ## Strict Mode
 
 **Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "warn"` or `strict = "abort"`.

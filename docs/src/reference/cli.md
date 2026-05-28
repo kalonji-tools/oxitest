@@ -41,6 +41,7 @@ current working directory when omitted.
 | `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
 | `--retries` | — | integer | — | Retry failed tests up to N times. |
 | `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. Has no effect without `--retries`. |
+| `--debug` | — | `post-mortem` | — | Drop into an interactive debugger on test failure. Implies `--serial`, `--maxfail 1`, and `--tb=long`. Use `--debug=MODE` with `=` (bare `--debug` defaults to `post-mortem`). See [Debug tests](../how-to/debug-tests.md). |
 
 ## Flag interactions
 
@@ -55,6 +56,12 @@ current working directory when omitted.
 | `--serial` | `--workers` | Mutually exclusive execution modes. |
 | `--serial` | `--schedule` | Schedule controls parallel worker ordering; no effect in serial mode. |
 | `--retries-delay` | *(without `--retries`)* | Delay has no effect without retries. |
+| `--debug` | `--workers` | Debug implies serial mode; cannot use with parallel workers. |
+| `--debug` | `--serial` | Debug already implies serial mode; redundant. |
+| `--debug` | `-x` / `--maxfail` | Debug already implies `--maxfail 1`; redundant or conflicting. |
+| `--debug` | `--retries` / `--retries-delay` | Interactive debugging and automatic retries serve opposite purposes. |
+| `--debug` | `--schedule` | Debug implies serial mode; schedule has no effect. |
+| `--debug` | `--timeout` | A timeout would kill the debugger session. |
 
 Example:
 
