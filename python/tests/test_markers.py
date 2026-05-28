@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import dataclasses
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import oxitest
-from helpers import run_test
+from conftest import helpers
 from oxitest import TempDir, parametrize
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
@@ -348,7 +344,7 @@ def test_mark_executor_result(
     tmp: TempDir, code: str, expected_status: str, message_contains: str
 ) -> None:
     path = _write_test(tmp, code)
-    result = run_test(path, "test_foo")
+    result = helpers.common.run_test(path, "test_foo")
     assert result.status == expected_status, (
         f"mark executor result: expected status={expected_status!r}, "
         f"got {result.status!r} (message={result.message!r})"
@@ -383,7 +379,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
         tmp,
         "@oxitest.mark.usefixtures('my_fixture')\ndef test_foo(): pass\n",
     )
-    result = run_test(path, "test_foo", session)
+    result = helpers.common.run_test(path, "test_foo", session)
     assert result.status == "passed", (  # usefixtures does not short-circuit
         f"@mark.usefixtures should not short-circuit, expected status='passed', got "
         f"{result.status!r}"
@@ -570,7 +566,7 @@ def test_each_handler_has_mark_name_class_attr():
 
 def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
     path = _write_test(tmp, "def test_foo(): assert False\n")
-    result = run_test(path, "test_foo")
+    result = helpers.common.run_test(path, "test_foo")
     assert result.exc_type == "AssertionError", (
         f"expected exc_type='AssertionError', got {result.exc_type!r}"
     )
@@ -578,7 +574,7 @@ def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
 
 def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
     path = _write_test(tmp, "def test_foo(): raise ValueError('boom')\n")
-    result = run_test(path, "test_foo")
+    result = helpers.common.run_test(path, "test_foo")
     assert result.exc_type == "ValueError", (
         f"expected exc_type='ValueError', got {result.exc_type!r}"
     )
@@ -586,7 +582,7 @@ def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
 
 def test_exc_type_empty_on_pass(tmp: TempDir) -> None:
     path = _write_test(tmp, "def test_foo(): pass\n")
-    result = run_test(path, "test_foo")
+    result = helpers.common.run_test(path, "test_foo")
     assert result.exc_type == "", f"expected exc_type='', got {result.exc_type!r}"
 
 

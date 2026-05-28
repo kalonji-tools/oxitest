@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 
-sys.path.insert(0, "python/tests")
-
-from helpers import make_meta, run_test as executor_run_test
+from conftest import helpers
 from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
 from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
@@ -201,7 +198,9 @@ def test_plain_typed_param_not_resolved_as_fixture():
         pass
 
     # x and y are NOT annotated with Fixture[T] — should not raise FixtureNotFoundError
-    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
+    kwargs, _ = session.resolve_for_test(
+        test_fn, helpers.common.make_meta("/fake/test_foo.py")
+    )
     assert kwargs == {}, (
         f"plain-typed params should not be resolved as fixtures, got kwargs={kwargs!r}"
     )
@@ -229,7 +228,9 @@ def test_fixture_annotated_param_resolved_alongside_plain_param():
     def test_fn(x: int, db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
+    kwargs, _ = session.resolve_for_test(
+        test_fn, helpers.common.make_meta("/fake/test_foo.py")
+    )
     assert kwargs == {"db": 42}, (
         f"only Fixture[T]-annotated param 'db' should be resolved, got "
         f"kwargs={kwargs!r}"
@@ -263,7 +264,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, make_meta("/fake/test_foo.py"))
+        session.resolve_for_test(test_fn, helpers.common.make_meta("/fake/test_foo.py"))
 
     msg = str(exc_info.value)
     assert "x" in msg, (
@@ -290,7 +291,7 @@ def test_executor_runs_parametrize_case(tmp: TempDir):
         "def test_add(x, y, expected):\n"
         "    assert x + y == expected\n"
     )
-    result = executor_run_test(str(f), "test_add", session=None, param_id="basic")
+    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="basic")
     assert result.status == "passed", (
         f"parametrize case 'basic' should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -311,7 +312,7 @@ def test_executor_parametrize_failure(tmp: TempDir):
         "def test_add(x, y, expected):\n"
         "    assert x + y == expected\n"
     )
-    result = executor_run_test(str(f), "test_add", session=None, param_id="wrong")
+    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="wrong")
     assert result.status == "failed", (
         f"wrong expected value should produce status='failed', got {result.status!r}"
     )
@@ -343,7 +344,9 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_mul", session=session, param_id="double")
+    result = helpers.common.run_test(
+        str(f), "test_mul", session=session, param_id="double"
+    )
     assert result.status == "passed", (
         f"parametrize with fixture should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -396,8 +399,12 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result_pg = executor_run_test(str(f), "test_db", session=session, param_id="pg")
-    result_sq = executor_run_test(str(f), "test_db", session=session, param_id="sq")
+    result_pg = helpers.common.run_test(
+        str(f), "test_db", session=session, param_id="pg"
+    )
+    result_sq = helpers.common.run_test(
+        str(f), "test_db", session=session, param_id="sq"
+    )
     assert result_pg.status == "passed", result_pg.message
     assert result_sq.status == "passed", result_sq.message
 
@@ -418,7 +425,7 @@ def test_fixture_ref_compact_mode_raises(tmp: TempDir):
         "def test_db(case: DbCase) -> None:\n"  # compact mode: single DbCase param
         "    pass\n"
     )
-    result = executor_run_test(str(f), "test_db", session=None, param_id="pg")
+    result = helpers.common.run_test(str(f), "test_db", session=None, param_id="pg")
     assert result.status == "error", (
         f"FixtureRef in compact mode should produce status='error', got "
         f"{result.status!r}"
@@ -448,7 +455,7 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_db", session=session, param_id="pg")
+    result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "error", (
         f"unregistered FixtureRef should produce status='error', got {result.status!r}"
     )
@@ -473,7 +480,7 @@ def test_fixture_ref_no_session_returns_error(tmp: TempDir):
         "def test_db(db: Fixture[str]) -> None:\n"  # expanded mode
         "    pass\n"
     )
-    result = executor_run_test(str(f), "test_db", session=None, param_id="pg")
+    result = helpers.common.run_test(str(f), "test_db", session=None, param_id="pg")
     assert result.status == "error", (
         f"FixtureRef with session=None should produce status='error', got "
         f"{result.status!r}"
@@ -602,8 +609,10 @@ def test_executor_dict_mode_passes(tmp: TempDir):
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result_basic = executor_run_test(str(f), "test_add", session=None, param_id="basic")
-    result_neg = executor_run_test(
+    result_basic = helpers.common.run_test(
+        str(f), "test_add", session=None, param_id="basic"
+    )
+    result_neg = helpers.common.run_test(
         str(f), "test_add", session=None, param_id="negative"
     )
     assert result_basic.status == "passed", result_basic.message
@@ -619,7 +628,7 @@ def test_executor_dict_mode_failure(tmp: TempDir):
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result = executor_run_test(str(f), "test_add", session=None, param_id="wrong")
+    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="wrong")
     assert result.status == "failed", (
         f"wrong expected value in dict mode should produce status='failed', got "
         f"{result.status!r}"
@@ -647,7 +656,9 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_mul", session=session, param_id="double")
+    result = helpers.common.run_test(
+        str(f), "test_mul", session=session, param_id="double"
+    )
     assert result.status == "passed", result.message
 
 
@@ -785,7 +796,9 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_query", session=session, param_id="prod")
+    result = helpers.common.run_test(
+        str(f), "test_query", session=session, param_id="prod"
+    )
     assert result.status == "passed", result.message
 
 
@@ -830,7 +843,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_db", session=session, param_id="pg")
+    result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "passed", result.message
 
 
@@ -989,7 +1002,9 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
         "def test_query(store: Fixture[str]) -> None:\n"
         "    assert store == 'db-conn'\n"
     )
-    result = executor_run_test(str(f), "test_query", session=None, param_id="prod")
+    result = helpers.common.run_test(
+        str(f), "test_query", session=None, param_id="prod"
+    )
     assert result.status == "error", (
         f"FixtureRef with namespace and session=None should produce status='error', "
         f"got {result.status!r}"
@@ -1331,7 +1346,7 @@ def test_executor_composed_parametrize_passes(tmp: TempDir):
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result = executor_run_test(str(f), "test_add", session=None, param_id="a-c")
+    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="a-c")
     assert result.status == "passed", (
         f"composed parametrize should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -1354,7 +1369,7 @@ def test_executor_composed_parametrize_failure(tmp: TempDir):
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result = executor_run_test(str(f), "test_add", session=None, param_id="a-c")
+    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="a-c")
     assert result.status == "failed", (
         f"wrong expected should fail, got status={result.status!r}"
     )
@@ -1386,7 +1401,9 @@ def test_executor_composed_with_fixture(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_mul", session=session, param_id="a-c")
+    result = helpers.common.run_test(
+        str(f), "test_mul", session=session, param_id="a-c"
+    )
     assert result.status == "passed", result.message
 
 
@@ -1405,7 +1422,9 @@ def test_executor_composed_compact_mode(tmp: TempDir):
         "def test_compact(case: Case) -> None:\n"
         "    assert case.x + case.y == 3\n"
     )
-    result = executor_run_test(str(f), "test_compact", session=None, param_id="a-c")
+    result = helpers.common.run_test(
+        str(f), "test_compact", session=None, param_id="a-c"
+    )
     assert result.status == "passed", (
         f"compact mode with composition should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -1441,5 +1460,7 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir):
     )
     session = create_session([str(conftest)])
     session.begin_module(str(f))
-    result = executor_run_test(str(f), "test_db", session=session, param_id="pg-check")
+    result = helpers.common.run_test(
+        str(f), "test_db", session=session, param_id="pg-check"
+    )
     assert result.status == "passed", result.message
