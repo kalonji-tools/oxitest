@@ -64,19 +64,17 @@ impl<'de> serde::Deserialize<'de> for WorkerCount {
             }
 
             fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<WorkerCount, E> {
-                if v <= 0 {
-                    Err(E::custom("worker count must be at least 1"))
-                } else {
-                    Ok(WorkerCount::Fixed(v as usize))
-                }
+                let n: usize = v
+                    .try_into()
+                    .map_err(|_| E::custom("worker count must be at least 1"))?;
+                WorkerCount::try_from_count(n).map_err(E::custom)
             }
 
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<WorkerCount, E> {
-                if v == 0 {
-                    Err(E::custom("worker count must be at least 1"))
-                } else {
-                    Ok(WorkerCount::Fixed(v as usize))
-                }
+                let n: usize = v
+                    .try_into()
+                    .map_err(|_| E::custom("worker count too large"))?;
+                WorkerCount::try_from_count(n).map_err(E::custom)
             }
         }
 

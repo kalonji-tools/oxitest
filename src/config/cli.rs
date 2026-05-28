@@ -1,9 +1,7 @@
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use super::{
-    parse_workers, ColorMode, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount,
-};
+use super::{ColorMode, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount};
 
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum DebugMode {
@@ -68,7 +66,7 @@ pub struct Cli {
     pub serial: bool,
 
     /// Number of parallel worker processes ("auto" or a positive integer)
-    #[arg(short = 'n', long, value_name = "N", conflicts_with = "serial", value_parser = parse_workers)]
+    #[arg(short = 'n', long, value_name = "N", conflicts_with = "serial")]
     pub workers: Option<WorkerCount>,
 
     /// Group scheduling strategy for parallel runs
