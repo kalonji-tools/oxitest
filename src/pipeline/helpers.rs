@@ -93,17 +93,6 @@ pub(super) fn resolve_timeout(
     }
 }
 
-pub(super) fn resolve_color(mode: config::ColorMode, is_tty: bool) -> bool {
-    match mode {
-        config::ColorMode::Always => {
-            console::set_colors_enabled(true);
-            true
-        }
-        config::ColorMode::Never => false,
-        config::ColorMode::Auto => is_tty && console::colors_enabled(),
-    }
-}
-
 /// Returns a human-readable OS description, e.g. "Ubuntu 24.04.2 LTS x86_64".
 pub(super) fn os_info() -> String {
     let arch = std::env::consts::ARCH;

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::types::ExitCode;
 use crate::{bridge, cache, config, reporter, strict, types};
 use clap::Parser;
-use helpers::{env_string, resolve_color};
+use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
 
@@ -161,7 +161,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 
     // Debug mode disables the TTY progress bar — pdb needs a clean terminal.
     let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
-    let use_color = resolve_color(cfg.color, is_tty || cfg.debug.is_some());
+    let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
     let resolved_tb = cli.tb.clone().unwrap_or(cfg.tb.clone());
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color)
         .tb(resolved_tb)
