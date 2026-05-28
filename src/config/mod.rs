@@ -6,6 +6,16 @@ pub use cli::{Cli, DebugMode};
 mod pyproject;
 use pyproject::{OxitestConfig, PyprojectToml};
 
+impl DebugMode {
+    /// Convert to the string representation sent across the Python bridge.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DebugMode::PostMortem => "post-mortem",
+            DebugMode::Always => "always",
+        }
+    }
+}
+
 /// Number of parallel worker subprocesses to use.
 ///
 /// `Auto` resolves to the number of logical CPU cores at runtime (see
@@ -370,12 +380,15 @@ impl Config {
         if let Some(ref mode) = cli.debug {
             self.debug = Some(mode.clone());
             self.serial = true;
-            self.maxfail = 1;
             // Timeout would kill the debugger session.
             self.timeout_secs = None;
             // Only imply tb=long if user didn't pass explicit --tb.
             if cli.tb.is_none() {
                 self.tb = TbStyle::Long;
+            }
+            // Only post-mortem implies maxfail=1 (always lets user control stopping).
+            if matches!(mode, DebugMode::PostMortem) {
+                self.maxfail = 1;
             }
         }
 
@@ -1635,6 +1648,21 @@ async_backend = "trio"
             merged.timeout_secs, None,
             "debug should clear pyproject timeout"
         );
+    }
+
+    #[test]
+    fn test_merge_cli_debug_always_does_not_imply_maxfail() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli {
+            debug: Some(DebugMode::Always),
+            ..base_cli()
+        };
+        let merged = config.merge_cli(&cli);
+        assert!(merged.serial, "always should imply serial");
+        assert_eq!(merged.maxfail, 0, "always should NOT imply maxfail=1");
+        assert_eq!(merged.tb, TbStyle::Long, "always should imply tb=long");
+        assert_eq!(merged.timeout_secs, None, "always should clear timeout");
     }
 
     #[test]

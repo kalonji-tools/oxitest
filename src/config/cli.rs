@@ -9,6 +9,8 @@ use super::{
 pub enum DebugMode {
     /// Drop into pdb on first test failure
     PostMortem,
+    /// Drop into pdb before every test
+    Always,
 }
 
 #[derive(Parser, Debug)]
@@ -177,7 +179,7 @@ impl Cli {
             return Err("--retries-delay has no effect without --retries.".to_string());
         }
 
-        if let Some(ref _mode) = self.debug {
+        if let Some(ref mode) = self.debug {
             if self.workers.is_some() {
                 return Err(
                     "--debug implies serial mode. It cannot be combined with --workers."
@@ -190,16 +192,18 @@ impl Cli {
                         .to_string(),
                 );
             }
-            if self.exitfirst {
-                return Err(
-                    "--debug already implies --maxfail 1. Passing -x is redundant.".to_string(),
-                );
-            }
-            if self.maxfail.is_some() {
-                return Err(
-                    "--debug already implies --maxfail 1. It cannot be combined with --maxfail."
-                        .to_string(),
-                );
+            if matches!(mode, DebugMode::PostMortem) {
+                if self.exitfirst {
+                    return Err(
+                        "--debug already implies --maxfail 1. Passing -x is redundant.".to_string(),
+                    );
+                }
+                if self.maxfail.is_some() {
+                    return Err(
+                        "--debug already implies --maxfail 1. It cannot be combined with --maxfail."
+                            .to_string(),
+                    );
+                }
             }
             if self.retries.is_some() {
                 return Err(
@@ -490,6 +494,58 @@ mod validate_tests {
     #[test]
     fn test_debug_alone_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "--debug"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_debug_always_parses() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always"]).unwrap();
+        assert_eq!(cli.debug, Some(DebugMode::Always));
+    }
+
+    #[test]
+    fn test_debug_always_allows_exitfirst() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "-x"]).unwrap();
+        assert!(cli.validate().is_ok(), "always mode should allow -x");
+    }
+
+    #[test]
+    fn test_debug_always_allows_maxfail() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--maxfail", "3"]).unwrap();
+        assert!(cli.validate().is_ok(), "always mode should allow --maxfail");
+    }
+
+    #[test]
+    fn test_debug_always_still_conflicts_with_workers() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--workers", "4"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--workers"),
+            "error should mention --workers: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_always_still_conflicts_with_timeout() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--timeout", "30"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--timeout"),
+            "error should mention --timeout: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_always_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=always"]).unwrap();
         assert!(cli.validate().is_ok());
     }
 }

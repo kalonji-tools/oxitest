@@ -8,7 +8,14 @@ worker subprocess.
 
 from __future__ import annotations
 
-__all__ = ["_print_debug_banner", "_suspend_capture", "run_test"]
+__all__ = [
+    "DebugMode",
+    "_print_debug_banner",
+    "_print_trace_banner",
+    "_suspend_and_trace",
+    "_suspend_capture",
+    "run_test",
+]
 
 import contextlib
 import functools
@@ -18,6 +25,7 @@ import sys
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -64,6 +72,17 @@ from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import StatusKind, TestResult, _error_result
 
 
+class DebugMode(StrEnum):
+    """Debug mode passed from Rust via the bridge.
+
+    StrEnum values match the Rust ``DebugMode::as_str()`` output so
+    PyO3 string extraction works without custom glue.
+    """
+
+    POST_MORTEM = "post-mortem"
+    ALWAYS = "always"
+
+
 @functools.cache
 def _exec_unique_name(module_path: str) -> str:
     return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"  # noqa: S324
@@ -91,15 +110,48 @@ def _print_debug_banner(node_id: str, exc: BaseException, *, file: Any = None) -
     print("Entering debugger (type 'h' for help, 'q' to quit)", file=out)
 
 
+def _print_trace_banner(node_id: str, *, file: Any = None) -> None:
+    """Print a banner before stepping into a test."""
+    import sys as _sys
+
+    out = file if file is not None else _sys.__stderr__
+    width = max(60, len(node_id) + 12)
+    header = f"── TRACE {node_id} "
+    header += "─" * (width - len(header))
+    print(header, file=out)
+    print("Stepping into test (type 'c' to run, 'q' to quit)", file=out)
+
+
+def _suspend_and_trace(all_kwargs: dict[str, Any], node_id: str) -> None:
+    """Drop into pdb before test execution, with capture temporarily suspended."""
+    import pdb
+
+    from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
+
+    managers = [
+        v.disabled()
+        for v in all_kwargs.values()
+        if isinstance(v, (_StdCapture, _FdCapture))
+    ]
+
+    with contextlib.ExitStack() as stack:
+        for mgr in managers:
+            stack.enter_context(mgr)
+        _print_trace_banner(node_id)
+        pdb.set_trace()
+
+
 def _run_base(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
     no_message_lines: list[int],
     *,
-    debug_mode: bool = False,
+    debug_mode: str | None = None,
     node_id: str = "",
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
+    if debug_mode == DebugMode.ALWAYS:
+        _suspend_and_trace(all_kwargs, node_id)
     try:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -115,7 +167,9 @@ def _run_base(
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
-        if debug_mode and _is_debuggable(exc):
+        if debug_mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS) and _is_debuggable(
+            exc
+        ):
             _suspend_capture(all_kwargs)
             _print_debug_banner(node_id, exc)
             import bdb
@@ -215,7 +269,7 @@ def _build_execution_chain(
     shared_session: SharedAsyncSession | None = None,
     session: _SessionProtocol | None = None,
     *,
-    debug_mode: bool = False,
+    debug_mode: str | None = None,
     node_id: str = "",
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
@@ -264,7 +318,7 @@ def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
-    debug_mode: bool = False,
+    debug_mode: str | None = None,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
@@ -275,8 +329,9 @@ def run_test(
             a null session is used, meaning no user fixtures are available.
         default_timeout: Per-test timeout in seconds inherited from config.
             Overridden by a ``@mark.timeout`` decorator on the test.
-        debug_mode: When ``True``, drop into an interactive debugger on
-            test failure (post-mortem mode).
+        debug_mode: When set, drop into an interactive debugger.
+            ``"post-mortem"`` enters pdb after failure; ``"always"`` enters
+            pdb before every test.  ``None`` disables debugging.
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
