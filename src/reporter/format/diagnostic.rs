@@ -277,7 +277,7 @@ pub(crate) fn fmt_diagnostic_block(
 mod tests {
     use super::*;
     use crate::reporter::test_helpers::{make_error, make_failed, make_item, make_item_at};
-    use crate::types::TestOutcome;
+    use crate::types::{LineNo, TestOutcome};
 
     #[test]
     fn test_box_constants_are_nonempty() {
@@ -362,7 +362,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: "tests/test_foo.py".to_string(),
-            lineno: 8,
+            lineno: LineNo::new(8),
             source_line: "assert result == 42".to_string(),
             left: "41".to_string(),
             right: "42".to_string(),
@@ -382,7 +382,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: "tests/test_foo.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "assert is_valid".to_string(),
             left: "False".to_string(),
             right: String::new(),
@@ -404,7 +404,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "should be 42".to_string(),
             file: "tests/test_foo.py".to_string(),
-            lineno: 8,
+            lineno: LineNo::new(8),
             source_line: "assert result == 42".to_string(),
             left: "41".to_string(),
             right: "42".to_string(),
@@ -452,7 +452,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: "tests/test_foo.py".to_string(),
-            lineno: 3,
+            lineno: LineNo::new(3),
             source_line: "assert x".to_string(),
             left: "42".to_string(),
             right: String::new(),
@@ -474,7 +474,7 @@ mod tests {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             markers: vec![],
             param_id: Some("basic".to_string()),
             param_values: vec![
@@ -499,7 +499,7 @@ mod tests {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             markers: vec![],
             param_id: Some("basic".to_string()),
             param_values: vec![("x".to_string(), "1".to_string())],
@@ -533,7 +533,7 @@ mod tests {
         let outcome = TestOutcome::Error {
             message: "PyImportError: No module named 'foo'".to_string(),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         };
@@ -568,7 +568,7 @@ mod tests {
             node_id: crate::types::NodeId::from_raw("test_foo.py::test_check"),
             module_path: "test_foo.py".into(),
             fn_name: "test_check".to_string(),
-            lineno: 10,
+            lineno: LineNo::new(10),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -577,7 +577,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "assert failed".to_string(),
             file: "test_foo.py".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             source_line: "assert x > 0".to_string(),
             left: "".to_string(),
             right: "".to_string(),
@@ -585,13 +585,13 @@ mod tests {
             frames: vec![
                 Frame {
                     file: "test_foo.py".to_string(),
-                    lineno: 10,
+                    lineno: LineNo::new(10),
                     name: "test_check".to_string(),
                     line: "helper(-1)".to_string(),
                 },
                 Frame {
                     file: "test_foo.py".to_string(),
-                    lineno: 5,
+                    lineno: LineNo::new(5),
                     name: "helper".to_string(),
                     line: "assert x > 0".to_string(),
                 },
@@ -617,7 +617,7 @@ mod tests {
             node_id: crate::types::NodeId::from_raw("t.py::test_direct"),
             module_path: "t.py".into(),
             fn_name: "test_direct".to_string(),
-            lineno: 3,
+            lineno: LineNo::new(3),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -626,7 +626,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "oops".to_string(),
             file: "t.py".to_string(),
-            lineno: 3,
+            lineno: LineNo::new(3),
             source_line: "assert False".to_string(),
             left: "".to_string(),
             right: "".to_string(),
@@ -650,7 +650,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "assert x == 1".to_string(),
             file: "tests/test_app.py".to_string(),
-            lineno: 10,
+            lineno: LineNo::new(10),
             source_line: "assert x == 1".to_string(),
             left: "0".to_string(),
             right: "1".to_string(),
@@ -658,19 +658,19 @@ mod tests {
             frames: vec![
                 Frame {
                     file: "tests/test_app.py".to_string(),
-                    lineno: 10,
+                    lineno: LineNo::new(10),
                     name: "test_user_code".to_string(),
                     line: "result = helper()".to_string(),
                 },
                 Frame {
                     file: "oxitest/_bridge/executor.py".to_string(),
-                    lineno: 55,
+                    lineno: LineNo::new(55),
                     name: "_run_base".to_string(),
                     line: "fn()".to_string(),
                 },
                 Frame {
                     file: "oxitest/_bridge/_middleware.py".to_string(),
-                    lineno: 30,
+                    lineno: LineNo::new(30),
                     name: "_compose".to_string(),
                     line: "wrapper(fn)".to_string(),
                 },
@@ -699,7 +699,7 @@ mod tests {
         let outcome = TestOutcome::Failed {
             message: "assert x == 1".to_string(),
             file: "tests/test_app.py".to_string(),
-            lineno: 10,
+            lineno: LineNo::new(10),
             source_line: "assert x == 1".to_string(),
             left: "0".to_string(),
             right: "1".to_string(),
@@ -707,13 +707,13 @@ mod tests {
             frames: vec![
                 Frame {
                     file: "tests/test_app.py".to_string(),
-                    lineno: 10,
+                    lineno: LineNo::new(10),
                     name: "test_user_code".to_string(),
                     line: "result = helper()".to_string(),
                 },
                 Frame {
                     file: "oxitest/_bridge/executor.py".to_string(),
-                    lineno: 55,
+                    lineno: LineNo::new(55),
                     name: "_run_base".to_string(),
                     line: "fn()".to_string(),
                 },
@@ -733,7 +733,7 @@ mod tests {
         // When ALL frames are internal, still show the last one
         let frames = vec![Frame {
             file: "oxitest/_bridge/executor.py".to_string(),
-            lineno: 10,
+            lineno: LineNo::new(10),
             name: "_run_base".to_string(),
             line: "fn()".to_string(),
         }];
@@ -796,18 +796,18 @@ mod tests {
             let outcome = TestOutcome::Error {
                 message: "ValueError: invalid input".to_string(),
                 file: "tests/test_errors.py".to_string(),
-                lineno: 10,
+                lineno: LineNo::new(10),
                 source_line: "result = process(data)".to_string(),
                 frames: vec![
                     Frame {
                         file: "tests/test_errors.py".to_string(),
-                        lineno: 10,
+                        lineno: LineNo::new(10),
                         name: "test_raises".to_string(),
                         line: "result = process(data)".to_string(),
                     },
                     Frame {
                         file: "src/processor.py".to_string(),
-                        lineno: 42,
+                        lineno: LineNo::new(42),
                         name: "process".to_string(),
                         line: "raise ValueError(\"invalid input\")".to_string(),
                     },
@@ -823,7 +823,7 @@ mod tests {
             let outcome = TestOutcome::Failed {
                 message: String::new(),
                 file: "tests/test_values.py".to_string(),
-                lineno: 7,
+                lineno: LineNo::new(7),
                 source_line: "assert result == expected".to_string(),
                 left: "1".to_string(),
                 right: "2".to_string(),

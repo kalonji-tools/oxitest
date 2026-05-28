@@ -179,7 +179,7 @@ mod tests {
             node_id: crate::types::NodeId::new("tests/test_mod.py", name, None),
             module_path: Utf8PathBuf::from("tests/test_mod.py"),
             fn_name: name.to_string(),
-            lineno: 0,
+            lineno: crate::types::LineNo::ZERO,
             markers: markers.into_iter().map(|s| s.to_string()).collect(),
             param_id: None,
             param_values: vec![],

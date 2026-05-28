@@ -268,7 +268,7 @@ pub(crate) mod doubles {
                 .last()
                 .unwrap_or("test_fn")
                 .to_string(),
-            lineno: 1,
+            lineno: crate::types::LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],

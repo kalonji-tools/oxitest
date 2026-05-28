@@ -428,7 +428,7 @@ mod worker_count_tests {
                 ..
             } => {
                 assert_eq!(file, "test_mod.py");
-                assert_eq!(lineno, 10usize);
+                assert_eq!(lineno, crate::types::LineNo::new(10));
                 assert_eq!(source_line, "assert x == y");
                 assert_eq!(left, "1");
                 assert_eq!(right, "2");
@@ -457,7 +457,7 @@ mod worker_count_tests {
                 ..
             } => {
                 assert_eq!(file, "t.py");
-                assert_eq!(lineno, 5usize);
+                assert_eq!(lineno, crate::types::LineNo::new(5));
                 assert_eq!(source_line, "import bad");
             }
             other => panic!("Expected Error, got {:?}", other),
@@ -824,7 +824,7 @@ mod drain_tests {
                 node_id: NodeId::new(path, fn_name, None),
                 module_path: Utf8PathBuf::from(path),
                 fn_name: fn_name.to_string(),
-                lineno: 1,
+                lineno: crate::types::LineNo::new(1),
                 markers: vec![],
                 param_id: None,
                 param_values: vec![],
@@ -1007,7 +1007,7 @@ mod result_handler_tests {
             node_id: types::NodeId::from_raw(node_id),
             module_path: camino::Utf8PathBuf::from("tests/test_mod.py"),
             fn_name: "test_fn".to_string(),
-            lineno: 1,
+            lineno: crate::types::LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],

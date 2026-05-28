@@ -272,7 +272,7 @@ pub fn make_reporter(
 #[cfg(test)]
 mod json_tests {
     use super::*;
-    use crate::types::{TestItem, TestOutcome};
+    use crate::types::{LineNo, TestItem, TestOutcome};
     use camino::Utf8PathBuf;
 
     // Uses "tests/test_mod.py" (not the shared helper's "tests/test_foo.py") because
@@ -282,7 +282,7 @@ mod json_tests {
             node_id: crate::types::NodeId::new("tests/test_mod.py", name, None),
             module_path: Utf8PathBuf::from("tests/test_mod.py"),
             fn_name: name.to_string(),
-            lineno: 1,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -340,7 +340,7 @@ mod json_tests {
             &TestOutcome::Failed {
                 message: "assert x == 1".to_string(),
                 file: "tests/test_mod.py".to_string(),
-                lineno: 5,
+                lineno: LineNo::new(5),
                 source_line: "assert x == 1".to_string(),
                 left: "0".to_string(),
                 right: "1".to_string(),

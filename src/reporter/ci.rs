@@ -1,4 +1,4 @@
-use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, LineNo, TestItem, TestOutcome};
 
 use super::colors::{color_dim, color_error_token, color_fail};
 use super::format::{case_sep, fmt_diagnostic_block};
@@ -32,7 +32,7 @@ impl CiReporter {
                 TestOutcome::Error {
                     message, lineno, ..
                 } => ("ERROR", message.as_str(), *lineno),
-                TestOutcome::Timeout { message } => ("TIMEOUT", message.as_str(), 0),
+                TestOutcome::Timeout { message } => ("TIMEOUT", message.as_str(), LineNo::ZERO),
                 _ => return,
             };
             let line = format!("{:<7} {}   :{}   {}", label, item.node_id, lineno, message);
@@ -314,7 +314,7 @@ mod tests {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("neg")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
-            lineno: 5,
+            lineno: LineNo::new(5),
             markers: vec![],
             param_id: Some("neg".to_string()),
             param_values: vec![("x".to_string(), "-1".to_string())],

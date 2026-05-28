@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
-use crate::types::{CollectError, Frame, NodeId, RawOutcome, TestItem, TestOutcome};
+use crate::types::{CollectError, Frame, LineNo, NodeId, RawOutcome, TestItem, TestOutcome};
 
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
@@ -238,7 +238,7 @@ pub(crate) fn collect_module_with_session_obj(
             node_id: NodeId::new(path_str, &item.fn_name, item.param_id.as_deref()),
             module_path: path.to_owned(),
             fn_name: item.fn_name,
-            lineno: item.lineno,
+            lineno: LineNo::new(item.lineno),
             markers: item.markers,
             param_id: item.param_id,
             param_values: item.param_values,
@@ -264,7 +264,7 @@ pub(crate) fn run_test_with_session_obj(
         .unwrap_or_else(|e| TestOutcome::Error {
             message: format!("{} — {}", item.node_id, e),
             file: String::new(),
-            lineno: 0,
+            lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
         })
@@ -337,7 +337,7 @@ fn try_run_test_with_session_obj(
         .into_iter()
         .map(|f| Frame {
             file: f.file,
-            lineno: f.lineno,
+            lineno: LineNo::new(f.lineno),
             name: f.name,
             line: f.line,
         })
@@ -347,7 +347,7 @@ fn try_run_test_with_session_obj(
         status: r.status.as_str(),
         message: &r.message,
         file: &r.file,
-        lineno: r.lineno,
+        lineno: LineNo::new(r.lineno),
         source_line: &r.source_line,
         no_message_lines: &r.no_message_lines,
         left: &r.left,
