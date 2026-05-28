@@ -10,10 +10,12 @@ from __future__ import annotations
 
 __all__ = [
     "DebugMode",
+    "_debug_post_mortem",
     "_print_debug_banner",
     "_print_trace_banner",
-    "_suspend_and_trace",
+    "_resolve_debugger_backend",
     "_suspend_capture",
+    "_trace_before_test",
     "run_test",
 ]
 
@@ -30,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import SharedAsyncSession
+    from oxitest._bridge._debugger import DebuggerBackend
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
@@ -88,6 +91,24 @@ def _exec_unique_name(module_path: str) -> str:
     return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"  # noqa: S324
 
 
+def _resolve_debugger_backend(
+    session: _SessionProtocol,
+    debug_mode: str | None,
+) -> DebuggerBackend | None:
+    """Resolve the debugger backend from the plugin registry or fall back to pdb.
+
+    Returns None when debug_mode is None (no debugging requested).
+    """
+    if debug_mode is None:
+        return None
+    registry = getattr(session, "_plugin_registry", None)
+    if registry is not None and registry.debugger_backends:
+        return registry.debugger_backends[0][1]
+    from oxitest._bridge._debugger import _PdbBackend
+
+    return _PdbBackend()
+
+
 def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
     """Restore real stdout/stderr by suspending any active capture fixtures."""
     from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
@@ -122,10 +143,12 @@ def _print_trace_banner(node_id: str, *, file: Any = None) -> None:
     print("Stepping into test (type 'c' to run, 'q' to quit)", file=out)
 
 
-def _suspend_and_trace(all_kwargs: dict[str, Any], node_id: str) -> None:
-    """Drop into pdb before test execution, with capture temporarily suspended."""
-    import pdb
-
+def _trace_before_test(
+    all_kwargs: dict[str, Any],
+    node_id: str,
+    backend: DebuggerBackend,
+) -> None:
+    """Suspend capture, print trace banner, call backend.trace(), restore."""
     from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
 
     managers = [
@@ -138,7 +161,21 @@ def _suspend_and_trace(all_kwargs: dict[str, Any], node_id: str) -> None:
         for mgr in managers:
             stack.enter_context(mgr)
         _print_trace_banner(node_id)
-        pdb.set_trace()
+        backend.trace()
+
+
+def _debug_post_mortem(
+    all_kwargs: dict[str, Any],
+    node_id: str,
+    exc: BaseException,
+    backend: DebuggerBackend,
+) -> None:
+    """Permanently suspend capture, print debug banner, call backend.post_mortem()."""
+    _suspend_capture(all_kwargs)
+    _print_debug_banner(node_id, exc)
+    tb = exc.__traceback__
+    assert tb is not None  # guaranteed inside except block
+    backend.post_mortem(tb)
 
 
 def _run_base(
@@ -148,10 +185,11 @@ def _run_base(
     *,
     debug_mode: str | None = None,
     node_id: str = "",
+    backend: DebuggerBackend | None = None,
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
-    if debug_mode == DebugMode.ALWAYS:
-        _suspend_and_trace(all_kwargs, node_id)
+    if debug_mode == DebugMode.ALWAYS and backend is not None:
+        _trace_before_test(all_kwargs, node_id, backend)
     try:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -167,16 +205,15 @@ def _run_base(
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
-        if debug_mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS) and _is_debuggable(
-            exc
+        if (
+            debug_mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS)
+            and backend is not None
+            and _is_debuggable(exc)
         ):
-            _suspend_capture(all_kwargs)
-            _print_debug_banner(node_id, exc)
             import bdb
-            import pdb
 
             try:
-                pdb.post_mortem(exc.__traceback__)
+                _debug_post_mortem(all_kwargs, node_id, exc, backend)
             except bdb.BdbQuit:
                 raise
         result = _dispatch_exception(exc)
@@ -271,6 +308,7 @@ def _build_execution_chain(
     *,
     debug_mode: str | None = None,
     node_id: str = "",
+    backend: DebuggerBackend | None = None,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
     plan = ExecutionPlan(
@@ -300,6 +338,7 @@ def _build_execution_chain(
             plan.no_message_lines,
             debug_mode=debug_mode,
             node_id=node_id,
+            backend=backend,
         )
 
     execute = build_pipeline(middlewares, plan, _base)
@@ -341,6 +380,7 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
+    backend = _resolve_debugger_backend(effective_session, debug_mode)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
     if isinstance(resolved, TestResult):
@@ -393,6 +433,7 @@ def run_test(
             session=effective_session,
             debug_mode=debug_mode,
             node_id=meta.node_id,
+            backend=backend,
         )
         return execute()
     finally:
