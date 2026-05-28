@@ -111,6 +111,19 @@ def oxitest_plugin(config=None) -> Plugin:
 
 ---
 
+```text
+Multiple plugins provide a debugger backend: <plugin_a>, <plugin_b>
+```
+
+**Cause:** More than one plugin in `plugins = [...]` declares a
+`debugger_backend` field on its `Plugin` return value. Only one debugger
+backend can be active.
+
+**Fix:** Remove the extra plugin from `plugins` in `pyproject.toml`, or
+reconfigure one of the plugins to not provide a debugger backend.
+
+---
+
 ## Async backend errors
 
 Async backend errors occur when the configured async backend cannot be resolved.
