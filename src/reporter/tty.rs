@@ -122,7 +122,7 @@ impl TtyReporter {
                     ),
                 )
             }
-            TestOutcome::Skipped { reason } => self.fmt_line(
+            TestOutcome::Skipped { reason } | TestOutcome::XFailed { reason } => self.fmt_line(
                 outcome_label(outcome, c),
                 &pad_to(
                     &truncate_name(&item.fn_name, self.opts.name_width),
@@ -151,14 +151,6 @@ impl TtyReporter {
                     &format!("{}{}", ms, types_str),
                 )
             }
-            TestOutcome::XFailed { reason } => self.fmt_line(
-                outcome_label(outcome, c),
-                &pad_to(
-                    &truncate_name(&item.fn_name, self.opts.name_width),
-                    self.opts.name_width,
-                ),
-                &color_dim(reason, c),
-            ),
             _ => self.fmt_line(
                 outcome_label(outcome, c),
                 &pad_to(
