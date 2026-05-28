@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 import warnings
 from dataclasses import dataclass
-
-sys.path.insert(0, "python/tests")
 
 import oxitest as oxi
 from oxitest._bridge._builtins._warncapture import _WarnCapture

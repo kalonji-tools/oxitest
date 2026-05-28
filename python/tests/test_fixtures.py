@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import oxitest
-from helpers import make_meta
+from conftest import helpers
 from oxitest import Fixture, raises
 from oxitest._bridge.fixtures import (
     FixtureCycleError,
@@ -133,8 +130,8 @@ def test_function_scope_new_instance_per_resolve():
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    k1, _ = session.resolve_for_test(fn, make_meta("t.py"))
-    k2, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert k1["val"] == 1, (
         f"first resolve of function-scope fixture should return 1, got {k1['val']!r}"
     )
@@ -162,7 +159,8 @@ def test_yield_fixture_function_scope_teardown():
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, fn_teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    meta = helpers.common.make_meta("t.py")
+    kwargs, fn_teardowns = session.resolve_for_test(fn, meta)
     assert kwargs["val"] == "value", (
         f"yield fixture should provide 'value' before teardown, got {kwargs['val']!r}"
     )
@@ -195,7 +193,8 @@ def test_addfinalizer_runs_in_teardown():
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, fn_teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    meta = helpers.common.make_meta("t.py")
+    kwargs, fn_teardowns = session.resolve_for_test(fn, meta)
     assert kwargs["thing"] == "val", (
         f"fixture using ctx.addfinalizer should still return 'val', got "
         f"{kwargs['thing']!r}"
@@ -228,7 +227,7 @@ def test_dag_fixture_depending_on_fixture():
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert kwargs["derived"] == 20, (
         f"derived fixture (base*2=20) should be resolved via DAG, got "
         f"{kwargs['derived']!r}"
@@ -252,7 +251,7 @@ def test_autouse_runs_side_effects_without_being_in_kwargs():
     def fn():
         pass  # does NOT request 'setup'
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "setup" not in kwargs, (
         f"autouse fixture should not appear in test kwargs (not requested), got keys: "
         f"{list(kwargs)}"
@@ -278,7 +277,7 @@ def test_autouse_teardown_still_runs():
     def fn():
         pass
 
-    _, fn_teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    _, fn_teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     for td in reversed(fn_teardowns):
         td()
     assert torn_down == [True], (
@@ -299,7 +298,7 @@ def test_missing_fixture_raises_not_found():
         pass
 
     with raises(FixtureNotFoundError) as exc_info:
-        session.resolve_for_test(fn, make_meta("t.py"))
+        session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "nonexistent" in str(exc_info.value), (
         f"FixtureNotFoundError message should mention 'nonexistent', got "
         f"{str(exc_info.value)!r}"
@@ -324,7 +323,7 @@ def test_cycle_raises_fixture_cycle_error():
         pass
 
     with raises(FixtureCycleError):
-        session.resolve_for_test(fn, make_meta("t.py"))
+        session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
 
 
 def test_setup_error_raises_fixture_setup_error():
@@ -340,7 +339,7 @@ def test_setup_error_raises_fixture_setup_error():
         pass
 
     with raises(FixtureSetupError) as exc_info:
-        session.resolve_for_test(fn, make_meta("t.py"))
+        session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "bad" in str(exc_info.value), (
         f"FixtureSetupError should mention fixture name 'bad', got "
         f"{str(exc_info.value)!r}"
@@ -370,7 +369,7 @@ def test_fixture_marker_param_resolved_by_name():
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert kwargs["val"] == 42, (
         f"Fixture[int]-annotated param 'val' should be resolved to 42, got "
         f"{kwargs['val']!r}"
@@ -389,7 +388,7 @@ def test_non_fixture_param_ignored_by_resolver():
     def fn(x: int) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "x" not in kwargs, (
         f"plain-typed param 'x: int' should not be resolved as a fixture, got "
         f"kwargs={list(kwargs)}"
@@ -404,7 +403,7 @@ def test_fixture_test_context_injected_directly():
     def fn(ctx: Fixture[OxiTestContext]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert isinstance(kwargs["ctx"], OxiTestContext), (
         f"Fixture[OxiTestContext] should inject an OxiTestContext instance, got "
         f"{type(kwargs['ctx']).__name__}"
@@ -426,7 +425,7 @@ def test_fixture_dep_resolved_via_annotation():
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert kwargs["derived"] == 30, (
         f"derived fixture (base*3=30) should resolve via annotation-based DAG, got "
         f"{kwargs['derived']!r}"
@@ -449,7 +448,7 @@ def test_autouse_not_double_invoked_when_explicitly_requested():
     def fn(setup: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert "setup" in kwargs, (
         f"explicitly requested autouse fixture should appear in kwargs, got keys: "
         f"{list(kwargs)}"
@@ -639,7 +638,7 @@ def test_resolve_for_test_skip_names_prevents_resolution():
         pass
 
     kwargs, _ = session.resolve_for_test(
-        test_fn, make_meta("/fake/test.py"), skip_names=frozenset({"db"})
+        test_fn, helpers.common.make_meta("/fake/test.py"), skip_names=frozenset({"db"})
     )
     assert "db" not in kwargs, (
         f"'db' should be skipped (in skip_names) and not appear in kwargs, got keys: "
@@ -661,7 +660,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error():
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, make_meta("t.py"))
+        session.resolve_for_test(test_fn, helpers.common.make_meta("t.py"))
 
     msg = str(exc_info.value)
     assert "numbers" in msg, (
@@ -690,7 +689,7 @@ def test_wrong_annotation_matching_fixture_raises_helpful_error():
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, make_meta("t.py"))
+        session.resolve_for_test(test_fn, helpers.common.make_meta("t.py"))
 
     msg = str(exc_info.value)
     assert "numbers" in msg, (
@@ -756,7 +755,8 @@ def test_on_teardown_registers_cleanup():
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    kwargs, fn_teardowns = session.resolve_for_test(fn, make_meta("t.py"))
+    meta = helpers.common.make_meta("t.py")
+    kwargs, fn_teardowns = session.resolve_for_test(fn, meta)
     assert kwargs["thing"] == "val", (
         f"fixture using ctx.on_teardown should still return 'val', got "
         f"{kwargs['thing']!r}"
@@ -822,8 +822,8 @@ def test_shared_fixture_is_called_once_across_tests():
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
-    k1, _ = session.resolve_for_test(fn, make_meta("t.py"))
-    k2, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert len(calls) == 1, f"factory called {len(calls)} times, expected 1"
     # Both resolutions return the same proxy instance (cache hit)
     assert k1["db"] is k2["db"], "same FrozenProxy instance expected on cache hit"
@@ -843,7 +843,7 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy():
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
 
-    k, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     assert isinstance(k["cfg"], FrozenProxy), (
         f"shared fixture should be wrapped in a FrozenProxy, got "
         f"{type(k['cfg']).__name__}"
@@ -864,7 +864,7 @@ def test_shared_fixture_proxy_raises_on_item_mutation():
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
 
-    k, _ = session.resolve_for_test(fn, make_meta("t.py"))
+    k, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     with raises(SharedFixtureMutationError):
         k["cfg"]["x"] = 2  # type: ignore[index]
 
@@ -884,7 +884,7 @@ def test_shared_fixture_teardown_runs_on_end_session():
     def fn(res: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
 
-    session.resolve_for_test(fn, make_meta("t.py"))
+    session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     session.end_module("t.py")
     assert not torn_down, "teardown must not run at end_module for shared fixtures"
     session.end_session()
@@ -1098,7 +1098,9 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
     def test_fn(fx: Fixtures) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/test.py"))
+    kwargs, _ = session.resolve_for_test(
+        test_fn, helpers.common.make_meta("/fake/test.py")
+    )
     assert "fx" in kwargs, (
         f"Fixtures-annotated param 'fx' should be injected into kwargs, got keys: "
         f"{list(kwargs)}"
@@ -1118,7 +1120,9 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session():
     def test_fn(fx: Fixtures) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(test_fn, make_meta("/fake/module.py"))
+    kwargs, _ = session.resolve_for_test(
+        test_fn, helpers.common.make_meta("/fake/module.py")
+    )
     proxy = kwargs["fx"]
     assert proxy._session is session, (
         f"FixturesProxy._session should be the same session used during resolve, got "
@@ -1317,7 +1321,6 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
 
 def test_plugin_fixture_provider_injected():
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
-    import sys
     import types
 
     from oxitest._bridge.plugin_loader import load_plugins

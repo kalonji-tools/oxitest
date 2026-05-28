@@ -2,12 +2,8 @@
 
 import io
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-
-from helpers import RecordingDebugger
+from conftest import helpers
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._middleware import _is_debuggable
@@ -110,14 +106,14 @@ def test_pdb_backend_satisfies_protocol():
 
 def test_recording_debugger_satisfies_protocol():
     """RecordingDebugger test double must be a valid DebuggerBackend."""
-    assert isinstance(RecordingDebugger(), DebuggerBackend), (
+    assert isinstance(helpers.common.RecordingDebugger(), DebuggerBackend), (
         "RecordingDebugger should satisfy DebuggerBackend protocol"
     )
 
 
 def test_recording_debugger_records_trace():
     """RecordingDebugger should count trace() calls."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     rec.trace()
     rec.trace()
     assert rec.trace_count == 2, f"expected 2 trace calls, got {rec.trace_count}"
@@ -125,7 +121,7 @@ def test_recording_debugger_records_trace():
 
 def test_recording_debugger_records_post_mortem():
     """RecordingDebugger should record traceback objects."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     try:
         raise ValueError("boom")
     except ValueError:
@@ -144,7 +140,7 @@ def test_recording_debugger_records_post_mortem():
 
 def test_run_base_always_mode_passing_calls_trace_only():
     """always mode + passing test: trace called, post_mortem not called."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     result = _run_base(
         lambda: None,
         {},
@@ -162,7 +158,7 @@ def test_run_base_always_mode_passing_calls_trace_only():
 
 def test_run_base_always_mode_failing_calls_both():
     """always mode + failure: trace before, post_mortem after."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
 
     def failing():
         raise AssertionError("boom")
@@ -184,7 +180,7 @@ def test_run_base_always_mode_failing_calls_both():
 
 def test_run_base_post_mortem_mode_failing_calls_post_mortem_only():
     """post-mortem mode + failure: only post_mortem called, no trace."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
 
     def failing():
         raise AssertionError("crash")
@@ -206,7 +202,7 @@ def test_run_base_post_mortem_mode_failing_calls_post_mortem_only():
 
 def test_run_base_post_mortem_mode_passing_calls_neither():
     """post-mortem mode + passing test: neither called."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     result = _run_base(
         lambda: None,
         {},
@@ -237,7 +233,7 @@ def test_run_base_no_debug_mode_calls_neither():
 
 def test_run_base_non_debuggable_exception_skips_post_mortem():
     """Skipped exceptions should not trigger post_mortem."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
 
     class Skipped(Exception):
         pass
@@ -288,7 +284,7 @@ def test_trace_before_test_suspends_capture_during_call():
 
 def test_trace_before_test_no_capture_kwargs():
     """_trace_before_test should work when no capture fixtures in kwargs."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     _trace_before_test({"x": 42}, "t.py::test_x", rec)
     assert rec.trace_count == 1, "trace should be called once"
 
@@ -297,7 +293,7 @@ def test_debug_post_mortem_permanently_suspends_capture():
     """_debug_post_mortem should permanently restore capture."""
     cap = _StdCapture()
     old_stdout = cap._old_stdout
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
 
     try:
         raise AssertionError("test failure")
@@ -313,7 +309,7 @@ def test_debug_post_mortem_permanently_suspends_capture():
 
 def test_debug_post_mortem_no_capture_kwargs():
     """_debug_post_mortem should work when no capture fixtures in kwargs."""
-    rec = RecordingDebugger()
+    rec = helpers.common.RecordingDebugger()
     try:
         raise ValueError("oops")
     except ValueError as exc:

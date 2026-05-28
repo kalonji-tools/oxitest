@@ -8,15 +8,11 @@ fix suggestions.
 
 from __future__ import annotations
 
-import sys
 import textwrap
 from dataclasses import dataclass, field
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import oxitest as oxi
-from helpers import run_oxitest
+from conftest import helpers
 from oxitest import TempDir
 
 
@@ -89,7 +85,7 @@ def test_failure_output(
 ) -> None:
     """Failure output matches expected patterns for each scenario."""
     (tmp / "test_check.py").write_text(test_code)
-    out, rc = run_oxitest(tmp, *extra_args)
+    out, rc = helpers.common.run_oxitest(tmp, *extra_args)
     assert rc != 0, f"expected non-zero exit code:\n{out}"
     for s in expected:
         assert s in out, f"expected {s!r} in output:\n{out}"
