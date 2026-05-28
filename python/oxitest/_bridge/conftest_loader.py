@@ -54,8 +54,7 @@ def _load_conftest_module(path: str) -> ModuleType | None:
 def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
     """Extract fixture definitions from Fixtures instances in a module."""
     found: list[FixtureDef[Any]] = []
-    for attr_name in vars(module):
-        obj = getattr(module, attr_name)
+    for attr_name, obj in vars(module).items():
         if not isinstance(obj, Fixtures):
             continue
         namespace_name = obj._namespace_name or attr_name
@@ -77,10 +76,8 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
 def _has_helpers(module: ModuleType) -> bool:
     """Return True if module has any public callables that aren't Fixtures."""
     return any(
-        callable(getattr(module, name))
-        and not name.startswith("_")
-        and not isinstance(getattr(module, name), Fixtures)
-        for name in vars(module)
+        not name.startswith("_") and callable(obj) and not isinstance(obj, Fixtures)
+        for name, obj in vars(module).items()
     )
 
 
