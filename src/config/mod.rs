@@ -249,6 +249,23 @@ macro_rules! apply_if_some {
     };
 }
 
+/// Shared optional fields that both TOML and CLI sources can override.
+///
+/// Built by `merge_toml` and `merge_cli`, then applied via
+/// `Config::apply_overrides` — keeping the field-assignment logic in one place.
+#[derive(Default)]
+struct Overrides {
+    schedule: Option<ScheduleStrategy>,
+    retries: Option<usize>,
+    retries_delay_secs: Option<u64>,
+    workers: Option<WorkerCount>,
+    failed: Option<FailedMode>,
+    tb: Option<TbStyle>,
+    color: Option<ColorMode>,
+    durations: Option<usize>,
+    strict: Option<StrictMode>,
+}
+
 /// Resolve testpaths relative to a root directory.
 ///
 /// Each path string is joined to `rootdir`, producing absolute paths for the
@@ -336,6 +353,24 @@ impl Config {
         config.merge_toml(tc, Some(rootdir))
     }
 
+    /// Apply shared overrides from either TOML or CLI source.
+    fn apply_overrides(&mut self, ovr: Overrides) {
+        // ── Execution ──────────────────────────────────────────────────
+        apply_if_some!(self, schedule, ovr.schedule);
+        apply_if_some!(self, retries, ovr.retries);
+        apply_if_some!(self, retries_delay_secs, ovr.retries_delay_secs);
+        apply_if_some!(self, workers, ovr.workers, wrap);
+        apply_if_some!(self, failed, ovr.failed, wrap);
+
+        // ── Output ─────────────────────────────────────────────────────
+        apply_if_some!(self, tb, ovr.tb);
+        apply_if_some!(self, color, ovr.color);
+        apply_if_some!(self, durations, ovr.durations, wrap);
+
+        // ── Filtering ──────────────────────────────────────────────────
+        apply_if_some!(self, strict, ovr.strict, wrap);
+    }
+
     /// Merge fields from a parsed `[tool.oxitest]` section (fluent builder).
     ///
     /// `rootdir` controls how `testpaths` are resolved:
@@ -352,29 +387,20 @@ impl Config {
         apply_if_some!(self, python_files, tc.python_files);
         apply_if_some!(self, norecursedirs, tc.norecursedirs);
 
-        // ── Execution ────────────────────────────────────────────────────
+        // ── Execution (unique to TOML) ──────────────────────────────────
         apply_if_some!(self, maxfail, tc.maxfail);
         apply_if_some!(self, serial, tc.serial);
-        apply_if_some!(self, schedule, tc.schedule);
         apply_if_some!(self, async_backend, tc.async_backend);
-        apply_if_some!(self, retries, tc.retries);
-        apply_if_some!(self, retries_delay_secs, tc.retries_delay);
-        apply_if_some!(self, workers, tc.workers, wrap);
-        apply_if_some!(self, failed, tc.failed, wrap);
         self.cache_max_age = tc.cache_max_age.unwrap_or(self.cache_max_age);
         self.min_parallel_tests = tc.min_parallel_tests.unwrap_or(self.min_parallel_tests);
         self.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(self.spawn_overhead_ms);
         self.timeout_secs = tc.timeout;
         self.timeout_multiplier = tc.timeout_multiplier;
 
-        // ── Output ───────────────────────────────────────────────────────
-        apply_if_some!(self, tb, tc.tb);
+        // ── Output (unique to TOML) ─────────────────────────────────────
         apply_if_some!(self, verbose, tc.verbose);
-        apply_if_some!(self, color, tc.color);
-        apply_if_some!(self, durations, tc.durations, wrap);
 
-        // ── Filtering & Plugins ──────────────────────────────────────────
-        apply_if_some!(self, strict, tc.strict, wrap);
+        // ── Filtering (unique to TOML) ──────────────────────────────────
         apply_if_some!(self, plugins, tc.plugins);
         self.plugin_settings = tc.plugin_settings;
         apply_if_some!(self, affected_base, tc.affected_base);
@@ -384,6 +410,19 @@ impl Config {
             self.registered_markers = names;
             self.markers_without_description = no_desc;
         }
+
+        // ── Shared overrides ────────────────────────────────────────────
+        self.apply_overrides(Overrides {
+            schedule: tc.schedule,
+            retries: tc.retries,
+            retries_delay_secs: tc.retries_delay,
+            workers: tc.workers,
+            failed: tc.failed,
+            tb: tc.tb,
+            color: tc.color,
+            durations: tc.durations,
+            strict: tc.strict,
+        });
 
         self
     }
@@ -404,7 +443,7 @@ impl Config {
                 .collect();
         }
 
-        // ── Execution ────────────────────────────────────────────────────
+        // ── Execution (unique to CLI) ───────────────────────────────────
         // validate() guarantees -x and --maxfail are mutually exclusive.
         if cli.exitfirst {
             self.maxfail = 1;
@@ -417,11 +456,6 @@ impl Config {
         if cli.serial {
             self.serial = true;
         }
-        apply_if_some!(self, schedule, cli.schedule);
-        apply_if_some!(self, retries, cli.retries);
-        apply_if_some!(self, retries_delay_secs, cli.retries_delay);
-        apply_if_some!(self, workers, cli.workers, wrap);
-        apply_if_some!(self, failed, cli.failed, wrap);
         apply_if_some!(self, timeout_secs, cli.timeout, wrap);
 
         // ── Debug mode ──────────────────────────────────────────────────
@@ -429,16 +463,12 @@ impl Config {
             mode.apply_to(&mut self, cli.tb.as_ref());
         }
 
-        // ── Output ───────────────────────────────────────────────────────
+        // ── Output (unique to CLI) ──────────────────────────────────────
         if cli.verbose {
             self.verbose = true;
         }
-        apply_if_some!(self, color, cli.color);
-        apply_if_some!(self, tb, cli.tb.clone());
-        apply_if_some!(self, durations, cli.durations, wrap);
 
-        // ── Filtering ────────────────────────────────────────────────────
-        apply_if_some!(self, strict, cli.strict.clone(), wrap);
+        // ── Filtering (unique to CLI) ───────────────────────────────────
         if let Some(ref val) = cli.affected {
             if val.is_empty() {
                 self.affected = Some(self.affected_base.clone());
@@ -446,6 +476,19 @@ impl Config {
                 self.affected = cli.affected.clone();
             }
         }
+
+        // ── Shared overrides ────────────────────────────────────────────
+        self.apply_overrides(Overrides {
+            schedule: cli.schedule,
+            retries: cli.retries,
+            retries_delay_secs: cli.retries_delay,
+            workers: cli.workers,
+            failed: cli.failed,
+            tb: cli.tb.clone(),
+            color: cli.color,
+            durations: cli.durations,
+            strict: cli.strict.clone(),
+        });
 
         self
     }
