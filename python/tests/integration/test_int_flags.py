@@ -1,6 +1,7 @@
 """Integration tests: flag interactions (--list, -k, --serial, --json, etc.)."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -134,3 +135,42 @@ def test_retries_delay_requires_retries(tmp: TempDir):
     assert rc == 4, f"--retries-delay without --retries should exit 4, got {rc}"
     assert "--retries-delay" in stderr, f"stderr: {stderr!r}"
     assert "--retries" in stderr, f"stderr: {stderr!r}"
+
+
+def test_debug_drops_into_pdb_and_quit_exits_2(tmp: TempDir):
+    """--debug on a failing test + 'q' input produces exit code 2 with banner."""
+    (tmp / "test_fail.py").write_text(
+        "def test_bad():\n    assert 1 == 2, 'one is not two'\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            str(tmp),
+            "--color",
+            "never",
+            "--debug",
+        ],
+        input="q\n",
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 2, (
+        f"expected exit code 2 (interrupted), got {result.returncode}\n"
+        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+    )
+    assert "DEBUG" in result.stderr, f"banner missing from stderr: {result.stderr!r}"
+    assert "test_bad" in result.stderr, (
+        f"node_id missing from stderr: {result.stderr!r}"
+    )
+
+
+def test_debug_conflicts_are_rejected(tmp: TempDir):
+    """--debug with --workers should produce exit code 4."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = run_oxitest_full(tmp, "--debug", "--workers", "2")
+    assert rc == 4, f"expected exit code 4, got {rc}\nstderr: {stderr!r}"
+    assert "--debug" in stderr, f"error should mention --debug: {stderr!r}"
+    assert "--workers" in stderr, f"error should mention --workers: {stderr!r}"
