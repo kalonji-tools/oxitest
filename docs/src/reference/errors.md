@@ -51,6 +51,44 @@ Python 2 syntax in a Python 3 file.
 
 ---
 
+```text
+"<name>" is a Python keyword and cannot be used as a namespace name.
+```
+
+**Cause:** A directory name (or `__helpers_namespace__` override) used for a
+conftest helpers or fixtures namespace matches a Python reserved keyword
+(e.g. `class`, `for`, `match`).
+
+**Fix:** Rename the directory, or add `__helpers_namespace__ = "..."` to the
+conftest.py to pick a different name.
+
+---
+
+```text
+"<name>" is a Python builtin and cannot be used as a namespace name.
+```
+
+**Cause:** A directory name (or `__helpers_namespace__` override) matches a
+Python builtin name (e.g. `int`, `list`, `print`).
+
+**Fix:** Rename the directory, or add `__helpers_namespace__ = "..."` to the
+conftest.py to pick a different name.
+
+---
+
+```text
+Two conftest files use the same helpers namespace "<name>":
+```
+
+**Cause:** Two conftest.py files in the ancestor chain produce the same
+namespace name, either from their directory names or explicit
+`__helpers_namespace__` overrides.
+
+**Fix:** Add `__helpers_namespace__ = "..."` to one of the two conftest files
+listed in the error message.
+
+---
+
 ## Plugin errors
 
 Plugin errors occur when oxitest cannot load or initialize a declared plugin.
