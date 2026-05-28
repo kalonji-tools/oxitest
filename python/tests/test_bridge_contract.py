@@ -89,14 +89,14 @@ def test_failed_shape_includes_diagnostic_fields():
         left="1",
         right="2",
         op="==",
-        frames=[
+        frames=(
             Frame(
                 file="tests/test_foo.py",
                 lineno=12,
                 name="test_example",
                 line="assert x == y",
             ),
-        ],
+        ),
     )
     wire = _wire(result)
     expected_msg = "AssertionError: values differ"
@@ -115,14 +115,14 @@ def test_failed_shape_error_includes_message_and_frames():
     result = TestResult(
         status=StatusKind.ERROR,
         message="ImportError: no module named foo",
-        frames=[
+        frames=(
             Frame(
                 file="tests/test_foo.py",
                 lineno=1,
                 name="<module>",
                 line="import foo",
             ),
-        ],
+        ),
     )
     wire = _wire(result)
     assert wire["outcome"] == "error", "wrong outcome"
@@ -186,14 +186,14 @@ def test_frame_keys():
     result = TestResult(
         status=StatusKind.FAILED,
         message="err",
-        frames=[
+        frames=(
             Frame(
                 file="src/foo.py",
                 lineno=5,
                 name="test_bar",
                 line="assert val",
             ),
-        ],
+        ),
     )
     wire = _wire(result)
     assert "frames" in wire, "frames must be present"
@@ -206,7 +206,7 @@ def test_frame_multiple_frames_preserved():
     result = TestResult(
         status=StatusKind.FAILED,
         message="err",
-        frames=[
+        frames=(
             Frame(
                 file="src/a.py",
                 lineno=1,
@@ -219,7 +219,7 @@ def test_frame_multiple_frames_preserved():
                 name="test_thing",
                 line="helper()",
             ),
-        ],
+        ),
     )
     wire = _wire(result)
     assert "frames" in wire, "frames must be present"

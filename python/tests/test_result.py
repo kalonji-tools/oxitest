@@ -120,7 +120,7 @@ def test_to_wire_includes_frames():
     r = TestResult(
         status=StatusKind.FAILED,
         message="err",
-        frames=[Frame(file="t.py", lineno=3, name="test_f", line="assert x")],
+        frames=(Frame(file="t.py", lineno=3, name="test_f", line="assert x"),),
     )
     wire = r.to_wire("t.py::test_f", 0.5)
     assert len(wire["frames"]) == 1, "should have 1 frame"

@@ -6,6 +6,7 @@ import dataclasses
 import importlib.util
 import sys
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -99,7 +100,7 @@ def load_fixtures_from_conftest(path: str) -> list[FixtureDef[Any]]:
     return _extract_fixtures(module, path)
 
 
-def create_session(conftest_paths: list[str]) -> FixtureSession:
+def create_session(conftest_paths: Sequence[str]) -> FixtureSession:
     """Build a FixtureRegistry from all conftest paths and return a FixtureSession.
 
     Also assembles a HelperNamespace from public callables in each conftest

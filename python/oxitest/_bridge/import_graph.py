@@ -8,6 +8,7 @@ files are affected by source changes.
 __all__ = ["resolve_affected"]
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -71,8 +72,8 @@ def _extract_imported_modules(file_path: str) -> set[str]:
 
 
 def resolve_affected(
-    test_files: list[str],
-    changed_sources: list[str],
+    test_files: Sequence[str],
+    changed_sources: Sequence[str],
     root: str,
 ) -> list[str]:
     """Return test files that import any of the changed source files.
