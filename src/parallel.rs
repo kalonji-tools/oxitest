@@ -167,11 +167,14 @@ pub(crate) fn handle_drain_outcome(
 /// result in that case.
 fn handle_worker_result(
     result: &WorkerResult,
-    item_lookup: &ahash::AHashMap<String, std::sync::Arc<types::TestItem>>,
+    item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
 ) -> Option<types::TestOutcome> {
-    let item = match item_lookup.get(&result.node_id).map(std::sync::Arc::clone) {
+    let item = match item_lookup
+        .get(result.node_id.as_str())
+        .map(std::sync::Arc::clone)
+    {
         Some(item) => item,
         None => {
             tracing::warn!(
@@ -203,7 +206,7 @@ fn handle_worker_result(
 /// will race us for remaining scheduler entries.
 fn drain_remaining_into_crashed(
     sched: &scheduler::Scheduler,
-    item_lookup: &ahash::AHashMap<String, std::sync::Arc<types::TestItem>>,
+    item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
 ) {
@@ -237,10 +240,10 @@ pub(crate) fn run_phase_parallel(
     let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
     // Build node_id → Arc<TestItem> before groups are consumed by the scheduler.
     // Items are already Arc-wrapped from collection — no deep clone needed.
-    let item_lookup: ahash::AHashMap<String, std::sync::Arc<types::TestItem>> = groups
+    let item_lookup: ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>> = groups
         .iter()
         .flat_map(|(_, items)| items.iter())
-        .map(|item| (item.node_id.to_string(), Arc::clone(item)))
+        .map(|item| (item.node_id.clone(), Arc::clone(item)))
         .collect();
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -252,14 +255,16 @@ pub(crate) fn run_phase_parallel(
         )
     };
     let timeout_secs = cfg.timeout_secs;
-    let python_bin = std::env::var("PYO3_PYTHON").unwrap_or_else(|_| "python3".to_string());
+    let python_bin: Arc<str> = std::env::var("PYO3_PYTHON")
+        .unwrap_or_else(|_| "python3".to_string())
+        .into();
 
     let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
     let handles: Vec<_> = (0..worker_count)
         .map(|_| {
             spawn_worker(
-                python_bin.clone(),
+                Arc::clone(&python_bin),
                 Arc::clone(&sched),
                 Arc::clone(&cancelled),
                 std::sync::Arc::clone(&conftest_raw),
@@ -851,9 +856,9 @@ mod drain_tests {
 
         let sched = Arc::new(crate::scheduler::Scheduler::new(groups));
 
-        let item_lookup: ahash::AHashMap<String, Arc<TestItem>> = all_items
+        let item_lookup: ahash::AHashMap<NodeId, Arc<TestItem>> = all_items
             .iter()
-            .map(|i| (i.node_id.to_string(), Arc::clone(i)))
+            .map(|i| (i.node_id.clone(), Arc::clone(i)))
             .collect();
 
         struct CrashCollector {
@@ -907,7 +912,7 @@ mod drain_tests {
         use std::sync::Arc;
 
         let sched = Arc::new(crate::scheduler::Scheduler::new(vec![]));
-        let item_lookup: ahash::AHashMap<String, Arc<TestItem>> = ahash::AHashMap::new();
+        let item_lookup: ahash::AHashMap<types::NodeId, Arc<TestItem>> = ahash::AHashMap::new();
 
         struct NullReporter;
         impl crate::reporter::Reporter for NullReporter {
@@ -1017,7 +1022,7 @@ mod result_handler_tests {
 
     #[test]
     fn unknown_node_id_returns_none_and_skips_reporter() {
-        let lookup: ahash::AHashMap<String, Arc<types::TestItem>> = ahash::AHashMap::new();
+        let lookup: ahash::AHashMap<types::NodeId, Arc<types::TestItem>> = ahash::AHashMap::new();
         let mut rep = CountingReporter {
             started: 0,
             completed: 0,
@@ -1038,8 +1043,12 @@ mod result_handler_tests {
 
     #[test]
     fn known_node_id_returns_outcome_and_notifies_reporter() {
-        let mut lookup: ahash::AHashMap<String, Arc<types::TestItem>> = ahash::AHashMap::new();
-        lookup.insert("my_mod::test_fn".to_string(), make_item("my_mod::test_fn"));
+        let mut lookup: ahash::AHashMap<types::NodeId, Arc<types::TestItem>> =
+            ahash::AHashMap::new();
+        lookup.insert(
+            types::NodeId::from_raw("my_mod::test_fn"),
+            make_item("my_mod::test_fn"),
+        );
         let mut rep = CountingReporter {
             started: 0,
             completed: 0,

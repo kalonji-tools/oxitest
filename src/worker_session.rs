@@ -129,7 +129,7 @@ impl WorkerSession {
 }
 
 pub(crate) fn spawn_worker(
-    python_bin: String,
+    python_bin: std::sync::Arc<str>,
     sched: std::sync::Arc<scheduler::Scheduler>,
     cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     conftest_json: std::sync::Arc<serde_json::value::RawValue>,
