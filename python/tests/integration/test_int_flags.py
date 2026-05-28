@@ -164,6 +164,5 @@ def test_debug_always_allows_exitfirst(tmp: TempDir):
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
     _, stderr, rc = run_oxitest_full(tmp, "--debug=always", "-x", "--list")
     assert rc == 0, (
-        f"--debug=always -x --list should exit 0, got rc={rc}\n"
-        f"stderr: {stderr!r}"
+        f"--debug=always -x --list should exit 0, got rc={rc}\nstderr: {stderr!r}"
     )
