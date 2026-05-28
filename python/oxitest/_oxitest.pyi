@@ -1,1 +1,3 @@
+from oxitest._exit_code import ExitCode as ExitCode
+
 def run(args: list[str]) -> int: ...
