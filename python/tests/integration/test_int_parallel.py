@@ -22,8 +22,8 @@ def test_serial_and_default_same_counts(tmp: TempDir):
     (tmp / "test_b.py").write_text(
         "def test_fail(): assert False\ndef test_pass(): assert True\n"
     )
-    serial_out, _ = helpers.common.run_oxitest(tmp, "--serial")
-    default_out, _ = helpers.common.run_oxitest(tmp)
+    serial_out, _, _ = helpers.common.run_oxitest(tmp, "--serial")
+    default_out, _, _ = helpers.common.run_oxitest(tmp)
     serial_counts = _parse_counts(serial_out)
     default_counts = _parse_counts(default_out)
     assert serial_counts == default_counts, (
@@ -38,7 +38,7 @@ def test_serial_and_default_both_pass(tmp: TempDir):
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
-    _, default_rc = helpers.common.run_oxitest(tmp)
+    _, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
+    _, _, default_rc = helpers.common.run_oxitest(tmp)
     assert serial_rc == 0, f"serial run should exit 0, got {serial_rc}"
     assert default_rc == 0, f"default run should exit 0, got {default_rc}"
