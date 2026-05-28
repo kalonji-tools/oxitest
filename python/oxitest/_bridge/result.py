@@ -123,7 +123,7 @@ class TestResult:
             "right": self.right,
             "op": self.op,
             "strict": self.strict,
-            "frames": [asdict(f) for f in self.frames],
+            "frames": [asdict(f) for f in self.frames] if self.frames else None,
         }
         output.update({k: v for k, v in optional.items() if v})
         return output
