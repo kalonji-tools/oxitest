@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from oxitest.plugin import Plugin
 
 if TYPE_CHECKING:
+    from oxitest._bridge._debugger import DebuggerBackend
     from oxitest.plugin import (
         Collector,
         ExecutionWrapper,
@@ -92,6 +93,27 @@ class PluginRegistry:
             if entry.plugin.async_backend is not None
         ]
 
+    @functools.cached_property
+    def debugger_backends(self) -> list[tuple[str, DebuggerBackend]]:
+        """All debugger backends from all plugins, as (module_name, backend) pairs."""
+        return [
+            (entry.module_name, entry.plugin.debugger_backend)
+            for entry in self.entries
+            if entry.plugin.debugger_backend is not None
+        ]
+
+    def validate(self) -> None:
+        """Check for conflicting plugin declarations.
+
+        Raises:
+            ConflictingDebuggerError: if multiple plugins provide a debugger backend.
+        """
+        from oxitest._bridge._errors import ConflictingDebuggerError
+
+        if len(self.debugger_backends) > 1:
+            providers = [name for name, _ in self.debugger_backends]
+            raise ConflictingDebuggerError(providers)
+
 
 def load_plugins(
     plugin_modules: list[str],
@@ -151,4 +173,5 @@ def load_plugins(
 
         registry.entries.append(PluginEntry(module_name=module_name, plugin=result))
 
+    registry.validate()
     return registry
