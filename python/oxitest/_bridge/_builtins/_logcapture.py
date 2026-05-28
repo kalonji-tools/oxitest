@@ -109,8 +109,8 @@ class _LogCapture:
     @property
     def text(self) -> str:
         """Formatted log output — one `'LEVEL    message'` line per record."""
-        lines = [f"{r.levelname:<8} {r.getMessage()}" for r in self.records]
-        return "\n".join(lines) + ("\n" if lines else "")
+        joined = "\n".join(f"{r.levelname:<8} {r.getMessage()}" for r in self.records)
+        return joined + "\n" if joined else ""
 
     def set_level(self, level: int, logger: str | None = None) -> None:
         """Set the minimum capture level, filtering out records below *level*.

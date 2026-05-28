@@ -123,15 +123,15 @@ def _check_warnings(
         (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
     )
     captured_ids = warn_capture._all_captured_ids if warn_capture else set()
-    relevant: list[str] = [
+    relevant = "\n".join(
         f"{wi.category.__name__}: {wi.message}"
         for wi in caught
         if not issubclass(wi.category, FixtureTeardownWarning)
         and id(wi) not in captured_ids
-    ]
+    )
     if not relevant:
         return False, ""
-    return True, "\n".join(relevant)
+    return True, relevant
 
 
 def _is_debuggable(exc: BaseException) -> bool:

@@ -8,7 +8,7 @@ import hashlib
 import inspect
 import itertools
 import pathlib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from types import ModuleType
 from typing import Any, cast
 
@@ -199,13 +199,14 @@ def _check_fn_violations(
     path: str,
     fn_name: str,
     fn: object,
-) -> list[CollectedViolation]:
-    """Return strict violations for a single test function.
+) -> Iterator[CollectedViolation]:
+    """Yield strict violations for a single test function.
 
     Checks dict-parametrize and missing-mark-reason violations.
     Bare-assert violations are detected separately via AST (_collect_bare_asserts).
     """
-    return [v for checker in _FN_VIOLATION_CHECKERS for v in checker(path, fn_name, fn)]
+    for checker in _FN_VIOLATION_CHECKERS:
+        yield from checker(path, fn_name, fn)
 
 
 def _collect_bare_asserts(path: str) -> list[CollectedViolation]:

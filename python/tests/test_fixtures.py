@@ -95,7 +95,7 @@ def test_registry_get_autouse_returns_only_autouse():
     manual = FixtureDef("db", lambda: None, False, None, "/c.py")
     reg.register(auto)
     reg.register(manual)
-    result = reg.get_autouse()
+    result = list(reg.get_autouse())
     assert len(result) == 1, (
         f"get_autouse() should return only 1 autouse fixture, got {len(result)}: "
         f"{[d.name for d in result]}"
@@ -107,7 +107,7 @@ def test_registry_get_autouse_returns_only_autouse():
 
 def test_registry_get_autouse_empty():
     reg = FixtureRegistry()
-    assert reg.get_autouse() == [], (
+    assert list(reg.get_autouse()) == [], (
         "get_autouse() on an empty registry should return an empty list"
     )
 
