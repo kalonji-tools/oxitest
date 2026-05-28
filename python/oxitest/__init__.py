@@ -79,6 +79,9 @@ from oxitest._bridge._builtins import (
     TestContext as TestContext,
     WarnCapture as WarnCapture,
 )
+from oxitest._bridge._debugger import (
+    DebuggerBackend as DebuggerBackend,
+)
 from oxitest._bridge._errors import (
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
@@ -107,6 +110,7 @@ from oxitest.plugin import Plugin as Plugin
 __all__ = [
     "AsyncBackend",
     "CaptureResult",
+    "DebuggerBackend",
     "FdCapture",
     "Fixture",
     "FixtureRef",

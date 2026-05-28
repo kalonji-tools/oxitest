@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import AsyncBackend
+    from oxitest._bridge._debugger import DebuggerBackend
 
 
 @runtime_checkable
@@ -199,3 +200,6 @@ class Plugin:
 
     # Async runtime backend (at most one across all plugins)
     async_backend: AsyncBackend | None = None
+
+    # Debugger backend (at most one across all plugins)
+    debugger_backend: DebuggerBackend | None = None
