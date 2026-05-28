@@ -8,6 +8,8 @@
 //! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
 //! type-checked at compile time rather than constructed with ad-hoc macros.
 
+use camino::Utf8PathBuf;
+
 use crate::types::{self, Frame, LineNo};
 
 /// Current version of the worker ↔ runner JSON protocol.
@@ -123,7 +125,7 @@ impl WorkerResult {
             .frames
             .iter()
             .map(|f| Frame {
-                file: f.file.clone(),
+                file: Utf8PathBuf::from(f.file.as_str()),
                 lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
                 name: f.name.clone(),
                 line: f.line.clone(),
@@ -240,7 +242,7 @@ mod frame_tests {
                 assert_eq!(
                     frames[0],
                     Frame {
-                        file: "t.py".to_string(),
+                        file: Utf8PathBuf::from("t.py"),
                         lineno: LineNo::new(10),
                         name: "test_f".to_string(),
                         line: "do_thing()".to_string(),
@@ -249,7 +251,7 @@ mod frame_tests {
                 assert_eq!(
                     frames[1],
                     Frame {
-                        file: "t.py".to_string(),
+                        file: Utf8PathBuf::from("t.py"),
                         lineno: LineNo::new(3),
                         name: "do_thing".to_string(),
                         line: "raise ValueError".to_string(),

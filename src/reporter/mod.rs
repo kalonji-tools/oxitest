@@ -339,7 +339,7 @@ mod json_tests {
             &item,
             &TestOutcome::Failed {
                 message: "assert x == 1".to_string(),
-                file: "tests/test_mod.py".to_string(),
+                file: Utf8PathBuf::from("tests/test_mod.py"),
                 lineno: LineNo::new(5),
                 source_line: "assert x == 1".to_string(),
                 left: "0".to_string(),
