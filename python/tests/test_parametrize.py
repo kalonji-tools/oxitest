@@ -870,7 +870,7 @@ def test_dataclass_cases_items_yields_field_repr_pairs():
     dc = _DataclassCases(
         cases={"basic": AddCase(x=1, y=2, expected=3)},
         param_type=AddCase,
-        fixref_fields=[],
+        fixref_fields=(),
     )
     result = list(dc.items())
     assert result == [("basic", [("x", "1"), ("y", "2"), ("expected", "3")])], (
@@ -883,7 +883,7 @@ def test_dataclass_cases_resolve_expanded_mode():
     dc = _DataclassCases(
         cases={"basic": AddCase(x=1, y=2, expected=3)},
         param_type=AddCase,
-        fixref_fields=[],
+        fixref_fields=(),
     )
 
     def test_fn(x: int, y: int, expected: int) -> None:
@@ -900,7 +900,7 @@ def test_dataclass_cases_resolve_compact_mode():
     dc = _DataclassCases(
         cases={"basic": AddCase(x=1, y=2, expected=3)},
         param_type=AddCase,
-        fixref_fields=[],
+        fixref_fields=(),
     )
 
     def test_fn(params: AddCase) -> None:
@@ -1109,7 +1109,7 @@ def test_partial_cases_items_yields_field_repr_pairs():
         cases={"add": p},
         param_type=MathCase,
         provided_fields=frozenset({"x", "y", "expected"}),
-        fixref_fields=[],
+        fixref_fields=(),
     )
 
     result = list(pc.items())

@@ -144,7 +144,7 @@ def test_run_base_always_mode_passing_calls_trace_only():
     result = _run_base(
         lambda: None,
         {},
-        [],
+        (),
         debug_mode="always",
         node_id="t.py::test_ok",
         backend=rec,
@@ -166,7 +166,7 @@ def test_run_base_always_mode_failing_calls_both():
     result = _run_base(
         failing,
         {},
-        [],
+        (),
         debug_mode="always",
         node_id="t.py::test_fail",
         backend=rec,
@@ -188,7 +188,7 @@ def test_run_base_post_mortem_mode_failing_calls_post_mortem_only():
     result = _run_base(
         failing,
         {},
-        [],
+        (),
         debug_mode="post-mortem",
         node_id="t.py::test_crash",
         backend=rec,
@@ -206,7 +206,7 @@ def test_run_base_post_mortem_mode_passing_calls_neither():
     result = _run_base(
         lambda: None,
         {},
-        [],
+        (),
         debug_mode="post-mortem",
         node_id="t.py::test_ok",
         backend=rec,
@@ -223,7 +223,7 @@ def test_run_base_no_debug_mode_calls_neither():
     result = _run_base(
         lambda: None,
         {},
-        [],
+        (),
         debug_mode=None,
         node_id="t.py::test_ok",
         backend=None,
@@ -244,7 +244,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
     _run_base(
         skip_test,
         {},
-        [],
+        (),
         debug_mode="always",
         node_id="t.py::test_skip",
         backend=rec,

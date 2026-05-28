@@ -10,6 +10,7 @@ import functools
 
 __all__ = ["load_plugins", "PluginRegistry"]
 import importlib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -116,7 +117,7 @@ class PluginRegistry:
 
 
 def load_plugins(
-    plugin_modules: list[str],
+    plugin_modules: Sequence[str],
     plugin_configs: dict[str, dict[str, object]],
 ) -> PluginRegistry:
     """Load and validate all declared plugins.
