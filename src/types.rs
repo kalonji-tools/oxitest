@@ -50,6 +50,12 @@ impl AsRef<str> for NodeId {
     }
 }
 
+impl std::borrow::Borrow<str> for NodeId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Duration in milliseconds, used throughout the runner for test timings.
 ///
 /// Wraps `f64` to prevent accidental unit confusion (milliseconds vs seconds).
@@ -475,7 +481,7 @@ pub enum CollectError {
 /// Used in [`TestTiming`] and [`CacheEntry`](crate::cache) to avoid stringly-typed
 /// comparisons. The `#[serde(rename_all = "snake_case")]` attribute ensures round-trip
 /// compatibility with the JSON cache and worker protocol.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutcomeKind {
     Passed,
