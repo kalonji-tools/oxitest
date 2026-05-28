@@ -105,12 +105,14 @@ from oxitest._bridge.parametrize import (
     parametrize as parametrize,
     partial as partial,
 )
+from oxitest._exit_code import ExitCode as ExitCode
 from oxitest.plugin import Plugin as Plugin
 
 __all__ = [
     "AsyncBackend",
     "CaptureResult",
     "DebuggerBackend",
+    "ExitCode",
     "FdCapture",
     "Fixture",
     "FixtureRef",
