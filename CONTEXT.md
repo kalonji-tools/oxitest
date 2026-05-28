@@ -70,7 +70,9 @@
 
 **Parallel Execution** — Tests distributed across worker subprocesses by the scheduler.
 
-**Debug Mode** — An interactive execution mode that runs tests serially, stops on the first failure or error, and transfers control to a debugger for live inspection of the failure state.
+**Debug Mode** — An interactive execution mode that runs tests serially and transfers control to a debugger. `post-mortem` drops into the debugger on the first failure. `always` drops into the debugger before every test and again on failure.
+
+**Debugger Backend** — A plugin-provided implementation of the debugger interface. Receives `trace()` and `post_mortem()` calls from the execution pipeline. The default backend wraps `pdb`.
 
 ## Strict Mode
 
