@@ -38,13 +38,23 @@
 
 **Fixtures (registry)** — An instance-based registry (`fixtures = Fixtures()`) that collects fixture definitions via the `@fixtures.fixture` decorator.
 
-**Namespace** — A `Fixtures()` instance acts as a namespace. Two registries can define fixtures with the same name without conflict.
+**Namespace** — A `Fixtures()` instance acts as a namespace. Two registries can define fixtures with the same name without conflict. Namespace names must not be Python keywords or builtins.
 
 **Scope** — The lifetime of a fixture value: `"each"` (per-test, default) or `"shared"` (per-module).
 
 **Autouse** — A fixture that is automatically injected into every test in its scope without explicit annotation.
 
 **Yield Fixture** — A fixture that uses `yield` to separate setup from teardown. Return type annotated `Yields[T]`.
+
+## Conftest
+
+**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures and helpers scoped to that directory subtree.
+
+**Helpers** — Public callables (functions and classes) in a conftest.py that are not `Fixtures` instances and not `_`-prefixed. Accessed via `from conftest import helpers`.
+
+**Helpers Namespace** — A dot-accessible scope grouping helpers from a single conftest.py. Named after the directory by default, overridable via `__helpers_namespace__`.
+
+**`__helpers_namespace__`** — Module-level dunder in a conftest.py that overrides the auto-derived namespace name for that file's helpers.
 
 ## Marks
 
