@@ -6,8 +6,8 @@
 
 ## Overview
 
-Plugins extend oxitest through five protocols: **Reporter**, **LogBackend**,
-**FixtureProvider**, **Collector**, and **ExecutionWrapper**. Each plugin is a
+Plugins extend oxitest through six protocols: **Reporter**, **LogBackend**,
+**FixtureProvider**, **Collector**, **ExecutionWrapper**, and **DebuggerBackend**. Each plugin is a
 Python package declared in `pyproject.toml` and loaded at startup. Per-plugin
 configuration is passed via `plugin_settings` as a dictionary to the plugin's
 entry point function.
@@ -77,6 +77,8 @@ class Plugin:
     execution_wrappers: list[ExecutionWrapper] = field(default_factory=list)
     collectors: list[Collector] = field(default_factory=list)
     reporters: list[Reporter] = field(default_factory=list)
+    async_backend: AsyncBackend | None = None
+    debugger_backend: DebuggerBackend | None = None
 ```
 
 ### Reporter
@@ -505,6 +507,44 @@ async_backend = "trio"
   found, oxitest raises `BackendNotFoundError`.
 - The built-in `"asyncio"` backend is always available. Plugins must not use the
   name `"asyncio"`.
+
+## Debugger backend
+
+Plugins can provide an alternative debugger backend by implementing the
+`DebuggerBackend` protocol.
+
+```python
+from oxitest.plugin import Plugin
+from oxitest import DebuggerBackend
+
+
+class IpdbBackend:
+    """ipdb debugger backend for oxitest."""
+
+    def trace(self) -> None:
+        import ipdb
+        ipdb.set_trace()
+
+    def post_mortem(self, tb) -> None:
+        import ipdb
+        ipdb.post_mortem(tb)
+
+
+def oxitest_plugin(config=None) -> Plugin:
+    return Plugin(debugger_backend=IpdbBackend())
+```
+
+oxitest owns capture management and banners. The backend only provides the
+debugger interaction — `trace()` is called before test execution in
+`--debug=always` mode, and `post_mortem()` is called on test failure in any
+`--debug` mode.
+
+**Rules:**
+
+- Only one debugger backend can be active. If multiple plugins provide a
+  backend, oxitest raises `ConflictingDebuggerError` at startup.
+- The default backend wraps stdlib `pdb`. It is used when no plugin provides
+  a backend.
 
 ## See also
 
