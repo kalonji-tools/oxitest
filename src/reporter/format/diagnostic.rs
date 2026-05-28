@@ -105,6 +105,66 @@ fn render_label_block(label_items: &[String], use_color: bool) -> String {
     out
 }
 
+/// Render the `├─ params` block showing parametrize key=value pairs.
+///
+/// Returns an empty string when `params` is empty.
+fn render_params_section(params: &[(String, String)], use_color: bool) -> String {
+    if params.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    out.push_str(&format!(
+        "        {}  {}\n",
+        color_dim(BOX_BRANCH, use_color),
+        color_dim("params", use_color)
+    ));
+    let key_width = params.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
+    for (k, v) in params {
+        out.push_str(&format!(
+            "        {}  {:<width$} = {}\n",
+            color_dim(BOX_VERT, use_color),
+            k,
+            v,
+            width = key_width
+        ));
+    }
+    out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+    out
+}
+
+/// Render the `├─ frames` block showing traceback frames.
+///
+/// Returns an empty string when `frames` is empty.
+fn render_frames_section(frames: &[&crate::types::Frame], use_color: bool) -> String {
+    if frames.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    out.push_str(&format!(
+        "        {}  {}\n",
+        color_dim(BOX_BRANCH, use_color),
+        color_dim("frames", use_color)
+    ));
+    for f in frames {
+        out.push_str(&format!(
+            "        {}    {}:{}  {}\n",
+            color_dim(BOX_VERT, use_color),
+            f.file,
+            f.lineno,
+            color_dim(&f.name, use_color)
+        ));
+        if !f.line.is_empty() {
+            out.push_str(&format!(
+                "        {}      {}\n",
+                color_dim(BOX_VERT, use_color),
+                color_bold_white(&f.line, use_color)
+            ));
+        }
+    }
+    out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+    out
+}
+
 /// Render a box-style diagnostic block for a failing test.
 ///
 /// Produces the indented `┌─ ... └─` box shown below each failure, including the
@@ -121,77 +181,21 @@ pub(crate) fn fmt_diagnostic_block(
         return String::new();
     }
 
-    let (file, lineno, source_line, extra, frames) = match outcome {
-        TestOutcome::Failed {
-            message,
-            file,
-            lineno,
-            source_line,
-            left,
-            right,
-            op,
-            frames,
-        } => {
-            let mut label_items: Vec<String> = Vec::new();
-            let mut diff_section = String::new();
-
-            if !op.is_empty() && !left.is_empty() && !right.is_empty() {
-                // Use colorized diff instead of plain left/right labels.
-                let diff = fmt_diff(left, right, op, use_color);
-                if !diff.is_empty() {
-                    diff_section.push_str(&format!(
-                        "        {}  {}\n",
-                        color_dim(BOX_BRANCH, use_color),
-                        color_dim("diff", use_color),
-                    ));
-                    for line in diff.lines() {
-                        diff_section.push_str(&format!(
-                            "        {}  {}\n",
-                            color_dim(BOX_VERT, use_color),
-                            line
-                        ));
-                    }
-                }
-            } else if !op.is_empty() {
-                // op set but right is empty — show left only
-                label_items.push(format!("{:<7}{}", "left:", color_dim(left, use_color)));
-            } else if !left.is_empty() {
-                label_items.push(format!("{:<7}{}", "value:", color_dim(left, use_color)));
-            }
-
-            if !message.is_empty() {
-                label_items.push(format!("{:<7}{}", "why:", color_dim(message, use_color)));
-            }
-
-            let extra = format!(
-                "{}{}",
-                diff_section,
-                render_label_block(&label_items, use_color)
-            );
-            (file.as_str(), *lineno, source_line.as_str(), extra, frames)
-        }
-        TestOutcome::Error {
-            message,
-            file,
-            lineno,
-            source_line,
-            frames,
-        } => {
-            let hint = format!(
-                "        {} {}\n",
-                color_dim(BOX_BOT_LEFT, use_color),
-                color_dim(message, use_color)
-            );
-            (file.as_str(), *lineno, source_line.as_str(), hint, frames)
-        }
-        _ => return String::new(),
+    let parts = match outcome.diagnostic_parts() {
+        Some(p) => p,
+        None => return String::new(),
     };
 
+    // ── Build the outcome-specific "extra" block ────────────────────
+    let is_error = matches!(outcome, TestOutcome::Error { .. });
+    let extra = build_extra_block(parts.message, parts.left, parts.right, parts.op, is_error, use_color);
+
+    // ── Assemble the diagnostic box ─────────────────────────────────
     let mut out = String::new();
 
-    // WHERE: location — file:path uses dim cyan (secondary context)
-    if !file.is_empty() {
-        let loc = format!("{}:{}", file, lineno);
+    // Location
+    if !parts.file.is_empty() {
+        let loc = format!("{}:{}", parts.file, parts.lineno);
         out.push_str(&format!(
             "        {} {}\n",
             color_dim(BOX_TOP_LEFT, use_color),
@@ -200,77 +204,91 @@ pub(crate) fn fmt_diagnostic_block(
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
-    if !item.param_values.is_empty() {
-        out.push_str(&format!(
-            "        {}  {}\n",
-            color_dim(BOX_BRANCH, use_color),
-            color_dim("params", use_color)
-        ));
-        let key_width = item
-            .param_values
-            .iter()
-            .map(|(k, _)| k.len())
-            .max()
-            .unwrap_or(0);
-        for (k, v) in &item.param_values {
-            out.push_str(&format!(
-                "        {}  {:<width$} = {}\n",
-                color_dim(BOX_VERT, use_color),
-                k,
-                v,
-                width = key_width
-            ));
-        }
-        out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
-    }
+    // Params
+    out.push_str(&render_params_section(&item.param_values, use_color));
 
-    let visible_frames = filter_frames(frames, tb);
+    // Frames
+    let visible_frames = filter_frames(parts.frames, tb);
+    out.push_str(&render_frames_section(&visible_frames, use_color));
 
-    if !visible_frames.is_empty() {
-        out.push_str(&format!(
-            "        {}  {}\n",
-            color_dim(BOX_BRANCH, use_color),
-            color_dim("frames", use_color)
-        ));
-        for f in &visible_frames {
-            out.push_str(&format!(
-                "        {}    {}:{}  {}\n",
-                color_dim(BOX_VERT, use_color),
-                f.file,
-                f.lineno,
-                color_dim(&f.name, use_color)
-            ));
-            if !f.line.is_empty() {
-                out.push_str(&format!(
-                    "        {}      {}\n",
-                    color_dim(BOX_VERT, use_color),
-                    color_bold_white(&f.line, use_color)
-                ));
-            }
-        }
-        out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
-    }
-
-    if visible_frames.is_empty() && !file.is_empty() {
-        let lineno_padded = format!("{:>4}", lineno);
+    // Source-line fallback (when no frames visible but location is known)
+    if visible_frames.is_empty() && !parts.file.is_empty() {
+        let lineno_padded = format!("{:>4}", parts.lineno);
         out.push_str(&format!(
             "        {}   {} {} {}\n",
             color_dim(BOX_VERT, use_color),
             color_dim(&lineno_padded, use_color),
             color_dim(BOX_VERT, use_color),
-            color_bold_white(&format!("   {}", source_line), use_color)
+            color_bold_white(&format!("   {}", parts.source_line), use_color)
         ));
         out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
     }
 
+    // Extra (diff/labels/hint)
     out.push_str(&extra);
 
+    // Suggestion
     if let Some(hint) = super::suggestions::suggest_fix(outcome, use_color) {
         out.push_str(&hint);
         out.push('\n');
     }
 
     out
+}
+
+/// Build the outcome-specific extra block (diff section + label items for Failed,
+/// error hint for Error).
+fn build_extra_block(
+    message: &str,
+    left: &str,
+    right: &str,
+    op: &str,
+    is_error: bool,
+    use_color: bool,
+) -> String {
+    // Error outcomes produce a simple hint line with the exception message.
+    if is_error {
+        return format!(
+            "        {} {}\n",
+            color_dim(BOX_BOT_LEFT, use_color),
+            color_dim(message, use_color)
+        );
+    }
+
+    let mut label_items: Vec<String> = Vec::new();
+    let mut diff_section = String::new();
+
+    if !op.is_empty() && !left.is_empty() && !right.is_empty() {
+        let diff = fmt_diff(left, right, op, use_color);
+        if !diff.is_empty() {
+            diff_section.push_str(&format!(
+                "        {}  {}\n",
+                color_dim(BOX_BRANCH, use_color),
+                color_dim("diff", use_color),
+            ));
+            for line in diff.lines() {
+                diff_section.push_str(&format!(
+                    "        {}  {}\n",
+                    color_dim(BOX_VERT, use_color),
+                    line
+                ));
+            }
+        }
+    } else if !op.is_empty() {
+        label_items.push(format!("{:<7}{}", "left:", color_dim(left, use_color)));
+    } else if !left.is_empty() {
+        label_items.push(format!("{:<7}{}", "value:", color_dim(left, use_color)));
+    }
+
+    if !message.is_empty() {
+        label_items.push(format!("{:<7}{}", "why:", color_dim(message, use_color)));
+    }
+
+    format!(
+        "{}{}",
+        diff_section,
+        render_label_block(&label_items, use_color)
+    )
 }
 
 #[cfg(test)]
