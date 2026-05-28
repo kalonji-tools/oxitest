@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::types::{CollectError, ColorCategory, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{
@@ -9,9 +11,9 @@ use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-fn truncate_name(name: &str, max_width: usize) -> String {
+fn truncate_name(name: &str, max_width: usize) -> Cow<'_, str> {
     if name.len() <= max_width {
-        return name.to_string();
+        return Cow::Borrowed(name);
     }
     let cut = max_width.saturating_sub(3);
     let end = name
@@ -20,10 +22,10 @@ fn truncate_name(name: &str, max_width: usize) -> String {
         .take_while(|&i| i <= cut)
         .last()
         .unwrap_or(0);
-    format!("{}...", &name[..end])
+    Cow::Owned(format!("{}...", &name[..end]))
 }
 
-fn fmt_quiet_line(symbol: String, body: String) -> String {
+fn fmt_quiet_line(symbol: &str, body: &str) -> String {
     format!(" {}  {}", symbol, body)
 }
 
@@ -78,7 +80,7 @@ impl TtyReporter {
     }
 
     /// Assemble a single reporter line: ` LABEL  <name padded to name_width>  trailing`
-    fn fmt_line(&self, label: String, name: &str, trailing: &str) -> String {
+    fn fmt_line(&self, label: &str, name: &str, trailing: &str) -> String {
         format!(" {}  {} {}", label, name, trailing)
     }
 
@@ -95,8 +97,8 @@ impl TtyReporter {
             TestOutcome::Passed { no_message_lines } if no_message_lines.is_empty() => {
                 let w = self.opts.name_width;
                 fmt_quiet_line(
-                    color_dim_green("\u{2713}    ", c),
-                    color_dim(
+                    &color_dim_green("\u{2713}    ", c),
+                    &color_dim(
                         &format!(
                             "{:<width$} {:.1}ms",
                             truncate_name(&item.fn_name, w),
@@ -110,8 +112,8 @@ impl TtyReporter {
             TestOutcome::Passed { .. } => {
                 let w = self.opts.name_width;
                 fmt_quiet_line(
-                    color_dim("\u{00B7}    ", c),
-                    color_dim(
+                    &color_dim("\u{00B7}    ", c),
+                    &color_dim(
                         &format!(
                             "{:<width$} {:.1}ms",
                             truncate_name(&item.fn_name, w),
@@ -122,14 +124,17 @@ impl TtyReporter {
                     ),
                 )
             }
-            TestOutcome::Skipped { reason } | TestOutcome::XFailed { reason } => self.fmt_line(
-                outcome_label(outcome, c),
-                &pad_to(
-                    &truncate_name(&item.fn_name, self.opts.name_width),
-                    self.opts.name_width,
-                ),
-                &color_dim(reason, c),
-            ),
+            TestOutcome::Skipped { reason } | TestOutcome::XFailed { reason } => {
+                let label = outcome_label(outcome, c);
+                self.fmt_line(
+                    &label,
+                    &pad_to(
+                        &truncate_name(&item.fn_name, self.opts.name_width),
+                        self.opts.name_width,
+                    ),
+                    &color_dim(reason, c),
+                )
+            }
             TestOutcome::Warned { reason, .. } => {
                 // Extract unique warning types (e.g. "UserWarning" from "UserWarning: hello")
                 let mut types: Vec<&str> = reason
@@ -142,8 +147,9 @@ impl TtyReporter {
                 } else {
                     format!("  {}", color_warn(&types.join(", "), c))
                 };
+                let label = outcome_label(outcome, c);
                 self.fmt_line(
-                    outcome_label(outcome, c),
+                    &label,
                     &pad_to(
                         &truncate_name(&item.fn_name, self.opts.name_width),
                         self.opts.name_width,
@@ -151,14 +157,17 @@ impl TtyReporter {
                     &format!("{}{}", ms, types_str),
                 )
             }
-            _ => self.fmt_line(
-                outcome_label(outcome, c),
-                &pad_to(
-                    &color_cyan(&truncate_name(&item.fn_name, self.opts.name_width), c),
-                    self.opts.name_width,
-                ),
-                &ms,
-            ),
+            _ => {
+                let label = outcome_label(outcome, c);
+                self.fmt_line(
+                    &label,
+                    &pad_to(
+                        &color_cyan(&truncate_name(&item.fn_name, self.opts.name_width), c),
+                        self.opts.name_width,
+                    ),
+                    &ms,
+                )
+            }
         }
     }
 
@@ -205,8 +214,9 @@ impl TtyReporter {
             let ms = color_dim(&format!("{:.1}ms", total_ms_raw), c);
             let passed = group.passed_count();
             let failed = group.results.len() - passed;
+            let label = color_fail("FAIL ", c);
             let line = self.fmt_line(
-                color_fail("FAIL ", c),
+                &label,
                 &pad_to(
                     &truncate_name(&group.fn_name, self.opts.name_width),
                     self.opts.name_width,
@@ -239,8 +249,8 @@ impl TtyReporter {
             let count = group.results.len();
             let w = self.opts.name_width;
             let line = fmt_quiet_line(
-                color_dim_green("\u{2713}    ", c),
-                color_dim(
+                &color_dim_green("\u{2713}    ", c),
+                &color_dim(
                     &format!(
                         "{:<width$} {:.1}ms  ({} case{})",
                         truncate_name(&group.fn_name, w),
@@ -487,7 +497,7 @@ mod tests {
     #[test]
     fn test_fmt_quiet_line_produces_expected_format() {
         // " symbol  body" — one leading space, two spaces between symbol and body
-        let result = fmt_quiet_line("\u{2713}    ".to_string(), "test_foo  42.0ms".to_string());
+        let result = fmt_quiet_line("\u{2713}    ", "test_foo  42.0ms");
         assert_eq!(result, " \u{2713}    \u{0020}\u{0020}test_foo  42.0ms");
     }
 
