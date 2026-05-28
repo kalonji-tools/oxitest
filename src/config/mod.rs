@@ -43,17 +43,31 @@ pub enum WorkerCount {
     Fixed(usize),
 }
 
-fn parse_workers(s: &str) -> Result<WorkerCount, String> {
-    if s.eq_ignore_ascii_case("auto") {
-        return Ok(WorkerCount::Auto);
+impl WorkerCount {
+    /// Validate and construct a `Fixed` worker count.
+    ///
+    /// Returns `Err` if `n` is zero — at least one worker is required.
+    fn try_from_count(n: usize) -> Result<Self, String> {
+        if n == 0 {
+            Err("worker count must be at least 1".into())
+        } else {
+            Ok(WorkerCount::Fixed(n))
+        }
     }
-    let n: usize = s
-        .parse()
-        .map_err(|_| format!("expected \"auto\" or a positive integer, got \"{s}\""))?;
-    if n == 0 {
-        return Err("worker count must be at least 1".into());
+}
+
+impl std::str::FromStr for WorkerCount {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("auto") {
+            return Ok(WorkerCount::Auto);
+        }
+        let n: usize = s
+            .parse()
+            .map_err(|_| format!("expected \"auto\" or a positive integer, got \"{s}\""))?;
+        Self::try_from_count(n)
     }
-    Ok(WorkerCount::Fixed(n))
 }
 
 /// Traceback display style for test failures.
@@ -887,28 +901,28 @@ mod tests {
 
     #[test]
     fn test_parse_workers_auto() {
-        assert_eq!(parse_workers("auto"), Ok(WorkerCount::Auto));
+        assert_eq!("auto".parse::<WorkerCount>(), Ok(WorkerCount::Auto));
     }
 
     #[test]
     fn test_parse_workers_auto_case_insensitive() {
-        assert_eq!(parse_workers("AUTO"), Ok(WorkerCount::Auto));
-        assert_eq!(parse_workers("Auto"), Ok(WorkerCount::Auto));
+        assert_eq!("AUTO".parse::<WorkerCount>(), Ok(WorkerCount::Auto));
+        assert_eq!("Auto".parse::<WorkerCount>(), Ok(WorkerCount::Auto));
     }
 
     #[test]
     fn test_parse_workers_fixed() {
-        assert_eq!(parse_workers("4"), Ok(WorkerCount::Fixed(4)));
+        assert_eq!("4".parse::<WorkerCount>(), Ok(WorkerCount::Fixed(4)));
     }
 
     #[test]
     fn test_parse_workers_zero_rejected() {
-        assert!(parse_workers("0").is_err());
+        assert!("0".parse::<WorkerCount>().is_err());
     }
 
     #[test]
     fn test_parse_workers_garbage_rejected() {
-        assert!(parse_workers("abc").is_err());
+        assert!("abc".parse::<WorkerCount>().is_err());
     }
 
     #[test]
