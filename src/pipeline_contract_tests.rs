@@ -3,6 +3,7 @@ use crate::reporter::test_helpers::make_ctx;
 use crate::test_doubles::doubles::{
     make_test_item, MockPhase, RecordingSession, StubCollector, StubRunner,
 };
+use crate::types::ExitCode;
 
 mod loop_tests {
     use super::*;
@@ -14,7 +15,7 @@ mod loop_tests {
             let mut ctx = make_ctx();
             let pipeline: &[&dyn PipelinePhase] = &[];
             let result = run_pipeline(py, pipeline, &mut ctx);
-            assert_eq!(result, Ok(0));
+            assert_eq!(result, Ok(ExitCode::Success));
         });
     }
 }
@@ -120,7 +121,7 @@ mod orchestration_tests {
 
             let result = run_pipeline(py, pipeline, &mut ctx);
 
-            assert_eq!(result, Ok(0));
+            assert_eq!(result, Ok(ExitCode::Success));
             assert!(!skipped.was_called());
             assert!(active.was_called());
         });
@@ -131,14 +132,18 @@ mod orchestration_tests {
         Python::initialize();
         Python::attach(|py| {
             let first = MockPhase::new("first", true, PhaseOutcome::Continue);
-            let exiter = MockPhase::new("exiter", true, PhaseOutcome::EarlyExit(3));
+            let exiter = MockPhase::new(
+                "exiter",
+                true,
+                PhaseOutcome::EarlyExit(ExitCode::CollectError),
+            );
             let after = MockPhase::new("after", true, PhaseOutcome::Continue);
             let mut ctx = make_ctx();
             let pipeline: &[&dyn PipelinePhase] = &[&first, &exiter, &after];
 
             let result = run_pipeline(py, pipeline, &mut ctx);
 
-            assert_eq!(result, Ok(3));
+            assert_eq!(result, Ok(ExitCode::CollectError));
             assert!(first.was_called());
             assert!(exiter.was_called());
             assert!(!after.was_called());
@@ -149,14 +154,14 @@ mod orchestration_tests {
     fn early_exit_zero_is_success() {
         Python::initialize();
         Python::attach(|py| {
-            let exiter = MockPhase::new("exiter", true, PhaseOutcome::EarlyExit(0));
+            let exiter = MockPhase::new("exiter", true, PhaseOutcome::EarlyExit(ExitCode::Success));
             let after = MockPhase::new("after", true, PhaseOutcome::Continue);
             let mut ctx = make_ctx();
             let pipeline: &[&dyn PipelinePhase] = &[&exiter, &after];
 
             let result = run_pipeline(py, pipeline, &mut ctx);
 
-            assert_eq!(result, Ok(0));
+            assert_eq!(result, Ok(ExitCode::Success));
             assert!(exiter.was_called());
             assert!(!after.was_called());
         });
@@ -167,13 +172,14 @@ mod orchestration_tests {
         Python::initialize();
         Python::attach(|py| {
             let first = MockPhase::new("first", false, PhaseOutcome::Continue);
-            let second = MockPhase::new("second", false, PhaseOutcome::EarlyExit(1));
+            let second =
+                MockPhase::new("second", false, PhaseOutcome::EarlyExit(ExitCode::Failure));
             let mut ctx = make_ctx();
             let pipeline: &[&dyn PipelinePhase] = &[&first, &second];
 
             let result = run_pipeline(py, pipeline, &mut ctx);
 
-            assert_eq!(result, Ok(0));
+            assert_eq!(result, Ok(ExitCode::Success));
             assert!(!first.was_called());
             assert!(!second.was_called());
         });
@@ -265,7 +271,10 @@ mod strict_phase_contract_tests {
             let result = phases::StrictPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
-            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(3)));
+            assert!(matches!(
+                result.unwrap(),
+                PhaseOutcome::EarlyExit(ExitCode::CollectError)
+            ));
         });
     }
 
@@ -340,7 +349,10 @@ mod list_phase_contract_tests {
             let result = phases::ListPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
-            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(0)));
+            assert!(matches!(
+                result.unwrap(),
+                PhaseOutcome::EarlyExit(ExitCode::Success)
+            ));
         });
     }
 
@@ -353,7 +365,10 @@ mod list_phase_contract_tests {
             let result = phases::ListPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
-            assert!(matches!(result.unwrap(), PhaseOutcome::EarlyExit(0)));
+            assert!(matches!(
+                result.unwrap(),
+                PhaseOutcome::EarlyExit(ExitCode::Success)
+            ));
         });
     }
 }
@@ -425,7 +440,10 @@ mod context_threading_tests {
 
             ctx.cli.list = true;
             let list_result = phases::ListPhase.execute(py, &mut ctx);
-            assert!(matches!(list_result, Ok(PhaseOutcome::EarlyExit(0))));
+            assert!(matches!(
+                list_result,
+                Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
+            ));
             assert_eq!(ctx.items.len(), 1);
         });
     }
@@ -454,7 +472,7 @@ mod context_threading_tests {
             ];
             let result = run_pipeline(py, pipeline, &mut ctx);
 
-            assert_eq!(result, Ok(0));
+            assert_eq!(result, Ok(ExitCode::Success));
             assert_eq!(ctx.items.len(), 1);
             assert_eq!(ctx.items[0].node_id.as_ref(), "tests/test_a.py::test_good");
             assert_eq!(ctx.violated_items.len(), 1);

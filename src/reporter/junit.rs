@@ -82,7 +82,7 @@ impl Reporter for JunitReporter {
     ) -> super::ExitVote {
         if let Err(e) = self.write_xml() {
             eprintln!("error: failed to write JUnit XML to {}: {e}", self.path);
-            return super::ExitVote::Code(4);
+            return super::ExitVote::Code(crate::types::ExitCode::UsageError);
         }
         super::ExitVote::Abstain
     }
@@ -412,7 +412,7 @@ mod tests {
         let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
         assert_eq!(
             vote.code(),
-            4,
+            crate::types::ExitCode::UsageError,
             "must return exit code 4 when XML file cannot be written"
         );
     }

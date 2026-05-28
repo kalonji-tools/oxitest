@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use crate::cache::{OutcomeCache, TimingCache};
+use crate::types::ExitCode;
 use crate::{bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict, types};
 use pyo3::prelude::*;
 use traits::{ExecutionHarness, ModuleCollector, ParallelRunner, Session, TestRunner};
@@ -161,7 +162,7 @@ pub(super) struct ExecutionContext<'a> {
 pub(in crate::pipeline) fn early_exit_with_error(
     errors: &[types::CollectError],
     make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
-) -> i32 {
+) -> ExitCode {
     make_rep()
         .finish(errors, false, &reporter::RunStats::new())
         .code()
@@ -266,14 +267,14 @@ pub(super) struct StrictResult {
 }
 
 /// Build violations, handle abort mode, produce enforce-mode suite lines, and
-/// partition items into violated vs. clean.  Returns `Err(3)` when abort mode
-/// detects violations (caller should propagate as `Ok(3)`).
+/// partition items into violated vs. clean.  Returns `Err(ExitCode::CollectError)` when abort mode
+/// detects violations (caller should propagate as early exit).
 pub(super) fn apply_strict(
     cfg: &config::Config,
     items: Vec<Arc<types::TestItem>>,
     raw_violations: Vec<bridge::RawViolation>,
     use_color: bool,
-) -> Result<StrictResult, i32> {
+) -> Result<StrictResult, ExitCode> {
     // Build the full violation list.
     let all_violations: Vec<strict::StrictViolation> = if cfg.strict.is_some() {
         let mut v = strict::check_config(cfg);
@@ -290,7 +291,7 @@ pub(super) fn apply_strict(
             .map(strict::format_violation_line)
             .collect();
         reporter::print_strict_abort(&abort_lines, use_color);
-        return Err(3);
+        return Err(ExitCode::CollectError);
     }
 
     // Enforce mode: build suite-level violation lines and partition items.
@@ -328,14 +329,14 @@ pub(super) fn apply_strict(
 /// Apply keyword, marker, and last-failed filters to the collected items.
 ///
 /// Returns the filtered item list, or `Err(code)` for an invalid `-m` expression
-/// (code 2, surfaced via the error reporter supplied by `make_error_rep`).
+/// (surfaced via the error reporter supplied by `make_error_rep`).
 pub(super) fn apply_filters(
     items: Vec<Arc<types::TestItem>>,
     cli: &config::Cli,
     cfg: &config::Config,
     cache: &impl cache::OutcomeCache,
     make_error_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
-) -> Result<Vec<Arc<types::TestItem>>, i32> {
+) -> Result<Vec<Arc<types::TestItem>>, ExitCode> {
     // Keyword filter (-k).
     let items = filter::filter_items(items, cli.keyword.as_deref());
 

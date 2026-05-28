@@ -10,6 +10,7 @@ use super::helpers;
 use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
 use crate::cache::{ModuleCache, TimingCache};
+use crate::types::ExitCode;
 use crate::{affected, bridge, collector, parallel, reporter, retry, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
@@ -25,7 +26,11 @@ impl PipelinePhase for FileCollectionPhase {
         true
     }
 
-    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(
+        &self,
+        _py: Python<'_>,
+        ctx: &mut PipelineContext,
+    ) -> Result<PhaseOutcome, ExitCode> {
         let (test_files, conftest_files) = collector::collect_files(&ctx.cfg);
         ctx.test_files = test_files;
         ctx.conftest_files = conftest_files;
@@ -46,7 +51,7 @@ impl PipelinePhase for SessionPhase {
         true
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = match bridge::FixtureSession::new(py, &ctx.conftest_files) {
             Ok(s) => s,
             Err(e) => {
@@ -97,7 +102,7 @@ impl PipelinePhase for FixturesPhase {
         ctx.cli.fixtures
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
 
         let verbosity = if ctx.cli.quiet {
@@ -116,10 +121,10 @@ impl PipelinePhase for FixturesPhase {
             }
             Err(e) => {
                 eprintln!("Error listing fixtures: {e}");
-                return Ok(PhaseOutcome::EarlyExit(1));
+                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
             }
         }
-        Ok(PhaseOutcome::EarlyExit(0))
+        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }
 
@@ -139,7 +144,7 @@ impl PipelinePhase for CollectionPhase<'_> {
         true
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
         ctx.cache.invalidate_modules();
         let (items, errors, raw_violations) = helpers::collect_items(
@@ -177,7 +182,11 @@ impl PipelinePhase for StrictPhase {
         ctx.cfg.strict.is_some()
     }
 
-    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(
+        &self,
+        _py: Python<'_>,
+        ctx: &mut PipelineContext,
+    ) -> Result<PhaseOutcome, ExitCode> {
         let raw_violations = std::mem::take(&mut ctx.raw_violations);
         let items = std::mem::take(&mut ctx.items);
         match helpers::apply_strict(&ctx.cfg, items, raw_violations, ctx.use_color) {
@@ -207,7 +216,11 @@ impl PipelinePhase for FilterPhase {
         true
     }
 
-    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(
+        &self,
+        _py: Python<'_>,
+        ctx: &mut PipelineContext,
+    ) -> Result<PhaseOutcome, ExitCode> {
         let items = std::mem::take(&mut ctx.items);
         let make_rep = || {
             reporter::make_reporter(
@@ -242,9 +255,13 @@ impl PipelinePhase for ListPhase {
         ctx.cli.list
     }
 
-    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(
+        &self,
+        _py: Python<'_>,
+        ctx: &mut PipelineContext,
+    ) -> Result<PhaseOutcome, ExitCode> {
         println!("{}", helpers::format_test_list(&ctx.items, ctx.cli.verbose));
-        Ok(PhaseOutcome::EarlyExit(0))
+        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }
 
@@ -266,7 +283,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
         true
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
 
         let total = ctx.violated_items.len() + ctx.items.len();
@@ -357,7 +374,7 @@ impl PipelinePhase for RetryPhase<'_> {
         ctx.cfg.retries > 0 && !ctx.interrupted
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
         let rep = ctx
             .reporter
@@ -404,7 +421,11 @@ impl PipelinePhase for FinalizePhase {
         true
     }
 
-    fn execute(&self, _py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(
+        &self,
+        _py: Python<'_>,
+        ctx: &mut PipelineContext,
+    ) -> Result<PhaseOutcome, ExitCode> {
         helpers::finalize(
             &mut ctx.cache,
             &ctx.timings,
@@ -432,14 +453,14 @@ impl PipelinePhase for AffectedPhase {
         ctx.cfg.affected.is_some()
     }
 
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let base_ref = ctx.cfg.affected.as_ref().expect("checked in should_run");
         match affected::filter_affected_test_files(py, &ctx.test_files, &ctx.cfg.rootdir, base_ref)
         {
             Ok(Some(files)) => {
                 if files.is_empty() {
                     println!("no changes detected — nothing to test");
-                    return Ok(PhaseOutcome::EarlyExit(0));
+                    return Ok(PhaseOutcome::EarlyExit(ExitCode::Success));
                 }
                 tracing::info!(
                     affected = files.len(),
