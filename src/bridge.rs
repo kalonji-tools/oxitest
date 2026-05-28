@@ -263,7 +263,7 @@ pub(crate) fn run_test_with_session_obj(
     try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug_mode)
         .unwrap_or_else(|e| TestOutcome::Error {
             message: format!("{} — {}", item.node_id, e),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -336,7 +336,7 @@ fn try_run_test_with_session_obj(
         .frames
         .into_iter()
         .map(|f| Frame {
-            file: f.file,
+            file: Utf8PathBuf::from(f.file),
             lineno: LineNo::new(f.lineno),
             name: f.name,
             line: f.line,

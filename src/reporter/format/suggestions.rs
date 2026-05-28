@@ -47,12 +47,13 @@ pub(crate) fn suggest_fix(outcome: &TestOutcome, use_color: bool) -> Option<Stri
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
+    use camino::Utf8PathBuf;
 
     #[test]
     fn async_mismatch_suggestion() {
         let outcome = TestOutcome::Error {
             message: "TypeError: object X can't be used in 'await' expression".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(5),
             source_line: "await fx".to_string(),
             frames: vec![],
@@ -65,7 +66,7 @@ mod snapshot_tests {
     fn no_suggestion_for_normal_error() {
         let outcome = TestOutcome::Error {
             message: "ValueError: bad input".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(3),
             source_line: "raise ValueError".to_string(),
             frames: vec![],
@@ -78,12 +79,13 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use camino::Utf8PathBuf;
 
     #[test]
     fn suggest_async_mismatch() {
         let outcome = TestOutcome::Error {
             message: "TypeError: object X can't be used in 'await' expression".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(5),
             source_line: "await fx".to_string(),
             frames: vec![],
@@ -97,7 +99,7 @@ mod tests {
     fn suggest_shared_mutation() {
         let outcome = TestOutcome::Error {
             message: "SharedFixtureMutationError: cannot mutate".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(5),
             source_line: "fx.val = 1".to_string(),
             frames: vec![],
@@ -111,7 +113,7 @@ mod tests {
     fn suggest_fixture_not_found() {
         let outcome = TestOutcome::Error {
             message: "fixture 'db' not found".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(5),
             source_line: "def test(db):".to_string(),
             frames: vec![],
@@ -125,7 +127,7 @@ mod tests {
     fn no_suggestion_for_generic_failure() {
         let outcome = TestOutcome::Failed {
             message: "assert 1 == 2".to_string(),
-            file: "test.py".to_string(),
+            file: Utf8PathBuf::from("test.py"),
             lineno: LineNo::new(5),
             source_line: "assert 1 == 2".to_string(),
             left: "1".to_string(),

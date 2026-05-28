@@ -188,7 +188,7 @@ pub struct TestItem {
 /// Single traceback frame from a test failure or error.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
-    pub file: String,
+    pub file: Utf8PathBuf,
     pub lineno: LineNo,
     pub name: String,
     pub line: String,
@@ -206,7 +206,7 @@ pub enum TestOutcome {
     },
     Failed {
         message: String,
-        file: String,
+        file: Utf8PathBuf,
         lineno: LineNo,
         source_line: String,
         left: String,
@@ -216,7 +216,7 @@ pub enum TestOutcome {
     },
     Error {
         message: String,
-        file: String,
+        file: Utf8PathBuf,
         lineno: LineNo,
         source_line: String,
         frames: Vec<Frame>,
@@ -545,7 +545,7 @@ impl TestOutcome {
             },
             "failed" => TestOutcome::Failed {
                 message: r.message.to_owned(),
-                file: r.file.to_owned(),
+                file: Utf8PathBuf::from(r.file),
                 lineno: r.lineno,
                 source_line: r.source_line.to_owned(),
                 left: r.left.to_owned(),
@@ -565,7 +565,7 @@ impl TestOutcome {
             },
             _ => TestOutcome::Error {
                 message: r.message.to_owned(),
-                file: r.file.to_owned(),
+                file: Utf8PathBuf::from(r.file),
                 lineno: r.lineno,
                 source_line: r.source_line.to_owned(),
                 frames: r.frames.to_vec(),
@@ -583,7 +583,7 @@ mod failure_accumulator_tests {
         let mut acc = FailureAccumulator::new(0);
         let outcome = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -600,7 +600,7 @@ mod failure_accumulator_tests {
         let mut acc = FailureAccumulator::new(2);
         let fail = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -637,7 +637,7 @@ mod tests {
     fn test_outcome_failed_carries_location() {
         let o = TestOutcome::Failed {
             message: "msg".to_string(),
-            file: "test_foo.py".to_string(),
+            file: Utf8PathBuf::from("test_foo.py"),
             lineno: LineNo::new(7),
             source_line: "assert x == 1".to_string(),
             left: "0".to_string(),
@@ -725,7 +725,7 @@ mod tests {
     fn test_is_hard_failure_failed() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -740,7 +740,7 @@ mod tests {
     fn test_is_hard_failure_error() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -886,7 +886,7 @@ mod tests {
     fn test_dot_char_failed() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -901,7 +901,7 @@ mod tests {
     fn test_dot_char_error() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -988,7 +988,7 @@ mod tests {
     fn test_label_failed() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1003,7 +1003,7 @@ mod tests {
     fn test_label_error() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -1077,7 +1077,7 @@ mod tests {
         assert_eq!(
             TestOutcome::Failed {
                 message: String::new(),
-                file: String::new(),
+                file: Utf8PathBuf::new(),
                 lineno: LineNo::ZERO,
                 source_line: String::new(),
                 left: String::new(),
@@ -1091,7 +1091,7 @@ mod tests {
         assert_eq!(
             TestOutcome::Error {
                 message: String::new(),
-                file: String::new(),
+                file: Utf8PathBuf::new(),
                 lineno: LineNo::ZERO,
                 source_line: String::new(),
                 frames: vec![],
@@ -1325,7 +1325,7 @@ mod tests {
             },
             TestOutcome::Failed {
                 message: String::new(),
-                file: String::new(),
+                file: Utf8PathBuf::new(),
                 lineno: LineNo::ZERO,
                 source_line: String::new(),
                 left: String::new(),
@@ -1335,7 +1335,7 @@ mod tests {
             },
             TestOutcome::Error {
                 message: String::new(),
-                file: String::new(),
+                file: Utf8PathBuf::new(),
                 lineno: LineNo::ZERO,
                 source_line: String::new(),
                 frames: vec![],
@@ -1384,7 +1384,7 @@ mod message_tests {
     fn failed_returns_message() {
         let o = TestOutcome::Failed {
             message: "assertion failed".to_string(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1399,7 +1399,7 @@ mod message_tests {
     fn failed_empty_message_returns_none() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1414,7 +1414,7 @@ mod message_tests {
     fn error_returns_message() {
         let o = TestOutcome::Error {
             message: "ImportError".to_string(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -1426,7 +1426,7 @@ mod message_tests {
     fn error_empty_message_returns_none() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -1531,7 +1531,7 @@ mod ctrf_status_tests {
     fn failed_is_failed() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1546,7 +1546,7 @@ mod ctrf_status_tests {
     fn error_is_failed() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -1622,7 +1622,7 @@ mod color_category_tests {
     fn failed_is_fail() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1637,7 +1637,7 @@ mod color_category_tests {
     fn error_is_error() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],
@@ -1737,7 +1737,7 @@ mod junit_category_tests {
     fn failed_is_failed() {
         let o = TestOutcome::Failed {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             left: String::new(),
@@ -1752,7 +1752,7 @@ mod junit_category_tests {
     fn error_is_error() {
         let o = TestOutcome::Error {
             message: String::new(),
-            file: String::new(),
+            file: Utf8PathBuf::new(),
             lineno: LineNo::ZERO,
             source_line: String::new(),
             frames: vec![],

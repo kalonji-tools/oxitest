@@ -8,6 +8,8 @@
 //! Violations are either warnings (enforce mode) or hard errors (abort mode)
 //! depending on the [`StrictMode`](crate::config::StrictMode) setting.
 
+use camino::Utf8PathBuf;
+
 use crate::bridge::{RawViolation, ViolationKind};
 use crate::config::Config;
 use crate::types::{LineNo, NodeId, TestOutcome};
@@ -237,7 +239,7 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
     };
     TestOutcome::Error {
         message,
-        file: String::new(),
+        file: Utf8PathBuf::new(),
         lineno: LineNo::ZERO,
         source_line: String::new(),
         frames: vec![],

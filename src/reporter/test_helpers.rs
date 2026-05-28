@@ -80,7 +80,7 @@ pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<
 pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> TestOutcome {
     TestOutcome::Failed {
         message: msg.to_string(),
-        file: file.to_string(),
+        file: Utf8PathBuf::from(file),
         lineno: LineNo::new(lineno),
         source_line: src.to_string(),
         left: String::new(),
@@ -93,7 +93,7 @@ pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> Te
 pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> TestOutcome {
     TestOutcome::Error {
         message: msg.to_string(),
-        file: file.to_string(),
+        file: Utf8PathBuf::from(file),
         lineno: LineNo::new(lineno),
         source_line: src.to_string(),
         frames: vec![],
