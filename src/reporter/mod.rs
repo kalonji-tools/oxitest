@@ -8,7 +8,7 @@
 
 use std::io::{self, Write};
 
-use crate::types::{CollectError, DurationMs};
+use crate::types::{CollectError, DurationMs, ExitCode};
 
 mod ci;
 mod colors;
@@ -96,14 +96,14 @@ pub enum ExitVote {
     /// Reporter does not influence exit code.
     Abstain,
     /// Reporter votes for this exit code.
-    Code(i32),
+    Code(ExitCode),
 }
 
 impl ExitVote {
-    /// Extract the exit code, treating `Abstain` as 0.
-    pub fn code(self) -> i32 {
+    /// Extract the exit code, treating `Abstain` as `ExitCode::Success`.
+    pub fn code(self) -> ExitCode {
         match self {
-            ExitVote::Abstain => 0,
+            ExitVote::Abstain => ExitCode::Success,
             ExitVote::Code(c) => c,
         }
     }
@@ -219,7 +219,7 @@ impl Reporter for CompositeReporter {
                 ExitVote::Abstain => None,
             })
             .max()
-            .map_or(ExitVote::Code(0), ExitVote::Code)
+            .map_or(ExitVote::Code(ExitCode::Success), ExitVote::Code)
     }
 
     fn record_teardown_warning(&mut self, context: &str, error: &str) {
@@ -427,7 +427,7 @@ pub(crate) fn print_summary_section(
     opts: &ReporterOpts,
     collect_errors: &[CollectError],
     interrupted: bool,
-) -> i32 {
+) -> ExitCode {
     let tip_block = fmt_tip_block(&stats.tip_lines, opts.show_tips, opts.use_color);
     let warn_block = fmt_warning_block(&stats.warning_msgs, opts.show_warnings, opts.use_color);
     let summary = fmt_summary(stats, collect_errors.len(), opts.use_color);
@@ -558,7 +558,7 @@ mod tests {
         };
         let stats = RunStats::new();
         let vote = standard_finish(&mut s, &stats, &[], false);
-        assert_eq!(vote.code(), 0);
+        assert_eq!(vote.code(), ExitCode::Success);
     }
 
     #[test]
@@ -726,15 +726,15 @@ mod tests {
 
         let mut composite = CompositeReporter::new(
             vec![
-                Box::new(StubReporter(ExitVote::Code(0))),
-                Box::new(StubReporter(ExitVote::Code(1))),
-                Box::new(StubReporter(ExitVote::Code(0))),
+                Box::new(StubReporter(ExitVote::Code(ExitCode::Success))),
+                Box::new(StubReporter(ExitVote::Code(ExitCode::Failure))),
+                Box::new(StubReporter(ExitVote::Code(ExitCode::Success))),
             ],
             0,
         );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
-            1,
+            ExitCode::Failure,
             "CompositeReporter::finish should return the max exit code across all reporters"
         );
     }
@@ -744,7 +744,7 @@ mod tests {
         let mut composite = CompositeReporter::new(vec![], 0);
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
-            0,
+            ExitCode::Success,
             "CompositeReporter with no reporters should return exit code 0"
         );
     }
@@ -768,7 +768,7 @@ mod tests {
 
         let mut composite = CompositeReporter::new(
             vec![
-                Box::new(StubReporter(ExitVote::Code(1))),
+                Box::new(StubReporter(ExitVote::Code(ExitCode::Failure))),
                 Box::new(StubReporter(ExitVote::Abstain)),
                 Box::new(StubReporter(ExitVote::Abstain)),
             ],
@@ -776,7 +776,7 @@ mod tests {
         );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
-            1,
+            ExitCode::Failure,
             "CompositeReporter::finish should ignore Abstain votes"
         );
     }
@@ -807,7 +807,7 @@ mod tests {
         );
         assert_eq!(
             composite.finish(&[], false, &RunStats::new()).code(),
-            0,
+            ExitCode::Success,
             "CompositeReporter with all Abstain should return exit code 0"
         );
     }
@@ -818,14 +818,20 @@ mod tests {
     fn test_make_reporter_returns_single_reporter_when_tty_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, true, None, None, vec![]);
-        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
+        assert_eq!(
+            reporter.finish(&[], false, &RunStats::new()).code(),
+            ExitCode::Success
+        );
     }
 
     #[test]
     fn test_make_reporter_returns_single_reporter_when_ci_and_no_extras() {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = make_reporter(opts, false, None, None, vec![]);
-        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
+        assert_eq!(
+            reporter.finish(&[], false, &RunStats::new()).code(),
+            ExitCode::Success
+        );
     }
 
     #[test]
@@ -834,7 +840,10 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
         let mut reporter = make_reporter(opts, false, Some(path), None, vec![]);
-        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
+        assert_eq!(
+            reporter.finish(&[], false, &RunStats::new()).code(),
+            ExitCode::Success
+        );
     }
 
     #[test]
@@ -875,7 +884,10 @@ mod tests {
             calls.load(Ordering::Relaxed) >= 2,
             "plugin reporter should receive test_started and test_completed events"
         );
-        assert_eq!(reporter.finish(&[], false, &RunStats::new()).code(), 0);
+        assert_eq!(
+            reporter.finish(&[], false, &RunStats::new()).code(),
+            ExitCode::Success
+        );
     }
 
     #[test]

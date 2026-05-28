@@ -129,6 +129,46 @@ impl std::fmt::Display for LineNo {
     }
 }
 
+/// Process exit code with named variants for each documented exit status.
+///
+/// - `Success` (0) — all tests passed (or were skipped / xfailed).
+/// - `Failure` (1) — at least one hard failure.
+/// - `Interrupted` (2) — the run was interrupted (e.g. Ctrl-C).
+/// - `CollectError` (3) — one or more collection errors.
+/// - `UsageError` (4) — invalid CLI arguments or conflicting flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ExitCode {
+    Success,
+    Failure,
+    Interrupted,
+    CollectError,
+    UsageError,
+}
+
+impl ExitCode {
+    pub fn as_i32(self) -> i32 {
+        match self {
+            ExitCode::Success => 0,
+            ExitCode::Failure => 1,
+            ExitCode::Interrupted => 2,
+            ExitCode::CollectError => 3,
+            ExitCode::UsageError => 4,
+        }
+    }
+}
+
+impl From<ExitCode> for i32 {
+    fn from(code: ExitCode) -> i32 {
+        code.as_i32()
+    }
+}
+
+impl std::fmt::Display for ExitCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_i32())
+    }
+}
+
 /// A collected test with all metadata needed for execution and reporting.
 ///
 /// Produced by `bridge::collect_module` after Python imports the test file.

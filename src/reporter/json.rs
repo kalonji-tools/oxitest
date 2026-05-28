@@ -107,7 +107,7 @@ impl Reporter for JsonReporter {
 
         if let Err(e) = self.write_json(&output) {
             eprintln!("error: failed to write JSON report to {}: {e}", self.path);
-            return super::ExitVote::Code(4);
+            return super::ExitVote::Code(crate::types::ExitCode::UsageError);
         }
         super::ExitVote::Abstain
     }
@@ -262,7 +262,7 @@ mod tests {
         let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
         assert_eq!(
             vote.code(),
-            4,
+            crate::types::ExitCode::UsageError,
             "must return exit code 4 when JSON file cannot be written"
         );
     }
