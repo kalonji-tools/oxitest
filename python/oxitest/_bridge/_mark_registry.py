@@ -83,9 +83,7 @@ class _SkipHandler(MarkHandler):
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         """Short-circuit test execution with a `skipped` result."""
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
-        return MarkEvalResult(
-            short_circuit=TestResult(status=StatusKind.SKIPPED, message=str(reason))
-        )
+        return MarkEvalResult(short_circuit=TestResult.skipped(str(reason)))
 
 
 class _XFailHandler(MarkHandler):
@@ -102,10 +100,10 @@ class _XFailHandler(MarkHandler):
             if result.status is StatusKind.SKIPPED:
                 return result
             if result.status in (StatusKind.PASSED, StatusKind.WARNED):
-                return TestResult(status=StatusKind.XPASSED, strict=bool(strict))
+                return TestResult.xpassed(strict=bool(strict))
             if raises is not None and result.exc_type != raises.__name__:  # ty: ignore[unresolved-attribute]
                 return result
-            return TestResult(status=StatusKind.XFAILED, message=str(reason))
+            return TestResult.xfailed(str(reason))
 
         return MarkEvalResult(wrapper=xfail_wrapper)
 

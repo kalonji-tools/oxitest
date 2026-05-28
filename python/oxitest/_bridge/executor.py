@@ -72,7 +72,7 @@ from oxitest._bridge._middleware import (
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge._timeout import OxitestTimeoutError
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.result import StatusKind, TestResult, _error_result
+from oxitest._bridge.result import TestResult, _error_result
 
 
 class DebugMode(StrEnum):
@@ -196,12 +196,8 @@ def _run_base(
             fn(**all_kwargs)
         has_warnings, warning_msg = _check_warnings(w, all_kwargs)
         if has_warnings:
-            return TestResult(
-                status=StatusKind.WARNED,
-                message=warning_msg,
-                no_message_lines=no_message_lines,
-            )
-        return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
+            return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
+        return TestResult.passed(no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
