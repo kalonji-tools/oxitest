@@ -7,6 +7,7 @@ __all__ = [
     "ExecutionPlan",
     "Middleware",
     "TimeoutMiddleware",
+    "_is_debuggable",
     "build_pipeline",
 ]
 
@@ -131,6 +132,17 @@ def _check_warnings(
     if not relevant:
         return False, ""
     return True, "\n".join(relevant)
+
+
+def _is_debuggable(exc: BaseException) -> bool:
+    """Return True if the exception should trigger the post-mortem debugger.
+
+    Skips, xfails, keyboard interrupts, and system exits are not debuggable.
+    """
+    exc_type = type(exc).__name__
+    if exc_type in ("Skipped", "SkipTest"):
+        return False
+    return isinstance(exc, (AssertionError, Exception))
 
 
 def _dispatch_exception(exc: BaseException) -> TestResult | None:

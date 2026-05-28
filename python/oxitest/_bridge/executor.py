@@ -8,7 +8,7 @@ worker subprocess.
 
 from __future__ import annotations
 
-__all__ = ["run_test"]
+__all__ = ["_print_debug_banner", "_suspend_capture", "run_test"]
 
 import contextlib
 import functools
@@ -55,6 +55,7 @@ from oxitest._bridge._middleware import (
     _check_warnings,
     _compose,
     _dispatch_exception,
+    _is_debuggable,
     build_pipeline,
 )
 from oxitest._bridge._test_meta import TestMeta
@@ -68,10 +69,35 @@ def _exec_unique_name(module_path: str) -> str:
     return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"  # noqa: S324
 
 
+def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
+    """Restore real stdout/stderr by suspending any active capture fixtures."""
+    from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
+
+    for v in all_kwargs.values():
+        if isinstance(v, (_StdCapture, _FdCapture)):
+            v._restore()
+
+
+def _print_debug_banner(node_id: str, exc: BaseException, *, file: Any = None) -> None:
+    """Print a banner before dropping into the debugger."""
+    import sys as _sys
+
+    out = file if file is not None else _sys.__stderr__
+    width = max(60, len(node_id) + 12)
+    header = f"── DEBUG {node_id} "
+    header += "─" * (width - len(header))
+    print(header, file=out)
+    print(f"{type(exc).__name__}: {exc}", file=out)
+    print("Entering debugger (type 'h' for help, 'q' to quit)", file=out)
+
+
 def _run_base(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
     no_message_lines: list[int],
+    *,
+    debug_mode: bool = False,
+    node_id: str = "",
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
     try:
@@ -89,6 +115,16 @@ def _run_base(
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
+        if debug_mode and _is_debuggable(exc):
+            _suspend_capture(all_kwargs)
+            _print_debug_banner(node_id, exc)
+            import bdb
+            import pdb
+
+            try:
+                pdb.post_mortem(exc.__traceback__)
+            except bdb.BdbQuit:
+                raise
         result = _dispatch_exception(exc)
         if result is not None:
             return result
@@ -178,6 +214,9 @@ def _build_execution_chain(
     default_timeout: int | None,
     shared_session: SharedAsyncSession | None = None,
     session: _SessionProtocol | None = None,
+    *,
+    debug_mode: bool = False,
+    node_id: str = "",
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
     plan = ExecutionPlan(
@@ -201,7 +240,13 @@ def _build_execution_chain(
     ]
 
     def _base() -> TestResult:
-        return _run_base(fn, all_kwargs, plan.no_message_lines)
+        return _run_base(
+            fn,
+            all_kwargs,
+            plan.no_message_lines,
+            debug_mode=debug_mode,
+            node_id=node_id,
+        )
 
     execute = build_pipeline(middlewares, plan, _base)
 
@@ -219,6 +264,7 @@ def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
+    debug_mode: bool = False,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
@@ -229,6 +275,8 @@ def run_test(
             a null session is used, meaning no user fixtures are available.
         default_timeout: Per-test timeout in seconds inherited from config.
             Overridden by a ``@mark.timeout`` decorator on the test.
+        debug_mode: When ``True``, drop into an interactive debugger on
+            test failure (post-mortem mode).
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
@@ -288,6 +336,8 @@ def run_test(
             default_timeout,
             shared_session=_shared_session if _used_shared else None,
             session=effective_session,
+            debug_mode=debug_mode,
+            node_id=meta.node_id,
         )
         return execute()
     finally:
