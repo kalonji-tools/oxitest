@@ -11,6 +11,7 @@ pub(crate) mod traits;
 
 use std::sync::Arc;
 
+use crate::types::ExitCode;
 use crate::{bridge, cache, config, reporter, strict, types};
 use clap::Parser;
 use helpers::{env_string, resolve_color};
@@ -23,7 +24,7 @@ pub(crate) enum PhaseOutcome {
     /// The phase completed normally; continue to the next phase.
     Continue,
     /// The phase requests an early exit with the given exit code.
-    EarlyExit(i32),
+    EarlyExit(ExitCode),
 }
 
 /// A discrete stage of the test pipeline.
@@ -46,7 +47,7 @@ pub(crate) trait PipelinePhase {
     /// Returns [`PhaseOutcome::Continue`] to proceed, or
     /// [`PhaseOutcome::EarlyExit(code)`] to stop the pipeline and return
     /// `code` as the process exit code.
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, i32>;
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode>;
 }
 
 /// Shared mutable state that flows through every pipeline phase.
@@ -129,7 +130,7 @@ pub(crate) struct SetupContext {
     pub(crate) base: reporter::ReporterOptsBuilder,
 }
 
-fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, i32>> {
+fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, ExitCode>> {
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
@@ -139,19 +140,19 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         Err(e) => {
             // Clap formats this for the user; subscriber may not be initialised yet.
             eprintln!("{}", e);
-            return Ok(Err(4));
+            return Ok(Err(ExitCode::UsageError));
         }
     };
 
     if let Err(msg) = cli.validate() {
         eprintln!("error: {msg}");
-        return Ok(Err(4));
+        return Ok(Err(ExitCode::UsageError));
     }
 
     // Early-exit flags: handled before any filesystem setup.
     if cli.capture_environment {
         println!("{}", env_string(py));
-        return Ok(Err(0));
+        return Ok(Err(ExitCode::Success));
     }
 
     let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
@@ -186,7 +187,7 @@ pub(crate) fn run_pipeline(
     py: Python<'_>,
     pipeline: &[&dyn PipelinePhase],
     ctx: &mut PipelineContext,
-) -> Result<i32, i32> {
+) -> Result<ExitCode, ExitCode> {
     for phase in pipeline {
         if phase.should_run(ctx) {
             match phase.execute(py, ctx)? {
@@ -195,12 +196,12 @@ pub(crate) fn run_pipeline(
             }
         }
     }
-    Ok(0)
+    Ok(ExitCode::Success)
 }
 
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let setup_ctx = match setup(py, &args)? {
-        Err(code) => return Ok(code),
+        Err(code) => return Ok(code.as_i32()),
         Ok(ctx) => *ctx,
     };
 
@@ -232,7 +233,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     ];
 
     match run_pipeline(py, pipeline, &mut ctx) {
-        Ok(code) | Err(code) => Ok(code),
+        Ok(code) | Err(code) => Ok(code.as_i32()),
     }
 }
 

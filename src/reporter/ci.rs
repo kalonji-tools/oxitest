@@ -217,7 +217,10 @@ mod tests {
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
-        assert_eq!(reporter.finish(&[], false, &stats).code(), 0);
+        assert_eq!(
+            reporter.finish(&[], false, &stats).code(),
+            crate::types::ExitCode::Success
+        );
     }
 
     #[test]
@@ -233,7 +236,10 @@ mod tests {
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
-        assert_eq!(reporter.finish(&[], false, &stats).code(), 1);
+        assert_eq!(
+            reporter.finish(&[], false, &stats).code(),
+            crate::types::ExitCode::Failure
+        );
     }
 
     #[test]
@@ -249,7 +255,10 @@ mod tests {
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
-        assert_eq!(reporter.finish(&[], true, &stats).code(), 2);
+        assert_eq!(
+            reporter.finish(&[], true, &stats).code(),
+            crate::types::ExitCode::Interrupted
+        );
     }
 
     #[test]
@@ -303,7 +312,7 @@ mod tests {
             reporter
                 .finish(&errors, false, &crate::reporter::RunStats::new())
                 .code(),
-            3
+            crate::types::ExitCode::CollectError
         );
     }
 

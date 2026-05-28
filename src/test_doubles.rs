@@ -20,7 +20,7 @@ pub(crate) mod doubles {
     use crate::pipeline::traits::{ModuleCollector, ParallelRunner, Session, TestRunner};
     use crate::pipeline::{PhaseOutcome, PipelineContext, PipelinePhase};
     use crate::reporter::Reporter;
-    use crate::types::{CollectError, TestItem, TestOutcome, TestTiming};
+    use crate::types::{CollectError, ExitCode, TestItem, TestOutcome, TestTiming};
 
     // ─── StubCollector ───────────────────────────────────────────────────────
 
@@ -185,7 +185,7 @@ pub(crate) mod doubles {
     pub(crate) struct MockPhase {
         pub name: &'static str,
         pub should_run: bool,
-        pub exit_code: Option<i32>,
+        pub exit_code: Option<ExitCode>,
         pub called: Cell<bool>,
     }
 
@@ -221,7 +221,7 @@ pub(crate) mod doubles {
             &self,
             _py: Python<'_>,
             _ctx: &mut PipelineContext,
-        ) -> Result<PhaseOutcome, i32> {
+        ) -> Result<PhaseOutcome, ExitCode> {
             self.called.set(true);
             match self.exit_code {
                 None => Ok(PhaseOutcome::Continue),

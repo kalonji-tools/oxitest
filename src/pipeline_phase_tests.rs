@@ -12,10 +12,14 @@ mod phase_outcome_tests {
 
     #[test]
     fn early_exit_carries_code() {
-        let outcome = PhaseOutcome::EarlyExit(3);
-        assert!(matches!(outcome, PhaseOutcome::EarlyExit(3)));
+        use crate::types::ExitCode;
+        let outcome = PhaseOutcome::EarlyExit(ExitCode::CollectError);
+        assert!(matches!(
+            outcome,
+            PhaseOutcome::EarlyExit(ExitCode::CollectError)
+        ));
         if let PhaseOutcome::EarlyExit(code) = outcome {
-            assert_eq!(code, 3);
+            assert_eq!(code, ExitCode::CollectError);
         }
     }
 }
