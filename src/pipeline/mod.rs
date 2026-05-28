@@ -158,8 +158,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let cfg = config::Config::load(&rootdir).merge_cli(&cli);
     let cache = cache::TestCache::load(&rootdir);
 
-    let is_tty = std::io::stdout().is_terminal();
-    let use_color = resolve_color(cfg.color, is_tty);
+    // Debug mode disables the TTY progress bar — pdb needs a clean terminal.
+    let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
+    let use_color = resolve_color(cfg.color, is_tty || cfg.debug.is_some());
     let resolved_tb = cli.tb.clone().unwrap_or(cfg.tb.clone());
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color)
         .tb(resolved_tb)

@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod cli;
-pub use cli::Cli;
+pub use cli::{Cli, DebugMode};
 
 mod pyproject;
 use pyproject::{OxitestConfig, PyprojectToml};
@@ -104,6 +104,7 @@ pub struct Config {
     pub registered_markers: Vec<String>,
     pub timeout_secs: Option<u64>,
     pub serial: bool,
+    pub debug: Option<DebugMode>,
     pub workers: Option<WorkerCount>,
     pub cache_max_age: u32,
     pub min_parallel_tests: usize,
@@ -146,6 +147,7 @@ impl Default for Config {
             registered_markers: vec![],
             timeout_secs: None,
             serial: false,
+            debug: None,
             workers: None,
             cache_max_age: 50,
             min_parallel_tests: 100,
@@ -363,6 +365,19 @@ impl Config {
         apply_if_some!(self, workers, cli.workers, wrap);
         apply_if_some!(self, failed, cli.failed, wrap);
         apply_if_some!(self, timeout_secs, cli.timeout, wrap);
+
+        // ── Debug mode ──────────────────────────────────────────────────
+        if let Some(ref mode) = cli.debug {
+            self.debug = Some(mode.clone());
+            self.serial = true;
+            self.maxfail = 1;
+            // Timeout would kill the debugger session.
+            self.timeout_secs = None;
+            // Only imply tb=long if user didn't pass explicit --tb.
+            if cli.tb.is_none() {
+                self.tb = TbStyle::Long;
+            }
+        }
 
         // ── Output ───────────────────────────────────────────────────────
         if cli.verbose {
@@ -1580,5 +1595,62 @@ async_backend = "trio"
         let (names, no_desc) = parse_marker_descriptions(&raw);
         assert_eq!(names, vec!["slow"]);
         assert!(no_desc.is_empty());
+    }
+
+    #[test]
+    fn test_merge_cli_debug_implies_serial() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli {
+            debug: Some(DebugMode::PostMortem),
+            ..base_cli()
+        };
+        let merged = config.merge_cli(&cli);
+        assert!(merged.serial, "debug should imply serial");
+        assert_eq!(merged.maxfail, 1, "debug should imply maxfail=1");
+        assert_eq!(merged.tb, TbStyle::Long, "debug should imply tb=long");
+        assert!(merged.debug.is_some(), "debug should be stored on config");
+        assert_eq!(
+            merged.timeout_secs, None,
+            "debug should clear timeout (would kill debugger)"
+        );
+    }
+
+    #[test]
+    fn test_merge_cli_debug_clears_pyproject_timeout() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ntimeout = 30\n",
+        )
+        .unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        assert_eq!(config.timeout_secs, Some(30), "precondition: timeout set");
+        let cli = Cli {
+            debug: Some(DebugMode::PostMortem),
+            ..base_cli()
+        };
+        let merged = config.merge_cli(&cli);
+        assert_eq!(
+            merged.timeout_secs, None,
+            "debug should clear pyproject timeout"
+        );
+    }
+
+    #[test]
+    fn test_merge_cli_debug_does_not_override_explicit_tb() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli {
+            debug: Some(DebugMode::PostMortem),
+            tb: Some(TbStyle::No),
+            ..base_cli()
+        };
+        let merged = config.merge_cli(&cli);
+        assert_eq!(
+            merged.tb,
+            TbStyle::No,
+            "explicit --tb should not be overridden"
+        );
     }
 }

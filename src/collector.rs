@@ -128,6 +128,7 @@ mod tests {
             registered_markers: vec![],
             timeout_secs: None,
             serial: false,
+            debug: None,
             workers: None,
             cache_max_age: 50,
             min_parallel_tests: 100,

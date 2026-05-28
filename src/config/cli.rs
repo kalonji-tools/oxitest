@@ -5,6 +5,12 @@ use super::{
     parse_workers, ColorMode, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum DebugMode {
+    /// Drop into pdb on first test failure
+    PostMortem,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "oxitest", about = "A fast Python test runner")]
 pub struct Cli {
@@ -125,6 +131,19 @@ pub struct Cli {
     /// Seconds to wait between retries
     #[arg(long, value_name = "SECS")]
     pub retries_delay: Option<u64>,
+
+    /// Drop into an interactive debugger on test failure.
+    /// Implies --serial and --maxfail 1. Use `--debug=MODE` with `=`.
+    /// Bare `--debug` defaults to post-mortem mode.
+    #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        default_missing_value = "post-mortem",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub debug: Option<DebugMode>,
 }
 
 impl Cli {
@@ -156,6 +175,56 @@ impl Cli {
 
         if self.retries_delay.is_some() && self.retries.is_none() {
             return Err("--retries-delay has no effect without --retries.".to_string());
+        }
+
+        if let Some(ref _mode) = self.debug {
+            if self.workers.is_some() {
+                return Err(
+                    "--debug implies serial mode. It cannot be combined with --workers."
+                        .to_string(),
+                );
+            }
+            if self.serial {
+                return Err(
+                    "--debug already implies serial mode. Passing --serial is redundant."
+                        .to_string(),
+                );
+            }
+            if self.exitfirst {
+                return Err(
+                    "--debug already implies --maxfail 1. Passing -x is redundant.".to_string(),
+                );
+            }
+            if self.maxfail.is_some() {
+                return Err(
+                    "--debug already implies --maxfail 1. It cannot be combined with --maxfail."
+                        .to_string(),
+                );
+            }
+            if self.retries.is_some() {
+                return Err(
+                    "--debug is for interactive debugging. It cannot be combined with --retries."
+                        .to_string(),
+                );
+            }
+            if self.retries_delay.is_some() {
+                return Err(
+                    "--debug is for interactive debugging. It cannot be combined with --retries-delay."
+                        .to_string(),
+                );
+            }
+            if self.schedule.is_some() {
+                return Err(
+                    "--debug implies serial mode. --schedule has no effect without parallel workers."
+                        .to_string(),
+                );
+            }
+            if self.timeout.is_some() {
+                return Err(
+                    "--debug is for interactive debugging. --timeout would kill the debugger session."
+                        .to_string(),
+                );
+            }
         }
 
         Ok(())
@@ -280,6 +349,147 @@ mod validate_tests {
     #[test]
     fn test_retries_alone_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "--retries", "3"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_debug_bare_defaults_to_post_mortem() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug"]).unwrap();
+        assert_eq!(cli.debug, Some(DebugMode::PostMortem));
+    }
+
+    #[test]
+    fn test_debug_explicit_post_mortem() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug=post-mortem"]).unwrap();
+        assert_eq!(cli.debug, Some(DebugMode::PostMortem));
+    }
+
+    #[test]
+    fn test_debug_absent_is_none() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert_eq!(cli.debug, None);
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_workers() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--workers", "4"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--workers"),
+            "error should mention --workers: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_serial() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--serial"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--serial"),
+            "error should mention --serial: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_exitfirst() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "-x"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(err.contains("-x"), "error should mention -x: {err}");
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_maxfail() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--maxfail", "5"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--maxfail"),
+            "error should mention --maxfail: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_retries() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--retries", "3"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--retries"),
+            "error should mention --retries: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_retries_delay() {
+        let cli = Cli::try_parse_from([
+            "oxitest",
+            "--debug",
+            "--retries",
+            "3",
+            "--retries-delay",
+            "5",
+        ])
+        .unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--retries"),
+            "error should mention --retries: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_schedule() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--schedule", "random"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--schedule"),
+            "error should mention --schedule: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_conflicts_with_timeout() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug", "--timeout", "30"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(
+            err.contains("--debug"),
+            "error should mention --debug: {err}"
+        );
+        assert!(
+            err.contains("--timeout"),
+            "error should mention --timeout: {err}"
+        );
+    }
+
+    #[test]
+    fn test_debug_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--debug"]).unwrap();
         assert!(cli.validate().is_ok());
     }
 }
