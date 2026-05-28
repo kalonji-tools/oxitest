@@ -14,6 +14,23 @@ impl DebugMode {
             DebugMode::Always => "always",
         }
     }
+
+    /// Apply debug-mode side effects to a config.
+    ///
+    /// Debug modes force serial execution, disable timeouts, and may override
+    /// traceback style and maxfail. `cli_tb` should be `Some` only if the user
+    /// passed an explicit `--tb` flag (prevents overriding their choice).
+    pub fn apply_to(&self, cfg: &mut Config, cli_tb: Option<&TbStyle>) {
+        cfg.debug = Some(self.clone());
+        cfg.serial = true;
+        cfg.timeout_secs = None;
+        if cli_tb.is_none() {
+            cfg.tb = TbStyle::Long;
+        }
+        if matches!(self, DebugMode::PostMortem) {
+            cfg.maxfail = 1;
+        }
+    }
 }
 
 /// Number of parallel worker subprocesses to use.
@@ -395,18 +412,7 @@ impl Config {
 
         // ── Debug mode ──────────────────────────────────────────────────
         if let Some(ref mode) = cli.debug {
-            self.debug = Some(mode.clone());
-            self.serial = true;
-            // Timeout would kill the debugger session.
-            self.timeout_secs = None;
-            // Only imply tb=long if user didn't pass explicit --tb.
-            if cli.tb.is_none() {
-                self.tb = TbStyle::Long;
-            }
-            // Only post-mortem implies maxfail=1 (always lets user control stopping).
-            if matches!(mode, DebugMode::PostMortem) {
-                self.maxfail = 1;
-            }
+            mode.apply_to(&mut self, cli.tb.as_ref());
         }
 
         // ── Output ───────────────────────────────────────────────────────
