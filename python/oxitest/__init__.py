@@ -53,6 +53,10 @@ warns          — Assert a block emits a warning:
                  `with oxitest.warns(UserWarning, match="pattern"):`.
 importorskip   — Skip test if module not installed:
                  `oxitest.importorskip("loguru")`.
+approx          — Approximate floating-point comparison:
+                 `assert 0.1 + 0.2 == oxi.approx(0.3)`.
+                 Supports scalars, sequences, mappings, and nested combos.
+                 Parameters: rel (1e-6), abs (1e-12), nan_ok (False).
 
 Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture and
       TempDirFactory already carry the injection marker — annotate parameters
@@ -64,6 +68,7 @@ from __future__ import annotations
 import sys
 from typing import Any as _Any, NoReturn as _NoReturn
 
+from oxitest._bridge._approx import ApproxBase as ApproxBase, approx as approx
 from oxitest._bridge._async_backend import (
     AsyncBackend as AsyncBackend,
     SharedAsyncSession as SharedAsyncSession,
@@ -109,6 +114,8 @@ from oxitest._exit_code import ExitCode as ExitCode
 from oxitest.plugin import Plugin as Plugin
 
 __all__ = [
+    "ApproxBase",
+    "approx",
     "AsyncBackend",
     "CaptureResult",
     "DebuggerBackend",
