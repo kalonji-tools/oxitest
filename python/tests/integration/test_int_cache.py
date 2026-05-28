@@ -26,7 +26,7 @@ def test_failed_only_runs_subset(tmp: TempDir):
     (tmp / "test_mixed.py").write_text(
         "def test_pass(): assert True\ndef test_fail(): assert True\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--failed=only")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--failed=only")
     assert rc == 0, f"--failed=only after fix should exit 0, got {rc}"
     assert "1 passed" in out, f"--failed=only should run exactly 1 test, got: {out!r}"
 
@@ -43,6 +43,6 @@ def test_failed_first_runs_all(tmp: TempDir):
     (tmp / "test_ff.py").write_text(
         "def test_ok(): assert True\ndef test_bad(): assert True\n"
     )
-    out, rc = helpers.common.run_oxitest(tmp, "--failed=first")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--failed=first")
     assert rc == 0, f"--failed=first after fix should exit 0, got {rc}"
     assert "2 passed" in out, f"--failed=first should run both tests, got: {out!r}"

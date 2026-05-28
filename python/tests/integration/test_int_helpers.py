@@ -16,7 +16,7 @@ def test_helpers_accessible_from_test_file(tmp: TempDir):
         "def test_greet():\n"
         "    assert helpers.myproject.greet() == 'hello'\n",
     )
-    stdout, rc = helpers.common.run_oxitest(project)
+    stdout, _, rc = helpers.common.run_oxitest(project)
     assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
     assert "1 passed" in stdout, f"expected '1 passed' in output:\n{stdout}"
 
@@ -40,7 +40,7 @@ def test_nested_conftest_helpers_ancestor_only(tmp: TempDir):
         "    assert helpers.sub.sub_fn() == 'sub'\n",
     )
     # Run from root so oxitest walks the full conftest chain (root -> sub)
-    stdout, rc = helpers.common.run_oxitest(root)
+    stdout, _, rc = helpers.common.run_oxitest(root)
     assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
     assert "2 passed" in stdout, f"expected '2 passed' in output:\n{stdout}"
 
@@ -61,7 +61,7 @@ def test_helpers_namespace_override(tmp: TempDir):
         "def test_override():\n"
         "    assert helpers.integ.helper() == 42\n",
     )
-    stdout, rc = helpers.common.run_oxitest(sub)
+    stdout, _, rc = helpers.common.run_oxitest(sub)
     assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
     assert "1 passed" in stdout, f"expected '1 passed' in output:\n{stdout}"
 
@@ -75,7 +75,7 @@ def test_helpers_only_conftest_no_warning(tmp: TempDir):
         root,
         "def test_pass():\n    assert True\n",
     )
-    stdout, rc = helpers.common.run_oxitest(root)
+    stdout, _, rc = helpers.common.run_oxitest(root)
     assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
     assert "no Fixtures instance" not in stdout, (
         f"unexpected warning in output:\n{stdout}"
