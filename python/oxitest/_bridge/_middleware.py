@@ -99,7 +99,7 @@ def _handle_runtime_exception(exc: BaseException) -> TestResult | None:
     """Map a non-assertion BaseException to a TestResult, or None to re-raise."""
     exc_type = type(exc).__name__
     if exc_type in ("Skipped", "SkipTest"):
-        return TestResult(status=StatusKind.SKIPPED, message=str(exc))
+        return TestResult.skipped(str(exc))
     if isinstance(exc, Exception):
         file, lineno, source_line = _get_location(exc)
         return TestResult(
@@ -191,12 +191,8 @@ async def _run_base_async(
             await fn(**all_kwargs)
         has_warnings, warning_msg = _check_warnings(w, all_kwargs)
         if has_warnings:
-            return TestResult(
-                status=StatusKind.WARNED,
-                message=warning_msg,
-                no_message_lines=no_message_lines,
-            )
-        return TestResult(status=StatusKind.PASSED, no_message_lines=no_message_lines)
+            return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
+        return TestResult.passed(no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:

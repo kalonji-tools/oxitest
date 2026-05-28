@@ -128,6 +128,45 @@ class TestResult:
         output.update({k: v for k, v in optional.items() if v})
         return output
 
+    @classmethod
+    def passed(cls, *, no_message_lines: list[int] | None = None) -> TestResult:
+        """Factory for a passing test result."""
+        return cls(
+            status=StatusKind.PASSED,
+            no_message_lines=no_message_lines or [],
+        )
+
+    @classmethod
+    def warned(
+        cls, message: str, *, no_message_lines: list[int] | None = None
+    ) -> TestResult:
+        """Factory for a test that passed with warnings."""
+        return cls(
+            status=StatusKind.WARNED,
+            message=message,
+            no_message_lines=no_message_lines or [],
+        )
+
+    @classmethod
+    def skipped(cls, message: str) -> TestResult:
+        """Factory for a skipped test result."""
+        return cls(status=StatusKind.SKIPPED, message=message)
+
+    @classmethod
+    def xfailed(cls, message: str = "") -> TestResult:
+        """Factory for an expected failure result."""
+        return cls(status=StatusKind.XFAILED, message=message)
+
+    @classmethod
+    def xpassed(cls, *, strict: bool = True) -> TestResult:
+        """Factory for an unexpected pass result."""
+        return cls(status=StatusKind.XPASSED, strict=strict)
+
+    @classmethod
+    def timeout(cls, message: str) -> TestResult:
+        """Factory for a timed-out test result."""
+        return cls(status=StatusKind.TIMEOUT, message=message)
+
 
 def _error_result(
     msg: str, file: str = "", lineno: int = 0, source_line: str = ""
