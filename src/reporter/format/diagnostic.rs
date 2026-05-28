@@ -188,7 +188,14 @@ pub(crate) fn fmt_diagnostic_block(
 
     // ── Build the outcome-specific "extra" block ────────────────────
     let is_error = matches!(outcome, TestOutcome::Error { .. });
-    let extra = build_extra_block(parts.message, parts.left, parts.right, parts.op, is_error, use_color);
+    let extra = build_extra_block(
+        parts.message,
+        parts.left,
+        parts.right,
+        parts.op,
+        is_error,
+        use_color,
+    );
 
     // ── Assemble the diagnostic box ─────────────────────────────────
     let mut out = String::new();
