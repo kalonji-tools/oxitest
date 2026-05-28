@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from helpers import RecordingDebugger
+from oxitest._bridge._errors import ConflictingDebuggerError
 from oxitest._bridge._raises import raises
 from oxitest._bridge.plugin_loader import PluginLoadError, PluginRegistry, load_plugins
 from oxitest.plugin import Plugin
@@ -130,3 +135,45 @@ def test_registry_aggregates_across_plugins():
     finally:
         _remove_fake_module("plug1")
         _remove_fake_module("plug2")
+
+
+def test_conflicting_debugger_backends_raises():
+    """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
+    mod_a = types.ModuleType("dbg_plugin_a")
+    mod_a.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        debugger_backend=RecordingDebugger()
+    )
+    mod_b = types.ModuleType("dbg_plugin_b")
+    mod_b.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        debugger_backend=RecordingDebugger()
+    )
+    _install_fake_module("dbg_plugin_a", mod_a)
+    _install_fake_module("dbg_plugin_b", mod_b)
+    try:
+        with raises(ConflictingDebuggerError) as exc_info:
+            load_plugins(["dbg_plugin_a", "dbg_plugin_b"], {})
+        assert "dbg_plugin_a" in str(exc_info.value), (
+            f"error should name first plugin: {exc_info.value}"
+        )
+        assert "dbg_plugin_b" in str(exc_info.value), (
+            f"error should name second plugin: {exc_info.value}"
+        )
+    finally:
+        _remove_fake_module("dbg_plugin_a")
+        _remove_fake_module("dbg_plugin_b")
+
+
+def test_single_debugger_backend_is_valid():
+    """One plugin providing a debugger backend should not raise."""
+    mod = types.ModuleType("solo_dbg")
+    mod.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        debugger_backend=RecordingDebugger()
+    )
+    _install_fake_module("solo_dbg", mod)
+    try:
+        registry = load_plugins(["solo_dbg"], {})
+        assert len(registry.debugger_backends) == 1, (
+            f"expected 1 debugger backend, got {len(registry.debugger_backends)}"
+        )
+    finally:
+        _remove_fake_module("solo_dbg")
