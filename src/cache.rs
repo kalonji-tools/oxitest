@@ -373,9 +373,11 @@ impl TimingCache for TestCache {
     /// Called after collection to prune stale entries (e.g. deleted or renamed tests).
     /// Sets `dirty = true` if any entries were removed, triggering a cache save.
     fn invalidate(&mut self, items: &[Arc<TestItem>]) {
-        let live: HashSet<String> = items.iter().map(|item| item.node_id.to_string()).collect();
+        let live: HashSet<&str> = items.iter().map(|item| item.node_id.as_ref()).collect();
         let before = self.inner.timings.len();
-        self.inner.timings.retain(|key, _| live.contains(key));
+        self.inner
+            .timings
+            .retain(|key, _| live.contains(key.as_str()));
         if self.inner.timings.len() != before {
             self.dirty = true;
         }
