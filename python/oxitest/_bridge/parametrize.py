@@ -28,6 +28,33 @@ from oxitest._bridge.fixtures import _fixture_inner_type
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 
+def _extract_fixture_ref_names(
+    target_type: type,
+    field_names: Iterable[str],
+) -> list[str]:
+    """Return field names annotated with ``FixtureRef[T]``.
+
+    Inspects type hints on *target_type* for the ``_FixtureRefMarker``
+    sentinel inside ``Annotated`` metadata.  Only *field_names* are
+    checked — pass ``hints.keys()`` to scan all fields.
+    """
+    from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
+
+    mod = sys.modules.get(target_type.__module__)
+    globalns = dict(vars(mod)) if mod else {}
+    globalns.setdefault("FixtureRef", FixtureRef)
+    field_hints = get_type_hints(target_type, globalns=globalns, include_extras=True)
+    return [
+        name
+        for name in field_names
+        if name in field_hints
+        and get_origin(field_hints[name]) is Annotated
+        and any(
+            isinstance(m, _FixtureRefMarker) for m in get_args(field_hints[name])[1:]
+        )
+    ]
+
+
 @dataclass(frozen=True)
 class _Partial:
     """A partial set of fields for a dataclass, used in parametrize composition."""
@@ -51,8 +78,6 @@ def partial(target_type: type, **fields: Any) -> _Partial:
         @oxi.parametrize(add=oxi.partial(Case, x=1, y=2))
         def test_math(db: Fixture[str], x: int, y: int) -> None: ...
     """
-    from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
-
     if not dataclasses.is_dataclass(target_type):
         raise TypeError(f"partial: {target_type!r} must be a dataclass")
     if not fields:
@@ -67,21 +92,7 @@ def partial(target_type: type, **fields: Any) -> _Partial:
             f"valid fields: {sorted(valid_field_names)!r}"
         )
 
-    # Detect FixtureRef fields among provided fields
-    mod = sys.modules.get(target_type.__module__)
-    globalns = dict(vars(mod)) if mod else {}
-    globalns.setdefault("FixtureRef", FixtureRef)
-    field_hints = get_type_hints(target_type, globalns=globalns, include_extras=True)
-    fixref_fields = [
-        field_name
-        for field_name in fields
-        if field_name in field_hints
-        and get_origin(field_hints[field_name]) is Annotated
-        and any(
-            isinstance(m, _FixtureRefMarker)
-            for m in get_args(field_hints[field_name])[1:]
-        )
-    ]
+    fixref_fields = _extract_fixture_ref_names(target_type, fields)
     for field_name in fixref_fields:
         value = fields[field_name]
         if not callable(value):
@@ -311,8 +322,6 @@ def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> _DictCas
 
 def _build_dataclass_cases(cases: dict[str, Any]) -> _DataclassCases:
     """Validate and build a _DataclassCases object."""
-    from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
-
     if not cases:
         raise TypeError("parametrize requires at least one case")
     first = next(iter(cases.values()))
@@ -330,16 +339,9 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> _DataclassCases:
                 f"parametrize case '{case_id}' must be an instance"
                 f" of '{values_type.__name__}'"
             )
-    mod = sys.modules.get(values_type.__module__)
-    globalns = dict(vars(mod)) if mod else {}
-    globalns.setdefault("FixtureRef", FixtureRef)
-    field_hints = get_type_hints(values_type, globalns=globalns, include_extras=True)
-    fixref_fields = [
-        field_name
-        for field_name, hint in field_hints.items()
-        if get_origin(hint) is Annotated
-        and any(isinstance(m, _FixtureRefMarker) for m in get_args(hint)[1:])
-    ]
+    fixref_fields = _extract_fixture_ref_names(
+        values_type, [f.name for f in dataclasses.fields(values_type)]
+    )
     for case_id, case in cases.items():
         for field_name in fixref_fields:
             value = getattr(case, field_name)
