@@ -404,7 +404,7 @@ impl OutcomeCache for TestCache {
         let mut changed = false;
         for t in timings {
             if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
-                entry.last_outcome = Some(t.outcome.clone());
+                entry.last_outcome = Some(t.outcome);
                 if t.outcome == OutcomeKind::Flaky {
                     entry.flaky_count = entry.flaky_count.saturating_add(1);
                 }
