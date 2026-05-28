@@ -10,7 +10,7 @@ __all__ = [
     "PROTOCOL_VERSION",
 ]
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -69,13 +69,13 @@ class TestResult:
     file: str = ""
     lineno: int = 0
     source_line: str = ""
-    no_message_lines: list[int] = field(default_factory=list[int])
+    no_message_lines: tuple[int, ...] = ()
     left: str = ""
     right: str = ""
     op: str = ""
     strict: bool = True
     exc_type: str = ""
-    frames: list[Frame] = field(default_factory=list)
+    frames: tuple[Frame, ...] = ()
 
     @property
     def failure_repr(self) -> str | None:
@@ -129,22 +129,22 @@ class TestResult:
         return output
 
     @classmethod
-    def passed(cls, *, no_message_lines: list[int] | None = None) -> TestResult:
+    def passed(cls, *, no_message_lines: tuple[int, ...] | None = None) -> TestResult:
         """Factory for a passing test result."""
         return cls(
             status=StatusKind.PASSED,
-            no_message_lines=no_message_lines or [],
+            no_message_lines=no_message_lines or (),
         )
 
     @classmethod
     def warned(
-        cls, message: str, *, no_message_lines: list[int] | None = None
+        cls, message: str, *, no_message_lines: tuple[int, ...] | None = None
     ) -> TestResult:
         """Factory for a test that passed with warnings."""
         return cls(
             status=StatusKind.WARNED,
             message=message,
-            no_message_lines=no_message_lines or [],
+            no_message_lines=no_message_lines or (),
         )
 
     @classmethod
@@ -189,9 +189,9 @@ class CollectedItem:
 
     fn_name: str
     lineno: int
-    markers: list[str]
+    markers: tuple[str, ...]
     param_id: str | None
-    param_values: list[tuple[str, str]]
+    param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
 
 

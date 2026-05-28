@@ -59,15 +59,15 @@ def _get_location(exc: BaseException) -> tuple[str, int, str]:
     return (file, lineno, source_line)
 
 
-def _get_frames(exc: BaseException) -> list[Frame]:
+def _get_frames(exc: BaseException) -> tuple[Frame, ...]:
     """Extract structured traceback frames from an exception."""
     tb = exc.__traceback__
     if tb is None:
-        return []
-    return [
+        return ()
+    return tuple(
         Frame(file=f.filename, lineno=f.lineno or 0, name=f.name, line=f.line or "")
         for f in traceback.extract_tb(tb)
-    ]
+    )
 
 
 def _handle_assertion_error(exc: AssertionError) -> TestResult:
@@ -182,7 +182,7 @@ def _find_bare_asserts(fn: object) -> list[int]:
 async def _run_base_async(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
-    no_message_lines: list[int],
+    no_message_lines: tuple[int, ...],
 ) -> TestResult:
     """Run an async test function and map exceptions to TestResult."""
     try:
@@ -210,7 +210,7 @@ class ExecutionPlan:
     fn_name: str
     kwargs: dict[str, Any]
     marks: list[MarkInfo]
-    no_message_lines: list[int]
+    no_message_lines: tuple[int, ...]
     is_async: bool
     default_timeout: int | None
     backend: Any  # AsyncBackend | None
@@ -268,8 +268,8 @@ class BareAssertMiddleware:
             self._module, "_oxitest_bare_asserts", {}
         )
         _simple_fn_name = plan.fn_name.split("::")[-1]
-        plan.no_message_lines = _bare_map.get(
-            _simple_fn_name, _find_bare_asserts(plan.fn)
+        plan.no_message_lines = tuple(
+            _bare_map.get(_simple_fn_name, _find_bare_asserts(plan.fn))
         )
         return next_fn
 

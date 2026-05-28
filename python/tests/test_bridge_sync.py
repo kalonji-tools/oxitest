@@ -23,13 +23,13 @@ def test_test_result_fields_match_rust_test_result():
         file="",
         lineno=0,
         source_line="",
-        no_message_lines=[],
+        no_message_lines=(),
         left="",
         right="",
         op="",
         strict=True,
         exc_type="",
-        frames=[],
+        frames=(),
     )
     expected_fields = {
         "status",
@@ -61,9 +61,9 @@ def test_collected_item_fields_match_rust_collected_item():
     item = CollectedItem(
         fn_name="test_foo",
         lineno=1,
-        markers=[],
+        markers=(),
         param_id=None,
-        param_values=[],
+        param_values=(),
         is_async=False,
     )
     expected_fields = {
