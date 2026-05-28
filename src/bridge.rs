@@ -258,17 +258,16 @@ pub(crate) fn run_test_with_session_obj(
     item: &TestItem,
     session_obj: Bound<'_, PyAny>,
     default_timeout: Option<u64>,
-    debug: bool,
+    debug_mode: Option<&str>,
 ) -> TestOutcome {
-    try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug).unwrap_or_else(
-        |e| TestOutcome::Error {
+    try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug_mode)
+        .unwrap_or_else(|e| TestOutcome::Error {
             message: format!("{} — {}", item.node_id, e),
             file: String::new(),
             lineno: 0,
             source_line: String::new(),
             frames: vec![],
-        },
-    )
+        })
 }
 
 /// Call Python's `import_graph.resolve_affected()` to find test files
@@ -294,7 +293,7 @@ fn try_run_test_with_session_obj(
     item: &TestItem,
     session_obj: Bound<'_, PyAny>,
     default_timeout: Option<u64>,
-    debug: bool,
+    debug_mode: Option<&str>,
 ) -> PyResult<TestOutcome> {
     let executor = py.import("oxitest._bridge.executor")?;
 
@@ -324,7 +323,10 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let debug_obj = pyo3::types::PyBool::new(py, debug);
+    let debug_obj: Bound<'_, PyAny> = match debug_mode {
+        Some(mode) => mode.into_pyobject(py)?.into_any(),
+        None => py.None().into_bound(py),
+    };
 
     let r: TestResult = executor
         .call_method1("run_test", (meta_obj, session_obj, &timeout_obj, debug_obj))?

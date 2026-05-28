@@ -178,7 +178,7 @@ pub(super) struct SerialHarness<'a> {
     pub timeout_secs: Option<u64>,
     pub timeout_multiplier: Option<f64>,
     pub maxfail: usize,
-    pub debug: bool,
+    pub debug_mode: Option<&'a str>,
 }
 
 impl super::traits::ExecutionHarness for SerialHarness<'_> {
@@ -199,7 +199,7 @@ impl super::traits::ExecutionHarness for SerialHarness<'_> {
                     resolve_timeout(self.cache, item, self.timeout_secs, self.timeout_multiplier);
                 let (outcome, duration_ms) =
                     self.runner
-                        .run_timed(self.py, item, self.session, timeout, self.debug);
+                        .run_timed(self.py, item, self.session, timeout, self.debug_mode);
                 timings.push(types::TestTiming {
                     node_id: item.node_id.clone(),
                     duration_ms,
@@ -489,7 +489,7 @@ pub(super) fn execute(
             timeout_secs: ctx.cfg.timeout_secs,
             timeout_multiplier: ctx.cfg.timeout_multiplier,
             maxfail: ctx.cfg.maxfail,
-            debug: ctx.cfg.debug.is_some(),
+            debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
         };
         harness.execute_groups(groups, rep)
     }

@@ -54,7 +54,7 @@ mod double_tests {
             let item = make_test_item("tests/test_foo.py::test_unknown");
             let session = RecordingSession::new(py);
 
-            let outcome = runner.run_test(py, &item, &session, None, false);
+            let outcome = runner.run_test(py, &item, &session, None, None);
 
             assert!(
                 matches!(outcome, crate::types::TestOutcome::Passed { .. }),
