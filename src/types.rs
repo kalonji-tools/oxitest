@@ -368,12 +368,75 @@ impl TestOutcome {
             Self::Skipped { .. } | Self::XFailed { .. } => "skipped",
         }
     }
+
+    /// Extract structured diagnostic parts for rendering.
+    ///
+    /// Returns `Some` for `Failed` and `Error` variants (which carry location and
+    /// traceback data), `None` for all other variants.
+    pub fn diagnostic_parts(&self) -> Option<DiagnosticParts<'_>> {
+        match self {
+            TestOutcome::Failed {
+                message,
+                file,
+                lineno,
+                source_line,
+                left,
+                right,
+                op,
+                frames,
+            } => Some(DiagnosticParts {
+                file: file.as_str(),
+                lineno: *lineno,
+                source_line,
+                message,
+                frames,
+                left,
+                right,
+                op,
+            }),
+            TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+            } => Some(DiagnosticParts {
+                file: file.as_str(),
+                lineno: *lineno,
+                source_line,
+                message,
+                frames,
+                left: "",
+                right: "",
+                op: "",
+            }),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for TestOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+/// Structured diagnostic data extracted from a `Failed` or `Error` outcome.
+///
+/// Used by the diagnostic renderer to separate data extraction from formatting.
+/// Fields borrow from the parent `TestOutcome` — the lifetime ties them together.
+pub struct DiagnosticParts<'a> {
+    pub file: &'a str,
+    pub lineno: LineNo,
+    pub source_line: &'a str,
+    pub message: &'a str,
+    pub frames: &'a [Frame],
+    /// Left operand of the comparison (empty for Error outcomes).
+    pub left: &'a str,
+    /// Right operand of the comparison (empty for Error outcomes).
+    pub right: &'a str,
+    /// Comparison operator (empty for Error outcomes or non-comparison assertions).
+    pub op: &'a str,
 }
 
 /// Classification of a [`TestOutcome`] for color/style selection in TTY output.
@@ -1600,6 +1663,88 @@ mod ctrf_status_tests {
             message: String::new(),
         };
         assert_eq!(o.ctrf_status(), "passed");
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_parts_tests {
+    use super::*;
+
+    #[test]
+    fn failed_returns_some_with_all_fields() {
+        let outcome = TestOutcome::Failed {
+            message: "expected 4".to_string(),
+            file: Utf8PathBuf::from("tests/test_foo.py"),
+            lineno: LineNo::new(8),
+            source_line: "assert add(1, 2) == 4".to_string(),
+            left: "3".to_string(),
+            right: "4".to_string(),
+            op: "==".to_string(),
+            frames: vec![],
+        };
+        let parts = outcome
+            .diagnostic_parts()
+            .expect("Failed should return Some");
+        assert_eq!(parts.file, "tests/test_foo.py");
+        assert_eq!(parts.lineno, LineNo::new(8));
+        assert_eq!(parts.source_line, "assert add(1, 2) == 4");
+        assert_eq!(parts.message, "expected 4");
+        assert_eq!(parts.left, "3");
+        assert_eq!(parts.right, "4");
+        assert_eq!(parts.op, "==");
+        assert!(parts.frames.is_empty());
+    }
+
+    #[test]
+    fn error_returns_some_with_empty_comparison_fields() {
+        let outcome = TestOutcome::Error {
+            message: "ValueError: bad".to_string(),
+            file: Utf8PathBuf::from("tests/test_foo.py"),
+            lineno: LineNo::new(22),
+            source_line: "result = divide(10, 0)".to_string(),
+            frames: vec![],
+        };
+        let parts = outcome
+            .diagnostic_parts()
+            .expect("Error should return Some");
+        assert_eq!(parts.file, "tests/test_foo.py");
+        assert_eq!(parts.lineno, LineNo::new(22));
+        assert_eq!(parts.message, "ValueError: bad");
+        assert!(parts.left.is_empty());
+        assert!(parts.right.is_empty());
+        assert!(parts.op.is_empty());
+    }
+
+    #[test]
+    fn passed_returns_none() {
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        assert!(outcome.diagnostic_parts().is_none());
+    }
+
+    #[test]
+    fn skipped_returns_none() {
+        let outcome = TestOutcome::Skipped {
+            reason: "not ready".to_string(),
+        };
+        assert!(outcome.diagnostic_parts().is_none());
+    }
+
+    #[test]
+    fn timeout_returns_none() {
+        let outcome = TestOutcome::Timeout {
+            message: "exceeded 5s".to_string(),
+        };
+        assert!(outcome.diagnostic_parts().is_none());
+    }
+
+    #[test]
+    fn flaky_returns_none() {
+        let outcome = TestOutcome::Flaky {
+            message: "flaky".to_string(),
+        };
+        assert!(outcome.diagnostic_parts().is_none());
     }
 }
 
