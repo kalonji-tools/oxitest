@@ -99,6 +99,23 @@ pub enum ColorMode {
     Never,
 }
 
+impl ColorMode {
+    /// Resolve the color mode to a boolean given whether stdout is a TTY.
+    ///
+    /// `Always` forces color on (including overriding the `console` crate global).
+    /// `Never` disables color. `Auto` defers to TTY detection and the `console` crate.
+    pub fn resolve(self, is_tty: bool) -> bool {
+        match self {
+            ColorMode::Always => {
+                console::set_colors_enabled(true);
+                true
+            }
+            ColorMode::Never => false,
+            ColorMode::Auto => is_tty && console::colors_enabled(),
+        }
+    }
+}
+
 /// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
 ///
 /// CLI flags take precedence over `pyproject.toml` values. Construct via
