@@ -6,9 +6,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._middleware import _is_debuggable
-from oxitest._bridge.executor import _print_debug_banner, _suspend_capture
+from oxitest._bridge.executor import (
+    _print_debug_banner,
+    _print_trace_banner,
+    _suspend_capture,
+)
 
 
 def test_is_debuggable_assertion_error():
@@ -78,3 +83,20 @@ def test_print_debug_banner_contains_node_id():
     assert "AssertionError" in output, f"missing exc type: {output!r}"
     assert "expected 3, got 5" in output, f"missing exc message: {output!r}"
     assert "'h' for help" in output, f"missing help hint: {output!r}"
+
+
+def test_print_trace_banner_contains_node_id():
+    """Trace banner should include node ID and stepping message."""
+    buf = io.StringIO()
+    _print_trace_banner("tests/test_math.py::test_add", file=buf)
+    output = buf.getvalue()
+    assert "TRACE" in output, f"missing TRACE keyword: {output!r}"
+    assert "tests/test_math.py::test_add" in output, f"missing node_id: {output!r}"
+    assert "'c' to run" in output, f"missing help hint: {output!r}"
+
+
+# Note: _suspend_and_trace and _run_base with debug_mode are tested via
+# subprocess integration tests in test_int_flags.py (test_debug_*).
+# Mocking pdb in unit tests is unreliable when oxitest runs tests in
+# parallel worker subprocesses — the mock patching does not survive the
+# worker's import of executor.py.
