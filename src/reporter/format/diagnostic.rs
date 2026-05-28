@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use crate::config::TbStyle;
@@ -86,20 +87,17 @@ fn render_label_block(label_items: &[String], use_color: bool) -> String {
         let mut lines = item.lines();
         // First line gets the normal prefix (└─ or │)
         if let Some(first) = lines.next() {
-            out.push_str(&format!(
-                "        {}{}{}\n",
+            let _ = writeln!(
+                out,
+                "        {}{}{}",
                 color_dim(prefix, use_color),
                 spacer,
                 first
-            ));
+            );
         }
         // Continuation lines get │ prefix with padding to align under the value
         for cont in lines {
-            out.push_str(&format!(
-                "        {}  {}\n",
-                color_dim(BOX_VERT, use_color),
-                cont
-            ));
+            let _ = writeln!(out, "        {}  {}", color_dim(BOX_VERT, use_color), cont);
         }
     }
     out
@@ -113,22 +111,24 @@ fn render_params_section(params: &[(String, String)], use_color: bool) -> String
         return String::new();
     }
     let mut out = String::new();
-    out.push_str(&format!(
-        "        {}  {}\n",
+    let _ = writeln!(
+        out,
+        "        {}  {}",
         color_dim(BOX_BRANCH, use_color),
         color_dim("params", use_color)
-    ));
+    );
     let key_width = params.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
     for (k, v) in params {
-        out.push_str(&format!(
-            "        {}  {:<width$} = {}\n",
+        let _ = writeln!(
+            out,
+            "        {}  {:<width$} = {}",
             color_dim(BOX_VERT, use_color),
             k,
             v,
             width = key_width
-        ));
+        );
     }
-    out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+    let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
     out
 }
 
@@ -140,28 +140,31 @@ fn render_frames_section(frames: &[&crate::types::Frame], use_color: bool) -> St
         return String::new();
     }
     let mut out = String::new();
-    out.push_str(&format!(
-        "        {}  {}\n",
+    let _ = writeln!(
+        out,
+        "        {}  {}",
         color_dim(BOX_BRANCH, use_color),
         color_dim("frames", use_color)
-    ));
+    );
     for f in frames {
-        out.push_str(&format!(
-            "        {}    {}:{}  {}\n",
+        let _ = writeln!(
+            out,
+            "        {}    {}:{}  {}",
             color_dim(BOX_VERT, use_color),
             f.file,
             f.lineno,
             color_dim(&f.name, use_color)
-        ));
+        );
         if !f.line.is_empty() {
-            out.push_str(&format!(
-                "        {}      {}\n",
+            let _ = writeln!(
+                out,
+                "        {}      {}",
                 color_dim(BOX_VERT, use_color),
                 color_bold_white(&f.line, use_color)
-            ));
+            );
         }
     }
-    out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+    let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
     out
 }
 
@@ -203,12 +206,13 @@ pub(crate) fn fmt_diagnostic_block(
     // Location
     if !parts.file.is_empty() {
         let loc = format!("{}:{}", parts.file, parts.lineno);
-        out.push_str(&format!(
-            "        {} {}\n",
+        let _ = writeln!(
+            out,
+            "        {} {}",
             color_dim(BOX_TOP_LEFT, use_color),
             color_dim_cyan(&loc, use_color)
-        ));
-        out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+        );
+        let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
     }
 
     // Params
@@ -221,14 +225,15 @@ pub(crate) fn fmt_diagnostic_block(
     // Source-line fallback (when no frames visible but location is known)
     if visible_frames.is_empty() && !parts.file.is_empty() {
         let lineno_padded = format!("{:>4}", parts.lineno);
-        out.push_str(&format!(
-            "        {}   {} {} {}\n",
+        let _ = writeln!(
+            out,
+            "        {}   {} {} {}",
             color_dim(BOX_VERT, use_color),
             color_dim(&lineno_padded, use_color),
             color_dim(BOX_VERT, use_color),
             color_bold_white(&format!("   {}", parts.source_line), use_color)
-        ));
-        out.push_str(&format!("        {}\n", color_dim(BOX_VERT, use_color)));
+        );
+        let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
     }
 
     // Extra (diff/labels/hint)
@@ -268,17 +273,19 @@ fn build_extra_block(
     if !op.is_empty() && !left.is_empty() && !right.is_empty() {
         let diff = fmt_diff(left, right, op, use_color);
         if !diff.is_empty() {
-            diff_section.push_str(&format!(
-                "        {}  {}\n",
+            let _ = writeln!(
+                diff_section,
+                "        {}  {}",
                 color_dim(BOX_BRANCH, use_color),
-                color_dim("diff", use_color),
-            ));
+                color_dim("diff", use_color)
+            );
             for line in diff.lines() {
-                diff_section.push_str(&format!(
-                    "        {}  {}\n",
+                let _ = writeln!(
+                    diff_section,
+                    "        {}  {}",
                     color_dim(BOX_VERT, use_color),
                     line
-                ));
+                );
             }
         }
     } else if !op.is_empty() {
