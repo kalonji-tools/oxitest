@@ -4,8 +4,10 @@ import textwrap
 from types import ModuleType
 
 from oxitest import TempDir, raises
+from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge.importer import (
+    _apply_module_marks,
     _check_fn_violations,
     _collect_items,
     _extract_module_marks,
@@ -584,3 +586,66 @@ def test_extract_module_marks_invalid_entry():
             f"expected INVALID_MODULE_MARK, got {v.kind}"
         )
 
+
+# ── _apply_module_marks tests ─────────────────────────────────────────────────
+
+
+def test_apply_module_marks_prepends_to_unmarked_fn():
+    """Module marks are added to functions with no per-test marks."""
+
+    def test_fn():
+        pass
+
+    module_marks = [MarkInfo("slow", (), {})]
+    _apply_module_marks([("test_fn", test_fn)], module_marks)
+    marks = get_metadata(test_fn).marks
+    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
+    assert marks[0].name == "slow", f"expected 'slow', got {marks[0].name!r}"
+
+
+def test_apply_module_marks_per_test_overrides_same_name():
+    """Per-test mark overrides module mark of the same name."""
+    import oxitest
+
+    @oxitest.mark.timeout(5)
+    def test_fn():
+        pass
+
+    module_marks = [MarkInfo("timeout", (), {"seconds": 120})]
+    _apply_module_marks([("test_fn", test_fn)], module_marks)
+    marks = get_metadata(test_fn).marks
+    timeout_marks = [m for m in marks if m.name == "timeout"]
+    assert len(timeout_marks) == 1, (
+        f"expected exactly 1 timeout mark, got {len(timeout_marks)}: {timeout_marks}"
+    )
+    assert timeout_marks[0].kwargs == {"seconds": 5}, (
+        f"per-test timeout(5) should override module timeout(120), "
+        f"got {timeout_marks[0].kwargs}"
+    )
+
+
+def test_apply_module_marks_non_conflicting_added():
+    """Module marks with different names than per-test marks are added."""
+    import oxitest
+
+    @oxitest.mark.timeout(5)
+    def test_fn():
+        pass
+
+    module_marks = [MarkInfo("slow", (), {})]
+    _apply_module_marks([("test_fn", test_fn)], module_marks)
+    marks = get_metadata(test_fn).marks
+    names = [m.name for m in marks]
+    assert "slow" in names, f"module mark 'slow' should be added, got {names}"
+    assert "timeout" in names, f"per-test mark 'timeout' should remain, got {names}"
+
+
+def test_apply_module_marks_empty_list_is_noop():
+    """Empty module_marks list does not modify functions."""
+
+    def test_fn():
+        pass
+
+    _apply_module_marks([("test_fn", test_fn)], [])
+    marks = get_metadata(test_fn).marks
+    assert marks == [], f"expected no marks, got {marks}"
