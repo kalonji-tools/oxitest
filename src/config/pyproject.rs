@@ -39,6 +39,7 @@ pub(super) struct OxitestConfig {
     pub(super) affected_base: Option<String>,
     pub(super) retries: Option<usize>,
     pub(super) retries_delay: Option<u64>,
+    pub(super) keep_tmp: Option<super::KeepTmpMode>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {

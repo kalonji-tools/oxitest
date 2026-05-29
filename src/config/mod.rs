@@ -130,6 +130,15 @@ pub enum ColorMode {
     Never,
 }
 
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum KeepTmpMode {
+    /// Preserve temp dirs only when the test fails
+    Failed,
+    /// Preserve every temp dir regardless of outcome
+    Always,
+}
+
 impl ColorMode {
     /// Resolve the color mode to a boolean given whether stdout is a TTY.
     ///
@@ -183,6 +192,7 @@ pub struct Config {
     pub affected_base: String,
     pub retries: usize,
     pub retries_delay_secs: u64,
+    pub keep_tmp: Option<KeepTmpMode>,
 }
 
 impl Default for Config {
@@ -226,6 +236,7 @@ impl Default for Config {
             affected_base: "HEAD".to_string(),
             retries: 0,
             retries_delay_secs: 0,
+            keep_tmp: None,
         }
     }
 }
@@ -264,6 +275,7 @@ struct Overrides {
     color: Option<ColorMode>,
     durations: Option<usize>,
     strict: Option<StrictMode>,
+    keep_tmp: Option<KeepTmpMode>,
 }
 
 /// Resolve testpaths relative to a root directory.
@@ -361,6 +373,7 @@ impl Config {
         apply_if_some!(self, retries_delay_secs, ovr.retries_delay_secs);
         apply_if_some!(self, workers, ovr.workers, wrap);
         apply_if_some!(self, failed, ovr.failed, wrap);
+        apply_if_some!(self, keep_tmp, ovr.keep_tmp, wrap);
 
         // ── Output ─────────────────────────────────────────────────────
         apply_if_some!(self, tb, ovr.tb);
@@ -422,6 +435,7 @@ impl Config {
             color: tc.color,
             durations: tc.durations,
             strict: tc.strict,
+            keep_tmp: tc.keep_tmp,
         });
 
         self
@@ -488,6 +502,7 @@ impl Config {
             color: cli.color,
             durations: cli.durations,
             strict: cli.strict.clone(),
+            keep_tmp: cli.keep_tmp,
         });
 
         self
@@ -1760,5 +1775,51 @@ async_backend = "trio"
             TbStyle::No,
             "explicit --tb should not be overridden"
         );
+    }
+
+    #[test]
+    fn test_keep_tmp_default_is_none() {
+        let cfg = Config::default();
+        assert!(cfg.keep_tmp.is_none());
+    }
+
+    #[test]
+    fn test_keep_tmp_from_pyproject_failed() {
+        let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"failed\"\n").unwrap();
+        assert_eq!(cfg.keep_tmp, Some(KeepTmpMode::Failed));
+    }
+
+    #[test]
+    fn test_keep_tmp_from_pyproject_always() {
+        let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"always\"\n").unwrap();
+        assert_eq!(cfg.keep_tmp, Some(KeepTmpMode::Always));
+    }
+
+    #[test]
+    fn test_keep_tmp_cli_overrides_toml() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nkeep_tmp = \"always\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=failed"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Failed));
+    }
+
+    #[test]
+    fn test_keep_tmp_toml_preserved_when_cli_absent() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nkeep_tmp = \"always\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Always));
     }
 }

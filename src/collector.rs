@@ -149,6 +149,7 @@ mod tests {
             affected_base: "HEAD".to_string(),
             retries: 0,
             retries_delay_secs: 0,
+            keep_tmp: None,
         }
     }
 
