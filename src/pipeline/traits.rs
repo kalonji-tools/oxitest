@@ -53,6 +53,7 @@ pub(crate) trait TestRunner {
         session: &dyn Session,
         timeout: Option<u64>,
         debug_mode: Option<&str>,
+        keep_tmp: Option<&str>,
     ) -> TestOutcome;
 
     /// Run a test and return the outcome with elapsed duration.
@@ -65,9 +66,10 @@ pub(crate) trait TestRunner {
         session: &dyn Session,
         timeout: Option<u64>,
         debug_mode: Option<&str>,
+        keep_tmp: Option<&str>,
     ) -> (TestOutcome, crate::types::DurationMs) {
         let start = std::time::Instant::now();
-        let outcome = self.run_test(py, item, session, timeout, debug_mode);
+        let outcome = self.run_test(py, item, session, timeout, debug_mode, keep_tmp);
         let duration_ms = crate::types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
         (outcome, duration_ms)
     }
@@ -151,8 +153,16 @@ impl TestRunner for BridgeRunner {
         session: &dyn Session,
         timeout: Option<u64>,
         debug_mode: Option<&str>,
+        keep_tmp: Option<&str>,
     ) -> TestOutcome {
-        bridge::run_test_with_session_obj(py, item, session.as_py_object(py), timeout, debug_mode)
+        bridge::run_test_with_session_obj(
+            py,
+            item,
+            session.as_py_object(py),
+            timeout,
+            debug_mode,
+            keep_tmp,
+        )
     }
 }
 

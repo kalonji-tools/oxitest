@@ -85,7 +85,7 @@ pub(crate) fn run_retries(
 
             let (outcome, duration_ms) =
                 ctx.runner
-                    .run_timed(ctx.py, item, ctx.session, ctx.timeout_secs, None);
+                    .run_timed(ctx.py, item, ctx.session, ctx.timeout_secs, None, None);
 
             if !outcome.is_hard_failure() {
                 let flaky_outcome = TestOutcome::Flaky {

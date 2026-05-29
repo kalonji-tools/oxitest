@@ -225,6 +225,8 @@ class _NullFixtureSession:
 
     _plugin_registry: PluginRegistry = PluginRegistry()
     _async_backend: AsyncBackend = AsyncioBackend()
+    _keep_tmp: str | None = None
+    _result_cell: list[Any] | None = None
 
     def resolve_for_test(
         self,
@@ -532,6 +534,8 @@ class FixtureSession:
                 is_async=True,
             )
         )
+        self._keep_tmp: str | None = None
+        self._result_cell: list[Any] | None = None
 
     # ── Async delegation properties (used by executor.py via getattr) ────────
 
@@ -594,6 +598,8 @@ class FixtureSession:
                         inject_scope="session",
                         teardown_stack=self._session_scope.teardowns,
                         plugin_registry=self._plugin_registry,
+                        keep_tmp=self._keep_tmp,
+                        result_cell=self._result_cell,
                     )
                 ),
             )
@@ -603,6 +609,8 @@ class FixtureSession:
                 inject_scope=inject_scope,
                 teardown_stack=teardown_stack,
                 plugin_registry=self._plugin_registry,
+                keep_tmp=self._keep_tmp,
+                result_cell=self._result_cell,
             )
         )
 

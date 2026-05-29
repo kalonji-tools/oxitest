@@ -19,6 +19,8 @@ class _BuiltinContext:
     inject_scope: str  # "function" for test-level injections
     teardown_stack: list[Callable[[], None]]
     plugin_registry: PluginRegistry | None = field(default=None, repr=False)
+    keep_tmp: str | None = None
+    result_cell: list[Any] | None = field(default=None, repr=False)
 
     @property
     def module_path(self) -> str:

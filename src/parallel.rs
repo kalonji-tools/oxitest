@@ -255,6 +255,7 @@ pub(crate) fn run_phase_parallel(
         )
     };
     let timeout_secs = cfg.timeout_secs;
+    let keep_tmp: Option<Arc<str>> = cfg.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
     let python_bin: Arc<str> = std::env::var("PYO3_PYTHON")
         .unwrap_or_else(|_| "python3".to_string())
         .into();
@@ -269,6 +270,7 @@ pub(crate) fn run_phase_parallel(
                 Arc::clone(&cancelled),
                 std::sync::Arc::clone(&conftest_raw),
                 timeout_secs,
+                keep_tmp.clone(),
                 tx.clone(),
             )
         })

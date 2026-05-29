@@ -354,6 +354,7 @@ def run_test(
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
     debug_mode: str | None = None,
+    keep_tmp: str | None = None,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
@@ -367,6 +368,9 @@ def run_test(
         debug_mode: When set, drop into an interactive debugger.
             ``"post-mortem"`` enters pdb after failure; ``"always"`` enters
             pdb before every test.  ``None`` disables debugging.
+        keep_tmp: When set, preserve TempDir contents instead of cleaning up.
+            ``"failed"`` preserves only on test failure; ``"always"`` preserves
+            unconditionally.  ``None`` always cleans up (default).
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
@@ -376,6 +380,8 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
+    effective_session._keep_tmp = keep_tmp  # type: ignore[attr-defined]
+    effective_session._result_cell = [None] if keep_tmp else None  # type: ignore[attr-defined]
     backend = _resolve_debugger_backend(effective_session, debug_mode)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
@@ -431,10 +437,15 @@ def run_test(
             node_id=meta.node_id,
             backend=backend,
         )
-        return execute()
+        result = execute()
+        if effective_session._result_cell is not None:  # type: ignore[attr-defined]
+            effective_session._result_cell[0] = result  # type: ignore[attr-defined]
+        return result
     finally:
         sys.modules.pop(unique_name, None)
         for td in reversed(fn_teardowns):
             # teardown errors already printed by FixtureSession._safe_call
             with contextlib.suppress(Exception):
                 td()
+        effective_session._keep_tmp = None  # type: ignore[attr-defined]
+        effective_session._result_cell = None  # type: ignore[attr-defined]
