@@ -138,3 +138,42 @@ def test_env_mutation():
 No-op when `--serial` is active (all tests already run on main process).
 
 ---
+
+## Module-level marks (`oxi_mark`)
+
+Apply marks to every test in a file using a module-level variable:
+
+```python
+import oxitest
+
+oxi_mark = [oxitest.mark.slow, oxitest.mark.timeout(120)]
+
+def test_a(): ...  # inherits slow + timeout(120)
+def test_b(): ...  # inherits slow + timeout(120)
+```
+
+A single mark can be assigned directly (no list wrapper needed):
+
+```python
+oxi_mark = oxitest.mark.slow
+```
+
+### Precedence
+
+Per-test marks override module marks of the same name:
+
+```python
+oxi_mark = [oxitest.mark.timeout(120)]
+
+@oxitest.mark.timeout(5)
+def test_fast(): ...   # timeout(5)
+def test_slow(): ...   # timeout(120)
+```
+
+### Validation
+
+- Non-mark entries in `oxi_mark` are collection errors (always, not gated by `--strict`).
+- `--strict` validates module-level marks the same way it validates per-test marks (e.g., `skip` without `reason=`).
+- `-m` filtering sees module-level marks.
+
+---
