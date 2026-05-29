@@ -77,6 +77,7 @@ pub(crate) mod doubles {
     }
 
     impl TestRunner for StubRunner {
+        #[allow(clippy::too_many_arguments)]
         fn run_test(
             &self,
             _py: Python<'_>,
@@ -85,6 +86,8 @@ pub(crate) mod doubles {
             timeout: Option<u64>,
             _debug_mode: Option<&str>,
             _keep_tmp: Option<&str>,
+            _show_locals: bool,
+            _show_internals: bool,
         ) -> TestOutcome {
             let node_id = item.node_id.to_string();
             self.calls.borrow_mut().push((node_id.clone(), timeout));

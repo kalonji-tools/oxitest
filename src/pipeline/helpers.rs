@@ -170,6 +170,8 @@ pub(super) struct SerialHarness<'a> {
     pub maxfail: usize,
     pub debug_mode: Option<&'a str>,
     pub keep_tmp: Option<&'a str>,
+    pub show_locals: bool,
+    pub show_internals: bool,
 }
 
 impl super::traits::ExecutionHarness for SerialHarness<'_> {
@@ -195,6 +197,8 @@ impl super::traits::ExecutionHarness for SerialHarness<'_> {
                     timeout,
                     self.debug_mode,
                     self.keep_tmp,
+                    self.show_locals,
+                    self.show_internals,
                 );
                 timings.push(types::TestTiming {
                     node_id: item.node_id.clone(),
@@ -487,6 +491,8 @@ pub(super) fn execute(
             maxfail: ctx.cfg.maxfail,
             debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
             keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+            show_locals: ctx.cfg.show_locals,
+            show_internals: ctx.cfg.show_internals,
         };
         harness.execute_groups(groups, rep)
     }

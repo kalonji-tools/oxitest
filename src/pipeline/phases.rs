@@ -394,6 +394,8 @@ impl PipelinePhase for RetryPhase<'_> {
             runner: self.runner,
             timeout_secs: ctx.cfg.timeout_secs,
             keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+            show_locals: ctx.cfg.show_locals,
+            show_internals: ctx.cfg.show_internals,
         };
         let retry::RetryResult {
             flaky_ids,
