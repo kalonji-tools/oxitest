@@ -141,6 +141,152 @@ def test_tempdir_fixture_teardown_removes_directory():
     )
 
 
+def test_tempdir_keep_tmp_failed_preserves_on_failure():
+    from oxitest._bridge._builtins._tempdir import _TempDirFixture
+    from oxitest._bridge.result import StatusKind, TestResult
+
+    result_cell: list[TestResult | None] = [None]
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="fail_test", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp="failed",
+        result_cell=result_cell,
+    )
+    tmp = _TempDirFixture().create(ctx)
+    path = tmp.path
+    assert path.is_dir(), "TempDir should create a directory"
+
+    # Simulate a failed test result
+    result_cell[0] = TestResult(status=StatusKind.FAILED, message="assertion error")
+
+    # Run teardown — should NOT remove the directory
+    teardowns[0]()
+    assert path.exists(), (
+        "TempDir should be preserved when keep_tmp='failed' and the test failed"
+    )
+    # Manual cleanup
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def test_tempdir_keep_tmp_failed_cleans_on_pass():
+    from oxitest._bridge._builtins._tempdir import _TempDirFixture
+    from oxitest._bridge.result import TestResult
+
+    result_cell: list[TestResult | None] = [None]
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="pass_test", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp="failed",
+        result_cell=result_cell,
+    )
+    tmp = _TempDirFixture().create(ctx)
+    path = tmp.path
+
+    # Simulate a passed test result
+    result_cell[0] = TestResult.passed()
+
+    teardowns[0]()
+    assert not path.exists(), (
+        "TempDir should be cleaned up when keep_tmp='failed' and the test passed"
+    )
+
+
+def test_tempdir_keep_tmp_always_preserves_on_pass():
+    from oxitest._bridge._builtins._tempdir import _TempDirFixture
+    from oxitest._bridge.result import TestResult
+
+    result_cell: list[TestResult | None] = [None]
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="pass_test", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp="always",
+        result_cell=result_cell,
+    )
+    tmp = _TempDirFixture().create(ctx)
+    path = tmp.path
+
+    result_cell[0] = TestResult.passed()
+
+    teardowns[0]()
+    assert path.exists(), (
+        "TempDir should be preserved when keep_tmp='always' even if the test passed"
+    )
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def test_tempdir_keep_tmp_failed_preserves_on_error():
+    from oxitest._bridge._builtins._tempdir import _TempDirFixture
+    from oxitest._bridge.result import StatusKind, TestResult
+
+    result_cell: list[TestResult | None] = [None]
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="err_test", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp="failed",
+        result_cell=result_cell,
+    )
+    tmp = _TempDirFixture().create(ctx)
+    path = tmp.path
+
+    result_cell[0] = TestResult(status=StatusKind.ERROR, message="boom")
+
+    teardowns[0]()
+    assert path.exists(), (
+        "TempDir should be preserved when keep_tmp='failed' and the test errored"
+    )
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def test_tempdir_keep_tmp_prints_path_to_stderr():
+    import io
+    from contextlib import redirect_stderr
+
+    from oxitest._bridge._builtins._tempdir import _TempDirFixture
+    from oxitest._bridge.result import StatusKind, TestResult
+
+    result_cell: list[TestResult | None] = [None]
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="fail_test", node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp="failed",
+        result_cell=result_cell,
+    )
+    tmp = _TempDirFixture().create(ctx)
+    path = tmp.path
+
+    result_cell[0] = TestResult(status=StatusKind.FAILED, message="oops")
+
+    buf = io.StringIO()
+    with redirect_stderr(buf):
+        teardowns[0]()
+    stderr_output = buf.getvalue()
+    assert str(path) in stderr_output, (
+        f"Preserved TempDir path should be printed to stderr, got: {stderr_output!r}"
+    )
+    assert "--keep-tmp" in stderr_output, (
+        f"Stderr message should mention --keep-tmp, got: {stderr_output!r}"
+    )
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+
+
 # ── TempDirFactory ────────────────────────────────────────────────────────────
 
 

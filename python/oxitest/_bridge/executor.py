@@ -380,8 +380,8 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
-    effective_session._keep_tmp = keep_tmp  # type: ignore[attr-defined]
-    effective_session._result_cell = [None] if keep_tmp else None  # type: ignore[attr-defined]
+    effective_session._keep_tmp = keep_tmp  # ty: ignore[unresolved-attribute]
+    effective_session._result_cell = [None] if keep_tmp else None  # ty: ignore[unresolved-attribute]
     backend = _resolve_debugger_backend(effective_session, debug_mode)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
@@ -438,8 +438,8 @@ def run_test(
             backend=backend,
         )
         result = execute()
-        if effective_session._result_cell is not None:  # type: ignore[attr-defined]
-            effective_session._result_cell[0] = result  # type: ignore[attr-defined]
+        if effective_session._result_cell is not None:  # ty: ignore[unresolved-attribute]
+            effective_session._result_cell[0] = result  # ty: ignore[unresolved-attribute]
         return result
     finally:
         sys.modules.pop(unique_name, None)
@@ -447,5 +447,5 @@ def run_test(
             # teardown errors already printed by FixtureSession._safe_call
             with contextlib.suppress(Exception):
                 td()
-        effective_session._keep_tmp = None  # type: ignore[attr-defined]
-        effective_session._result_cell = None  # type: ignore[attr-defined]
+        effective_session._keep_tmp = None  # ty: ignore[unresolved-attribute]
+        effective_session._result_cell = None  # ty: ignore[unresolved-attribute]

@@ -228,3 +228,44 @@ def test_debug_always_with_plugin_backend(tmp: TempDir):
     assert marker_file.read_text() == "traced", (
         f"marker file content wrong: {marker_file.read_text()!r}"
     )
+
+
+def test_keep_tmp_preserves_on_failure(tmp: TempDir):
+    """--keep-tmp preserves TempDir when test fails."""
+    helpers.common.write_test_file(
+        tmp,
+        """\
+from oxitest import Fixture
+from oxitest._bridge._builtins import TempDir
+
+def test_uses_tmp(t: Fixture[TempDir]) -> None:
+    (t / "artifact.txt").write_text("data")
+    assert False, "deliberate failure"
+""",
+        "test_fail_tmp.py",
+    )
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
+    assert rc != 0, "test should fail"
+    assert "KEPT" in stderr, f"stderr should contain KEPT message, got: {stderr!r}"
+    assert "--keep-tmp" in stderr, f"stderr should mention --keep-tmp, got: {stderr!r}"
+
+
+def test_keep_tmp_cleans_on_pass(tmp: TempDir):
+    """--keep-tmp=failed cleans up when test passes."""
+    helpers.common.write_test_file(
+        tmp,
+        """\
+from oxitest import Fixture
+from oxitest._bridge._builtins import TempDir
+
+def test_uses_tmp(t: Fixture[TempDir]) -> None:
+    (t / "artifact.txt").write_text("data")
+    assert True
+""",
+        "test_pass_tmp.py",
+    )
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
+    assert rc == 0, "test should pass"
+    assert "KEPT" not in stderr, (
+        f"stderr should NOT contain KEPT for passing tests, got: {stderr!r}"
+    )
