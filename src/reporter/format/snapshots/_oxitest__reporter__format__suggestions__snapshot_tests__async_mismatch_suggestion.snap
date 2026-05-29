@@ -2,4 +2,4 @@
 source: src/reporter/format/suggestions.rs
 expression: hint.unwrap_or_default()
 ---
-        hint: The test is async but a fixture returned a non-awaitable value. Mark the fixture as `async def` or make the test synchronous.
+The test is async but a fixture returned a non-awaitable value. Mark the fixture as `async def` or make the test synchronous.

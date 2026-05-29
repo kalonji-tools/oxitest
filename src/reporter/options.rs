@@ -16,11 +16,7 @@ pub struct ReporterOpts {
     pub(crate) tb: crate::config::TbStyle,
     pub(crate) show_tips: bool,
     pub(crate) show_warnings: bool,
-    // TODO(#585): used by diagnostic renderer in Task 5
-    #[allow(dead_code)]
     pub(crate) show_locals: bool,
-    // TODO(#585): used by diagnostic renderer in Task 5
-    #[allow(dead_code)]
     pub(crate) show_internals: bool,
     pub(crate) verbosity: Verbosity,
     pub(crate) show_durations: Option<usize>,
@@ -129,7 +125,6 @@ impl ReporterOptsBuilder {
         Self { tb, ..self }
     }
 
-    // TODO(#585): used by diagnostic renderer in Task 5
     #[allow(dead_code)]
     pub fn show_locals(self, v: bool) -> Self {
         Self {
@@ -138,7 +133,6 @@ impl ReporterOptsBuilder {
         }
     }
 
-    // TODO(#585): used by diagnostic renderer in Task 5
     #[allow(dead_code)]
     pub fn show_internals(self, v: bool) -> Self {
         Self {

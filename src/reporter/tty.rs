@@ -241,7 +241,14 @@ impl TtyReporter {
                     color_dim(&group.fn_name, c)
                 );
                 self.pb.println(header);
-                let diag = fmt_diagnostic_block(item, outcome, &self.opts.tb, c);
+                let diag = fmt_diagnostic_block(
+                    item,
+                    outcome,
+                    &self.opts.tb,
+                    self.opts.show_internals,
+                    self.opts.show_locals,
+                    c,
+                );
                 if !diag.is_empty() {
                     self.pb.println(diag.trim_end());
                 }
@@ -278,7 +285,14 @@ impl StandardReporter for TtyReporter {
         for (item, outcome, duration_ms) in deferred {
             self.pb
                 .println(self.format_test_line(&item, &outcome, duration_ms));
-            let diag = fmt_diagnostic_block(&item, &outcome, &self.opts.tb, self.opts.use_color);
+            let diag = fmt_diagnostic_block(
+                &item,
+                &outcome,
+                &self.opts.tb,
+                self.opts.show_internals,
+                self.opts.show_locals,
+                self.opts.use_color,
+            );
             if !diag.is_empty() {
                 self.pb.println(diag.trim_end());
             }
@@ -330,7 +344,14 @@ impl Reporter for TtyReporter {
             }
             self.pb
                 .println(self.format_test_line(item, outcome, duration_ms));
-            let diag = fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.use_color);
+            let diag = fmt_diagnostic_block(
+                item,
+                outcome,
+                &self.opts.tb,
+                self.opts.show_internals,
+                self.opts.show_locals,
+                self.opts.use_color,
+            );
             if !diag.is_empty() {
                 self.pb.println(diag.trim_end());
             }

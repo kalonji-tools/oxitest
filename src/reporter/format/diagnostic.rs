@@ -5,12 +5,13 @@ use crate::config::TbStyle;
 use crate::types::{TestItem, TestOutcome};
 
 use super::fmt_diff;
-use crate::reporter::colors::{color_bold_white, color_dim, color_dim_cyan};
+use crate::reporter::colors::{color_blue, color_bold_white, color_dim, color_dim_cyan};
 
-const BOX_TOP_LEFT: &str = "┌─";
+const BOX_OPEN: &str = "┌";
 const BOX_VERT: &str = "│";
-const BOX_BOT_LEFT: &str = "└─";
-const BOX_BRANCH: &str = "├─";
+const BOX_CLOSE: &str = "└";
+
+const MARGIN: &str = "      ";
 
 const INTERNAL_PREFIXES: &[&str] = &["oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin"];
 
@@ -20,14 +21,19 @@ fn is_internal_frame(frame: &crate::types::Frame) -> bool {
         .any(|prefix| frame.file.as_str().contains(prefix))
 }
 
-fn filter_frames(frames: &[crate::types::Frame]) -> Vec<&crate::types::Frame> {
-    let user_frames: Vec<&crate::types::Frame> =
-        frames.iter().filter(|f| !is_internal_frame(f)).collect();
-    if user_frames.is_empty() && !frames.is_empty() {
-        // Always show at least the last frame (where the error occurred)
-        vec![frames.last().unwrap()]
+fn filter_frames(
+    frames: &[crate::types::Frame],
+    show_internals: bool,
+) -> Vec<&crate::types::Frame> {
+    if show_internals {
+        frames.iter().collect()
     } else {
-        user_frames
+        let user_frames: Vec<_> = frames.iter().filter(|f| !is_internal_frame(f)).collect();
+        if user_frames.is_empty() && !frames.is_empty() {
+            vec![frames.last().unwrap()]
+        } else {
+            user_frames
+        }
     }
 }
 
@@ -65,111 +71,18 @@ pub(crate) fn pad_to(s: &str, width: usize) -> String {
     }
 }
 
-fn render_label_block(label_items: &[String], use_color: bool) -> String {
-    if label_items.is_empty() {
-        return format!("        {}\n", color_dim(BOX_BOT_LEFT, use_color));
-    }
-    let n = label_items.len();
-    let mut out = String::new();
-    for (i, item) in label_items.iter().enumerate() {
-        let is_last = i == n - 1;
-        let prefix = if is_last { BOX_BOT_LEFT } else { BOX_VERT };
-        let spacer = if is_last { " " } else { "  " };
-
-        let mut lines = item.lines();
-        // First line gets the normal prefix (└─ or │)
-        if let Some(first) = lines.next() {
-            let _ = writeln!(
-                out,
-                "        {}{}{}",
-                color_dim(prefix, use_color),
-                spacer,
-                first
-            );
-        }
-        // Continuation lines get │ prefix with padding to align under the value
-        for cont in lines {
-            let _ = writeln!(out, "        {}  {}", color_dim(BOX_VERT, use_color), cont);
-        }
-    }
-    out
-}
-
-/// Render the `├─ params` block showing parametrize key=value pairs.
-///
-/// Returns an empty string when `params` is empty.
-fn render_params_section(params: &[(String, String)], use_color: bool) -> String {
-    if params.is_empty() {
-        return String::new();
-    }
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "        {}  {}",
-        color_dim(BOX_BRANCH, use_color),
-        color_dim("params", use_color)
-    );
-    let key_width = params.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    for (k, v) in params {
-        let _ = writeln!(
-            out,
-            "        {}  {:<width$} = {}",
-            color_dim(BOX_VERT, use_color),
-            k,
-            v,
-            width = key_width
-        );
-    }
-    let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
-    out
-}
-
-/// Render the `├─ frames` block showing traceback frames.
-///
-/// Returns an empty string when `frames` is empty.
-fn render_frames_section(frames: &[&crate::types::Frame], use_color: bool) -> String {
-    if frames.is_empty() {
-        return String::new();
-    }
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "        {}  {}",
-        color_dim(BOX_BRANCH, use_color),
-        color_dim("frames", use_color)
-    );
-    for f in frames {
-        let _ = writeln!(
-            out,
-            "        {}    {}:{}  {}",
-            color_dim(BOX_VERT, use_color),
-            f.file,
-            f.lineno,
-            color_dim(&f.name, use_color)
-        );
-        if !f.line.is_empty() {
-            let _ = writeln!(
-                out,
-                "        {}      {}",
-                color_dim(BOX_VERT, use_color),
-                color_bold_white(&f.line, use_color)
-            );
-        }
-    }
-    let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
-    out
-}
-
 /// Render a box-style diagnostic block for a failing test.
 ///
-/// Produces the indented `┌─ ... └─` box shown below each failure, including the
-/// assertion source line, left/right diff (for `Failed`), traceback frames, and
-/// error message. Returns an empty string for `TbStyle::No` and `TbStyle::Line`
-/// (those styles suppress the block entirely).
+/// Produces the indented `┌ ... └` box shown below each failure line.
+/// Narrative order: WHERE → WITH WHAT → WHAT → VALUES → TRACE → HINT → WHY.
+///
+/// Returns an empty string for `TbStyle::No` and `TbStyle::Line`.
 pub(crate) fn fmt_diagnostic_block(
     item: &TestItem,
     outcome: &TestOutcome,
     tb: &TbStyle,
+    show_internals: bool,
+    show_locals: bool,
     use_color: bool,
 ) -> String {
     if *tb == TbStyle::No || *tb == TbStyle::Line {
@@ -181,120 +94,223 @@ pub(crate) fn fmt_diagnostic_block(
         None => return String::new(),
     };
 
-    // ── Build the outcome-specific "extra" block ────────────────────
     let is_error = matches!(outcome, TestOutcome::Error { .. });
-    let extra = build_extra_block(
-        parts.message,
-        parts.left,
-        parts.right,
-        parts.op,
-        is_error,
-        use_color,
-    );
 
-    // ── Assemble the diagnostic box ─────────────────────────────────
     let mut out = String::new();
 
-    // Location
+    // ── WHERE: ┌ file:line ──────────────────────────────────────────
     if !parts.file.is_empty() {
         let loc = format!("{}:{}", parts.file, parts.lineno);
         let _ = writeln!(
             out,
-            "        {} {}",
-            color_dim(BOX_TOP_LEFT, use_color),
+            "{}{} {}",
+            MARGIN,
+            color_dim(BOX_OPEN, use_color),
             color_dim_cyan(&loc, use_color)
         );
-        let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
     }
 
-    // Params
-    out.push_str(&render_params_section(&item.param_values, use_color));
-
-    // Frames
-    let visible_frames = filter_frames(parts.frames);
-    out.push_str(&render_frames_section(&visible_frames, use_color));
-
-    // Source-line fallback (when no frames visible but location is known)
-    if visible_frames.is_empty() && !parts.file.is_empty() {
-        let lineno_padded = format!("{:>4}", parts.lineno);
+    // ── WITH WHAT: inline params ────────────────────────────────────
+    if !item.param_values.is_empty() {
+        let params_str = item
+            .param_values
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "{} {} {}",
+                    color_dim(k, use_color),
+                    color_dim("=", use_color),
+                    v,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(&color_dim(", ", use_color));
         let _ = writeln!(
             out,
-            "        {}   {} {} {}",
+            "{}{}  {}",
+            MARGIN,
             color_dim(BOX_VERT, use_color),
-            color_dim(&lineno_padded, use_color),
-            color_dim(BOX_VERT, use_color),
-            color_bold_white(&format!("   {}", parts.source_line), use_color)
+            params_str
         );
-        let _ = writeln!(out, "        {}", color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
     }
 
-    // Extra (diff/labels/hint)
-    out.push_str(&extra);
+    // ── WHAT: source line (hero) ────────────────────────────────────
+    if !parts.source_line.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}{}  {}",
+            MARGIN,
+            color_dim(BOX_VERT, use_color),
+            color_bold_white(parts.source_line, use_color)
+        );
 
-    // Suggestion
-    if let Some(hint) = super::suggestions::suggest_fix(outcome, use_color) {
-        out.push_str(&hint);
-        out.push('\n');
+        // Show locals for the failure frame if show_locals is on
+        if show_locals {
+            // Find the failure frame (matching file:lineno) and render its locals
+            let failure_locals = parts.frames.iter().find_map(|f| {
+                if f.file.as_str() == parts.file && f.lineno == parts.lineno && !f.locals.is_empty()
+                {
+                    Some(&f.locals)
+                } else {
+                    None
+                }
+            });
+            if let Some(locals) = failure_locals {
+                for (name, value) in locals {
+                    let _ = writeln!(
+                        out,
+                        "{}{}    {} = {}",
+                        MARGIN,
+                        color_dim(BOX_VERT, use_color),
+                        color_dim(name, use_color),
+                        color_dim(value, use_color)
+                    );
+                }
+            }
+        }
+
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+    }
+
+    // ── VALUES: diff / value labels ─────────────────────────────────
+    if !is_error {
+        render_values(&mut out, parts.left, parts.right, parts.op, use_color);
+    }
+
+    // ── TRACE: non-failure frames ───────────────────────────────────
+    let visible_frames = filter_frames(parts.frames, show_internals);
+    // Exclude the failure frame (same file:lineno as the diagnostic location)
+    let trace_frames: Vec<_> = visible_frames
+        .iter()
+        .filter(|f| !(f.file.as_str() == parts.file && f.lineno == parts.lineno))
+        .collect();
+    if !trace_frames.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}{}  {}",
+            MARGIN,
+            color_dim(BOX_VERT, use_color),
+            color_dim("trace", use_color)
+        );
+        for f in &trace_frames {
+            let loc = format!("{}:{} in {}", f.file, f.lineno, f.name);
+            let _ = writeln!(
+                out,
+                "{}{}    {}",
+                MARGIN,
+                color_dim(BOX_VERT, use_color),
+                color_dim(&loc, use_color)
+            );
+            if !f.line.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "{}{}      {}",
+                    MARGIN,
+                    color_dim(BOX_VERT, use_color),
+                    color_bold_white(&f.line, use_color)
+                );
+            }
+            // Show locals for trace frames if show_locals
+            if show_locals && !f.locals.is_empty() {
+                for (name, value) in &f.locals {
+                    let _ = writeln!(
+                        out,
+                        "{}{}        {} = {}",
+                        MARGIN,
+                        color_dim(BOX_VERT, use_color),
+                        color_dim(name, use_color),
+                        color_dim(value, use_color)
+                    );
+                }
+            }
+        }
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+    }
+
+    // ── HINT: suggestion inside box ─────────────────────────────────
+    if let Some(hint_text) = super::suggestions::suggest_fix(outcome) {
+        let _ = writeln!(
+            out,
+            "{}{}  {}",
+            MARGIN,
+            color_dim(BOX_VERT, use_color),
+            color_blue(&format!("hint: {}", hint_text), use_color)
+        );
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+    }
+
+    // ── WHY: closing └ message ──────────────────────────────────────
+    let closing_message = parts.message;
+
+    if closing_message.is_empty() {
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_CLOSE, use_color));
+    } else {
+        // Multi-line messages: first line on └, continuation lines on │
+        let mut lines = closing_message.lines();
+        if let Some(first) = lines.next() {
+            let _ = writeln!(
+                out,
+                "{}{} {}",
+                MARGIN,
+                color_dim(BOX_CLOSE, use_color),
+                color_dim(first, use_color)
+            );
+        }
+        for cont in lines {
+            let _ = writeln!(
+                out,
+                "{}{}  {}",
+                MARGIN,
+                color_dim(BOX_VERT, use_color),
+                color_dim(cont, use_color)
+            );
+        }
     }
 
     out
 }
 
-/// Build the outcome-specific extra block (diff section + label items for Failed,
-/// error hint for Error).
-fn build_extra_block(
-    message: &str,
-    left: &str,
-    right: &str,
-    op: &str,
-    is_error: bool,
-    use_color: bool,
-) -> String {
-    // Error outcomes produce a simple hint line with the exception message.
-    if is_error {
-        return format!(
-            "        {} {}\n",
-            color_dim(BOX_BOT_LEFT, use_color),
-            color_dim(message, use_color)
-        );
-    }
-
-    let mut label_items: Vec<String> = Vec::new();
-    let mut diff_section = String::new();
-
+/// Render the VALUES section (diff lines without a section label).
+fn render_values(out: &mut String, left: &str, right: &str, op: &str, use_color: bool) {
     if !op.is_empty() && !left.is_empty() && !right.is_empty() {
         let diff = fmt_diff(left, right, op, use_color);
         if !diff.is_empty() {
-            let _ = writeln!(
-                diff_section,
-                "        {}  {}",
-                color_dim(BOX_BRANCH, use_color),
-                color_dim("diff", use_color)
-            );
             for line in diff.lines() {
                 let _ = writeln!(
-                    diff_section,
-                    "        {}  {}",
+                    out,
+                    "{}{}  {}",
+                    MARGIN,
                     color_dim(BOX_VERT, use_color),
                     line
                 );
             }
+            let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
         }
     } else if !op.is_empty() {
-        label_items.push(format!("{:<7}{}", "left:", color_dim(left, use_color)));
+        // op set but right empty — show left only
+        let _ = writeln!(
+            out,
+            "{}{}  {:<7}{}",
+            MARGIN,
+            color_dim(BOX_VERT, use_color),
+            "left:",
+            color_dim(left, use_color)
+        );
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
     } else if !left.is_empty() {
-        label_items.push(format!("{:<7}{}", "value:", color_dim(left, use_color)));
+        // Bool assert — show value
+        let _ = writeln!(
+            out,
+            "{}{}  {:<7}{}",
+            MARGIN,
+            color_dim(BOX_VERT, use_color),
+            "value:",
+            color_dim(left, use_color)
+        );
+        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
     }
-
-    if !message.is_empty() {
-        label_items.push(format!("{:<7}{}", "why:", color_dim(message, use_color)));
-    }
-
-    format!(
-        "{}{}",
-        diff_section,
-        render_label_block(&label_items, use_color)
-    )
 }
 
 #[cfg(test)]
@@ -306,10 +322,9 @@ mod tests {
 
     #[test]
     fn test_box_constants_are_nonempty() {
-        assert!(!BOX_TOP_LEFT.is_empty());
+        assert!(!BOX_OPEN.is_empty());
         assert!(!BOX_VERT.is_empty());
-        assert!(!BOX_BOT_LEFT.is_empty());
-        assert!(!BOX_BRANCH.is_empty());
+        assert!(!BOX_CLOSE.is_empty());
     }
 
     #[test]
@@ -321,10 +336,9 @@ mod tests {
             8,
             "assert add(1, 2) == 4",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(block.contains("tests/test_foo.py:8"));
         assert!(block.contains("assert add(1, 2) == 4"));
-        assert!(block.contains("why:"));
         assert!(block.contains("expected 4"));
     }
 
@@ -332,7 +346,7 @@ mod tests {
     fn test_diagnostic_short_no_message_no_nudge() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(!block.contains("add an assertion message"));
         assert!(!block.contains("hint:"));
     }
@@ -346,7 +360,7 @@ mod tests {
             22,
             "result = divide(10, 0)",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(block.contains("ValueError: Cannot divide by zero"));
     }
 
@@ -354,7 +368,7 @@ mod tests {
     fn test_diagnostic_line_style_returns_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false, false, false);
         assert!(
             block.is_empty(),
             "--tb=line must produce no diagnostic block"
@@ -365,16 +379,15 @@ mod tests {
     fn test_diagnostic_no_style_is_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false, false);
         assert!(block.is_empty());
     }
 
     #[test]
     fn test_diagnostic_does_not_repeat_fn_name() {
-        // fn_name is shown (colored) on the reporter line; the block must not repeat it
         let item = make_item("test_add_two_positives");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(
             !block.contains("test_add_two_positives"),
             "fn name must not be repeated in the diagnostic block"
@@ -394,7 +407,7 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(block.contains("left:"), "missing left label");
         assert!(block.contains("41"), "missing left value");
         assert!(block.contains("right:"), "missing right label");
@@ -414,7 +427,7 @@ mod tests {
             op: String::new(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(block.contains("value:"), "missing value label");
         assert!(block.contains("False"), "missing value");
         assert!(
@@ -424,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_shows_why_when_message_present() {
+    fn test_diagnostic_shows_closing_message_when_present() {
         let item = make_item("test_add");
         let outcome = TestOutcome::Failed {
             message: "should be 42".to_string(),
@@ -436,28 +449,32 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        assert!(block.contains("why:"), "missing why label");
-        assert!(block.contains("should be 42"), "missing why value");
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        assert!(
+            block.contains("should be 42"),
+            "closing message must appear"
+        );
+        // Message appears on the closing └ line
+        assert!(block.contains(&format!("{} should be 42", BOX_CLOSE)));
     }
 
     #[test]
-    fn test_diagnostic_no_nudge_and_no_hint_label() {
+    fn test_diagnostic_no_nudge_and_no_why_label() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(
             !block.contains("add an assertion message"),
             "nudge should be removed"
         );
         assert!(
-            !block.contains("hint:"),
-            "hint label should be replaced with why"
+            !block.contains("why:"),
+            "why label should not appear in new format"
         );
     }
 
     #[test]
-    fn test_diagnostic_why_replaces_hint_label() {
+    fn test_diagnostic_closing_line_shows_message() {
         let item = make_item("test_add");
         let outcome = make_failed(
             "expected 4",
@@ -465,10 +482,11 @@ mod tests {
             8,
             "assert add(1, 2) == 4",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        assert!(block.contains("why:"), "should use why label");
-        assert!(block.contains("expected 4"), "should show message");
-        assert!(!block.contains("hint:"), "old hint label must be gone");
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        assert!(
+            block.contains("expected 4"),
+            "message must appear on closing line"
+        );
     }
 
     #[test]
@@ -484,7 +502,7 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(block.contains("left:"), "left should appear");
         assert!(block.contains("42"), "left value should appear");
         assert!(
@@ -494,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_shows_params_block_when_param_values_present() {
+    fn test_diagnostic_shows_inline_params() {
         let item = std::sync::Arc::new(TestItem {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
@@ -511,12 +529,16 @@ mod tests {
             fixture_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x + y == expected");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        assert!(block.contains("params"), "missing params header");
-        assert!(block.contains("x"), "missing param key x");
-        assert!(block.contains("1"), "missing param value 1");
-        assert!(block.contains("expected"), "missing param key expected");
-        assert!(block.contains("3"), "missing param value 3");
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        // Inline params format: "x = 1, y = 2, expected = 3"
+        assert!(block.contains("x = 1"), "missing param x");
+        assert!(block.contains("y = 2"), "missing param y");
+        assert!(block.contains("expected = 3"), "missing param expected");
+        // Should NOT have the old "params" header
+        assert!(
+            !block.contains("params"),
+            "should not have old params header"
+        );
     }
 
     #[test]
@@ -533,9 +555,9 @@ mod tests {
             fixture_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         let path_pos = block.find("tests/test_foo.py:8").unwrap();
-        let params_pos = block.find("params").unwrap();
+        let params_pos = block.find("x = 1").unwrap();
         let source_pos = block.find("assert x > 0").unwrap();
         assert!(path_pos < params_pos, "params must appear after path");
         assert!(params_pos < source_pos, "params must appear before source");
@@ -545,7 +567,7 @@ mod tests {
     fn test_diagnostic_no_params_block_when_param_values_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(
             !block.contains("params"),
             "params block should not appear for non-parametrize"
@@ -554,8 +576,6 @@ mod tests {
 
     #[test]
     fn test_diagnostic_error_with_empty_file_omits_location_line() {
-        // Bridge-level errors have file="" and lineno=0 — the renderer
-        // must not produce a meaningless ":0" location line.
         let item = make_item("test_bridge");
         let outcome = TestOutcome::Error {
             message: "PyImportError: No module named 'foo'".to_string(),
@@ -564,7 +584,7 @@ mod tests {
             source_line: String::new(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(
             !block.contains(":0"),
             "must not show ':0' when file is empty"
@@ -588,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_block_detail_shows_frames() {
+    fn test_diagnostic_block_detail_shows_trace() {
         use crate::types::{Frame, TestItem, TestOutcome};
 
         let item = TestItem {
@@ -627,21 +647,21 @@ mod tests {
                 },
             ],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        assert!(block.contains("frames"), "must contain frames label");
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        // New format uses "trace" not "frames"
+        assert!(block.contains("trace"), "must contain trace label");
         assert!(block.contains("test_check"), "must show caller function");
-        assert!(block.contains("helper"), "must show callee function");
         assert!(block.contains("helper(-1)"), "must show caller source line");
-        // In Detail mode with frames, numbered source line should NOT appear
+        // The failure frame (lineno=5) should NOT appear in trace
         assert!(
-            !block.contains("   5 │"),
-            "must NOT show numbered source line when frames present"
+            !block.contains("in helper"),
+            "failure frame must NOT appear in trace section"
         );
     }
 
     #[test]
-    fn test_diagnostic_block_detail_empty_frames_falls_back_to_source_line() {
-        use crate::types::{TestItem, TestOutcome};
+    fn test_diagnostic_block_detail_no_trace_when_only_failure_frame() {
+        use crate::types::{Frame, TestItem, TestOutcome};
 
         let item = TestItem {
             node_id: crate::types::NodeId::from_raw("t.py::test_direct"),
@@ -662,19 +682,26 @@ mod tests {
             left: "".to_string(),
             right: "".to_string(),
             op: "".to_string(),
-            frames: vec![],
+            frames: vec![Frame {
+                file: Utf8PathBuf::from("t.py"),
+                lineno: LineNo::new(3),
+                name: "test_direct".to_string(),
+                line: "assert False".to_string(),
+                locals: vec![],
+            }],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        // Empty frames → falls back to showing numbered source line
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        // Only the failure frame exists, so no trace section
         assert!(
-            block.contains("   3 │"),
-            "must show numbered source line when no frames"
+            !block.contains("trace"),
+            "must NOT show trace when only failure frame"
         );
-        assert!(!block.contains("frames"), "must NOT show frames section");
+        // Source line still shown as hero
+        assert!(block.contains("assert False"), "must show source line");
     }
 
     #[test]
-    fn test_diagnostic_short_hides_internal_frames() {
+    fn test_diagnostic_hides_internal_frames() {
         use crate::types::Frame;
 
         let item = make_item_at("test_user_code", "tests/test_app.py", 10);
@@ -710,11 +737,7 @@ mod tests {
                 },
             ],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        assert!(
-            block.contains("test_app.py"),
-            "user frame must appear: {block}"
-        );
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
         assert!(
             !block.contains("executor.py"),
             "internal frame must be hidden: {block}"
@@ -726,7 +749,7 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_detail_hides_internal_frames_keeps_user() {
+    fn test_diagnostic_show_internals_reveals_internal_frames() {
         use crate::types::Frame;
 
         let item = make_item_at("test_user_code", "tests/test_app.py", 10);
@@ -755,14 +778,11 @@ mod tests {
                 },
             ],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+        // show_internals=true should reveal internal frames
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false, false);
         assert!(
-            block.contains("test_app.py"),
-            "detail mode must show user frames: {block}"
-        );
-        assert!(
-            !block.contains("executor.py"),
-            "detail mode must hide internal frames: {block}"
+            block.contains("executor.py"),
+            "show_internals must reveal internal frames: {block}"
         );
     }
 
@@ -770,7 +790,6 @@ mod tests {
     fn test_filter_frames_fallback_to_last() {
         use crate::types::Frame;
 
-        // When ALL frames are internal, still show the last one
         let frames = vec![Frame {
             file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
             lineno: LineNo::new(10),
@@ -778,12 +797,12 @@ mod tests {
             line: "fn()".to_string(),
             locals: vec![],
         }];
-        let filtered = filter_frames(&frames);
+        let filtered = filter_frames(&frames, false);
         assert_eq!(filtered.len(), 1, "should show at least the last frame");
     }
 
     #[test]
-    fn test_diagnostic_multiline_why_stays_inside_box() {
+    fn test_diagnostic_multiline_closing_message_stays_inside_box() {
         let item = make_item("test_sub");
         let outcome = make_failed(
             "missing value:\ncollected 1 item\n\nFAILURES\nFAILED test.py::test_x",
@@ -791,8 +810,8 @@ mod tests {
             10,
             "assert x in out",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
-        // Every non-empty continuation line must be prefixed with BOX_VERT
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        // Every non-empty continuation line must be prefixed with box chrome
         for line in block.lines().skip(1) {
             let trimmed = line.trim_start();
             if trimmed.is_empty() {
@@ -800,13 +819,11 @@ mod tests {
             }
             assert!(
                 trimmed.starts_with(BOX_VERT)
-                    || trimmed.starts_with(BOX_BOT_LEFT)
-                    || trimmed.starts_with(BOX_BRANCH)
-                    || trimmed.starts_with(BOX_TOP_LEFT),
+                    || trimmed.starts_with(BOX_CLOSE)
+                    || trimmed.starts_with(BOX_OPEN),
                 "line escapes diagnostic box: {line:?}"
             );
         }
-        // The multi-line content must still appear
         assert!(
             block.contains("collected 1 item"),
             "multi-line content must be present"
@@ -814,6 +831,83 @@ mod tests {
         assert!(
             block.contains("FAILURES"),
             "multi-line content must be present"
+        );
+    }
+
+    #[test]
+    fn test_diagnostic_show_locals_renders_failure_frame_locals() {
+        use crate::types::Frame;
+
+        let item = make_item_at("test_check", "test.py", 5);
+        let outcome = TestOutcome::Failed {
+            message: "".to_string(),
+            file: Utf8PathBuf::from("test.py"),
+            lineno: LineNo::new(5),
+            source_line: "assert result == 10".to_string(),
+            left: "7".to_string(),
+            right: "10".to_string(),
+            op: "==".to_string(),
+            frames: vec![Frame {
+                file: Utf8PathBuf::from("test.py"),
+                lineno: LineNo::new(5),
+                name: "test_check".to_string(),
+                line: "assert result == 10".to_string(),
+                locals: vec![("result".to_string(), "7".to_string())],
+            }],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, true, false);
+        assert!(
+            block.contains("result = 7"),
+            "show_locals must render failure frame locals: {block}"
+        );
+    }
+
+    #[test]
+    fn test_diagnostic_no_locals_without_show_locals() {
+        use crate::types::Frame;
+
+        let item = make_item_at("test_check", "test.py", 5);
+        let outcome = TestOutcome::Failed {
+            message: "".to_string(),
+            file: Utf8PathBuf::from("test.py"),
+            lineno: LineNo::new(5),
+            source_line: "assert result == 10".to_string(),
+            left: "".to_string(),
+            right: "".to_string(),
+            op: "".to_string(),
+            frames: vec![Frame {
+                file: Utf8PathBuf::from("test.py"),
+                lineno: LineNo::new(5),
+                name: "test_check".to_string(),
+                line: "assert result == 10".to_string(),
+                locals: vec![("result".to_string(), "7".to_string())],
+            }],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        assert!(
+            !block.contains("result = 7"),
+            "locals must NOT appear without show_locals: {block}"
+        );
+    }
+
+    #[test]
+    fn test_diagnostic_hint_appears_inside_box() {
+        let item = make_item("test_await");
+        let outcome = TestOutcome::Error {
+            message: "TypeError: object X can't be used in 'await' expression".to_string(),
+            file: Utf8PathBuf::from("test.py"),
+            lineno: LineNo::new(5),
+            source_line: "await fx".to_string(),
+            frames: vec![],
+        };
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        assert!(
+            block.contains("hint:"),
+            "hint must appear inside the box: {block}"
+        );
+        assert!(
+            block.contains("async"),
+            "hint text must be present: {block}"
         );
     }
 
@@ -825,7 +919,8 @@ mod tests {
         fn failed_assertion_with_diff() {
             let item = make_item_at("test_compare", "tests/test_math.py", 15);
             let outcome = make_failed("assert x == y", "tests/test_math.py", 15, "assert x == y");
-            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+            let block =
+                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
             assert_snapshot!(block);
         }
 
@@ -856,7 +951,8 @@ mod tests {
                     },
                 ],
             };
-            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+            let block =
+                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
             assert_snapshot!(block);
         }
 
@@ -873,7 +969,8 @@ mod tests {
                 op: "==".to_string(),
                 frames: vec![],
             };
-            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false);
+            let block =
+                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
             assert_snapshot!(block);
         }
 
@@ -881,7 +978,7 @@ mod tests {
         fn tb_no_returns_empty() {
             let item = make_item_at("test_something", "tests/test_mod.py", 5);
             let outcome = make_failed("should pass", "tests/test_mod.py", 5, "assert x");
-            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false);
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false, false);
             assert_snapshot!(block);
         }
     }
