@@ -12,50 +12,20 @@ use crate::types::{
 /// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
 /// the canonical test module path `"tests/test_foo.py"`.
 pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
-    Arc::new(TestItem {
-        node_id: NodeId::new("tests/test_foo.py", name, None),
-        module_path: Utf8PathBuf::from("tests/test_foo.py"),
-        fn_name: name.to_string(),
-        lineno: LineNo::ZERO,
-        markers: vec![],
-        param_id: None,
-        param_values: vec![],
-        is_async: false,
-        fixture_names: vec![],
-    })
+    Arc::new(TestItem::builder("tests/test_foo.py", name).build())
 }
 
 /// Build an `Arc<TestItem>` from an already-formatted `node_id` string (e.g.
 /// `"tests/test_foo.py::test_fn"`).  Used by modules that receive raw node
 /// IDs from workers or other external sources.
 pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
-    Arc::new(TestItem {
-        node_id: NodeId::from_raw(node_id),
-        module_path: Utf8PathBuf::from("tests/test_foo.py"),
-        fn_name: node_id.to_string(),
-        lineno: LineNo::ZERO,
-        markers: vec![],
-        param_id: None,
-        param_values: vec![],
-        is_async: false,
-        fixture_names: vec![],
-    })
+    Arc::new(TestItem::builder_raw(node_id).build())
 }
 
 /// Build an `Arc<TestItem>` with an explicit `module` path, constructing the
 /// `node_id` via `NodeId::new(module, name, None)`.
 pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
-    Arc::new(TestItem {
-        node_id: NodeId::new(module, name, None),
-        module_path: Utf8PathBuf::from(module),
-        fn_name: name.to_string(),
-        lineno: LineNo::ZERO,
-        markers: vec![],
-        param_id: None,
-        param_values: vec![],
-        is_async: false,
-        fixture_names: vec![],
-    })
+    Arc::new(TestItem::builder(module, name).build())
 }
 
 /// Build a `(Utf8PathBuf, Vec<Arc<TestItem>>)` group for `module`, one item per
@@ -64,19 +34,7 @@ pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<
     let path = Utf8PathBuf::from(module);
     let items = names
         .iter()
-        .map(|name| {
-            Arc::new(TestItem {
-                node_id: NodeId::new(module, name, None),
-                module_path: path.clone(),
-                fn_name: name.to_string(),
-                lineno: LineNo::ZERO,
-                markers: vec![],
-                param_id: None,
-                param_values: vec![],
-                is_async: false,
-                fixture_names: vec![],
-            })
-        })
+        .map(|name| Arc::new(TestItem::builder(module, name).build()))
         .collect();
     (path, items)
 }
@@ -106,17 +64,7 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
 
 /// Build an `Arc<TestItem>` with an explicit module path and line number.
 pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestItem> {
-    Arc::new(TestItem {
-        node_id: NodeId::new(module, name, None),
-        module_path: Utf8PathBuf::from(module),
-        fn_name: name.to_string(),
-        lineno: LineNo::new(lineno),
-        markers: vec![],
-        param_id: None,
-        param_values: vec![],
-        is_async: false,
-        fixture_names: vec![],
-    })
+    Arc::new(TestItem::builder(module, name).lineno(lineno).build())
 }
 
 /// Build a zero-duration [`TestTiming`] for the given `node_id` string and `outcome`.

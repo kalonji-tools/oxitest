@@ -267,29 +267,15 @@ pub(crate) mod doubles {
     /// constructing [`StubRunner`] / [`StubCollector`] inputs without
     /// repeating boilerplate in each test.
     pub(crate) fn make_test_item(node_id_str: &str) -> TestItem {
-        use crate::types::NodeId;
-        TestItem {
-            node_id: NodeId::from_raw(node_id_str),
-            module_path: Utf8PathBuf::from("test_stub.py"),
-            fn_name: node_id_str
-                .split("::")
-                .last()
-                .unwrap_or("test_fn")
-                .to_string(),
-            lineno: crate::types::LineNo::new(1),
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-            is_async: false,
-            fixture_names: vec![],
-        }
+        TestItem::builder_raw(node_id_str).lineno(1).build()
     }
 
     /// Build a [`TestItem`] with the `inprocess` marker set.
     pub(crate) fn make_inprocess_item(node_id_str: &str) -> TestItem {
-        let mut item = make_test_item(node_id_str);
-        item.markers.push("inprocess".to_string());
-        item
+        TestItem::builder_raw(node_id_str)
+            .lineno(1)
+            .markers(vec!["inprocess".to_string()])
+            .build()
     }
 
     /// Build a zero-duration [`TestTiming`] for a given node-id string.
