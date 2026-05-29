@@ -1,0 +1,10 @@
+---
+source: src/pipeline_tests.rs
+expression: "helpers::format_test_list(&items, Verbosity::Full)"
+---
+tests/test_a.py::test_simple    fixtures: [tmp]
+tests/test_a.py::test_calc
+  [pos]    Case(n=1)    marks: [math]
+  [neg]    Case(n=-1)    marks: [math]
+
+3 tests

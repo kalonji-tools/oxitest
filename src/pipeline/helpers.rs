@@ -504,12 +504,16 @@ pub(super) fn finalize(
     cache.save(rootdir);
 }
 
-/// Format collected tests as a string. Plain mode: one node ID per line.
-/// Verbose mode: aligned table with module, function, markers, async flag.
+/// Format collected tests as a string for `--list` output.
+///
+/// - **Normal**: one node ID per line (no footer).
+/// - **Detailed**: node IDs with marks/fixtures metadata, plus a count footer.
+/// - **Full**: parametrized cases grouped under their parent function, plus a count footer.
 pub(super) fn format_test_list(
     items: &[Arc<types::TestItem>],
     verbosity: crate::config::Verbosity,
 ) -> String {
+    use crate::config::Verbosity;
     use std::fmt::Write;
 
     if items.is_empty() {
@@ -518,46 +522,116 @@ pub(super) fn format_test_list(
 
     let mut out = String::new();
 
-    if verbosity == crate::config::Verbosity::Normal {
-        let lines: Vec<&str> = items.iter().map(|i| i.node_id.as_ref()).collect();
-        return lines.join("\n");
-    }
+    match verbosity {
+        Verbosity::Normal => {
+            let lines: Vec<&str> = items.iter().map(|i| i.node_id.as_ref()).collect();
+            return lines.join("\n");
+        }
+        Verbosity::Detailed => {
+            let id_width = items
+                .iter()
+                .map(|i| i.node_id.as_ref().len())
+                .max()
+                .unwrap_or(10);
 
-    // Verbose: table with columns
-    let mod_width = items
-        .iter()
-        .map(|i| i.module_path.as_str().len())
-        .max()
-        .unwrap_or(6);
-    let fn_width = items.iter().map(|i| i.fn_name.len()).max().unwrap_or(8);
+            for item in items {
+                let marks = if item.markers.is_empty() {
+                    String::new()
+                } else {
+                    format!("marks: {}", item.markers.join(", "))
+                };
+                let fixtures = if item.fixture_names.is_empty() {
+                    String::new()
+                } else {
+                    format!("fixtures: {}", item.fixture_names.join(", "))
+                };
+                let mut parts = Vec::new();
+                if !marks.is_empty() {
+                    parts.push(marks);
+                }
+                if !fixtures.is_empty() {
+                    parts.push(fixtures);
+                }
+                let suffix = parts.join("    ");
+                if suffix.is_empty() {
+                    writeln!(out, "{}", item.node_id.as_ref()).unwrap();
+                } else {
+                    writeln!(out, "{:<id_width$}    {}", item.node_id.as_ref(), suffix,).unwrap();
+                }
+            }
+        }
+        Verbosity::Full => {
+            let mut current_fn: Option<(&str, &str)> = None;
 
-    writeln!(
-        out,
-        "{:<mod_width$}  {:<fn_width$}  {:>5}  markers",
-        "module", "function", "async",
-    )
-    .unwrap();
-    writeln!(
-        out,
-        "{}  {}  -----  -------",
-        "-".repeat(mod_width),
-        "-".repeat(fn_width),
-    )
-    .unwrap();
+            for item in items {
+                let is_param = item.param_id.is_some();
+                let module_fn = (item.module_path.as_str(), item.fn_name.as_str());
 
-    for item in items {
-        let markers = if item.markers.is_empty() {
-            String::new()
-        } else {
-            item.markers.join(", ")
-        };
-        let async_flag = if item.is_async { "yes" } else { "" };
-        writeln!(
-            out,
-            "{:<mod_width$}  {:<fn_width$}  {:>5}  {}",
-            item.module_path, item.fn_name, async_flag, markers,
-        )
-        .unwrap();
+                if is_param {
+                    if current_fn != Some(module_fn) {
+                        writeln!(out, "{}::{}", item.module_path, item.fn_name).unwrap();
+                        current_fn = Some(module_fn);
+                    }
+                    let param_id = item.param_id.as_deref().unwrap_or("?");
+                    let pv_repr = if item.param_values.is_empty() {
+                        String::new()
+                    } else {
+                        let fields: Vec<String> = item
+                            .param_values
+                            .iter()
+                            .map(|(k, v)| format!("{}={}", k, v))
+                            .collect();
+                        format!("Case({})", fields.join(", "))
+                    };
+                    let marks = if item.markers.is_empty() {
+                        String::new()
+                    } else {
+                        format!("marks: [{}]", item.markers.join(", "))
+                    };
+                    let fixtures = if item.fixture_names.is_empty() {
+                        String::new()
+                    } else {
+                        format!("fixtures: [{}]", item.fixture_names.join(", "))
+                    };
+                    let mut parts = Vec::new();
+                    if !pv_repr.is_empty() {
+                        parts.push(pv_repr);
+                    }
+                    if !marks.is_empty() {
+                        parts.push(marks);
+                    }
+                    if !fixtures.is_empty() {
+                        parts.push(fixtures);
+                    }
+                    writeln!(out, "  [{}]    {}", param_id, parts.join("    ")).unwrap();
+                } else {
+                    current_fn = None;
+                    let marks = if item.markers.is_empty() {
+                        String::new()
+                    } else {
+                        format!("marks: [{}]", item.markers.join(", "))
+                    };
+                    let fixtures = if item.fixture_names.is_empty() {
+                        String::new()
+                    } else {
+                        format!("fixtures: [{}]", item.fixture_names.join(", "))
+                    };
+                    let mut parts = Vec::new();
+                    if !marks.is_empty() {
+                        parts.push(marks);
+                    }
+                    if !fixtures.is_empty() {
+                        parts.push(fixtures);
+                    }
+                    let suffix = parts.join("    ");
+                    if suffix.is_empty() {
+                        writeln!(out, "{}", item.node_id.as_ref()).unwrap();
+                    } else {
+                        writeln!(out, "{}    {}", item.node_id.as_ref(), suffix).unwrap();
+                    }
+                }
+            }
+        }
     }
 
     write!(
