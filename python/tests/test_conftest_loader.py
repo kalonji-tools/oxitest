@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import textwrap
 
+import oxitest
 from conftest import helpers
 from oxitest import Fixture, TempDir, raises, warns
 from oxitest._bridge._helper_namespace import HelperNamespace
@@ -271,6 +272,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
     )
 
 
+@oxitest.mark.inprocess
 def test_load_fixtures_registers_conftest_in_sys_modules(tmp: TempDir):
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
 
@@ -393,6 +395,7 @@ def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir):
 # ── Helpers integration ──────────────────────────────────────────────────────
 
 
+@oxitest.mark.inprocess
 def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
     f = tmp / "conftest.py"
     f.write_text(
@@ -419,6 +422,7 @@ def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
     )
 
 
+@oxitest.mark.inprocess
 def test_create_session_helpers_contain_public_functions(tmp: TempDir):
     f = tmp / "conftest.py"
     f.write_text(
@@ -462,6 +466,7 @@ def test_create_session_empty_conftest_still_warns(tmp: TempDir):
         create_session([str(f)])
 
 
+@oxitest.mark.inprocess
 def test_create_session_helpers_empty_when_no_callables(tmp: TempDir):
     """helpers is present but scope has no attrs when conftest has only fixtures."""
     f = tmp / "conftest.py"

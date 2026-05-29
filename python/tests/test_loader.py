@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
+import oxitest
 from oxitest import TempDir, raises
 
 
@@ -42,6 +43,7 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir):
         _load_module(str(f), unique)
 
 
+@oxitest.mark.inprocess
 def test_resolve_fn_returns_callable(tmp: TempDir):
     import importlib.util
     import sys
@@ -57,16 +59,19 @@ def test_resolve_fn_returns_callable(tmp: TempDir):
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp"] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
 
-    fn_raw, fn = _resolve_fn(module, "test_bar", str(f))
-    assert callable(fn), (
-        f"resolved function should be callable, got {type(fn).__name__}"
-    )
-    assert fn() == 42, f"resolved function should return 42, got {fn()!r}"
-    sys.modules.pop("_test_mod_tmp", None)
+        fn_raw, fn = _resolve_fn(module, "test_bar", str(f))
+        assert callable(fn), (
+            f"resolved function should be callable, got {type(fn).__name__}"
+        )
+        assert fn() == 42, f"resolved function should return 42, got {fn()!r}"
+    finally:
+        sys.modules.pop("_test_mod_tmp", None)
 
 
+@oxitest.mark.inprocess
 def test_resolve_fn_raises_load_error_on_missing_function(tmp: TempDir):
     import importlib.util
     import sys
@@ -82,17 +87,20 @@ def test_resolve_fn_raises_load_error_on_missing_function(tmp: TempDir):
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp2"] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
 
-    with raises(_LoadError) as exc_info:
-        _resolve_fn(module, "test_nonexistent", str(f))
-    assert exc_info.value.result.status == "error", (  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
-        f"_LoadError for missing function should have result.status='error', "
-        f"got {exc_info.value.result.status!r}"  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
-    )
-    sys.modules.pop("_test_mod_tmp2", None)
+        with raises(_LoadError) as exc_info:
+            _resolve_fn(module, "test_nonexistent", str(f))
+        assert exc_info.value.result.status == "error", (  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+            f"_LoadError for missing function should have result.status='error', "
+            f"got {exc_info.value.result.status!r}"  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+        )
+    finally:
+        sys.modules.pop("_test_mod_tmp2", None)
 
 
+@oxitest.mark.inprocess
 def test_resolve_fn_handles_class_method(tmp: TempDir):
     import importlib.util
     import sys
@@ -108,11 +116,13 @@ def test_resolve_fn_handles_class_method(tmp: TempDir):
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp3"] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
 
-    fn_raw, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
-    assert callable(fn), (
-        f"resolved class method should be callable, got {type(fn).__name__}"
-    )
-    assert fn() == "ok", f"resolved class method should return 'ok', got {fn()!r}"
-    sys.modules.pop("_test_mod_tmp3", None)
+        fn_raw, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
+        assert callable(fn), (
+            f"resolved class method should be callable, got {type(fn).__name__}"
+        )
+        assert fn() == "ok", f"resolved class method should return 'ok', got {fn()!r}"
+    finally:
+        sys.modules.pop("_test_mod_tmp3", None)
