@@ -139,6 +139,8 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Detail,
+            show_locals: false,
+            show_internals: false,
             verbosity: crate::config::Verbosity::Normal,
             durations: None,
             color: crate::config::ColorMode::Auto,
