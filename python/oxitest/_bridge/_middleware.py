@@ -33,34 +33,31 @@ from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
 
 _REPR_MAX = 80
-_repr = reprlib.Repr()
-_repr.maxstring = _REPR_MAX
-_repr.maxother = _REPR_MAX
 
 
-def _repr_safe(value: object) -> str:
+def _safe_repr(obj: object, max_len: int = _REPR_MAX) -> str:
+    """Repr with length cap and failure safety via reprlib."""
+    r = reprlib.Repr()
+    r.maxstring = max_len
+    r.maxother = max_len
     try:
-        return _repr.repr(value)
-    except Exception:
-        return "<repr failed>"
-
-
-INTERNAL_PREFIXES = ("oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin")
-
-
-def _safe_repr(obj: object, max_len: int = 200) -> str:
-    """Repr with length cap and failure safety."""
-    try:
-        r = repr(obj)
-        return r[:max_len] + "..." if len(r) > max_len else r
+        return r.repr(obj)
     except Exception:  # noqa: BLE001
         return "<repr failed>"
+
+
+#: Backward-compatible alias used by assertion error rendering (80-char cap).
+_repr_safe = _safe_repr
+
+INTERNAL_PREFIXES = ("oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin")
 
 
 def _capture_locals(frame: Any) -> tuple[tuple[str, str], ...]:
     """Capture non-private local variables from a frame object."""
     return tuple(
-        (k, _safe_repr(v)) for k, v in frame.f_locals.items() if not k.startswith("_")
+        (k, _safe_repr(v, max_len=200))
+        for k, v in frame.f_locals.items()
+        if not k.startswith("_")
     )
 
 
