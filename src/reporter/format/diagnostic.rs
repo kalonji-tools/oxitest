@@ -169,7 +169,10 @@ pub(crate) fn fmt_diagnostic_block(
             color_dim(BOX_VERT, use_color),
             color_dim("trace", use_color)
         );
-        for f in &trace_frames {
+        for (i, f) in trace_frames.iter().enumerate() {
+            if i > 0 {
+                let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+            }
             let loc = format!("{}:{} in {}", f.file, f.lineno, f.name);
             let _ = writeln!(
                 out,
