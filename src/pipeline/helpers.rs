@@ -397,6 +397,7 @@ pub(super) fn apply_filters(
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
+#[allow(clippy::type_complexity)]
 fn partition_inprocess_groups(
     groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
 ) -> (
