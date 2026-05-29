@@ -69,7 +69,7 @@ class ApproxScalar(ApproxBase):
         if not isinstance(other, numbers.Number):
             return NotImplemented
         actual = float(other)  # ty: ignore[invalid-argument-type]
-        expected = float(self._expected)  # ty: ignore[invalid-argument-type]
+        expected = float(self._expected)
         if self._nan_ok and math.isnan(expected) and math.isnan(actual):
             return True
         if math.isnan(expected) or math.isnan(actual):
