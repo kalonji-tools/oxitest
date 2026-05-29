@@ -256,6 +256,8 @@ pub(crate) fn run_phase_parallel(
     };
     let timeout_secs = cfg.timeout_secs;
     let keep_tmp: Option<Arc<str>> = cfg.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
+    let show_locals = cfg.show_locals;
+    let show_internals = cfg.show_internals;
     let python_bin: Arc<str> = std::env::var("PYO3_PYTHON")
         .unwrap_or_else(|_| "python3".to_string())
         .into();
@@ -271,6 +273,8 @@ pub(crate) fn run_phase_parallel(
                 std::sync::Arc::clone(&conftest_raw),
                 timeout_secs,
                 keep_tmp.clone(),
+                show_locals,
+                show_internals,
                 tx.clone(),
             )
         })

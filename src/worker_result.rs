@@ -29,6 +29,10 @@ pub(crate) struct WorkerTask<'a> {
     pub timeout_secs: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keep_tmp: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_locals: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_internals: Option<bool>,
 }
 
 /// One test item within a [`WorkerTask`].

@@ -46,6 +46,7 @@ pub(crate) trait ModuleCollector {
 /// The real implementation (`BridgeRunner`) calls the Python executor. Test
 /// doubles can return fixed outcomes to exercise reporter and accumulator logic.
 pub(crate) trait TestRunner {
+    #[allow(clippy::too_many_arguments)]
     fn run_test(
         &self,
         py: Python<'_>,
@@ -54,11 +55,14 @@ pub(crate) trait TestRunner {
         timeout: Option<u64>,
         debug_mode: Option<&str>,
         keep_tmp: Option<&str>,
+        show_locals: bool,
+        show_internals: bool,
     ) -> TestOutcome;
 
     /// Run a test and return the outcome with elapsed duration.
     ///
     /// Default implementation wraps `run_test()` with `Instant::now()` timing.
+    #[allow(clippy::too_many_arguments)]
     fn run_timed(
         &self,
         py: Python<'_>,
@@ -67,9 +71,20 @@ pub(crate) trait TestRunner {
         timeout: Option<u64>,
         debug_mode: Option<&str>,
         keep_tmp: Option<&str>,
+        show_locals: bool,
+        show_internals: bool,
     ) -> (TestOutcome, crate::types::DurationMs) {
         let start = std::time::Instant::now();
-        let outcome = self.run_test(py, item, session, timeout, debug_mode, keep_tmp);
+        let outcome = self.run_test(
+            py,
+            item,
+            session,
+            timeout,
+            debug_mode,
+            keep_tmp,
+            show_locals,
+            show_internals,
+        );
         let duration_ms = crate::types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
         (outcome, duration_ms)
     }
@@ -146,6 +161,7 @@ impl ModuleCollector for BridgeCollector {
 pub(crate) struct BridgeRunner;
 
 impl TestRunner for BridgeRunner {
+    #[allow(clippy::too_many_arguments)]
     fn run_test(
         &self,
         py: Python<'_>,
@@ -154,6 +170,8 @@ impl TestRunner for BridgeRunner {
         timeout: Option<u64>,
         debug_mode: Option<&str>,
         keep_tmp: Option<&str>,
+        show_locals: bool,
+        show_internals: bool,
     ) -> TestOutcome {
         bridge::run_test_with_session_obj(
             py,
@@ -162,6 +180,8 @@ impl TestRunner for BridgeRunner {
             timeout,
             debug_mode,
             keep_tmp,
+            show_locals,
+            show_internals,
         )
     }
 }

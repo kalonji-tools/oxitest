@@ -28,6 +28,8 @@ pub(crate) struct RetryContext<'a> {
     pub runner: &'a dyn TestRunner,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: Option<&'a str>,
+    pub show_locals: bool,
+    pub show_internals: bool,
 }
 
 /// Identify test items whose timings show a failure outcome.
@@ -91,6 +93,8 @@ pub(crate) fn run_retries(
                 ctx.timeout_secs,
                 None,
                 ctx.keep_tmp,
+                ctx.show_locals,
+                ctx.show_internals,
             );
 
             if !outcome.is_hard_failure() {
