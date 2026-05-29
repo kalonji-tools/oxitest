@@ -174,6 +174,10 @@ pub(crate) mod doubles {
             vec![]
         }
 
+        fn shared_fixture_groups(&self, _py: Python<'_>) -> Vec<Vec<String>> {
+            vec![]
+        }
+
         fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
             self.obj.bind(py).clone()
         }

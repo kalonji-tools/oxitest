@@ -131,6 +131,18 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Returns connected components of shared fixture dependencies.
+    /// Each inner Vec is a sorted group of fixture names that must co-locate.
+    /// Returns an empty Vec on any Python error (advisory-only).
+    #[allow(dead_code)]
+    pub fn shared_fixture_groups(&self, py: Python<'_>) -> Vec<Vec<String>> {
+        self.0
+            .bind(py)
+            .call_method0("shared_fixture_groups")
+            .and_then(|v| v.extract::<Vec<Vec<String>>>())
+            .unwrap_or_default()
+    }
+
     /// Returns this session as a bound Python object for passing to bridge calls.
     pub(crate) fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.0.bind(py).clone()

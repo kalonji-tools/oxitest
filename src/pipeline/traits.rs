@@ -24,6 +24,8 @@ pub(crate) trait Session {
     fn end_module(&self, py: Python<'_>, module_path: &Utf8Path) -> PyResult<()>;
     fn end_session(&self, py: Python<'_>) -> PyResult<()>;
     fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String>;
+    #[allow(dead_code)]
+    fn shared_fixture_groups(&self, py: Python<'_>) -> Vec<Vec<String>>;
     fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny>;
 }
 
@@ -130,6 +132,10 @@ impl Session for bridge::FixtureSession {
 
     fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {
         bridge::FixtureSession::shared_fixture_names(self, py)
+    }
+
+    fn shared_fixture_groups(&self, py: Python<'_>) -> Vec<Vec<String>> {
+        bridge::FixtureSession::shared_fixture_groups(self, py)
     }
 
     fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
