@@ -198,7 +198,7 @@ def test_frame_keys():
     wire = _wire(result)
     assert "frames" in wire, "frames must be present"
     frame = wire["frames"][0]
-    expected = {"file", "lineno", "name", "line"}
+    expected = {"file", "lineno", "name", "line", "locals"}
     assert set(frame.keys()) == expected, f"wrong frame keys: {set(frame.keys())}"
 
 
