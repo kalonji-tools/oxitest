@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+import oxitest
 from conftest import helpers
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
@@ -1090,6 +1091,7 @@ def test_logcapture_injected_via_session():
         td()
 
 
+@oxitest.mark.inprocess
 def test_logcapture_includes_plugin_backends():
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
     import logging
