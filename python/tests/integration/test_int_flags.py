@@ -429,3 +429,21 @@ def test_capture_environment_prints_versions(tmp: TempDir):
     assert "oxitest:" in out.lower(), f"output should contain oxitest version: {out!r}"
     # Should NOT run tests
     assert "passed" not in out, f"--capture-environment should not run tests: {out!r}"
+
+
+@oxitest.mark.timeout(120)
+def test_inprocess_mark_runs_on_main_process(tmp: TempDir):
+    """@oxi.mark.inprocess tests run on main process during parallel execution."""
+    (tmp / "test_inproc.py").write_text(
+        "import oxitest\n\n"
+        "@oxitest.mark.inprocess\n"
+        "def test_main_process():\n"
+        "    assert True\n"
+    )
+    (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    assert rc == 0, (
+        f"inprocess + parallel should exit 0, got {rc}\n"
+        f"stdout: {out!r}\nstderr: {stderr!r}"
+    )
+    assert "2 passed" in out, f"both tests should pass: {out!r}"
