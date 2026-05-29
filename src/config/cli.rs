@@ -23,9 +23,20 @@ pub struct Cli {
     #[arg(short = 'k', value_name = "EXPR")]
     pub keyword: Option<String>,
 
-    /// Verbose output: show each test name and result
-    #[arg(short = 'v', long)]
-    pub verbose: bool,
+    /// Short-form verbosity (-v = detailed, -vv = full)
+    #[arg(short = 'v', action = clap::ArgAction::Count)]
+    pub verbose_count: u8,
+
+    /// Explicit verbosity level (--verbose, --verbose=detailed, --verbose=full)
+    #[arg(
+        long = "verbose",
+        value_enum,
+        value_name = "LEVEL",
+        default_missing_value = "detailed",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub verbose: Option<crate::config::Verbosity>,
 
     /// Exit immediately after the first failure
     #[arg(short = 'x')]
@@ -174,11 +185,8 @@ impl Cli {
             );
         }
 
-        if self.verbose && self.quiet {
-            return Err(
-                "--verbose and --quiet are opposite output modes. Use one or the other."
-                    .to_string(),
-            );
+        if self.verbose_count > 0 && self.verbose.is_some() {
+            return Err("use -v/-vv or --verbose=LEVEL, not both.".to_string());
         }
 
         if self.schedule.is_some() && self.serial {
@@ -291,21 +299,50 @@ mod validate_tests {
     }
 
     #[test]
-    fn test_verbose_conflicts_with_quiet() {
-        let cli = Cli::try_parse_from(["oxitest", "-v", "-q"]).unwrap();
+    fn test_short_v_parses() {
+        let cli = Cli::try_parse_from(["oxitest", "-v"]).unwrap();
+        assert_eq!(cli.verbose_count, 1);
+        assert!(cli.verbose.is_none());
+    }
+
+    #[test]
+    fn test_short_vv_parses() {
+        let cli = Cli::try_parse_from(["oxitest", "-vv"]).unwrap();
+        assert_eq!(cli.verbose_count, 2);
+    }
+
+    #[test]
+    fn test_long_verbose_bare() {
+        let cli = Cli::try_parse_from(["oxitest", "--verbose"]).unwrap();
+        assert_eq!(cli.verbose, Some(crate::config::Verbosity::Detailed));
+        assert_eq!(cli.verbose_count, 0);
+    }
+
+    #[test]
+    fn test_long_verbose_full() {
+        let cli = Cli::try_parse_from(["oxitest", "--verbose=full"]).unwrap();
+        assert_eq!(cli.verbose, Some(crate::config::Verbosity::Full));
+    }
+
+    #[test]
+    fn test_short_and_long_verbose_conflict() {
+        let cli = Cli::try_parse_from(["oxitest", "-v", "--verbose=full"]).unwrap();
         let err = cli.validate().unwrap_err();
+        assert!(err.contains("-v/-vv"), "error: {err}");
+        assert!(err.contains("--verbose"), "error: {err}");
+    }
+
+    #[test]
+    fn test_v_with_quiet_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "-v", "-q"]).unwrap();
         assert!(
-            err.contains("--verbose"),
-            "error should mention --verbose: {err}"
-        );
-        assert!(
-            err.contains("--quiet"),
-            "error should mention --quiet: {err}"
+            cli.validate().is_ok(),
+            "-v -q should be valid (quiet trumps)"
         );
     }
 
     #[test]
-    fn test_verbose_alone_is_valid() {
+    fn test_short_v_alone_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "-v"]).unwrap();
         assert!(cli.validate().is_ok());
     }

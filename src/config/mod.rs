@@ -145,7 +145,9 @@ pub enum KeepTmpMode {
 /// - `Normal` — default: dots/lines, summary only.
 /// - `Detailed` — show individual test names and outcomes.
 /// - `Full` — show test names, outcomes, and fixture/setup detail.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, clap::ValueEnum,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Verbosity {
     #[default]
@@ -509,6 +511,16 @@ impl Config {
             } else {
                 self.affected = cli.affected.clone();
             }
+        }
+
+        // ── Output (unique to CLI) ──────────────────────────────────
+        // validate() guarantees verbose_count and verbose are not both set.
+        if let Some(level) = cli.verbose {
+            self.verbosity = level;
+        } else if cli.verbose_count >= 2 {
+            self.verbosity = Verbosity::Full;
+        } else if cli.verbose_count == 1 {
+            self.verbosity = Verbosity::Detailed;
         }
 
         // ── Shared overrides ────────────────────────────────────────────
