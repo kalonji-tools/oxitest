@@ -56,6 +56,27 @@ def test_builtin_fixture_create_raises_not_implemented():
         BuiltinFixture().create(ctx)
 
 
+def test_builtin_context_keep_tmp_default_is_none():
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=[],
+    )
+    assert ctx.keep_tmp is None, "_BuiltinContext.keep_tmp should default to None"
+
+
+def test_builtin_context_keep_tmp_accepts_value():
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
+        inject_scope="function",
+        teardown_stack=[],
+        keep_tmp="failed",
+    )
+    assert ctx.keep_tmp == "failed", (
+        "_BuiltinContext.keep_tmp should accept and store 'failed'"
+    )
+
+
 # ── TempDir ───────────────────────────────────────────────────────────────────
 
 

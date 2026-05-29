@@ -139,6 +139,16 @@ pub enum KeepTmpMode {
     Always,
 }
 
+impl KeepTmpMode {
+    /// Convert to the string representation sent across the Python bridge.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            KeepTmpMode::Failed => "failed",
+            KeepTmpMode::Always => "always",
+        }
+    }
+}
+
 impl ColorMode {
     /// Resolve the color mode to a boolean given whether stdout is a TTY.
     ///

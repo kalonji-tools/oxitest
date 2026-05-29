@@ -84,6 +84,7 @@ pub(crate) mod doubles {
             _session: &dyn Session,
             timeout: Option<u64>,
             _debug_mode: Option<&str>,
+            _keep_tmp: Option<&str>,
         ) -> TestOutcome {
             let node_id = item.node_id.to_string();
             self.calls.borrow_mut().push((node_id.clone(), timeout));
