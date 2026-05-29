@@ -66,7 +66,7 @@ def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
             pass
 
         try:
-            entry(_sentinel)
+            entry(_sentinel)  # ty: ignore[call-top-callable]
             marks = get_marks(_sentinel)
             return marks[-1] if marks else None
         except Exception:  # noqa: BLE001
