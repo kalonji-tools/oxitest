@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import types
 
+import oxitest
 from conftest import helpers
 from oxitest._bridge._errors import ConflictingDebuggerError
 from oxitest._bridge._raises import raises
@@ -30,6 +31,7 @@ def test_load_empty_plugins_returns_empty_registry():
     assert registry.entries == [], f"expected empty entries, got {registry.entries!r}"
 
 
+@oxitest.mark.inprocess
 def test_load_valid_plugin():
     mod = types.ModuleType("fake_plugin")
     mod.oxitest_plugin = lambda config=None: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
@@ -47,6 +49,7 @@ def test_load_valid_plugin():
         _remove_fake_module("fake_plugin")
 
 
+@oxitest.mark.inprocess
 def test_load_plugin_receives_config():
     received: dict = {}
 
@@ -71,6 +74,7 @@ def test_load_missing_module_raises():
         load_plugins(["nonexistent_oxitest_plugin_xyz"], {})
 
 
+@oxitest.mark.inprocess
 def test_load_no_entry_function_raises():
     mod = types.ModuleType("no_entry")
     _install_fake_module("no_entry", mod)
@@ -81,6 +85,7 @@ def test_load_no_entry_function_raises():
         _remove_fake_module("no_entry")
 
 
+@oxitest.mark.inprocess
 def test_load_wrong_return_type_raises():
     mod = types.ModuleType("bad_return")
     mod.oxitest_plugin = lambda config=None: "not a Plugin"  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
@@ -92,6 +97,7 @@ def test_load_wrong_return_type_raises():
         _remove_fake_module("bad_return")
 
 
+@oxitest.mark.inprocess
 def test_load_entry_raises_wraps_error():
     def bad_entry(config=None):
         raise ValueError("boom")
@@ -106,6 +112,7 @@ def test_load_entry_raises_wraps_error():
         _remove_fake_module("raises_plugin")
 
 
+@oxitest.mark.inprocess
 def test_registry_aggregates_across_plugins():
     class FakeBackend:
         def install(self):
@@ -134,6 +141,7 @@ def test_registry_aggregates_across_plugins():
         _remove_fake_module("plug2")
 
 
+@oxitest.mark.inprocess
 def test_conflicting_debugger_backends_raises():
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
     mod_a = types.ModuleType("dbg_plugin_a")
@@ -160,6 +168,7 @@ def test_conflicting_debugger_backends_raises():
         _remove_fake_module("dbg_plugin_b")
 
 
+@oxitest.mark.inprocess
 def test_single_debugger_backend_is_valid():
     """One plugin providing a debugger backend should not raise."""
     mod = types.ModuleType("solo_dbg")

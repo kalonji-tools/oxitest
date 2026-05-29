@@ -1319,6 +1319,7 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
         _fixture_context.reset(token)
 
 
+@oxitest.mark.inprocess
 def test_plugin_fixture_provider_injected():
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
     import types
