@@ -256,6 +256,7 @@ pub(crate) fn collect_module_with_session_obj(
 ///
 /// The trait-based `TestRunner` implementation calls this directly,
 /// bypassing the `Option<&FixtureSession>` indirection.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,
@@ -263,15 +264,26 @@ pub(crate) fn run_test_with_session_obj(
     default_timeout: Option<u64>,
     debug_mode: Option<&str>,
     keep_tmp: Option<&str>,
+    show_locals: bool,
+    show_internals: bool,
 ) -> TestOutcome {
-    try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug_mode, keep_tmp)
-        .unwrap_or_else(|e| TestOutcome::Error {
-            message: format!("{} — {}", item.node_id, e),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        })
+    try_run_test_with_session_obj(
+        py,
+        item,
+        session_obj,
+        default_timeout,
+        debug_mode,
+        keep_tmp,
+        show_locals,
+        show_internals,
+    )
+    .unwrap_or_else(|e| TestOutcome::Error {
+        message: format!("{} — {}", item.node_id, e),
+        file: Utf8PathBuf::new(),
+        lineno: LineNo::ZERO,
+        source_line: String::new(),
+        frames: vec![],
+    })
 }
 
 /// Call Python's `import_graph.resolve_affected()` to find test files
@@ -292,6 +304,7 @@ pub(crate) fn resolve_affected_tests(
     Ok(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn try_run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,
@@ -299,6 +312,8 @@ fn try_run_test_with_session_obj(
     default_timeout: Option<u64>,
     debug_mode: Option<&str>,
     keep_tmp: Option<&str>,
+    show_locals: bool,
+    show_internals: bool,
 ) -> PyResult<TestOutcome> {
     let executor = py.import("oxitest._bridge.executor")?;
 
@@ -338,10 +353,25 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
+    let show_locals_obj: Bound<'_, PyAny> = pyo3::types::PyBool::new(py, show_locals)
+        .to_owned()
+        .into_any();
+    let show_internals_obj: Bound<'_, PyAny> = pyo3::types::PyBool::new(py, show_internals)
+        .to_owned()
+        .into_any();
+
     let r: TestResult = executor
         .call_method1(
             "run_test",
-            (meta_obj, session_obj, &timeout_obj, debug_obj, keep_tmp_obj),
+            (
+                meta_obj,
+                session_obj,
+                &timeout_obj,
+                debug_obj,
+                keep_tmp_obj,
+                show_locals_obj,
+                show_internals_obj,
+            ),
         )?
         .extract()?;
 

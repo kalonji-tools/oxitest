@@ -128,6 +128,7 @@ impl WorkerSession {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_worker(
     python_bin: std::sync::Arc<str>,
     sched: std::sync::Arc<scheduler::Scheduler>,
@@ -135,6 +136,8 @@ pub(crate) fn spawn_worker(
     conftest_json: std::sync::Arc<serde_json::value::RawValue>,
     timeout_secs: Option<u64>,
     keep_tmp: Option<std::sync::Arc<str>>,
+    show_locals: bool,
+    show_internals: bool,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
@@ -178,6 +181,8 @@ pub(crate) fn spawn_worker(
                 conftest_paths: &conftest_json,
                 timeout_secs,
                 keep_tmp: keep_tmp.as_deref(),
+                show_locals: if show_locals { Some(true) } else { None },
+                show_internals: if show_internals { Some(true) } else { None },
             };
 
             if let Err(e) = session.send_task(&task) {
@@ -293,6 +298,8 @@ mod worker_session_tests {
             conftest_paths: conftest,
             timeout_secs: None,
             keep_tmp: None,
+            show_locals: None,
+            show_internals: None,
         }
     }
 
@@ -344,6 +351,8 @@ mod worker_session_tests {
             conftest_paths: &conftest,
             timeout_secs: Some(30),
             keep_tmp: None,
+            show_locals: None,
+            show_internals: None,
         };
 
         // Act
