@@ -397,7 +397,6 @@ pub(super) fn apply_filters(
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
-#[allow(dead_code)] // Used by later tasks (inprocess unit tests).
 fn partition_inprocess_groups(
     groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
 ) -> (
@@ -719,4 +718,66 @@ pub(super) fn format_test_list(
     )
     .unwrap();
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_doubles::doubles::{make_inprocess_item, make_test_item};
+    use camino::Utf8PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_partition_inprocess_groups_splits_mixed_module() {
+        let normal = Arc::new(make_test_item("test_a.py::test_normal"));
+        let inproc = Arc::new(make_inprocess_item("test_a.py::test_serial"));
+        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![normal, inproc])];
+
+        let (inp, par) = partition_inprocess_groups(groups);
+        assert_eq!(inp.len(), 1, "one module in inprocess");
+        assert_eq!(inp[0].1.len(), 1);
+        assert_eq!(inp[0].1[0].fn_name, "test_serial");
+        assert_eq!(par.len(), 1, "one module in parallel");
+        assert_eq!(par[0].1.len(), 1);
+        assert_eq!(par[0].1[0].fn_name, "test_normal");
+    }
+
+    #[test]
+    fn test_partition_inprocess_groups_no_inprocess() {
+        let a = Arc::new(make_test_item("test_a.py::test_a"));
+        let b = Arc::new(make_test_item("test_a.py::test_b"));
+        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
+
+        let (inp, par) = partition_inprocess_groups(groups);
+        assert!(inp.is_empty());
+        assert_eq!(par.len(), 1);
+        assert_eq!(par[0].1.len(), 2);
+    }
+
+    #[test]
+    fn test_partition_inprocess_groups_all_inprocess() {
+        let a = Arc::new(make_inprocess_item("test_a.py::test_a"));
+        let b = Arc::new(make_inprocess_item("test_a.py::test_b"));
+        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
+
+        let (inp, par) = partition_inprocess_groups(groups);
+        assert_eq!(inp.len(), 1);
+        assert_eq!(inp[0].1.len(), 2);
+        assert!(par.is_empty());
+    }
+
+    #[test]
+    fn test_partition_inprocess_groups_multiple_modules() {
+        let a_normal = Arc::new(make_test_item("test_a.py::test_normal"));
+        let a_inproc = Arc::new(make_inprocess_item("test_a.py::test_serial"));
+        let b_normal = Arc::new(make_test_item("test_b.py::test_b"));
+        let groups = vec![
+            (Utf8PathBuf::from("test_a.py"), vec![a_normal, a_inproc]),
+            (Utf8PathBuf::from("test_b.py"), vec![b_normal]),
+        ];
+
+        let (inp, par) = partition_inprocess_groups(groups);
+        assert_eq!(inp.len(), 1, "only test_a.py has inprocess items");
+        assert_eq!(par.len(), 2, "both modules have parallel items");
+    }
 }
