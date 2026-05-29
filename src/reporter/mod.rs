@@ -288,17 +288,9 @@ mod json_tests {
     // Uses "tests/test_mod.py" (not the shared helper's "tests/test_foo.py") because
     // CTRF output tests assert on the exact module path that appears in JSON output.
     fn make_item(name: &str) -> TestItem {
-        TestItem {
-            node_id: crate::types::NodeId::new("tests/test_mod.py", name, None),
-            module_path: Utf8PathBuf::from("tests/test_mod.py"),
-            fn_name: name.to_string(),
-            lineno: LineNo::new(1),
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-            is_async: false,
-            fixture_names: vec![],
-        }
+        TestItem::builder("tests/test_mod.py", name)
+            .lineno(1)
+            .build()
     }
 
     #[test]

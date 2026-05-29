@@ -1015,17 +1015,12 @@ mod result_handler_tests {
     }
 
     fn make_item(node_id: &str) -> Arc<types::TestItem> {
-        Arc::new(types::TestItem {
-            node_id: types::NodeId::from_raw(node_id),
-            module_path: camino::Utf8PathBuf::from("tests/test_mod.py"),
-            fn_name: "test_fn".to_string(),
-            lineno: crate::types::LineNo::new(1),
-            markers: vec![],
-            param_id: None,
-            param_values: vec![],
-            is_async: false,
-            fixture_names: vec![],
-        })
+        Arc::new(
+            types::TestItem::builder_raw(node_id)
+                .module_path("tests/test_mod.py")
+                .lineno(1)
+                .build(),
+        )
     }
 
     #[test]

@@ -93,23 +93,16 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::NodeId;
 
     fn make_group(path: &str, count: usize) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
         let p = Utf8PathBuf::from(path);
         let items = (0..count)
             .map(|i| {
-                Arc::new(TestItem {
-                    node_id: NodeId::new(path, &format!("test_{i}"), None),
-                    module_path: p.clone(),
-                    fn_name: format!("test_{i}"),
-                    lineno: crate::types::LineNo::new(i),
-                    markers: vec![],
-                    param_id: None,
-                    param_values: vec![],
-                    is_async: false,
-                    fixture_names: vec![],
-                })
+                Arc::new(
+                    TestItem::builder(path, &format!("test_{i}"))
+                        .lineno(i)
+                        .build(),
+                )
             })
             .collect();
         (p, items)

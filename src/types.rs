@@ -195,6 +195,119 @@ pub struct TestItem {
     pub(crate) fixture_names: Vec<String>,
 }
 
+/// Builder for [`TestItem`], used exclusively in tests.
+///
+/// Required fields (`module_path`, `fn_name`) are set at construction.
+/// All other fields default to empty/zero/false.
+#[cfg(test)]
+pub(crate) struct TestItemBuilder {
+    node_id: Option<NodeId>,
+    module_path: Utf8PathBuf,
+    fn_name: String,
+    lineno: LineNo,
+    markers: Vec<String>,
+    param_id: Option<String>,
+    param_values: Vec<(String, String)>,
+    is_async: bool,
+    fixture_names: Vec<String>,
+}
+
+#[cfg(test)]
+impl TestItemBuilder {
+    pub(crate) fn lineno(mut self, n: usize) -> Self {
+        self.lineno = LineNo::new(n);
+        self
+    }
+
+    pub(crate) fn markers(mut self, m: Vec<String>) -> Self {
+        self.markers = m;
+        self
+    }
+
+    pub(crate) fn param_id(mut self, id: String) -> Self {
+        self.param_id = Some(id);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn param_values(mut self, pv: Vec<(String, String)>) -> Self {
+        self.param_values = pv;
+        self
+    }
+
+    pub(crate) fn async_fn(mut self, val: bool) -> Self {
+        self.is_async = val;
+        self
+    }
+
+    pub(crate) fn fixture_names(mut self, names: Vec<String>) -> Self {
+        self.fixture_names = names;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn module_path(mut self, path: &str) -> Self {
+        self.module_path = Utf8PathBuf::from(path);
+        self
+    }
+
+    pub(crate) fn build(self) -> TestItem {
+        let node_id = self.node_id.unwrap_or_else(|| {
+            NodeId::new(
+                self.module_path.as_str(),
+                &self.fn_name,
+                self.param_id.as_deref(),
+            )
+        });
+        TestItem {
+            node_id,
+            module_path: self.module_path,
+            fn_name: self.fn_name,
+            lineno: self.lineno,
+            markers: self.markers,
+            param_id: self.param_id,
+            param_values: self.param_values,
+            is_async: self.is_async,
+            fixture_names: self.fixture_names,
+        }
+    }
+}
+
+#[cfg(test)]
+impl TestItem {
+    /// Create a builder with a module path and function name.
+    /// `node_id` is auto-computed as `"{module}::{fn_name}"` (with `[param_id]` if set).
+    pub(crate) fn builder(module_path: &str, fn_name: &str) -> TestItemBuilder {
+        TestItemBuilder {
+            node_id: None,
+            module_path: Utf8PathBuf::from(module_path),
+            fn_name: fn_name.to_string(),
+            lineno: LineNo::ZERO,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+            is_async: false,
+            fixture_names: vec![],
+        }
+    }
+
+    /// Create a builder from a pre-formatted node_id string.
+    /// `module_path` defaults to `"tests/test_foo.py"` and `fn_name` to the full node_id.
+    pub(crate) fn builder_raw(node_id: &str) -> TestItemBuilder {
+        TestItemBuilder {
+            node_id: Some(NodeId::from_raw(node_id)),
+            module_path: Utf8PathBuf::from("tests/test_foo.py"),
+            fn_name: node_id.to_string(),
+            lineno: LineNo::ZERO,
+            markers: vec![],
+            param_id: None,
+            param_values: vec![],
+            is_async: false,
+            fixture_names: vec![],
+        }
+    }
+}
+
 /// Single traceback frame from a test failure or error.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
@@ -1286,6 +1399,53 @@ mod tests {
             outcome: OutcomeKind::Passed,
         };
         assert_eq!(timing.outcome, OutcomeKind::Passed);
+    }
+
+    #[test]
+    fn builder_defaults() {
+        let item = TestItem::builder("tests/test_foo.py", "test_add").build();
+        assert_eq!(item.node_id.to_string(), "tests/test_foo.py::test_add");
+        assert_eq!(item.module_path.as_str(), "tests/test_foo.py");
+        assert_eq!(item.fn_name, "test_add");
+        assert_eq!(item.lineno, LineNo::ZERO);
+        assert!(item.markers.is_empty());
+        assert!(item.param_id.is_none());
+        assert!(item.param_values.is_empty());
+        assert!(!item.is_async);
+        assert!(item.fixture_names.is_empty());
+    }
+
+    #[test]
+    fn builder_with_overrides() {
+        let item = TestItem::builder("tests/test_foo.py", "test_add")
+            .lineno(42)
+            .markers(vec!["slow".to_string()])
+            .async_fn(true)
+            .fixture_names(vec!["db".to_string()])
+            .build();
+        assert_eq!(item.lineno, LineNo::new(42));
+        assert_eq!(item.markers, vec!["slow"]);
+        assert!(item.is_async);
+        assert_eq!(item.fixture_names, vec!["db"]);
+    }
+
+    #[test]
+    fn builder_raw_node_id() {
+        let item = TestItem::builder_raw("tests/test_foo.py::test_fn").build();
+        assert_eq!(item.node_id.to_string(), "tests/test_foo.py::test_fn");
+        assert_eq!(item.fn_name, "tests/test_foo.py::test_fn");
+    }
+
+    #[test]
+    fn builder_with_param_id() {
+        let item = TestItem::builder("tests/test_foo.py", "test_add")
+            .param_id("case0".to_string())
+            .build();
+        assert_eq!(
+            item.node_id.to_string(),
+            "tests/test_foo.py::test_add[case0]"
+        );
+        assert_eq!(item.param_id, Some("case0".to_string()));
     }
 
     fn raw(status: &str) -> RawOutcome<'_> {

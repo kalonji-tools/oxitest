@@ -925,10 +925,10 @@ mod tests {
         let (inp, par) = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1, "one module in inprocess");
         assert_eq!(inp[0].1.len(), 1);
-        assert_eq!(inp[0].1[0].fn_name, "test_serial");
+        assert_eq!(inp[0].1[0].node_id.as_ref(), "test_a.py::test_serial");
         assert_eq!(par.len(), 1, "one module in parallel");
         assert_eq!(par[0].1.len(), 1);
-        assert_eq!(par[0].1[0].fn_name, "test_normal");
+        assert_eq!(par[0].1[0].node_id.as_ref(), "test_a.py::test_normal");
     }
 
     #[test]
@@ -997,10 +997,10 @@ mod tests {
         assert_eq!(arranged.len(), 1, "one fixture group");
         assert_eq!(arranged[0].len(), 1, "one module in fixture group");
         assert_eq!(arranged[0][0].1.len(), 1, "one test in fixture group");
-        assert_eq!(arranged[0][0].1[0].fn_name, "test_db");
+        assert_eq!(arranged[0][0].1[0].node_id.as_ref(), "test_a.py::test_db");
         assert_eq!(remaining.len(), 1, "one module with remaining");
         assert_eq!(remaining[0].1.len(), 1, "one test remaining");
-        assert_eq!(remaining[0].1[0].fn_name, "test_plain");
+        assert_eq!(remaining[0].1[0].node_id.as_ref(), "test_a.py::test_plain");
     }
 
     #[test]
