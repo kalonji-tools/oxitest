@@ -581,6 +581,10 @@ class FixtureSession:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
         return self._registry.shared_names()
 
+    def shared_fixture_groups(self) -> list[list[str]]:
+        """Return connected components of shared fixture dependencies."""
+        return self._registry.shared_fixture_groups()
+
     def _inject_builtin(
         self,
         impl_cls: type[BuiltinFixture],
