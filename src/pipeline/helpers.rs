@@ -506,7 +506,10 @@ pub(super) fn finalize(
 
 /// Format collected tests as a string. Plain mode: one node ID per line.
 /// Verbose mode: aligned table with module, function, markers, async flag.
-pub(super) fn format_test_list(items: &[Arc<types::TestItem>], verbose: bool) -> String {
+pub(super) fn format_test_list(
+    items: &[Arc<types::TestItem>],
+    verbosity: crate::config::Verbosity,
+) -> String {
     use std::fmt::Write;
 
     if items.is_empty() {
@@ -515,7 +518,7 @@ pub(super) fn format_test_list(items: &[Arc<types::TestItem>], verbose: bool) ->
 
     let mut out = String::new();
 
-    if !verbose {
+    if verbosity == crate::config::Verbosity::Normal {
         let lines: Vec<&str> = items.iter().map(|i| i.node_id.as_ref()).collect();
         return lines.join("\n");
     }
