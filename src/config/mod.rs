@@ -139,6 +139,21 @@ pub enum KeepTmpMode {
     Always,
 }
 
+/// Output verbosity level.
+///
+/// Controls how much detail is shown in test output:
+/// - `Normal` — default: dots/lines, summary only.
+/// - `Detailed` — show individual test names and outcomes.
+/// - `Full` — show test names, outcomes, and fixture/setup detail.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Verbosity {
+    #[default]
+    Normal = 0,
+    Detailed = 1,
+    Full = 2,
+}
+
 impl KeepTmpMode {
     /// Convert to the string representation sent across the Python bridge.
     pub fn as_str(&self) -> &'static str {
@@ -192,7 +207,7 @@ pub struct Config {
     pub schedule: ScheduleStrategy,
     pub failed: Option<FailedMode>,
     pub tb: TbStyle,
-    pub verbose: bool,
+    pub verbosity: Verbosity,
     pub durations: Option<usize>,
     pub color: ColorMode,
     pub plugins: Vec<String>,
@@ -236,7 +251,7 @@ impl Default for Config {
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
             tb: TbStyle::Short,
-            verbose: false,
+            verbosity: Verbosity::Normal,
             durations: None,
             color: ColorMode::Auto,
             plugins: vec![],
@@ -421,7 +436,7 @@ impl Config {
         self.timeout_multiplier = tc.timeout_multiplier;
 
         // ── Output (unique to TOML) ─────────────────────────────────────
-        apply_if_some!(self, verbose, tc.verbose);
+        apply_if_some!(self, verbosity, tc.verbosity);
 
         // ── Filtering (unique to TOML) ──────────────────────────────────
         apply_if_some!(self, plugins, tc.plugins);
@@ -485,11 +500,6 @@ impl Config {
         // ── Debug mode ──────────────────────────────────────────────────
         if let Some(ref mode) = cli.debug {
             mode.apply_to(&mut self, cli.tb.as_ref());
-        }
-
-        // ── Output (unique to CLI) ──────────────────────────────────────
-        if cli.verbose {
-            self.verbose = true;
         }
 
         // ── Filtering (unique to CLI) ───────────────────────────────────
@@ -704,9 +714,26 @@ mod tests {
     }
 
     #[test]
-    fn test_verbose_from_pyproject() {
-        let cfg = Config::from_str("[tool.oxitest]\nverbose = true\n").unwrap();
-        assert!(cfg.verbose);
+    fn test_verbosity_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nverbosity = \"detailed\"\n").unwrap();
+        assert_eq!(cfg.verbosity, Verbosity::Detailed);
+    }
+
+    #[test]
+    fn test_verbosity_full_from_pyproject() {
+        let cfg = Config::from_str("[tool.oxitest]\nverbosity = \"full\"\n").unwrap();
+        assert_eq!(cfg.verbosity, Verbosity::Full);
+    }
+
+    #[test]
+    fn test_verbosity_ordering() {
+        assert!(Verbosity::Normal < Verbosity::Detailed);
+        assert!(Verbosity::Detailed < Verbosity::Full);
+    }
+
+    #[test]
+    fn test_verbosity_default_is_normal() {
+        assert_eq!(Verbosity::default(), Verbosity::Normal);
     }
 
     #[test]
