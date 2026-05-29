@@ -128,6 +128,7 @@ mod color_tests {
 
 mod list_tests {
     use super::*;
+    use crate::config::Verbosity;
     use crate::types::{NodeId, TestItem};
     use camino::Utf8PathBuf;
     use std::sync::Arc;
@@ -148,13 +149,13 @@ mod list_tests {
 
     #[test]
     fn test_list_empty() {
-        let result = helpers::format_test_list(&[], false);
+        let result = helpers::format_test_list(&[], Verbosity::Normal);
         assert_eq!(result, "no tests collected");
     }
 
     #[test]
     fn test_list_empty_verbose() {
-        let result = helpers::format_test_list(&[], true);
+        let result = helpers::format_test_list(&[], Verbosity::Detailed);
         assert_eq!(result, "no tests collected");
     }
 
@@ -164,7 +165,7 @@ mod list_tests {
             make_item("tests/test_a.py", "test_one", &[], false),
             make_item("tests/test_b.py", "test_two", &["slow"], true),
         ];
-        let result = helpers::format_test_list(&items, false);
+        let result = helpers::format_test_list(&items, Verbosity::Normal);
         assert_eq!(
             result,
             "tests/test_a.py::test_one\ntests/test_b.py::test_two"
@@ -177,7 +178,7 @@ mod list_tests {
             make_item("tests/test_a.py", "test_one", &[], false),
             make_item("tests/test_a.py", "test_two", &["slow", "network"], true),
         ];
-        let result = helpers::format_test_list(&items, true);
+        let result = helpers::format_test_list(&items, Verbosity::Detailed);
         assert!(result.contains("module"));
         assert!(result.contains("function"));
         assert!(result.contains("async"));
@@ -192,7 +193,7 @@ mod list_tests {
     #[test]
     fn test_list_single_test_singular() {
         let items = vec![make_item("tests/test_a.py", "test_one", &[], false)];
-        let result = helpers::format_test_list(&items, true);
+        let result = helpers::format_test_list(&items, Verbosity::Detailed);
         assert!(result.contains("1 test"));
         assert!(!result.contains("1 tests"));
     }
