@@ -170,6 +170,14 @@ pub struct Cli {
         require_equals = true,
     )]
     pub keep_tmp: Option<KeepTmpMode>,
+
+    /// Show local variables in diagnostic frames (requires --tb=detail)
+    #[arg(long)]
+    pub show_locals: bool,
+
+    /// Show oxitest internal frames in trace (requires --tb=detail)
+    #[arg(long)]
+    pub show_internals: bool,
 }
 
 impl Cli {
@@ -277,6 +285,22 @@ impl Cli {
             }
             if self.fixtures {
                 return Err("--quiet suppresses output, but --fixtures requests it.".to_string());
+            }
+        }
+
+        // ── --show-locals / --show-internals require --tb=detail ──
+        if self.show_locals {
+            if let Some(ref tb) = self.tb {
+                if !matches!(tb, TbStyle::Detail) {
+                    return Err("--show-locals requires --tb=detail.".to_string());
+                }
+            }
+        }
+        if self.show_internals {
+            if let Some(ref tb) = self.tb {
+                if !matches!(tb, TbStyle::Detail) {
+                    return Err("--show-internals requires --tb=detail.".to_string());
+                }
             }
         }
 
@@ -700,6 +724,59 @@ mod validate_tests {
     #[test]
     fn test_list_with_v_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "--list", "-v"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_show_locals_with_tb_no_conflicts() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "no"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--show-locals"), "error: {err}");
+        assert!(err.contains("--tb=detail"), "error: {err}");
+    }
+
+    #[test]
+    fn test_show_locals_with_tb_line_conflicts() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "line"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--show-locals"), "error: {err}");
+    }
+
+    #[test]
+    fn test_show_internals_with_tb_no_conflicts() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "no"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--show-internals"), "error: {err}");
+    }
+
+    #[test]
+    fn test_show_internals_with_tb_line_conflicts() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "line"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--show-internals"), "error: {err}");
+    }
+
+    #[test]
+    fn test_show_locals_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-locals"]).unwrap();
+        assert!(cli.validate().is_ok(), "default tb is detail, so valid");
+    }
+
+    #[test]
+    fn test_show_internals_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-internals"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_show_locals_with_tb_detail_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "detail"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_show_internals_with_tb_detail_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "detail"]).unwrap();
         assert!(cli.validate().is_ok());
     }
 }
