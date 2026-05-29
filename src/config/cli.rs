@@ -252,6 +252,38 @@ impl Cli {
             }
         }
 
+        // ── Mutually exclusive action modes ──────────────────────────
+        let action_modes = [
+            (self.list, "--list"),
+            (self.fixtures, "--fixtures"),
+            (self.capture_environment, "--capture-environment"),
+        ];
+        let active: Vec<&str> = action_modes
+            .iter()
+            .filter(|(flag, _)| *flag)
+            .map(|(_, name)| *name)
+            .collect();
+        if active.len() > 1 {
+            return Err(format!(
+                "{} and {} are mutually exclusive action modes.",
+                active[0], active[1],
+            ));
+        }
+
+        // ── Quiet conflicts with output-requesting actions ───────────
+        if self.quiet {
+            if self.list {
+                return Err(
+                    "--quiet suppresses output, but --list requests it.".to_string(),
+                );
+            }
+            if self.fixtures {
+                return Err(
+                    "--quiet suppresses output, but --fixtures requests it.".to_string(),
+                );
+            }
+        }
+
         Ok(())
     }
 }
@@ -621,5 +653,58 @@ mod validate_tests {
     fn test_keep_tmp_explicit_always() {
         let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=always"]).unwrap();
         assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Always));
+    }
+
+    #[test]
+    fn test_list_conflicts_with_fixtures() {
+        let cli = Cli::try_parse_from(["oxitest", "--list", "--fixtures"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--list"), "error: {err}");
+        assert!(err.contains("--fixtures"), "error: {err}");
+    }
+
+    #[test]
+    fn test_list_conflicts_with_capture_environment() {
+        let cli = Cli::try_parse_from(["oxitest", "--list", "--capture-environment"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--list"), "error: {err}");
+        assert!(err.contains("--capture-environment"), "error: {err}");
+    }
+
+    #[test]
+    fn test_fixtures_conflicts_with_capture_environment() {
+        let cli =
+            Cli::try_parse_from(["oxitest", "--fixtures", "--capture-environment"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--fixtures"), "error: {err}");
+        assert!(err.contains("--capture-environment"), "error: {err}");
+    }
+
+    #[test]
+    fn test_list_conflicts_with_quiet() {
+        let cli = Cli::try_parse_from(["oxitest", "--list", "-q"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--list"), "error: {err}");
+        assert!(err.contains("--quiet"), "error: {err}");
+    }
+
+    #[test]
+    fn test_fixtures_conflicts_with_quiet() {
+        let cli = Cli::try_parse_from(["oxitest", "--fixtures", "-q"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--fixtures"), "error: {err}");
+        assert!(err.contains("--quiet"), "error: {err}");
+    }
+
+    #[test]
+    fn test_list_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--list"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_list_with_v_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--list", "-v"]).unwrap();
+        assert!(cli.validate().is_ok());
     }
 }
