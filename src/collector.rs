@@ -138,7 +138,7 @@ mod tests {
             markers_without_description: vec![],
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
-            tb: crate::config::TbStyle::Short,
+            tb: crate::config::TbStyle::Detail,
             verbosity: crate::config::Verbosity::Normal,
             durations: None,
             color: crate::config::ColorMode::Auto,

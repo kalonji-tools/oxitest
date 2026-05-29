@@ -25,7 +25,7 @@ impl DebugMode {
         cfg.serial = true;
         cfg.timeout_secs = None;
         if cli_tb.is_none() {
-            cfg.tb = TbStyle::Long;
+            cfg.tb = TbStyle::Detail;
         }
         if matches!(self, DebugMode::PostMortem) {
             cfg.maxfail = 1;
@@ -72,15 +72,13 @@ impl std::str::FromStr for WorkerCount {
 
 /// Traceback display style for test failures.
 ///
-/// - `Long` — full traceback with all frames.
-/// - `Short` — user frames only (oxitest internal frames filtered out).
+/// - `Detail` — user frames only (oxitest internal frames filtered out).
 /// - `Line` — single-line summary, no frame block.
 /// - `No` — suppress traceback entirely.
 #[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TbStyle {
-    Long,
-    Short,
+    Detail,
     Line,
     No,
 }
@@ -252,7 +250,7 @@ impl Default for Config {
             markers_without_description: vec![],
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
-            tb: TbStyle::Short,
+            tb: TbStyle::Detail,
             verbosity: Verbosity::Normal,
             durations: None,
             color: ColorMode::Auto,
@@ -695,9 +693,9 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_tb_short() {
-        let cli = Cli::try_parse_from(["oxitest", "--tb", "short"]).unwrap();
-        assert_eq!(cli.tb, Some(TbStyle::Short));
+    fn test_cli_tb_detail() {
+        let cli = Cli::try_parse_from(["oxitest", "--tb", "detail"]).unwrap();
+        assert_eq!(cli.tb, Some(TbStyle::Detail));
     }
 
     #[test]
@@ -707,22 +705,16 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_tb_long() {
-        let cli = Cli::try_parse_from(["oxitest", "--tb", "long"]).unwrap();
-        assert_eq!(cli.tb, Some(TbStyle::Long));
-    }
-
-    #[test]
     fn test_tb_from_pyproject() {
-        let toml = "[tool.oxitest]\ntb = \"long\"\n";
+        let toml = "[tool.oxitest]\ntb = \"detail\"\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.tb, TbStyle::Long);
+        assert_eq!(cfg.tb, TbStyle::Detail);
     }
 
     #[test]
-    fn test_tb_default_is_short() {
+    fn test_tb_default_is_detail() {
         let cfg = Config::default();
-        assert_eq!(cfg.tb, TbStyle::Short);
+        assert_eq!(cfg.tb, TbStyle::Detail);
     }
 
     #[test]
@@ -1765,7 +1757,7 @@ async_backend = "trio"
         let merged = config.merge_cli(&cli);
         assert!(merged.serial, "debug should imply serial");
         assert_eq!(merged.maxfail, 1, "debug should imply maxfail=1");
-        assert_eq!(merged.tb, TbStyle::Long, "debug should imply tb=long");
+        assert_eq!(merged.tb, TbStyle::Detail, "debug should imply tb=detail");
         assert!(merged.debug.is_some(), "debug should be stored on config");
         assert_eq!(
             merged.timeout_secs, None,
@@ -1805,7 +1797,7 @@ async_backend = "trio"
         let merged = config.merge_cli(&cli);
         assert!(merged.serial, "always should imply serial");
         assert_eq!(merged.maxfail, 0, "always should NOT imply maxfail=1");
-        assert_eq!(merged.tb, TbStyle::Long, "always should imply tb=long");
+        assert_eq!(merged.tb, TbStyle::Detail, "always should imply tb=detail");
         assert_eq!(merged.timeout_secs, None, "always should clear timeout");
     }
 
