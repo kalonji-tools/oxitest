@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::config::Verbosity;
 use crate::types::{CollectError, ColorCategory, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{
@@ -194,7 +195,7 @@ impl TtyReporter {
     /// Dispatch a completed parametrize group: print immediately in verbose mode,
     /// defer hard failures in non-verbose mode.
     fn dispatch_param_group(&mut self, group: ParametrizeBuffer) {
-        if self.opts.verbose {
+        if self.opts.verbosity >= Verbosity::Detailed {
             self.flush_param_group(group);
         } else {
             for (item, outcome, duration_ms) in group.results {
@@ -311,7 +312,7 @@ impl Reporter for TtyReporter {
             |(i, _, _), target| i.node_id.as_ref() == target,
         );
 
-        if item.param_id.is_some() && !self.opts.verbose {
+        if item.param_id.is_some() && self.opts.verbosity < Verbosity::Detailed {
             // Flush pending group if fn_name changed
             let flush = matches!(&self.pending_group, Some(g) if g.fn_name != item.fn_name);
             if flush {
@@ -322,7 +323,7 @@ impl Reporter for TtyReporter {
                 .pending_group
                 .get_or_insert_with(|| ParametrizeBuffer::new(item.fn_name.clone()));
             group.push(item.clone(), outcome.clone(), duration_ms);
-        } else if self.opts.verbose {
+        } else if self.opts.verbosity >= Verbosity::Detailed {
             // Verbose mode: flush pending group and print every result immediately
             if let Some(group) = self.pending_group.take() {
                 self.flush_param_group(group);
@@ -723,7 +724,9 @@ mod tests {
 
     #[test]
     fn test_non_verbose_defers_failures() {
-        let opts = ReporterOptsBuilder::new().verbose(false).build();
+        let opts = ReporterOptsBuilder::new()
+            .verbosity(Verbosity::Normal)
+            .build();
         let mut reporter = TtyReporter::new(opts);
         let item = make_item("test_failing");
         let outcome = make_failed("oops", "test.py", 5, "assert x");
@@ -737,7 +740,9 @@ mod tests {
 
     #[test]
     fn test_non_verbose_does_not_defer_passes() {
-        let opts = ReporterOptsBuilder::new().verbose(false).build();
+        let opts = ReporterOptsBuilder::new()
+            .verbosity(Verbosity::Normal)
+            .build();
         let mut reporter = TtyReporter::new(opts);
         let item = make_item("test_passing");
         let outcome = TestOutcome::Passed {
@@ -752,7 +757,9 @@ mod tests {
 
     #[test]
     fn test_verbose_does_not_defer() {
-        let opts = ReporterOptsBuilder::new().verbose(true).build();
+        let opts = ReporterOptsBuilder::new()
+            .verbosity(Verbosity::Detailed)
+            .build();
         let mut reporter = TtyReporter::new(opts);
         let item = make_item("test_failing");
         let outcome = make_failed("oops", "test.py", 5, "assert x");

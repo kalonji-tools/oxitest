@@ -1,3 +1,5 @@
+use crate::config::Verbosity;
+
 const DEFAULT_NAME_WIDTH: usize = 45;
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -14,7 +16,7 @@ pub struct ReporterOpts {
     pub(crate) tb: crate::config::TbStyle,
     pub(crate) show_tips: bool,
     pub(crate) show_warnings: bool,
-    pub(crate) verbose: bool,
+    pub(crate) verbosity: Verbosity,
     pub(crate) show_durations: Option<usize>,
     pub(crate) name_width: usize,
     pub(crate) strict_suite_lines: Vec<String>,
@@ -35,7 +37,7 @@ pub struct ReporterOptsBuilder {
     tb: crate::config::TbStyle,
     show_tips: bool,
     show_warnings: bool,
-    verbose: bool,
+    verbosity: Verbosity,
     show_durations: Option<usize>,
     name_width: usize,
     strict_suite_lines: Vec<String>,
@@ -43,7 +45,7 @@ pub struct ReporterOptsBuilder {
 
 impl ReporterOptsBuilder {
     /// Sensible defaults for tests: total=0, use_color=false, tb=Short,
-    /// show_tips=false, show_warnings=false, verbose=false.
+    /// show_tips=false, show_warnings=false, verbosity=Normal.
     pub fn new() -> Self {
         Self {
             total: 0,
@@ -52,7 +54,7 @@ impl ReporterOptsBuilder {
             tb: crate::config::TbStyle::Short,
             show_tips: false,
             show_warnings: false,
-            verbose: false,
+            verbosity: Verbosity::Normal,
             show_durations: None,
             name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
@@ -67,9 +69,9 @@ impl ReporterOptsBuilder {
             async_count: 0,
             use_color,
             tb: cfg.tb.clone(),
-            show_tips: cfg.verbose,
-            show_warnings: cfg.verbose,
-            verbose: cfg.verbose,
+            show_tips: cfg.verbosity >= Verbosity::Detailed,
+            show_warnings: cfg.verbosity >= Verbosity::Detailed,
+            verbosity: cfg.verbosity,
             show_durations: cfg.durations,
             name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
@@ -101,11 +103,12 @@ impl ReporterOptsBuilder {
         }
     }
 
-    pub fn verbose(self, v: bool) -> Self {
+    pub fn verbosity(self, v: Verbosity) -> Self {
+        let detailed_or_more = v >= Verbosity::Detailed;
         Self {
-            verbose: v,
-            show_tips: self.show_tips || v,
-            show_warnings: self.show_warnings || v,
+            verbosity: v,
+            show_tips: self.show_tips || detailed_or_more,
+            show_warnings: self.show_warnings || detailed_or_more,
             ..self
         }
     }
@@ -136,7 +139,7 @@ impl ReporterOptsBuilder {
             tb: self.tb,
             show_tips: self.show_tips,
             show_warnings: self.show_warnings,
-            verbose: self.verbose,
+            verbosity: self.verbosity,
             show_durations: self.show_durations,
             name_width: self.name_width,
             strict_suite_lines: self.strict_suite_lines,
@@ -161,7 +164,7 @@ mod tests {
         assert!(!opts.use_color);
         assert!(!opts.show_tips);
         assert!(!opts.show_warnings);
-        assert!(!opts.verbose);
+        assert_eq!(opts.verbosity, Verbosity::Normal);
         assert_eq!(opts.tb, crate::config::TbStyle::Short);
     }
 
@@ -173,10 +176,12 @@ mod tests {
 
     #[test]
     fn test_builder_verbose_propagates_to_tips_and_warnings() {
-        let opts = ReporterOptsBuilder::new().verbose(true).build();
-        assert!(opts.verbose);
-        assert!(opts.show_tips, "verbose(true) must set show_tips");
-        assert!(opts.show_warnings, "verbose(true) must set show_warnings");
+        let opts = ReporterOptsBuilder::new()
+            .verbosity(Verbosity::Detailed)
+            .build();
+        assert_eq!(opts.verbosity, Verbosity::Detailed);
+        assert!(opts.show_tips, "Detailed must set show_tips");
+        assert!(opts.show_warnings, "Detailed must set show_warnings");
     }
 
     #[test]
@@ -190,13 +195,13 @@ mod tests {
     #[test]
     fn test_from_config_verbose_implies_show_tips_and_warnings() {
         let cfg = crate::config::Config {
-            verbose: true,
+            verbosity: Verbosity::Detailed,
             ..crate::config::Config::default()
         };
         let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert!(opts.show_tips);
         assert!(opts.show_warnings);
-        assert!(opts.verbose);
+        assert_eq!(opts.verbosity, Verbosity::Detailed);
     }
 
     #[test]
@@ -204,7 +209,7 @@ mod tests {
         let opts = ReporterOptsBuilder::new().show_tips(true).build();
         assert!(opts.show_tips);
         assert!(!opts.show_warnings);
-        assert!(!opts.verbose);
+        assert_eq!(opts.verbosity, Verbosity::Normal);
     }
 
     #[test]
@@ -248,12 +253,12 @@ mod tests {
     #[test]
     fn test_builder_clone_allows_two_builds_from_same_base() {
         let base = ReporterOptsBuilder::new().total(5);
-        let a = base.clone().verbose(false).build();
-        let b = base.verbose(true).build();
+        let a = base.clone().verbosity(Verbosity::Normal).build();
+        let b = base.verbosity(Verbosity::Detailed).build();
         assert_eq!(a.total, 5);
-        assert!(!a.verbose);
+        assert_eq!(a.verbosity, Verbosity::Normal);
         assert_eq!(b.total, 5);
-        assert!(b.verbose);
+        assert_eq!(b.verbosity, Verbosity::Detailed);
     }
 
     #[test]
