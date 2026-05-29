@@ -241,14 +241,8 @@ impl TtyReporter {
                     color_dim(&group.fn_name, c)
                 );
                 self.pb.println(header);
-                let diag = fmt_diagnostic_block(
-                    item,
-                    outcome,
-                    &self.opts.tb,
-                    self.opts.show_internals,
-                    self.opts.show_locals,
-                    c,
-                );
+                let diag =
+                    fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.show_locals, c);
                 if !diag.is_empty() {
                     self.pb.println(diag.trim_end());
                 }
@@ -289,7 +283,6 @@ impl StandardReporter for TtyReporter {
                 &item,
                 &outcome,
                 &self.opts.tb,
-                self.opts.show_internals,
                 self.opts.show_locals,
                 self.opts.use_color,
             );
@@ -348,7 +341,6 @@ impl Reporter for TtyReporter {
                 item,
                 outcome,
                 &self.opts.tb,
-                self.opts.show_internals,
                 self.opts.show_locals,
                 self.opts.use_color,
             );

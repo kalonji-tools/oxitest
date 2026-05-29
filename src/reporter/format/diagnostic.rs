@@ -13,30 +13,6 @@ const BOX_CLOSE: &str = "└";
 
 const MARGIN: &str = "      ";
 
-const INTERNAL_PREFIXES: &[&str] = &["oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin"];
-
-fn is_internal_frame(frame: &crate::types::Frame) -> bool {
-    INTERNAL_PREFIXES
-        .iter()
-        .any(|prefix| frame.file.as_str().contains(prefix))
-}
-
-fn filter_frames(
-    frames: &[crate::types::Frame],
-    show_internals: bool,
-) -> Vec<&crate::types::Frame> {
-    if show_internals {
-        frames.iter().collect()
-    } else {
-        let user_frames: Vec<_> = frames.iter().filter(|f| !is_internal_frame(f)).collect();
-        if user_frames.is_empty() && !frames.is_empty() {
-            vec![frames.last().unwrap()]
-        } else {
-            user_frames
-        }
-    }
-}
-
 /// Returns the terminal width for separator lines, capped at 100 columns.
 ///
 /// Queried once and cached; subsequent calls return the same value. The 100-column
@@ -81,7 +57,6 @@ pub(crate) fn fmt_diagnostic_block(
     item: &TestItem,
     outcome: &TestOutcome,
     tb: &TbStyle,
-    show_internals: bool,
     show_locals: bool,
     use_color: bool,
 ) -> String {
@@ -180,7 +155,7 @@ pub(crate) fn fmt_diagnostic_block(
     }
 
     // ── TRACE: non-failure frames ───────────────────────────────────
-    let visible_frames = filter_frames(parts.frames, show_internals);
+    let visible_frames: Vec<&crate::types::Frame> = parts.frames.iter().collect();
     // Exclude the failure frame (same file:lineno as the diagnostic location)
     let trace_frames: Vec<_> = visible_frames
         .iter()
@@ -336,7 +311,7 @@ mod tests {
             8,
             "assert add(1, 2) == 4",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("tests/test_foo.py:8"));
         assert!(block.contains("assert add(1, 2) == 4"));
         assert!(block.contains("expected 4"));
@@ -346,7 +321,7 @@ mod tests {
     fn test_diagnostic_short_no_message_no_nudge() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(!block.contains("add an assertion message"));
         assert!(!block.contains("hint:"));
     }
@@ -360,7 +335,7 @@ mod tests {
             22,
             "result = divide(10, 0)",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("ValueError: Cannot divide by zero"));
     }
 
@@ -368,7 +343,7 @@ mod tests {
     fn test_diagnostic_line_style_returns_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false, false);
         assert!(
             block.is_empty(),
             "--tb=line must produce no diagnostic block"
@@ -379,7 +354,7 @@ mod tests {
     fn test_diagnostic_no_style_is_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
         assert!(block.is_empty());
     }
 
@@ -387,7 +362,7 @@ mod tests {
     fn test_diagnostic_does_not_repeat_fn_name() {
         let item = make_item("test_add_two_positives");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("test_add_two_positives"),
             "fn name must not be repeated in the diagnostic block"
@@ -407,7 +382,7 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "missing left label");
         assert!(block.contains("41"), "missing left value");
         assert!(block.contains("right:"), "missing right label");
@@ -427,7 +402,7 @@ mod tests {
             op: String::new(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("value:"), "missing value label");
         assert!(block.contains("False"), "missing value");
         assert!(
@@ -449,7 +424,7 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("should be 42"),
             "closing message must appear"
@@ -462,7 +437,7 @@ mod tests {
     fn test_diagnostic_no_nudge_and_no_why_label() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("add an assertion message"),
             "nudge should be removed"
@@ -482,7 +457,7 @@ mod tests {
             8,
             "assert add(1, 2) == 4",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("expected 4"),
             "message must appear on closing line"
@@ -502,7 +477,7 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "left should appear");
         assert!(block.contains("42"), "left value should appear");
         assert!(
@@ -529,7 +504,7 @@ mod tests {
             fixture_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x + y == expected");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Inline params format: "x = 1, y = 2, expected = 3"
         assert!(block.contains("x = 1"), "missing param x");
         assert!(block.contains("y = 2"), "missing param y");
@@ -555,7 +530,7 @@ mod tests {
             fixture_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         let path_pos = block.find("tests/test_foo.py:8").unwrap();
         let params_pos = block.find("x = 1").unwrap();
         let source_pos = block.find("assert x > 0").unwrap();
@@ -567,7 +542,7 @@ mod tests {
     fn test_diagnostic_no_params_block_when_param_values_empty() {
         let item = make_item("test_add");
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("params"),
             "params block should not appear for non-parametrize"
@@ -584,7 +559,7 @@ mod tests {
             source_line: String::new(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains(":0"),
             "must not show ':0' when file is empty"
@@ -647,7 +622,7 @@ mod tests {
                 },
             ],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // New format uses "trace" not "frames"
         assert!(block.contains("trace"), "must contain trace label");
         assert!(block.contains("test_check"), "must show caller function");
@@ -690,7 +665,7 @@ mod tests {
                 locals: vec![],
             }],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Only the failure frame exists, so no trace section
         assert!(
             !block.contains("trace"),
@@ -698,107 +673,6 @@ mod tests {
         );
         // Source line still shown as hero
         assert!(block.contains("assert False"), "must show source line");
-    }
-
-    #[test]
-    fn test_diagnostic_hides_internal_frames() {
-        use crate::types::Frame;
-
-        let item = make_item_at("test_user_code", "tests/test_app.py", 10);
-        let outcome = TestOutcome::Failed {
-            message: "assert x == 1".to_string(),
-            file: Utf8PathBuf::from("tests/test_app.py"),
-            lineno: LineNo::new(10),
-            source_line: "assert x == 1".to_string(),
-            left: "0".to_string(),
-            right: "1".to_string(),
-            op: "==".to_string(),
-            frames: vec![
-                Frame {
-                    file: Utf8PathBuf::from("tests/test_app.py"),
-                    lineno: LineNo::new(10),
-                    name: "test_user_code".to_string(),
-                    line: "result = helper()".to_string(),
-                    locals: vec![],
-                },
-                Frame {
-                    file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
-                    lineno: LineNo::new(55),
-                    name: "_run_base".to_string(),
-                    line: "fn()".to_string(),
-                    locals: vec![],
-                },
-                Frame {
-                    file: Utf8PathBuf::from("oxitest/_bridge/_middleware.py"),
-                    lineno: LineNo::new(30),
-                    name: "_compose".to_string(),
-                    line: "wrapper(fn)".to_string(),
-                    locals: vec![],
-                },
-            ],
-        };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
-        assert!(
-            !block.contains("executor.py"),
-            "internal frame must be hidden: {block}"
-        );
-        assert!(
-            !block.contains("_middleware.py"),
-            "internal frame must be hidden: {block}"
-        );
-    }
-
-    #[test]
-    fn test_diagnostic_show_internals_reveals_internal_frames() {
-        use crate::types::Frame;
-
-        let item = make_item_at("test_user_code", "tests/test_app.py", 10);
-        let outcome = TestOutcome::Failed {
-            message: "assert x == 1".to_string(),
-            file: Utf8PathBuf::from("tests/test_app.py"),
-            lineno: LineNo::new(10),
-            source_line: "assert x == 1".to_string(),
-            left: "0".to_string(),
-            right: "1".to_string(),
-            op: "==".to_string(),
-            frames: vec![
-                Frame {
-                    file: Utf8PathBuf::from("tests/test_app.py"),
-                    lineno: LineNo::new(10),
-                    name: "test_user_code".to_string(),
-                    line: "result = helper()".to_string(),
-                    locals: vec![],
-                },
-                Frame {
-                    file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
-                    lineno: LineNo::new(55),
-                    name: "_run_base".to_string(),
-                    line: "fn()".to_string(),
-                    locals: vec![],
-                },
-            ],
-        };
-        // show_internals=true should reveal internal frames
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false, false);
-        assert!(
-            block.contains("executor.py"),
-            "show_internals must reveal internal frames: {block}"
-        );
-    }
-
-    #[test]
-    fn test_filter_frames_fallback_to_last() {
-        use crate::types::Frame;
-
-        let frames = vec![Frame {
-            file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
-            lineno: LineNo::new(10),
-            name: "_run_base".to_string(),
-            line: "fn()".to_string(),
-            locals: vec![],
-        }];
-        let filtered = filter_frames(&frames, false);
-        assert_eq!(filtered.len(), 1, "should show at least the last frame");
     }
 
     #[test]
@@ -810,7 +684,7 @@ mod tests {
             10,
             "assert x in out",
         );
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Every non-empty continuation line must be prefixed with box chrome
         for line in block.lines().skip(1) {
             let trimmed = line.trim_start();
@@ -855,7 +729,7 @@ mod tests {
                 locals: vec![("result".to_string(), "7".to_string())],
             }],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, true, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false);
         assert!(
             block.contains("result = 7"),
             "show_locals must render failure frame locals: {block}"
@@ -883,7 +757,7 @@ mod tests {
                 locals: vec![("result".to_string(), "7".to_string())],
             }],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("result = 7"),
             "locals must NOT appear without show_locals: {block}"
@@ -900,7 +774,7 @@ mod tests {
             source_line: "await fx".to_string(),
             frames: vec![],
         };
-        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("hint:"),
             "hint must appear inside the box: {block}"
@@ -919,8 +793,7 @@ mod tests {
         fn failed_assertion_with_diff() {
             let item = make_item_at("test_compare", "tests/test_math.py", 15);
             let outcome = make_failed("assert x == y", "tests/test_math.py", 15, "assert x == y");
-            let block =
-                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
 
@@ -951,8 +824,7 @@ mod tests {
                     },
                 ],
             };
-            let block =
-                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
 
@@ -969,8 +841,7 @@ mod tests {
                 op: "==".to_string(),
                 frames: vec![],
             };
-            let block =
-                fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false, false);
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
 
@@ -978,7 +849,7 @@ mod tests {
         fn tb_no_returns_empty() {
             let item = make_item_at("test_something", "tests/test_mod.py", 5);
             let outcome = make_failed("should pass", "tests/test_mod.py", 5, "assert x");
-            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false, false);
+            let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
             assert_snapshot!(block);
         }
     }

@@ -44,7 +44,6 @@ impl CiReporter {
             item,
             outcome,
             &self.opts.tb,
-            self.opts.show_internals,
             self.opts.show_locals,
             self.opts.use_color,
         );
