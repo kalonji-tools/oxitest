@@ -120,3 +120,21 @@ def test_add(x: int, y: int, expected: int) -> None:
 See the [parametrize how-to](../../how-to/use-parametrize.md) for full documentation.
 
 ---
+
+## mark.inprocess
+
+Forces the test to run on the main process instead of a worker subprocess. Useful
+for tests that mutate process-global state (`os.environ`, `signal` handlers,
+`sys.modules`) or depend on session-scoped shared fixtures.
+
+```python
+@oxitest.mark.inprocess
+def test_env_mutation():
+    import os
+    os.environ["KEY"] = "value"
+    assert os.environ["KEY"] == "value"
+```
+
+No-op when `--serial` is active (all tests already run on main process).
+
+---
