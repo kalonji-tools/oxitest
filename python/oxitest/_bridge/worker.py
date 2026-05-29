@@ -13,7 +13,9 @@ Task schema (stdin):
             "markers": [str]
         }],
         "conftest_paths": [str],
-        "timeout_secs": int | null
+        "timeout_secs": int | null,
+        "show_locals": bool | null,
+        "show_internals": bool | null
     }
 
 Result schema (stdout, one line per test):
@@ -55,6 +57,8 @@ def run(task: dict) -> None:
     conftest_paths: list[str] = task.get("conftest_paths") or []
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str | None = task.get("keep_tmp")
+    show_locals: bool = task.get("show_locals", False)
+    show_internals: bool = task.get("show_internals", False)
 
     session = create_session(conftest_paths)
 
@@ -75,7 +79,12 @@ def run(task: dict) -> None:
 
         start = time.monotonic()
         result = run_test(
-            meta, session=session, default_timeout=timeout_secs, keep_tmp=keep_tmp
+            meta,
+            session=session,
+            default_timeout=timeout_secs,
+            keep_tmp=keep_tmp,
+            show_locals=show_locals,
+            show_internals=show_internals,
         )
         duration_ms = (time.monotonic() - start) * 1000.0
         print(json.dumps(result.to_wire(meta.node_id, duration_ms)))

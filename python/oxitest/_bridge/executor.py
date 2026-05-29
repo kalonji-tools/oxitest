@@ -186,6 +186,8 @@ def _run_base(
     debug_mode: str | None = None,
     node_id: str = "",
     backend: DebuggerBackend | None = None,
+    show_locals: bool = False,
+    show_internals: bool = False,
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
     if debug_mode == DebugMode.ALWAYS and backend is not None:
@@ -212,7 +214,9 @@ def _run_base(
                 _debug_post_mortem(all_kwargs, node_id, exc, backend)
             except bdb.BdbQuit:
                 raise
-        result = _dispatch_exception(exc)
+        result = _dispatch_exception(
+            exc, show_internals=show_internals, show_locals=show_locals
+        )
         if result is not None:
             return result
         raise
@@ -305,6 +309,8 @@ def _build_execution_chain(
     debug_mode: str | None = None,
     node_id: str = "",
     backend: DebuggerBackend | None = None,
+    show_locals: bool = False,
+    show_internals: bool = False,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
     plan = ExecutionPlan(
@@ -335,6 +341,8 @@ def _build_execution_chain(
             debug_mode=debug_mode,
             node_id=node_id,
             backend=backend,
+            show_locals=show_locals,
+            show_internals=show_internals,
         )
 
     execute = build_pipeline(middlewares, plan, _base)
@@ -355,6 +363,8 @@ def run_test(
     default_timeout: int | None = None,
     debug_mode: str | None = None,
     keep_tmp: str | None = None,
+    show_locals: bool = False,
+    show_internals: bool = False,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
@@ -371,6 +381,10 @@ def run_test(
         keep_tmp: When set, preserve TempDir contents instead of cleaning up.
             ``"failed"`` preserves only on test failure; ``"always"`` preserves
             unconditionally.  ``None`` always cleans up (default).
+        show_locals: When ``True``, capture local variables in each traceback
+            frame and include them in the failure output.
+        show_internals: When ``True``, include oxitest-internal frames in the
+            traceback instead of filtering them out.
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
@@ -436,6 +450,8 @@ def run_test(
             debug_mode=debug_mode,
             node_id=meta.node_id,
             backend=backend,
+            show_locals=show_locals,
+            show_internals=show_internals,
         )
         result = execute()
         if effective_session._result_cell is not None:  # ty: ignore[unresolved-attribute]
