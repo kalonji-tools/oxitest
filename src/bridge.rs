@@ -134,7 +134,6 @@ impl FixtureSession {
     /// Returns connected components of shared fixture dependencies.
     /// Each inner Vec is a sorted group of fixture names that must co-locate.
     /// Returns an empty Vec on any Python error (advisory-only).
-    #[allow(dead_code)]
     pub fn shared_fixture_groups(&self, py: Python<'_>) -> Vec<Vec<String>> {
         self.0
             .bind(py)
