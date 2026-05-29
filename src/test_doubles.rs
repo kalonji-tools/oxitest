@@ -281,6 +281,14 @@ pub(crate) mod doubles {
         }
     }
 
+    /// Build a [`TestItem`] with the `inprocess` marker set.
+    #[allow(dead_code)] // Used by later tasks (inprocess unit tests).
+    pub(crate) fn make_inprocess_item(node_id_str: &str) -> TestItem {
+        let mut item = make_test_item(node_id_str);
+        item.markers.push("inprocess".to_string());
+        item
+    }
+
     /// Build a zero-duration [`TestTiming`] for a given node-id string.
     #[allow(dead_code)] // Used by later tasks (execution contract tests).
     pub(crate) fn make_timing(node_id_str: &str) -> TestTiming {
