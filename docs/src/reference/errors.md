@@ -308,7 +308,7 @@ an infinite loop, deadlock, or blocking I/O call in test or fixture code.
 - Blocking network or file I/O without a timeout
 - Deadlocks from threading or multiprocessing
 
-Run the test in serial mode (`--serial`) with `--tb=long` to narrow down the
+Run the test in serial mode (`--serial`) with `--show-internals` to narrow down the
 hanging test.
 
 ---

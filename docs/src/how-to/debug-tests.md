@@ -26,11 +26,11 @@ From here you can inspect local variables, walk the call stack, and
 understand exactly what went wrong.
 
 `--debug` implies `--serial` (single process), `--maxfail 1` (stop on
-first failure), and `--tb=long` (full traceback after the session). You
-can override the traceback style with an explicit `--tb`:
+first failure), and `--show-internals` (full traceback after the session).
+You can suppress internal frames with an explicit `--tb`:
 
 ```console
-$ oxitest --debug --tb=short tests/test_math.py
+$ oxitest --debug --tb=detail tests/test_math.py
 ```
 
 ## Stepping through every test

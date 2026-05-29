@@ -139,20 +139,22 @@ the key becomes the test ID (e.g. `test_add[basic]`).
    Find every place your CI pipeline calls `pytest` and replace it with `oxitest`. Flags
    with direct equivalents:
 
-   | pytest flag            | oxitest flag           |
-   |------------------------|------------------------|
-   | `-k EXPR`              | `-k EXPR`              |
-   | `-m EXPR`              | `-m EXPR`              |
-   | `-v`                   | `-v`                   |
-   | `-x`                   | `-x`                   |
-   | `--maxfail N`          | `--maxfail N`          |
-   | `--tb short\|line\|no` | `--tb short\|line\|no` |
+   | pytest flag            | oxitest equivalent              |
+   |------------------------|---------------------------------|
+   | `-k EXPR`              | `-k EXPR`                       |
+   | `-m EXPR`              | `-m EXPR`                       |
+   | `-v`                   | `-v`                            |
+   | `-x`                   | `-x`                            |
+   | `--maxfail N`          | `--maxfail N`                   |
+   | `--tb short`           | `--tb detail` (default)         |
+   | `--tb long`            | `--show-internals`              |
+   | `--tb line\|no`        | `--tb line\|no`                 |
 
    Example GitHub Actions step:
 
    ```yaml
    - name: Run tests
-     run: oxitest --tb short -v
+     run: oxitest -v
    ```
 
 ## See also
