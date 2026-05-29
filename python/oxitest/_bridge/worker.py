@@ -54,6 +54,7 @@ def run(task: dict) -> None:
     items: list[dict] = task["items"]
     conftest_paths: list[str] = task.get("conftest_paths") or []
     timeout_secs: int | None = task.get("timeout_secs")
+    keep_tmp: str | None = task.get("keep_tmp")
 
     session = create_session(conftest_paths)
 
@@ -73,7 +74,9 @@ def run(task: dict) -> None:
         )
 
         start = time.monotonic()
-        result = run_test(meta, session=session, default_timeout=timeout_secs)
+        result = run_test(
+            meta, session=session, default_timeout=timeout_secs, keep_tmp=keep_tmp
+        )
         duration_ms = (time.monotonic() - start) * 1000.0
         print(json.dumps(result.to_wire(meta.node_id, duration_ms)))
 

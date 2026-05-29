@@ -134,6 +134,7 @@ pub(crate) fn spawn_worker(
     cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     conftest_json: std::sync::Arc<serde_json::value::RawValue>,
     timeout_secs: Option<u64>,
+    keep_tmp: Option<std::sync::Arc<str>>,
     tx: crossbeam_channel::Sender<WorkerResult>,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
@@ -176,6 +177,7 @@ pub(crate) fn spawn_worker(
                     .collect(),
                 conftest_paths: &conftest_json,
                 timeout_secs,
+                keep_tmp: keep_tmp.as_deref(),
             };
 
             if let Err(e) = session.send_task(&task) {
@@ -290,6 +292,7 @@ mod worker_session_tests {
             }],
             conftest_paths: conftest,
             timeout_secs: None,
+            keep_tmp: None,
         }
     }
 
@@ -340,6 +343,7 @@ mod worker_session_tests {
             }],
             conftest_paths: &conftest,
             timeout_secs: Some(30),
+            keep_tmp: None,
         };
 
         // Act

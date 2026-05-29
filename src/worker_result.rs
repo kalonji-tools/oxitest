@@ -27,6 +27,8 @@ pub(crate) struct WorkerTask<'a> {
     pub items: Vec<WorkerTaskItem<'a>>,
     pub conftest_paths: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_tmp: Option<&'a str>,
 }
 
 /// One test item within a [`WorkerTask`].

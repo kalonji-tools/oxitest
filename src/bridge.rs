@@ -259,8 +259,9 @@ pub(crate) fn run_test_with_session_obj(
     session_obj: Bound<'_, PyAny>,
     default_timeout: Option<u64>,
     debug_mode: Option<&str>,
+    keep_tmp: Option<&str>,
 ) -> TestOutcome {
-    try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug_mode)
+    try_run_test_with_session_obj(py, item, session_obj, default_timeout, debug_mode, keep_tmp)
         .unwrap_or_else(|e| TestOutcome::Error {
             message: format!("{} — {}", item.node_id, e),
             file: Utf8PathBuf::new(),
@@ -294,6 +295,7 @@ fn try_run_test_with_session_obj(
     session_obj: Bound<'_, PyAny>,
     default_timeout: Option<u64>,
     debug_mode: Option<&str>,
+    keep_tmp: Option<&str>,
 ) -> PyResult<TestOutcome> {
     let executor = py.import("oxitest._bridge.executor")?;
 
@@ -328,8 +330,16 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
+    let keep_tmp_obj: Bound<'_, PyAny> = match keep_tmp {
+        Some(mode) => mode.into_pyobject(py)?.into_any(),
+        None => py.None().into_bound(py),
+    };
+
     let r: TestResult = executor
-        .call_method1("run_test", (meta_obj, session_obj, &timeout_obj, debug_obj))?
+        .call_method1(
+            "run_test",
+            (meta_obj, session_obj, &timeout_obj, debug_obj, keep_tmp_obj),
+        )?
         .extract()?;
 
     let frames: Vec<Frame> = r
