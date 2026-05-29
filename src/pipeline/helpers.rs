@@ -423,6 +423,106 @@ fn partition_inprocess_groups(
     (inprocess, parallel)
 }
 
+/// Partition test groups by shared fixture affinity.
+///
+/// Tests whose `fixture_names` overlap with any connected component from
+/// `shared_fixture_groups()` are grouped together (one group per component).
+/// Tests with no shared fixture dependency stay in `remaining`.
+///
+/// Returns `(arranged, remaining)` where `arranged[i]` contains the
+/// module groups for fixture component `i`.
+#[allow(clippy::type_complexity)]
+fn partition_by_fixture_groups(
+    groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+    fixture_groups: &[Vec<String>],
+) -> (
+    Vec<Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>>,
+    Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+) {
+    if fixture_groups.is_empty() {
+        return (vec![], groups);
+    }
+
+    let mut arranged: Vec<Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>> =
+        vec![vec![]; fixture_groups.len()];
+    let mut remaining = Vec::new();
+
+    for (module_path, items) in groups {
+        let mut group_buckets: Vec<Vec<Arc<types::TestItem>>> = vec![vec![]; fixture_groups.len()];
+        let mut unassigned: Vec<Arc<types::TestItem>> = Vec::new();
+
+        for item in items {
+            let mut assigned = false;
+            for (gi, fg) in fixture_groups.iter().enumerate() {
+                if item.fixture_names.iter().any(|f| fg.contains(f)) {
+                    group_buckets[gi].push(item.clone());
+                    assigned = true;
+                    break;
+                }
+            }
+            if !assigned {
+                unassigned.push(item);
+            }
+        }
+
+        for (gi, bucket) in group_buckets.into_iter().enumerate() {
+            if !bucket.is_empty() {
+                arranged[gi].push((module_path.clone(), bucket));
+            }
+        }
+        if !unassigned.is_empty() {
+            remaining.push((module_path, unassigned));
+        }
+    }
+
+    (arranged, remaining)
+}
+
+/// Result of evaluating whether auto-arrangement should proceed, fall back, or skip.
+#[derive(Debug, PartialEq)]
+enum ArrangeDecision {
+    /// Largest group exceeds threshold — fall back to serial for all tests.
+    FallbackSerial { ratio: u8 },
+    /// Proceed with arrangement — run arranged groups serially, rest in parallel.
+    Arrange,
+}
+
+/// Evaluate whether auto-arrangement should proceed based on the threshold.
+///
+/// Pure function: no I/O, no PyO3. Testable in isolation.
+#[allow(clippy::type_complexity)]
+fn evaluate_arrange_threshold(
+    arranged: &[Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>],
+    remaining: &[(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)],
+    threshold: u8,
+) -> ArrangeDecision {
+    let total_parallel: usize = arranged
+        .iter()
+        .flat_map(|g| g.iter())
+        .map(|(_, items)| items.len())
+        .sum::<usize>()
+        + remaining
+            .iter()
+            .map(|(_, items)| items.len())
+            .sum::<usize>();
+    let largest_group: usize = arranged
+        .iter()
+        .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
+        .max()
+        .unwrap_or(0);
+    let ratio = if total_parallel > 0 {
+        (largest_group as f64 / total_parallel as f64 * 100.0) as u8
+    } else {
+        0
+    };
+
+    if ratio > threshold {
+        ArrangeDecision::FallbackSerial { ratio }
+    } else {
+        ArrangeDecision::Arrange
+    }
+}
+
 /// Report violated items, group and schedule the clean items, decide
 /// serial vs. parallel, dispatch, and return `(interrupted, timings)`.
 ///
@@ -513,27 +613,116 @@ pub(super) fn execute(
             estimated,
             ctx.cfg.spawn_overhead_ms,
         );
-        // Warn when session-scoped (shared=True) fixtures are present: each worker
-        // subprocess creates its own FixtureSession, so these fixtures execute once
-        // per worker rather than once per run.
-        let shared_names = ctx.session.shared_fixture_names(py);
-        if !shared_names.is_empty() {
-            let list = shared_names.join(", ");
-            let noun = if shared_names.len() == 1 {
-                "fixture"
+
+        // Auto-arrange: group tests by shared fixture dependencies.
+        let (parallel_groups, mut inprocess_result) =
+            if let Some(threshold) = ctx.cfg.auto_arrange_threshold {
+                let fixture_groups = ctx.session.shared_fixture_groups(py);
+                if fixture_groups.is_empty() {
+                    (parallel_groups, inprocess_result)
+                } else {
+                    let (arranged, remaining) =
+                        partition_by_fixture_groups(parallel_groups, &fixture_groups);
+
+                    let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
+
+                    if let ArrangeDecision::FallbackSerial { ratio } = decision {
+                        // Threshold exceeded — fall back to serial.
+                        tracing::info!(
+                            threshold = threshold,
+                            ratio = ratio,
+                            "auto-arrange: largest fixture group is {ratio}% of parallel tests \
+                             (threshold {threshold}%); falling back to serial"
+                        );
+                        let mut all_groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)> =
+                            Vec::new();
+                        for group_modules in arranged {
+                            all_groups.extend(group_modules);
+                        }
+                        all_groups.extend(remaining);
+
+                        let harness = SerialHarness {
+                            py,
+                            runner: ctx.runner,
+                            session: ctx.session,
+                            cache: ctx.cache,
+                            timeout_secs: ctx.cfg.timeout_secs,
+                            timeout_multiplier: ctx.cfg.timeout_multiplier,
+                            maxfail: ctx.cfg.maxfail,
+                            debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
+                            keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+                            show_locals: ctx.cfg.show_locals,
+                            show_internals: ctx.cfg.show_internals,
+                        };
+                        let serial_result = harness.execute_groups(all_groups, rep);
+                        inprocess_result.timings.extend(serial_result.timings);
+                        inprocess_result.interrupted |= serial_result.interrupted;
+                        return inprocess_result;
+                    }
+
+                    // Run each arranged fixture group serially on main process.
+                    let fixture_names: Vec<String> = fixture_groups
+                        .iter()
+                        .flat_map(|g| g.iter().cloned())
+                        .collect();
+                    let list = fixture_names.join(", ");
+                    let arranged_count: usize = arranged
+                        .iter()
+                        .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
+                        .sum();
+                    tracing::info!(
+                        fixtures = %list,
+                        arranged_tests = arranged_count,
+                        workers = optimal_worker_count,
+                        "auto-arranged {arranged_count} tests by shared fixtures ({list})"
+                    );
+
+                    let harness = SerialHarness {
+                        py,
+                        runner: ctx.runner,
+                        session: ctx.session,
+                        cache: ctx.cache,
+                        timeout_secs: ctx.cfg.timeout_secs,
+                        timeout_multiplier: ctx.cfg.timeout_multiplier,
+                        maxfail: ctx.cfg.maxfail,
+                        debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
+                        keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+                        show_locals: ctx.cfg.show_locals,
+                        show_internals: ctx.cfg.show_internals,
+                    };
+                    for group_modules in arranged {
+                        if inprocess_result.interrupted {
+                            return inprocess_result;
+                        }
+                        let result = harness.execute_groups(group_modules, rep);
+                        inprocess_result.timings.extend(result.timings);
+                        inprocess_result.interrupted |= result.interrupted;
+                    }
+
+                    (remaining, inprocess_result)
+                }
             } else {
-                "fixtures"
+                // Auto-arrange disabled — emit the existing warning.
+                let shared_names = ctx.session.shared_fixture_names(py);
+                if !shared_names.is_empty() {
+                    let list = shared_names.join(", ");
+                    let noun = if shared_names.len() == 1 {
+                        "fixture"
+                    } else {
+                        "fixtures"
+                    };
+                    tracing::warn!(
+                        fixtures = %list,
+                        fixture_count = shared_names.len(),
+                        workers = optimal_worker_count,
+                        "shared {noun} will run once per worker; \
+                         session-scoped fixtures are not shared across parallel worker processes — \
+                         use --serial to run them once, or remove shared=True from fixtures \
+                         that can be function-scoped"
+                    );
+                }
+                (parallel_groups, inprocess_result)
             };
-            tracing::warn!(
-                fixtures = %list,
-                fixture_count = shared_names.len(),
-                workers = optimal_worker_count,
-                "shared {noun} will run once per worker; \
-                 session-scoped fixtures are not shared across parallel worker processes — \
-                 use --serial to run them once, or remove shared=True from fixtures \
-                 that can be function-scoped"
-            );
-        }
 
         if parallel_groups.is_empty() {
             return inprocess_result;
@@ -547,7 +736,6 @@ pub(super) fn execute(
         };
         let parallel_result = harness.execute_groups(parallel_groups, rep);
 
-        // Merge results: combine timings, interrupted if either phase was.
         inprocess_result.timings.extend(parallel_result.timings);
         inprocess_result.interrupted |= parallel_result.interrupted;
         inprocess_result
@@ -780,5 +968,143 @@ mod tests {
         let (inp, par) = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1, "only test_a.py has inprocess items");
         assert_eq!(par.len(), 2, "both modules have parallel items");
+    }
+
+    #[test]
+    fn test_partition_by_fixture_groups_no_groups() {
+        let a = Arc::new(make_test_item("test_a.py::test_a"));
+        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a])];
+        let fixture_groups: Vec<Vec<String>> = vec![];
+
+        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        assert!(arranged.is_empty());
+        assert_eq!(remaining.len(), 1);
+    }
+
+    #[test]
+    fn test_partition_by_fixture_groups_splits_by_fixture() {
+        let mut a = make_test_item("test_a.py::test_db");
+        a.fixture_names = vec!["db".to_string()];
+        let mut b = make_test_item("test_a.py::test_plain");
+        b.fixture_names = vec![];
+        let groups = vec![(
+            Utf8PathBuf::from("test_a.py"),
+            vec![Arc::new(a), Arc::new(b)],
+        )];
+        let fixture_groups = vec![vec!["db".to_string()]];
+
+        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        assert_eq!(arranged.len(), 1, "one fixture group");
+        assert_eq!(arranged[0].len(), 1, "one module in fixture group");
+        assert_eq!(arranged[0][0].1.len(), 1, "one test in fixture group");
+        assert_eq!(arranged[0][0].1[0].fn_name, "test_db");
+        assert_eq!(remaining.len(), 1, "one module with remaining");
+        assert_eq!(remaining[0].1.len(), 1, "one test remaining");
+        assert_eq!(remaining[0].1[0].fn_name, "test_plain");
+    }
+
+    #[test]
+    fn test_partition_by_fixture_groups_transitive() {
+        let mut a = make_test_item("test_a.py::test_repo");
+        a.fixture_names = vec!["repo".to_string()];
+        let mut b = make_test_item("test_a.py::test_db");
+        b.fixture_names = vec!["db".to_string()];
+        let mut c = make_test_item("test_a.py::test_plain");
+        c.fixture_names = vec![];
+        let groups = vec![(
+            Utf8PathBuf::from("test_a.py"),
+            vec![Arc::new(a), Arc::new(b), Arc::new(c)],
+        )];
+        let fixture_groups = vec![vec!["db".to_string(), "repo".to_string()]];
+
+        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        assert_eq!(arranged.len(), 1);
+        assert_eq!(arranged[0].len(), 1, "one module in fixture group 0");
+        assert_eq!(arranged[0][0].1.len(), 2, "two tests in that module");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].1.len(), 1, "one plain test remaining");
+    }
+
+    // ── evaluate_arrange_threshold ───────────────────────────────────────────
+
+    #[test]
+    fn test_threshold_below_allows_arrangement() {
+        // 2 arranged + 8 remaining = 20% ratio, threshold 70% → Arrange
+        let mut item = make_test_item("test_a.py::test_db");
+        item.fixture_names = vec!["db".to_string()];
+        let arranged = vec![vec![(
+            Utf8PathBuf::from("test_a.py"),
+            vec![Arc::new(item.clone()), Arc::new(item)],
+        )]];
+        let remaining: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)> = (0..8)
+            .map(|i| {
+                (
+                    Utf8PathBuf::from(format!("test_{i}.py")),
+                    vec![Arc::new(make_test_item(&format!("test_{i}.py::test")))],
+                )
+            })
+            .collect();
+
+        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
+        assert_eq!(decision, ArrangeDecision::Arrange);
+    }
+
+    #[test]
+    fn test_threshold_exceeded_falls_back_to_serial() {
+        // 9 arranged + 1 remaining = 90% ratio, threshold 70% → FallbackSerial
+        let mut item = make_test_item("test_a.py::test_db");
+        item.fixture_names = vec!["db".to_string()];
+        let arranged = vec![vec![(
+            Utf8PathBuf::from("test_a.py"),
+            (0..9).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
+        )]];
+        let remaining = vec![(
+            Utf8PathBuf::from("test_b.py"),
+            vec![Arc::new(make_test_item("test_b.py::test_plain"))],
+        )];
+
+        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
+        assert_eq!(decision, ArrangeDecision::FallbackSerial { ratio: 90 });
+    }
+
+    #[test]
+    fn test_threshold_at_boundary_allows_arrangement() {
+        // 7 arranged + 3 remaining = 70% ratio, threshold 70% → Arrange (not >)
+        let mut item = make_test_item("test_a.py::test_db");
+        item.fixture_names = vec!["db".to_string()];
+        let arranged = vec![vec![(
+            Utf8PathBuf::from("test_a.py"),
+            (0..7).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
+        )]];
+        let remaining = vec![(
+            Utf8PathBuf::from("test_b.py"),
+            (0..3)
+                .map(|i| Arc::new(make_test_item(&format!("test_b.py::test_{i}"))))
+                .collect::<Vec<_>>(),
+        )];
+
+        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
+        assert_eq!(decision, ArrangeDecision::Arrange);
+    }
+
+    #[test]
+    fn test_threshold_empty_arranged_returns_arrange() {
+        let arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>> = vec![vec![]];
+        let remaining = vec![(
+            Utf8PathBuf::from("test_a.py"),
+            vec![Arc::new(make_test_item("test_a.py::test_a"))],
+        )];
+
+        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
+        assert_eq!(decision, ArrangeDecision::Arrange);
+    }
+
+    #[test]
+    fn test_threshold_no_tests_returns_arrange() {
+        let arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>> = vec![];
+        let remaining: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)> = vec![];
+
+        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
+        assert_eq!(decision, ArrangeDecision::Arrange);
     }
 }
