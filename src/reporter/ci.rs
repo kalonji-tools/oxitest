@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_all_pass_dots() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_bare_assert_shows_middot() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![5],
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_fail_shows_f() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         let outcome = make_failed("oops", "t.py", 1, "assert x");
         reporter.test_started(&item);
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_skip_shows_s() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         reporter.test_completed(
             &item,
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_error_shows_e() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         let outcome = make_error("AttributeError: x", "t.py", 5, "obj.x");
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_xfail_shows_x() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         reporter.test_completed(
             &item,
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_xpassed_shows_capital_x() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         reporter.test_completed(
             &item,
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_xpassed_lenient_shows_capital_x() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = make_item("test_a");
         reporter.test_completed(
             &item,
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_ci_reporter_parametrize_fail_uses_case_id_format() {
-        let mut reporter = make_ci_reporter(TbStyle::Short);
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("neg")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),

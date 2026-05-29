@@ -46,7 +46,7 @@ pub struct Cli {
     #[arg(long, value_name = "NUM")]
     pub maxfail: Option<usize>,
 
-    /// Traceback style: long, short (default), line, no
+    /// Traceback style: detail (default), line, no
     #[arg(long, value_enum)]
     pub tb: Option<TbStyle>,
 

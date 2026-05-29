@@ -44,14 +44,14 @@ pub struct ReporterOptsBuilder {
 }
 
 impl ReporterOptsBuilder {
-    /// Sensible defaults for tests: total=0, use_color=false, tb=Short,
+    /// Sensible defaults for tests: total=0, use_color=false, tb=Detail,
     /// show_tips=false, show_warnings=false, verbosity=Normal.
     pub fn new() -> Self {
         Self {
             total: 0,
             async_count: 0,
             use_color: false,
-            tb: crate::config::TbStyle::Short,
+            tb: crate::config::TbStyle::Detail,
             show_tips: false,
             show_warnings: false,
             verbosity: Verbosity::Normal,
@@ -165,7 +165,7 @@ mod tests {
         assert!(!opts.show_tips);
         assert!(!opts.show_warnings);
         assert_eq!(opts.verbosity, Verbosity::Normal);
-        assert_eq!(opts.tb, crate::config::TbStyle::Short);
+        assert_eq!(opts.tb, crate::config::TbStyle::Detail);
     }
 
     #[test]
