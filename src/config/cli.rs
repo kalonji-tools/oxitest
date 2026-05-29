@@ -273,14 +273,10 @@ impl Cli {
         // ── Quiet conflicts with output-requesting actions ───────────
         if self.quiet {
             if self.list {
-                return Err(
-                    "--quiet suppresses output, but --list requests it.".to_string(),
-                );
+                return Err("--quiet suppresses output, but --list requests it.".to_string());
             }
             if self.fixtures {
-                return Err(
-                    "--quiet suppresses output, but --fixtures requests it.".to_string(),
-                );
+                return Err("--quiet suppresses output, but --fixtures requests it.".to_string());
             }
         }
 
@@ -673,8 +669,7 @@ mod validate_tests {
 
     #[test]
     fn test_fixtures_conflicts_with_capture_environment() {
-        let cli =
-            Cli::try_parse_from(["oxitest", "--fixtures", "--capture-environment"]).unwrap();
+        let cli = Cli::try_parse_from(["oxitest", "--fixtures", "--capture-environment"]).unwrap();
         let err = cli.validate().unwrap_err();
         assert!(err.contains("--fixtures"), "error: {err}");
         assert!(err.contains("--capture-environment"), "error: {err}");

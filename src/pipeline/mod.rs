@@ -110,7 +110,10 @@ impl PipelineContext {
     /// no plugin reporters.
     pub(crate) fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
         reporter::make_reporter(
-            self.base.clone().verbose(false).build(),
+            self.base
+                .clone()
+                .verbosity(config::Verbosity::Normal)
+                .build(),
             self.is_tty,
             None,
             None,
