@@ -29,6 +29,7 @@ current working directory when omitted.
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. `auto` detects TTY. `always` forces color (useful in pipes). `never` disables color. |
 | `--serial` | — | flag | `false` | Run all tests in a single process. Disables parallel workers. Conflicts with `--workers`. |
 | `--workers` | `-n` | `auto\|integer` | cpu count | Number of parallel worker processes. `auto` uses all available CPUs. Conflicts with `--serial`. |
+| `--auto-arrange[=THRESHOLD]` | — | `integer\|false` | `70` | Automatically group tests that share `shared=True` fixtures onto the same worker. THRESHOLD is a percentage (0–100); when the largest fixture group exceeds THRESHOLD% of parallel-eligible tests oxitest falls back to serial execution to avoid a bottleneck. `--auto-arrange` uses the default threshold (70). `--auto-arrange=50` sets a custom threshold. `--no-auto-arrange` disables auto-arrangement. **TOML:** `auto_arrange = 50` or `auto_arrange = false`. |
 | `--schedule` | — | `longest-first\|failed-first\|random` | — | Group scheduling strategy for parallel runs. Defaults to `longest-first`. |
 | `--timeout` | — | integer (seconds) | — | Per-test timeout. Tests exceeding this are killed and marked failed. Overrides pyproject.toml `timeout`. |
 | `--durations` | — | integer | — | Show the N slowest tests at end of run. |
@@ -62,6 +63,7 @@ current working directory when omitted.
 | `--fixtures` | `--quiet` / `-q` | Quiet suppresses output, but --fixtures requests it. |
 | `--serial` | `--workers` | Mutually exclusive execution modes. |
 | `--serial` | `--schedule` | Schedule controls parallel worker ordering; no effect in serial mode. |
+| `--serial` | `--auto-arrange` | Auto-arrangement targets parallel workers; no effect in serial mode. |
 | `--retries-delay` | *(without `--retries`)* | Delay has no effect without retries. |
 | `--debug` | `--workers` | Debug implies serial mode; cannot use with parallel workers. |
 | `--debug` | `--serial` | Debug already implies serial mode; redundant. |
