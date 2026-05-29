@@ -320,3 +320,112 @@ def test_list_full_shows_param_values(tmp: TempDir):
     assert "test_abs" in out, f"test_abs missing from output: {out!r}"
     assert "[pos]" in out, f"[pos] missing from output: {out!r}"
     assert "[neg]" in out, f"[neg] missing from output: {out!r}"
+
+
+# ── Issue #584: Integration tests for 6 untested CLI flags ───────────────────
+
+
+@oxitest.mark.timeout(120)
+def test_affected_filters_to_changed_tests(tmp: TempDir):
+    """--affected filters to tests in files changed since the given ref."""
+    # Arrange — set up a git repo with a committed test file and a new one
+    git = ["git", "-C", str(tmp)]
+    subprocess.run([*git, "init"], check=True, capture_output=True)
+    subprocess.run(
+        [*git, "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [*git, "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Create and commit a baseline test file
+    (tmp / "test_old.py").write_text("def test_old(): assert True\n")
+    subprocess.run([*git, "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        [*git, "commit", "-m", "baseline"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Add a new test file and stage it (git diff HEAD sees staged changes)
+    (tmp / "test_new.py").write_text("def test_new(): assert True\n")
+    subprocess.run([*git, "add", "test_new.py"], check=True, capture_output=True)
+
+    # Act
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--affected=HEAD")
+
+    # Assert — only the new file should be collected (1 test, not 2)
+    assert rc == 0, f"--affected should exit 0, got {rc}\nstderr: {stderr!r}"
+    assert "1 passed" in out, f"should run exactly 1 test (the new one): {out!r}"
+    assert "2 passed" not in out, f"should NOT run both tests: {out!r}"
+
+
+def test_tb_line_shows_compact_failure(tmp: TempDir):
+    """--tb line shows file:line but no full diagnostic block."""
+    (tmp / "test_fail.py").write_text(
+        "def test_boom():\n    assert 1 == 2, 'one is not two'\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "line")
+    assert rc != 0, "test should fail"
+    # --tb=line emits a one-liner with file:line and message
+    assert "test_fail.py" in out, f"file name should appear: {out!r}"
+    assert "one is not two" in out, f"failure message should appear: {out!r}"
+    # No diagnostic box chrome
+    assert "┌" not in out, f"--tb=line should not emit box chrome: {out!r}"
+    assert "└" not in out, f"--tb=line should not emit box chrome: {out!r}"
+
+
+def test_tb_no_suppresses_traceback(tmp: TempDir):
+    """--tb no reports failure but shows no traceback or diagnostic block."""
+    (tmp / "test_fail.py").write_text(
+        "def test_kaboom():\n    assert False, 'should not see traceback'\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "no")
+    assert rc != 0, "test should fail"
+    assert "1 failed" in out, f"summary should report failure: {out!r}"
+    # No diagnostic block, no one-liner
+    assert "┌" not in out, f"--tb=no should not emit box chrome: {out!r}"
+    assert "should not see traceback" not in out, (
+        f"--tb=no should suppress failure message: {out!r}"
+    )
+
+
+def test_timeout_cli_flag(tmp: TempDir):
+    """--timeout applies a session-wide timeout to tests without @mark.timeout."""
+    (tmp / "test_slow.py").write_text(
+        "import time\n\ndef test_hangs():\n    time.sleep(30)\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--timeout", "1")
+    assert rc != 0, f"timed-out test should fail, got rc={rc}"
+    assert "1 failed" in out or "timeout" in out.lower(), (
+        f"output should indicate timeout failure: {out!r}"
+    )
+
+
+def test_durations_shows_slowest_tests(tmp: TempDir):
+    """--durations N lists the N slowest tests after the run."""
+    (tmp / "test_dur.py").write_text(
+        "import time\n\n"
+        "def test_fast(): pass\n\n"
+        "def test_slow():\n"
+        "    time.sleep(0.05)\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--durations", "1")
+    assert rc == 0, f"--durations should exit 0, got {rc}"
+    assert "slowest" in out.lower(), f"output should contain 'slowest': {out!r}"
+    assert "ms" in out, f"output should show duration in ms: {out!r}"
+
+
+def test_capture_environment_prints_versions(tmp: TempDir):
+    """--capture-environment prints Python and oxitest versions and exits 0."""
+    (tmp / "test_dummy.py").write_text("def test_noop(): pass\n")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--capture-environment")
+    assert rc == 0, f"--capture-environment should exit 0, got {rc}"
+    assert "python:" in out.lower(), f"output should contain Python version: {out!r}"
+    assert "oxitest:" in out.lower(), f"output should contain oxitest version: {out!r}"
+    # Should NOT run tests
+    assert "passed" not in out, f"--capture-environment should not run tests: {out!r}"
