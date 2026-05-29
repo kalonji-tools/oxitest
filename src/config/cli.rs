@@ -1,7 +1,9 @@
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use super::{ColorMode, FailedMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount};
+use super::{
+    ColorMode, FailedMode, KeepTmpMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum DebugMode {
@@ -144,6 +146,19 @@ pub struct Cli {
         require_equals = true,
     )]
     pub debug: Option<DebugMode>,
+
+    /// Preserve TempDir contents instead of cleaning up.
+    /// Bare `--keep-tmp` defaults to failed mode (preserve on test failure only).
+    /// Use `--keep-tmp=MODE` with `=` (e.g. `--keep-tmp=always`).
+    #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        default_missing_value = "failed",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub keep_tmp: Option<KeepTmpMode>,
 }
 
 impl Cli {
@@ -545,5 +560,29 @@ mod validate_tests {
     fn test_debug_always_alone_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "--debug=always"]).unwrap();
         assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_keep_tmp_absent_is_none() {
+        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
+        assert!(cli.keep_tmp.is_none());
+    }
+
+    #[test]
+    fn test_keep_tmp_bare_defaults_to_failed() {
+        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp"]).unwrap();
+        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Failed));
+    }
+
+    #[test]
+    fn test_keep_tmp_explicit_failed() {
+        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=failed"]).unwrap();
+        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Failed));
+    }
+
+    #[test]
+    fn test_keep_tmp_explicit_always() {
+        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=always"]).unwrap();
+        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Always));
     }
 }
