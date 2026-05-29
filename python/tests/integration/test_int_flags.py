@@ -25,15 +25,17 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
     assert "passed" not in out, "--list should not run tests (no 'passed' in output)"
 
 
-def test_list_verbose_shows_table(tmp: TempDir):
-    """--list -v shows a table with module and function columns."""
+def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
+    """--list -v shows marks and fixtures."""
     (tmp / "test_table.py").write_text(
-        "def test_one(): assert True\ndef test_two(): assert True\n"
+        "from oxitest._bridge._fixture_type import Fixture\n"
+        "def test_one(): assert True\n"
+        "def test_two(tmp: Fixture[str]): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--list", "-v")
     assert rc == 0, f"--list -v should exit 0, got {rc}"
-    assert "module" in out, "verbose list should show 'module' column header"
-    assert "function" in out, "verbose list should show 'function' column header"
+    assert "test_one" in out, f"test_one missing from output: {out!r}"
+    assert "test_two" in out, f"test_two missing from output: {out!r}"
 
 
 def test_keyword_filter(tmp: TempDir):
@@ -109,13 +111,12 @@ def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
     assert "--maxfail" in stderr, f"stderr: {stderr!r}"
 
 
-def test_verbose_conflicts_with_quiet(tmp: TempDir):
-    """Flag conflict: --verbose and --quiet are opposite modes."""
+def test_v_with_quiet_is_valid(tmp: TempDir):
+    """-v -q is valid: quiet trumps verbose."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "-v", "-q")
-    assert rc == 4, f"-v/-q conflict should exit 4, got {rc}"
-    assert "--verbose" in stderr, f"stderr: {stderr!r}"
-    assert "--quiet" in stderr, f"stderr: {stderr!r}"
+    out, _, rc = helpers.common.run_oxitest(tmp, "-v", "-q")
+    # Quiet trumps, so this runs silently with exit 0
+    assert rc == 0, f"-v/-q should be valid, got {rc}"
 
 
 def test_schedule_conflicts_with_serial(tmp: TempDir):
@@ -269,3 +270,53 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     assert "KEPT" not in stderr, (
         f"stderr should NOT contain KEPT for passing tests, got: {stderr!r}"
     )
+
+
+def test_list_conflicts_with_quiet(tmp: TempDir):
+    """--list -q is a conflict."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "-q")
+    assert rc == 4, f"--list/-q conflict should exit 4, got {rc}"
+    assert "--list" in stderr, f"stderr: {stderr!r}"
+    assert "--quiet" in stderr, f"stderr: {stderr!r}"
+
+
+def test_fixtures_conflicts_with_quiet(tmp: TempDir):
+    """--fixtures -q is a conflict."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--fixtures", "-q")
+    assert rc == 4, f"--fixtures/-q conflict should exit 4, got {rc}"
+    assert "--fixtures" in stderr, f"stderr: {stderr!r}"
+    assert "--quiet" in stderr, f"stderr: {stderr!r}"
+
+
+def test_list_conflicts_with_fixtures(tmp: TempDir):
+    """--list --fixtures is a conflict."""
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    _, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "--fixtures")
+    assert rc == 4, f"--list/--fixtures conflict should exit 4, got {rc}"
+    assert "--list" in stderr, f"stderr: {stderr!r}"
+    assert "--fixtures" in stderr, f"stderr: {stderr!r}"
+
+
+def test_list_full_shows_param_values(tmp: TempDir):
+    """--list --verbose=full shows grouped parametrize cases."""
+    (tmp / "test_param.py").write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest as oxi\n\n"
+        "@dataclass(frozen=True)\n"
+        "class Case:\n"
+        "    x: int\n"
+        "    expected: int\n\n"
+        "@oxi.parametrize(pos=Case(1, 1), neg=Case(-1, 1))\n"
+        "def test_abs(case: Case) -> None:\n"
+        "    assert abs(case.x) == case.expected, 'mismatch'\n"
+    )
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "--verbose=full")
+    assert rc == 0, (
+        f"--list --verbose=full should exit 0, got {rc}\n"
+        f"stdout: {out!r}\nstderr: {stderr!r}"
+    )
+    assert "test_abs" in out, f"test_abs missing from output: {out!r}"
+    assert "[pos]" in out, f"[pos] missing from output: {out!r}"
+    assert "[neg]" in out, f"[neg] missing from output: {out!r}"
