@@ -84,6 +84,14 @@
 
 **Debugger Backend** — A plugin-provided implementation of the debugger interface. Receives `trace()` and `post_mortem()` calls from the execution pipeline. The default backend wraps `pdb`.
 
+## Auto-Arrangement
+
+**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on shared fixture dependencies. Tests that transitively depend on the same `shared=True` fixture(s) are co-located on a single worker so the fixture is created once, not per-worker.
+
+**Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on shared fixture B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same worker.
+
+**Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via `--auto-arrange[=THRESHOLD]`.
+
 ## Strict Mode
 
 **Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "warn"` or `strict = "abort"`.
