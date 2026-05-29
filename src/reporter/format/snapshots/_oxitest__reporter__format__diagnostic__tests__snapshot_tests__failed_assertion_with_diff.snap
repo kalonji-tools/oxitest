@@ -2,8 +2,8 @@
 source: src/reporter/format/diagnostic.rs
 expression: block
 ---
-        ┌─ tests/test_math.py:15
-        │
-        │     15 │    assert x == y
-        │
-        └─ why:   assert x == y
+      ┌ tests/test_math.py:15
+      │
+      │  assert x == y
+      │
+      └ assert x == y
