@@ -50,22 +50,49 @@ def _propagate_class_marks(fn: object, cls: object) -> None:
             _append_mark(cast(Any, fn), m)
 
 
+def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
+    """Convert a mark entry to MarkInfo, or return None if invalid.
+
+    Accepts:
+    - MarkInfo directly (from tests or explicit construction)
+    - A mark factory/decorator (e.g. oxitest.mark.slow, oxitest.mark.timeout(5))
+      by applying it to a sentinel function and reading back the MarkInfo.
+    """
+    if isinstance(entry, MarkInfo):
+        return entry
+    if callable(entry):
+
+        def _sentinel() -> None:
+            pass
+
+        try:
+            entry(_sentinel)
+            marks = get_marks(_sentinel)
+            return marks[-1] if marks else None
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
 def _extract_module_marks(
     module: ModuleType,
     path: str,
 ) -> tuple[list[MarkInfo], list[CollectedViolation]]:
     """Extract and validate the oxi_mark module variable.
 
-    Returns (valid_marks, violations). Accepts a single MarkInfo or a
-    list/tuple of them. Non-MarkInfo entries produce INVALID_MODULE_MARK
+    Returns (valid_marks, violations). Accepts a single MarkInfo, a mark
+    factory/decorator (e.g. oxitest.mark.slow or oxitest.mark.timeout(5)),
+    or a list/tuple of any mix. Non-mark entries produce INVALID_MODULE_MARK
     violations.
     """
     raw = getattr(module, "oxi_mark", None)
     if raw is None:
         return [], []
-    if isinstance(raw, MarkInfo):
-        return [raw], []
+    # Single entry (not a list/tuple)
     if not isinstance(raw, (list, tuple)):
+        mark_info = _coerce_to_mark_info(raw)
+        if mark_info is not None:
+            return [mark_info], []
         return [], [
             CollectedViolation(
                 node_id=path,
@@ -76,8 +103,9 @@ def _extract_module_marks(
     marks: list[MarkInfo] = []
     violations: list[CollectedViolation] = []
     for entry in raw:
-        if isinstance(entry, MarkInfo):
-            marks.append(entry)
+        mark_info = _coerce_to_mark_info(entry)
+        if mark_info is not None:
+            marks.append(mark_info)
         else:
             violations.append(
                 CollectedViolation(
@@ -425,12 +453,13 @@ def collect_module(
     unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"  # noqa: S324
     module = _import_test_module(path, unique_name, session)
     _register_module_fixtures(module, path, session)
+    module_marks, mark_violations = _extract_module_marks(module, path)
     items: list[CollectedItem] = []
-    violations: list[CollectedViolation] = []
+    violations: list[CollectedViolation] = list(mark_violations)
     for discover in (_module_members, _class_members):
-        found_items, found_viols = _collect_items(
-            discover(module), path, collect_violations
-        )
+        members = list(discover(module))
+        _apply_module_marks(members, module_marks)
+        found_items, found_viols = _collect_items(members, path, collect_violations)
         items.extend(found_items)
         violations.extend(found_viols)
 
