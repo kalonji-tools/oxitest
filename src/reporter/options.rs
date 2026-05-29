@@ -17,6 +17,8 @@ pub struct ReporterOpts {
     pub(crate) show_tips: bool,
     pub(crate) show_warnings: bool,
     pub(crate) show_locals: bool,
+    // Reserved for future use (e.g., --show-internals flag display in other reporters)
+    #[allow(dead_code)]
     pub(crate) show_internals: bool,
     pub(crate) verbosity: Verbosity,
     pub(crate) show_durations: Option<usize>,
