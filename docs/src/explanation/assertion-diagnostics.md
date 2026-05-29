@@ -120,20 +120,21 @@ failure output. Current patterns:
 
 ## Frame truncation
 
-In `--tb short` mode (the default), oxitest hides internal framework frames from
-tracebacks. Only user code frames are shown. Frames from `oxitest/_bridge/`,
-`oxitest/_builtins/`, and `oxitest/plugin` are filtered out. At least one frame (the
-innermost) is always shown.
+By default (`--tb=detail`), oxitest hides internal framework frames from tracebacks.
+Only user code frames are shown. Frames from `oxitest/_bridge/`, `oxitest/_builtins/`,
+and `oxitest/plugin` are filtered out. At least one frame (the innermost) is always shown.
 
-In `--tb long` mode, all frames are shown including oxitest internals.
+Pass `--show-internals` to include all frames, including oxitest internals.
 
 ## The `--tb` styles
 
 The `--tb` flag controls how much of the diagnostic block is printed for each failure.
+Use `--show-locals` and `--show-internals` for additional detail within `--tb=detail`.
 
-=== "`--tb short` (default)"
+=== "`--tb detail` (default)"
     Shows the source line of the failing assertion, color-coded diff of operand values,
-    and any fix suggestions. Internal framework frames are hidden.
+    and any fix suggestions. Internal framework frames are hidden unless `--show-internals`
+    is set.
 
     ```text
     FAILED  ./test_diag.py::test_comparison
@@ -147,7 +148,7 @@ The `--tb` flag controls how much of the diagnostic block is printed for each fa
             └─ why:   values should match
     ```
 
-=== "`--tb long`"
+=== "`--tb detail --show-internals`"
     Full call-chain frames (including oxitest internals), plus the diff and suggestions.
 
     ```text

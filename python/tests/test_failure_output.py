@@ -66,7 +66,7 @@ class OutputCase:
                 raise ValueError("boom")
         """),
         expected=("test_check.py",),
-        extra_args=("--serial", "--tb", "long"),
+        extra_args=("--serial", "--show-internals"),
     ),
     no_hint_for_plain_assertion=OutputCase(
         test_code=textwrap.dedent("""\

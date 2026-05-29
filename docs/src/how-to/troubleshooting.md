@@ -62,11 +62,8 @@ timeout_multiplier = 3.0
 Use these flags to narrow down and inspect failures:
 
 ```console
-# Full tracebacks with all call-chain frames
-$ oxitest --tb=long
-
-# Compact tracebacks (default)
-$ oxitest --tb=short
+# Full tracebacks including call-chain frames
+$ oxitest --show-internals
 
 # One-line summary per failure
 $ oxitest --tb=line
@@ -81,7 +78,7 @@ $ oxitest tests/test_foo.py
 $ oxitest -vv
 ```
 
-Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --tb=long -vv`.
+Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --show-internals -vv`.
 
 ## Why is test collection slow?
 

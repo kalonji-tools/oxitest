@@ -21,7 +21,9 @@ current working directory when omitted.
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` or `--verbose` sets `detailed`. `-vv` or `--verbose=full` sets `full`. In `detailed` mode, `--list` shows marks and fixtures. In `full` mode, `--list` groups parametrize cases with expanded values. |
 | `-x` | — | flag | `false` | Stop immediately after the first test failure or error. Equivalent to `--maxfail 1`. Conflicts with `--maxfail`. |
 | `--maxfail` | — | integer | `0` | Stop after `N` failures. `0` means unlimited. |
-| `--tb` | — | `long\|short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
+| `--tb` | — | `detail\|line\|no` | `detail` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
+| `--show-locals` | — | flag | `false` | Show local variable values in the failing frame. |
+| `--show-internals` | — | flag | `false` | Show internal oxitest framework frames in tracebacks. |
 | `--tips` | — | flag | `false` | Expand assertion tip output from a count to a full `file:line` list (see [Tips](#tips)). |
 | `--warnings` | — | flag | `false` | Expand warning details. Without this flag, only a count is shown. With it, each warning is displayed in a box with the test function name and warning type/message. Warnings captured by `WarnCapture` or `oxitest.warns()` are excluded. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. `auto` detects TTY. `always` forces color (useful in pipes). `never` disables color. |
@@ -41,7 +43,7 @@ current working directory when omitted.
 | `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
 | `--retries` | — | integer | — | Retry failed tests up to N times. |
 | `--retries-delay` | — | integer (seconds) | — | Seconds to wait between retries. Has no effect without `--retries`. |
-| `--debug` | — | `post-mortem\|always` | — | Drop into an interactive debugger. Implies `--serial` and `--tb=long`. `post-mortem` (default) also implies `--maxfail 1`. `always` pauses before every test. Use `--debug=MODE` with `=`. See [Debug tests](../how-to/debug-tests.md). |
+| `--debug` | — | `post-mortem\|always` | — | Drop into an interactive debugger. Implies `--serial` and `--tb=detail --show-internals`. `post-mortem` (default) also implies `--maxfail 1`. `always` pauses before every test. Use `--debug=MODE` with `=`. See [Debug tests](../how-to/debug-tests.md). |
 
 ## Flag interactions
 
@@ -79,17 +81,18 @@ error: -x and --maxfail both control when to stop after failures. Use one or the
 
 ## Traceback styles
 
-The `--tb` option controls how failure tracebacks are rendered. Each mode shows
-progressively less detail:
+The `--tb` option controls how failure tracebacks are rendered:
 
 | Value | Behaviour |
 |-------|-----------|
-| `long` | Full call-chain frames (including oxitest internals), color-coded diff, and fix suggestions. |
-| `short` | The failing source line, color-coded diff, and fix suggestions. Internal framework frames hidden. Default. |
+| `detail` | The failing source line, color-coded diff, and fix suggestions. Internal framework frames hidden unless `--show-internals` is set. Default. |
 | `line` | One compact line per failure: `STATUS  node_id  :lineno  message`. |
 | `no` | Suppresses traceback output entirely. Only the summary count is shown. |
 
-Example `--tb=short` output (default):
+Use `--show-locals` to include local variable values in the failing frame.
+Use `--show-internals` to include internal oxitest framework frames.
+
+Example `--tb=detail` output (default):
 
 ```
 FAILED  tests/test_math.py::test_add
@@ -103,7 +106,7 @@ FAILED  tests/test_math.py::test_add
         └─ why:   values should match
 ```
 
-Example `--tb=long` output:
+Example `--tb=detail --show-internals` output:
 
 ```
 FAILED  tests/test_math.py::test_divide
