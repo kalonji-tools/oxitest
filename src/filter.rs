@@ -19,7 +19,7 @@ use crate::types::{CollectError, TestItem};
 // Marker *conditions* — skip(when=condition), xfail — are evaluated at execution time
 // by the mark handler registry in python/oxitest/_bridge/_mark_registry.py (_MARK_REGISTRY).
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
-const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "usefixtures", "timeout"];
+const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
 
 /// Check that every marker name on every item is either a built-in or registered.
 ///
@@ -205,11 +205,10 @@ mod tests {
 
     #[test]
     fn test_builtin_markers_contains_expected_set() {
-        // These names must match the keys of _MARK_REGISTRY in
-        // python/oxitest/_bridge/marks.py. If you add a MarkHandler subclass
-        // there, add its mark_name here. If you add a name here, add a handler
-        // there. Both lists must agree or validate_markers() will emit false
-        // "unknown marker" errors.
+        // These names must match either:
+        // - a handler in python/oxitest/_bridge/marks.py _MARK_REGISTRY, OR
+        // - a Rust-only scheduling mark (like "inprocess") with no Python handler.
+        // If you add a MarkHandler subclass in Python, add its mark_name here.
         assert!(
             BUILTIN_MARKERS.contains(&"skip"),
             "'skip' missing — add SkipHandler to marks.py _MARK_REGISTRY"
@@ -226,15 +225,19 @@ mod tests {
             BUILTIN_MARKERS.contains(&"timeout"),
             "'timeout' missing — add TimeoutHandler to marks.py _MARK_REGISTRY"
         );
-        let expected: std::collections::HashSet<&str> = ["skip", "xfail", "usefixtures", "timeout"]
-            .into_iter()
-            .collect();
+        assert!(
+            BUILTIN_MARKERS.contains(&"inprocess"),
+            "'inprocess' missing — scheduling mark for main-process execution"
+        );
+        let expected: std::collections::HashSet<&str> =
+            ["skip", "xfail", "usefixtures", "timeout", "inprocess"]
+                .into_iter()
+                .collect();
         let actual: std::collections::HashSet<&str> = BUILTIN_MARKERS.iter().copied().collect();
         assert_eq!(
             actual,
             expected,
-            "BUILTIN_MARKERS must exactly match the keys in \
-             python/oxitest/_bridge/marks.py _MARK_REGISTRY.\n\
+            "BUILTIN_MARKERS mismatch.\n\
              Extra in BUILTIN_MARKERS:    {:?}\n\
              Missing from BUILTIN_MARKERS: {:?}",
             actual.difference(&expected).collect::<Vec<_>>(),
