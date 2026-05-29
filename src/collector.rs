@@ -139,7 +139,7 @@ mod tests {
             schedule: crate::config::ScheduleStrategy::LongestFirst,
             failed: None,
             tb: crate::config::TbStyle::Short,
-            verbose: false,
+            verbosity: crate::config::Verbosity::Normal,
             durations: None,
             color: crate::config::ColorMode::Auto,
             plugins: vec![],
