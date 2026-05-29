@@ -4,10 +4,10 @@ use crate::config::Verbosity;
 use crate::types::{CollectError, ColorCategory, DurationMs, TestItem, TestOutcome};
 
 use super::colors::{
-    color_cyan, color_dim, color_dim_green, color_error_token, color_fail, color_skip,
-    color_timeout, color_warn,
+    color_bold_white, color_cyan, color_dim, color_dim_green, color_error_token, color_fail,
+    color_skip, color_timeout, color_warn,
 };
-use super::format::{case_sep, fmt_diagnostic_block, pad_to, plural};
+use super::format::{fmt_diagnostic_block, pad_to, plural};
 use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
@@ -94,45 +94,34 @@ impl TtyReporter {
         let raw_ms = duration_ms.as_f64();
         let ms = color_dim(&format!("{:.1}ms", raw_ms), self.opts.use_color);
         let c = self.opts.use_color;
+        let param_suffix = match &item.param_id {
+            Some(pid) => format!("[ {} ]", color_bold_white(pid, c)),
+            None => String::new(),
+        };
+        let w = self.opts.name_width;
+        let name_part = truncate_name(&item.fn_name, w);
         match outcome {
             TestOutcome::Passed { no_message_lines } if no_message_lines.is_empty() => {
-                let w = self.opts.name_width;
                 fmt_quiet_line(
                     &color_dim_green("\u{2713}    ", c),
                     &color_dim(
-                        &format!(
-                            "{:<width$} {:.1}ms",
-                            truncate_name(&item.fn_name, w),
-                            raw_ms,
-                            width = w
-                        ),
+                        &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
                         c,
                     ),
                 )
             }
-            TestOutcome::Passed { .. } => {
-                let w = self.opts.name_width;
-                fmt_quiet_line(
-                    &color_dim("\u{00B7}    ", c),
-                    &color_dim(
-                        &format!(
-                            "{:<width$} {:.1}ms",
-                            truncate_name(&item.fn_name, w),
-                            raw_ms,
-                            width = w
-                        ),
-                        c,
-                    ),
-                )
-            }
+            TestOutcome::Passed { .. } => fmt_quiet_line(
+                &color_dim("\u{00B7}    ", c),
+                &color_dim(
+                    &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
+                    c,
+                ),
+            ),
             TestOutcome::Skipped { reason } | TestOutcome::XFailed { reason } => {
                 let label = outcome_label(outcome, c);
                 self.fmt_line(
                     &label,
-                    &pad_to(
-                        &truncate_name(&item.fn_name, self.opts.name_width),
-                        self.opts.name_width,
-                    ),
+                    &pad_to(&format!("{}{}", name_part, param_suffix), w),
                     &color_dim(reason, c),
                 )
             }
@@ -151,23 +140,14 @@ impl TtyReporter {
                 let label = outcome_label(outcome, c);
                 self.fmt_line(
                     &label,
-                    &pad_to(
-                        &truncate_name(&item.fn_name, self.opts.name_width),
-                        self.opts.name_width,
-                    ),
+                    &pad_to(&format!("{}{}", name_part, param_suffix), w),
                     &format!("{}{}", ms, types_str),
                 )
             }
             _ => {
                 let label = outcome_label(outcome, c);
-                self.fmt_line(
-                    &label,
-                    &pad_to(
-                        &color_cyan(&truncate_name(&item.fn_name, self.opts.name_width), c),
-                        self.opts.name_width,
-                    ),
-                    &ms,
-                )
+                let name_with_id = format!("{}{}", color_cyan(&name_part, c), param_suffix);
+                self.fmt_line(&label, &pad_to(&name_with_id, w), &ms)
             }
         }
     }
@@ -234,12 +214,8 @@ impl TtyReporter {
                     continue;
                 }
                 let case_id = item.param_id.as_deref().unwrap_or("");
-                let header = format!(
-                    "       {}{}{}",
-                    color_fail(case_id, c),
-                    case_sep(c),
-                    color_dim(&group.fn_name, c)
-                );
+                self.pb.println("");
+                let header = format!("       {}[ {} ]", color_dim(&group.fn_name, c), case_id,);
                 self.pb.println(header);
                 let diag =
                     fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.show_locals, c);
