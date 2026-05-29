@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["collect_module"]
+__all__ = ["collect_module", "_extract_module_marks", "_apply_module_marks"]
 
 import ast
 import dataclasses
@@ -15,7 +15,7 @@ from typing import Any, cast, get_type_hints
 from oxitest._bridge._ast_utils import walk_bare_asserts
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
-from oxitest._bridge._mark_api import _append_mark
+from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge.fixtures import Fixtures, _fixture_inner_type
 from oxitest._bridge.parametrize import _DictCases, _PartialCases
@@ -48,6 +48,64 @@ def _propagate_class_marks(fn: object, cls: object) -> None:
     for m in get_marks(cls):
         if m.name == "usefixtures":
             _append_mark(cast(Any, fn), m)
+
+
+def _extract_module_marks(
+    module: ModuleType,
+    path: str,
+) -> tuple[list[MarkInfo], list[CollectedViolation]]:
+    """Extract and validate the oxi_mark module variable.
+
+    Returns (valid_marks, violations). Accepts a single MarkInfo or a
+    list/tuple of them. Non-MarkInfo entries produce INVALID_MODULE_MARK
+    violations.
+    """
+    raw = getattr(module, "oxi_mark", None)
+    if raw is None:
+        return [], []
+    if isinstance(raw, MarkInfo):
+        return [raw], []
+    if not isinstance(raw, (list, tuple)):
+        return [], [
+            CollectedViolation(
+                node_id=path,
+                kind=ViolationKind.INVALID_MODULE_MARK,
+                detail=repr(raw),
+            )
+        ]
+    marks: list[MarkInfo] = []
+    violations: list[CollectedViolation] = []
+    for entry in raw:
+        if isinstance(entry, MarkInfo):
+            marks.append(entry)
+        else:
+            violations.append(
+                CollectedViolation(
+                    node_id=path,
+                    kind=ViolationKind.INVALID_MODULE_MARK,
+                    detail=repr(entry),
+                )
+            )
+    return marks, violations
+
+
+def _apply_module_marks(
+    members: Iterable[tuple[str, object]],
+    module_marks: list[MarkInfo],
+) -> None:
+    """Prepend non-conflicting module marks onto each function's metadata.
+
+    For each function, module marks whose name matches a per-test mark
+    are skipped (per-test wins). Remaining module marks are prepended
+    so they appear before per-test marks in the list.
+    """
+    if not module_marks:
+        return
+    for _fn_name, fn in members:
+        existing_names = {m.name for m in get_marks(fn)}
+        for mark in module_marks:
+            if mark.name not in existing_names:
+                _append_mark(cast(Any, fn), mark)
 
 
 def _validate_composition(layers: tuple) -> None:
