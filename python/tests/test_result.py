@@ -129,6 +129,7 @@ def test_to_wire_includes_frames():
         "lineno": 3,
         "name": "test_f",
         "line": "assert x",
+        "locals": [],
     }, "frame content mismatch"
 
 
