@@ -19,6 +19,8 @@ import sys
 
 import oxitest
 
+oxi_mark = oxitest.mark.inprocess
+
 # Use sys.modules as process-persistent storage so the counter survives
 # module eviction between tests.  The key is unique enough to avoid
 # collision with other test files.
@@ -31,7 +33,6 @@ _counter = sys.modules[_KEY]
 _counter.n += 1  # type: ignore[attr-defined]
 
 
-@oxitest.mark.inprocess
 def test_module_loaded_once_first_test() -> None:
     """Module should have been loaded exactly once by the time this test runs."""
     assert _counter.n == 1, (
@@ -39,7 +40,6 @@ def test_module_loaded_once_first_test() -> None:
     )
 
 
-@oxitest.mark.inprocess
 def test_module_loaded_once_second_test() -> None:
     """Module should not have been reloaded between tests."""
     assert _counter.n == 1, (
