@@ -43,6 +43,9 @@ pub(crate) use format::sep_width;
 /// Parametrized cases are accumulated here so the reporter can emit a combined
 /// summary line (e.g. `test_add — 3 passed, 1 failed`) once all cases finish,
 /// rather than one line per case.
+///
+/// Statistics are computed incrementally on each `push()` to avoid repeated
+/// iteration over the results vector.
 pub(crate) struct ParametrizeBuffer {
     pub fn_name: String,
     pub results: Vec<(
@@ -50,6 +53,9 @@ pub(crate) struct ParametrizeBuffer {
         crate::types::TestOutcome,
         DurationMs,
     )>,
+    total_ms: DurationMs,
+    has_failure: bool,
+    passed_count: usize,
 }
 
 impl ParametrizeBuffer {
@@ -57,6 +63,9 @@ impl ParametrizeBuffer {
         Self {
             fn_name,
             results: Vec::new(),
+            total_ms: DurationMs::ZERO,
+            has_failure: false,
+            passed_count: 0,
         }
     }
 
@@ -66,25 +75,26 @@ impl ParametrizeBuffer {
         outcome: crate::types::TestOutcome,
         ms: DurationMs,
     ) {
+        self.total_ms += ms;
+        if outcome.is_hard_failure() {
+            self.has_failure = true;
+        }
+        if matches!(outcome, crate::types::TestOutcome::Passed { .. }) {
+            self.passed_count += 1;
+        }
         self.results.push((item, outcome, ms));
     }
 
     pub fn total_ms(&self) -> DurationMs {
-        self.results
-            .iter()
-            .fold(DurationMs::ZERO, |acc, (_, _, ms)| acc + *ms)
+        self.total_ms
     }
 
     pub fn any_failed(&self) -> bool {
-        self.results.iter().any(|(_, o, _)| o.is_hard_failure())
+        self.has_failure
     }
 
     pub fn passed_count(&self) -> usize {
-        use crate::types::TestOutcome;
-        self.results
-            .iter()
-            .filter(|(_, o, _)| matches!(o, TestOutcome::Passed { .. }))
-            .count()
+        self.passed_count
     }
 }
 
