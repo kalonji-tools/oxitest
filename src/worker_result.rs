@@ -46,6 +46,8 @@ pub(crate) struct FrameEntry {
     pub lineno: u64,
     pub name: String,
     pub line: String,
+    #[serde(default)]
+    pub locals: Vec<(String, String)>,
 }
 
 /// Deserialized JSON result for a single test, written by a worker subprocess.
@@ -131,6 +133,7 @@ impl WorkerResult {
                 lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
                 name: f.name.clone(),
                 line: f.line.clone(),
+                locals: f.locals.clone(),
             })
             .collect();
 
@@ -248,6 +251,7 @@ mod frame_tests {
                         lineno: LineNo::new(10),
                         name: "test_f".to_string(),
                         line: "do_thing()".to_string(),
+                        locals: vec![],
                     }
                 );
                 assert_eq!(
@@ -257,6 +261,7 @@ mod frame_tests {
                         lineno: LineNo::new(3),
                         name: "do_thing".to_string(),
                         line: "raise ValueError".to_string(),
+                        locals: vec![],
                     }
                 );
             }

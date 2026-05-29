@@ -616,12 +616,14 @@ mod tests {
                     lineno: LineNo::new(10),
                     name: "test_check".to_string(),
                     line: "helper(-1)".to_string(),
+                    locals: vec![],
                 },
                 Frame {
                     file: Utf8PathBuf::from("test_foo.py"),
                     lineno: LineNo::new(5),
                     name: "helper".to_string(),
                     line: "assert x > 0".to_string(),
+                    locals: vec![],
                 },
             ],
         };
@@ -690,18 +692,21 @@ mod tests {
                     lineno: LineNo::new(10),
                     name: "test_user_code".to_string(),
                     line: "result = helper()".to_string(),
+                    locals: vec![],
                 },
                 Frame {
                     file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
                     lineno: LineNo::new(55),
                     name: "_run_base".to_string(),
                     line: "fn()".to_string(),
+                    locals: vec![],
                 },
                 Frame {
                     file: Utf8PathBuf::from("oxitest/_bridge/_middleware.py"),
                     lineno: LineNo::new(30),
                     name: "_compose".to_string(),
                     line: "wrapper(fn)".to_string(),
+                    locals: vec![],
                 },
             ],
         };
@@ -739,12 +744,14 @@ mod tests {
                     lineno: LineNo::new(10),
                     name: "test_user_code".to_string(),
                     line: "result = helper()".to_string(),
+                    locals: vec![],
                 },
                 Frame {
                     file: Utf8PathBuf::from("oxitest/_bridge/executor.py"),
                     lineno: LineNo::new(55),
                     name: "_run_base".to_string(),
                     line: "fn()".to_string(),
+                    locals: vec![],
                 },
             ],
         };
@@ -769,6 +776,7 @@ mod tests {
             lineno: LineNo::new(10),
             name: "_run_base".to_string(),
             line: "fn()".to_string(),
+            locals: vec![],
         }];
         let filtered = filter_frames(&frames);
         assert_eq!(filtered.len(), 1, "should show at least the last frame");
@@ -837,12 +845,14 @@ mod tests {
                         lineno: LineNo::new(10),
                         name: "test_raises".to_string(),
                         line: "result = process(data)".to_string(),
+                        locals: vec![],
                     },
                     Frame {
                         file: Utf8PathBuf::from("src/processor.py"),
                         lineno: LineNo::new(42),
                         name: "process".to_string(),
                         line: "raise ValueError(\"invalid input\")".to_string(),
+                        locals: vec![],
                     },
                 ],
             };

@@ -199,6 +199,7 @@ pub struct Frame {
     pub lineno: LineNo,
     pub name: String,
     pub line: String,
+    pub locals: Vec<(String, String)>,
 }
 
 /// The eight possible results of running a single test.
