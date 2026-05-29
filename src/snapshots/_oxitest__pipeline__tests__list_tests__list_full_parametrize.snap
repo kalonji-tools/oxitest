@@ -1,0 +1,9 @@
+---
+source: src/pipeline_tests.rs
+expression: "helpers::format_test_list(&items, Verbosity::Full)"
+---
+tests/test_math.py::test_add
+  [basic]    Case(x=1, y=2, expected=3)    marks: [slow]    fixtures: [db, tmp]
+  [negative]    Case(x=-5, y=3, expected=-2)    marks: [slow]    fixtures: [db, tmp]
+
+2 tests
