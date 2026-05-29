@@ -105,13 +105,7 @@ impl PipelinePhase for FixturesPhase {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
 
-        let verbosity = if ctx.cli.quiet {
-            0
-        } else if ctx.cli.verbose {
-            2
-        } else {
-            1
-        };
+        let verbosity = ctx.cfg.verbosity as i32;
 
         match session.list_fixtures(py, verbosity, ctx.cli.keyword.as_deref(), ctx.use_color) {
             Ok(output) => {
@@ -224,7 +218,10 @@ impl PipelinePhase for FilterPhase {
         let items = std::mem::take(&mut ctx.items);
         let make_rep = || {
             reporter::make_reporter(
-                ctx.base.clone().verbose(false).build(),
+                ctx.base
+                    .clone()
+                    .verbosity(crate::config::Verbosity::Normal)
+                    .build(),
                 ctx.is_tty,
                 None,
                 None,
@@ -260,7 +257,10 @@ impl PipelinePhase for ListPhase {
         _py: Python<'_>,
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
-        println!("{}", helpers::format_test_list(&ctx.items, ctx.cli.verbose));
+        println!(
+            "{}",
+            helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
+        );
         Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }
