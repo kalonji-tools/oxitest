@@ -1293,6 +1293,170 @@ def test_shared_fixture_names_returns_only_shared_names():
     )
 
 
+# ── Shared fixture groups (connected components) ──────────────────────────────
+
+
+def test_shared_fixture_groups_empty_registry():
+    session = FixtureSession(FixtureRegistry())
+    assert session.shared_fixture_groups() == [], (
+        "empty registry should return no fixture groups"
+    )
+
+
+def test_shared_fixture_groups_no_shared_fixtures():
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="store",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+        )
+    )
+    session = FixtureSession(reg)
+    assert session.shared_fixture_groups() == [], (
+        "registry with no shared fixtures should return no groups"
+    )
+
+
+def test_shared_fixture_groups_single_shared():
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+            shared=True,
+        )
+    )
+    session = FixtureSession(reg)
+    groups = session.shared_fixture_groups()
+    assert groups == [["db"]], (
+        f"single shared fixture should produce one group, got {groups}"
+    )
+
+
+def test_shared_fixture_groups_transitive_dependency():
+    def _db():
+        pass
+
+    def _repo(db):
+        pass
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=_db,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="repo",
+            func=_repo,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+        )
+    )
+    session = FixtureSession(reg)
+    groups = session.shared_fixture_groups()
+    assert groups == [["db", "repo"]], (
+        f"repo depends on shared db — should form one group, got {groups}"
+    )
+
+
+def test_shared_fixture_groups_two_independent_shared():
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="cache",
+            func=lambda: None,
+            autouse=False,
+            params=None,
+            conftest_path="/conftest.py",
+            shared=True,
+        )
+    )
+    session = FixtureSession(reg)
+    groups = session.shared_fixture_groups()
+    assert len(groups) == 2, (
+        f"two independent shared fixtures should produce two groups, got {groups}"
+    )
+    flat = [name for g in groups for name in g]
+    assert sorted(flat) == ["cache", "db"], (
+        f"groups should contain db and cache, got {flat}"
+    )
+
+
+def test_shared_fixture_groups_transitive_merge():
+    def _db():
+        pass
+
+    def _cache():
+        pass
+
+    def _service(db, cache):
+        pass
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="db",
+            func=_db,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="cache",
+            func=_cache,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+            shared=True,
+        )
+    )
+    reg.register(
+        FixtureDef(
+            name="service",
+            func=_service,
+            autouse=False,
+            params=None,
+            conftest_path="/c.py",
+        )
+    )
+    session = FixtureSession(reg)
+    groups = session.shared_fixture_groups()
+    # service links db+cache into one connected component
+    assert len(groups) == 1, (
+        f"service links db+cache — should merge into one group, got {groups}"
+    )
+    assert sorted(groups[0]) == ["cache", "db", "service"], (
+        f"merged group should contain all three fixtures, got {groups[0]}"
+    )
+
+
 # ── FixtureAccessor ───────────────────────────────────────────────────────────
 
 

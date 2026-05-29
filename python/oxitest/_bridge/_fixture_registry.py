@@ -7,6 +7,7 @@ __all__ = [
     "_fixture_ref_inner_type",
 ]
 
+import inspect
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Generic, TypeVar, get_args, get_origin
@@ -85,9 +86,73 @@ class FixtureRegistry:
         """Return True if any registered fixture belongs to the given namespace."""
         return namespace in self._namespaces
 
+    def shared_fixture_groups(self) -> list[list[str]]:
+        """Compute connected components of shared fixture dependencies.
+
+        Walks fixture function signatures to build a dependency graph, then
+        computes transitive closure to find groups of fixtures linked by
+        shared fixture dependencies. Returns sorted list of sorted groups.
+        """
+        graph: dict[str, set[str]] = {}
+        for name, defs in self._defs.items():
+            if not defs:
+                continue
+            defn = defs[-1]  # most-local definition
+            deps: set[str] = set()
+            try:
+                sig = inspect.signature(defn.func)
+            except (ValueError, TypeError):
+                pass
+            else:
+                for param_name in sig.parameters:
+                    if param_name in self._defs and param_name != name:
+                        deps.add(param_name)
+            graph[name] = deps
+
+        # Find which shared fixtures each fixture transitively reaches.
+        def _transitive_shared(name: str, visited: set[str] | None = None) -> set[str]:
+            if visited is None:
+                visited = set()
+            if name in visited:
+                return set()
+            visited.add(name)
+            result: set[str] = set()
+            defs = self._defs.get(name)
+            if defs and defs[-1].shared:
+                result.add(name)
+            for dep in graph.get(name, ()):
+                result |= _transitive_shared(dep, visited)
+            return result
+
+        # Collect fixtures with shared ancestors.
+        shared_ancestors: dict[str, frozenset[str]] = {}
+        for name in self._defs:
+            ancestors = _transitive_shared(name)
+            if ancestors:
+                shared_ancestors[name] = frozenset(ancestors)
+
+        if not shared_ancestors:
+            return []
+
+        # Merge overlapping ancestor sets into connected components.
+        components: list[set[str]] = []
+        for name, ancestors in shared_ancestors.items():
+            all_names = {name} | ancestors
+            merged: list[set[str]] = []
+            new_component = set(all_names)
+            for comp in components:
+                if comp & new_component:
+                    new_component |= comp
+                else:
+                    merged.append(comp)
+            merged.append(new_component)
+            components = merged
+
+        return sorted(sorted(comp) for comp in components)
+
     def has_shared(self) -> bool:
         """Return True if any effective fixture definition has shared=True."""
-        return any(defs[-1].shared for defs in self._defs.values() if defs)
+        return len(self.shared_fixture_groups()) > 0
 
     def shared_names(self) -> list[str]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
