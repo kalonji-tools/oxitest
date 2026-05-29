@@ -108,6 +108,7 @@ mod tests {
                     param_id: None,
                     param_values: vec![],
                     is_async: false,
+                    fixture_names: vec![],
                 })
             })
             .collect();
