@@ -539,7 +539,7 @@ def test_extract_module_marks_none_returns_empty():
 def test_extract_module_marks_single_mark():
     """oxi_mark = oxi.mark.slow → list with one MarkInfo."""
     module = ModuleType("test_single")
-    module.oxi_mark = MarkInfo("slow", (), {})  # type: ignore[attr-defined]
+    module.oxi_mark = MarkInfo("slow", (), {})  # ty: ignore[unresolved-attribute]
     marks, violations = _extract_module_marks(module, "/fake/test_single.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
     assert marks[0].name == "slow", f"expected mark name 'slow', got {marks[0].name!r}"
@@ -549,7 +549,7 @@ def test_extract_module_marks_single_mark():
 def test_extract_module_marks_list():
     """oxi_mark = [mark.slow, mark.timeout(10)] → list with two MarkInfos."""
     module = ModuleType("test_list")
-    module.oxi_mark = [  # type: ignore[attr-defined]
+    module.oxi_mark = [  # ty: ignore[unresolved-attribute]
         MarkInfo("slow", (), {}),
         MarkInfo("timeout", (), {"seconds": 10}),
     ]
@@ -564,7 +564,7 @@ def test_extract_module_marks_list():
 def test_extract_module_marks_tuple():
     """oxi_mark as tuple is accepted."""
     module = ModuleType("test_tuple")
-    module.oxi_mark = (MarkInfo("slow", (), {}),)  # type: ignore[attr-defined]
+    module.oxi_mark = (MarkInfo("slow", (), {}),)  # ty: ignore[unresolved-attribute]
     marks, violations = _extract_module_marks(module, "/fake/test_tuple.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
 
@@ -572,7 +572,7 @@ def test_extract_module_marks_tuple():
 def test_extract_module_marks_invalid_entry():
     """Non-MarkInfo entries produce violations, valid entries still collected."""
     module = ModuleType("test_invalid")
-    module.oxi_mark = [  # type: ignore[attr-defined]
+    module.oxi_mark = [  # ty: ignore[unresolved-attribute]
         MarkInfo("slow", (), {}),
         42,
         "not_a_mark",
