@@ -22,3 +22,4 @@ color_fn!(color_cyan, |s| s.cyan());
 color_fn!(color_bold_white, |s| s.bold().white());
 color_fn!(color_dim_green, |s| s.dim().green());
 color_fn!(color_dim_cyan, |s| s.dim().cyan());
+color_fn!(color_blue, |s| s.blue());

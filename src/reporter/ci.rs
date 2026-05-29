@@ -40,7 +40,14 @@ impl CiReporter {
             return;
         }
 
-        let diag = fmt_diagnostic_block(item, outcome, &self.opts.tb, self.opts.use_color);
+        let diag = fmt_diagnostic_block(
+            item,
+            outcome,
+            &self.opts.tb,
+            self.opts.show_internals,
+            self.opts.show_locals,
+            self.opts.use_color,
+        );
         if diag.is_empty() {
             return;
         }
