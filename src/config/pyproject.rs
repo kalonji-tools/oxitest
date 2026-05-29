@@ -1,6 +1,13 @@
 use super::WorkerCount;
 use serde::Deserialize;
 
+#[derive(serde::Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub(super) enum AutoArrangeToml {
+    Threshold(u8),
+    Disabled(bool),
+}
+
 #[derive(Deserialize, Default)]
 pub(super) struct PyprojectToml {
     pub(super) tool: Option<ToolTable>,
@@ -40,6 +47,7 @@ pub(super) struct OxitestConfig {
     pub(super) retries: Option<usize>,
     pub(super) retries_delay: Option<u64>,
     pub(super) keep_tmp: Option<super::KeepTmpMode>,
+    pub(super) auto_arrange: Option<AutoArrangeToml>,
     pub(super) show_locals: Option<bool>,
     pub(super) show_internals: Option<bool>,
 }

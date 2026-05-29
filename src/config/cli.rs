@@ -171,6 +171,22 @@ pub struct Cli {
     )]
     pub keep_tmp: Option<KeepTmpMode>,
 
+    /// Auto-arrange tests by shared fixture dependencies onto the same worker.
+    /// Bare `--auto-arrange` uses the default threshold (70%).
+    /// Use `--auto-arrange=N` to set a custom threshold percentage.
+    #[arg(
+        long,
+        value_name = "THRESHOLD",
+        default_missing_value = "70",
+        num_args = 0..=1,
+        require_equals = true,
+    )]
+    pub auto_arrange: Option<u8>,
+
+    /// Disable auto-arrangement of tests by shared fixtures.
+    #[arg(long, conflicts_with = "auto_arrange")]
+    pub no_auto_arrange: bool,
+
     /// Show local variables in diagnostic frames (requires --tb=detail)
     #[arg(long)]
     pub show_locals: bool,
