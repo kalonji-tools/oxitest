@@ -22,6 +22,7 @@ struct BridgeFrame {
     lineno: usize,
     name: String,
     line: String,
+    locals: Vec<(String, String)>,
 }
 
 /// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
@@ -352,6 +353,7 @@ fn try_run_test_with_session_obj(
             lineno: LineNo::new(f.lineno),
             name: f.name,
             line: f.line,
+            locals: f.locals,
         })
         .collect();
 

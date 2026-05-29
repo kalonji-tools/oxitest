@@ -23,6 +23,7 @@ class Frame:
     lineno: int
     name: str
     line: str
+    locals: tuple[tuple[str, str], ...] = ()
 
 
 class StatusKind(StrEnum):
