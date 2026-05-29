@@ -836,6 +836,7 @@ mod drain_tests {
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
+                fixture_names: vec![],
             })
         }
 
@@ -1019,6 +1020,7 @@ mod result_handler_tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
+            fixture_names: vec![],
         })
     }
 

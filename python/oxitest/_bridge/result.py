@@ -193,6 +193,7 @@ class CollectedItem:
     param_id: str | None
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
+    fixture_names: tuple[str, ...] = ()
 
 
 class ViolationKind(StrEnum):

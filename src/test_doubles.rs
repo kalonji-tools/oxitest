@@ -274,6 +274,7 @@ pub(crate) mod doubles {
             param_id: None,
             param_values: vec![],
             is_async: false,
+            fixture_names: vec![],
         }
     }
 
