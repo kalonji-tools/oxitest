@@ -4,7 +4,7 @@ mod cli;
 pub use cli::{Cli, DebugMode};
 
 mod pyproject;
-use pyproject::{OxitestConfig, PyprojectToml};
+use pyproject::{AutoArrangeToml, OxitestConfig, PyprojectToml};
 
 impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.
@@ -221,6 +221,7 @@ pub struct Config {
     pub retries: usize,
     pub retries_delay_secs: u64,
     pub keep_tmp: Option<KeepTmpMode>,
+    pub auto_arrange_threshold: Option<u8>,
 }
 
 impl Default for Config {
@@ -267,6 +268,7 @@ impl Default for Config {
             retries: 0,
             retries_delay_secs: 0,
             keep_tmp: None,
+            auto_arrange_threshold: Some(70),
         }
     }
 }
@@ -308,6 +310,7 @@ struct Overrides {
     keep_tmp: Option<KeepTmpMode>,
     show_locals: Option<bool>,
     show_internals: Option<bool>,
+    auto_arrange_threshold: Option<Option<u8>>,
 }
 
 /// Resolve testpaths relative to a root directory.
@@ -406,6 +409,9 @@ impl Config {
         apply_if_some!(self, workers, ovr.workers, wrap);
         apply_if_some!(self, failed, ovr.failed, wrap);
         apply_if_some!(self, keep_tmp, ovr.keep_tmp, wrap);
+        if let Some(v) = ovr.auto_arrange_threshold {
+            self.auto_arrange_threshold = v;
+        }
 
         // ── Output ─────────────────────────────────────────────────────
         apply_if_some!(self, tb, ovr.tb);
@@ -472,6 +478,11 @@ impl Config {
             keep_tmp: tc.keep_tmp,
             show_locals: tc.show_locals,
             show_internals: tc.show_internals,
+            auto_arrange_threshold: tc.auto_arrange.map(|v| match v {
+                AutoArrangeToml::Threshold(n) => Some(n),
+                AutoArrangeToml::Disabled(false) => None,
+                AutoArrangeToml::Disabled(true) => Some(70),
+            }),
         });
 
         self
@@ -546,6 +557,11 @@ impl Config {
             keep_tmp: cli.keep_tmp,
             show_locals: if cli.show_locals { Some(true) } else { None },
             show_internals: if cli.show_internals { Some(true) } else { None },
+            auto_arrange_threshold: if cli.no_auto_arrange {
+                Some(None)
+            } else {
+                cli.auto_arrange.map(Some)
+            },
         });
 
         self
@@ -1913,5 +1929,56 @@ async_backend = "trio"
         };
         let merged = config.merge_cli(&cli);
         assert!(merged.show_internals, "debug should imply show_internals");
+    }
+
+    #[test]
+    fn test_auto_arrange_default_is_some_70() {
+        let cfg = Config::default();
+        assert_eq!(cfg.auto_arrange_threshold, Some(70));
+    }
+
+    #[test]
+    fn test_auto_arrange_from_pyproject_custom() {
+        let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = 50\n").unwrap();
+        assert_eq!(cfg.auto_arrange_threshold, Some(50));
+    }
+
+    #[test]
+    fn test_auto_arrange_from_pyproject_false() {
+        let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
+        assert_eq!(cfg.auto_arrange_threshold, None);
+    }
+
+    #[test]
+    fn test_no_auto_arrange_cli() {
+        let cli = Cli::try_parse_from(["oxitest", "--no-auto-arrange"]).unwrap();
+        assert!(cli.no_auto_arrange);
+        assert!(cli.auto_arrange.is_none());
+    }
+
+    #[test]
+    fn test_auto_arrange_bare_cli() {
+        let cli = Cli::try_parse_from(["oxitest", "--auto-arrange"]).unwrap();
+        assert_eq!(cli.auto_arrange, Some(70));
+    }
+
+    #[test]
+    fn test_auto_arrange_custom_cli() {
+        let cli = Cli::try_parse_from(["oxitest", "--auto-arrange=50"]).unwrap();
+        assert_eq!(cli.auto_arrange, Some(50));
+    }
+
+    #[test]
+    fn test_no_auto_arrange_overrides_toml() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nauto_arrange = 50\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli::try_parse_from(["oxitest", "--no-auto-arrange"]).unwrap();
+        let merged = cfg.merge_cli(&cli);
+        assert_eq!(merged.auto_arrange_threshold, None);
     }
 }
