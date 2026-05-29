@@ -392,6 +392,37 @@ pub(super) fn apply_filters(
     Ok(items)
 }
 
+/// Partition module groups into inprocess (main-process) and parallel-eligible groups.
+///
+/// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
+/// If a module has a mix of inprocess and non-inprocess tests, the module appears
+/// in both lists with the appropriate subset.
+#[allow(dead_code)] // Used by later tasks (inprocess unit tests).
+fn partition_inprocess_groups(
+    groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+) -> (
+    Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+    Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+) {
+    let mut inprocess = Vec::new();
+    let mut parallel = Vec::new();
+
+    for (module_path, items) in groups {
+        let (inp, par): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .partition(|item| item.markers.iter().any(|m| m == "inprocess"));
+
+        if !inp.is_empty() {
+            inprocess.push((module_path.clone(), inp));
+        }
+        if !par.is_empty() {
+            parallel.push((module_path, par));
+        }
+    }
+
+    (inprocess, parallel)
+}
+
 /// Report violated items, group and schedule the clean items, decide
 /// serial vs. parallel, dispatch, and return `(interrupted, timings)`.
 ///
@@ -445,6 +476,36 @@ pub(super) fn execute(
             !ctx.cfg.serial,
             "compute_optimal_workers is unreachable in serial mode"
         );
+
+        // Partition inprocess-marked tests: run on main process before parallel dispatch.
+        let (inprocess_groups, parallel_groups) = partition_inprocess_groups(groups);
+        let mut inprocess_result = if inprocess_groups.is_empty() {
+            parallel::PhaseResult {
+                interrupted: false,
+                timings: Vec::new(),
+            }
+        } else {
+            let harness = SerialHarness {
+                py,
+                runner: ctx.runner,
+                session: ctx.session,
+                cache: ctx.cache,
+                timeout_secs: ctx.cfg.timeout_secs,
+                timeout_multiplier: ctx.cfg.timeout_multiplier,
+                maxfail: ctx.cfg.maxfail,
+                debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
+                keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+                show_locals: ctx.cfg.show_locals,
+                show_internals: ctx.cfg.show_internals,
+            };
+            harness.execute_groups(inprocess_groups, rep)
+        };
+
+        // If inprocess phase was interrupted (maxfail), skip parallel.
+        if inprocess_result.interrupted {
+            return inprocess_result;
+        }
+
         let optimal_worker_count = parallel::compute_optimal_workers(
             ctx.cfg.workers,
             ctx.cfg.serial,
@@ -473,13 +534,23 @@ pub(super) fn execute(
                  that can be function-scoped"
             );
         }
+
+        if parallel_groups.is_empty() {
+            return inprocess_result;
+        }
+
         let harness = ParallelHarness {
             parallel: ctx.parallel,
             cfg: ctx.cfg,
             workers: optimal_worker_count,
             conftest_files: ctx.conftest_files,
         };
-        harness.execute_groups(groups, rep)
+        let parallel_result = harness.execute_groups(parallel_groups, rep);
+
+        // Merge results: combine timings, interrupted if either phase was.
+        inprocess_result.timings.extend(parallel_result.timings);
+        inprocess_result.interrupted |= parallel_result.interrupted;
+        inprocess_result
     } else {
         let harness = SerialHarness {
             py,
