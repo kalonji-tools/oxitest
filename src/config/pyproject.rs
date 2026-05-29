@@ -27,7 +27,7 @@ pub(super) struct OxitestConfig {
     pub(super) schedule: Option<super::ScheduleStrategy>,
     pub(super) failed: Option<super::FailedMode>,
     pub(super) tb: Option<super::TbStyle>,
-    pub(super) verbose: Option<bool>,
+    pub(super) verbosity: Option<super::Verbosity>,
     pub(super) maxfail: Option<usize>,
     pub(super) durations: Option<usize>,
     pub(super) serial: Option<bool>,
