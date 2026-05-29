@@ -140,18 +140,14 @@ mod list_tests {
         is_async: bool,
         fixture_names: &[&str],
     ) -> Arc<TestItem> {
-        let node_id = format!("{module}::{fn_name}");
-        Arc::new(TestItem {
-            node_id: NodeId::from_raw(&node_id),
-            module_path: Utf8PathBuf::from(module),
-            fn_name: fn_name.to_string(),
-            lineno: LineNo::new(1),
-            markers: markers.iter().map(|s| s.to_string()).collect(),
-            param_id: None,
-            param_values: vec![],
-            is_async,
-            fixture_names: fixture_names.iter().map(|s| s.to_string()).collect(),
-        })
+        Arc::new(
+            TestItem::builder(module, fn_name)
+                .lineno(1)
+                .markers(markers.iter().map(|s| s.to_string()).collect())
+                .async_fn(is_async)
+                .fixture_names(fixture_names.iter().map(|s| s.to_string()).collect())
+                .build(),
+        )
     }
 
     fn make_param_item(
