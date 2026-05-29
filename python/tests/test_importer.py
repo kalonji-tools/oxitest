@@ -4,9 +4,11 @@ import textwrap
 from types import ModuleType
 
 from oxitest import TempDir, raises
+from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge.importer import (
     _check_fn_violations,
     _collect_items,
+    _extract_module_marks,
     _module_members,
     _propagate_class_marks,
     collect_module,
@@ -519,3 +521,66 @@ def test_collect_items_returns_collected_items():
         f"expected fn_name='test_fake', got {items[0].fn_name!r}"
     )
     assert items[0].lineno == lineno, f"expected lineno={lineno}, got {items[0].lineno}"
+
+
+# ── _extract_module_marks tests ───────────────────────────────────────────────
+
+
+def test_extract_module_marks_none_returns_empty():
+    """No oxi_mark attribute → empty list, no violations."""
+    module = ModuleType("test_no_marks")
+    marks, violations = _extract_module_marks(module, "/fake/test_no_marks.py")
+    assert marks == [], f"expected no marks, got {marks}"
+    assert violations == [], f"expected no violations, got {violations}"
+
+
+def test_extract_module_marks_single_mark():
+    """oxi_mark = oxi.mark.slow → list with one MarkInfo."""
+    module = ModuleType("test_single")
+    module.oxi_mark = MarkInfo("slow", (), {})  # type: ignore[attr-defined]
+    marks, violations = _extract_module_marks(module, "/fake/test_single.py")
+    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
+    assert marks[0].name == "slow", f"expected mark name 'slow', got {marks[0].name!r}"
+    assert violations == [], f"expected no violations, got {violations}"
+
+
+def test_extract_module_marks_list():
+    """oxi_mark = [mark.slow, mark.timeout(10)] → list with two MarkInfos."""
+    module = ModuleType("test_list")
+    module.oxi_mark = [  # type: ignore[attr-defined]
+        MarkInfo("slow", (), {}),
+        MarkInfo("timeout", (), {"seconds": 10}),
+    ]
+    marks, violations = _extract_module_marks(module, "/fake/test_list.py")
+    assert len(marks) == 2, f"expected 2 marks, got {len(marks)}"
+    names = [m.name for m in marks]
+    assert "slow" in names, f"'slow' should be in marks, got {names}"
+    assert "timeout" in names, f"'timeout' should be in marks, got {names}"
+    assert violations == [], f"expected no violations, got {violations}"
+
+
+def test_extract_module_marks_tuple():
+    """oxi_mark as tuple is accepted."""
+    module = ModuleType("test_tuple")
+    module.oxi_mark = (MarkInfo("slow", (), {}),)  # type: ignore[attr-defined]
+    marks, violations = _extract_module_marks(module, "/fake/test_tuple.py")
+    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
+
+
+def test_extract_module_marks_invalid_entry():
+    """Non-MarkInfo entries produce violations, valid entries still collected."""
+    module = ModuleType("test_invalid")
+    module.oxi_mark = [  # type: ignore[attr-defined]
+        MarkInfo("slow", (), {}),
+        42,
+        "not_a_mark",
+    ]
+    marks, violations = _extract_module_marks(module, "/fake/test_invalid.py")
+    assert len(marks) == 1, f"expected 1 valid mark, got {len(marks)}"
+    assert marks[0].name == "slow", f"expected 'slow', got {marks[0].name!r}"
+    assert len(violations) == 2, f"expected 2 violations, got {len(violations)}"
+    for v in violations:
+        assert v.kind == ViolationKind.INVALID_MODULE_MARK, (
+            f"expected INVALID_MODULE_MARK, got {v.kind}"
+        )
+
