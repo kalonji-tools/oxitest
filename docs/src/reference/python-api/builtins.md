@@ -26,6 +26,34 @@
       members:
         - mktemp
 
+### Preserving temp dirs on failure
+
+By default, `TempDir` contents are deleted after each test. Use `--keep-tmp` to
+preserve them for debugging:
+
+```bash
+oxitest --keep-tmp          # preserve on failure (default mode)
+oxitest --keep-tmp=failed   # same as above
+oxitest --keep-tmp=always   # preserve every temp dir
+```
+
+When a temp dir is preserved, its path is printed to stderr:
+
+```
+KEPT /tmp/test_writes_file_abc123 (--keep-tmp)
+```
+
+This also works with `TempDirFactory` — when `--keep-tmp` is set (any mode),
+all factory-created dirs are preserved unconditionally since the factory is
+session-scoped and cannot track per-test outcomes.
+
+Configure in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+keep_tmp = "failed"
+```
+
 ## StdCapture
 
 ::: oxitest._bridge._builtins._capture._StdCapture

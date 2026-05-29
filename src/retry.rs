@@ -27,6 +27,7 @@ pub(crate) struct RetryContext<'a> {
     pub session: &'a dyn Session,
     pub runner: &'a dyn TestRunner,
     pub timeout_secs: Option<u64>,
+    pub keep_tmp: Option<&'a str>,
 }
 
 /// Identify test items whose timings show a failure outcome.
@@ -83,9 +84,14 @@ pub(crate) fn run_retries(
                 std::thread::sleep(std::time::Duration::from_secs(ctx.delay_secs));
             }
 
-            let (outcome, duration_ms) =
-                ctx.runner
-                    .run_timed(ctx.py, item, ctx.session, ctx.timeout_secs, None, None);
+            let (outcome, duration_ms) = ctx.runner.run_timed(
+                ctx.py,
+                item,
+                ctx.session,
+                ctx.timeout_secs,
+                None,
+                ctx.keep_tmp,
+            );
 
             if !outcome.is_hard_failure() {
                 let flaky_outcome = TestOutcome::Flaky {
