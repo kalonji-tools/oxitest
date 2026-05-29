@@ -21,6 +21,7 @@ pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
         param_id: None,
         param_values: vec![],
         is_async: false,
+        fixture_names: vec![],
     })
 }
 
@@ -37,6 +38,7 @@ pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
         param_id: None,
         param_values: vec![],
         is_async: false,
+        fixture_names: vec![],
     })
 }
 
@@ -52,6 +54,7 @@ pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
         param_id: None,
         param_values: vec![],
         is_async: false,
+        fixture_names: vec![],
     })
 }
 
@@ -71,6 +74,7 @@ pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
+                fixture_names: vec![],
             })
         })
         .collect();
@@ -111,6 +115,7 @@ pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestI
         param_id: None,
         param_values: vec![],
         is_async: false,
+        fixture_names: vec![],
     })
 }
 

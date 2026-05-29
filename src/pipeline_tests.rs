@@ -144,6 +144,7 @@ mod list_tests {
             param_id: None,
             param_values: vec![],
             is_async,
+            fixture_names: vec![],
         })
     }
 

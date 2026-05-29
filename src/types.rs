@@ -189,6 +189,7 @@ pub struct TestItem {
     pub(crate) param_id: Option<String>,
     pub(crate) param_values: Vec<(String, String)>,
     pub(crate) is_async: bool,
+    pub(crate) fixture_names: Vec<String>,
 }
 
 /// Single traceback frame from a test failure or error.
@@ -785,6 +786,7 @@ mod tests {
             param_id: Some("basic".to_string()),
             param_values: vec![("x".to_string(), "1".to_string())],
             is_async: false,
+            fixture_names: vec![],
         };
         assert_eq!(item.param_id, Some("basic".to_string()));
         assert_eq!(item.param_values.len(), 1);
@@ -846,6 +848,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
+            fixture_names: vec![],
         };
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
@@ -862,6 +865,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
+            fixture_names: vec![],
         };
         assert!(!sync_item.is_async);
 
@@ -874,6 +878,7 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: true,
+            fixture_names: vec![],
         };
         assert!(async_item.is_async);
     }

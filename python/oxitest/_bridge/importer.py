@@ -10,16 +10,32 @@ import itertools
 import pathlib
 from collections.abc import Callable, Iterable, Iterator
 from types import ModuleType
-from typing import Any, cast
+from typing import Any, cast, get_type_hints
 
 from oxitest._bridge._ast_utils import walk_bare_asserts
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import _append_mark
 from oxitest._bridge._metadata import get_marks
-from oxitest._bridge.fixtures import Fixtures
+from oxitest._bridge.fixtures import Fixtures, _fixture_inner_type
 from oxitest._bridge.parametrize import _DictCases, _PartialCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
+
+
+def _get_fixture_names(fn: object) -> tuple[str, ...]:
+    """Extract parameter names annotated with Fixture[T] from a function signature."""
+    try:
+        hints = get_type_hints(fn, include_extras=True)
+    except Exception:  # noqa: BLE001
+        return ()
+    names: list[str] = []
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        is_fix, _ = _fixture_inner_type(hint)
+        if is_fix:
+            names.append(param_name)
+    return tuple(names)
 
 
 def _propagate_class_marks(fn: object, cls: object) -> None:
@@ -65,6 +81,7 @@ def _expand_composed(
     lineno: int,
     marker_names: list[str],
     is_async: bool,
+    fixture_names: tuple[str, ...],
 ) -> list[CollectedItem]:
     """Expand composed _PartialCases layers via cartesian product."""
     _validate_composition(layers)
@@ -83,6 +100,7 @@ def _expand_composed(
                 param_id=compound_id,
                 param_values=tuple(merged_pv),
                 is_async=is_async,
+                fixture_names=fixture_names,
             )
         )
     return items
@@ -96,6 +114,7 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     is_async = inspect.iscoroutinefunction(fn)
+    fixture_names = _get_fixture_names(fn)
     raw = get_metadata(fn).param_cases
     if raw is None:
         return [
@@ -106,12 +125,15 @@ def _expand_item(
                 param_id=None,
                 param_values=(),
                 is_async=is_async,
+                fixture_names=fixture_names,
             )
         ]
     layers = cast(tuple, raw)
     # Composition: all layers are _PartialCases
     if len(layers) > 1 or isinstance(layers[0], _PartialCases):
-        return _expand_composed(layers, fn_name, lineno, marker_names, is_async)
+        return _expand_composed(
+            layers, fn_name, lineno, marker_names, is_async, fixture_names
+        )
     # Single layer: existing behavior
     return [
         CollectedItem(
@@ -121,6 +143,7 @@ def _expand_item(
             param_id=case_id,
             param_values=tuple(pv),
             is_async=is_async,
+            fixture_names=fixture_names,
         )
         for case_id, pv in layers[0].items()
     ]
