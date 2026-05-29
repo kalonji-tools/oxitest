@@ -18,7 +18,7 @@ current working directory when omitted.
 |------|-------|------|---------|-------------|
 | `-k` | — | `EXPR` | — | Filter tests by keyword expression. Only tests whose names contain the expression are run. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression (`and`/`or`/`not` supported). Only tests carrying a matching mark are run. |
-| `--verbose` | `-v` | flag | `false` | Enable verbose output. Prints each test name and result as it runs. Without `-v`, only failures are shown after the progress bar completes. |
+| `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` or `--verbose` sets `detailed`. `-vv` or `--verbose=full` sets `full`. In `detailed` mode, `--list` shows marks and fixtures. In `full` mode, `--list` groups parametrize cases with expanded values. |
 | `-x` | — | flag | `false` | Stop immediately after the first test failure or error. Equivalent to `--maxfail 1`. Conflicts with `--maxfail`. |
 | `--maxfail` | — | integer | `0` | Stop after `N` failures. `0` means unlimited. |
 | `--tb` | — | `long\|short\|line\|no` | `short` | Traceback style on failure (see [Traceback styles](#traceback-styles)). |
@@ -52,7 +52,12 @@ current working directory when omitted.
 | Flag A | Flag B | Why they conflict |
 |--------|--------|-------------------|
 | `-x` | `--maxfail` | Both control when to stop after failures. Use one or the other. |
-| `--verbose` / `-v` | `--quiet` / `-q` | Opposite output modes. Use one or the other. |
+| `-v`/`-vv` | `--verbose=LEVEL` | Both set verbosity. Use short form or long form, not both. |
+| `--list` | `--fixtures` | Mutually exclusive action modes. |
+| `--list` | `--capture-environment` | Mutually exclusive action modes. |
+| `--fixtures` | `--capture-environment` | Mutually exclusive action modes. |
+| `--list` | `--quiet` / `-q` | Quiet suppresses output, but --list requests it. |
+| `--fixtures` | `--quiet` / `-q` | Quiet suppresses output, but --fixtures requests it. |
 | `--serial` | `--workers` | Mutually exclusive execution modes. |
 | `--serial` | `--schedule` | Schedule controls parallel worker ordering; no effect in serial mode. |
 | `--retries-delay` | *(without `--retries`)* | Delay has no effect without retries. |
@@ -62,6 +67,8 @@ current working directory when omitted.
 | `--debug` | `--retries` / `--retries-delay` | Interactive debugging and automatic retries serve opposite purposes. |
 | `--debug` | `--schedule` | Debug implies serial mode; schedule has no effect. |
 | `--debug` | `--timeout` | A timeout would kill the debugger session. |
+
+Note: `-v -q` is valid — quiet trumps verbose silently.
 
 Example:
 
