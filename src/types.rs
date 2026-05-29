@@ -4,6 +4,7 @@
 //! [`TestOutcome`] (the eight possible results of running a test), [`CollectError`],
 //! and [`TestTiming`].
 
+use std::fmt::Write;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -15,11 +16,13 @@ pub struct NodeId(Arc<str>);
 
 impl NodeId {
     pub fn new(module_path: &str, fn_name: &str, param_id: Option<&str>) -> Self {
-        let base = format!("{}::{}", module_path, fn_name);
-        match param_id {
-            Some(id) => NodeId(format!("{}[{}]", base, id).into()),
-            None => NodeId(base.into()),
+        let extra = param_id.map_or(0, |id| id.len() + 2); // "[" + id + "]"
+        let mut s = String::with_capacity(module_path.len() + 2 + fn_name.len() + extra);
+        let _ = write!(s, "{}::{}", module_path, fn_name);
+        if let Some(id) = param_id {
+            let _ = write!(s, "[{}]", id);
         }
+        NodeId(s.into())
     }
 
     /// Create a NodeId from an already-formatted string (e.g. received from a worker subprocess).

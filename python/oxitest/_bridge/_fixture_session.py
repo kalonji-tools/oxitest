@@ -85,33 +85,34 @@ def _fixture_scope(
         _fixture_context.reset(token)
 
 
-def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Sync fixtures cannot depend on async fixtures."""
+def _check_async_dep(dep_name: str, dep_val: Any, fixture_name: str, msg: str) -> None:
+    """Reject an async dependency value with a descriptive error message."""
     if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
         if inspect.iscoroutine(dep_val):
             dep_val.close()
-        raise FixtureSetupError(
-            fixture_name,
-            RuntimeError(
-                f"sync fixture '{fixture_name}' cannot depend on "
-                f"async fixture '{dep_name}'"
-            ),
-        )
+        raise FixtureSetupError(fixture_name, RuntimeError(msg))
+
+
+def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:
+    """Sync fixtures cannot depend on async fixtures."""
+    _check_async_dep(
+        dep_name,
+        dep_val,
+        fixture_name,
+        f"sync fixture '{fixture_name}' cannot depend on async fixture '{dep_name}'",
+    )
 
 
 def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> None:
     """Shared fixtures cannot depend on non-shared async fixtures."""
-    if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
-        if inspect.iscoroutine(dep_val):
-            dep_val.close()
-        raise FixtureSetupError(
-            fixture_name,
-            RuntimeError(
-                f"shared fixture '{fixture_name}' cannot depend on "
-                f"non-shared async fixture '{dep_name}' \u2014 "
-                f"lifetime mismatch"
-            ),
-        )
+    _check_async_dep(
+        dep_name,
+        dep_val,
+        fixture_name,
+        f"shared fixture '{fixture_name}' cannot depend on "
+        f"non-shared async fixture '{dep_name}' \u2014 "
+        f"lifetime mismatch",
+    )
 
 
 AsyncPolicy = Callable[[str, Any, str], None]
