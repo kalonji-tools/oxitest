@@ -1,6 +1,62 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.9.0] - 2026-05-29
+
+### Bug Fixes
+
+
+- Update Python tests for Frame.locals field and refresh Cargo.lock
+- Expect tuple not list for Frame.locals in wire test
+- Revert Cargo.lock to match main (bitflags 2.11.1)
+- Add clippy type_complexity allow on partition_inprocess_groups
+- Revert __all__ export and fix docstring wording
+- Use ty suppression syntax instead of mypy
+- Resolve ty type-checker errors
+
+### Features
+
+
+- Add ExitCode IntEnum on Python side
+- Add ApproxBase, ApproxScalar, ApproxSequence, ApproxMapping
+- Export approx and ApproxBase from public API
+- Add KeepTmpMode enum and --keep-tmp CLI flag (#550)
+- Thread keep_tmp through Rust bridge to Python worker (#550)
+- Conditional teardown based on --keep-tmp mode (#550)
+- Replace verbose bool with Verbosity enum
+- Dual verbose syntax with -v/-vv count and --verbose=LEVEL
+- Add conflict validation for action modes and quiet
+- Add fixture_names to CollectedItem and TestItem
+- Implement three-level --list output (Normal/Detailed/Full)
+- Add --show-locals and --show-internals flags
+- Add locals field to Frame for --show-locals
+- Rewrite diagnostic renderer for new box format
+- Rewrite _get_frames with filtering and locals capture
+- Thread show_locals/show_internals through executor and worker
+- Thread show_locals/show_internals through Rust pipeline
+- Add inprocess to BUILTIN_MARKERS
+- Add INVALID_MODULE_MARK violation kind
+- Implement _extract_module_marks()
+- Implement _apply_module_marks()
+- Integrate oxi_mark into collect_module()
+- Add auto-arrangement terms to CONTEXT.md
+- Add shared_fixture_groups() for connected component analysis (#596)
+- Add --auto-arrange / --no-auto-arrange config (#596)
+- Bridge shared_fixture_groups() to Rust Session trait (#596)
+- Auto-arrange tests by shared fixtures in execute() (#596)
+
+### Performance
+
+
+- Derive Copy on OutcomeKind, add Borrow<str> for NodeId
+- Short-circuit empty frames in to_wire()
+- Dedup conftest dirs in affected test filtering
+- Use vars().items() to avoid double getattr lookups
+- Use NodeId as item_lookup key, Arc<str> for python_bin
+- Use HashSet<&str> in cache invalidate to avoid allocations
+- Return Cow from truncate_name, take &str in fmt_line
+- Use write! macro in diagnostic rendering
+
 ## [0.8.0] - 2026-05-28
 
 ### Features
