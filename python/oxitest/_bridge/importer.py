@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["collect_module", "_extract_module_marks", "_apply_module_marks"]
+__all__ = ["collect_module"]
 
 import ast
 import dataclasses
@@ -121,11 +121,11 @@ def _apply_module_marks(
     members: Iterable[tuple[str, object]],
     module_marks: list[MarkInfo],
 ) -> None:
-    """Prepend non-conflicting module marks onto each function's metadata.
+    """Append non-conflicting module marks onto each function's metadata.
 
     For each function, module marks whose name matches a per-test mark
-    are skipped (per-test wins). Remaining module marks are prepended
-    so they appear before per-test marks in the list.
+    are skipped (per-test wins). Remaining module marks are appended
+    after per-test marks in the list.
     """
     if not module_marks:
         return
