@@ -40,6 +40,8 @@ pub(super) struct OxitestConfig {
     pub(super) retries: Option<usize>,
     pub(super) retries_delay: Option<u64>,
     pub(super) keep_tmp: Option<super::KeepTmpMode>,
+    pub(super) show_locals: Option<bool>,
+    pub(super) show_internals: Option<bool>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {

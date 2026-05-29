@@ -16,6 +16,12 @@ pub struct ReporterOpts {
     pub(crate) tb: crate::config::TbStyle,
     pub(crate) show_tips: bool,
     pub(crate) show_warnings: bool,
+    // TODO(#585): used by diagnostic renderer in Task 5
+    #[allow(dead_code)]
+    pub(crate) show_locals: bool,
+    // TODO(#585): used by diagnostic renderer in Task 5
+    #[allow(dead_code)]
+    pub(crate) show_internals: bool,
     pub(crate) verbosity: Verbosity,
     pub(crate) show_durations: Option<usize>,
     pub(crate) name_width: usize,
@@ -37,6 +43,8 @@ pub struct ReporterOptsBuilder {
     tb: crate::config::TbStyle,
     show_tips: bool,
     show_warnings: bool,
+    show_locals: bool,
+    show_internals: bool,
     verbosity: Verbosity,
     show_durations: Option<usize>,
     name_width: usize,
@@ -54,6 +62,8 @@ impl ReporterOptsBuilder {
             tb: crate::config::TbStyle::Detail,
             show_tips: false,
             show_warnings: false,
+            show_locals: false,
+            show_internals: false,
             verbosity: Verbosity::Normal,
             show_durations: None,
             name_width: DEFAULT_NAME_WIDTH,
@@ -71,6 +81,8 @@ impl ReporterOptsBuilder {
             tb: cfg.tb.clone(),
             show_tips: cfg.verbosity >= Verbosity::Detailed,
             show_warnings: cfg.verbosity >= Verbosity::Detailed,
+            show_locals: cfg.show_locals,
+            show_internals: cfg.show_internals,
             verbosity: cfg.verbosity,
             show_durations: cfg.durations,
             name_width: DEFAULT_NAME_WIDTH,
@@ -117,6 +129,24 @@ impl ReporterOptsBuilder {
         Self { tb, ..self }
     }
 
+    // TODO(#585): used by diagnostic renderer in Task 5
+    #[allow(dead_code)]
+    pub fn show_locals(self, v: bool) -> Self {
+        Self {
+            show_locals: v,
+            ..self
+        }
+    }
+
+    // TODO(#585): used by diagnostic renderer in Task 5
+    #[allow(dead_code)]
+    pub fn show_internals(self, v: bool) -> Self {
+        Self {
+            show_internals: v,
+            ..self
+        }
+    }
+
     pub fn strict_suite_lines(self, lines: Vec<String>) -> Self {
         Self {
             strict_suite_lines: lines,
@@ -139,6 +169,8 @@ impl ReporterOptsBuilder {
             tb: self.tb,
             show_tips: self.show_tips,
             show_warnings: self.show_warnings,
+            show_locals: self.show_locals,
+            show_internals: self.show_internals,
             verbosity: self.verbosity,
             show_durations: self.show_durations,
             name_width: self.name_width,

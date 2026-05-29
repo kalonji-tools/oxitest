@@ -24,6 +24,7 @@ impl DebugMode {
         cfg.debug = Some(self.clone());
         cfg.serial = true;
         cfg.timeout_secs = None;
+        cfg.show_internals = true;
         if cli_tb.is_none() {
             cfg.tb = TbStyle::Detail;
         }
@@ -207,6 +208,8 @@ pub struct Config {
     pub schedule: ScheduleStrategy,
     pub failed: Option<FailedMode>,
     pub tb: TbStyle,
+    pub show_locals: bool,
+    pub show_internals: bool,
     pub verbosity: Verbosity,
     pub durations: Option<usize>,
     pub color: ColorMode,
@@ -251,6 +254,8 @@ impl Default for Config {
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
             tb: TbStyle::Detail,
+            show_locals: false,
+            show_internals: false,
             verbosity: Verbosity::Normal,
             durations: None,
             color: ColorMode::Auto,
@@ -301,6 +306,8 @@ struct Overrides {
     durations: Option<usize>,
     strict: Option<StrictMode>,
     keep_tmp: Option<KeepTmpMode>,
+    show_locals: Option<bool>,
+    show_internals: Option<bool>,
 }
 
 /// Resolve testpaths relative to a root directory.
@@ -402,6 +409,8 @@ impl Config {
 
         // ── Output ─────────────────────────────────────────────────────
         apply_if_some!(self, tb, ovr.tb);
+        apply_if_some!(self, show_locals, ovr.show_locals);
+        apply_if_some!(self, show_internals, ovr.show_internals);
         apply_if_some!(self, color, ovr.color);
         apply_if_some!(self, durations, ovr.durations, wrap);
 
@@ -461,6 +470,8 @@ impl Config {
             durations: tc.durations,
             strict: tc.strict,
             keep_tmp: tc.keep_tmp,
+            show_locals: tc.show_locals,
+            show_internals: tc.show_internals,
         });
 
         self
@@ -533,6 +544,8 @@ impl Config {
             durations: cli.durations,
             strict: cli.strict.clone(),
             keep_tmp: cli.keep_tmp,
+            show_locals: if cli.show_locals { Some(true) } else { None },
+            show_internals: if cli.show_internals { Some(true) } else { None },
         });
 
         self
@@ -1862,5 +1875,43 @@ async_backend = "trio"
         let cli = Cli::try_parse_from(["oxitest"]).unwrap();
         let merged = cfg.merge_cli(&cli);
         assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Always));
+    }
+
+    #[test]
+    fn test_show_locals_default_is_false() {
+        let cfg = Config::default();
+        assert!(!cfg.show_locals);
+    }
+
+    #[test]
+    fn test_show_internals_default_is_false() {
+        let cfg = Config::default();
+        assert!(!cfg.show_internals);
+    }
+
+    #[test]
+    fn test_show_locals_from_pyproject() {
+        let toml = "[tool.oxitest]\nshow_locals = true\n";
+        let cfg = Config::from_str(toml).unwrap();
+        assert!(cfg.show_locals);
+    }
+
+    #[test]
+    fn test_show_internals_from_pyproject() {
+        let toml = "[tool.oxitest]\nshow_internals = true\n";
+        let cfg = Config::from_str(toml).unwrap();
+        assert!(cfg.show_internals);
+    }
+
+    #[test]
+    fn test_debug_implies_show_internals() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cli = Cli {
+            debug: Some(DebugMode::PostMortem),
+            ..base_cli()
+        };
+        let merged = config.merge_cli(&cli);
+        assert!(merged.show_internals, "debug should imply show_internals");
     }
 }
