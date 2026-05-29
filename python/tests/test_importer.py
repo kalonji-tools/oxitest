@@ -649,3 +649,122 @@ def test_apply_module_marks_empty_list_is_noop():
     _apply_module_marks([("test_fn", test_fn)], [])
     marks = get_metadata(test_fn).marks
     assert marks == [], f"expected no marks, got {marks}"
+
+
+# ── collect_module oxi_mark integration tests ─────────────────────────────────
+
+
+def test_collect_module_with_oxi_mark_single(tmp: TempDir):
+    """oxi_mark = oxi.mark.slow applies 'slow' to all tests."""
+    f = tmp / "test_mod_mark.py"
+    f.write_text(
+        "import oxitest\n"
+        "oxi_mark = oxitest.mark.slow\n"
+        "def test_a(): pass\n"
+        "def test_b(): pass\n"
+    )
+    items, violations = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    for item in items:
+        assert "slow" in item.markers, (
+            f"module mark 'slow' should apply to {item.fn_name}, got {item.markers}"
+        )
+    assert violations == [], f"expected no violations, got {violations}"
+
+
+def test_collect_module_with_oxi_mark_list(tmp: TempDir):
+    """oxi_mark = [mark.slow, mark.timeout(10)] applies both marks to all tests."""
+    f = tmp / "test_mod_marks.py"
+    f.write_text(
+        "import oxitest\n"
+        "oxi_mark = [oxitest.mark.slow, oxitest.mark.timeout(10)]\n"
+        "def test_a(): pass\n"
+        "def test_b(): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    for item in items:
+        assert "slow" in item.markers, (
+            f"module mark 'slow' should apply to {item.fn_name}, got {item.markers}"
+        )
+        assert "timeout" in item.markers, (
+            f"module mark 'timeout' should apply to {item.fn_name}, got {item.markers}"
+        )
+
+
+def test_collect_module_oxi_mark_per_test_override(tmp: TempDir):
+    """Per-test mark overrides module mark of the same name."""
+    f = tmp / "test_override.py"
+    f.write_text(
+        "import oxitest\n"
+        "oxi_mark = [oxitest.mark.timeout(120)]\n"
+        "@oxitest.mark.timeout(5)\n"
+        "def test_fast(): pass\n"
+        "def test_slow(): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    for item in items:
+        assert "timeout" in item.markers, (
+            f"timeout should be on {item.fn_name}, got {item.markers}"
+        )
+
+
+def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
+    """Module marks apply to each parametrize case."""
+    f = tmp / "test_param.py"
+    f.write_text(
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "oxi_mark = [oxitest.mark.slow]\n"
+        "@dataclass(frozen=True)\n"
+        "class C:\n"
+        "    x: int\n"
+        "@oxitest.parametrize(case_a=C(1), case_b=C(2))\n"
+        "def test_compute(c: C): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 parametrize cases, got {len(items)}"
+    for item in items:
+        assert "slow" in item.markers, (
+            f"module mark 'slow' should apply to {item.fn_name}[{item.param_id}], "
+            f"got {item.markers}"
+        )
+
+
+def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir):
+    """Module marks apply to test methods inside Test* classes."""
+    f = tmp / "test_cls_mod.py"
+    f.write_text(
+        "import oxitest\n"
+        "oxi_mark = [oxitest.mark.slow]\n"
+        "class TestSuite:\n"
+        "    def test_foo(self): pass\n"
+        "    def test_bar(self): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    for item in items:
+        assert "slow" in item.markers, (
+            f"module mark 'slow' should apply to class method {item.fn_name}, "
+            f"got {item.markers}"
+        )
+
+
+def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
+    """Invalid entries in oxi_mark produce violations."""
+    f = tmp / "test_bad_mark.py"
+    f.write_text(
+        "import oxitest\noxi_mark = [oxitest.mark.slow, 42]\ndef test_a(): pass\n"
+    )
+    items, violations = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item (tests still collected), got {len(items)}"
+    assert "slow" in items[0].markers, (
+        f"valid mark 'slow' should still apply, got {items[0].markers}"
+    )
+    assert len(violations) == 1, (
+        f"expected 1 violation for invalid entry, got {len(violations)}"
+    )
+    assert violations[0].kind == ViolationKind.INVALID_MODULE_MARK, (
+        f"expected INVALID_MODULE_MARK, got {violations[0].kind}"
+    )
