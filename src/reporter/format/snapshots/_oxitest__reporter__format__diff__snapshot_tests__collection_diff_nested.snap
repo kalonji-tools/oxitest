@@ -1,0 +1,9 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+  [
+    {'a': 1},
+-   {'b': 2},
++   {'b': 3},
+  ]

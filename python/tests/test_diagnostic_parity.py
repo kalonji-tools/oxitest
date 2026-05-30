@@ -47,10 +47,8 @@ def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
 
     for field, label in [
         ("test_parity.py:4", "file:lineno"),
-        ("left:", "left label"),
-        ("right:", "right label"),
-        ("[1, 2, 3]", "left value"),
-        ("[1, 2, 4]", "right value"),
+        ("3,", "left element (collection diff)"),
+        ("4,", "right element (collection diff)"),
         ("assert left == right", "source line"),
     ]:
         assert field in serial_diag, (
