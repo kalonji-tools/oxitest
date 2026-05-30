@@ -44,6 +44,8 @@ struct CachedItemData {
     is_async: bool,
     #[serde(default)]
     fixture_names: Vec<String>,
+    #[serde(default)]
+    fixref_names: Vec<String>,
 }
 
 /// Per-module collection cache keyed by file path.
@@ -237,6 +239,7 @@ impl ModuleCache for TestCache {
                     param_values: d.param_values.clone(),
                     is_async: d.is_async,
                     fixture_names: d.fixture_names.clone(),
+                    fixref_names: d.fixref_names.clone(),
                 })
             })
             .collect();
@@ -257,6 +260,7 @@ impl ModuleCache for TestCache {
                 param_values: item.param_values.clone(),
                 is_async: item.is_async,
                 fixture_names: item.fixture_names.clone(),
+                fixref_names: item.fixref_names.clone(),
             })
             .collect();
         self.inner.modules.insert(
@@ -800,6 +804,7 @@ mod tests {
                 param_values: vec![],
                 is_async: false,
                 fixture_names: vec![],
+                fixref_names: vec![],
             }),
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
@@ -811,6 +816,7 @@ mod tests {
                 param_values: vec![("x".to_string(), "0".to_string())],
                 is_async: false,
                 fixture_names: vec![],
+                fixref_names: vec![],
             }),
         ];
         cache.update_module_cache(module_path, 12345, &items);
@@ -842,6 +848,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         })];
         cache.update_module_cache(module_path, 12345, &items);
         assert!(cache.cached_module_items(module_path, 99999).is_none());
@@ -920,6 +927,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         })];
         cache.update_module_cache(module_path, 9999, &items);
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();

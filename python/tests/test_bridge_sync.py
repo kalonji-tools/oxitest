@@ -74,6 +74,7 @@ def test_collected_item_fields_match_rust_collected_item():
         "param_values",
         "is_async",
         "fixture_names",
+        "fixref_names",
     }
     actual_fields = {f.name for f in dataclasses.fields(item)}
     assert actual_fields == expected_fields, (
