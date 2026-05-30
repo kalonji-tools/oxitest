@@ -217,6 +217,24 @@ mod snapshot_tests {
     use crate::types::DurationMs;
     use insta::assert_snapshot;
 
+    /// Normalize all `time="..."` attribute values to `time="0.000"` for snapshot stability.
+    fn normalize_times(xml: &str) -> String {
+        let mut result = String::with_capacity(xml.len());
+        let mut rest = xml;
+        while let Some(pos) = rest.find("time=\"") {
+            result.push_str(&rest[..pos]);
+            result.push_str("time=\"0.000\"");
+            let after_key = &rest[pos + 6..]; // skip past `time="`
+            if let Some(end) = after_key.find('"') {
+                rest = &after_key[end + 1..];
+            } else {
+                break;
+            }
+        }
+        result.push_str(rest);
+        result
+    }
+
     fn run_and_read(items: &[(&str, &str)]) -> String {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let path = camino::Utf8PathBuf::try_from(tmp.path().to_path_buf()).unwrap();
@@ -228,7 +246,8 @@ mod snapshot_tests {
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
         }
         rep.finish(&[], false, &crate::reporter::RunStats::new());
-        std::fs::read_to_string(&path).unwrap()
+        let xml = std::fs::read_to_string(&path).unwrap();
+        normalize_times(&xml)
     }
 
     #[test]
