@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __all__ = [
     "CaptureResult",
+    "_CaptureBase",
     "_StdCapture",
     "_FdCapture",
     "_StdCaptureFixture",
@@ -12,6 +13,7 @@ import io
 import os
 import sys
 import tempfile
+from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -41,7 +43,36 @@ class CaptureResult:
     err: str
 
 
-class _StdCapture:
+class _CaptureBase(ABC):
+    """Abstract base for stdout/stderr capture implementations."""
+
+    @abstractmethod
+    def readouterr(self) -> CaptureResult:
+        """Return and clear all captured output since the last call."""
+
+    @abstractmethod
+    def _suspend(self) -> None:
+        """Restore original streams/fds (pause capturing)."""
+
+    @abstractmethod
+    def _resume(self) -> None:
+        """Re-apply capture streams/fds (resume capturing)."""
+
+    @contextmanager
+    def disabled(self) -> Generator[None, None, None]:
+        """Context manager: temporarily restore real output so it passes through."""
+        self._suspend()
+        try:
+            yield
+        finally:
+            self._resume()
+
+    def _restore(self) -> None:
+        """Permanently restore original streams/fds and release resources."""
+        self._suspend()
+
+
+class _StdCapture(_CaptureBase):
     r"""Captures `sys.stdout` and `sys.stderr` at the Python stream level.
 
     Replaces `sys.stdout` and `sys.stderr` with in-memory `StringIO`
@@ -67,11 +98,6 @@ class _StdCapture:
         sys.stderr = self._err_buf
 
     def readouterr(self) -> CaptureResult:
-        """Return and clear all captured output since the last call.
-
-        Returns:
-            A `CaptureResult` with `.out` and `.err` strings.
-        """
         out = self._out_buf.getvalue()
         err = self._err_buf.getvalue()
         self._out_buf.truncate(0)
@@ -80,23 +106,16 @@ class _StdCapture:
         self._err_buf.seek(0)
         return CaptureResult(out=out, err=err)
 
-    @contextmanager
-    def disabled(self) -> Generator[None, None, None]:
-        """Context manager: restore real streams so output passes through."""
-        sys.stdout = self._old_stdout
-        sys.stderr = self._old_stderr
-        try:
-            yield
-        finally:
-            sys.stdout = self._out_buf
-            sys.stderr = self._err_buf
-
-    def _restore(self) -> None:
+    def _suspend(self) -> None:
         sys.stdout = self._old_stdout
         sys.stderr = self._old_stderr
 
+    def _resume(self) -> None:
+        sys.stdout = self._out_buf
+        sys.stderr = self._err_buf
 
-class _FdCapture:
+
+class _FdCapture(_CaptureBase):
     """Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).
 
     Redirects the underlying OS file descriptors, so output from C extensions,
@@ -121,11 +140,6 @@ class _FdCapture:
         os.dup2(self._stderr_tmp.fileno(), 2)
 
     def readouterr(self) -> CaptureResult:
-        """Return and clear all captured output since the last call.
-
-        Returns:
-            A `CaptureResult` with `.out` and `.err` strings.
-        """
         sys.stdout.flush()
         sys.stderr.flush()
         self._stdout_tmp.seek(0)
@@ -138,20 +152,16 @@ class _FdCapture:
         self._stderr_tmp.seek(0)
         return CaptureResult(out=out, err=err)
 
-    @contextmanager
-    def disabled(self) -> Generator[None, None, None]:
-        """Context manager: temporarily restore real fds so output passes through."""
+    def _suspend(self) -> None:
         os.dup2(self._old_stdout_fd, 1)
         os.dup2(self._old_stderr_fd, 2)
-        try:
-            yield
-        finally:
-            os.dup2(self._stdout_tmp.fileno(), 1)
-            os.dup2(self._stderr_tmp.fileno(), 2)
+
+    def _resume(self) -> None:
+        os.dup2(self._stdout_tmp.fileno(), 1)
+        os.dup2(self._stderr_tmp.fileno(), 2)
 
     def _restore(self) -> None:
-        os.dup2(self._old_stdout_fd, 1)
-        os.dup2(self._old_stderr_fd, 2)
+        self._suspend()
         os.close(self._old_stdout_fd)
         os.close(self._old_stderr_fd)
         self._stdout_tmp.close()
