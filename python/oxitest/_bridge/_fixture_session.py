@@ -586,6 +586,27 @@ class FixtureSession:
         """Return connected components of shared fixture dependencies."""
         return self._registry.shared_fixture_groups()
 
+    def validate_fixture_names(
+        self,
+        items: list[dict[str, Any]],
+    ) -> list[tuple[str, str]]:
+        """Return ``(node_id, fixture_name)`` pairs that cannot resolve.
+
+        Called by the Rust ``FixtureValidationPhase`` after collection to catch
+        typos and missing fixtures before any test executes.
+        """
+        errors: list[tuple[str, str]] = []
+        for item in items:
+            node_id: str = item["node_id"]
+            fixref = set(item.get("fixref_names", ()))
+            for name in item["fixture_names"]:
+                if name in fixref:
+                    continue
+                if self._registry.get(name) is not None:
+                    continue
+                errors.append((node_id, name))
+        return errors
+
     def _inject_builtin(
         self,
         impl_cls: type[BuiltinFixture],
