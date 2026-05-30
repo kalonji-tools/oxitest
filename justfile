@@ -15,58 +15,79 @@ maturin_env := if env("IN_NIX_SHELL", "") != "" {
     "VIRTUAL_ENV=" + justfile_directory() + "/.venv"
 } else { "" }
 
-# Build the Rust extension; extra args are forwarded to maturin
-build *args:
+# ── Color codes for log output ───────────────────────────────────────────────
+_green := "32"
+_red := "31"
+_yellow := "33"
+_blue := "34"
+
+[private]
+_log color msg:
+    @printf '\033[{{color}}m→ %s\033[0m\n' '{{msg}}'
+
+# ── Recipes ──────────────────────────────────────────────────────────────────
+
+# Show available recipes
+help:
+    @just --list
+
+# Build the Rust extension
+build *args: (_log _green "Building extension...")
     {{fix_env}} uv sync --group build
     {{maturin_env}} maturin develop {{args}}
 
-# Run Python tests (rebuilds extension first)
+# Build extension and run Python tests
 test *args: build
+    @just _log {{_blue}} "Running Python tests..."
     PYTHONPATH=python uv run python -m oxitest {{args}}
 
-# Run only tests affected by uncommitted changes (or vs a given ref)
-test-affected *args:
+# Run Python tests without rebuilding
+test-py *args: (_log _blue "Running Python tests (skip build)...")
+    PYTHONPATH=python uv run python -m oxitest {{args}}
+
+# Run tests affected by uncommitted changes
+test-affected *args: (_log _blue "Running affected tests...")
     just test --affected {{args}}
 
 # Run Rust unit tests
-test-rust *args:
+test-rust *args: (_log _blue "Running Rust tests...")
     cargo test {{args}}
 
-# Clean, run Rust tests, build extension, run Python tests
+# Clean, run Rust tests, build, run Python tests
 dev: clean test-rust test
 
 # Lint Python (ruff) and check types (ty)
-lint:
+lint: (_log _blue "Linting Python...")
     ruff check python/
     ty check
 
-# Format Python (ruff) and Rust (cargo fmt); pass --check to verify only
-fmt *args:
+# Format Python (ruff) and Rust (cargo fmt)
+fmt *args: (_log _yellow "Formatting code...")
     ruff format {{args}} python/
     cargo fmt {{args}}
 
 # Build the documentation site
-docs:
+docs: (_log _green "Building docs...")
     mkdocs build
 
-# Serve the documentation locally with live reload
-docs-serve:
+# Serve docs locally with live reload
+docs-serve: (_log _blue "Serving docs at localhost:8000...")
     mkdocs serve --dev-addr localhost:8000
 
-# Run hyperfine benchmarks across all tiers
-bench:
+# Run hyperfine benchmarks
+bench: (_log _blue "Running benchmarks...")
     bash bench/run.sh
 
-# Print speedup summary against bench/baseline.json
-bench-compare:
+# Print speedup summary against baseline
+bench-compare: (_log _blue "Comparing benchmarks...")
     python bench/compare.py
 
 # Remove build artifacts
-clean:
+clean: (_log _red "Removing build artifacts...")
     cargo clean
     rm -f python/oxitest/_oxitest*.so
 
-# Check that all required tools are on $PATH
+# Check that all required tools are on PATH
 health:
     #!/usr/bin/env bash
     missing=0

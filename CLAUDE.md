@@ -23,6 +23,9 @@ just test
 # Run a single Python test file
 just test python/tests/test_fixtures.py
 
+# Run Python tests without rebuilding (Python-only changes)
+just test-py
+
 # Run Rust unit tests
 just test-rust
 
@@ -37,6 +40,9 @@ just fmt
 
 # Clean build artifacts
 just clean
+
+# Show all available recipes
+just help
 ```
 
 ## Architecture
