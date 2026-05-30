@@ -3,11 +3,13 @@ from __future__ import annotations
 __all__ = [
     "FixtureDef",
     "FixtureRegistry",
+    "FixtureShadowWarning",
     "_fixture_inner_type",
     "_fixture_ref_inner_type",
 ]
 
 import inspect
+import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import (
@@ -24,6 +26,10 @@ from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
 from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 T = TypeVar("T")
+
+
+class FixtureShadowWarning(UserWarning):
+    """Emitted when a child conftest shadows a parent conftest fixture."""
 
 
 @dataclass
@@ -53,6 +59,16 @@ class FixtureRegistry:
         self._namespaces: set[str] = set()  # O(1) namespace existence check
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
+        existing = self._defs.get(defn.name)
+        if existing and existing[-1].conftest_path != defn.conftest_path:
+            parent = existing[-1]
+            warnings.warn(
+                FixtureShadowWarning(
+                    f"fixture '{defn.name}' in {defn.conftest_path} "
+                    f"shadows definition in {parent.conftest_path}"
+                ),
+                stacklevel=2,
+            )
         self._defs.setdefault(defn.name, []).append(defn)
         if defn.namespace:
             self._namespaces.add(defn.namespace)
