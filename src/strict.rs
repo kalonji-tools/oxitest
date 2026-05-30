@@ -3,8 +3,8 @@
 //! When `--strict` is enabled, oxitest checks for code quality issues at
 //! collection time: bare `assert` statements without messages, dict-based
 //! parametrize (instead of frozen dataclasses), missing mark reasons,
-//! missing fixture return annotations, and unregistered markers without
-//! descriptions.
+//! missing fixture return annotations, unused fixtures, and unregistered
+//! markers without descriptions.
 //!
 //! Violations are either warnings (enforce mode) or hard errors (abort mode)
 //! depending on the [`StrictMode`](crate::config::StrictMode) setting.
@@ -41,6 +41,10 @@ pub enum PerTestViolation {
     SingleCaseParametrize {
         node_id: NodeId,
     },
+    UnusedFixture {
+        node_id: NodeId,
+        fixture_name: String,
+    },
 }
 
 impl PerTestViolation {
@@ -50,7 +54,8 @@ impl PerTestViolation {
             | Self::DictParametrize { node_id }
             | Self::MissingMarkReason { node_id, .. }
             | Self::MissingReturnAnnotation { node_id, .. }
-            | Self::SingleCaseParametrize { node_id } => node_id,
+            | Self::SingleCaseParametrize { node_id }
+            | Self::UnusedFixture { node_id, .. } => node_id,
         }
     }
 }
@@ -143,6 +148,12 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                 ViolationKind::SingleCaseParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::SingleCaseParametrize { node_id },
                 )),
+                ViolationKind::UnusedFixture => {
+                    Some(StrictViolation::PerTest(PerTestViolation::UnusedFixture {
+                        node_id,
+                        fixture_name: r.detail,
+                    }))
+                }
                 ViolationKind::Unknown => None,
             }
         })
@@ -210,6 +221,17 @@ impl std::fmt::Display for PerTestViolation {
             Self::SingleCaseParametrize { node_id } => {
                 write!(f, "{:<60}  single-case-parametrize", node_id.as_ref())
             }
+            Self::UnusedFixture {
+                node_id,
+                fixture_name,
+            } => {
+                write!(
+                    f,
+                    "{:<60}  unused-fixture   {}",
+                    node_id.as_ref(),
+                    fixture_name
+                )
+            }
         }
     }
 }
@@ -274,6 +296,12 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         }
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
+        }
+        PerTestViolation::UnusedFixture { fixture_name, .. } => {
+            format!(
+                "strict: fixture '{}' is defined but never used",
+                fixture_name
+            )
         }
     };
     TestOutcome::Error {
@@ -581,5 +609,58 @@ mod tests {
         } else {
             panic!("expected Error outcome");
         }
+    }
+
+    #[test]
+    fn test_check_collected_unused_fixture() {
+        let raw = vec![RawViolation {
+            node_id: "/project/conftest.py".to_string(),
+            kind: ViolationKind::UnusedFixture,
+            detail: "unused_db".to_string(),
+        }];
+        let violations = check_collected(raw);
+        assert_eq!(violations.len(), 1);
+        assert!(matches!(
+            &violations[0],
+            StrictViolation::PerTest(PerTestViolation::UnusedFixture {
+                fixture_name, ..
+            }) if fixture_name == "unused_db"
+        ));
+    }
+
+    #[test]
+    fn test_per_test_error_unused_fixture() {
+        let v = PerTestViolation::UnusedFixture {
+            node_id: NodeId::from_raw("/project/conftest.py"),
+            fixture_name: "unused_db".to_string(),
+        };
+        let outcome = per_test_error(&v);
+        if let TestOutcome::Error { message, .. } = outcome {
+            assert!(
+                message.contains("strict"),
+                "message must contain 'strict': {message:?}"
+            );
+            assert!(
+                message.contains("unused_db"),
+                "message must mention fixture name 'unused_db': {message:?}"
+            );
+            assert!(
+                message.contains("defined but never used"),
+                "message must mention 'defined but never used': {message:?}"
+            );
+        } else {
+            panic!("expected Error outcome");
+        }
+    }
+
+    #[test]
+    fn test_format_violation_line_unused_fixture() {
+        let v = StrictViolation::PerTest(PerTestViolation::UnusedFixture {
+            node_id: NodeId::from_raw("tests/conftest.py"),
+            fixture_name: "unused_db".to_string(),
+        });
+        let line = format_violation_line(&v);
+        assert!(line.contains("unused-fixture"));
+        assert!(line.contains("unused_db"));
     }
 }

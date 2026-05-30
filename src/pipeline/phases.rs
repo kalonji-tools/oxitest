@@ -161,7 +161,15 @@ impl PipelinePhase for CollectionPhase<'_> {
             )));
         }
         ctx.items = items;
-        ctx.raw_violations = raw_violations;
+        ctx.raw_violations.extend(raw_violations);
+
+        // Detect unused fixtures when strict mode is enabled.
+        if ctx.cfg.strict.is_some() {
+            if let Ok(unused) = bridge::find_unused_fixtures(py, session, &ctx.items) {
+                ctx.raw_violations.extend(unused);
+            }
+        }
+
         Ok(PhaseOutcome::Continue)
     }
 }

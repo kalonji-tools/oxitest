@@ -212,6 +212,7 @@ class ViolationKind(StrEnum):
     MISSING_MARK_REASON = "missing_mark_reason"
     MISSING_RETURN_ANNOTATION = "missing_return_annotation"
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
+    UNUSED_FIXTURE = "unused_fixture"
 
 
 @dataclass
