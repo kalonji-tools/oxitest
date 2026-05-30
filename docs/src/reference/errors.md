@@ -252,15 +252,31 @@ If the parameter is not a fixture, remove it from the function signature.
 ---
 
 ```text
-FixtureTeardownWarning: error in teardown of fixture '<name>': <error>
+FixtureTeardownWarning: fixture '<name>' teardown failed during <node_id>: <error>
 ```
 
 **Cause:** An exception was raised during the cleanup phase of a yield fixture.
-This is a **warning**, not an error -- the test result itself is not affected.
+The warning now includes the test `node_id` that triggered the teardown, making
+it easier to identify which test exposed the issue. This is a **warning**, not
+an error -- the test result itself is not affected.
 
 **Fix:** Fix the teardown code in the fixture. Common causes include trying to
 close an already-closed resource or referencing a variable that was not
 assigned because setup failed.
+
+---
+
+```text
+FixtureShadowWarning: fixture '<name>' in <child_conftest> shadows definition in <parent_conftest>
+```
+
+**Cause:** A `conftest.py` file defines a fixture with the same name as one
+already registered by a parent `conftest.py`. The child definition silently
+overrides the parent within its directory tree.
+
+**Fix:** Rename the fixture in either the child or parent conftest to avoid
+ambiguity. If the shadowing is intentional, suppress the warning with a
+standard `warnings.filterwarnings` call in the child conftest.
 
 ---
 
@@ -395,5 +411,46 @@ markers = [
     "integration: tests requiring external services",
 ]
 ```
+
+---
+
+```text
+missing-return-annotation   <fixture_name>
+```
+
+**Cause:** A fixture function in `conftest.py` does not have a return type
+annotation. Strict mode requires explicit return types on all fixtures for
+clarity and type safety.
+
+**Fix:** Add a return type annotation to the fixture function:
+
+```python
+from oxitest import Fixtures, Yields
+
+fixtures = Fixtures()
+
+
+@fixtures.fixture
+def db_connection() -> Yields[Connection]:
+    conn = Connection()
+    yield conn
+    conn.close()
+```
+
+---
+
+```text
+unused-fixture   <fixture_name>
+```
+
+**Cause:** A fixture defined in `conftest.py` is never referenced by any
+collected test (neither via `Fixture[T]` annotations nor as a dependency of
+another fixture that is used). This often indicates dead code or a typo in
+a parameter name.
+
+**Fix:** Either remove the unused fixture from `conftest.py`, or add a test
+that uses it. If the fixture is intentionally unused (e.g., an `autouse`
+fixture), verify that it is marked with `autouse=True` -- autouse fixtures
+are excluded from this check.
 
 ---
