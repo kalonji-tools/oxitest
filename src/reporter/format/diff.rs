@@ -61,9 +61,129 @@ fn fmt_multi_line_diff(left: &str, right: &str, use_color: bool) -> String {
     out
 }
 
+/// Returns true if `s` looks like a Python collection repr.
+///
+/// Matches `[...]`, `{...}`, `(...)`, and `frozenset({...})`.
+/// Rejects truncated reprs containing `...` and strings shorter than 2 chars.
+fn is_collection_repr(s: &str) -> bool {
+    if s.len() < 2 || s.contains("...") {
+        return false;
+    }
+    let inner = s
+        .strip_prefix("frozenset(")
+        .and_then(|r| r.strip_suffix(')'))
+        .unwrap_or(s);
+    matches!(
+        (inner.as_bytes().first(), inner.as_bytes().last()),
+        (Some(b'['), Some(b']')) | (Some(b'{'), Some(b'}')) | (Some(b'('), Some(b')'))
+    )
+}
+
+/// Splits `s` at top-level commas, respecting bracket depth and quoted strings.
+///
+/// Quote state tracks single and double quoted strings, including escaped quotes.
+fn split_top_level(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth: usize = 0;
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut start = 0;
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        // Handle escape sequences inside strings
+        if (in_single_quote || in_double_quote) && b == b'\\' {
+            i += 2;
+            continue;
+        }
+
+        if in_single_quote {
+            if b == b'\'' {
+                in_single_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if in_double_quote {
+            if b == b'"' {
+                in_double_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        match b {
+            b'\'' => in_single_quote = true,
+            b'"' => in_double_quote = true,
+            b'[' | b'{' | b'(' => depth += 1,
+            b']' | b'}' | b')' => {
+                depth = depth.saturating_sub(1);
+            }
+            b',' if depth == 0 => {
+                parts.push(s[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    // Push the last segment (may be empty for trailing comma)
+    let last = s[start..].trim();
+    if !last.is_empty() {
+        parts.push(last);
+    }
+
+    parts
+}
+
+/// Reformats a Python collection repr to one element per line.
+///
+/// Empty collections are returned unchanged. For `frozenset({...})`, the outer
+/// `frozenset(` prefix and `)` suffix are preserved around the reformatted inner set.
+fn pretty_print_collection(s: &str) -> String {
+    // Handle frozenset specially — strip the outer wrapper, reformat inner, re-wrap
+    if let Some(inner) = s
+        .strip_prefix("frozenset(")
+        .and_then(|r| r.strip_suffix(')'))
+    {
+        let reformatted = pretty_print_collection(inner);
+        return format!("frozenset({reformatted})");
+    }
+
+    let len = s.len();
+    if len < 2 {
+        return s.to_owned();
+    }
+
+    let open = &s[..1];
+    let close = &s[len - 1..];
+    let contents = s[1..len - 1].trim();
+
+    if contents.is_empty() {
+        return s.to_owned();
+    }
+
+    let elements = split_top_level(contents);
+    let mut out = String::new();
+    out.push_str(open);
+    out.push('\n');
+    for elem in elements {
+        out.push_str(&format!("  {elem},\n"));
+    }
+    out.push_str(close);
+    out
+}
+
 /// Produces a colored diff string for assertion failures.
 ///
 /// - Returns empty string if both values are empty or identical.
+/// - For `==` comparisons where both values look like Python collection reprs:
+///   pretty-prints each to one-element-per-line and renders a unified diff.
 /// - For single-line values: renders `- left: <value>` / `+ right: <value>` inline diff.
 /// - For multi-line values: renders a unified diff using `similar`.
 /// - For `==` comparisons with single-line values: appends a caret marker at the
@@ -74,6 +194,14 @@ pub(crate) fn fmt_diff(left: &str, right: &str, op: &str, use_color: bool) -> St
     }
     if left == right {
         return String::new();
+    }
+
+    if op == "==" && is_collection_repr(left) && is_collection_repr(right) {
+        let left_pp = pretty_print_collection(left);
+        let right_pp = pretty_print_collection(right);
+        if left_pp != right_pp {
+            return fmt_multi_line_diff(&left_pp, &right_pp, use_color);
+        }
     }
 
     let left_multiline = left.contains('\n');
@@ -111,6 +239,30 @@ mod snapshot_tests {
     #[test]
     fn identical_values_returns_empty() {
         let result = fmt_diff("hello", "hello", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn collection_diff_list() {
+        let result = fmt_diff("[1, 2, 3]", "[1, 4, 3]", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn collection_diff_dict() {
+        let result = fmt_diff("{'a': 1, 'b': 2}", "{'a': 1, 'b': 3}", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn collection_diff_set() {
+        let result = fmt_diff("{1, 2, 3}", "{1, 4, 3}", "==", false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn collection_diff_nested() {
+        let result = fmt_diff("[{'a': 1}, {'b': 2}]", "[{'a': 1}, {'b': 3}]", "==", false);
         insta::assert_snapshot!(result);
     }
 }
@@ -161,6 +313,118 @@ mod tests {
         assert!(
             !result.contains('^'),
             "caret should not appear for != op: {result}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::*;
+
+    // --- is_collection_repr ---
+
+    #[test]
+    fn detects_list() {
+        assert!(is_collection_repr("[1, 2, 3]"));
+    }
+
+    #[test]
+    fn detects_dict() {
+        assert!(is_collection_repr("{'a': 1, 'b': 2}"));
+    }
+
+    #[test]
+    fn detects_set() {
+        assert!(is_collection_repr("{1, 2, 3}"));
+    }
+
+    #[test]
+    fn detects_tuple() {
+        assert!(is_collection_repr("(1, 2, 3)"));
+    }
+
+    #[test]
+    fn detects_frozenset() {
+        assert!(is_collection_repr("frozenset({1, 2})"));
+    }
+
+    #[test]
+    fn rejects_plain_string() {
+        assert!(!is_collection_repr("'hello'"));
+    }
+
+    #[test]
+    fn rejects_number() {
+        assert!(!is_collection_repr("42"));
+    }
+
+    #[test]
+    fn rejects_truncated_list() {
+        assert!(!is_collection_repr("[1, 2, ...]"));
+    }
+
+    #[test]
+    fn rejects_empty_string() {
+        assert!(!is_collection_repr(""));
+    }
+
+    // --- pretty_print_collection ---
+
+    #[test]
+    fn list_one_per_line() {
+        assert_eq!(
+            pretty_print_collection("[1, 2, 3]"),
+            "[\n  1,\n  2,\n  3,\n]"
+        );
+    }
+
+    #[test]
+    fn dict_one_per_line() {
+        assert_eq!(
+            pretty_print_collection("{'a': 1, 'b': 2}"),
+            "{\n  'a': 1,\n  'b': 2,\n}"
+        );
+    }
+
+    #[test]
+    fn nested_collection_not_expanded() {
+        assert_eq!(
+            pretty_print_collection("[{'a': [1, 2]}, 'hello']"),
+            "[\n  {'a': [1, 2]},\n  'hello',\n]"
+        );
+    }
+
+    #[test]
+    fn string_with_comma_not_split() {
+        assert_eq!(
+            pretty_print_collection("['hello, world', 'foo']"),
+            "[\n  'hello, world',\n  'foo',\n]"
+        );
+    }
+
+    #[test]
+    fn empty_list_unchanged() {
+        assert_eq!(pretty_print_collection("[]"), "[]");
+    }
+
+    #[test]
+    fn single_element_list() {
+        assert_eq!(pretty_print_collection("[42]"), "[\n  42,\n]");
+    }
+
+    #[test]
+    fn frozenset_formatted() {
+        assert_eq!(
+            pretty_print_collection("frozenset({1, 2})"),
+            "frozenset({\n  1,\n  2,\n})"
+        );
+    }
+
+    #[test]
+    fn tuple_one_per_line() {
+        assert_eq!(
+            pretty_print_collection("(1, 2, 3)"),
+            "(\n  1,\n  2,\n  3,\n)"
         );
     }
 }
