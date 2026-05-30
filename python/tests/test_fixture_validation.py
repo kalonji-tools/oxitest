@@ -1,6 +1,18 @@
-"""Tests for collection-time fixture name validation."""
+"""Tests for collection-time fixture name validation and unused fixture detection."""
 
-from conftest import helpers
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from oxitest._bridge._helper_namespace import HelperNamespace
+
+    helpers: HelperNamespace
+
+from conftest import helpers  # type: ignore[assignment]  # ty: ignore
+
+
+# ── validate_fixture_names ───────────────────────────────────────────────────
 
 
 def test_valid_names_return_empty():
@@ -96,3 +108,83 @@ def test_no_fixture_names_return_empty():
     )
 
     assert errors == [], f"expected no errors for empty fixture_names, got {errors}"
+
+
+# ── find_unused_fixtures ─────────────────────────────────────────────────────
+
+
+def _factory_no_dep() -> None:
+    """A fixture factory with no dependencies."""
+
+
+def test_unused_fixture_detected() -> None:
+    """A fixture that no test references should appear as unused."""
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "unused_db", conftest_path="/project/conftest.py", factory=_factory_no_dep
+        ),
+    )
+    items: list[dict] = [{"fixture_names": []}]
+
+    result = session.find_unused_fixtures(items)
+
+    assert len(result) == 1, f"expected 1 unused fixture, got {len(result)}"
+    assert result[0] == (
+        "/project/conftest.py",
+        "unused_db",
+    ), f"unexpected result: {result[0]}"
+
+
+def test_autouse_excluded() -> None:
+    """Autouse fixtures should never be reported as unused."""
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "auto_setup",
+            autouse=True,
+            conftest_path="/project/conftest.py",
+            factory=_factory_no_dep,
+        ),
+    )
+    items: list[dict] = [{"fixture_names": []}]
+
+    result = session.find_unused_fixtures(items)
+
+    assert result == [], f"autouse fixture should not appear as unused: {result}"
+
+
+def test_transitive_deps_excluded() -> None:
+    """A fixture used only as a dependency of a used fixture is not unused."""
+
+    def _parent(dep: object = None) -> None:
+        """Parent fixture depending on 'dep'."""
+
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "dep", conftest_path="/project/conftest.py", factory=_factory_no_dep
+        ),
+        helpers.common.make_fixture_def(
+            "parent", conftest_path="/project/conftest.py", factory=_parent
+        ),
+    )
+    items: list[dict] = [{"fixture_names": ["parent"]}]
+
+    result = session.find_unused_fixtures(items)
+
+    assert result == [], f"transitive dep should not appear as unused: {result}"
+
+
+def test_all_fixtures_used_empty_result() -> None:
+    """When every fixture is referenced by at least one test, result is empty."""
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", conftest_path="/project/conftest.py", factory=_factory_no_dep
+        ),
+        helpers.common.make_fixture_def(
+            "cache", conftest_path="/project/conftest.py", factory=_factory_no_dep
+        ),
+    )
+    items: list[dict] = [{"fixture_names": ["db", "cache"]}]
+
+    result = session.find_unused_fixtures(items)
+
+    assert result == [], f"all fixtures used, expected empty result: {result}"
