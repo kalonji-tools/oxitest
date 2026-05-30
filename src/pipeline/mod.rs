@@ -222,6 +222,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         &phases::CollectionPhase {
             collector: &collector_impl,
         },
+        &phases::FixtureValidationPhase,
         &phases::StrictPhase,
         &phases::FilterPhase,
         &phases::ListPhase,

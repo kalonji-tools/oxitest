@@ -586,6 +586,10 @@ class FixtureSession:
         """Return connected components of shared fixture dependencies."""
         return self._registry.shared_fixture_groups()
 
+    def registered_fixture_names(self) -> list[str]:
+        """Return all fixture names known to the registry."""
+        return list(self._registry._defs.keys())
+
     def validate_fixture_names(
         self,
         items: list[dict[str, Any]],
@@ -595,6 +599,12 @@ class FixtureSession:
         Called by the Rust ``FixtureValidationPhase`` after collection to catch
         typos and missing fixtures before any test executes.
         """
+        # Build set of types that plugin fixture providers can inject.
+        plugin_types: set[type] = set()
+        if hasattr(self, "_plugin_registry"):
+            for provider in self._plugin_registry.fixture_providers:
+                plugin_types.add(provider.fixture_type)
+
         errors: list[tuple[str, str]] = []
         for item in items:
             node_id: str = item["node_id"]
@@ -604,8 +614,52 @@ class FixtureSession:
                     continue
                 if self._registry.get(name) is not None:
                     continue
+                # Check if the name resolves to a plugin-provided fixture by
+                # looking up the cached module and examining the type hint.
+                if plugin_types and self._can_plugin_resolve(
+                    node_id, name, plugin_types
+                ):
+                    continue
                 errors.append((node_id, name))
         return errors
+
+    def _can_plugin_resolve(
+        self,
+        node_id: str,
+        param_name: str,
+        plugin_types: set[type],
+    ) -> bool:
+        """Check if a parameter resolves to a plugin-provided fixture type."""
+        # node_id format: "path/to/test.py::test_fn" or "path/to/test.py::test_fn[case]"
+        parts = node_id.split("::", 1)
+        if len(parts) < 2:
+            return False
+        module_path = parts[0]
+        fn_part = parts[1].split("[", 1)[0]  # strip param_id
+        # Look up the cached module (already loaded during collection)
+        mod = self._module_cache.get(module_path)
+        if mod is None:
+            return False
+        # Handle class::method syntax
+        if "::" in fn_part:
+            cls_name, method_name = fn_part.split("::", 1)
+            cls = getattr(mod, cls_name, None)
+            fn = getattr(cls, method_name, None) if cls else None
+        else:
+            fn = getattr(mod, fn_part, None)
+        if fn is None:
+            return False
+        try:
+            from typing import get_type_hints
+
+            hints = get_type_hints(fn, include_extras=True)
+        except Exception:  # noqa: BLE001
+            return False
+        hint = hints.get(param_name)
+        if hint is None:
+            return False
+        is_fx, inner = _fixture_inner_type(hint)
+        return is_fx and inner in plugin_types
 
     def _inject_builtin(
         self,
