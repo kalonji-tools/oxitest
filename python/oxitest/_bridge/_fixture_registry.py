@@ -10,9 +10,18 @@ __all__ = [
 import inspect
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Annotated, Any, Generic, TypeVar, get_args, get_origin
+from typing import (
+    Annotated,
+    Any,
+    Generic,
+    TypeVar,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
+from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 T = TypeVar("T")
 
@@ -43,10 +52,29 @@ class FixtureRegistry:
         self._defs: dict[str, list[FixtureDef[Any]]] = {}
         self._namespaces: set[str] = set()  # O(1) namespace existence check
 
-    def register(self, defn: FixtureDef[Any]) -> None:
+    def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
         self._defs.setdefault(defn.name, []).append(defn)
         if defn.namespace:
             self._namespaces.add(defn.namespace)
+
+        # Skip annotation check for builtins (conftest_path starts with "<")
+        if defn.conftest_path.startswith("<"):
+            return []
+
+        violations: list[CollectedViolation] = []
+        try:
+            hints = get_type_hints(defn.func)
+        except Exception:  # noqa: BLE001
+            hints = {}
+        if "return" not in hints:
+            violations.append(
+                CollectedViolation(
+                    node_id=defn.conftest_path,
+                    kind=ViolationKind.MISSING_RETURN_ANNOTATION,
+                    detail=defn.name,
+                )
+            )
+        return violations
 
     def get(self, name: str) -> FixtureDef[Any] | None:
         """Return the most-local (last-registered) FixtureDef for name."""
