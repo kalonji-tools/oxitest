@@ -111,10 +111,10 @@ def _resolve_debugger_backend(
 
 def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
     """Restore real stdout/stderr by suspending any active capture fixtures."""
-    from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
+    from oxitest._bridge._builtins._capture import _CaptureBase
 
     for v in all_kwargs.values():
-        if isinstance(v, (_StdCapture, _FdCapture)):
+        if isinstance(v, _CaptureBase):
             v._restore()
 
 
@@ -151,12 +151,10 @@ def _trace_before_test(
     file: Any = None,
 ) -> None:
     """Suspend capture, print trace banner, call backend.trace(), restore."""
-    from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
+    from oxitest._bridge._builtins._capture import _CaptureBase
 
     managers = [
-        v.disabled()
-        for v in all_kwargs.values()
-        if isinstance(v, (_StdCapture, _FdCapture))
+        v.disabled() for v in all_kwargs.values() if isinstance(v, _CaptureBase)
     ]
 
     with contextlib.ExitStack() as stack:
