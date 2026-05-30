@@ -13,6 +13,7 @@ from types import ModuleType
 from typing import Any, cast, get_type_hints
 
 from oxitest._bridge._ast_utils import walk_bare_asserts
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
@@ -27,7 +28,11 @@ from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationK
 
 
 def _get_fixture_names(fn: object) -> tuple[str, ...]:
-    """Extract parameter names annotated with Fixture[T] from a function signature."""
+    """Extract parameter names annotated with Fixture[T] that need registry resolution.
+
+    Excludes built-in fixtures (resolved by type, not name) and the bare
+    ``Fixtures`` accessor type, since those never go through the registry.
+    """
     try:
         hints = get_type_hints(fn, include_extras=True)
     except Exception:  # noqa: BLE001
@@ -36,8 +41,10 @@ def _get_fixture_names(fn: object) -> tuple[str, ...]:
     for param_name, hint in hints.items():
         if param_name == "return":
             continue
-        is_fix, _ = _fixture_inner_type(hint)
-        if is_fix:
+        if hint is Fixtures:
+            continue
+        is_fix, inner = _fixture_inner_type(hint)
+        if is_fix and BuiltinFixture.for_type(inner) is None:
             names.append(param_name)
     return tuple(names)
 

@@ -164,6 +164,60 @@ impl PipelinePhase for CollectionPhase<'_> {
     }
 }
 
+// ─── FixtureValidationPhase ──────────────────────────────────────────────────
+
+/// Validates that every `Fixture[T]` parameter name matches a registered
+/// fixture. Runs after collection, before strict checks. Aborts with
+/// `CollectError` exit code on mismatch.
+pub(crate) struct FixtureValidationPhase;
+
+impl PipelinePhase for FixtureValidationPhase {
+    fn name(&self) -> &'static str {
+        "fixture-validation"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+        let errors = bridge::validate_fixture_names(py, session, &ctx.items)
+            .map_err(|_| ExitCode::CollectError)?;
+
+        if errors.is_empty() {
+            return Ok(PhaseOutcome::Continue);
+        }
+
+        // Get registered fixture names for "did you mean?" suggestions
+        let registered = bridge::registered_fixture_names(py, session).unwrap_or_default();
+
+        let mut messages = Vec::with_capacity(errors.len());
+        for (node_id, bad_name) in &errors {
+            let suggestion = crate::edit_distance::closest_match(
+                bad_name,
+                registered.iter().map(|s| s.as_str()),
+                2,
+            );
+            let msg = match suggestion {
+                Some(s) => format!(
+                    "  {} - fixture '{}' not found (did you mean '{}'?)",
+                    node_id, bad_name, s
+                ),
+                None => format!("  {} - fixture '{}' not found", node_id, bad_name),
+            };
+            messages.push(msg);
+        }
+
+        let full_message = format!("ERROR collecting tests\n{}", messages.join("\n"));
+        let err = types::CollectError::PyError(full_message);
+        Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
+            &[err],
+            &|| ctx.make_error_reporter(),
+        )))
+    }
+}
+
 // ─── StrictPhase ─────────────────────────────────────────────────────────────
 
 /// Checks strict-mode violations. Abort mode exits early; enforce mode
