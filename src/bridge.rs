@@ -8,6 +8,7 @@
 //! `python/oxitest/_bridge/result.py`. A mismatch silently drops data.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
@@ -263,6 +264,60 @@ pub(crate) fn collect_module_with_session_obj(
         .collect();
 
     Ok((items_vec, raw_violations))
+}
+
+/// Validate that all collected fixture names can resolve in the registry.
+///
+/// Returns `(node_id, fixture_name)` pairs for names that cannot resolve.
+/// FixtureRef-resolved parameters (from `@parametrize`) are excluded.
+pub(crate) fn validate_fixture_names(
+    py: Python<'_>,
+    session: &FixtureSession,
+    items: &[Arc<TestItem>],
+) -> Result<Vec<(NodeId, String)>, CollectError> {
+    let session_obj = session.as_py_object(py);
+
+    let dicts: Vec<Bound<'_, pyo3::types::PyDict>> = items
+        .iter()
+        .map(|item| {
+            let dict = pyo3::types::PyDict::new(py);
+            let nid: &str = &item.node_id;
+            dict.set_item("node_id", nid).unwrap();
+            dict.set_item("fixture_names", &item.fixture_names).unwrap();
+            dict.set_item("fixref_names", &item.fixref_names).unwrap();
+            dict
+        })
+        .collect();
+
+    let items_list = pyo3::types::PyList::new(py, &dicts)
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+
+    let result = session_obj
+        .call_method1("validate_fixture_names", (items_list,))
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+
+    let pairs: Vec<(String, String)> = result
+        .extract()
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+
+    Ok(pairs
+        .into_iter()
+        .map(|(nid, name)| (NodeId::from_raw(&nid), name))
+        .collect())
+}
+
+/// Return all fixture names known to the registry.
+pub(crate) fn registered_fixture_names(
+    py: Python<'_>,
+    session: &FixtureSession,
+) -> Result<Vec<String>, CollectError> {
+    let session_obj = session.as_py_object(py);
+    let result = session_obj
+        .call_method0("registered_fixture_names")
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+    result
+        .extract()
+        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))
 }
 
 /// Variant of `run_test` that accepts a raw Python session object.

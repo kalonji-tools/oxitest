@@ -27,10 +27,17 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
     """--list -v shows marks and fixtures."""
+    (tmp / "conftest.py").write_text(
+        "from oxitest import Fixtures\n\n"
+        "fx = Fixtures()\n\n"
+        "@fx.fixture\n"
+        "def my_db() -> str:\n"
+        "    return 'connected'\n"
+    )
     (tmp / "test_table.py").write_text(
         "from oxitest._bridge._fixture_type import Fixture\n"
         "def test_one(): assert True\n"
-        "def test_two(tmp: Fixture[str]): assert True\n"
+        "def test_two(my_db: Fixture[str]): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--list", "-v")
     assert rc == 0, f"--list -v should exit 0, got {rc}"
