@@ -9,6 +9,7 @@ mod bridge;
 mod cache;
 mod collector;
 mod config;
+mod edit_distance;
 mod filter;
 mod marker;
 mod parallel;
