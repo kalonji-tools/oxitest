@@ -104,6 +104,7 @@ from oxitest._bridge._raises import raises as raises
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.fixtures import (
     Fixtures as Fixtures,
+    FixtureShadowWarning as FixtureShadowWarning,
     FixtureTeardownWarning as FixtureTeardownWarning,
 )
 from oxitest._bridge.parametrize import (
@@ -123,6 +124,7 @@ __all__ = [
     "FdCapture",
     "Fixture",
     "FixtureRef",
+    "FixtureShadowWarning",
     "FixtureTeardownWarning",
     "Fixtures",
     "LogCapture",

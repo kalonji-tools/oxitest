@@ -6,6 +6,7 @@ __all__ = [
     "FixtureDef",
     "FixtureRegistry",
     "FixtureSession",
+    "FixtureShadowWarning",
     "FixtureTeardownWarning",
     "UnannotatedFixtureParamError",
     # Internal bridge protocol (used by executor and loader)
@@ -32,6 +33,7 @@ from oxitest._bridge._errors import (  # noqa: F401
 from oxitest._bridge._fixture_registry import (
     FixtureDef as FixtureDef,
     FixtureRegistry as FixtureRegistry,
+    FixtureShadowWarning as FixtureShadowWarning,
     _fixture_inner_type as _fixture_inner_type,
     _fixture_ref_inner_type as _fixture_ref_inner_type,
 )
