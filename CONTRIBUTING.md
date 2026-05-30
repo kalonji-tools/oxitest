@@ -13,6 +13,20 @@ just health          # verify toolchain
 just dev             # full cycle: Rust tests, build extension, Python tests
 ```
 
+### NixOS users
+
+If you're on NixOS, you **must** enable `nix-ld` in your system configuration:
+
+```nix
+# /etc/nixos/configuration.nix (or equivalent)
+programs.nix-ld.enable = true;
+```
+
+Without this, Python tools installed by `uv` (ruff, ty, codespell) are dynamically
+linked against standard glibc paths that don't exist on NixOS. You'll see errors like
+"cannot run dynamically linked executable" when git hooks or worktree commands try to
+use them. This is a one-time system config change — rebuild with `sudo nixos-rebuild switch`.
+
 Without Nix, install Rust (stable), Python 3.12+, and maturin manually. See
 [Build Setup](https://kalonji-tools.github.io/oxitest/contributing/build-setup/)
 for details. Note that PyO3 linking can be tricky outside Nix — you may need to
