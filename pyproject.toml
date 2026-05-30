@@ -59,7 +59,7 @@ source = ["python/oxitest"]
 
 [tool.codespell]
 skip = "target,Cargo.lock,flake.lock"
-ignore-words-list = "NotIn,ser"
+ignore-words-list = "NotIn,ser,sotre"
 
 [dependency-groups]
 build = [

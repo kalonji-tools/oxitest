@@ -1437,11 +1437,13 @@ mod tests {
             .markers(vec!["slow".to_string()])
             .async_fn(true)
             .fixture_names(vec!["db".to_string()])
+            .fixref_names(vec!["backend".to_string()])
             .build();
         assert_eq!(item.lineno, LineNo::new(42));
         assert_eq!(item.markers, vec!["slow"]);
         assert!(item.is_async);
         assert_eq!(item.fixture_names, vec!["db"]);
+        assert_eq!(item.fixref_names, vec!["backend"]);
     }
 
     #[test]

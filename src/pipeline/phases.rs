@@ -171,6 +171,32 @@ impl PipelinePhase for CollectionPhase<'_> {
 /// `CollectError` exit code on mismatch.
 pub(crate) struct FixtureValidationPhase;
 
+/// Format fixture validation errors into a human-readable message.
+///
+/// Each error gets a line like:
+///   `test.py::test_foo - fixture 'sotre' not found (did you mean 'store'?)`
+///
+/// The `registered` list provides candidates for edit-distance suggestions.
+pub(crate) fn format_fixture_errors(
+    errors: &[(types::NodeId, String)],
+    registered: &[String],
+) -> String {
+    let mut messages = Vec::with_capacity(errors.len());
+    for (node_id, bad_name) in errors {
+        let suggestion =
+            crate::edit_distance::closest_match(bad_name, registered.iter().map(|s| s.as_str()), 2);
+        let msg = match suggestion {
+            Some(s) => format!(
+                "  {} - fixture '{}' not found (did you mean '{}'?)",
+                node_id, bad_name, s
+            ),
+            None => format!("  {} - fixture '{}' not found", node_id, bad_name),
+        };
+        messages.push(msg);
+    }
+    format!("ERROR collecting tests\n{}", messages.join("\n"))
+}
+
 impl PipelinePhase for FixtureValidationPhase {
     fn name(&self) -> &'static str {
         "fixture-validation"
@@ -189,27 +215,8 @@ impl PipelinePhase for FixtureValidationPhase {
             return Ok(PhaseOutcome::Continue);
         }
 
-        // Get registered fixture names for "did you mean?" suggestions
         let registered = bridge::registered_fixture_names(py, session).unwrap_or_default();
-
-        let mut messages = Vec::with_capacity(errors.len());
-        for (node_id, bad_name) in &errors {
-            let suggestion = crate::edit_distance::closest_match(
-                bad_name,
-                registered.iter().map(|s| s.as_str()),
-                2,
-            );
-            let msg = match suggestion {
-                Some(s) => format!(
-                    "  {} - fixture '{}' not found (did you mean '{}'?)",
-                    node_id, bad_name, s
-                ),
-                None => format!("  {} - fixture '{}' not found", node_id, bad_name),
-            };
-            messages.push(msg);
-        }
-
-        let full_message = format!("ERROR collecting tests\n{}", messages.join("\n"));
+        let full_message = format_fixture_errors(&errors, &registered);
         let err = types::CollectError::PyError(full_message);
         Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
             &[err],

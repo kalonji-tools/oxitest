@@ -239,3 +239,62 @@ mod finalize_phase_tests {
         assert!(phase.should_run(&ctx));
     }
 }
+
+mod fixture_validation_phase_tests {
+    use super::*;
+    use crate::types::NodeId;
+
+    #[test]
+    fn always_runs() {
+        let ctx = make_ctx();
+        let phase = phases::FixtureValidationPhase;
+        assert!(phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn name_is_fixture_validation() {
+        let phase = phases::FixtureValidationPhase;
+        assert_eq!(phase.name(), "fixture-validation");
+    }
+
+    #[test]
+    fn format_errors_with_suggestion() {
+        let errors = vec![(NodeId::from_raw("test.py::test_foo"), "sotre".to_string())];
+        let registered = vec!["store".to_string(), "backend".to_string()];
+        let msg = phases::format_fixture_errors(&errors, &registered);
+        assert!(msg.contains("ERROR collecting tests"));
+        assert!(msg.contains("fixture 'sotre' not found"));
+        assert!(msg.contains("did you mean 'store'?"));
+    }
+
+    #[test]
+    fn format_errors_without_suggestion() {
+        let errors = vec![(NodeId::from_raw("test.py::test_foo"), "zzzzz".to_string())];
+        let registered = vec!["store".to_string()];
+        let msg = phases::format_fixture_errors(&errors, &registered);
+        assert!(msg.contains("fixture 'zzzzz' not found"));
+        assert!(!msg.contains("did you mean"));
+    }
+
+    #[test]
+    fn format_errors_multiple() {
+        let errors = vec![
+            (NodeId::from_raw("test.py::test_a"), "sotre".to_string()),
+            (NodeId::from_raw("test.py::test_b"), "xyz".to_string()),
+        ];
+        let registered = vec!["store".to_string()];
+        let msg = phases::format_fixture_errors(&errors, &registered);
+        assert!(msg.contains("test.py::test_a"));
+        assert!(msg.contains("test.py::test_b"));
+        assert!(msg.contains("sotre"));
+        assert!(msg.contains("xyz"));
+    }
+
+    #[test]
+    fn format_errors_empty_registered() {
+        let errors = vec![(NodeId::from_raw("test.py::test_foo"), "store".to_string())];
+        let msg = phases::format_fixture_errors(&errors, &[]);
+        assert!(msg.contains("fixture 'store' not found"));
+        assert!(!msg.contains("did you mean"));
+    }
+}
