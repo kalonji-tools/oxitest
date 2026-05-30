@@ -193,6 +193,7 @@ pub struct TestItem {
     pub(crate) param_values: Vec<(String, String)>,
     pub(crate) is_async: bool,
     pub(crate) fixture_names: Vec<String>,
+    pub(crate) fixref_names: Vec<String>,
 }
 
 /// Builder for [`TestItem`], used exclusively in tests.
@@ -210,6 +211,7 @@ pub(crate) struct TestItemBuilder {
     param_values: Vec<(String, String)>,
     is_async: bool,
     fixture_names: Vec<String>,
+    fixref_names: Vec<String>,
 }
 
 #[cfg(test)]
@@ -246,6 +248,12 @@ impl TestItemBuilder {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn fixref_names(mut self, names: Vec<String>) -> Self {
+        self.fixref_names = names;
+        self
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn module_path(mut self, path: &str) -> Self {
         self.module_path = Utf8PathBuf::from(path);
         self
@@ -269,6 +277,7 @@ impl TestItemBuilder {
             param_values: self.param_values,
             is_async: self.is_async,
             fixture_names: self.fixture_names,
+            fixref_names: self.fixref_names,
         }
     }
 }
@@ -288,6 +297,7 @@ impl TestItem {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         }
     }
 
@@ -304,6 +314,7 @@ impl TestItem {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         }
     }
 }
@@ -904,6 +915,7 @@ mod tests {
             param_values: vec![("x".to_string(), "1".to_string())],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         assert_eq!(item.param_id, Some("basic".to_string()));
         assert_eq!(item.param_values.len(), 1);
@@ -966,6 +978,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
@@ -983,6 +996,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         assert!(!sync_item.is_async);
 
@@ -996,6 +1010,7 @@ mod tests {
             param_values: vec![],
             is_async: true,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         assert!(async_item.is_async);
     }

@@ -841,6 +841,7 @@ mod drain_tests {
                 param_values: vec![],
                 is_async: false,
                 fixture_names: vec![],
+                fixref_names: vec![],
             })
         }
 

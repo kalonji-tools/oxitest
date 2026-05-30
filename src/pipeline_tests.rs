@@ -172,6 +172,7 @@ mod list_tests {
                 .collect(),
             is_async: false,
             fixture_names: fixture_names.iter().map(|s| s.to_string()).collect(),
+            fixref_names: vec![],
         })
     }
 

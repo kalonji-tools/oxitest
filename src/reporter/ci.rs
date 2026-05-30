@@ -335,6 +335,7 @@ mod tests {
             param_values: vec![("x".to_string(), "-1".to_string())],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         let outcome = make_failed("", "tests/test_foo.py", 5, "assert x > 0");
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0));

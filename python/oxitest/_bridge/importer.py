@@ -18,7 +18,11 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge.fixtures import Fixtures, _fixture_inner_type
-from oxitest._bridge.parametrize import _DictCases, _PartialCases
+from oxitest._bridge.parametrize import (
+    _DataclassCases,
+    _DictCases,
+    _PartialCases,
+)
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
 
@@ -168,6 +172,7 @@ def _expand_composed(
     marker_names: list[str],
     is_async: bool,
     fixture_names: tuple[str, ...],
+    fixref_names: tuple[str, ...] = (),
 ) -> list[CollectedItem]:
     """Expand composed _PartialCases layers via cartesian product."""
     _validate_composition(layers)
@@ -187,9 +192,17 @@ def _expand_composed(
                 param_values=tuple(merged_pv),
                 is_async=is_async,
                 fixture_names=fixture_names,
+                fixref_names=fixref_names,
             )
         )
     return items
+
+
+def _get_fixref_names(layer: object) -> tuple[str, ...]:
+    """Extract fixture-ref field names from a parametrize layer."""
+    if isinstance(layer, (_DataclassCases, _PartialCases)):
+        return layer.fixref_fields
+    return ()
 
 
 def _expand_item(
@@ -217,10 +230,21 @@ def _expand_item(
     layers = cast(tuple, raw)
     # Composition: all layers are _PartialCases
     if len(layers) > 1 or isinstance(layers[0], _PartialCases):
+        # Merge fixref_fields from all composition layers
+        all_fixrefs: set[str] = set()
+        for layer in layers:
+            all_fixrefs.update(_get_fixref_names(layer))
         return _expand_composed(
-            layers, fn_name, lineno, marker_names, is_async, fixture_names
+            layers,
+            fn_name,
+            lineno,
+            marker_names,
+            is_async,
+            fixture_names,
+            fixref_names=tuple(sorted(all_fixrefs)),
         )
     # Single layer: existing behavior
+    fixref_names = _get_fixref_names(layers[0])
     return [
         CollectedItem(
             fn_name=fn_name,
@@ -230,6 +254,7 @@ def _expand_item(
             param_values=tuple(pv),
             is_async=is_async,
             fixture_names=fixture_names,
+            fixref_names=fixref_names,
         )
         for case_id, pv in layers[0].items()
     ]
