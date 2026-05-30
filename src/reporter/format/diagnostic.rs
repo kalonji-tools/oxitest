@@ -523,6 +523,7 @@ mod tests {
             ],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x + y == expected");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
@@ -549,6 +550,7 @@ mod tests {
             param_values: vec![("x".to_string(), "1".to_string())],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         });
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
@@ -617,6 +619,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         let outcome = TestOutcome::Failed {
             message: "assert failed".to_string(),
@@ -669,6 +672,7 @@ mod tests {
             param_values: vec![],
             is_async: false,
             fixture_names: vec![],
+            fixref_names: vec![],
         };
         let outcome = TestOutcome::Failed {
             message: "oops".to_string(),
