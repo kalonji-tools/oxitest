@@ -16,6 +16,7 @@ from oxitest._bridge.fixtures import (
     FixtureSetupError,
     _TestContext as OxiTestContext,
 )
+from oxitest._bridge.result import ViolationKind
 
 # ── skip / mark ───────────────────────────────────────────────────────────────
 
@@ -109,6 +110,65 @@ def test_registry_get_autouse_empty():
     reg = FixtureRegistry()
     assert list(reg.get_autouse()) == [], (
         "get_autouse() on an empty registry should return an empty list"
+    )
+
+
+# ── FixtureRegistry: strict violations ─────────────────────────────────────────
+
+
+def test_register_returns_violation_for_untyped_fixture():
+    # Arrange
+    reg = FixtureRegistry()
+    defn = FixtureDef(
+        name="db",
+        func=lambda: None,
+        autouse=False,
+        params=None,
+        conftest_path="/project/conftest.py",
+    )
+
+    # Act
+    violations = reg.register(defn)
+
+    # Assert
+    assert len(violations) == 1, (
+        f"registering an untyped fixture should produce 1 violation, "
+        f"got {len(violations)}"
+    )
+    assert violations[0].kind == ViolationKind.MISSING_RETURN_ANNOTATION, (
+        f"violation kind should be MISSING_RETURN_ANNOTATION, "
+        f"got {violations[0].kind!r}"
+    )
+    assert violations[0].detail == "db", (
+        f"violation detail should be fixture name 'db', got {violations[0].detail!r}"
+    )
+    assert violations[0].node_id == "/project/conftest.py", (
+        f"violation node_id should be conftest path, got {violations[0].node_id!r}"
+    )
+
+
+def test_register_returns_empty_for_typed_fixture():
+    # Arrange
+    reg = FixtureRegistry()
+
+    def typed_fixture() -> int:
+        return 42
+
+    defn = FixtureDef(
+        name="val",
+        func=typed_fixture,
+        autouse=False,
+        params=None,
+        conftest_path="/project/conftest.py",
+    )
+
+    # Act
+    violations = reg.register(defn)
+
+    # Assert
+    assert violations == [], (
+        "registering a typed fixture should produce no violations, "
+        f"got {len(violations)}"
     )
 
 

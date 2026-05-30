@@ -49,11 +49,18 @@ pub struct FixtureSession(Py<PyAny>);
 
 impl FixtureSession {
     /// Create a session by loading fixtures from all conftest paths.
-    pub fn new(py: Python<'_>, conftest_paths: &[Utf8PathBuf]) -> PyResult<Self> {
+    ///
+    /// Returns the session and any strict-mode violations detected during
+    /// fixture registration (e.g. missing return type annotations).
+    pub fn new(
+        py: Python<'_>,
+        conftest_paths: &[Utf8PathBuf],
+    ) -> PyResult<(Self, Vec<RawViolation>)> {
         let loader = py.import("oxitest._bridge.conftest_loader")?;
         let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
-        let session = loader.call_method1("create_session", (paths,))?;
-        Ok(Self(session.into()))
+        let result = loader.call_method1("create_session", (paths,))?;
+        let (session, violations): (Bound<'_, PyAny>, Vec<RawViolation>) = result.extract()?;
+        Ok((Self(session.into()), violations))
     }
 
     /// Signal that all tests in the module have finished; runs module teardowns.
@@ -170,6 +177,7 @@ pub(crate) enum ViolationKind {
     BareAssert,
     DictParametrize,
     MissingMarkReason,
+    MissingReturnAnnotation,
     SingleCaseParametrize,
     Unknown,
 }
@@ -183,6 +191,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
             "bare_assert" => ViolationKind::BareAssert,
             "dict_parametrize" => ViolationKind::DictParametrize,
             "missing_mark_reason" => ViolationKind::MissingMarkReason,
+            "missing_return_annotation" => ViolationKind::MissingReturnAnnotation,
             "single_case_parametrize" => ViolationKind::SingleCaseParametrize,
             _ => ViolationKind::Unknown,
         })

@@ -210,6 +210,7 @@ class ViolationKind(StrEnum):
     DICT_PARAMETRIZE = "dict_parametrize"
     INVALID_MODULE_MARK = "invalid_module_mark"
     MISSING_MARK_REASON = "missing_mark_reason"
+    MISSING_RETURN_ANNOTATION = "missing_return_annotation"
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
 
 
