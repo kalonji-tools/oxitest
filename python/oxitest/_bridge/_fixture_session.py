@@ -631,6 +631,66 @@ class FixtureSession:
                 errors.append((node_id, name))
         return errors
 
+    def find_unused_fixtures(
+        self,
+        items: list[dict[str, Any]],
+    ) -> list[tuple[str, str]]:
+        """Return (conftest_path, fixture_name) pairs for unused fixtures.
+
+        A fixture is unused if:
+        - It is not autouse
+        - It is not referenced by any collected test's fixture_names
+        - It is not a dependency of any referenced fixture (transitive)
+        """
+        # 1. Collect all directly-referenced fixture names from items
+        referenced: set[str] = set()
+        for item in items:
+            referenced.update(item.get("fixture_names", ()))
+
+        # 2. Expand transitively -- walk fixture function signatures
+        def _expand_deps(name: str, visited: set[str]) -> None:
+            if name in visited:
+                return
+            visited.add(name)
+            defn = self._registry.get(name)
+            if defn is None:
+                return
+            try:
+                sig = inspect.signature(defn.func)
+            except (ValueError, TypeError):
+                return
+            for param_name in sig.parameters:
+                if param_name in self._registry._defs:
+                    _expand_deps(param_name, visited)
+
+        all_used: set[str] = set()
+        for name in referenced:
+            _expand_deps(name, all_used)
+
+        # 3. Also expand autouse fixtures and their deps
+        for defn in self._registry.get_autouse():
+            _expand_deps(defn.name, all_used)
+
+        # 4. Find unused (skip builtins, autouse, and non-conftest fixtures)
+        unused: list[tuple[str, str]] = []
+        for name, defs in self._registry._defs.items():
+            if not defs:
+                continue
+            defn = defs[-1]  # most-local
+            if defn.autouse:
+                continue
+            # Skip builtins (conftest_path starts with "<")
+            if defn.conftest_path.startswith("<"):
+                continue
+            # Only flag fixtures from conftest files; module-level Fixtures()
+            # instances may be used solely via FixtureRef in parametrize.
+            if not defn.conftest_path.endswith("conftest.py"):
+                continue
+            if name in all_used:
+                continue
+            unused.append((defn.conftest_path, name))
+        return sorted(unused)
+
     def _can_plugin_resolve(
         self,
         node_id: str,
