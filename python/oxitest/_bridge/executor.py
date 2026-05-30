@@ -38,6 +38,7 @@ from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
 from oxitest._bridge._fixture_session import (
     FixtureSession,
+    _current_teardown_node_id,
     _SessionProtocol,
 )
 from oxitest._bridge._loader import (
@@ -462,9 +463,13 @@ def run_test(
         return result
     finally:
         sys.modules.pop(unique_name, None)
-        for td in reversed(fn_teardowns):
-            # teardown errors already printed by FixtureSession._safe_call
-            with contextlib.suppress(Exception):
-                td()
+        token = _current_teardown_node_id.set(meta.node_id)
+        try:
+            for td in reversed(fn_teardowns):
+                # teardown errors already printed by FixtureSession._safe_call
+                with contextlib.suppress(Exception):
+                    td()
+        finally:
+            _current_teardown_node_id.reset(token)
         effective_session._keep_tmp = None  # ty: ignore[unresolved-attribute]
         effective_session._result_cell = None  # ty: ignore[unresolved-attribute]

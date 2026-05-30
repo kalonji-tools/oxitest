@@ -26,6 +26,43 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
     )
 
 
+def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
+    from oxitest._bridge.fixtures import _warn_teardown
+
+    _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
+
+    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
+    msg = str(warn.list[0].message)
+    assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
+    assert "test_foo" in msg, f"expected node_id in message, got {msg!r}"
+
+
+def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
+    from oxitest._bridge.fixtures import _warn_teardown
+
+    _warn_teardown("my_fix", RuntimeError("boom"))
+
+    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
+    msg = str(warn.list[0].message)
+    assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
+
+
+def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
+    from oxitest._bridge._fixture_session import _current_teardown_node_id
+    from oxitest._bridge.fixtures import _warn_teardown
+
+    token = _current_teardown_node_id.set("tests/test_b.py::test_bar")
+    try:
+        _warn_teardown("db", RuntimeError("oops"))
+    finally:
+        _current_teardown_node_id.reset(token)
+
+    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
+    msg = str(warn.list[0].message)
+    assert "db" in msg, f"expected fixture name in message, got {msg!r}"
+    assert "test_bar" in msg, f"expected node_id in message, got {msg!r}"
+
+
 def test_passing_function(tmp: TempDir):
     f = tmp / "test_pass.py"
     f.write_text("def test_ok(): assert 1 == 1\n")
