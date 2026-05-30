@@ -179,6 +179,7 @@ pub(crate) enum ViolationKind {
     MissingMarkReason,
     MissingReturnAnnotation,
     SingleCaseParametrize,
+    UnusedFixture,
     Unknown,
 }
 
@@ -193,6 +194,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
             "missing_mark_reason" => ViolationKind::MissingMarkReason,
             "missing_return_annotation" => ViolationKind::MissingReturnAnnotation,
             "single_case_parametrize" => ViolationKind::SingleCaseParametrize,
+            "unused_fixture" => ViolationKind::UnusedFixture,
             _ => ViolationKind::Unknown,
         })
     }
@@ -379,6 +381,36 @@ pub(crate) fn resolve_affected_tests(
         .call1((test_strs, source_strs, rootdir.as_str()))?
         .extract()?;
     Ok(result)
+}
+
+/// Call `FixtureSession.find_unused_fixtures()` to detect fixtures defined
+/// in conftest but never referenced by any collected test.
+pub(crate) fn find_unused_fixtures(
+    py: Python<'_>,
+    session: &FixtureSession,
+    items: &[std::sync::Arc<TestItem>],
+) -> PyResult<Vec<RawViolation>> {
+    let items_list = pyo3::types::PyList::empty(py);
+    for item in items {
+        let dict = pyo3::types::PyDict::new(py);
+        let fixture_names =
+            pyo3::types::PyList::new(py, item.fixture_names.iter().map(String::as_str))?;
+        dict.set_item("fixture_names", fixture_names)?;
+        items_list.append(dict)?;
+    }
+    let result: Vec<(String, String)> = session
+        .0
+        .bind(py)
+        .call_method1("find_unused_fixtures", (items_list,))?
+        .extract()?;
+    Ok(result
+        .into_iter()
+        .map(|(conftest_path, fixture_name)| RawViolation {
+            node_id: conftest_path,
+            kind: ViolationKind::UnusedFixture,
+            detail: fixture_name,
+        })
+        .collect())
 }
 
 #[allow(clippy::too_many_arguments)]
