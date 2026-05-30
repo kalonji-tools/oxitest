@@ -418,19 +418,23 @@ def _register_module_fixtures(
     module: ModuleType,
     path: str,
     session: Any | None,
-) -> None:
+) -> list[CollectedViolation]:
     """Scan module for Fixtures() instances and register them with the session."""
     if session is None:
-        return
+        return []
     registry = getattr(session, "_registry", None)
     if registry is None:
-        return
+        return []
 
+    violations: list[CollectedViolation] = []
     for attr_name in vars(module):
         obj = getattr(module, attr_name)
         if isinstance(obj, Fixtures):
             for defn in obj._defs:
-                registry.register(dataclasses.replace(defn, conftest_path=path))
+                violations.extend(
+                    registry.register(dataclasses.replace(defn, conftest_path=path))
+                )
+    return violations
 
 
 def _collect_items(
@@ -484,10 +488,10 @@ def collect_module(
     """
     unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"  # noqa: S324
     module = _import_test_module(path, unique_name, session)
-    _register_module_fixtures(module, path, session)
+    fixture_violations = _register_module_fixtures(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)
     items: list[CollectedItem] = []
-    violations: list[CollectedViolation] = list(mark_violations)
+    violations: list[CollectedViolation] = list(mark_violations) + fixture_violations
     for discover in (_module_members, _class_members):
         members = list(discover(module))
         _apply_module_marks(members, module_marks)

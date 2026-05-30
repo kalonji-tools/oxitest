@@ -197,10 +197,13 @@ def test_load_fixtures_multiple_instances(tmp: TempDir):
 
 
 def test_create_session_empty_returns_session():
-    session = create_session([])
+    session, violations = create_session([])
     assert isinstance(session, FixtureSession), (
         f"create_session([]) should return a FixtureSession, got "
         f"{type(session).__name__}"
+    )
+    assert violations == [], (
+        f"create_session([]) should return no violations, got {len(violations)}"
     )
 
 
@@ -217,7 +220,7 @@ def test_create_session_populates_registry(tmp: TempDir):
             return 42
     """)
     )
-    session = create_session([str(f)])
+    session, _ = create_session([str(f)])
     session.begin_module("t.py")
 
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
@@ -257,7 +260,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
             return "local"
     """)
     )
-    session = create_session([str(root_conf), str(sub_conf)])
+    session, _ = create_session([str(root_conf), str(sub_conf)])
     session.begin_module(str(sub / "test_x.py"))
 
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
@@ -411,7 +414,7 @@ def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
     import sys as _sys
 
     _sys.modules.pop("conftest", None)
-    create_session([str(f)])
+    create_session([str(f)])  # side-effect: registers conftest module
     conftest_mod = _sys.modules["conftest"]
     assert hasattr(conftest_mod, "helpers"), (
         "conftest module should have a 'helpers' attribute after create_session"
@@ -438,7 +441,7 @@ def test_create_session_helpers_contain_public_functions(tmp: TempDir):
     import sys as _sys
 
     _sys.modules.pop("conftest", None)
-    create_session([str(f)])
+    create_session([str(f)])  # side-effect: registers conftest module
     conftest_mod = _sys.modules["conftest"]
     ns_name = tmp.path.name  # directory name
     scope = getattr(conftest_mod.helpers, ns_name)
