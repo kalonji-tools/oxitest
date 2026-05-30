@@ -148,6 +148,7 @@ def test_run_base_always_mode_passing_calls_trace_only():
         debug_mode="always",
         node_id="t.py::test_ok",
         backend=rec,
+        file=io.StringIO(),
     )
     assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
     assert rec.trace_count == 1, f"expected 1 trace call, got {rec.trace_count}"
@@ -170,6 +171,7 @@ def test_run_base_always_mode_failing_calls_both():
         debug_mode="always",
         node_id="t.py::test_fail",
         backend=rec,
+        file=io.StringIO(),
     )
     assert result.status == StatusKind.FAILED, f"expected failed, got {result.status}"
     assert rec.trace_count == 1, f"expected 1 trace call, got {rec.trace_count}"
@@ -192,6 +194,7 @@ def test_run_base_post_mortem_mode_failing_calls_post_mortem_only():
         debug_mode="post-mortem",
         node_id="t.py::test_crash",
         backend=rec,
+        file=io.StringIO(),
     )
     assert result.status == StatusKind.FAILED, f"expected failed, got {result.status}"
     assert rec.trace_count == 0, f"expected 0 trace calls, got {rec.trace_count}"
@@ -210,6 +213,7 @@ def test_run_base_post_mortem_mode_passing_calls_neither():
         debug_mode="post-mortem",
         node_id="t.py::test_ok",
         backend=rec,
+        file=io.StringIO(),
     )
     assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
     assert rec.trace_count == 0, f"expected 0 trace calls, got {rec.trace_count}"
@@ -227,6 +231,7 @@ def test_run_base_no_debug_mode_calls_neither():
         debug_mode=None,
         node_id="t.py::test_ok",
         backend=None,
+        file=io.StringIO(),
     )
     assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
 
@@ -248,6 +253,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
         debug_mode="always",
         node_id="t.py::test_skip",
         backend=rec,
+        file=io.StringIO(),
     )
     assert rec.trace_count == 1, "trace should still be called before test"
     assert len(rec.post_mortem_tracebacks) == 0, (
@@ -273,7 +279,7 @@ def test_trace_before_test_suspends_capture_during_call():
             pass
 
     spy = SpyDebugger()
-    _trace_before_test({"cap": cap}, "t.py::test_x", spy)
+    _trace_before_test({"cap": cap}, "t.py::test_x", spy, file=io.StringIO())
 
     assert suspended_during_trace, "capture should be suspended during trace()"
     assert sys.stdout is not cap._old_stdout, (
@@ -285,7 +291,7 @@ def test_trace_before_test_suspends_capture_during_call():
 def test_trace_before_test_no_capture_kwargs():
     """_trace_before_test should work when no capture fixtures in kwargs."""
     rec = helpers.common.RecordingDebugger()
-    _trace_before_test({"x": 42}, "t.py::test_x", rec)
+    _trace_before_test({"x": 42}, "t.py::test_x", rec, file=io.StringIO())
     assert rec.trace_count == 1, "trace should be called once"
 
 
@@ -298,7 +304,9 @@ def test_debug_post_mortem_permanently_suspends_capture():
     try:
         raise AssertionError("test failure")
     except AssertionError as exc:
-        _debug_post_mortem({"cap": cap}, "t.py::test_fail", exc, rec)
+        _debug_post_mortem(
+            {"cap": cap}, "t.py::test_fail", exc, rec, file=io.StringIO()
+        )
 
     assert sys.stdout is old_stdout, "capture should be permanently restored"
     assert len(rec.post_mortem_tracebacks) == 1, (
@@ -313,5 +321,5 @@ def test_debug_post_mortem_no_capture_kwargs():
     try:
         raise ValueError("oops")
     except ValueError as exc:
-        _debug_post_mortem({}, "t.py::test_err", exc, rec)
+        _debug_post_mortem({}, "t.py::test_err", exc, rec, file=io.StringIO())
     assert len(rec.post_mortem_tracebacks) == 1, "post_mortem should be called once"

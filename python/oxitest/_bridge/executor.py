@@ -147,6 +147,8 @@ def _trace_before_test(
     all_kwargs: dict[str, Any],
     node_id: str,
     backend: DebuggerBackend,
+    *,
+    file: Any = None,
 ) -> None:
     """Suspend capture, print trace banner, call backend.trace(), restore."""
     from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
@@ -160,7 +162,7 @@ def _trace_before_test(
     with contextlib.ExitStack() as stack:
         for mgr in managers:
             stack.enter_context(mgr)
-        _print_trace_banner(node_id)
+        _print_trace_banner(node_id, file=file)
         backend.trace()
 
 
@@ -169,10 +171,12 @@ def _debug_post_mortem(
     node_id: str,
     exc: BaseException,
     backend: DebuggerBackend,
+    *,
+    file: Any = None,
 ) -> None:
     """Permanently suspend capture, print debug banner, call backend.post_mortem()."""
     _suspend_capture(all_kwargs)
-    _print_debug_banner(node_id, exc)
+    _print_debug_banner(node_id, exc, file=file)
     tb = exc.__traceback__
     assert tb is not None  # guaranteed inside except block
     backend.post_mortem(tb)
@@ -188,10 +192,11 @@ def _run_base(
     backend: DebuggerBackend | None = None,
     show_locals: bool = False,
     show_internals: bool = False,
+    file: Any = None,
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
     if debug_mode == DebugMode.ALWAYS and backend is not None:
-        _trace_before_test(all_kwargs, node_id, backend)
+        _trace_before_test(all_kwargs, node_id, backend, file=file)
     try:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -211,7 +216,7 @@ def _run_base(
             import bdb
 
             try:
-                _debug_post_mortem(all_kwargs, node_id, exc, backend)
+                _debug_post_mortem(all_kwargs, node_id, exc, backend, file=file)
             except bdb.BdbQuit:
                 raise
         result = _dispatch_exception(
