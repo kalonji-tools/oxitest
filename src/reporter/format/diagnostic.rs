@@ -1,4 +1,5 @@
 use std::fmt::Write as _;
+#[cfg(not(test))]
 use std::sync::OnceLock;
 
 use crate::config::TbStyle;
@@ -17,12 +18,21 @@ const MARGIN: &str = "      ";
 ///
 /// Queried once and cached; subsequent calls return the same value. The 100-column
 /// cap keeps output readable on wide terminals.
+///
+/// In test builds, always returns 80 for deterministic snapshot output.
 pub(crate) fn sep_width() -> usize {
-    static WIDTH: OnceLock<usize> = OnceLock::new();
-    *WIDTH.get_or_init(|| {
-        let (_, cols) = console::Term::stdout().size();
-        (cols as usize).min(100)
-    })
+    #[cfg(test)]
+    {
+        80
+    }
+    #[cfg(not(test))]
+    {
+        static WIDTH: OnceLock<usize> = OnceLock::new();
+        *WIDTH.get_or_init(|| {
+            let (_, cols) = console::Term::stdout().size();
+            (cols as usize).min(100)
+        })
+    }
 }
 
 /// Returns the separator string between parametrize case identifiers.
