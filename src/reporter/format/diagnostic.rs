@@ -8,11 +8,19 @@ use crate::types::{TestItem, TestOutcome};
 use super::fmt_diff;
 use crate::reporter::colors::{color_blue, color_bold_white, color_dim, color_dim_cyan};
 
-const BOX_OPEN: &str = "┌";
-const BOX_VERT: &str = "│";
-const BOX_CLOSE: &str = "└";
+struct BoxChars {
+    open: &'static str,
+    vert: &'static str,
+    close: &'static str,
+    margin: &'static str,
+}
 
-const MARGIN: &str = "      ";
+const BOX: BoxChars = BoxChars {
+    open: "┌",
+    vert: "│",
+    close: "└",
+    margin: "      ",
+};
 
 /// Returns the terminal width for separator lines, capped at 100 columns.
 ///
@@ -89,11 +97,11 @@ pub(crate) fn fmt_diagnostic_block(
         let _ = writeln!(
             out,
             "{}{} {}",
-            MARGIN,
-            color_dim(BOX_OPEN, use_color),
+            BOX.margin,
+            color_dim(BOX.open, use_color),
             color_dim_cyan(&loc, use_color)
         );
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 
     // ── WITH WHAT: inline params ────────────────────────────────────
@@ -114,11 +122,11 @@ pub(crate) fn fmt_diagnostic_block(
         let _ = writeln!(
             out,
             "{}{}  {}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             params_str
         );
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 
     // ── WHAT: source line (hero) ────────────────────────────────────
@@ -126,8 +134,8 @@ pub(crate) fn fmt_diagnostic_block(
         let _ = writeln!(
             out,
             "{}{}  {}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             color_bold_white(parts.source_line, use_color)
         );
 
@@ -147,8 +155,8 @@ pub(crate) fn fmt_diagnostic_block(
                     let _ = writeln!(
                         out,
                         "{}{}    {} = {}",
-                        MARGIN,
-                        color_dim(BOX_VERT, use_color),
+                        BOX.margin,
+                        color_dim(BOX.vert, use_color),
                         color_dim(name, use_color),
                         color_dim(value, use_color)
                     );
@@ -156,7 +164,7 @@ pub(crate) fn fmt_diagnostic_block(
             }
         }
 
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 
     // ── VALUES: diff / value labels ─────────────────────────────────
@@ -175,28 +183,28 @@ pub(crate) fn fmt_diagnostic_block(
         let _ = writeln!(
             out,
             "{}{}  {}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             color_dim("trace", use_color)
         );
         for (i, f) in trace_frames.iter().enumerate() {
             if i > 0 {
-                let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+                let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
             }
             let loc = format!("{}:{} in {}", f.file, f.lineno, f.name);
             let _ = writeln!(
                 out,
                 "{}{}    {}",
-                MARGIN,
-                color_dim(BOX_VERT, use_color),
+                BOX.margin,
+                color_dim(BOX.vert, use_color),
                 color_dim(&loc, use_color)
             );
             if !f.line.is_empty() {
                 let _ = writeln!(
                     out,
                     "{}{}      {}",
-                    MARGIN,
-                    color_dim(BOX_VERT, use_color),
+                    BOX.margin,
+                    color_dim(BOX.vert, use_color),
                     color_bold_white(&f.line, use_color)
                 );
             }
@@ -206,15 +214,15 @@ pub(crate) fn fmt_diagnostic_block(
                     let _ = writeln!(
                         out,
                         "{}{}        {} = {}",
-                        MARGIN,
-                        color_dim(BOX_VERT, use_color),
+                        BOX.margin,
+                        color_dim(BOX.vert, use_color),
                         color_dim(name, use_color),
                         color_dim(value, use_color)
                     );
                 }
             }
         }
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 
     // ── HINT: suggestion inside box ─────────────────────────────────
@@ -222,18 +230,18 @@ pub(crate) fn fmt_diagnostic_block(
         let _ = writeln!(
             out,
             "{}{}  {}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             color_blue(&format!("hint: {}", hint_text), use_color)
         );
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 
     // ── WHY: closing └ message ──────────────────────────────────────
     let closing_message = parts.message;
 
     if closing_message.is_empty() {
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_CLOSE, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.close, use_color));
     } else {
         // Multi-line messages: first line on └, continuation lines on │
         let mut lines = closing_message.lines();
@@ -241,8 +249,8 @@ pub(crate) fn fmt_diagnostic_block(
             let _ = writeln!(
                 out,
                 "{}{} {}",
-                MARGIN,
-                color_dim(BOX_CLOSE, use_color),
+                BOX.margin,
+                color_dim(BOX.close, use_color),
                 color_dim(first, use_color)
             );
         }
@@ -250,8 +258,8 @@ pub(crate) fn fmt_diagnostic_block(
             let _ = writeln!(
                 out,
                 "{}{}  {}",
-                MARGIN,
-                color_dim(BOX_VERT, use_color),
+                BOX.margin,
+                color_dim(BOX.vert, use_color),
                 color_dim(cont, use_color)
             );
         }
@@ -269,35 +277,35 @@ fn render_values(out: &mut String, left: &str, right: &str, op: &str, use_color:
                 let _ = writeln!(
                     out,
                     "{}{}  {}",
-                    MARGIN,
-                    color_dim(BOX_VERT, use_color),
+                    BOX.margin,
+                    color_dim(BOX.vert, use_color),
                     line
                 );
             }
-            let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+            let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
         }
     } else if !op.is_empty() {
         // op set but right empty — show left only
         let _ = writeln!(
             out,
             "{}{}  {:<7}{}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             "left:",
             color_dim(left, use_color)
         );
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     } else if !left.is_empty() {
         // Bool assert — show value
         let _ = writeln!(
             out,
             "{}{}  {:<7}{}",
-            MARGIN,
-            color_dim(BOX_VERT, use_color),
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
             "value:",
             color_dim(left, use_color)
         );
-        let _ = writeln!(out, "{}{}", MARGIN, color_dim(BOX_VERT, use_color));
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
     }
 }
 
@@ -310,9 +318,9 @@ mod tests {
 
     #[test]
     fn test_box_constants_are_nonempty() {
-        assert!(!BOX_OPEN.is_empty());
-        assert!(!BOX_VERT.is_empty());
-        assert!(!BOX_CLOSE.is_empty());
+        assert!(!BOX.open.is_empty());
+        assert!(!BOX.vert.is_empty());
+        assert!(!BOX.close.is_empty());
     }
 
     #[test]
@@ -443,7 +451,7 @@ mod tests {
             "closing message must appear"
         );
         // Message appears on the closing └ line
-        assert!(block.contains(&format!("{} should be 42", BOX_CLOSE)));
+        assert!(block.contains(&format!("{} should be 42", BOX.close)));
     }
 
     #[test]
@@ -705,9 +713,9 @@ mod tests {
                 continue;
             }
             assert!(
-                trimmed.starts_with(BOX_VERT)
-                    || trimmed.starts_with(BOX_CLOSE)
-                    || trimmed.starts_with(BOX_OPEN),
+                trimmed.starts_with(BOX.vert)
+                    || trimmed.starts_with(BOX.close)
+                    || trimmed.starts_with(BOX.open),
                 "line escapes diagnostic box: {line:?}"
             );
         }
