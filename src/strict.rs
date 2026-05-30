@@ -2,8 +2,9 @@
 //!
 //! When `--strict` is enabled, oxitest checks for code quality issues at
 //! collection time: bare `assert` statements without messages, dict-based
-//! parametrize (instead of frozen dataclasses), missing mark reasons, and
-//! unregistered markers without descriptions.
+//! parametrize (instead of frozen dataclasses), missing mark reasons,
+//! missing fixture return annotations, and unregistered markers without
+//! descriptions.
 //!
 //! Violations are either warnings (enforce mode) or hard errors (abort mode)
 //! depending on the [`StrictMode`](crate::config::StrictMode) setting.
@@ -22,19 +23,34 @@ use crate::types::{LineNo, NodeId, TestOutcome};
 /// run to abort before execution when `strict = "abort"`.
 #[derive(Debug, PartialEq)]
 pub enum PerTestViolation {
-    BareAssert { node_id: NodeId, lines: Vec<usize> },
-    DictParametrize { node_id: NodeId },
-    MissingMarkReason { node_id: NodeId, mark_name: String },
-    SingleCaseParametrize { node_id: NodeId },
+    BareAssert {
+        node_id: NodeId,
+        lines: Vec<usize>,
+    },
+    DictParametrize {
+        node_id: NodeId,
+    },
+    MissingMarkReason {
+        node_id: NodeId,
+        mark_name: String,
+    },
+    MissingReturnAnnotation {
+        node_id: NodeId,
+        fixture_name: String,
+    },
+    SingleCaseParametrize {
+        node_id: NodeId,
+    },
 }
 
 impl PerTestViolation {
     pub fn node_id(&self) -> &NodeId {
         match self {
-            Self::BareAssert { node_id, .. } => node_id,
-            Self::DictParametrize { node_id } => node_id,
-            Self::MissingMarkReason { node_id, .. } => node_id,
-            Self::SingleCaseParametrize { node_id } => node_id,
+            Self::BareAssert { node_id, .. }
+            | Self::DictParametrize { node_id }
+            | Self::MissingMarkReason { node_id, .. }
+            | Self::MissingReturnAnnotation { node_id, .. }
+            | Self::SingleCaseParametrize { node_id } => node_id,
         }
     }
 }
@@ -118,6 +134,12 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         mark_name: r.detail,
                     },
                 )),
+                ViolationKind::MissingReturnAnnotation => Some(StrictViolation::PerTest(
+                    PerTestViolation::MissingReturnAnnotation {
+                        node_id,
+                        fixture_name: r.detail,
+                    },
+                )),
                 ViolationKind::SingleCaseParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::SingleCaseParametrize { node_id },
                 )),
@@ -172,6 +194,17 @@ impl std::fmt::Display for PerTestViolation {
                     "{:<60}  missing-mark-reason   {}",
                     node_id.as_ref(),
                     mark_name
+                )
+            }
+            Self::MissingReturnAnnotation {
+                node_id,
+                fixture_name,
+            } => {
+                write!(
+                    f,
+                    "{:<60}  missing-return-annotation   {}",
+                    node_id.as_ref(),
+                    fixture_name
                 )
             }
             Self::SingleCaseParametrize { node_id } => {
@@ -232,6 +265,12 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         }
         PerTestViolation::MissingMarkReason { mark_name, .. } => {
             format!("strict: @mark.{} requires reason=", mark_name)
+        }
+        PerTestViolation::MissingReturnAnnotation { fixture_name, .. } => {
+            format!(
+                "strict: fixture '{}' is missing a return type annotation",
+                fixture_name
+            )
         }
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
@@ -485,6 +524,59 @@ mod tests {
             assert!(
                 message.contains("single case"),
                 "message must mention single case: {message:?}"
+            );
+        } else {
+            panic!("expected Error outcome");
+        }
+    }
+
+    #[test]
+    fn test_check_collected_missing_return_annotation() {
+        let raw = vec![RawViolation {
+            node_id: "/project/conftest.py".to_string(),
+            kind: ViolationKind::MissingReturnAnnotation,
+            detail: "db".to_string(),
+        }];
+        let violations = check_collected(raw);
+        assert_eq!(violations.len(), 1);
+        assert!(matches!(
+            &violations[0],
+            StrictViolation::PerTest(PerTestViolation::MissingReturnAnnotation {
+                fixture_name, ..
+            }) if fixture_name == "db"
+        ));
+    }
+
+    #[test]
+    fn test_format_violation_line_missing_return_annotation() {
+        let v = StrictViolation::PerTest(PerTestViolation::MissingReturnAnnotation {
+            node_id: NodeId::from_raw("tests/conftest.py"),
+            fixture_name: "db".to_string(),
+        });
+        let line = format_violation_line(&v);
+        assert!(line.contains("missing-return-annotation"));
+        assert!(line.contains("db"));
+    }
+
+    #[test]
+    fn test_per_test_error_missing_return_annotation() {
+        let v = PerTestViolation::MissingReturnAnnotation {
+            node_id: NodeId::from_raw("/project/conftest.py"),
+            fixture_name: "db".to_string(),
+        };
+        let outcome = per_test_error(&v);
+        if let TestOutcome::Error { message, .. } = outcome {
+            assert!(
+                message.contains("strict"),
+                "message must contain 'strict': {message:?}"
+            );
+            assert!(
+                message.contains("db"),
+                "message must mention fixture name 'db': {message:?}"
+            );
+            assert!(
+                message.contains("return type annotation"),
+                "message must mention return type annotation: {message:?}"
             );
         } else {
             panic!("expected Error outcome");

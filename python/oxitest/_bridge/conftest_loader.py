@@ -19,6 +19,7 @@ from oxitest._bridge.fixtures import (
     Fixtures,
     FixtureSession,
 )
+from oxitest._bridge.result import CollectedViolation
 
 
 def find_conftest_paths(test_path: str, rootdir: str) -> list[str]:
@@ -81,7 +82,9 @@ def _has_helpers(module: ModuleType) -> bool:
     )
 
 
-def load_fixtures_from_conftest(path: str) -> list[FixtureDef[Any]]:
+def load_fixtures_from_conftest(
+    path: str,
+) -> list[FixtureDef[Any]]:
     """Load conftest.py and return all fixtures registered via Fixtures instances.
 
     Also registers the module as sys.modules["conftest"] so test files can do
@@ -97,13 +100,19 @@ def load_fixtures_from_conftest(path: str) -> list[FixtureDef[Any]]:
     return _extract_fixtures(module, path)
 
 
-def create_session(conftest_paths: Sequence[str]) -> FixtureSession:
+def create_session(
+    conftest_paths: Sequence[str],
+) -> tuple[FixtureSession, list[CollectedViolation]]:
     """Build a FixtureRegistry from all conftest paths and return a FixtureSession.
 
     Also assembles a HelperNamespace from public callables in each conftest
     and attaches it as ``sys.modules["conftest"].helpers``.
+
+    Returns a tuple of (session, violations) where violations contains any
+    strict-mode issues detected during fixture registration.
     """
     registry = FixtureRegistry()
+    all_violations: list[CollectedViolation] = []
     conftest_chain: list[tuple[ModuleType, Path]] = []
 
     for path in conftest_paths:
@@ -124,7 +133,7 @@ def create_session(conftest_paths: Sequence[str]) -> FixtureSession:
             )
 
         for defn in fixtures:
-            registry.register(defn)
+            all_violations.extend(registry.register(defn))
 
         conftest_chain.append((module, Path(path).parent))
 
@@ -135,4 +144,4 @@ def create_session(conftest_paths: Sequence[str]) -> FixtureSession:
     if conftest_mod is not None:
         conftest_mod.helpers = helpers  # ty: ignore[unresolved-attribute]
 
-    return FixtureSession(registry)
+    return FixtureSession(registry), all_violations

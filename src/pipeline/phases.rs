@@ -55,19 +55,21 @@ impl PipelinePhase for SessionPhase {
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
-        let session = match bridge::FixtureSession::new(py, &ctx.conftest_files) {
-            Ok(s) => s,
-            Err(e) => {
-                let err = types::CollectError::PyError(format!(
-                    "Failed to load conftest fixtures: {}",
-                    e
-                ));
-                return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
-                    &[err],
-                    &|| ctx.make_error_reporter(),
-                )));
-            }
-        };
+        let (session, fixture_violations) =
+            match bridge::FixtureSession::new(py, &ctx.conftest_files) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    let err = types::CollectError::PyError(format!(
+                        "Failed to load conftest fixtures: {}",
+                        e
+                    ));
+                    return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
+                        &[err],
+                        &|| ctx.make_error_reporter(),
+                    )));
+                }
+            };
+        ctx.raw_violations.extend(fixture_violations);
 
         if !ctx.cfg.plugins.is_empty() {
             if let Err(e) = session.load_plugins(py, &ctx.cfg.plugins, &ctx.cfg.plugin_settings) {

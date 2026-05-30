@@ -60,7 +60,7 @@ def run(task: dict) -> None:
     show_locals: bool = task.get("show_locals", False)
     show_internals: bool = task.get("show_internals", False)
 
-    session = create_session(conftest_paths)
+    session, _violations = create_session(conftest_paths)
 
     # Register fixtures declared in the test module itself (e.g. a Fixtures()
     # instance at module level). This mirrors what the serial runner does via
