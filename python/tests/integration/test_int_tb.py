@@ -70,3 +70,15 @@ def test_tb_detail_shows_diff(tmp: TempDir):
     out, _, rc = helpers.common.run_oxitest(tmp)
     assert rc == 1, f"expected exit 1, got {rc}"
     assert "left:" in out or "- left:" in out, f"diff left missing: {out!r}"
+
+
+def test_tb_detail_shows_collection_diff(tmp: TempDir):
+    """--tb=detail shows element-level diff for list comparisons."""
+    (tmp / "test_list.py").write_text(
+        "def test_list():\n    assert [1, 2, 3] == [1, 4, 3]\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    assert rc == 1, f"expected exit 1, got {rc}"
+    # Element-level diff should show individual elements on separate lines
+    assert "-   2," in out, f"removed element missing: {out!r}"
+    assert "+   4," in out, f"added element missing: {out!r}"

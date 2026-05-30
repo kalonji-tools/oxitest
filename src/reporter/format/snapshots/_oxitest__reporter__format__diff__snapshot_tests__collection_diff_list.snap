@@ -1,0 +1,10 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+  [
+    1,
+-   2,
++   4,
+    3,
+  ]
