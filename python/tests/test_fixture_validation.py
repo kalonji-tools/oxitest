@@ -9,8 +9,7 @@ if TYPE_CHECKING:
 
     helpers: HelperNamespace
 
-from conftest import helpers  # type: ignore[assignment]  # ty: ignore
-
+from conftest import helpers  # type: ignore[assignment]
 
 # ── validate_fixture_names ───────────────────────────────────────────────────
 
