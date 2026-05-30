@@ -17,6 +17,7 @@ __all__ = [
     "_reject_nonshared_async",
     "_resolve_deps",
     "_unpack_sync",
+    "_current_teardown_node_id",
     "_warn_teardown",
 ]
 
@@ -48,6 +49,10 @@ from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
+
+_current_teardown_node_id: ContextVar[str] = ContextVar(
+    "_current_teardown_node_id", default=""
+)
 
 
 @dataclass
@@ -345,8 +350,11 @@ class FixtureTeardownWarning(UserWarning):
     """
 
 
-def _warn_teardown(name: str, exc: Exception) -> None:
-    if name:
+def _warn_teardown(name: str, exc: Exception, *, node_id: str = "") -> None:
+    effective_id = node_id or _current_teardown_node_id.get()
+    if name and effective_id:
+        msg = f"fixture '{name}' teardown failed during {effective_id}: {exc}"
+    elif name:
         msg = f"error in teardown of fixture '{name}': {exc}"
     else:
         msg = f"error during teardown: {exc}"
