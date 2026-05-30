@@ -11,29 +11,20 @@ use walkdir::WalkDir;
 
 use crate::config::Config;
 
-fn build_glob_set(patterns: &[String]) -> GlobSet {
+fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
-        match GlobBuilder::new(pattern).build() {
-            Ok(glob) => {
-                builder.add(glob);
-            }
-            Err(e) => {
-                tracing::warn!(
-                    pattern = %pattern,
-                    error = %e,
-                    "invalid glob pattern, skipping"
-                );
-            }
-        }
+        builder.add(GlobBuilder::new(pattern).build()?);
     }
-    builder.build().unwrap_or_else(|_| GlobSet::empty())
+    builder.build()
 }
 
 /// Returns `(test_files, conftest_files)` sorted by path.
 /// conftest_files are deduplicated and sorted shallow-first.
-pub fn collect_files(config: &Config) -> (Vec<Utf8PathBuf>, Vec<Utf8PathBuf>) {
-    let glob_set = build_glob_set(&config.python_files);
+pub fn collect_files(
+    config: &Config,
+) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
+    let glob_set = build_glob_set(&config.python_files)?;
     let mut files = Vec::new();
     let mut conftest_set: HashSet<Utf8PathBuf> = HashSet::new();
 
@@ -53,7 +44,7 @@ pub fn collect_files(config: &Config) -> (Vec<Utf8PathBuf>, Vec<Utf8PathBuf>) {
     let mut conftests: Vec<Utf8PathBuf> = conftest_set.into_iter().collect();
     conftests.sort_by_key(|p| p.components().count());
 
-    (files, conftests)
+    Ok((files, conftests))
 }
 
 fn collect_from(
@@ -160,7 +151,7 @@ mod tests {
     fn test_collect_empty_dir() {
         let dir = assert_fs::TempDir::new().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, conftests) = collect_files(&config);
+        let (files, conftests) = collect_files(&config).unwrap();
         assert!(files.is_empty());
         assert!(conftests.is_empty());
     }
@@ -170,7 +161,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config);
+        let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_foo.py");
     }
@@ -181,7 +172,7 @@ mod tests {
         dir.child("helper.py").touch().unwrap();
         dir.child("test_real.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config);
+        let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_real.py");
     }
@@ -192,7 +183,7 @@ mod tests {
         dir.child("__pycache__/test_hidden.py").touch().unwrap();
         dir.child("test_visible.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config);
+        let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
     }
@@ -209,7 +200,7 @@ mod tests {
             norecursedirs: vec![],
             ..make_config(utf8_dir)
         };
-        let (files, _) = collect_files(&config);
+        let (files, _) = collect_files(&config).unwrap();
         assert_eq!(
             files,
             vec![camino::Utf8Path::from_path(f.path()).unwrap().to_owned()]
@@ -228,7 +219,7 @@ mod tests {
             norecursedirs: vec![],
             ..make_config(utf8_dir)
         };
-        let (files, _) = collect_files(&config);
+        let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_foo_integration.py");
     }
@@ -239,7 +230,7 @@ mod tests {
         dir.child("conftest.py").touch().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config);
+        let (_, conftests) = collect_files(&config).unwrap();
         assert_eq!(conftests.len(), 1);
         assert_eq!(conftests[0].file_name().unwrap(), "conftest.py");
     }
@@ -250,7 +241,7 @@ mod tests {
         dir.child("tests/conftest.py").touch().unwrap();
         dir.child("tests/test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config);
+        let (_, conftests) = collect_files(&config).unwrap();
         assert_eq!(conftests.len(), 1);
     }
 
@@ -259,7 +250,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config);
+        let (_, conftests) = collect_files(&config).unwrap();
         assert!(conftests.is_empty());
     }
 
@@ -270,14 +261,12 @@ mod tests {
         dir.child("test_a.py").touch().unwrap();
         dir.child("test_b.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config);
+        let (_, conftests) = collect_files(&config).unwrap();
         assert_eq!(conftests.len(), 1);
     }
 
     #[test]
-    fn test_collect_with_invalid_glob_pattern_does_not_crash() {
-        // "[" is an unclosed bracket — invalid in globset syntax.
-        // The invalid pattern should be skipped; the valid pattern must still work.
+    fn test_collect_with_invalid_glob_pattern_returns_error() {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
@@ -286,12 +275,10 @@ mod tests {
             norecursedirs: vec![],
             ..make_config(utf8_dir)
         };
-        let (files, _) = collect_files(&config);
-        assert_eq!(
-            files.len(),
-            1,
-            "valid pattern must still match despite bad sibling"
+        let err = collect_files(&config).unwrap_err();
+        assert!(
+            err.to_string().contains('['),
+            "error should mention the invalid pattern"
         );
-        assert_eq!(files[0].file_name().unwrap(), "test_foo.py");
     }
 }

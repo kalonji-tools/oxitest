@@ -31,7 +31,10 @@ impl PipelinePhase for FileCollectionPhase {
         _py: Python<'_>,
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
-        let (test_files, conftest_files) = collector::collect_files(&ctx.cfg);
+        let (test_files, conftest_files) = collector::collect_files(&ctx.cfg).map_err(|e| {
+            eprintln!("error: invalid glob pattern in python_files: {e}");
+            ExitCode::UsageError
+        })?;
         ctx.test_files = test_files;
         ctx.conftest_files = conftest_files;
         Ok(PhaseOutcome::Continue)
