@@ -1,6 +1,37 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.10.0] - 2026-05-31
+
+### Bug Fixes
+
+
+- Make sep_width deterministic in test builds
+- Suppress debug/trace banner output leaking to terminal (#605)
+- Normalize wall-clock times in JUnit snapshot tests
+- Use sys.executable instead of PYO3_PYTHON for workers
+
+### Features
+
+
+- Render collection-level diffs for Python assertion failures
+- Add fixref_names to CollectedItem and TestItem
+- Add edit_distance module for fixture name suggestions
+- Add FixtureSession.validate_fixture_names() with tests
+- Add FixtureValidationPhase with bridge validation and suggestions
+- Add MissingReturnAnnotation strict violation (#621)
+- Add FixtureShadowWarning at registration (#617)
+- Fixture teardown error attribution (#618)
+- Unused fixture detection as strict violation (#616)
+- Add tree_fixtures_from_registry() with TDD
+- Add --tree flag as standalone action mode
+- Add TreePhase and tree_fixtures bridge method
+- Replace flake.nix with devenv.nix
+- Replace Python import graph with pure Rust implementation
+- Move bare-assert detection from Python to Rust
+- Add Rust pre-scan to skip test files with no test functions
+- Show parametrize case count in collection summary (#627)
+
 ## [0.9.0] - 2026-05-29
 
 ### Bug Fixes
