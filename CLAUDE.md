@@ -8,7 +8,7 @@ oxitest is a Python test runner rewritten in Rust. It exposes a Python API (fixt
 
 ## Commands
 
-The project uses a `justfile` for common tasks. Ensure required tools are on `$PATH` (via `nix develop`, or installed manually):
+The project uses a `justfile` for common tasks. Ensure required tools are on `$PATH` (via `devenv shell`, or installed manually):
 
 ```bash
 # Check all required tools are available

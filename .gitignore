@@ -1,5 +1,7 @@
 .worktrees/
 .config/
+.devenv/
+.devenv.flake.nix
 target/
 *.so
 *.pyd
