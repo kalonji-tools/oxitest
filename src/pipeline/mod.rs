@@ -219,6 +219,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         &phases::AffectedPhase,
         &phases::SessionPhase,
         &phases::FixturesPhase,
+        &phases::TreePhase,
         &phases::CollectionPhase {
             collector: &collector_impl,
         },

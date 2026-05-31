@@ -90,6 +90,25 @@ mod fixtures_phase_tests {
     }
 }
 
+mod tree_phase_tests {
+    use super::*;
+
+    #[test]
+    fn tree_phase_skips_when_flag_not_set() {
+        let phase = phases::TreePhase;
+        let ctx = make_ctx();
+        assert!(!phase.should_run(&ctx));
+    }
+
+    #[test]
+    fn tree_phase_runs_when_flag_set() {
+        let phase = phases::TreePhase;
+        let mut ctx = make_ctx();
+        ctx.cli.tree = true;
+        assert!(phase.should_run(&ctx));
+    }
+}
+
 mod affected_phase_tests {
     use super::*;
 

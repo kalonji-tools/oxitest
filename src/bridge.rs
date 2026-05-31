@@ -119,6 +119,23 @@ impl FixtureSession {
         result.extract::<String>()
     }
 
+    /// Render fixture dependency tree as a formatted string for `--tree`.
+    pub fn tree_fixtures(
+        &self,
+        py: Python<'_>,
+        verbosity: i32,
+        pattern: Option<&str>,
+        use_color: bool,
+    ) -> PyResult<String> {
+        let lister = py.import("oxitest._bridge.fixture_lister")?;
+        let registry = self.0.bind(py).getattr("_registry")?;
+        let result = lister.call_method1(
+            "tree_fixtures_from_registry",
+            (registry, verbosity, pattern, use_color),
+        )?;
+        result.extract::<String>()
+    }
+
     /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
     /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
     /// Unlike `end_module`/`end_session`, errors are absorbed here because this
