@@ -13,6 +13,7 @@ __helpers_namespace__ = "common"
 
 import subprocess
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from types import TracebackType
 
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 
     helpers: HelperNamespace
 
+import oxitest
+from oxitest import TempDir, Yields
 from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
@@ -37,7 +40,29 @@ __all__ = [
     "run_oxitest_subcmd",
     "run_test",
     "write_test_file",
+    "write_test_module",
 ]
+
+fx = oxitest.Fixtures()
+
+
+@fx.fixture
+def fixture_session(tmp: TempDir) -> Yields[FixtureSession]:
+    reg = FixtureRegistry()
+    session = FixtureSession(reg)
+    session.begin_module(str(tmp / "test_auto.py"))
+    yield session
+    session.end_session()
+
+
+@fx.fixture
+def clean_sys_modules() -> Yields[None]:
+    saved = sys.modules.copy()
+    yield
+    for key in list(sys.modules):
+        if key not in saved:
+            del sys.modules[key]
+    sys.modules.update({k: v for k, v in saved.items() if k not in sys.modules})
 
 
 def make_fixture_def(
@@ -209,6 +234,12 @@ def write_test_file(
     """Write a test file into *tmp_path* and return its path as str."""
     f = tmp_path / name
     f.write_text(code)
+    return str(f)
+
+
+def write_test_module(tmp, code: str, *, name: str = "test_auto.py") -> str:
+    f = tmp / name
+    f.write_text(textwrap.dedent(code))
     return str(f)
 
 
