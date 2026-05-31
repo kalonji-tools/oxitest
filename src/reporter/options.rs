@@ -11,6 +11,7 @@ const DEFAULT_NAME_WIDTH: usize = 45;
 #[derive(Debug)]
 pub struct ReporterOpts {
     pub(crate) total: usize,
+    pub(crate) fn_count: usize,
     pub(crate) async_count: usize,
     pub(crate) use_color: bool,
     pub(crate) tb: crate::config::TbStyle,
@@ -36,6 +37,7 @@ pub struct ReporterOpts {
 #[derive(Clone, Debug)]
 pub struct ReporterOptsBuilder {
     total: usize,
+    fn_count: usize,
     async_count: usize,
     use_color: bool,
     tb: crate::config::TbStyle,
@@ -55,6 +57,7 @@ impl ReporterOptsBuilder {
     pub fn new() -> Self {
         Self {
             total: 0,
+            fn_count: 0,
             async_count: 0,
             use_color: false,
             tb: crate::config::TbStyle::Detail,
@@ -74,6 +77,7 @@ impl ReporterOptsBuilder {
     pub fn from_config(cfg: &crate::config::Config, use_color: bool) -> Self {
         Self {
             total: 0,
+            fn_count: 0,
             async_count: 0,
             use_color,
             tb: cfg.tb.clone(),
@@ -104,6 +108,13 @@ impl ReporterOptsBuilder {
 
     pub fn total(self, n: usize) -> Self {
         Self { total: n, ..self }
+    }
+
+    pub fn fn_count(self, n: usize) -> Self {
+        Self {
+            fn_count: n,
+            ..self
+        }
     }
 
     pub fn async_count(self, count: usize) -> Self {
@@ -160,6 +171,7 @@ impl ReporterOptsBuilder {
     pub fn build(self) -> ReporterOpts {
         ReporterOpts {
             total: self.total,
+            fn_count: self.fn_count,
             async_count: self.async_count,
             use_color: self.use_color,
             tb: self.tb,
@@ -319,13 +331,34 @@ mod tests {
 
     #[test]
     fn test_print_collected_no_async() {
-        // Exercises the zero-async branch (output goes to stdout, not asserted)
-        super::super::print_collected(10, 0);
+        super::super::print_collected(10, 10, 0);
     }
 
     #[test]
     fn test_print_collected_with_async() {
-        // Exercises the async-count branch
-        super::super::print_collected(10, 3);
+        super::super::print_collected(10, 10, 3);
+    }
+
+    #[test]
+    fn test_print_collected_with_parametrize() {
+        // fn_count < total triggers "from N functions" display
+        super::super::print_collected(45, 12, 0);
+    }
+
+    #[test]
+    fn test_print_collected_with_parametrize_and_async() {
+        super::super::print_collected(45, 12, 5);
+    }
+
+    #[test]
+    fn test_builder_fn_count_defaults_to_zero() {
+        let opts = ReporterOptsBuilder::new().build();
+        assert_eq!(opts.fn_count, 0);
+    }
+
+    #[test]
+    fn test_builder_fn_count_override() {
+        let opts = ReporterOptsBuilder::new().total(45).fn_count(12).build();
+        assert_eq!(opts.fn_count, 12);
     }
 }
