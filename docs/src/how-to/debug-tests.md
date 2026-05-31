@@ -8,7 +8,7 @@
 When a test fails and you want to inspect the failure interactively:
 
 ```console
-$ oxitest --debug tests/test_math.py
+$ oxitest debug tests/test_math.py
 ```
 
 oxitest runs the test serially, and when it hits a failure, drops you into
@@ -25,12 +25,12 @@ Entering debugger (type 'h' for help, 'q' to quit)
 From here you can inspect local variables, walk the call stack, and
 understand exactly what went wrong.
 
-`--debug` implies `--serial` (single process), `--maxfail 1` (stop on
+`oxitest debug` implies `--serial` (single process), `--maxfail 1` (stop on
 first failure), and `--show-internals` (full traceback after the session).
-You can suppress internal frames with an explicit `--tb`:
+You can override the traceback style explicitly:
 
 ```console
-$ oxitest --debug --tb=detail tests/test_math.py
+$ oxitest debug --tb=detail tests/test_math.py
 ```
 
 ## Stepping through every test
@@ -38,7 +38,7 @@ $ oxitest --debug --tb=detail tests/test_math.py
 To drop into the debugger at the start of every test:
 
 ```console
-$ oxitest --debug=always tests/test_math.py
+$ oxitest debug --always tests/test_math.py
 ```
 
 oxitest pauses before each test function runs, showing:
@@ -52,18 +52,14 @@ Stepping into test (type 'c' to run, 'q' to quit)
 Type `c` to continue into the test, or `q` to stop the run. If the test
 fails, you also get a post-mortem debugger session at the failure point.
 
-Unlike `--debug` (post-mortem), `always` mode does not imply `--maxfail 1`.
-You can combine it with `-x` to stop on first failure:
-
-```console
-$ oxitest --debug=always -x tests/
-```
-
-Or let it run all tests with a debugger pause before each one.
+Unlike post-mortem mode, `oxitest debug --always` does not imply `--maxfail 1`.
+It runs through all tests with a debugger pause before each one. The `debug`
+subcommand does not accept `-x` or `--maxfail` — to stop on first failure in
+always mode, use the default post-mortem behaviour instead.
 
 ## Using breakpoints
 
-Under `--debug`, `breakpoint()` calls in your test code work normally.
+Under `oxitest debug`, `breakpoint()` calls in your test code work normally.
 This lets you set proactive breakpoints before a failure occurs:
 
 ```python
@@ -74,10 +70,10 @@ def test_complex_calculation():
     assert result == expected
 ```
 
-Run with `--debug` to ensure serial mode (which keeps stdin connected):
+Run with `oxitest debug` to ensure serial mode (which keeps stdin connected):
 
 ```console
-$ oxitest --debug tests/test_complex.py
+$ oxitest debug tests/test_complex.py
 ```
 
 ## Essential pdb commands
@@ -103,7 +99,7 @@ Once in the debugger, these commands help you navigate:
 **"A test fails and I don't understand why"**
 
 ```console
-$ oxitest --debug tests/test_failing.py
+$ oxitest debug tests/test_failing.py
 ```
 
 In the debugger, use `p variable_name` to inspect locals and `w` to see
@@ -114,7 +110,7 @@ the call stack.
 Add `breakpoint()` at the line you want to inspect, then run:
 
 ```console
-$ oxitest --debug tests/test_specific.py -k test_name
+$ oxitest debug tests/test_specific.py -k test_name
 ```
 
 **"I want to see all variables at the failure point"**
