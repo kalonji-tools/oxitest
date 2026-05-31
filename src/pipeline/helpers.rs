@@ -144,6 +144,7 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) cache: &'a cache::TestCache,
     pub(super) session: &'a dyn Session,
     pub(super) conftest_files: &'a [camino::Utf8PathBuf],
+    pub(super) python_bin: &'a str,
     pub(super) runner: &'a dyn TestRunner,
     pub(super) parallel: &'a dyn ParallelRunner,
 }
@@ -244,6 +245,7 @@ pub(super) struct ParallelHarness<'a> {
     pub cfg: &'a config::Config,
     pub workers: usize,
     pub conftest_files: &'a [camino::Utf8PathBuf],
+    pub python_bin: &'a str,
 }
 
 impl super::traits::ExecutionHarness for ParallelHarness<'_> {
@@ -252,8 +254,14 @@ impl super::traits::ExecutionHarness for ParallelHarness<'_> {
         groups: Vec<(camino::Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
-        self.parallel
-            .run_parallel(groups, self.cfg, self.workers, self.conftest_files, rep)
+        self.parallel.run_parallel(
+            groups,
+            self.cfg,
+            self.workers,
+            self.conftest_files,
+            self.python_bin,
+            rep,
+        )
     }
 }
 
@@ -734,6 +742,7 @@ pub(super) fn execute(
             cfg: ctx.cfg,
             workers: optimal_worker_count,
             conftest_files: ctx.conftest_files,
+            python_bin: ctx.python_bin,
         };
         let parallel_result = harness.execute_groups(parallel_groups, rep);
 

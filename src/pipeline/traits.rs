@@ -103,6 +103,7 @@ pub(crate) trait ParallelRunner {
         cfg: &Config,
         workers: usize,
         conftest_files: &[Utf8PathBuf],
+        python_bin: &str,
         rep: &mut dyn Reporter,
     ) -> parallel::PhaseResult;
 }
@@ -201,8 +202,9 @@ impl ParallelRunner for DefaultParallelRunner {
         cfg: &Config,
         workers: usize,
         conftest_files: &[Utf8PathBuf],
+        python_bin: &str,
         rep: &mut dyn Reporter,
     ) -> parallel::PhaseResult {
-        parallel::run_phase_parallel(groups, cfg, workers, conftest_files, rep)
+        parallel::run_phase_parallel(groups, cfg, workers, conftest_files, python_bin, rep)
     }
 }
