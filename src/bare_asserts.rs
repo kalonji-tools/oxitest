@@ -5,10 +5,10 @@
 //! a message — entirely in Rust, no PyO3 call needed.
 
 use camino::Utf8Path;
-use rustpython_parser::{ast, Parse};
+use rustpython_parser::ast;
 
-use crate::bridge::RawViolation;
-use crate::bridge::ViolationKind;
+use crate::bridge::{RawViolation, ViolationKind};
+use crate::python_ast;
 
 /// Bare-assert violation found in a test function.
 struct BareAssert {
@@ -18,51 +18,38 @@ struct BareAssert {
     lines: Vec<u32>,
 }
 
-/// Build an index mapping byte offsets to 1-based line numbers.
-fn build_line_index(source: &str) -> Vec<u32> {
-    let mut newlines = vec![0u32]; // line 1 starts at byte 0
-    for (i, b) in source.bytes().enumerate() {
-        if b == b'\n' {
-            newlines.push(i as u32 + 1);
-        }
-    }
-    newlines
-}
-
-/// Convert a byte offset to a 1-based line number.
-fn offset_to_line(line_index: &[u32], offset: u32) -> u32 {
-    match line_index.binary_search(&offset) {
-        Ok(i) => i as u32 + 1,
-        Err(i) => i as u32,
-    }
-}
-
 /// Parse a Python test file and return bare-assert violations for test functions.
-///
-/// Mirrors `importer.py::_collect_bare_asserts()`:
-/// - Finds `def test_*` at module level and in `class Test*`
-/// - For each test function, walks the body (pruning nested functions) for
-///   `assert` statements without a message
-/// - Returns one `RawViolation` per test function that has bare asserts
 pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
-    let source = match std::fs::read_to_string(path.as_std_path()) {
-        Ok(s) => s,
-        Err(_) => return vec![],
+    let (source, stmts) = match python_ast::parse_file(path) {
+        Some(parsed) => parsed,
+        None => return vec![],
     };
 
-    let stmts = match ast::Suite::parse(&source, path.as_str()) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
+    let line_index = python_ast::build_line_index(&source);
+    to_violations(find_bare_asserts(path, &stmts, &line_index))
+}
 
-    let line_index = build_line_index(&source);
+/// Detect bare-assert violations from a pre-parsed AST.
+///
+/// Same logic as [`collect_bare_asserts`] but skips file I/O and parsing.
+/// Used by `collect_items()` to avoid double-parsing in strict mode.
+pub(crate) fn collect_bare_asserts_from_ast(
+    path: &Utf8Path,
+    source: &str,
+    stmts: &[ast::Stmt],
+) -> Vec<RawViolation> {
+    let line_index = python_ast::build_line_index(source);
+    to_violations(find_bare_asserts(path, stmts, &line_index))
+}
 
+/// Scan top-level statements for test functions/classes containing bare asserts.
+fn find_bare_asserts(path: &Utf8Path, stmts: &[ast::Stmt], line_index: &[u32]) -> Vec<BareAssert> {
     let mut found = Vec::new();
 
-    for stmt in &stmts {
+    for stmt in stmts {
         match stmt {
-            ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => {
-                let lines = walk_bare_asserts(&f.body, &line_index);
+            ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
+                let lines = walk_bare_asserts(&f.body, line_index);
                 if !lines.is_empty() {
                     found.push(BareAssert {
                         node_id: format!("{path}::{}", f.name),
@@ -70,8 +57,8 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
                     });
                 }
             }
-            ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => {
-                let lines = walk_bare_asserts(&f.body, &line_index);
+            ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
+                let lines = walk_bare_asserts(&f.body, line_index);
                 if !lines.is_empty() {
                     found.push(BareAssert {
                         node_id: format!("{path}::{}", f.name),
@@ -79,11 +66,11 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
                     });
                 }
             }
-            ast::Stmt::ClassDef(cls) if is_test_class(&cls.name) => {
+            ast::Stmt::ClassDef(cls) if python_ast::is_test_class(&cls.name) => {
                 for item in &cls.body {
                     match item {
-                        ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => {
-                            let lines = walk_bare_asserts(&f.body, &line_index);
+                        ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
+                            let lines = walk_bare_asserts(&f.body, line_index);
                             if !lines.is_empty() {
                                 found.push(BareAssert {
                                     node_id: format!("{path}::{}::{}", cls.name, f.name),
@@ -91,8 +78,8 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
                                 });
                             }
                         }
-                        ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => {
-                            let lines = walk_bare_asserts(&f.body, &line_index);
+                        ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
+                            let lines = walk_bare_asserts(&f.body, line_index);
                             if !lines.is_empty() {
                                 found.push(BareAssert {
                                     node_id: format!("{path}::{}::{}", cls.name, f.name),
@@ -109,6 +96,35 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
     }
 
     found
+}
+
+/// Walk a function body for bare `assert` statements, pruning nested functions.
+fn walk_bare_asserts(body: &[ast::Stmt], line_index: &[u32]) -> Vec<u32> {
+    let mut lines = Vec::new();
+    let mut queue: Vec<&ast::Stmt> = body.iter().collect();
+
+    while let Some(stmt) = queue.pop() {
+        match stmt {
+            // Prune: do not recurse into nested functions
+            ast::Stmt::FunctionDef(_) | ast::Stmt::AsyncFunctionDef(_) => continue,
+            ast::Stmt::Assert(a) if a.msg.is_none() => {
+                lines.push(python_ast::offset_to_line(
+                    line_index,
+                    a.range.start().to_u32(),
+                ));
+            }
+            _ => {}
+        }
+        // Recurse into child statements of compound nodes
+        queue.extend(python_ast::compound_children(stmt));
+    }
+
+    lines.sort_unstable();
+    lines
+}
+
+fn to_violations(found: Vec<BareAssert>) -> Vec<RawViolation> {
+    found
         .into_iter()
         .map(|ba| RawViolation {
             node_id: ba.node_id,
@@ -123,96 +139,10 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
         .collect()
 }
 
-fn is_test_fn(name: &str) -> bool {
-    name.starts_with("test_")
-}
-
-fn is_test_class(name: &str) -> bool {
-    name.starts_with("Test")
-}
-
-/// Walk a function body for bare `assert` statements, pruning nested functions.
-///
-/// Mirrors `_ast_utils.py::walk_bare_asserts()`: BFS through child nodes,
-/// skipping nested FunctionDef/AsyncFunctionDef, collecting Assert nodes
-/// where `msg` is None.
-fn walk_bare_asserts(body: &[ast::Stmt], line_index: &[u32]) -> Vec<u32> {
-    let mut lines = Vec::new();
-    let mut queue: Vec<&ast::Stmt> = body.iter().collect();
-
-    while let Some(stmt) = queue.pop() {
-        match stmt {
-            // Prune: do not recurse into nested functions
-            ast::Stmt::FunctionDef(_) | ast::Stmt::AsyncFunctionDef(_) => continue,
-            ast::Stmt::Assert(a) if a.msg.is_none() => {
-                lines.push(offset_to_line(line_index, a.range.start().to_u32()));
-            }
-            _ => {}
-        }
-        // Recurse into child statements of compound nodes
-        queue.extend(child_stmts(stmt));
-    }
-
-    lines.sort_unstable();
-    lines
-}
-
-/// Yield the child statement bodies of compound statements.
-fn child_stmts(stmt: &ast::Stmt) -> Vec<&ast::Stmt> {
-    match stmt {
-        ast::Stmt::If(n) => chain(&n.body, &n.orelse),
-        ast::Stmt::While(n) => chain(&n.body, &n.orelse),
-        ast::Stmt::For(n) => chain(&n.body, &n.orelse),
-        ast::Stmt::AsyncFor(n) => chain(&n.body, &n.orelse),
-        ast::Stmt::With(n) => n.body.iter().collect(),
-        ast::Stmt::AsyncWith(n) => n.body.iter().collect(),
-        ast::Stmt::Try(n) => {
-            let mut stmts: Vec<&ast::Stmt> = Vec::new();
-            stmts.extend(&n.body);
-            for handler in &n.handlers {
-                let ast::ExceptHandler::ExceptHandler(h) = handler;
-                stmts.extend(&h.body);
-            }
-            stmts.extend(&n.orelse);
-            stmts.extend(&n.finalbody);
-            stmts
-        }
-        ast::Stmt::TryStar(n) => {
-            let mut stmts: Vec<&ast::Stmt> = Vec::new();
-            stmts.extend(&n.body);
-            for handler in &n.handlers {
-                let ast::ExceptHandler::ExceptHandler(h) = handler;
-                stmts.extend(&h.body);
-            }
-            stmts.extend(&n.orelse);
-            stmts.extend(&n.finalbody);
-            stmts
-        }
-        ast::Stmt::Match(n) => n.cases.iter().flat_map(|c| &c.body).collect(),
-        ast::Stmt::ClassDef(n) => n.body.iter().collect(),
-        _ => vec![],
-    }
-}
-
-fn chain<'a>(a: &'a [ast::Stmt], b: &'a [ast::Stmt]) -> Vec<&'a ast::Stmt> {
-    a.iter().chain(b.iter()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::Utf8PathBuf;
-    use std::io::Write;
-
-    fn write_temp_py(content: &str) -> tempfile::NamedTempFile {
-        let mut f = tempfile::Builder::new().suffix(".py").tempfile().unwrap();
-        f.write_all(content.as_bytes()).unwrap();
-        f
-    }
-
-    fn temp_path(f: &tempfile::NamedTempFile) -> Utf8PathBuf {
-        Utf8PathBuf::from_path_buf(f.path().to_path_buf()).unwrap()
-    }
+    use crate::python_ast::tests::{temp_path, write_temp_py};
 
     #[test]
     fn no_bare_asserts() {
@@ -280,7 +210,7 @@ mod tests {
         let f = write_temp_py("def test_it():\n    assert True, 'has message'\n    assert False\n");
         let violations = collect_bare_asserts(&temp_path(&f));
         assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].detail, "3"); // only the bare one
+        assert_eq!(violations[0].detail, "3");
     }
 
     #[test]
@@ -294,6 +224,22 @@ mod tests {
     fn nonexistent_file_returns_empty() {
         let violations = collect_bare_asserts(Utf8Path::new("/nonexistent/file.py"));
         assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn from_ast_matches_from_file() {
+        let f = write_temp_py(
+            "def test_a():\n    assert True\n\nclass TestB:\n    def test_c(self):\n        assert False\n",
+        );
+        let path = temp_path(&f);
+        let from_file = collect_bare_asserts(&path);
+        let (source, stmts) = python_ast::parse_file(&path).unwrap();
+        let from_ast = collect_bare_asserts_from_ast(&path, &source, &stmts);
+        assert_eq!(from_file.len(), from_ast.len());
+        for (a, b) in from_file.iter().zip(from_ast.iter()) {
+            assert_eq!(a.node_id, b.node_id);
+            assert_eq!(a.detail, b.detail);
+        }
     }
 
     #[test]
