@@ -11,8 +11,7 @@ from __future__ import annotations
 __all__ = [
     "DebugMode",
     "_debug_post_mortem",
-    "_print_debug_banner",
-    "_print_trace_banner",
+    "_print_banner",
     "_resolve_debugger_backend",
     "_suspend_capture",
     "_trace_before_test",
@@ -119,29 +118,22 @@ def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
             v._restore()
 
 
-def _print_debug_banner(node_id: str, exc: BaseException, *, file: Any = None) -> None:
-    """Print a banner before dropping into the debugger."""
+def _print_banner(
+    mode: str,
+    node_id: str,
+    *body_lines: str,
+    file: Any = None,
+) -> None:
+    """Print a debug/trace banner with optional body lines."""
     import sys as _sys
 
     out = file if file is not None else _sys.__stderr__
     width = max(60, len(node_id) + 12)
-    header = f"── DEBUG {node_id} "
+    header = f"── {mode} {node_id} "
     header += "─" * (width - len(header))
     print(header, file=out)
-    print(f"{type(exc).__name__}: {exc}", file=out)
-    print("Entering debugger (type 'h' for help, 'q' to quit)", file=out)
-
-
-def _print_trace_banner(node_id: str, *, file: Any = None) -> None:
-    """Print a banner before stepping into a test."""
-    import sys as _sys
-
-    out = file if file is not None else _sys.__stderr__
-    width = max(60, len(node_id) + 12)
-    header = f"── TRACE {node_id} "
-    header += "─" * (width - len(header))
-    print(header, file=out)
-    print("Stepping into test (type 'c' to run, 'q' to quit)", file=out)
+    for line in body_lines:
+        print(line, file=out)
 
 
 def _trace_before_test(
@@ -161,7 +153,12 @@ def _trace_before_test(
     with contextlib.ExitStack() as stack:
         for mgr in managers:
             stack.enter_context(mgr)
-        _print_trace_banner(node_id, file=file)
+        _print_banner(
+            "TRACE",
+            node_id,
+            "Stepping into test (type 'c' to run, 'q' to quit)",
+            file=file,
+        )
         backend.trace()
 
 
@@ -175,7 +172,13 @@ def _debug_post_mortem(
 ) -> None:
     """Permanently suspend capture, print debug banner, call backend.post_mortem()."""
     _suspend_capture(all_kwargs)
-    _print_debug_banner(node_id, exc, file=file)
+    _print_banner(
+        "DEBUG",
+        node_id,
+        f"{type(exc).__name__}: {exc}",
+        "Entering debugger (type 'h' for help, 'q' to quit)",
+        file=file,
+    )
     tb = exc.__traceback__
     assert tb is not None  # guaranteed inside except block
     backend.post_mortem(tb)

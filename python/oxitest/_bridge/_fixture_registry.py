@@ -203,21 +203,21 @@ class FixtureRegistry:
         )
 
 
-def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
-    """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
+def _extract_annotated_type(hint: Any, marker_type: type) -> tuple[bool, Any]:
+    """Return (has_marker, inner_type) for an Annotated[T, marker, ...] hint."""
     if get_origin(hint) is not Annotated:
         return False, None
     inner, *meta = get_args(hint)
-    if not any(isinstance(m, _FixtureMarker) for m in meta):
+    if not any(isinstance(m, marker_type) for m in meta):
         return False, None
     return True, inner
+
+
+def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
+    """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
+    return _extract_annotated_type(hint, _FixtureMarker)
 
 
 def _fixture_ref_inner_type(hint: Any) -> tuple[bool, Any]:
     """Return (is_fixture_ref, inner_type). True iff hint is FixtureRef[T]."""
-    if get_origin(hint) is not Annotated:
-        return False, None
-    inner, *meta = get_args(hint)
-    if not any(isinstance(m, _FixtureRefMarker) for m in meta):
-        return False, None
-    return True, inner
+    return _extract_annotated_type(hint, _FixtureRefMarker)

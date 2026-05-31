@@ -9,8 +9,7 @@ from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._middleware import _is_debuggable
 from oxitest._bridge.executor import (
     _debug_post_mortem,
-    _print_debug_banner,
-    _print_trace_banner,
+    _print_banner,
     _run_base,
     _suspend_capture,
     _trace_before_test,
@@ -79,7 +78,13 @@ def test_print_debug_banner_contains_node_id():
     """Banner should include node ID, exception type/message, and help text."""
     exc = AssertionError("expected 3, got 5")
     buf = io.StringIO()
-    _print_debug_banner("tests/test_math.py::test_add", exc, file=buf)
+    _print_banner(
+        "DEBUG",
+        "tests/test_math.py::test_add",
+        f"{type(exc).__name__}: {exc}",
+        "Entering debugger (type 'h' for help, 'q' to quit)",
+        file=buf,
+    )
     output = buf.getvalue()
     assert "tests/test_math.py::test_add" in output, f"missing node_id: {output!r}"
     assert "AssertionError" in output, f"missing exc type: {output!r}"
@@ -90,7 +95,12 @@ def test_print_debug_banner_contains_node_id():
 def test_print_trace_banner_contains_node_id():
     """Trace banner should include node ID and stepping message."""
     buf = io.StringIO()
-    _print_trace_banner("tests/test_math.py::test_add", file=buf)
+    _print_banner(
+        "TRACE",
+        "tests/test_math.py::test_add",
+        "Stepping into test (type 'c' to run, 'q' to quit)",
+        file=buf,
+    )
     output = buf.getvalue()
     assert "TRACE" in output, f"missing TRACE keyword: {output!r}"
     assert "tests/test_math.py::test_add" in output, f"missing node_id: {output!r}"
