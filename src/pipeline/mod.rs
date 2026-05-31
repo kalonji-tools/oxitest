@@ -13,7 +13,6 @@ use std::sync::Arc;
 
 use crate::types::ExitCode;
 use crate::{bridge, cache, config, reporter, strict, types};
-use clap::Parser;
 use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
@@ -57,7 +56,7 @@ pub(crate) trait PipelinePhase {
 /// and augment the results.
 pub(crate) struct PipelineContext {
     pub(crate) cfg: config::Config,
-    pub(crate) cli: config::Cli,
+    pub(crate) command: config::Command,
     pub(crate) rootdir: camino::Utf8PathBuf,
     pub(crate) is_tty: bool,
     pub(crate) use_color: bool,
@@ -84,7 +83,7 @@ impl PipelineContext {
     pub(crate) fn from_setup(s: SetupContext) -> Self {
         Self {
             cfg: s.cfg,
-            cli: s.cli,
+            command: s.command,
             rootdir: s.rootdir,
             is_tty: s.is_tty,
             use_color: s.use_color,
@@ -126,7 +125,7 @@ impl PipelineContext {
 pub(crate) struct SetupContext {
     pub(crate) cfg: config::Config,
     pub(crate) cache: cache::TestCache,
-    pub(crate) cli: config::Cli,
+    pub(crate) command: config::Command,
     pub(crate) rootdir: camino::Utf8PathBuf,
     pub(crate) is_tty: bool,
     pub(crate) use_color: bool,
@@ -138,7 +137,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         .chain(args.iter().cloned())
         .collect();
 
-    let cli = match config::Cli::try_parse_from(&argv) {
+    let command = match config::OxitestCli::resolve(&argv) {
         Ok(c) => c,
         Err(e) => {
             // Clap formats this for the user; subscriber may not be initialised yet.
@@ -147,34 +146,91 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         }
     };
 
-    if let Err(msg) = cli.validate() {
-        eprintln!("error: {msg}");
-        return Ok(Err(ExitCode::UsageError));
+    // Per-command validation.
+    match &command {
+        config::Command::Run(a) => {
+            if let Err(msg) = a.validate() {
+                eprintln!("error: {msg}");
+                return Ok(Err(ExitCode::UsageError));
+            }
+        }
+        config::Command::Debug(a) => {
+            if let Err(msg) = a.validate() {
+                eprintln!("error: {msg}");
+                return Ok(Err(ExitCode::UsageError));
+            }
+        }
+        _ => {}
     }
 
-    // Early-exit flags: handled before any filesystem setup.
-    if cli.capture_environment {
+    // Early-exit: `oxitest env` prints environment info and exits.
+    if matches!(command, config::Command::Env) {
         println!("{}", env_string(py));
         return Ok(Err(ExitCode::Success));
     }
 
-    let rootdir = config::find_rootdir(cli.paths.first().map(|p| p.as_path()));
-    let cfg = config::Config::load(&rootdir).merge_cli(&cli);
+    // Resolve rootdir from first path argument (varies per command).
+    let first_path = match &command {
+        config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::List(a) => a.paths.first().map(|p| p.as_path()),
+        _ => None,
+    };
+    let rootdir = config::find_rootdir(first_path);
+
+    // Build Config from pyproject.toml, then merge CLI-specific args.
+    let cfg = match &command {
+        config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
+        config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
+        config::Command::List(args) => {
+            let mut cfg = config::Config::load(&rootdir);
+            if let Some(ref val) = args.filter.affected {
+                if val.is_empty() {
+                    cfg.affected = Some(cfg.affected_base.clone());
+                } else {
+                    cfg.affected = Some(val.clone());
+                }
+            }
+            if let Some(level) = args.verbosity.resolve() {
+                cfg.verbosity = level;
+            }
+            if let Some(color) = args.color {
+                cfg.color = color;
+            }
+            cfg
+        }
+        config::Command::Fixtures(args) => {
+            let mut cfg = config::Config::load(&rootdir);
+            if let Some(level) = args.verbosity.resolve() {
+                cfg.verbosity = level;
+            }
+            if let Some(color) = args.color {
+                cfg.color = color;
+            }
+            cfg
+        }
+        config::Command::Env => unreachable!("handled above"),
+    };
+
     let cache = cache::TestCache::load(&rootdir);
 
     // Debug mode disables the TTY progress bar — pdb needs a clean terminal.
     let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
     let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
-    let resolved_tb = cli.tb.clone().unwrap_or(cfg.tb.clone());
-    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color)
-        .tb(resolved_tb)
-        .show_tips(cli.tips)
-        .show_warnings(cli.warnings);
+
+    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.tb.clone());
+
+    // Only set tips/warnings for `run` command.
+    let base = if let config::Command::Run(args) = &command {
+        base.show_tips(args.tips).show_warnings(args.warnings)
+    } else {
+        base
+    };
 
     Ok(Ok(Box::new(SetupContext {
         cfg,
         cache,
-        cli,
+        command,
         rootdir,
         is_tty,
         use_color,
@@ -214,28 +270,59 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let runner_impl = traits::BridgeRunner;
     let parallel_impl = traits::DefaultParallelRunner;
 
-    let pipeline: &[&dyn PipelinePhase] = &[
-        &phases::FileCollectionPhase,
-        &phases::AffectedPhase,
-        &phases::SessionPhase,
-        &phases::FixturesPhase,
-        &phases::TreePhase,
-        &phases::CollectionPhase {
-            collector: &collector_impl,
-        },
-        &phases::FixtureValidationPhase,
-        &phases::StrictPhase,
-        &phases::FilterPhase,
-        &phases::ListPhase,
-        &phases::ExecutionPhase {
-            runner: &runner_impl,
-            parallel: &parallel_impl,
-        },
-        &phases::RetryPhase {
-            runner: &runner_impl,
-        },
-        &phases::FinalizePhase,
-    ];
+    let pipeline: &[&dyn PipelinePhase] = match &ctx.command {
+        config::Command::Run(_) => &[
+            &phases::FileCollectionPhase,
+            &phases::AffectedPhase,
+            &phases::SessionPhase,
+            &phases::CollectionPhase {
+                collector: &collector_impl,
+            },
+            &phases::FixtureValidationPhase,
+            &phases::StrictPhase,
+            &phases::FilterPhase,
+            &phases::ExecutionPhase {
+                runner: &runner_impl,
+                parallel: &parallel_impl,
+            },
+            &phases::RetryPhase {
+                runner: &runner_impl,
+            },
+            &phases::FinalizePhase,
+        ],
+        config::Command::Debug(_) => &[
+            &phases::FileCollectionPhase,
+            &phases::AffectedPhase,
+            &phases::SessionPhase,
+            &phases::CollectionPhase {
+                collector: &collector_impl,
+            },
+            &phases::FixtureValidationPhase,
+            &phases::FilterPhase,
+            &phases::ExecutionPhase {
+                runner: &runner_impl,
+                parallel: &parallel_impl,
+            },
+            // No RetryPhase in debug mode
+            &phases::FinalizePhase,
+        ],
+        config::Command::List(_) => &[
+            &phases::FileCollectionPhase,
+            &phases::AffectedPhase,
+            &phases::SessionPhase,
+            &phases::CollectionPhase {
+                collector: &collector_impl,
+            },
+            &phases::FilterPhase,
+            &phases::ListPhase,
+        ],
+        config::Command::Fixtures(_) => &[
+            &phases::FileCollectionPhase,
+            &phases::SessionPhase,
+            &phases::FixturesPhase,
+        ],
+        config::Command::Env => unreachable!("handled in setup"),
+    };
 
     match run_pipeline(py, pipeline, &mut ctx) {
         Ok(code) | Err(code) => Ok(code.as_i32()),
