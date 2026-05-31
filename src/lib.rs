@@ -16,7 +16,7 @@ mod import_graph;
 mod marker;
 mod parallel;
 mod pipeline;
-mod prescan;
+mod python_ast;
 mod reporter;
 mod retry;
 mod scheduler;
