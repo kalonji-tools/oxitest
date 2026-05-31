@@ -127,6 +127,43 @@ impl PipelinePhase for FixturesPhase {
     }
 }
 
+// ─── TreePhase ───────────────────────────────────────────────────────────────
+
+pub(crate) struct TreePhase;
+
+impl PipelinePhase for TreePhase {
+    fn name(&self) -> &'static str {
+        "tree"
+    }
+
+    fn should_run(&self, ctx: &PipelineContext) -> bool {
+        ctx.cli.tree
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+
+        let verbosity = ctx.cfg.verbosity as i32;
+
+        match session.tree_fixtures(py, verbosity, ctx.cli.keyword.as_deref(), ctx.use_color) {
+            Ok(output) => {
+                if output.starts_with("error:") {
+                    eprintln!("{output}");
+                    return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+                }
+                if !output.is_empty() {
+                    println!("{output}");
+                }
+            }
+            Err(e) => {
+                eprintln!("Error rendering fixture tree: {e}");
+                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+            }
+        }
+        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
+    }
+}
+
 // ─── CollectionPhase ─────────────────────────────────────────────────────────
 
 /// Imports test modules and collects test items + violations.
