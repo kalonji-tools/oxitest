@@ -181,16 +181,14 @@ class FixtureRegistry:
         # Merge overlapping ancestor sets into connected components.
         components: list[set[str]] = []
         for name, ancestors in shared_ancestors.items():
-            all_names = {name} | ancestors
-            merged: list[set[str]] = []
-            new_component = set(all_names)
-            for comp in components:
-                if comp & new_component:
-                    new_component |= comp
+            new_component = {name} | ancestors
+            i = 0
+            while i < len(components):
+                if components[i] & new_component:
+                    new_component |= components.pop(i)
                 else:
-                    merged.append(comp)
-            merged.append(new_component)
-            components = merged
+                    i += 1
+            components.append(new_component)
 
         return sorted(sorted(comp) for comp in components)
 
