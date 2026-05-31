@@ -396,6 +396,13 @@ impl PipelinePhase for ExecutionPhase<'_> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
 
         let total = ctx.violated_items.len() + ctx.items.len();
+        let fn_count = {
+            let mut seen = std::collections::HashSet::new();
+            for item in ctx.items.iter().chain(ctx.violated_items.iter()) {
+                seen.insert((&item.module_path, &item.fn_name));
+            }
+            seen.len()
+        };
         let async_count = ctx.items.iter().filter(|i| i.is_async).count();
         let max_name_width = ctx
             .items
@@ -429,6 +436,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
             ctx.base
                 .clone()
                 .total(total)
+                .fn_count(fn_count)
                 .async_count(async_count)
                 .name_width(max_name_width)
                 .strict_suite_lines(std::mem::take(&mut ctx.suite_lines))
