@@ -231,6 +231,7 @@ pub(crate) fn run_phase_parallel(
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
     conftest_paths: &[camino::Utf8PathBuf],
+    python_bin: &str,
     rep: &mut dyn reporter::Reporter,
 ) -> PhaseResult {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -258,9 +259,7 @@ pub(crate) fn run_phase_parallel(
     let keep_tmp: Option<Arc<str>> = cfg.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
     let show_locals = cfg.show_locals;
     let show_internals = cfg.show_internals;
-    let python_bin: Arc<str> = std::env::var("PYO3_PYTHON")
-        .unwrap_or_else(|_| "python3".to_string())
-        .into();
+    let python_bin: Arc<str> = Arc::from(python_bin);
 
     let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
 

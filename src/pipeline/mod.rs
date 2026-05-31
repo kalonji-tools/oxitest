@@ -72,6 +72,7 @@ pub(crate) struct PipelineContext {
     pub(crate) suite_lines: Vec<String>,
     pub(crate) timings: Vec<types::TestTiming>,
     pub(crate) interrupted: bool,
+    pub(crate) python_bin: String,
     pub(crate) reporter: Option<Box<dyn reporter::Reporter>>,
 }
 
@@ -88,6 +89,7 @@ impl PipelineContext {
             is_tty: s.is_tty,
             use_color: s.use_color,
             base: s.base,
+            python_bin: s.python_bin,
             cache: s.cache,
             test_files: Vec::new(),
             conftest_files: Vec::new(),
@@ -129,6 +131,7 @@ pub(crate) struct SetupContext {
     pub(crate) rootdir: camino::Utf8PathBuf,
     pub(crate) is_tty: bool,
     pub(crate) use_color: bool,
+    pub(crate) python_bin: String,
     pub(crate) base: reporter::ReporterOptsBuilder,
 }
 
@@ -218,6 +221,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
     let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
 
+    let python_bin: String = py.import("sys")?.getattr("executable")?.extract()?;
+
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.tb.clone());
 
     // Only set tips/warnings for `run` command.
@@ -234,6 +239,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         rootdir,
         is_tty,
         use_color,
+        python_bin,
         base,
     })))
 }
