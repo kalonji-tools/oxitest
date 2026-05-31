@@ -27,14 +27,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          enable-cache: true
+          uv-sync-args: --only-group lint --only-group typecheck --only-group test
 
       - name: Install tools
         run: |
           uv tool install prek
-          uv sync --only-group lint --only-group typecheck --only-group test
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run quality checks
