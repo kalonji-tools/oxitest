@@ -221,7 +221,10 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
     let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
 
-    let python_bin: String = py.import("sys")?.getattr("executable")?.extract()?;
+    let python_bin = py
+        .import("sys")?
+        .getattr("executable")?
+        .extract::<String>()?;
 
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.tb.clone());
 
