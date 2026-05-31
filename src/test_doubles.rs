@@ -126,6 +126,7 @@ pub(crate) mod doubles {
             _cfg: &Config,
             _workers: usize,
             _conftest_files: &[Utf8PathBuf],
+            _python_bin: &str,
             _rep: &mut dyn Reporter,
         ) -> PhaseResult {
             PhaseResult {

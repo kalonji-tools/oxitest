@@ -114,6 +114,7 @@ pub(crate) fn make_ctx() -> crate::pipeline::PipelineContext {
         rootdir,
         is_tty: false,
         use_color,
+        python_bin: "python3".to_string(),
         base,
     })
 }
