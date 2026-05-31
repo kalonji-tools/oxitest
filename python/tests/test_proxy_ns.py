@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from conftest import helpers
-from oxitest import TempDir
+from oxitest import Fixture, TempDir
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._builtins._logcapture import _LogCapture
 from oxitest._bridge._builtins._patch import _Patcher
@@ -112,21 +112,23 @@ def test_fixtures_proxy_unknown_namespace_raises():
 # ── OxiNamespaceProxy ──────────────────────────────────────────────────────
 
 
-def test_oxi_proxy_tmp_injects_tempdir(tmp: TempDir):
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(tmp / "test.py"))
-    proxy = OxiNamespaceProxy(session, str(tmp / "test.py"), [])
+def test_oxi_proxy_tmp_injects_tempdir(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
+    fixture_session.begin_module(str(tmp / "test.py"))
+    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.tmp
     assert isinstance(result, _TempDir), (
         f"oxi.tmp should inject a _TempDir instance, got {type(result).__name__}"
     )
 
 
-def test_oxi_proxy_cap_injects_stdcapture(tmp: TempDir):
+def test_oxi_proxy_cap_injects_stdcapture(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
     teardowns: list = []
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(tmp / "test.py"))
-    proxy = OxiNamespaceProxy(session, str(tmp / "test.py"), teardowns)
+    fixture_session.begin_module(str(tmp / "test.py"))
+    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.cap
     assert isinstance(result, _StdCapture), (
         f"oxi.cap should inject a _StdCapture instance, got {type(result).__name__}"
@@ -135,21 +137,23 @@ def test_oxi_proxy_cap_injects_stdcapture(tmp: TempDir):
         td()
 
 
-def test_oxi_proxy_patch_injects_patcher(tmp: TempDir):
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(tmp / "test.py"))
-    proxy = OxiNamespaceProxy(session, str(tmp / "test.py"), [])
+def test_oxi_proxy_patch_injects_patcher(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
+    fixture_session.begin_module(str(tmp / "test.py"))
+    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.patch
     assert isinstance(result, _Patcher), (
         f"oxi.patch should inject a _Patcher instance, got {type(result).__name__}"
     )
 
 
-def test_oxi_proxy_log_injects_logcapture(tmp: TempDir):
+def test_oxi_proxy_log_injects_logcapture(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
     teardowns: list = []
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(tmp / "test.py"))
-    proxy = OxiNamespaceProxy(session, str(tmp / "test.py"), teardowns)
+    fixture_session.begin_module(str(tmp / "test.py"))
+    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.log
     assert isinstance(result, _LogCapture), (
         f"oxi.log should inject a _LogCapture instance, got {type(result).__name__}"
@@ -158,10 +162,11 @@ def test_oxi_proxy_log_injects_logcapture(tmp: TempDir):
         td()
 
 
-def test_oxi_proxy_unknown_raises_with_available_list(tmp: TempDir):
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(tmp / "test.py"))
-    proxy = OxiNamespaceProxy(session, str(tmp / "test.py"), [])
+def test_oxi_proxy_unknown_raises_with_available_list(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
+    fixture_session.begin_module(str(tmp / "test.py"))
+    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     try:
         _ = proxy.unknown
         assert False, "expected AttributeError for unknown oxi builtin 'unknown'"
@@ -203,23 +208,23 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
 # ── OxiNamespaceProxy ctx ──────────────────────────────────────────────────
 
 
-def test_oxi_proxy_ctx_returns_test_context():
+def test_oxi_proxy_ctx_returns_test_context(fixture_session: Fixture[FixtureSession]):
     """fx.oxi.ctx should return a _TestContext instance."""
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module("/fake/test.py")
-    proxy = OxiNamespaceProxy(session, "/fake/test.py", [])
+    fixture_session.begin_module("/fake/test.py")
+    proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", [])
     result = proxy.ctx
     assert isinstance(result, _TestContext), (
         f"oxi.ctx should return a _TestContext instance, got {type(result).__name__}"
     )
 
 
-def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access():
+def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
+    fixture_session: Fixture[FixtureSession],
+):
     """FixturesProxy.oxi caches and returns same OxiNamespaceProxy on
     repeated access."""
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module("/fake/test.py")
-    proxy = FixturesProxy(session, "/fake/test.py", [])
+    fixture_session.begin_module("/fake/test.py")
+    proxy = FixturesProxy(fixture_session, "/fake/test.py", [])
     oxi1 = proxy.oxi
     oxi2 = proxy.oxi
     assert oxi1 is oxi2, (
@@ -228,13 +233,14 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access():
     )
 
 
-def test_oxi_proxy_caches_builtin_on_repeated_access():
+def test_oxi_proxy_caches_builtin_on_repeated_access(
+    fixture_session: Fixture[FixtureSession],
+):
     """OxiNamespaceProxy caches builtin instances; repeated access returns
     the same object."""
     teardowns: list = []
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module("/fake/test.py")
-    proxy = OxiNamespaceProxy(session, "/fake/test.py", teardowns)
+    fixture_session.begin_module("/fake/test.py")
+    proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", teardowns)
     tmp1 = proxy.tmp
     tmp2 = proxy.tmp
     assert tmp1 is tmp2, (
@@ -279,7 +285,9 @@ def test_full_pipeline_fx_namespace_access(tmp: TempDir):
     assert result.status == "passed", result.message
 
 
-def test_full_pipeline_fx_oxi_tmp(tmp: TempDir):
+def test_full_pipeline_fx_oxi_tmp(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
     """End-to-end: test accesses fx.oxi.tmp and writes to it."""
     test_file = tmp / "test_oxi.py"
     test_file.write_text(
@@ -291,10 +299,9 @@ def test_full_pipeline_fx_oxi_tmp(tmp: TempDir):
         "    assert p.read_text() == 'hi'\n"
     )
 
-    session = FixtureSession(FixtureRegistry())
-    session.begin_module(str(test_file))
+    fixture_session.begin_module(str(test_file))
 
-    result = helpers.common.run_test(str(test_file), "test_oxi_tmp", session)
+    result = helpers.common.run_test(str(test_file), "test_oxi_tmp", fixture_session)
     assert result.status == "passed", result.message
 
 

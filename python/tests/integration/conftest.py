@@ -7,9 +7,9 @@ yield fixtures with teardown. Helpers are accessible via
 
 from __future__ import annotations
 
-import os
 import subprocess
 import textwrap
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import oxitest
@@ -26,7 +26,7 @@ fx = oxitest.Fixtures()
 
 
 @fx.fixture
-def git_repo(tmp: TempDir) -> Yields[TempDir]:
+def git_repo(tmp: TempDir) -> Yields[Path]:
     """Tmp dir initialized as a git repo with an initial commit."""
     git = ["git", "-C", str(tmp)]
     subprocess.run([*git, "init"], check=True, capture_output=True)
@@ -44,18 +44,6 @@ def git_repo(tmp: TempDir) -> Yields[TempDir]:
     subprocess.run([*git, "add", "."], check=True, capture_output=True)
     subprocess.run([*git, "commit", "-m", "init"], check=True, capture_output=True)
     yield tmp
-
-
-@fx.fixture
-def plugin_env(tmp: TempDir) -> Yields[TempDir]:
-    """Tmp dir with PYTHONPATH set so plugin modules are importable."""
-    old = os.environ.get("PYTHONPATH")
-    os.environ["PYTHONPATH"] = str(tmp)
-    yield tmp
-    if old is None:
-        os.environ.pop("PYTHONPATH", None)
-    else:
-        os.environ["PYTHONPATH"] = old
 
 
 # ── Helpers (helpers.integ namespace) ─────────────────────────────────────────

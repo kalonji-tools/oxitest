@@ -24,10 +24,7 @@ def test_strict_abort_unused_fixture(tmp: TempDir):
     out, stderr, rc = helpers.common.run_oxitest(tmp)
 
     # Assert
-    assert rc == 3, (
-        f"strict abort with unused fixture should exit 3, got {rc}\n"
-        f"stdout: {out!r}\nstderr: {stderr!r}"
-    )
+    helpers.integ.assert_collection_error(out, rc)
     combined = out + stderr
     assert "unused" in combined.lower(), (
         f"output should mention 'unused': stdout={out!r}, stderr={stderr!r}"
@@ -55,10 +52,7 @@ def test_strict_abort_missing_return_annotation(tmp: TempDir):
     out, stderr, rc = helpers.common.run_oxitest(tmp)
 
     # Assert
-    assert rc == 3, (
-        f"strict abort with missing annotation should exit 3, got {rc}\n"
-        f"stdout: {out!r}\nstderr: {stderr!r}"
-    )
+    helpers.integ.assert_collection_error(out, rc)
     combined = out + stderr
     assert "return" in combined.lower() or "annotation" in combined.lower(), (
         f"output should mention 'return' or 'annotation': "

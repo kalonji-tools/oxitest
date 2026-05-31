@@ -36,8 +36,7 @@ def test_auto_arrange_default_passes(tmp: TempDir):
     """Auto-arrangement is on by default and doesn't break test execution."""
     _write_shared_suite(tmp)
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"auto-arrange should not break tests, got rc={rc}\n{out}"
-    assert "4 passed" in out, f"expected 4 tests to pass: {out!r}"
+    helpers.integ.assert_passed(out, rc, count=4)
 
 
 def test_auto_arrange_no_shared_fixtures(tmp: TempDir):
@@ -49,5 +48,4 @@ def test_auto_arrange_no_shared_fixtures(tmp: TempDir):
         "    assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"no-shared-fixture run should exit 0, got rc={rc}\n{out}"
-    assert "2 passed" in out, f"expected 2 tests to pass: {out!r}"
+    helpers.integ.assert_passed(out, rc, count=2)
