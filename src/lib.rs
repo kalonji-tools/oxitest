@@ -5,6 +5,7 @@
 use pyo3::prelude::*;
 
 mod affected;
+mod bare_asserts;
 mod bridge;
 mod cache;
 mod collector;

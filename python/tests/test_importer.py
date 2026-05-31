@@ -287,7 +287,8 @@ def _write_py(tmp_path: TempDir, src: str) -> str:
     return str(p)
 
 
-def test_collect_violations_bare_assert(tmp: TempDir):
+def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir):
+    """Bare-assert detection moved to Rust (bare_asserts.rs) — Python returns none."""
     path = _write_py(
         tmp,
         """
@@ -297,14 +298,9 @@ def test_collect_violations_bare_assert(tmp: TempDir):
     """,
     )
     _, violations = collect_module(path, collect_violations=True)
-    assert len(violations) == 1, (
-        f"expected 1 bare-assert violation, got {len(violations)}: {violations}"
-    )
-    assert violations[0].kind == "bare_assert", (
-        f"violation kind should be 'bare_assert', got {violations[0].kind!r}"
-    )
-    assert "test_foo" in violations[0].node_id, (
-        f"violation node_id should contain 'test_foo', got {violations[0].node_id!r}"
+    bare = [v for v in violations if v.kind == "bare_assert"]
+    assert bare == [], (
+        f"bare-assert violations should come from Rust, not Python: {bare}"
     )
 
 

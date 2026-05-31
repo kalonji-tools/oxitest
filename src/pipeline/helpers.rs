@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::types::ExitCode;
-use crate::{bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict, types};
+use crate::{
+    bare_asserts, bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict,
+    types,
+};
 use pyo3::prelude::*;
 use traits::{ExecutionHarness, ModuleCollector, ParallelRunner, Session, TestRunner};
 
@@ -62,6 +65,10 @@ pub(super) fn collect_items(
                     cache.update_module_cache(file, mtime, &arc_items);
                 }
                 raw_violations.extend(file_violations);
+                // Bare-assert detection runs in Rust — no PyO3 needed.
+                if collect_violations {
+                    raw_violations.extend(bare_asserts::collect_bare_asserts(file));
+                }
                 items.extend(arc_items);
             }
             Err(e) => errors.push(e),
