@@ -31,11 +31,16 @@ jobs:
         with:
           enable-cache: true
 
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Install tools
         run: |
           uv tool install prek
           uv sync --only-group lint --only-group typecheck --only-group test
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          nix profile install nixpkgs#deadnix nixpkgs#alejandra
 
       - name: Run quality checks
         run: prek run --all-files --show-diff-on-failure --skip no-commit-to-branch

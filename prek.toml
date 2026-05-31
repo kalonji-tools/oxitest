@@ -44,6 +44,20 @@ language = "system"
 entry = "codespell"
 
 [[repos.hooks]]
+id = "deadnix"
+name = "deadnix"
+language = "system"
+entry = "deadnix --fail"
+files = "\\.nix$"
+
+[[repos.hooks]]
+id = "alejandra"
+name = "alejandra"
+language = "system"
+entry = "alejandra"
+files = "\\.nix$"
+
+[[repos.hooks]]
 id = "cargo-fmt"
 name = "cargo fmt"
 language = "system"

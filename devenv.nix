@@ -1,10 +1,7 @@
-{ pkgs, ... }:
-
-let
+{pkgs, ...}: let
   python = pkgs.python312;
-  pythonEnv = python.withPackages (ps: [ ps.pip ]);
-in
-{
+  pythonEnv = python.withPackages (ps: [ps.pip]);
+in {
   languages.rust.enable = true;
 
   languages.python = {
@@ -30,6 +27,10 @@ in
     # File watcher
     bacon
 
+    # Nix linting & formatting
+    deadnix
+    alejandra
+
     # Release tooling
     git-cliff
   ];
@@ -49,7 +50,7 @@ in
         git config core.hooksPath "$HOOKS_DIR"
       fi
     '';
-    before = [ "devenv:enterShell" ];
+    before = ["devenv:enterShell"];
   };
 
   enterShell = ''
