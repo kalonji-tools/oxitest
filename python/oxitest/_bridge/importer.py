@@ -2,17 +2,14 @@ from __future__ import annotations
 
 __all__ = ["collect_module"]
 
-import ast
 import dataclasses
 import hashlib
 import inspect
 import itertools
-import pathlib
 from collections.abc import Callable, Iterable, Iterator
 from types import ModuleType
 from typing import Any, cast, get_type_hints
 
-from oxitest._bridge._ast_utils import walk_bare_asserts
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
@@ -350,47 +347,6 @@ def _check_fn_violations(
         yield from checker(path, fn_name, fn)
 
 
-def _collect_bare_asserts(path: str) -> list[CollectedViolation]:
-    """Parse the source file and return bare-assert violations for test functions."""
-    try:
-        source = pathlib.Path(path).read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=path)
-    except (SyntaxError, OSError):
-        return []
-
-    violations: list[CollectedViolation] = []
-
-    for node in tree.body:
-        if isinstance(
-            node, (ast.FunctionDef, ast.AsyncFunctionDef)
-        ) and node.name.startswith("test_"):
-            lines = walk_bare_asserts(node)
-            if lines:
-                violations.append(
-                    CollectedViolation(
-                        node_id=f"{path}::{node.name}",
-                        kind=ViolationKind.BARE_ASSERT,
-                        detail=" ".join(str(ln) for ln in lines),
-                    )
-                )
-        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
-            for item in node.body:
-                if isinstance(
-                    item, (ast.FunctionDef, ast.AsyncFunctionDef)
-                ) and item.name.startswith("test_"):
-                    lines = walk_bare_asserts(item)
-                    if lines:
-                        violations.append(
-                            CollectedViolation(
-                                node_id=f"{path}::{node.name}::{item.name}",
-                                kind=ViolationKind.BARE_ASSERT,
-                                detail=" ".join(str(ln) for ln in lines),
-                            )
-                        )
-
-    return violations
-
-
 def _import_test_module(
     path: str,
     unique_name: str,
@@ -514,7 +470,6 @@ def collect_module(
 
                 traceback.print_exc()
 
-    if collect_violations:
-        violations.extend(_collect_bare_asserts(path))
+    # Bare-assert detection is now handled in Rust (bare_asserts.rs).
     items.sort(key=lambda x: x.lineno)
     return items, violations
