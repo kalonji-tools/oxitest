@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["list_fixtures_from_registry"]
+__all__ = ["list_fixtures_from_registry", "tree_fixtures_from_registry"]
 
 import inspect
 import re
@@ -313,3 +313,158 @@ def list_fixtures_from_registry(
         lines.append(_dim(f"  {shown} fixture{s}", use_color))
 
     return "\n".join(lines)
+
+
+def tree_fixtures_from_registry(
+    registry: FixtureRegistry,
+    verbosity: int = 0,
+    pattern: str | None = None,
+    use_color: bool = True,
+) -> str:
+    """Format all fixtures as a dependency tree.
+
+    Args:
+        registry: The fixture registry to visualize.
+        verbosity: 0=names only, 1=names+tags, 2=names+tags+origin.
+        pattern: Optional substring filter on root fixture names.
+        use_color: Whether to emit ANSI color codes.
+
+    Returns:
+        Formatted tree string, or error message if circular deps detected.
+    """
+    # Build dependency graph from signatures
+    all_defs: dict[str, FixtureDef[Any]] = {}
+    seen_names: set[str] = set()
+    for name in sorted(registry._defs):
+        defs = registry._defs[name]
+        if defs:
+            all_defs[name] = defs[-1]
+            seen_names.add(name)
+
+    # Add built-in fixtures
+    for defn in _builtin_defs():
+        if defn.name not in seen_names:
+            all_defs[defn.name] = defn
+
+    # Extract deps for each fixture
+    graph: dict[str, list[str]] = {}
+    for name, defn in all_defs.items():
+        deps: list[str] = []
+        try:
+            sig = inspect.signature(defn.func)
+        except (ValueError, TypeError):
+            pass
+        else:
+            deps.extend(
+                param_name
+                for param_name in sig.parameters
+                if param_name in all_defs and param_name != name
+            )
+        graph[name] = deps
+
+    # Cycle detection via DFS (white/gray/black)
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = dict.fromkeys(all_defs, WHITE)
+    cycle_path: list[str] = []
+
+    def _has_cycle(node: str, path: list[str]) -> bool:
+        if color[node] == GRAY:
+            cycle_path.extend(path[path.index(node) :])
+            cycle_path.append(node)
+            return True
+        if color[node] == BLACK:
+            return False
+        color[node] = GRAY
+        path.append(node)
+        for dep in graph.get(node, []):
+            if dep in color and _has_cycle(dep, path):
+                return True
+        path.pop()
+        color[node] = BLACK
+        return False
+
+    for name in sorted(all_defs):
+        if color[name] == WHITE and _has_cycle(name, []):
+            cycle_str = " -> ".join(cycle_path)
+            return f"error: Circular fixture dependency: {cycle_str}"
+
+    # Determine roots
+    total = len(all_defs)
+    roots = sorted(all_defs.keys(), key=lambda n: (_origin_key(all_defs[n]), n))
+    if pattern:
+        roots = [r for r in roots if pattern in r]
+
+    if not roots:
+        if pattern:
+            return _dim(f"no fixtures match '{pattern}'", use_color)
+        return ""
+
+    # Render tree
+    lines: list[str] = []
+
+    def _render_node(name: str, prefix: str, is_last: bool, is_root: bool) -> None:
+        defn = all_defs[name]
+        label = _tree_label(defn, verbosity, use_color)
+        if is_root:
+            lines.append(label)
+        else:
+            connector = "└── " if is_last else "├── "
+            if use_color:
+                lines.append(f"{_DIM}{prefix}{connector}{_RESET}{label}")
+            else:
+                lines.append(f"{prefix}{connector}{label}")
+
+        # Recurse into deps
+        deps = graph.get(name, [])
+        child_prefix = prefix if is_root else (prefix + ("    " if is_last else "│   "))
+        for i, dep in enumerate(deps):
+            _render_node(dep, child_prefix, i == len(deps) - 1, False)
+
+    for i, root in enumerate(roots):
+        if i > 0:
+            lines.append("")
+        _render_node(root, "", True, True)
+
+    # Summary
+    shown = len(roots)
+    if pattern:
+        lines.append(f"\n── {shown} of {total} fixtures")
+    else:
+        s = "" if total == 1 else "s"
+        lines.append(f"\n── {total} fixture{s}")
+
+    return "\n".join(lines)
+
+
+def _tree_label(defn: FixtureDef[Any], verbosity: int, use_color: bool) -> str:
+    """Format a single fixture node label based on verbosity."""
+    name = defn.name
+    if use_color:
+        name = f"{_BOLD_CYAN}{defn.name}{_RESET}"
+
+    if verbosity == 0:
+        return name
+
+    # Verbosity 1: name + tags
+    parts: list[str] = []
+    if defn.shared:
+        parts.append("shared")
+    if defn.is_async:
+        parts.append("async")
+    if defn.autouse:
+        parts.append("autouse")
+    tag_str = ""
+    if parts:
+        tag_str = f" [{', '.join(parts)}]"
+        if use_color:
+            tag_str = f" {_DIM_YELLOW}[{', '.join(parts)}]{_RESET}"
+
+    if verbosity == 1:
+        return f"{name}{tag_str}"
+
+    # Verbosity 2: name + tags + origin
+    origin = _origin_header(defn)
+    origin_str = f" ({origin})" if origin else ""
+    if use_color:
+        origin_str = f" {_DIM}({origin}){_RESET}" if origin else ""
+    return f"{name}{tag_str}{origin_str}"
