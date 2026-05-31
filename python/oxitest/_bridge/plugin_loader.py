@@ -7,6 +7,7 @@ plugin module paths and their per-plugin config dicts.
 from __future__ import annotations
 
 import functools
+import itertools
 
 __all__ = ["load_plugins", "PluginRegistry"]
 import importlib
@@ -48,42 +49,41 @@ class PluginRegistry:
     @functools.cached_property
     def log_backends(self) -> list[LogBackend]:
         """All log backends from all plugins."""
-        backends = []
-        for entry in self.entries:
-            backends.extend(entry.plugin.log_backends)
-        return backends
+        return list(
+            itertools.chain.from_iterable(e.plugin.log_backends for e in self.entries)
+        )
 
     @functools.cached_property
     def fixture_providers(self) -> list[FixtureProvider]:
         """All fixture providers from all plugins."""
-        providers = []
-        for entry in self.entries:
-            providers.extend(entry.plugin.fixture_providers)
-        return providers
+        return list(
+            itertools.chain.from_iterable(
+                e.plugin.fixture_providers for e in self.entries
+            )
+        )
 
     @functools.cached_property
     def execution_wrappers(self) -> list[ExecutionWrapper]:
         """All execution wrappers from all plugins."""
-        wrappers = []
-        for entry in self.entries:
-            wrappers.extend(entry.plugin.execution_wrappers)
-        return wrappers
+        return list(
+            itertools.chain.from_iterable(
+                e.plugin.execution_wrappers for e in self.entries
+            )
+        )
 
     @functools.cached_property
     def collectors(self) -> list[Collector]:
         """All collectors from all plugins."""
-        collectors = []
-        for entry in self.entries:
-            collectors.extend(entry.plugin.collectors)
-        return collectors
+        return list(
+            itertools.chain.from_iterable(e.plugin.collectors for e in self.entries)
+        )
 
     @functools.cached_property
     def reporters(self) -> list[Reporter]:
         """All reporters from all plugins."""
-        reporters = []
-        for entry in self.entries:
-            reporters.extend(entry.plugin.reporters)
-        return reporters
+        return list(
+            itertools.chain.from_iterable(e.plugin.reporters for e in self.entries)
+        )
 
     @functools.cached_property
     def async_backends(self) -> list[tuple[str, Any]]:
