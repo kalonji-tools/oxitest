@@ -12,7 +12,7 @@ pub struct CiReporter {
 
 impl CiReporter {
     pub fn new(opts: ReporterOpts) -> Self {
-        super::print_collected(opts.total, opts.async_count);
+        super::print_collected(opts.total, opts.fn_count, opts.async_count);
         Self {
             opts,
             deferred_diags: Vec::new(),

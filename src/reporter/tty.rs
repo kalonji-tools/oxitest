@@ -58,7 +58,7 @@ pub struct TtyReporter {
 
 impl TtyReporter {
     pub fn new(opts: ReporterOpts) -> Self {
-        super::print_collected(opts.total, opts.async_count);
+        super::print_collected(opts.total, opts.fn_count, opts.async_count);
         let pb = ProgressBar::new(opts.total as u64);
         let style = if opts.use_color {
             ProgressStyle::with_template("  {pos}/{len}  {spinner:.cyan}  {msg}")
