@@ -45,11 +45,9 @@ jobs:
         with:
           fetch-depth: 0  # required by git-revision-date-localized
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          python-version: '3.12'
-
-      - run: uv sync --only-group docs
+          uv-sync-args: --only-group docs
 
       - name: Build
         run: uv run mkdocs build --strict
