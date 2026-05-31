@@ -69,12 +69,18 @@ def _oxitest_file(file_idx: int, test_offset: int) -> str:
         lines.append(f"    assert d['k{idx}'] == {idx}, ''")
         idx += 1
 
-    # Fixture tests (~30%)
-    for _ in range(FIXTURE_PER_FILE):
+    # Fixture tests (~30%) — first uses shared seed_data, rest use per-test data
+    for i in range(FIXTURE_PER_FILE):
         lines.append("")
-        lines.append(f"def test_fixture_{idx}(data: oxi.Fixture[dict]) -> None:")
-        lines.append(f"    data['k{idx}'] = {idx}")
-        lines.append(f"    assert data['k{idx}'] == {idx}, ''")
+        if i == 0:
+            lines.append(
+                f"def test_fixture_{idx}(seed_data: oxi.Fixture[dict]) -> None:"
+            )
+            lines.append("    assert 'key_0' in seed_data, ''")
+        else:
+            lines.append(f"def test_fixture_{idx}(data: oxi.Fixture[dict]) -> None:")
+            lines.append(f"    data['k{idx}'] = {idx}")
+            lines.append(f"    assert data['k{idx}'] == {idx}, ''")
         idx += 1
 
     # Parametrize tests (~20%)
@@ -89,10 +95,10 @@ def _oxitest_file(file_idx: int, test_offset: int) -> str:
         )
         lines.append(f"@oxi.parametrize({cases})")
         lines.append(
-            f"def test_param_{idx}(value: int, data: oxi.Fixture[dict]) -> None:"
+            f"def test_param_{idx}(case: Case{idx}, data: oxi.Fixture[dict]) -> None:"
         )
-        lines.append(f"    data['k{idx}'] = value")
-        lines.append(f"    assert data['k{idx}'] == value, ''")
+        lines.append(f"    data['k{idx}'] = case.value")
+        lines.append(f"    assert data['k{idx}'] == case.value, ''")
         idx += 1
 
     lines.append("")
