@@ -92,6 +92,10 @@
 
 **Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via `--auto-arrange[=THRESHOLD]`.
 
+## CLI Structure
+
+**Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `list` (show collected tests), `fixtures` (inspect fixtures), `env` (print environment). Each subcommand has its own flag set.
+
 ## Strict Mode
 
 **Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "warn"` or `strict = "abort"`.
