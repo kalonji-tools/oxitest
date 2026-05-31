@@ -102,7 +102,7 @@ pub(crate) fn make_outcome(status: &str) -> TestOutcome {
 /// `is_tty = false` / `use_color = false`. All incremental fields start empty.
 pub(crate) fn make_ctx() -> crate::pipeline::PipelineContext {
     let cfg = crate::config::Config::default();
-    let cli = crate::config::Cli::default_for_test();
+    let command = crate::config::Command::Run(crate::config::RunArgs::default_for_test());
     let cache = crate::cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
     let rootdir = camino::Utf8PathBuf::from(".");
     let use_color = false;
@@ -110,7 +110,7 @@ pub(crate) fn make_ctx() -> crate::pipeline::PipelineContext {
     crate::pipeline::PipelineContext::from_setup(crate::pipeline::SetupContext {
         cfg,
         cache,
-        cli,
+        command,
         rootdir,
         is_tty: false,
         use_color,
