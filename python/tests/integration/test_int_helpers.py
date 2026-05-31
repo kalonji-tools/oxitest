@@ -17,8 +17,7 @@ def test_helpers_accessible_from_test_file(tmp: TempDir):
         "    assert helpers.myproject.greet() == 'hello'\n",
     )
     stdout, _, rc = helpers.common.run_oxitest(project)
-    assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
-    assert "1 passed" in stdout, f"expected '1 passed' in output:\n{stdout}"
+    helpers.integ.assert_passed(stdout, rc, count=1)
 
 
 def test_nested_conftest_helpers_ancestor_only(tmp: TempDir):
@@ -41,8 +40,7 @@ def test_nested_conftest_helpers_ancestor_only(tmp: TempDir):
     )
     # Run from root so oxitest walks the full conftest chain (root -> sub)
     stdout, _, rc = helpers.common.run_oxitest(root)
-    assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
-    assert "2 passed" in stdout, f"expected '2 passed' in output:\n{stdout}"
+    helpers.integ.assert_passed(stdout, rc, count=2)
 
 
 def test_helpers_namespace_override(tmp: TempDir):
@@ -62,8 +60,7 @@ def test_helpers_namespace_override(tmp: TempDir):
         "    assert helpers.integ.helper() == 42\n",
     )
     stdout, _, rc = helpers.common.run_oxitest(sub)
-    assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
-    assert "1 passed" in stdout, f"expected '1 passed' in output:\n{stdout}"
+    helpers.integ.assert_passed(stdout, rc, count=1)
 
 
 def test_helpers_only_conftest_no_warning(tmp: TempDir):

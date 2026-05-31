@@ -7,7 +7,7 @@ from pathlib import Path
 
 import oxitest
 from conftest import helpers
-from oxitest import TempDir
+from oxitest import Fixture, TempDir
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
@@ -19,10 +19,8 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list")
     assert rc == 0, f"`list` should exit 0, got {rc}"
-    assert "test_alpha" in out, "node ID test_alpha should appear in `list` output"
-    assert "test_beta" in out, "node ID test_beta should appear in `list` output"
-    assert "test_gamma" in out, "node ID test_gamma should appear in `list` output"
-    assert "passed" not in out, "`list` should not run tests (no 'passed' in output)"
+    helpers.integ.assert_contains(out, "test_alpha", "test_beta", "test_gamma")
+    helpers.integ.assert_excludes(out, "passed")
 
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
@@ -41,8 +39,7 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "-v")
     assert rc == 0, f"`list -v` should exit 0, got {rc}"
-    assert "test_one" in out, f"test_one missing from output: {out!r}"
-    assert "test_two" in out, f"test_two missing from output: {out!r}"
+    helpers.integ.assert_contains(out, "test_one", "test_two")
 
 
 def test_keyword_filter(tmp: TempDir):
@@ -51,8 +48,7 @@ def test_keyword_filter(tmp: TempDir):
         "def test_alpha(): assert True\ndef test_beta(): assert False\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "-k", "alpha")
-    assert rc == 0, f"-k alpha should exit 0 (only matching test runs), got {rc}"
-    assert "1 passed" in out, "-k alpha should run exactly 1 test"
+    helpers.integ.assert_passed(out, rc, count=1)
 
 
 def test_serial_flag(tmp: TempDir):
@@ -61,8 +57,7 @@ def test_serial_flag(tmp: TempDir):
         "def test_a(): assert True\ndef test_b(): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
-    assert rc == 0, f"--serial should exit 0, got {rc}"
-    assert "passed" in out, "--serial run should report passed tests"
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_json_output(tmp: TempDir):
@@ -89,9 +84,9 @@ def test_junit_xml_output(tmp: TempDir):
     assert rc == 0, f"--junit-xml run should exit 0, got {rc}"
     assert xml_path.exists(), "--junit-xml should create the output file"
     xml_content = xml_path.read_text()
-    assert "<testsuites" in xml_content, "JUnit XML should contain <testsuites element"
-    assert "test_first" in xml_content, "JUnit XML should contain test_first name"
-    assert "test_second" in xml_content, "JUnit XML should contain test_second name"
+    helpers.integ.assert_contains(
+        xml_content, "<testsuites", "test_first", "test_second"
+    )
 
 
 def test_marker_filter(tmp: TempDir):
@@ -105,8 +100,7 @@ def test_marker_filter(tmp: TempDir):
     pyproject = Path(tmp) / "pyproject.toml"
     pyproject.write_text('[tool.oxitest]\nmarkers = ["slow: slow tests"]\n')
     out, _, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
-    assert rc == 0, f"-m slow should exit 0, got {rc}"
-    assert "1 passed" in out, "-m slow should run exactly 1 test"
+    helpers.integ.assert_passed(out, rc, count=1)
 
 
 def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
@@ -114,8 +108,7 @@ def test_exitfirst_conflicts_with_maxfail(tmp: TempDir):
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
     _, stderr, rc = helpers.common.run_oxitest(tmp, "-x", "--maxfail", "5")
     assert rc == 4, f"-x/--maxfail conflict should exit 4, got {rc}"
-    assert "-x" in stderr, f"stderr: {stderr!r}"
-    assert "--maxfail" in stderr, f"stderr: {stderr!r}"
+    helpers.integ.assert_contains(stderr, "-x", "--maxfail")
 
 
 def test_v_with_quiet_is_valid(tmp: TempDir):
@@ -131,8 +124,7 @@ def test_schedule_conflicts_with_serial(tmp: TempDir):
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
     _, stderr, rc = helpers.common.run_oxitest(tmp, "--schedule", "random", "--serial")
     assert rc == 4, f"--schedule/--serial conflict should exit 4, got {rc}"
-    assert "--schedule" in stderr, f"stderr: {stderr!r}"
-    assert "--serial" in stderr, f"stderr: {stderr!r}"
+    helpers.integ.assert_contains(stderr, "--schedule", "--serial")
 
 
 def test_debug_with_passing_test_exits_0(tmp: TempDir):
@@ -241,8 +233,7 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     )
     _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
     assert rc != 0, "test should fail"
-    assert "KEPT" in stderr, f"stderr should contain KEPT message, got: {stderr!r}"
-    assert "--keep-tmp" in stderr, f"stderr should mention --keep-tmp, got: {stderr!r}"
+    helpers.integ.assert_contains(stderr, "KEPT", "--keep-tmp")
 
 
 def test_keep_tmp_cleans_on_pass(tmp: TempDir):
@@ -261,9 +252,7 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     )
     _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
     assert rc == 0, "test should pass"
-    assert "KEPT" not in stderr, (
-        f"stderr should NOT contain KEPT for passing tests, got: {stderr!r}"
-    )
+    helpers.integ.assert_excludes(stderr, "KEPT")
 
 
 def test_list_full_shows_param_values(tmp: TempDir):
@@ -284,32 +273,19 @@ def test_list_full_shows_param_values(tmp: TempDir):
         f"`list --verbose=full` should exit 0, got {rc}\n"
         f"stdout: {out!r}\nstderr: {stderr!r}"
     )
-    assert "test_abs" in out, f"test_abs missing from output: {out!r}"
-    assert "[pos]" in out, f"[pos] missing from output: {out!r}"
-    assert "[neg]" in out, f"[neg] missing from output: {out!r}"
+    helpers.integ.assert_contains(out, "test_abs", "[pos]", "[neg]")
 
 
 # ── Issue #584: Integration tests for 6 untested CLI flags ───────────────────
 
 
 @oxitest.mark.timeout(120)
-def test_affected_filters_to_changed_tests(tmp: TempDir):
+def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]):
     """--affected filters to tests in files changed since the given ref."""
-    # Arrange — set up a git repo with a committed test file and a new one
+    tmp = git_repo
     git = ["git", "-C", str(tmp)]
-    subprocess.run([*git, "init"], check=True, capture_output=True)
-    subprocess.run(
-        [*git, "config", "user.email", "test@test.com"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        [*git, "config", "user.name", "Test"],
-        check=True,
-        capture_output=True,
-    )
 
-    # Create and commit a baseline test file
+    # Create and commit a baseline test file (on top of git_repo's init commit)
     (tmp / "test_old.py").write_text("def test_old(): assert True\n")
     subprocess.run([*git, "add", "."], check=True, capture_output=True)
     subprocess.run(
@@ -326,9 +302,8 @@ def test_affected_filters_to_changed_tests(tmp: TempDir):
     out, stderr, rc = helpers.common.run_oxitest(tmp, "--affected=HEAD")
 
     # Assert — only the new file should be collected (1 test, not 2)
-    assert rc == 0, f"--affected should exit 0, got {rc}\nstderr: {stderr!r}"
-    assert "1 passed" in out, f"should run exactly 1 test (the new one): {out!r}"
-    assert "2 passed" not in out, f"should NOT run both tests: {out!r}"
+    helpers.integ.assert_passed(out, rc, count=1)
+    helpers.integ.assert_excludes(out, "2 passed")
 
 
 def test_tb_line_shows_compact_failure(tmp: TempDir):
@@ -339,11 +314,9 @@ def test_tb_line_shows_compact_failure(tmp: TempDir):
     out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "line")
     assert rc != 0, "test should fail"
     # --tb=line emits a one-liner with file:line and message
-    assert "test_fail.py" in out, f"file name should appear: {out!r}"
-    assert "one is not two" in out, f"failure message should appear: {out!r}"
+    helpers.integ.assert_contains(out, "test_fail.py", "one is not two")
     # No diagnostic box chrome
-    assert "┌" not in out, f"--tb=line should not emit box chrome: {out!r}"
-    assert "└" not in out, f"--tb=line should not emit box chrome: {out!r}"
+    helpers.integ.assert_excludes(out, "┌", "└")
 
 
 def test_tb_no_suppresses_traceback(tmp: TempDir):
@@ -352,13 +325,9 @@ def test_tb_no_suppresses_traceback(tmp: TempDir):
         "def test_kaboom():\n    assert False, 'should not see traceback'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "no")
-    assert rc != 0, "test should fail"
-    assert "1 failed" in out, f"summary should report failure: {out!r}"
+    helpers.integ.assert_failed(out, rc, count=1)
     # No diagnostic block, no one-liner
-    assert "┌" not in out, f"--tb=no should not emit box chrome: {out!r}"
-    assert "should not see traceback" not in out, (
-        f"--tb=no should suppress failure message: {out!r}"
-    )
+    helpers.integ.assert_excludes(out, "┌", "should not see traceback")
 
 
 def test_timeout_cli_flag(tmp: TempDir):
@@ -382,9 +351,9 @@ def test_durations_shows_slowest_tests(tmp: TempDir):
         "    time.sleep(0.05)\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--durations", "1")
-    assert rc == 0, f"--durations should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     assert "slowest" in out.lower(), f"output should contain 'slowest': {out!r}"
-    assert "ms" in out, f"output should show duration in ms: {out!r}"
+    helpers.integ.assert_contains(out, "ms")
 
 
 def test_capture_environment_prints_versions():
@@ -394,7 +363,7 @@ def test_capture_environment_prints_versions():
     assert "python:" in out.lower(), f"output should contain Python version: {out!r}"
     assert "oxitest:" in out.lower(), f"output should contain oxitest version: {out!r}"
     # Should NOT run tests
-    assert "passed" not in out, f"`env` should not run tests: {out!r}"
+    helpers.integ.assert_excludes(out, "passed")
 
 
 @oxitest.mark.timeout(120)
@@ -412,4 +381,4 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir):
         f"inprocess + parallel should exit 0, got {rc}\n"
         f"stdout: {out!r}\nstderr: {stderr!r}"
     )
-    assert "2 passed" in out, f"both tests should pass: {out!r}"
+    helpers.integ.assert_passed(out, rc, count=2)

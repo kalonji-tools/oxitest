@@ -3,6 +3,7 @@
 import subprocess
 import sys
 
+from conftest import helpers
 from oxitest import TempDir
 
 
@@ -42,8 +43,7 @@ def test_tree_basic_output(tmp: TempDir):
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run_fixtures_tree(tmp)
     assert rc == 0, f"`fixtures --tree` should exit 0, got {rc}. stderr: {out}"
-    assert "db" in out, f"db fixture missing: {out!r}"
-    assert "config" in out, f"config dep missing: {out!r}"
+    helpers.integ.assert_contains(out, "db", "config")
     assert "└── " in out or "├── " in out, f"tree chars missing: {out!r}"
 
 
@@ -59,7 +59,7 @@ def test_tree_verbose_shows_tags(tmp: TempDir):
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run_fixtures_tree(tmp, "-v")
     assert rc == 0, f"exit code: {rc}"
-    assert "shared" in out, f"shared tag missing: {out!r}"
+    helpers.integ.assert_contains(out, "shared")
 
 
 def test_tree_cycle_exits_failure(tmp: TempDir):
@@ -86,4 +86,4 @@ def test_tree_no_fixtures_shows_builtins(tmp: TempDir):
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run_fixtures_tree(tmp)
     assert rc == 0, f"exit code: {rc}"
-    assert "TempDir" in out, f"built-in TempDir missing: {out!r}"
+    helpers.integ.assert_contains(out, "TempDir")

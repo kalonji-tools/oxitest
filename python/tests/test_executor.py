@@ -357,16 +357,16 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
     )
 
 
-def test_run_test_missing_fixture_returns_error_result(tmp: TempDir):
+def test_run_test_missing_fixture_returns_error_result(
+    tmp: TempDir, fixture_session: Fixture[FixtureSession]
+):
     f = tmp / "test_fix.py"
     f.write_text(
         "from oxitest import Fixture\n"
         "def test_uses_missing(nonexistent: Fixture[int]) -> None: pass\n"
     )
-    reg = FixtureRegistry()  # empty registry
-    session = FixtureSession(reg)
-    session.begin_module(str(f))
-    result = helpers.common.run_test(str(f), "test_uses_missing", session)
+    fixture_session.begin_module(str(f))
+    result = helpers.common.run_test(str(f), "test_uses_missing", fixture_session)
     assert result.status == "error", (
         f"missing fixture should produce status='error', got {result.status!r}"
     )
