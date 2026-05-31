@@ -37,15 +37,12 @@ jobs:
         with:
           shared-key: bench
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          enable-cache: true
-          python-version: '3.12'
+          uv-sync-args: --group test
 
-      - name: Install Python dependencies
-        run: |
-          uv sync --group test
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Add venv to PATH
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Build oxitest
         run: uv run maturin develop --release
