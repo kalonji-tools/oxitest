@@ -39,6 +39,7 @@ current working directory when omitted.
 | `--strict` | — | `abort\|enforce` | — | Enforce strict conventions. Use `--strict=MODE` with `=` (bare `--strict` defaults to `abort`). Checks: bare assert, dict parametrize, missing mark reason, marker without description. `abort` exits with code 3 before tests run. `enforce` runs tests but turns violations into errors. |
 | `--capture-environment` | — | flag | `false` | Print environment info (oxitest version, Python, rustc, OS) and exit with code 0. Useful for bug reports. |
 | `--fixtures` | — | flag | `false` | List all registered fixtures and exit. Alias: `--fx`. |
+| `--tree` | — | flag | `false` | Show fixture dependency tree and exit. Visualizes which fixtures depend on which. Use `-k` to filter roots by name. Verbosity (`-v`/`-vv`) adds tags and origin info. Detects circular dependencies. |
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail for `--fixtures`). |
 | `--list` | — | flag | `false` | List collected tests and exit (no execution). |
 | `--affected` | — | `REF` | — | Run only tests affected by git changes. Use `--affected=REF` with `=` (bare `--affected` uses the `affected_base` config value, or `HEAD`). |
@@ -57,10 +58,14 @@ current working directory when omitted.
 | `-x` | `--maxfail` | Both control when to stop after failures. Use one or the other. |
 | `-v`/`-vv` | `--verbose=LEVEL` | Both set verbosity. Use short form or long form, not both. |
 | `--list` | `--fixtures` | Mutually exclusive action modes. |
+| `--list` | `--tree` | Mutually exclusive action modes. |
 | `--list` | `--capture-environment` | Mutually exclusive action modes. |
+| `--fixtures` | `--tree` | Mutually exclusive action modes. |
 | `--fixtures` | `--capture-environment` | Mutually exclusive action modes. |
+| `--tree` | `--capture-environment` | Mutually exclusive action modes. |
 | `--list` | `--quiet` / `-q` | Quiet suppresses output, but --list requests it. |
 | `--fixtures` | `--quiet` / `-q` | Quiet suppresses output, but --fixtures requests it. |
+| `--tree` | `--quiet` / `-q` | Quiet suppresses output, but --tree requests it. |
 | `--serial` | `--workers` | Mutually exclusive execution modes. |
 | `--serial` | `--schedule` | Schedule controls parallel worker ordering; no effect in serial mode. |
 | `--serial` | `--auto-arrange` | Auto-arrangement targets parallel workers; no effect in serial mode. |
@@ -140,6 +145,46 @@ oxitest suggests adding assertion messages to improve failure output.
 
 Without `--tips`, only a count of such assertions is shown after a passing run. With `--tips`,
 the full `file:line` list of every bare assertion is printed instead.
+
+## Fixture tree
+
+The `--tree` flag renders all fixtures as a dependency tree. Each fixture is a
+node; arrows point to its dependencies. This is useful for understanding fixture
+relationships and debugging circular dependencies.
+
+```console
+$ oxitest --tree
+db
+└── config
+
+── 2 fixtures
+```
+
+Use `-k` to filter which fixtures appear as roots:
+
+```console
+$ oxitest --tree -k db
+db
+└── config
+
+── 1 of 2 fixtures
+```
+
+Verbosity controls the amount of detail per node:
+
+| Level | Shows |
+|-------|-------|
+| *(default)* | Fixture names only. |
+| `-v` | Names + tags (`shared`, `async`, `autouse`). |
+| `-vv` | Names + tags + origin (`conftest.py` path). |
+
+When a circular dependency is detected, `--tree` prints an error and exits
+with a non-zero exit code:
+
+```console
+$ oxitest --tree
+error: Circular fixture dependency: a -> b -> a
+```
 
 ## Exit codes
 
