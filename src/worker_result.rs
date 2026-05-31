@@ -54,6 +54,18 @@ pub(crate) struct FrameEntry {
     pub locals: Vec<(String, String)>,
 }
 
+impl From<&FrameEntry> for Frame {
+    fn from(f: &FrameEntry) -> Self {
+        Frame {
+            file: Utf8PathBuf::from(f.file.as_str()),
+            lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
+            name: f.name.clone(),
+            line: f.line.clone(),
+            locals: f.locals.clone(),
+        }
+    }
+}
+
 /// Deserialized JSON result for a single test, written by a worker subprocess.
 ///
 /// Workers print one `WorkerResult` line per test to stdout. All optional
@@ -129,17 +141,7 @@ impl WorkerResult {
             .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
 
-        let frames: Vec<Frame> = self
-            .frames
-            .iter()
-            .map(|f| Frame {
-                file: Utf8PathBuf::from(f.file.as_str()),
-                lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
-                name: f.name.clone(),
-                line: f.line.clone(),
-                locals: f.locals.clone(),
-            })
-            .collect();
+        let frames: Vec<Frame> = self.frames.iter().map(Frame::from).collect();
 
         types::TestOutcome::from_raw(types::RawOutcome {
             status: self.outcome.as_str(),
