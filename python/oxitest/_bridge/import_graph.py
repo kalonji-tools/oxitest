@@ -57,17 +57,17 @@ def _extract_imported_modules(file_path: str) -> set[str]:
     except (SyntaxError, OSError):
         return set()
 
+    def _module_prefixes(dotted_name: str) -> set[str]:
+        parts = dotted_name.split(".")
+        return {".".join(parts[:i]) for i in range(1, len(parts) + 1)}
+
     modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                parts = alias.name.split(".")
-                for i in range(1, len(parts) + 1):
-                    modules.add(".".join(parts[:i]))
+                modules.update(_module_prefixes(alias.name))
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            parts = node.module.split(".")
-            for i in range(1, len(parts) + 1):
-                modules.add(".".join(parts[:i]))
+            modules.update(_module_prefixes(node.module))
     return modules
 
 
