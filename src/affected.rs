@@ -5,9 +5,8 @@
 //! list to only affected files.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use pyo3::prelude::*;
 
-use crate::bridge;
+use crate::import_graph;
 
 /// Error from `--affected` processing.
 #[derive(thiserror::Error, Debug, Clone)]
@@ -135,7 +134,6 @@ fn directly_changed_tests(
 /// - `Ok(None)` — `pyproject.toml` changed or root conftest changed; run all.
 /// - `Err(e)` — git error or import analysis error.
 pub(crate) fn filter_affected_test_files(
-    py: Python<'_>,
     test_files: &[Utf8PathBuf],
     rootdir: &Utf8Path,
     base_ref: &str,
@@ -168,7 +166,7 @@ pub(crate) fn filter_affected_test_files(
         rootdir,
     ));
 
-    // 3. Test files that import changed source files (via Python AST analysis).
+    // 3. Test files that import changed source files (via Rust AST analysis).
     //    Only analyze files not already marked affected.
     let remaining: Vec<Utf8PathBuf> = test_files
         .iter()
@@ -177,15 +175,10 @@ pub(crate) fn filter_affected_test_files(
         .collect();
 
     if !remaining.is_empty() && !classified.source_files.is_empty() {
-        let import_affected =
-            bridge::resolve_affected_tests(py, &remaining, &classified.source_files, rootdir)
-                .map_err(|e| {
-                    AffectedError::GitCommandFailed(format!("import analysis failed: {e}"))
-                })?;
-
-        for path_str in import_affected {
-            affected.insert(Utf8PathBuf::from(path_str));
-        }
+        affected.extend(import_graph::resolve_affected(
+            &remaining,
+            &classified.source_files,
+        ));
     }
 
     // Preserve original ordering from test_files.

@@ -573,8 +573,8 @@ impl PipelinePhase for AffectedPhase {
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let base_ref = ctx.cfg.affected.as_ref().expect("checked in should_run");
-        match affected::filter_affected_test_files(py, &ctx.test_files, &ctx.cfg.rootdir, base_ref)
-        {
+        let _ = py; // GIL no longer needed for import analysis
+        match affected::filter_affected_test_files(&ctx.test_files, &ctx.cfg.rootdir, base_ref) {
             Ok(Some(files)) => {
                 if files.is_empty() {
                     println!("no changes detected — nothing to test");
