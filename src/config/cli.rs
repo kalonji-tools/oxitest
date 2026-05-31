@@ -2,8 +2,11 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 
 use super::{
-    ColorMode, FailedMode, KeepTmpMode, ScheduleStrategy, StrictMode, TbStyle, WorkerCount,
+    ColorMode, FailedMode, KeepTmpMode, ScheduleStrategy, StrictMode, TbStyle, Verbosity,
+    WorkerCount,
 };
+
+// ── DebugMode ────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum DebugMode {
@@ -13,18 +16,70 @@ pub enum DebugMode {
     Always,
 }
 
-#[derive(Parser, Debug)]
-#[command(name = "oxitest", about = "A fast Python test runner")]
-pub struct Cli {
-    /// Paths to test files or directories (default: current directory)
-    pub paths: Vec<Utf8PathBuf>,
+// ── Shared flag groups ───────────────────────────────────────────────────────
 
+/// Keyword and marker filtering flags, shared by run/debug/list.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct FilteringArgs {
     /// Only run tests matching the keyword expression
-    #[arg(short = 'k', value_name = "EXPR")]
+    #[arg(short = 'k', value_name = "EXPR", help_heading = "Filtering")]
     pub keyword: Option<String>,
 
+    /// Only run tests matching the marker expression
+    #[arg(
+        short = 'm',
+        long = "marker",
+        value_name = "EXPR",
+        help_heading = "Filtering"
+    )]
+    pub marker: Option<String>,
+
+    /// Run only tests affected by git changes (default ref from affected_base config, or HEAD)
+    #[arg(
+        long,
+        value_name = "REF",
+        default_missing_value = "",
+        num_args = 0..=1,
+        require_equals = true,
+        help_heading = "Filtering",
+    )]
+    pub affected: Option<String>,
+}
+
+/// Failed-test filtering flags, shared by run/debug.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct FailedFilterArgs {
+    /// Failed-test mode: "only" runs just failures, "first" runs failures before the rest
+    #[arg(long, value_enum, value_name = "MODE", help_heading = "Filtering")]
+    pub failed: Option<FailedMode>,
+
+    /// Shorthand for --failed=only (run only previously-failed tests)
+    #[arg(long, conflicts_with = "failed", help_heading = "Filtering")]
+    pub lf: bool,
+
+    /// Shorthand for --failed=first (run failed tests first, then the rest)
+    #[arg(long, conflicts_with_all = ["failed", "lf"], help_heading = "Filtering")]
+    pub ff: bool,
+}
+
+impl FailedFilterArgs {
+    /// Resolve the three flags into a single `Option<FailedMode>`.
+    pub fn resolve(&self) -> Option<FailedMode> {
+        if self.lf {
+            Some(FailedMode::Only)
+        } else if self.ff {
+            Some(FailedMode::First)
+        } else {
+            self.failed
+        }
+    }
+}
+
+/// Verbosity flags, shared across subcommands.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct VerbosityArgs {
     /// Short-form verbosity (-v = detailed, -vv = full)
-    #[arg(short = 'v', action = clap::ArgAction::Count)]
+    #[arg(short = 'v', action = clap::ArgAction::Count, help_heading = "Output")]
     pub verbose_count: u8,
 
     /// Explicit verbosity level (--verbose, --verbose=detailed, --verbose=full)
@@ -35,68 +90,85 @@ pub struct Cli {
         default_missing_value = "detailed",
         num_args = 0..=1,
         require_equals = true,
+        help_heading = "Output",
     )]
-    pub verbose: Option<crate::config::Verbosity>,
+    pub verbose: Option<Verbosity>,
+}
 
+impl VerbosityArgs {
+    /// Check that short and long verbosity flags are not mixed.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.verbose_count > 0 && self.verbose.is_some() {
+            return Err("use -v/-vv or --verbose=LEVEL, not both.".to_string());
+        }
+        Ok(())
+    }
+
+    /// Resolve the two flags into a single `Option<Verbosity>`.
+    pub fn resolve(&self) -> Option<Verbosity> {
+        if let Some(level) = self.verbose {
+            Some(level)
+        } else if self.verbose_count >= 2 {
+            Some(Verbosity::Full)
+        } else if self.verbose_count == 1 {
+            Some(Verbosity::Detailed)
+        } else {
+            None
+        }
+    }
+}
+
+// ── Subcommand argument structs ──────────────────────────────────────────────
+
+/// Arguments for `oxitest run` (the default subcommand).
+#[derive(clap::Args, Debug, Clone)]
+pub struct RunArgs {
+    /// Paths to test files or directories (default: current directory)
+    pub paths: Vec<Utf8PathBuf>,
+
+    #[command(flatten)]
+    pub filter: FilteringArgs,
+
+    #[command(flatten)]
+    pub failed_filter: FailedFilterArgs,
+
+    #[command(flatten)]
+    pub verbosity: VerbosityArgs,
+
+    // ── Execution ────────────────────────────────────────────────────
     /// Exit immediately after the first failure
-    #[arg(short = 'x')]
+    #[arg(short = 'x', help_heading = "Execution")]
     pub exitfirst: bool,
 
     /// Exit after N failures (0 = no limit)
-    #[arg(long, value_name = "NUM")]
+    #[arg(long, value_name = "NUM", help_heading = "Execution")]
     pub maxfail: Option<usize>,
 
-    /// Traceback style: detail (default), line, no
-    #[arg(long, value_enum)]
-    pub tb: Option<TbStyle>,
-
-    /// Expand assertions-without-messages tip list
-    #[arg(long)]
-    pub tips: bool,
-
-    /// Expand captured Python warnings list
-    #[arg(long)]
-    pub warnings: bool,
-
-    /// Color output mode: auto, always, never
-    #[arg(long, value_enum)]
-    pub color: Option<ColorMode>,
-
-    /// Write CTRF JSON results to PATH
-    #[arg(long, value_name = "PATH")]
-    pub json: Option<Utf8PathBuf>,
-
-    /// Write JUnit XML results to PATH
-    #[arg(long, value_name = "PATH")]
-    pub junit_xml: Option<Utf8PathBuf>,
-
-    /// Only run tests matching the marker expression
-    #[arg(short = 'm', long = "marker", value_name = "EXPR")]
-    pub marker: Option<String>,
-
     /// Run tests serially (single process, no workers)
-    #[arg(long)]
+    #[arg(long, help_heading = "Execution")]
     pub serial: bool,
 
     /// Number of parallel worker processes ("auto" or a positive integer)
-    #[arg(short = 'n', long, value_name = "N", conflicts_with = "serial")]
+    #[arg(
+        short = 'n',
+        long,
+        value_name = "N",
+        conflicts_with = "serial",
+        help_heading = "Execution"
+    )]
     pub workers: Option<WorkerCount>,
 
     /// Group scheduling strategy for parallel runs
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, help_heading = "Execution")]
     pub schedule: Option<ScheduleStrategy>,
 
     /// Per-test timeout in seconds (overrides pyproject.toml timeout)
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", help_heading = "Execution")]
     pub timeout: Option<u64>,
 
-    /// Show the N slowest tests at end of run
-    #[arg(long, value_name = "N")]
-    pub durations: Option<usize>,
-
-    /// Failed-test mode: "only" runs just failures, "first" runs failures before the rest
-    #[arg(long, value_enum, value_name = "MODE")]
-    pub failed: Option<FailedMode>,
+    /// Retry failed tests up to N times
+    #[arg(long, value_name = "N", help_heading = "Execution")]
+    pub retries: Option<usize>,
 
     /// Enforce strict conventions (bare-assert, dict-parametrize, missing mark reason,
     /// marker-without-description). Use `--strict=MODE` with `=` (e.g. `--strict=enforce`).
@@ -108,59 +180,42 @@ pub struct Cli {
         default_missing_value = "abort",
         num_args = 0..=1,
         require_equals = true,
+        help_heading = "Execution",
     )]
     pub strict: Option<StrictMode>,
 
-    /// Print environment information (oxitest version, Python, rustc, OS) and exit
-    #[arg(long)]
-    pub capture_environment: bool,
-
-    /// List all registered fixtures and exit
-    #[arg(long, visible_alias = "fx")]
-    pub fixtures: bool,
-
-    /// Show fixture dependency tree and exit
-    #[arg(long)]
-    pub tree: bool,
-
-    /// Quiet output (minimal detail for --fixtures)
-    #[arg(short = 'q', long)]
+    // ── Output ───────────────────────────────────────────────────────
+    /// Quiet output (minimal detail)
+    #[arg(short = 'q', long, help_heading = "Output")]
     pub quiet: bool,
 
-    /// List collected tests and exit (no execution)
-    #[arg(long)]
-    pub list: bool,
+    /// Traceback style: detail (default), line, no
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub tb: Option<TbStyle>,
 
-    /// Run only tests affected by git changes (default ref from affected_base config, or HEAD)
-    #[arg(
-        long,
-        value_name = "REF",
-        default_missing_value = "",
-        num_args = 0..=1,
-        require_equals = true,
-    )]
-    pub affected: Option<String>,
+    /// Show local variables in diagnostic frames (requires --tb=detail)
+    #[arg(long, help_heading = "Output")]
+    pub show_locals: bool,
 
-    /// Retry failed tests up to N times
-    #[arg(long, value_name = "N")]
-    pub retries: Option<usize>,
+    /// Show oxitest internal frames in trace (requires --tb=detail)
+    #[arg(long, help_heading = "Output")]
+    pub show_internals: bool,
 
-    /// Seconds to wait between retries
-    #[arg(long, value_name = "SECS")]
-    pub retries_delay: Option<u64>,
+    /// Expand assertions-without-messages tip list
+    #[arg(long, help_heading = "Output")]
+    pub tips: bool,
 
-    /// Drop into an interactive debugger on test failure.
-    /// Implies --serial and --maxfail 1. Use `--debug=MODE` with `=`.
-    /// Bare `--debug` defaults to post-mortem mode.
-    #[arg(
-        long,
-        value_enum,
-        value_name = "MODE",
-        default_missing_value = "post-mortem",
-        num_args = 0..=1,
-        require_equals = true,
-    )]
-    pub debug: Option<DebugMode>,
+    /// Expand captured Python warnings list
+    #[arg(long, help_heading = "Output")]
+    pub warnings: bool,
+
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+
+    /// Show the N slowest tests at end of run
+    #[arg(long, value_name = "N", help_heading = "Output")]
+    pub durations: Option<usize>,
 
     /// Preserve TempDir contents instead of cleaning up.
     /// Bare `--keep-tmp` defaults to failed mode (preserve on test failure only).
@@ -172,39 +227,24 @@ pub struct Cli {
         default_missing_value = "failed",
         num_args = 0..=1,
         require_equals = true,
+        help_heading = "Output",
     )]
     pub keep_tmp: Option<KeepTmpMode>,
 
-    /// Auto-arrange tests by shared fixture dependencies onto the same worker.
-    /// Bare `--auto-arrange` uses the default threshold (70%).
-    /// Use `--auto-arrange=N` to set a custom threshold percentage.
-    #[arg(
-        long,
-        value_name = "THRESHOLD",
-        default_missing_value = "70",
-        num_args = 0..=1,
-        require_equals = true,
-    )]
-    pub auto_arrange: Option<u8>,
+    // ── Reports ──────────────────────────────────────────────────────
+    /// Write CTRF JSON results to PATH
+    #[arg(long, value_name = "PATH", help_heading = "Reports")]
+    pub json: Option<Utf8PathBuf>,
 
-    /// Disable auto-arrangement of tests by shared fixtures.
-    #[arg(long, conflicts_with = "auto_arrange")]
-    pub no_auto_arrange: bool,
-
-    /// Show local variables in diagnostic frames (requires --tb=detail)
-    #[arg(long)]
-    pub show_locals: bool,
-
-    /// Show oxitest internal frames in trace (requires --tb=detail)
-    #[arg(long)]
-    pub show_internals: bool,
+    /// Write JUnit XML results to PATH
+    #[arg(long, value_name = "PATH", help_heading = "Reports")]
+    pub junit_xml: Option<Utf8PathBuf>,
 }
 
-impl Cli {
+impl RunArgs {
     /// Check for conflicting flag combinations.
     ///
     /// Returns `Err` with a human-readable message if flags contradict each other.
-    /// Called after `Cli::parse()` and before any filesystem or config work.
     pub fn validate(&self) -> Result<(), String> {
         if self.exitfirst && self.maxfail.is_some() {
             return Err(
@@ -213,103 +253,11 @@ impl Cli {
             );
         }
 
-        if self.verbose_count > 0 && self.verbose.is_some() {
-            return Err("use -v/-vv or --verbose=LEVEL, not both.".to_string());
-        }
-
         if self.schedule.is_some() && self.serial {
             return Err(
                 "--schedule controls parallel worker ordering, which has no effect with --serial."
                     .to_string(),
             );
-        }
-
-        if self.retries_delay.is_some() && self.retries.is_none() {
-            return Err("--retries-delay has no effect without --retries.".to_string());
-        }
-
-        if let Some(ref mode) = self.debug {
-            if self.workers.is_some() {
-                return Err(
-                    "--debug implies serial mode. It cannot be combined with --workers."
-                        .to_string(),
-                );
-            }
-            if self.serial {
-                return Err(
-                    "--debug already implies serial mode. Passing --serial is redundant."
-                        .to_string(),
-                );
-            }
-            if matches!(mode, DebugMode::PostMortem) {
-                if self.exitfirst {
-                    return Err(
-                        "--debug already implies --maxfail 1. Passing -x is redundant.".to_string(),
-                    );
-                }
-                if self.maxfail.is_some() {
-                    return Err(
-                        "--debug already implies --maxfail 1. It cannot be combined with --maxfail."
-                            .to_string(),
-                    );
-                }
-            }
-            if self.retries.is_some() {
-                return Err(
-                    "--debug is for interactive debugging. It cannot be combined with --retries."
-                        .to_string(),
-                );
-            }
-            if self.retries_delay.is_some() {
-                return Err(
-                    "--debug is for interactive debugging. It cannot be combined with --retries-delay."
-                        .to_string(),
-                );
-            }
-            if self.schedule.is_some() {
-                return Err(
-                    "--debug implies serial mode. --schedule has no effect without parallel workers."
-                        .to_string(),
-                );
-            }
-            if self.timeout.is_some() {
-                return Err(
-                    "--debug is for interactive debugging. --timeout would kill the debugger session."
-                        .to_string(),
-                );
-            }
-        }
-
-        // ── Mutually exclusive action modes ──────────────────────────
-        let action_modes = [
-            (self.list, "--list"),
-            (self.fixtures, "--fixtures"),
-            (self.tree, "--tree"),
-            (self.capture_environment, "--capture-environment"),
-        ];
-        let active: Vec<&str> = action_modes
-            .iter()
-            .filter(|(flag, _)| *flag)
-            .map(|(_, name)| *name)
-            .collect();
-        if active.len() > 1 {
-            return Err(format!(
-                "{} and {} are mutually exclusive action modes.",
-                active[0], active[1],
-            ));
-        }
-
-        // ── Quiet conflicts with output-requesting actions ───────────
-        if self.quiet {
-            if self.list {
-                return Err("--quiet suppresses output, but --list requests it.".to_string());
-            }
-            if self.fixtures {
-                return Err("--quiet suppresses output, but --fixtures requests it.".to_string());
-            }
-            if self.tree {
-                return Err("--quiet suppresses output, but --tree requests it.".to_string());
-            }
         }
 
         // ── --show-locals / --show-internals require --tb=detail ──
@@ -328,509 +276,516 @@ impl Cli {
             }
         }
 
-        Ok(())
+        self.verbosity.validate()
     }
 }
 
+/// Arguments for `oxitest debug`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct DebugArgs {
+    /// Paths to test files or directories (default: current directory)
+    pub paths: Vec<Utf8PathBuf>,
+
+    /// Start the debugger before every test (not just on failure)
+    #[arg(long)]
+    pub always: bool,
+
+    #[command(flatten)]
+    pub filter: FilteringArgs,
+
+    #[command(flatten)]
+    pub failed_filter: FailedFilterArgs,
+
+    #[command(flatten)]
+    pub verbosity: VerbosityArgs,
+
+    // ── Output ───────────────────────────────────────────────────────
+    /// Quiet output (minimal detail)
+    #[arg(short = 'q', long, help_heading = "Output")]
+    pub quiet: bool,
+
+    /// Traceback style: detail (default), line, no
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub tb: Option<TbStyle>,
+
+    /// Show local variables in diagnostic frames (requires --tb=detail)
+    #[arg(long, help_heading = "Output")]
+    pub show_locals: bool,
+
+    /// Preserve TempDir contents instead of cleaning up.
+    /// Bare `--keep-tmp` defaults to failed mode (preserve on test failure only).
+    /// Use `--keep-tmp=MODE` with `=` (e.g. `--keep-tmp=always`).
+    #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        default_missing_value = "failed",
+        num_args = 0..=1,
+        require_equals = true,
+        help_heading = "Output",
+    )]
+    pub keep_tmp: Option<KeepTmpMode>,
+
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+}
+
+impl DebugArgs {
+    /// Return the debug mode based on the `--always` flag.
+    pub fn mode(&self) -> DebugMode {
+        if self.always {
+            DebugMode::Always
+        } else {
+            DebugMode::PostMortem
+        }
+    }
+
+    /// Check for conflicting flag combinations.
+    pub fn validate(&self) -> Result<(), String> {
+        self.verbosity.validate()
+    }
+}
+
+/// Arguments for `oxitest list`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct ListArgs {
+    /// Paths to test files or directories (default: current directory)
+    pub paths: Vec<Utf8PathBuf>,
+
+    #[command(flatten)]
+    pub filter: FilteringArgs,
+
+    #[command(flatten)]
+    pub verbosity: VerbosityArgs,
+
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+}
+
+/// Arguments for `oxitest fixtures`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct FixturesArgs {
+    /// Show fixture dependency tree
+    #[arg(long)]
+    pub tree: bool,
+
+    #[command(flatten)]
+    pub verbosity: VerbosityArgs,
+
+    /// Quiet output (minimal detail)
+    #[arg(short = 'q', long, help_heading = "Output")]
+    pub quiet: bool,
+
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+}
+
+// ── Command enum ─────────────────────────────────────────────────────────────
+
+/// Available subcommands.
+#[derive(clap::Subcommand, Debug, Clone)]
+pub enum Command {
+    /// Run tests (default when no subcommand is given)
+    Run(RunArgs),
+    /// Interactive debugger session
+    Debug(DebugArgs),
+    /// List collected tests without executing
+    List(ListArgs),
+    /// Inspect registered fixtures
+    Fixtures(FixturesArgs),
+    /// Print environment information (version, Python, rustc, OS)
+    Env,
+}
+
+// ── Top-level parser ─────────────────────────────────────────────────────────
+
+/// oxitest — a fast Python test runner.
+#[derive(Parser, Debug)]
+#[command(name = "oxitest", about = "A fast Python test runner")]
+pub struct OxitestCli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+impl OxitestCli {
+    /// Parse arguments, falling back to implicit `run` when no subcommand is given.
+    ///
+    /// Tries parsing with subcommands first. On failure (e.g. `oxitest tests/ -k foo`
+    /// without an explicit `run`), falls back to parsing all args as `RunArgs`.
+    pub fn resolve(args: &[String]) -> Result<Command, clap::Error> {
+        // First, try normal parsing with subcommands.
+        match OxitestCli::try_parse_from(args) {
+            Ok(cli) => {
+                if let Some(cmd) = cli.command {
+                    return Ok(cmd);
+                }
+                // No subcommand given (bare `oxitest`) — treat as `run` with no args.
+                let run_args = vec![args[0].clone(), "run".to_string()];
+                // (no extra args to forward)
+                let cli = OxitestCli::try_parse_from(&run_args)?;
+                Ok(cli.command.unwrap())
+            }
+            Err(e) => {
+                // If the initial parse failed, try inserting "run" after the binary name
+                // to handle implicit default subcommand (e.g. `oxitest tests/ -k foo`).
+                if args.len() > 1 {
+                    let mut run_args = Vec::with_capacity(args.len() + 1);
+                    run_args.push(args[0].clone());
+                    run_args.push("run".to_string());
+                    run_args.extend_from_slice(&args[1..]);
+                    match OxitestCli::try_parse_from(&run_args) {
+                        Ok(cli) => Ok(cli.command.unwrap()),
+                        Err(_) => Err(e), // Return the original error for better UX
+                    }
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+}
+
+// ── Test helpers ─────────────────────────────────────────────────────────────
+
 #[cfg(test)]
-impl Cli {
-    /// Construct a `Cli` with all defaults, equivalent to running `oxitest` with no arguments.
+impl RunArgs {
     pub fn default_for_test() -> Self {
-        Self::try_parse_from(["oxitest"]).expect("default CLI args must parse")
+        OxitestCli::try_parse_from(["oxitest", "run"])
+            .expect("default RunArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::Run(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
     }
 }
 
 #[cfg(test)]
-mod validate_tests {
+impl DebugArgs {
+    pub fn default_for_test() -> Self {
+        OxitestCli::try_parse_from(["oxitest", "debug"])
+            .expect("default DebugArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::Debug(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
+    }
+}
+
+#[cfg(test)]
+impl ListArgs {
+    #[allow(dead_code)]
+    pub fn default_for_test() -> Self {
+        OxitestCli::try_parse_from(["oxitest", "list"])
+            .expect("default ListArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::List(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
+    }
+}
+
+#[cfg(test)]
+impl FixturesArgs {
+    #[allow(dead_code)]
+    pub fn default_for_test() -> Self {
+        OxitestCli::try_parse_from(["oxitest", "fixtures"])
+            .expect("default FixturesArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::Fixtures(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
+    }
+}
+
+// ── Unit tests ────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
     use super::*;
-    use clap::Parser;
+    use crate::config::{FailedMode, Verbosity};
+
+    /// Convert a fixed-size array of `&str` into `Vec<String>`.
+    fn s<const N: usize>(args: [&str; N]) -> Vec<String> {
+        args.iter().map(|a| a.to_string()).collect()
+    }
+
+    // ── OxitestCli::resolve ───────────────────────────────────────────────────
 
     #[test]
-    fn test_exitfirst_conflicts_with_maxfail() {
-        let cli = Cli::try_parse_from(["oxitest", "-x", "--maxfail", "5"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("-x"), "error should mention -x: {err}");
-        assert!(
-            err.contains("--maxfail"),
-            "error should mention --maxfail: {err}"
-        );
+    fn bare_oxitest_defaults_to_run() {
+        let cmd = OxitestCli::resolve(&s(["oxitest"])).unwrap();
+        assert!(matches!(cmd, Command::Run(_)));
     }
 
     #[test]
-    fn test_exitfirst_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "-x"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn explicit_run_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        assert!(matches!(cmd, Command::Run(_)));
     }
 
     #[test]
-    fn test_maxfail_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--maxfail", "3"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn implicit_run_with_path() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "tests/"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/")]);
     }
 
     #[test]
-    fn test_no_flags_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn implicit_run_with_flags() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "-k", "foo"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
     }
 
     #[test]
-    fn test_short_v_parses() {
-        let cli = Cli::try_parse_from(["oxitest", "-v"]).unwrap();
-        assert_eq!(cli.verbose_count, 1);
-        assert!(cli.verbose.is_none());
+    fn implicit_run_with_path_and_flags() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "tests/", "-k", "foo"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/")]);
+        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
     }
 
     #[test]
-    fn test_short_vv_parses() {
-        let cli = Cli::try_parse_from(["oxitest", "-vv"]).unwrap();
-        assert_eq!(cli.verbose_count, 2);
+    fn debug_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
+        assert!(matches!(cmd, Command::Debug(_)));
     }
 
     #[test]
-    fn test_long_verbose_bare() {
-        let cli = Cli::try_parse_from(["oxitest", "--verbose"]).unwrap();
-        assert_eq!(cli.verbose, Some(crate::config::Verbosity::Detailed));
-        assert_eq!(cli.verbose_count, 0);
+    fn debug_with_always() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "debug", "--always"])).unwrap();
+        let Command::Debug(args) = cmd else {
+            panic!("expected Command::Debug");
+        };
+        assert!(args.always);
     }
 
     #[test]
-    fn test_long_verbose_full() {
-        let cli = Cli::try_parse_from(["oxitest", "--verbose=full"]).unwrap();
-        assert_eq!(cli.verbose, Some(crate::config::Verbosity::Full));
+    fn debug_default_is_post_mortem() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
+        let Command::Debug(args) = cmd else {
+            panic!("expected Command::Debug");
+        };
+        assert_eq!(args.mode(), DebugMode::PostMortem);
     }
 
     #[test]
-    fn test_short_and_long_verbose_conflict() {
-        let cli = Cli::try_parse_from(["oxitest", "-v", "--verbose=full"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("-v/-vv"), "error: {err}");
-        assert!(err.contains("--verbose"), "error: {err}");
+    fn list_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "list"])).unwrap();
+        assert!(matches!(cmd, Command::List(_)));
     }
 
     #[test]
-    fn test_v_with_quiet_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "-v", "-q"]).unwrap();
-        assert!(
-            cli.validate().is_ok(),
-            "-v -q should be valid (quiet trumps)"
-        );
+    fn list_with_keyword() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "-k", "foo"])).unwrap();
+        let Command::List(args) = cmd else {
+            panic!("expected Command::List");
+        };
+        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
     }
 
     #[test]
-    fn test_short_v_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "-v"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn list_with_marker() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "-m", "slow"])).unwrap();
+        let Command::List(args) = cmd else {
+            panic!("expected Command::List");
+        };
+        assert_eq!(args.filter.marker.as_deref(), Some("slow"));
     }
 
     #[test]
-    fn test_quiet_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "-q"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn fixtures_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures"])).unwrap();
+        assert!(matches!(cmd, Command::Fixtures(_)));
     }
 
     #[test]
-    fn test_schedule_conflicts_with_serial() {
-        let cli = Cli::try_parse_from(["oxitest", "--schedule", "random", "--serial"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--schedule"),
-            "error should mention --schedule: {err}"
-        );
-        assert!(
-            err.contains("--serial"),
-            "error should mention --serial: {err}"
-        );
+    fn fixtures_with_tree() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures", "--tree"])).unwrap();
+        let Command::Fixtures(args) = cmd else {
+            panic!("expected Command::Fixtures");
+        };
+        assert!(args.tree);
     }
 
     #[test]
-    fn test_schedule_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--schedule", "random"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn fixtures_with_quiet() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures", "-q"])).unwrap();
+        let Command::Fixtures(args) = cmd else {
+            panic!("expected Command::Fixtures");
+        };
+        assert!(args.quiet);
     }
 
     #[test]
-    fn test_serial_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--serial"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn env_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "env"])).unwrap();
+        assert!(matches!(cmd, Command::Env));
+    }
+
+    // ── FailedFilterArgs::resolve ─────────────────────────────────────────────
+
+    #[test]
+    fn lf_resolves_to_failed_only() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--lf"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
 
     #[test]
-    fn test_retries_delay_requires_retries() {
-        let cli = Cli::try_parse_from(["oxitest", "--retries-delay", "5"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--retries-delay"),
-            "error should mention --retries-delay: {err}"
-        );
-        assert!(
-            err.contains("--retries"),
-            "error should mention --retries: {err}"
-        );
+    fn ff_resolves_to_failed_first() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--ff"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::First));
     }
 
     #[test]
-    fn test_retries_with_delay_is_valid() {
-        let cli =
-            Cli::try_parse_from(["oxitest", "--retries", "3", "--retries-delay", "5"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn failed_only_canonical() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "only"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
 
     #[test]
-    fn test_retries_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--retries", "3"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn failed_first_canonical() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "first"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::First));
     }
 
     #[test]
-    fn test_debug_bare_defaults_to_post_mortem() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug"]).unwrap();
-        assert_eq!(cli.debug, Some(DebugMode::PostMortem));
+    fn lf_conflicts_with_failed() {
+        let result = OxitestCli::resolve(&s(["oxitest", "run", "--lf", "--failed", "only"]));
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_debug_explicit_post_mortem() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=post-mortem"]).unwrap();
-        assert_eq!(cli.debug, Some(DebugMode::PostMortem));
+    fn ff_conflicts_with_lf() {
+        let result = OxitestCli::resolve(&s(["oxitest", "run", "--ff", "--lf"]));
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_debug_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.debug, None);
+    fn no_failed_flags_resolves_none() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), None);
     }
 
     #[test]
-    fn test_debug_conflicts_with_workers() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--workers", "4"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--workers"),
-            "error should mention --workers: {err}"
-        );
+    fn lf_in_debug_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "debug", "--lf"])).unwrap();
+        let Command::Debug(args) = cmd else { panic!() };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
+    }
+
+    // ── RunArgs::validate ─────────────────────────────────────────────────────
+
+    #[test]
+    fn exitfirst_conflicts_with_maxfail() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-x", "--maxfail", "5"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
     }
 
     #[test]
-    fn test_debug_conflicts_with_serial() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--serial"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--serial"),
-            "error should mention --serial: {err}"
-        );
+    fn schedule_conflicts_with_serial() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--serial", "--schedule", "random"]))
+            .unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
     }
 
     #[test]
-    fn test_debug_conflicts_with_exitfirst() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "-x"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(err.contains("-x"), "error should mention -x: {err}");
+    fn show_locals_with_tb_no_conflicts() {
+        let cmd =
+            OxitestCli::resolve(&s(["oxitest", "run", "--show-locals", "--tb", "no"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
     }
 
     #[test]
-    fn test_debug_conflicts_with_maxfail() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--maxfail", "5"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--maxfail"),
-            "error should mention --maxfail: {err}"
-        );
+    fn show_internals_with_tb_line_conflicts() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--show-internals", "--tb", "line"]))
+            .unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
     }
 
     #[test]
-    fn test_debug_conflicts_with_retries() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--retries", "3"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--retries"),
-            "error should mention --retries: {err}"
-        );
+    fn show_locals_alone_is_valid() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--show-locals"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        // default tb is None (→ detail), so no conflict
+        assert!(args.validate().is_ok());
     }
 
     #[test]
-    fn test_debug_conflicts_with_retries_delay() {
-        let cli = Cli::try_parse_from([
-            "oxitest",
-            "--debug",
-            "--retries",
-            "3",
-            "--retries-delay",
-            "5",
-        ])
-        .unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--retries"),
-            "error should mention --retries: {err}"
-        );
+    fn no_flags_is_valid() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_ok());
     }
 
     #[test]
-    fn test_debug_conflicts_with_schedule() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--schedule", "random"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--schedule"),
-            "error should mention --schedule: {err}"
-        );
+    fn v_and_verbose_conflict() {
+        // clap accepts -v and --verbose=full at parse time; validate() catches the mix.
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-v", "--verbose=full"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
+    }
+
+    // ── VerbosityArgs ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn short_v_resolves_detailed() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-v"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
     }
 
     #[test]
-    fn test_debug_conflicts_with_timeout() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug", "--timeout", "30"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--timeout"),
-            "error should mention --timeout: {err}"
-        );
+    fn short_vv_resolves_full() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-vv"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Full));
     }
 
     #[test]
-    fn test_debug_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn long_verbose_bare_resolves_detailed() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--verbose"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
     }
 
     #[test]
-    fn test_debug_always_parses() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always"]).unwrap();
-        assert_eq!(cli.debug, Some(DebugMode::Always));
+    fn long_verbose_full() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--verbose=full"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Full));
     }
 
     #[test]
-    fn test_debug_always_allows_exitfirst() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "-x"]).unwrap();
-        assert!(cli.validate().is_ok(), "always mode should allow -x");
-    }
-
-    #[test]
-    fn test_debug_always_allows_maxfail() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--maxfail", "3"]).unwrap();
-        assert!(cli.validate().is_ok(), "always mode should allow --maxfail");
-    }
-
-    #[test]
-    fn test_debug_always_still_conflicts_with_workers() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--workers", "4"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--workers"),
-            "error should mention --workers: {err}"
-        );
-    }
-
-    #[test]
-    fn test_debug_always_still_conflicts_with_timeout() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always", "--timeout", "30"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(
-            err.contains("--debug"),
-            "error should mention --debug: {err}"
-        );
-        assert!(
-            err.contains("--timeout"),
-            "error should mention --timeout: {err}"
-        );
-    }
-
-    #[test]
-    fn test_debug_always_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--debug=always"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_keep_tmp_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.keep_tmp.is_none());
-    }
-
-    #[test]
-    fn test_keep_tmp_bare_defaults_to_failed() {
-        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp"]).unwrap();
-        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Failed));
-    }
-
-    #[test]
-    fn test_keep_tmp_explicit_failed() {
-        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=failed"]).unwrap();
-        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Failed));
-    }
-
-    #[test]
-    fn test_keep_tmp_explicit_always() {
-        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=always"]).unwrap();
-        assert_eq!(cli.keep_tmp, Some(KeepTmpMode::Always));
-    }
-
-    #[test]
-    fn test_list_conflicts_with_fixtures() {
-        let cli = Cli::try_parse_from(["oxitest", "--list", "--fixtures"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--list"), "error: {err}");
-        assert!(err.contains("--fixtures"), "error: {err}");
-    }
-
-    #[test]
-    fn test_list_conflicts_with_capture_environment() {
-        let cli = Cli::try_parse_from(["oxitest", "--list", "--capture-environment"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--list"), "error: {err}");
-        assert!(err.contains("--capture-environment"), "error: {err}");
-    }
-
-    #[test]
-    fn test_fixtures_conflicts_with_capture_environment() {
-        let cli = Cli::try_parse_from(["oxitest", "--fixtures", "--capture-environment"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--fixtures"), "error: {err}");
-        assert!(err.contains("--capture-environment"), "error: {err}");
-    }
-
-    #[test]
-    fn test_list_conflicts_with_quiet() {
-        let cli = Cli::try_parse_from(["oxitest", "--list", "-q"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--list"), "error: {err}");
-        assert!(err.contains("--quiet"), "error: {err}");
-    }
-
-    #[test]
-    fn test_fixtures_conflicts_with_quiet() {
-        let cli = Cli::try_parse_from(["oxitest", "--fixtures", "-q"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--fixtures"), "error: {err}");
-        assert!(err.contains("--quiet"), "error: {err}");
-    }
-
-    #[test]
-    fn test_list_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--list"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_list_with_v_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--list", "-v"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_show_locals_with_tb_no_conflicts() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "no"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--show-locals"), "error: {err}");
-        assert!(err.contains("--tb=detail"), "error: {err}");
-    }
-
-    #[test]
-    fn test_show_locals_with_tb_line_conflicts() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "line"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--show-locals"), "error: {err}");
-    }
-
-    #[test]
-    fn test_show_internals_with_tb_no_conflicts() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "no"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--show-internals"), "error: {err}");
-    }
-
-    #[test]
-    fn test_show_internals_with_tb_line_conflicts() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "line"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--show-internals"), "error: {err}");
-    }
-
-    #[test]
-    fn test_show_locals_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-locals"]).unwrap();
-        assert!(cli.validate().is_ok(), "default tb is detail, so valid");
-    }
-
-    #[test]
-    fn test_show_internals_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-internals"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_show_locals_with_tb_detail_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-locals", "--tb", "detail"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_show_internals_with_tb_detail_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "detail"]).unwrap();
-        assert!(cli.validate().is_ok());
-    }
-
-    #[test]
-    fn test_tree_conflicts_with_list() {
-        let cli = Cli::try_parse_from(["oxitest", "--tree", "--list"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--tree"), "error: {err}");
-        assert!(err.contains("--list"), "error: {err}");
-    }
-
-    #[test]
-    fn test_tree_conflicts_with_fixtures() {
-        let cli = Cli::try_parse_from(["oxitest", "--tree", "--fixtures"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--tree"), "error: {err}");
-        assert!(err.contains("--fixtures"), "error: {err}");
-    }
-
-    #[test]
-    fn test_tree_conflicts_with_quiet() {
-        let cli = Cli::try_parse_from(["oxitest", "--tree", "-q"]).unwrap();
-        let err = cli.validate().unwrap_err();
-        assert!(err.contains("--tree"), "error: {err}");
-        assert!(err.contains("--quiet"), "error: {err}");
-    }
-
-    #[test]
-    fn test_tree_alone_is_valid() {
-        let cli = Cli::try_parse_from(["oxitest", "--tree"]).unwrap();
-        assert!(cli.validate().is_ok());
+    fn no_verbose_resolves_none() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert_eq!(args.verbosity.resolve(), None);
     }
 }
