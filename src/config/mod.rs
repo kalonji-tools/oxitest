@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod cli;
-pub use cli::{Cli, DebugMode};
+pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, RunArgs};
 
 mod pyproject;
 use pyproject::{AutoArrangeToml, OxitestConfig, PyprojectToml};
@@ -185,8 +185,8 @@ impl ColorMode {
 /// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
 ///
 /// CLI flags take precedence over `pyproject.toml` values. Construct via
-/// `Config::load(rootdir)` then `config.merge_cli(&cli)`. Defaults come from
-/// `Config::default()`.
+/// `Config::load(rootdir)` then `config.merge_run_args(&args)` or
+/// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
 #[derive(Debug)]
 pub struct Config {
     pub rootdir: Utf8PathBuf,
@@ -488,11 +488,96 @@ impl Config {
         self
     }
 
-    pub fn merge_cli(mut self, cli: &Cli) -> Self {
+    pub fn merge_run_args(mut self, args: &RunArgs) -> Self {
         // ── Paths ────────────────────────────────────────────────────────
-        if !cli.paths.is_empty() {
-            self.testpaths = cli
-                .paths
+        self.merge_paths(&args.paths);
+
+        // ── Execution (unique to CLI) ───────────────────────────────────
+        // validate() guarantees -x and --maxfail are mutually exclusive.
+        if args.exitfirst {
+            self.maxfail = 1;
+        }
+        if let Some(n) = args.maxfail {
+            if n > 0 {
+                self.maxfail = n;
+            }
+        }
+        if args.serial {
+            self.serial = true;
+        }
+        apply_if_some!(self, timeout_secs, args.timeout, wrap);
+
+        // ── Filtering (unique to CLI) ───────────────────────────────────
+        self.merge_affected(&args.filter.affected);
+
+        // ── Output (unique to CLI) ──────────────────────────────────
+        if let Some(level) = args.verbosity.resolve() {
+            self.verbosity = level;
+        }
+
+        // ── Shared overrides ────────────────────────────────────────────
+        self.apply_overrides(Overrides {
+            schedule: args.schedule,
+            retries: args.retries,
+            retries_delay_secs: None,
+            workers: args.workers,
+            failed: args.failed_filter.resolve(),
+            tb: args.tb.clone(),
+            color: args.color,
+            durations: args.durations,
+            strict: args.strict.clone(),
+            keep_tmp: args.keep_tmp,
+            show_locals: if args.show_locals { Some(true) } else { None },
+            show_internals: if args.show_internals {
+                Some(true)
+            } else {
+                None
+            },
+            auto_arrange_threshold: None,
+        });
+
+        self
+    }
+
+    pub fn merge_debug_args(mut self, args: &DebugArgs) -> Self {
+        // ── Paths ────────────────────────────────────────────────────────
+        self.merge_paths(&args.paths);
+
+        // ── Debug mode ──────────────────────────────────────────────────
+        args.mode().apply_to(&mut self, args.tb.as_ref());
+
+        // ── Filtering (unique to CLI) ───────────────────────────────────
+        self.merge_affected(&args.filter.affected);
+
+        // ── Output (unique to CLI) ──────────────────────────────────
+        if let Some(level) = args.verbosity.resolve() {
+            self.verbosity = level;
+        }
+
+        // ── Shared overrides ────────────────────────────────────────────
+        self.apply_overrides(Overrides {
+            schedule: None,
+            retries: None,
+            retries_delay_secs: None,
+            workers: None,
+            failed: args.failed_filter.resolve(),
+            tb: args.tb.clone(),
+            color: args.color,
+            durations: None,
+            strict: None,
+            keep_tmp: args.keep_tmp,
+            show_locals: if args.show_locals { Some(true) } else { None },
+            show_internals: None,
+            auto_arrange_threshold: None,
+        });
+
+        self
+    }
+
+    /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
+    fn merge_paths(&mut self, paths: &[Utf8PathBuf]) {
+        if !paths.is_empty() {
+            self.testpaths = paths
                 .iter()
                 .map(|p| {
                     if p.is_absolute() {
@@ -503,68 +588,17 @@ impl Config {
                 })
                 .collect();
         }
+    }
 
-        // ── Execution (unique to CLI) ───────────────────────────────────
-        // validate() guarantees -x and --maxfail are mutually exclusive.
-        if cli.exitfirst {
-            self.maxfail = 1;
-        }
-        if let Some(n) = cli.maxfail {
-            if n > 0 {
-                self.maxfail = n;
-            }
-        }
-        if cli.serial {
-            self.serial = true;
-        }
-        apply_if_some!(self, timeout_secs, cli.timeout, wrap);
-
-        // ── Debug mode ──────────────────────────────────────────────────
-        if let Some(ref mode) = cli.debug {
-            mode.apply_to(&mut self, cli.tb.as_ref());
-        }
-
-        // ── Filtering (unique to CLI) ───────────────────────────────────
-        if let Some(ref val) = cli.affected {
+    /// Merge the `--affected` flag into config, resolving empty sentinel to `affected_base`.
+    fn merge_affected(&mut self, affected: &Option<String>) {
+        if let Some(ref val) = affected {
             if val.is_empty() {
                 self.affected = Some(self.affected_base.clone());
             } else {
-                self.affected = cli.affected.clone();
+                self.affected = affected.clone();
             }
         }
-
-        // ── Output (unique to CLI) ──────────────────────────────────
-        // validate() guarantees verbose_count and verbose are not both set.
-        if let Some(level) = cli.verbose {
-            self.verbosity = level;
-        } else if cli.verbose_count >= 2 {
-            self.verbosity = Verbosity::Full;
-        } else if cli.verbose_count == 1 {
-            self.verbosity = Verbosity::Detailed;
-        }
-
-        // ── Shared overrides ────────────────────────────────────────────
-        self.apply_overrides(Overrides {
-            schedule: cli.schedule,
-            retries: cli.retries,
-            retries_delay_secs: cli.retries_delay,
-            workers: cli.workers,
-            failed: cli.failed,
-            tb: cli.tb.clone(),
-            color: cli.color,
-            durations: cli.durations,
-            strict: cli.strict.clone(),
-            keep_tmp: cli.keep_tmp,
-            show_locals: if cli.show_locals { Some(true) } else { None },
-            show_internals: if cli.show_internals { Some(true) } else { None },
-            auto_arrange_threshold: if cli.no_auto_arrange {
-                Some(None)
-            } else {
-                cli.auto_arrange.map(Some)
-            },
-        });
-
-        self
     }
 
     /// Resolve the configured worker count to a concrete number.
@@ -593,15 +627,22 @@ impl Config {
 mod tests {
     use super::*;
     use camino::{Utf8Path, Utf8PathBuf};
-    use clap::Parser;
     use std::fs;
     use tempfile::TempDir;
 
-    /// Returns a `Cli` parsed from no flags — all fields at their defaults.
-    /// Use struct-update syntax (`Cli { field: val, ..base_cli() }`) to override
-    /// only the field under test, so adding a new flag never breaks these tests.
-    fn base_cli() -> Cli {
-        Cli::try_parse_from(["oxitest"]).expect("default CLI parse must succeed")
+    /// Returns default `RunArgs` for use in tests.
+    fn base_run_args() -> RunArgs {
+        RunArgs::default_for_test()
+    }
+
+    /// Helper: resolve CLI args into a `RunArgs`.
+    fn parse_run(args: &[&str]) -> RunArgs {
+        let mut argv: Vec<String> = vec!["oxitest".to_string(), "run".to_string()];
+        argv.extend(args.iter().map(|s| s.to_string()));
+        match OxitestCli::resolve(&argv).unwrap() {
+            Command::Run(a) => a,
+            _ => panic!("expected Command::Run"),
+        }
     }
 
     #[test]
@@ -628,7 +669,6 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        // [tool.pytest] must not be read — only [tool.oxitest] is supported
         assert_eq!(config.testpaths, vec![utf8_dir.to_owned()]);
     }
 
@@ -678,59 +718,53 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_cli_exitfirst_sets_maxfail_1() {
+    fn test_merge_run_args_exitfirst_sets_maxfail_1() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            exitfirst: true,
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
+        let mut args = base_run_args();
+        args.exitfirst = true;
+        let merged = config.merge_run_args(&args);
         assert_eq!(merged.maxfail, 1);
     }
 
     #[test]
-    fn test_merge_cli_maxfail_sets_maxfail() {
+    fn test_merge_run_args_maxfail_sets_maxfail() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            maxfail: Some(3),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
+        let mut args = base_run_args();
+        args.maxfail = Some(3);
+        let merged = config.merge_run_args(&args);
         assert_eq!(merged.maxfail, 3);
     }
 
     #[test]
-    fn test_merge_cli_paths_overrides_testpaths() {
+    fn test_merge_run_args_paths_overrides_testpaths() {
         let dir = TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let config = Config::load(utf8_dir);
         let custom = utf8_dir.join("custom_tests");
-        let cli = Cli {
-            paths: vec![custom.clone()],
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
+        let mut args = base_run_args();
+        args.paths = vec![custom.clone()];
+        let merged = config.merge_run_args(&args);
         assert_eq!(merged.testpaths, vec![custom]);
     }
 
     #[test]
     fn test_cli_tb_default_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.tb, None);
+        let args = base_run_args();
+        assert_eq!(args.tb, None);
     }
 
     #[test]
     fn test_cli_tb_detail() {
-        let cli = Cli::try_parse_from(["oxitest", "--tb", "detail"]).unwrap();
-        assert_eq!(cli.tb, Some(TbStyle::Detail));
+        let args = parse_run(&["--tb", "detail"]);
+        assert_eq!(args.tb, Some(TbStyle::Detail));
     }
 
     #[test]
     fn test_cli_tb_no() {
-        let cli = Cli::try_parse_from(["oxitest", "--tb", "no"]).unwrap();
-        assert_eq!(cli.tb, Some(TbStyle::No));
+        let args = parse_run(&["--tb", "no"]);
+        assert_eq!(args.tb, Some(TbStyle::No));
     }
 
     #[test]
@@ -795,26 +829,26 @@ mod tests {
 
     #[test]
     fn test_cli_tips_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--tips"]).unwrap();
-        assert!(cli.tips);
+        let args = parse_run(&["--tips"]);
+        assert!(args.tips);
     }
 
     #[test]
     fn test_cli_color_never() {
-        let cli = Cli::try_parse_from(["oxitest", "--color", "never"]).unwrap();
-        assert_eq!(cli.color, Some(ColorMode::Never));
+        let args = parse_run(&["--color", "never"]);
+        assert_eq!(args.color, Some(ColorMode::Never));
     }
 
     #[test]
     fn test_cli_color_always() {
-        let cli = Cli::try_parse_from(["oxitest", "--color", "always"]).unwrap();
-        assert_eq!(cli.color, Some(ColorMode::Always));
+        let args = parse_run(&["--color", "always"]);
+        assert_eq!(args.color, Some(ColorMode::Always));
     }
 
     #[test]
     fn test_cli_color_default_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.color, None);
+        let args = base_run_args();
+        assert_eq!(args.color, None);
     }
 
     #[test]
@@ -826,18 +860,10 @@ mod tests {
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(
-            cfg.color,
-            ColorMode::Always,
-            "pyproject color must load correctly"
-        );
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.color,
-            ColorMode::Always,
-            "pyproject color must be preserved when CLI does not specify --color"
-        );
+        assert_eq!(cfg.color, ColorMode::Always);
+        let args = base_run_args();
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.color, ColorMode::Always);
     }
 
     #[test]
@@ -849,19 +875,15 @@ mod tests {
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--color", "never"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.color,
-            ColorMode::Never,
-            "CLI --color must override pyproject value"
-        );
+        let args = parse_run(&["--color", "never"]);
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.color, ColorMode::Never);
     }
 
     #[test]
     fn test_cli_warnings_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--warnings"]).unwrap();
-        assert!(cli.warnings);
+        let args = parse_run(&["--warnings"]);
+        assert!(args.warnings);
     }
 
     #[test]
@@ -890,32 +912,34 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        // Only the name before ":" is stored
         assert_eq!(config.registered_markers, vec!["slow".to_string()]);
     }
 
     #[test]
     fn test_cli_marker_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "-m", "slow"]).unwrap();
-        assert_eq!(cli.marker, Some("slow".to_string()));
+        let args = parse_run(&["-m", "slow"]);
+        assert_eq!(args.filter.marker, Some("slow".to_string()));
     }
 
     #[test]
     fn test_cli_marker_flag_long() {
-        let cli = Cli::try_parse_from(["oxitest", "--marker", "slow and not integration"]).unwrap();
-        assert_eq!(cli.marker, Some("slow and not integration".to_string()));
+        let args = parse_run(&["--marker", "slow and not integration"]);
+        assert_eq!(
+            args.filter.marker,
+            Some("slow and not integration".to_string())
+        );
     }
 
     #[test]
     fn test_cli_json_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--json", "/tmp/results.json"]).unwrap();
-        assert_eq!(cli.json, Some(Utf8PathBuf::from("/tmp/results.json")));
+        let args = parse_run(&["--json", "/tmp/results.json"]);
+        assert_eq!(args.json, Some(Utf8PathBuf::from("/tmp/results.json")));
     }
 
     #[test]
     fn test_cli_json_flag_absent() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.json.is_none());
+        let args = base_run_args();
+        assert!(args.json.is_none());
     }
 
     #[test]
@@ -941,68 +965,84 @@ mod tests {
 
     #[test]
     fn test_cli_serial_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--serial"]).unwrap();
-        assert!(cli.serial);
+        let args = parse_run(&["--serial"]);
+        assert!(args.serial);
     }
 
     #[test]
     fn test_cli_serial_default_is_false() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(!cli.serial);
+        let args = base_run_args();
+        assert!(!args.serial);
     }
 
     #[test]
     fn test_cli_workers_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--workers", "4"]).unwrap();
-        assert_eq!(cli.workers, Some(WorkerCount::Fixed(4)));
+        let args = parse_run(&["--workers", "4"]);
+        assert_eq!(args.workers, Some(WorkerCount::Fixed(4)));
     }
 
     #[test]
     fn test_cli_workers_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.workers.is_none());
+        let args = base_run_args();
+        assert!(args.workers.is_none());
     }
 
     #[test]
     fn test_config_worker_count_serial_returns_1() {
         let dir = TempDir::new().unwrap();
-        let cli = Cli::try_parse_from(["oxitest", "--serial"]).unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_cli(&cli);
+        let args = parse_run(&["--serial"]);
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert_eq!(config.worker_count(), 1);
     }
 
     #[test]
     fn test_config_worker_count_explicit_workers() {
         let dir = TempDir::new().unwrap();
-        let cli = Cli::try_parse_from(["oxitest", "--workers", "3"]).unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_cli(&cli);
+        let args = parse_run(&["--workers", "3"]);
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert_eq!(config.worker_count(), 3);
     }
 
     #[test]
     fn test_config_worker_count_default_is_cpu_count() {
         let dir = TempDir::new().unwrap();
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_cli(&cli);
-        // Must be >= 1
+        let args = base_run_args();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert!(config.worker_count() >= 1);
     }
 
     #[test]
     fn test_cli_workers_zero_is_rejected() {
-        let result = Cli::try_parse_from(["oxitest", "--workers", "0"]);
+        let result = OxitestCli::resolve(&[
+            "oxitest".to_string(),
+            "run".to_string(),
+            "--workers".to_string(),
+            "0".to_string(),
+        ]);
         assert!(result.is_err(), "Expected --workers 0 to be rejected");
     }
 
     #[test]
     fn test_cli_serial_and_workers_conflict() {
-        let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "4"]);
+        let result = OxitestCli::resolve(&[
+            "oxitest".to_string(),
+            "run".to_string(),
+            "--serial".to_string(),
+            "--workers".to_string(),
+            "4".to_string(),
+        ]);
         assert!(result.is_err(), "Expected --serial --workers to conflict");
     }
 
     #[test]
     fn test_cli_serial_and_workers_auto_conflict() {
-        let result = Cli::try_parse_from(["oxitest", "--serial", "--workers", "auto"]);
+        let result = OxitestCli::resolve(&[
+            "oxitest".to_string(),
+            "run".to_string(),
+            "--serial".to_string(),
+            "--workers".to_string(),
+            "auto".to_string(),
+        ]);
         assert!(
             result.is_err(),
             "Expected --serial --workers auto to conflict"
@@ -1011,20 +1051,20 @@ mod tests {
 
     #[test]
     fn test_cli_short_n_flag_auto() {
-        let cli = Cli::try_parse_from(["oxitest", "-n", "auto"]).unwrap();
-        assert_eq!(cli.workers, Some(WorkerCount::Auto));
+        let args = parse_run(&["-n", "auto"]);
+        assert_eq!(args.workers, Some(WorkerCount::Auto));
     }
 
     #[test]
     fn test_cli_short_n_flag_fixed() {
-        let cli = Cli::try_parse_from(["oxitest", "-n", "4"]).unwrap();
-        assert_eq!(cli.workers, Some(WorkerCount::Fixed(4)));
+        let args = parse_run(&["-n", "4"]);
+        assert_eq!(args.workers, Some(WorkerCount::Fixed(4)));
     }
 
     #[test]
     fn test_cli_long_workers_auto() {
-        let cli = Cli::try_parse_from(["oxitest", "--workers", "auto"]).unwrap();
-        assert_eq!(cli.workers, Some(WorkerCount::Auto));
+        let args = parse_run(&["--workers", "auto"]);
+        assert_eq!(args.workers, Some(WorkerCount::Auto));
     }
 
     #[test]
@@ -1055,14 +1095,14 @@ mod tests {
 
     #[test]
     fn test_cli_durations_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--durations", "10"]).unwrap();
-        assert_eq!(cli.durations, Some(10));
+        let args = parse_run(&["--durations", "10"]);
+        assert_eq!(args.durations, Some(10));
     }
 
     #[test]
     fn test_cli_durations_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.durations.is_none());
+        let args = base_run_args();
+        assert!(args.durations.is_none());
     }
 
     #[test]
@@ -1126,24 +1166,6 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_flag_only() {
-        let cli = Cli::try_parse_from(["oxitest", "--failed=only"]).unwrap();
-        assert_eq!(cli.failed, Some(FailedMode::Only));
-    }
-
-    #[test]
-    fn test_failed_flag_first() {
-        let cli = Cli::try_parse_from(["oxitest", "--failed=first"]).unwrap();
-        assert_eq!(cli.failed, Some(FailedMode::First));
-    }
-
-    #[test]
-    fn test_no_failed_flag() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.failed, None);
-    }
-
-    #[test]
     fn test_failed_from_pyproject() {
         let dir = TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
@@ -1176,40 +1198,38 @@ spawn_overhead_ms = 100.0
     fn test_load_malformed_toml_returns_defaults() {
         let dir = TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
-        // timeout expects u64 but receives a string — toml::from_str will Err
         fs::write(
             dir.path().join("pyproject.toml"),
             "[tool.oxitest]\ntimeout = \"not_a_number\"\n",
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        // Must fall back to defaults, not crash
         assert_eq!(config.timeout_secs, Config::default().timeout_secs);
         assert_eq!(config.python_files, Config::default().python_files);
     }
 
     #[test]
     fn test_cli_strict_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.strict.is_none());
+        let args = base_run_args();
+        assert!(args.strict.is_none());
     }
 
     #[test]
     fn test_cli_strict_bare_flag_defaults_to_abort() {
-        let cli = Cli::try_parse_from(["oxitest", "--strict"]).unwrap();
-        assert_eq!(cli.strict, Some(StrictMode::Abort));
+        let args = parse_run(&["--strict"]);
+        assert_eq!(args.strict, Some(StrictMode::Abort));
     }
 
     #[test]
     fn test_cli_strict_enforce() {
-        let cli = Cli::try_parse_from(["oxitest", "--strict=enforce"]).unwrap();
-        assert_eq!(cli.strict, Some(StrictMode::Enforce));
+        let args = parse_run(&["--strict=enforce"]);
+        assert_eq!(args.strict, Some(StrictMode::Enforce));
     }
 
     #[test]
     fn test_cli_strict_abort_explicit() {
-        let cli = Cli::try_parse_from(["oxitest", "--strict=abort"]).unwrap();
-        assert_eq!(cli.strict, Some(StrictMode::Abort));
+        let args = parse_run(&["--strict=abort"]);
+        assert_eq!(args.strict, Some(StrictMode::Abort));
     }
 
     #[test]
@@ -1235,8 +1255,8 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--strict=enforce"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--strict=enforce"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.strict, Some(StrictMode::Enforce));
     }
 
@@ -1263,22 +1283,9 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        // No --strict flag on CLI — TOML value must be preserved.
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = base_run_args();
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.strict, Some(StrictMode::Enforce));
-    }
-
-    #[test]
-    fn test_cli_capture_environment_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--capture-environment"]).unwrap();
-        assert!(cli.capture_environment);
-    }
-
-    #[test]
-    fn test_cli_capture_environment_absent_is_false() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(!cli.capture_environment);
     }
 
     #[test]
@@ -1339,8 +1346,8 @@ spawn_overhead_ms = 100.0
         .unwrap();
         assert_eq!(config.workers, Some(WorkerCount::Auto));
 
-        let cli = Cli::try_parse_from(["oxitest", "--workers", "2"]).unwrap();
-        let merged = config.merge_cli(&cli);
+        let args = parse_run(&["--workers", "2"]);
+        let merged = config.merge_run_args(&args);
         assert_eq!(merged.workers, Some(WorkerCount::Fixed(2)));
     }
 
@@ -1353,8 +1360,8 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = config.merge_cli(&cli);
+        let args = base_run_args();
+        let merged = config.merge_run_args(&args);
         assert_eq!(merged.workers, Some(WorkerCount::Fixed(8)));
     }
 
@@ -1395,13 +1402,9 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.schedule,
-            ScheduleStrategy::Random,
-            "pyproject schedule must be preserved when CLI does not specify --schedule"
-        );
+        let args = base_run_args();
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.schedule, ScheduleStrategy::Random);
     }
 
     #[test]
@@ -1413,25 +1416,21 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--schedule", "failed-first"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.schedule,
-            ScheduleStrategy::FailedFirst,
-            "CLI --schedule must override pyproject value"
-        );
+        let args = parse_run(&["--schedule", "failed-first"]);
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.schedule, ScheduleStrategy::FailedFirst);
     }
 
     #[test]
     fn test_cli_timeout_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--timeout", "30"]).unwrap();
-        assert_eq!(cli.timeout, Some(30));
+        let args = parse_run(&["--timeout", "30"]);
+        assert_eq!(args.timeout, Some(30));
     }
 
     #[test]
     fn test_cli_timeout_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert_eq!(cli.timeout, None);
+        let args = base_run_args();
+        assert_eq!(args.timeout, None);
     }
 
     #[test]
@@ -1444,13 +1443,9 @@ spawn_overhead_ms = 100.0
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(cfg.timeout_secs, Some(60));
-        let cli = Cli::try_parse_from(["oxitest", "--timeout", "10"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.timeout_secs,
-            Some(10),
-            "CLI --timeout must override pyproject value"
-        );
+        let args = parse_run(&["--timeout", "10"]);
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.timeout_secs, Some(10));
     }
 
     #[test]
@@ -1462,20 +1457,15 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(
-            merged.timeout_secs,
-            Some(45),
-            "pyproject timeout must be preserved when CLI does not specify --timeout"
-        );
+        let args = base_run_args();
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(merged.timeout_secs, Some(45));
     }
 
     // ── WorkerCount serde visitor edge cases ─────────────────────────────────
 
     #[test]
     fn test_toml_workers_negative_rejected() {
-        // TOML parses negative integers as i64 → exercises visit_i64 error path
         let result = Config::from_str(
             r#"
         [tool.oxitest]
@@ -1487,31 +1477,24 @@ spawn_overhead_ms = 100.0
 
     #[test]
     fn test_toml_workers_positive_i64() {
-        // TOML may route small positive integers through visit_i64 on some
-        // deserializer implementations; this exercises the success path.
-        // (toml crate uses visit_u64 for positives, so this tests via from_str
-        // with serde_json which does use visit_i64)
         let v: WorkerCount = serde_json::from_str("3").unwrap();
         assert_eq!(v, WorkerCount::Fixed(3));
     }
 
     #[test]
     fn test_json_workers_negative_rejected() {
-        // JSON integers can be negative → exercises visit_i64 error path
         let result = serde_json::from_str::<WorkerCount>("-5");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_json_workers_zero_i64_rejected() {
-        // JSON zero as i64 → exercises visit_i64 with v <= 0
         let result = serde_json::from_str::<WorkerCount>("0");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_toml_workers_invalid_string_rejected() {
-        // Exercises visit_str error path (string that isn't "auto")
         let result = Config::from_str(
             r#"
         [tool.oxitest]
@@ -1523,7 +1506,6 @@ spawn_overhead_ms = 100.0
 
     #[test]
     fn test_worker_count_expecting_message() {
-        // Exercises the `expecting` method (triggered by type mismatch)
         let result = serde_json::from_str::<WorkerCount>("true");
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -1586,14 +1568,14 @@ async_backend = "trio"
 
     #[test]
     fn test_cli_affected_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.affected.is_none());
+        let args = base_run_args();
+        assert!(args.filter.affected.is_none());
     }
 
     #[test]
     fn test_cli_affected_bare_is_empty_sentinel() {
-        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
-        assert_eq!(cli.affected, Some("".to_string()));
+        let args = parse_run(&["--affected"]);
+        assert_eq!(args.filter.affected, Some("".to_string()));
     }
 
     #[test]
@@ -1605,8 +1587,8 @@ async_backend = "trio"
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--affected"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.affected, Some("main".to_string()));
     }
 
@@ -1614,8 +1596,8 @@ async_backend = "trio"
     fn test_affected_bare_defaults_to_head_without_config() {
         let dir = TempDir::new().unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--affected"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--affected"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.affected, Some("HEAD".to_string()));
     }
 
@@ -1628,39 +1610,33 @@ async_backend = "trio"
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--affected=develop"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--affected=develop"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.affected, Some("develop".to_string()));
     }
 
     #[test]
     fn test_cli_affected_with_branch() {
-        let cli = Cli::try_parse_from(["oxitest", "--affected=main"]).unwrap();
-        assert_eq!(cli.affected, Some("main".to_string()));
+        let args = parse_run(&["--affected=main"]);
+        assert_eq!(args.filter.affected, Some("main".to_string()));
     }
 
     #[test]
     fn test_cli_affected_with_commit() {
-        let cli = Cli::try_parse_from(["oxitest", "--affected=abc123"]).unwrap();
-        assert_eq!(cli.affected, Some("abc123".to_string()));
+        let args = parse_run(&["--affected=abc123"]);
+        assert_eq!(args.filter.affected, Some("abc123".to_string()));
     }
 
     #[test]
     fn test_cli_retries_absent_is_none() {
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        assert!(cli.retries.is_none());
+        let args = base_run_args();
+        assert!(args.retries.is_none());
     }
 
     #[test]
     fn test_cli_retries_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--retries", "3"]).unwrap();
-        assert_eq!(cli.retries, Some(3));
-    }
-
-    #[test]
-    fn test_cli_retries_delay_flag() {
-        let cli = Cli::try_parse_from(["oxitest", "--retries-delay", "2"]).unwrap();
-        assert_eq!(cli.retries_delay, Some(2));
+        let args = parse_run(&["--retries", "3"]);
+        assert_eq!(args.retries, Some(3));
     }
 
     #[test]
@@ -1690,8 +1666,8 @@ async_backend = "trio"
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--retries", "5"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--retries", "5"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.retries, 5);
     }
 
@@ -1775,77 +1751,67 @@ async_backend = "trio"
         assert!(no_desc.is_empty());
     }
 
+    // ── DebugMode::apply_to tests ───────────────────────────────────────
+
     #[test]
-    fn test_merge_cli_debug_implies_serial() {
-        let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            debug: Some(DebugMode::PostMortem),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
-        assert!(merged.serial, "debug should imply serial");
-        assert_eq!(merged.maxfail, 1, "debug should imply maxfail=1");
-        assert_eq!(merged.tb, TbStyle::Detail, "debug should imply tb=detail");
-        assert!(merged.debug.is_some(), "debug should be stored on config");
-        assert_eq!(
-            merged.timeout_secs, None,
-            "debug should clear timeout (would kill debugger)"
-        );
+    fn test_debug_post_mortem_apply_to() {
+        let mut cfg = Config::default();
+        DebugMode::PostMortem.apply_to(&mut cfg, None);
+        assert!(cfg.serial, "debug should imply serial");
+        assert_eq!(cfg.maxfail, 1, "post-mortem should imply maxfail=1");
+        assert_eq!(cfg.tb, TbStyle::Detail, "debug should imply tb=detail");
+        assert!(cfg.debug.is_some(), "debug should be stored on config");
+        assert_eq!(cfg.timeout_secs, None, "debug should clear timeout");
+        assert!(cfg.show_internals, "debug should imply show_internals");
     }
 
     #[test]
-    fn test_merge_cli_debug_clears_pyproject_timeout() {
-        let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("pyproject.toml"),
-            "[tool.oxitest]\ntimeout = 30\n",
-        )
-        .unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(config.timeout_secs, Some(30), "precondition: timeout set");
-        let cli = Cli {
-            debug: Some(DebugMode::PostMortem),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
+    fn test_debug_post_mortem_clears_pyproject_timeout() {
+        let mut cfg = Config::default();
+        cfg.timeout_secs = Some(30);
+        DebugMode::PostMortem.apply_to(&mut cfg, None);
         assert_eq!(
-            merged.timeout_secs, None,
+            cfg.timeout_secs, None,
             "debug should clear pyproject timeout"
         );
     }
 
     #[test]
-    fn test_merge_cli_debug_always_does_not_imply_maxfail() {
-        let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            debug: Some(DebugMode::Always),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
-        assert!(merged.serial, "always should imply serial");
-        assert_eq!(merged.maxfail, 0, "always should NOT imply maxfail=1");
-        assert_eq!(merged.tb, TbStyle::Detail, "always should imply tb=detail");
-        assert_eq!(merged.timeout_secs, None, "always should clear timeout");
+    fn test_debug_always_does_not_imply_maxfail() {
+        let mut cfg = Config::default();
+        DebugMode::Always.apply_to(&mut cfg, None);
+        assert!(cfg.serial, "always should imply serial");
+        assert_eq!(cfg.maxfail, 0, "always should NOT imply maxfail=1");
+        assert_eq!(cfg.tb, TbStyle::Detail, "always should imply tb=detail");
+        assert_eq!(cfg.timeout_secs, None, "always should clear timeout");
     }
 
     #[test]
-    fn test_merge_cli_debug_does_not_override_explicit_tb() {
-        let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            debug: Some(DebugMode::PostMortem),
-            tb: Some(TbStyle::No),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
+    fn test_debug_does_not_override_explicit_tb() {
+        // When cli_tb is Some, apply_to should NOT override tb to Detail.
+        // The caller sets cfg.tb via the override mechanism after apply_to.
+        let mut cfg = Config::default();
+        cfg.tb = TbStyle::No; // User chose --tb=no explicitly
+        DebugMode::PostMortem.apply_to(&mut cfg, Some(&TbStyle::No));
         assert_eq!(
-            merged.tb,
+            cfg.tb,
             TbStyle::No,
             "explicit --tb should not be overridden"
         );
     }
+
+    #[test]
+    fn test_merge_debug_args_applies_mode() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let args = DebugArgs::default_for_test();
+        let merged = config.merge_debug_args(&args);
+        assert!(merged.serial);
+        assert_eq!(merged.maxfail, 1);
+        assert!(merged.debug.is_some());
+    }
+
+    // ── keep_tmp tests ──────────────────────────────────────────────────
 
     #[test]
     fn test_keep_tmp_default_is_none() {
@@ -1874,8 +1840,8 @@ async_backend = "trio"
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--keep-tmp=failed"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = parse_run(&["--keep-tmp=failed"]);
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Failed));
     }
 
@@ -1888,8 +1854,8 @@ async_backend = "trio"
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
+        let args = base_run_args();
+        let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Always));
     }
 
@@ -1919,17 +1885,7 @@ async_backend = "trio"
         assert!(cfg.show_internals);
     }
 
-    #[test]
-    fn test_debug_implies_show_internals() {
-        let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli {
-            debug: Some(DebugMode::PostMortem),
-            ..base_cli()
-        };
-        let merged = config.merge_cli(&cli);
-        assert!(merged.show_internals, "debug should imply show_internals");
-    }
+    // ── auto_arrange tests (TOML only) ──────────────────────────────────
 
     #[test]
     fn test_auto_arrange_default_is_some_70() {
@@ -1947,38 +1903,5 @@ async_backend = "trio"
     fn test_auto_arrange_from_pyproject_false() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
         assert_eq!(cfg.auto_arrange_threshold, None);
-    }
-
-    #[test]
-    fn test_no_auto_arrange_cli() {
-        let cli = Cli::try_parse_from(["oxitest", "--no-auto-arrange"]).unwrap();
-        assert!(cli.no_auto_arrange);
-        assert!(cli.auto_arrange.is_none());
-    }
-
-    #[test]
-    fn test_auto_arrange_bare_cli() {
-        let cli = Cli::try_parse_from(["oxitest", "--auto-arrange"]).unwrap();
-        assert_eq!(cli.auto_arrange, Some(70));
-    }
-
-    #[test]
-    fn test_auto_arrange_custom_cli() {
-        let cli = Cli::try_parse_from(["oxitest", "--auto-arrange=50"]).unwrap();
-        assert_eq!(cli.auto_arrange, Some(50));
-    }
-
-    #[test]
-    fn test_no_auto_arrange_overrides_toml() {
-        let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("pyproject.toml"),
-            "[tool.oxitest]\nauto_arrange = 50\n",
-        )
-        .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        let cli = Cli::try_parse_from(["oxitest", "--no-auto-arrange"]).unwrap();
-        let merged = cfg.merge_cli(&cli);
-        assert_eq!(merged.auto_arrange_threshold, None);
     }
 }
