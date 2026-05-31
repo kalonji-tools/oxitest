@@ -108,7 +108,7 @@ flowchart TD
     AF{"2. Affected<br/>--affected flag?"}
     AF_Y["filter to git-changed files"]
     SE["3. Session<br/>import conftests → FixtureSession"]
-    FX{"4. Fixtures<br/>--fixtures flag?"}
+    FX{"4. Fixtures<br/>fixtures subcommand?"}
     FX_Y["list fixtures → exit"]
     CO["5. Collection<br/>import modules → TestItem list"]
     ST{"6. Strict<br/>strict mode?"}

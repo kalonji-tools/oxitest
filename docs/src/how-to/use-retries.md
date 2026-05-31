@@ -17,8 +17,12 @@ failure total.
 
 ## Add a delay between retries
 
-```console
-$ oxitest --retries 3 --retries-delay 2
+Retry delay is a configuration-only option — it cannot be set on the command
+line. Set it in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+retries_delay = 2   # seconds to wait before each retry attempt
 ```
 
 Waits 2 seconds before each retry attempt. Useful for tests that fail due to
@@ -27,15 +31,16 @@ resource contention or external service rate limits.
 ## Configure in pyproject.toml
 
 Both options are available under `[tool.oxitest]` so you do not need to pass
-them on every invocation:
+`--retries` on every invocation:
 
 ```toml
 [tool.oxitest]
 retries = 3
-retries_delay = 2   # seconds
+retries_delay = 2   # seconds; config-only, not available as a CLI flag
 ```
 
-CLI flags override `pyproject.toml` values.
+`--retries` on the CLI overrides the `retries` value from `pyproject.toml`.
+`retries_delay` is config-only and cannot be overridden from the command line.
 
 ## How the retry phase works
 
