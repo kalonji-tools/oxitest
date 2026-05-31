@@ -408,20 +408,24 @@ mod json_tests {
     }
 }
 
-pub(crate) fn print_collected(total: usize, async_count: usize) {
+pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize) {
+    let suffix = if total == 1 { "" } else { "s" };
+    let from_fns = if fn_count > 0 && fn_count < total {
+        format!(
+            " from {} function{}",
+            fn_count,
+            if fn_count == 1 { "" } else { "s" }
+        )
+    } else {
+        String::new()
+    };
     if async_count > 0 {
         println!(
-            "collected {} item{} ({} async)\n",
-            total,
-            if total == 1 { "" } else { "s" },
-            async_count,
+            "collected {} item{}{} ({} async)\n",
+            total, suffix, from_fns, async_count
         );
     } else {
-        println!(
-            "collected {} item{}\n",
-            total,
-            if total == 1 { "" } else { "s" }
-        );
+        println!("collected {} item{}{}\n", total, suffix, from_fns);
     }
 }
 
