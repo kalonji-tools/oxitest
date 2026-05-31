@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::types::ExitCode;
 use crate::{
-    bare_asserts, bridge, cache, config, filter, marker, parallel, prescan, reporter, scheduler,
+    bare_asserts, bridge, cache, config, filter, marker, parallel, python_ast, reporter, scheduler,
     strict, types,
 };
 use pyo3::prelude::*;
@@ -44,15 +44,26 @@ pub(super) fn collect_items(
     let collect_violations = cfg.strict.is_some();
 
     for file in test_files {
-        // Pre-scan: skip Python import entirely if file has no test functions.
-        // Falls through on read/syntax errors so Python can report proper diagnostics.
-        if prescan::has_test_functions(file) == Some(false) {
-            tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
-            continue;
-        }
+        // Pre-scan: skip files with no test functions.
+        // When collecting violations (strict mode), keep the parsed AST
+        // for bare-assert detection to avoid double-parsing.
+        let prescan = python_ast::prescan_with_ast(file, collect_violations);
+        let cached_ast = match prescan {
+            python_ast::PrescanResult::NoTests => {
+                tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
+                continue;
+            }
+            python_ast::PrescanResult::Unavailable => None,
+            python_ast::PrescanResult::HasTests { source, stmts } => {
+                if collect_violations && !source.is_empty() {
+                    Some((source, stmts))
+                } else {
+                    None
+                }
+            }
+        };
 
         let mtime = file_mtime_secs(file);
-        // Skip cache when collecting violations — violations are not cached.
         let cached = if collect_violations {
             None
         } else {
@@ -66,15 +77,19 @@ pub(super) fn collect_items(
             Ok((file_items, file_violations)) => {
                 let arc_items: Vec<Arc<types::TestItem>> =
                     file_items.into_iter().map(Arc::new).collect();
-                // Skip cache write in strict mode: violations are not cached,
-                // so the cached entry would silently drop violation data on the next run.
                 if mtime != 0 && !collect_violations {
                     cache.update_module_cache(file, mtime, &arc_items);
                 }
                 raw_violations.extend(file_violations);
-                // Bare-assert detection runs in Rust — no PyO3 needed.
+                // Bare-assert detection: reuse pre-parsed AST when available.
                 if collect_violations {
-                    raw_violations.extend(bare_asserts::collect_bare_asserts(file));
+                    if let Some((ref source, ref stmts)) = cached_ast {
+                        raw_violations.extend(bare_asserts::collect_bare_asserts_from_ast(
+                            file, source, stmts,
+                        ));
+                    } else {
+                        raw_violations.extend(bare_asserts::collect_bare_asserts(file));
+                    }
                 }
                 items.extend(arc_items);
             }

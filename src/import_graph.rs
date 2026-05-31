@@ -7,25 +7,16 @@
 use std::collections::HashSet;
 
 use camino::Utf8Path;
-use rustpython_parser::{ast, Parse};
+use rustpython_parser::ast;
+
+use crate::python_ast;
 
 /// Extract all absolutely-imported module names (and their prefixes) from a
 /// Python source file.
-///
-/// Mirrors `import_graph._extract_imported_modules()` in Python:
-/// - Collects `import X` names
-/// - Collects `from X import Y` where level == 0 (absolute imports only)
-/// - Expands each dotted name to all prefixes (e.g. `a.b.c` → {`a`, `a.b`, `a.b.c`})
-/// - Returns empty set on read error or syntax error (graceful fallback)
 fn extract_imported_modules(path: &Utf8Path) -> HashSet<String> {
-    let source = match std::fs::read_to_string(path.as_std_path()) {
-        Ok(s) => s,
-        Err(_) => return HashSet::new(),
-    };
-
-    let stmts = match ast::Suite::parse(&source, path.as_str()) {
-        Ok(s) => s,
-        Err(_) => return HashSet::new(),
+    let stmts = match python_ast::parse_file(path) {
+        Some((_, stmts)) => stmts,
+        None => return HashSet::new(),
     };
 
     let mut modules = HashSet::new();
@@ -52,58 +43,11 @@ fn collect_imports(stmt: &ast::Stmt, modules: &mut HashSet<String>) {
                 }
             }
         }
-        // Recurse into compound statements that can contain imports
-        ast::Stmt::FunctionDef(n) => walk_body(&n.body, modules),
-        ast::Stmt::AsyncFunctionDef(n) => walk_body(&n.body, modules),
-        ast::Stmt::ClassDef(n) => walk_body(&n.body, modules),
-        ast::Stmt::If(n) => {
-            walk_body(&n.body, modules);
-            walk_body(&n.orelse, modules);
-        }
-        ast::Stmt::While(n) => {
-            walk_body(&n.body, modules);
-            walk_body(&n.orelse, modules);
-        }
-        ast::Stmt::For(n) => {
-            walk_body(&n.body, modules);
-            walk_body(&n.orelse, modules);
-        }
-        ast::Stmt::AsyncFor(n) => {
-            walk_body(&n.body, modules);
-            walk_body(&n.orelse, modules);
-        }
-        ast::Stmt::With(n) => walk_body(&n.body, modules),
-        ast::Stmt::AsyncWith(n) => walk_body(&n.body, modules),
-        ast::Stmt::Try(n) => {
-            walk_body(&n.body, modules);
-            for handler in &n.handlers {
-                let ast::ExceptHandler::ExceptHandler(h) = handler;
-                walk_body(&h.body, modules);
-            }
-            walk_body(&n.orelse, modules);
-            walk_body(&n.finalbody, modules);
-        }
-        ast::Stmt::TryStar(n) => {
-            walk_body(&n.body, modules);
-            for handler in &n.handlers {
-                let ast::ExceptHandler::ExceptHandler(h) = handler;
-                walk_body(&h.body, modules);
-            }
-            walk_body(&n.orelse, modules);
-            walk_body(&n.finalbody, modules);
-        }
-        ast::Stmt::Match(n) => {
-            for case in &n.cases {
-                walk_body(&case.body, modules);
-            }
-        }
         _ => {}
     }
-}
-
-fn walk_body(body: &[ast::Stmt], modules: &mut HashSet<String>) {
-    for stmt in body {
-        collect_imports(stmt, modules);
+    // Recurse into compound statement children
+    for child in python_ast::compound_children(stmt) {
+        collect_imports(child, modules);
     }
 }
 
@@ -176,18 +120,7 @@ pub(crate) fn resolve_affected(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::Utf8PathBuf;
-    use std::io::Write;
-
-    fn write_temp_py(content: &str) -> tempfile::NamedTempFile {
-        let mut f = tempfile::Builder::new().suffix(".py").tempfile().unwrap();
-        f.write_all(content.as_bytes()).unwrap();
-        f
-    }
-
-    fn temp_path(f: &tempfile::NamedTempFile) -> Utf8PathBuf {
-        Utf8PathBuf::from_path_buf(f.path().to_path_buf()).unwrap()
-    }
+    use crate::python_ast::tests::{temp_path, write_temp_py};
 
     // ── extract_imported_modules ─────────────────────────────────────
 
