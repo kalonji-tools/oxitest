@@ -27,12 +27,9 @@ jobs:
         with:
           shared-key: test
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          enable-cache: true
-          python-version: '3.12'
-
-      - run: uv sync --group test
+          uv-sync-args: --group test
 
       - name: Rust tests
         run: cargo test
@@ -55,12 +52,10 @@ jobs:
           shared-key: test
           save-if: ${{ matrix.python-version == '3.12' }}
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          enable-cache: true
           python-version: ${{ matrix.python-version }}
-
-      - run: uv sync --group test
+          uv-sync-args: --group test
 
       - name: Build extension
         run: uv run maturin develop
@@ -93,10 +88,7 @@ jobs:
         with:
           shared-key: coverage
 
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          python-version: '3.12'
+      - uses: ./.github/actions/setup-python
 
       - uses: taiki-e/install-action@v2
         with:
@@ -141,12 +133,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/setup-python
         with:
-          enable-cache: true
-          python-version: '3.12'
-
-      - run: uv sync --group coverage
+          uv-sync-args: --only-group coverage
 
       - name: Download extension artifact
         uses: actions/download-artifact@v8
