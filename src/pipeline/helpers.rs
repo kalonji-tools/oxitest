@@ -331,16 +331,17 @@ pub(super) fn apply_strict(
 /// (surfaced via the error reporter supplied by `make_error_rep`).
 pub(super) fn apply_filters(
     items: Vec<Arc<types::TestItem>>,
-    cli: &config::Cli,
+    keyword: Option<&str>,
+    marker: Option<&str>,
     cfg: &config::Config,
     cache: &impl cache::OutcomeCache,
     make_error_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
 ) -> Result<Vec<Arc<types::TestItem>>, ExitCode> {
     // Keyword filter (-k).
-    let items = filter::filter_items(items, cli.keyword.as_deref());
+    let items = filter::filter_items(items, keyword);
 
     // Marker expression filter (-m).
-    let items = if let Some(expr) = &cli.marker {
+    let items = if let Some(expr) = marker {
         match marker::filter_by_marker_expr(items, expr) {
             Ok(items) => items,
             Err(e) => {
