@@ -11,6 +11,7 @@ mod collector;
 mod config;
 mod edit_distance;
 mod filter;
+mod import_graph;
 mod marker;
 mod parallel;
 mod pipeline;

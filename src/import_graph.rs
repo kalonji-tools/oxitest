@@ -1,0 +1,339 @@
+//! Pure-Rust import graph analysis for `--affected` test selection.
+//!
+//! Replaces `python/oxitest/_bridge/import_graph.py` by parsing Python source
+//! files with `rustpython-parser` and extracting import statements entirely in
+//! Rust — no PyO3 call needed.
+
+use std::collections::HashSet;
+
+use camino::Utf8Path;
+use rustpython_parser::{ast, Parse};
+
+/// Extract all absolutely-imported module names (and their prefixes) from a
+/// Python source file.
+///
+/// Mirrors `import_graph._extract_imported_modules()` in Python:
+/// - Collects `import X` names
+/// - Collects `from X import Y` where level == 0 (absolute imports only)
+/// - Expands each dotted name to all prefixes (e.g. `a.b.c` → {`a`, `a.b`, `a.b.c`})
+/// - Returns empty set on read error or syntax error (graceful fallback)
+fn extract_imported_modules(path: &Utf8Path) -> HashSet<String> {
+    let source = match std::fs::read_to_string(path.as_std_path()) {
+        Ok(s) => s,
+        Err(_) => return HashSet::new(),
+    };
+
+    let stmts = match ast::Suite::parse(&source, path.as_str()) {
+        Ok(s) => s,
+        Err(_) => return HashSet::new(),
+    };
+
+    let mut modules = HashSet::new();
+    for stmt in &stmts {
+        collect_imports(stmt, &mut modules);
+    }
+    expand_prefixes(modules)
+}
+
+/// Walk a statement (and recurse into compound bodies) to find Import/ImportFrom.
+fn collect_imports(stmt: &ast::Stmt, modules: &mut HashSet<String>) {
+    match stmt {
+        ast::Stmt::Import(node) => {
+            for alias in &node.names {
+                modules.insert(alias.name.to_string());
+            }
+        }
+        ast::Stmt::ImportFrom(node) => {
+            // Only absolute imports (level == None or level == 0)
+            let is_absolute = node.level.is_none_or(|l| l == 0u32);
+            if is_absolute {
+                if let Some(ref module) = node.module {
+                    modules.insert(module.to_string());
+                }
+            }
+        }
+        // Recurse into compound statements that can contain imports
+        ast::Stmt::FunctionDef(n) => walk_body(&n.body, modules),
+        ast::Stmt::AsyncFunctionDef(n) => walk_body(&n.body, modules),
+        ast::Stmt::ClassDef(n) => walk_body(&n.body, modules),
+        ast::Stmt::If(n) => {
+            walk_body(&n.body, modules);
+            walk_body(&n.orelse, modules);
+        }
+        ast::Stmt::While(n) => {
+            walk_body(&n.body, modules);
+            walk_body(&n.orelse, modules);
+        }
+        ast::Stmt::For(n) => {
+            walk_body(&n.body, modules);
+            walk_body(&n.orelse, modules);
+        }
+        ast::Stmt::AsyncFor(n) => {
+            walk_body(&n.body, modules);
+            walk_body(&n.orelse, modules);
+        }
+        ast::Stmt::With(n) => walk_body(&n.body, modules),
+        ast::Stmt::AsyncWith(n) => walk_body(&n.body, modules),
+        ast::Stmt::Try(n) => {
+            walk_body(&n.body, modules);
+            for handler in &n.handlers {
+                let ast::ExceptHandler::ExceptHandler(h) = handler;
+                walk_body(&h.body, modules);
+            }
+            walk_body(&n.orelse, modules);
+            walk_body(&n.finalbody, modules);
+        }
+        ast::Stmt::TryStar(n) => {
+            walk_body(&n.body, modules);
+            for handler in &n.handlers {
+                let ast::ExceptHandler::ExceptHandler(h) = handler;
+                walk_body(&h.body, modules);
+            }
+            walk_body(&n.orelse, modules);
+            walk_body(&n.finalbody, modules);
+        }
+        ast::Stmt::Match(n) => {
+            for case in &n.cases {
+                walk_body(&case.body, modules);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn walk_body(body: &[ast::Stmt], modules: &mut HashSet<String>) {
+    for stmt in body {
+        collect_imports(stmt, modules);
+    }
+}
+
+/// Expand each dotted module name to include all prefixes.
+/// `"a.b.c"` → `{"a", "a.b", "a.b.c"}`
+fn expand_prefixes(modules: HashSet<String>) -> HashSet<String> {
+    let mut expanded = HashSet::new();
+    for module in &modules {
+        let parts: Vec<&str> = module.split('.').collect();
+        for i in 1..=parts.len() {
+            expanded.insert(parts[..i].join("."));
+        }
+    }
+    expanded
+}
+
+/// Convert a relative file path to all possible dotted module name prefixes.
+///
+/// Mirrors `import_graph._file_to_modules()` in Python.
+/// E.g. `"myapp/sub/foo.py"` → `["myapp.sub.foo", "myapp.sub", "myapp"]`
+fn file_to_modules(rel_path: &str) -> Vec<String> {
+    let p = std::path::Path::new(rel_path);
+    let stem = p.with_extension("");
+    let mut parts: Vec<&str> = stem.iter().filter_map(|s| s.to_str()).collect();
+
+    // __init__.py represents the package itself
+    if parts.last() == Some(&"__init__") {
+        parts.pop();
+    }
+
+    if parts.is_empty() {
+        return vec![];
+    }
+
+    (0..parts.len())
+        .rev()
+        .map(|i| parts[..=i].join("."))
+        .collect()
+}
+
+/// Determine which test files are affected by changed source files.
+///
+/// Parses each test file's imports and checks for overlap with the module
+/// names derived from `changed_sources`.
+pub(crate) fn resolve_affected(
+    test_files: &[camino::Utf8PathBuf],
+    changed_sources: &[String],
+) -> Vec<camino::Utf8PathBuf> {
+    let mut changed_modules = HashSet::new();
+    for src in changed_sources {
+        for m in file_to_modules(src) {
+            changed_modules.insert(m);
+        }
+    }
+
+    if changed_modules.is_empty() {
+        return vec![];
+    }
+
+    test_files
+        .iter()
+        .filter(|test_file| {
+            let imports = extract_imported_modules(test_file);
+            !imports.is_disjoint(&changed_modules)
+        })
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use std::io::Write;
+
+    fn write_temp_py(content: &str) -> tempfile::NamedTempFile {
+        let mut f = tempfile::Builder::new().suffix(".py").tempfile().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        f
+    }
+
+    fn temp_path(f: &tempfile::NamedTempFile) -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(f.path().to_path_buf()).unwrap()
+    }
+
+    // ── extract_imported_modules ─────────────────────────────────────
+
+    #[test]
+    fn extract_simple_import() {
+        let f = write_temp_py("import os\nimport sys\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("os"));
+        assert!(modules.contains("sys"));
+    }
+
+    #[test]
+    fn extract_dotted_import_with_prefixes() {
+        let f = write_temp_py("import os.path\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("os"));
+        assert!(modules.contains("os.path"));
+    }
+
+    #[test]
+    fn extract_from_import_absolute() {
+        let f = write_temp_py("from os.path import join\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("os"));
+        assert!(modules.contains("os.path"));
+    }
+
+    #[test]
+    fn extract_skips_relative_imports() {
+        let f = write_temp_py("from . import sibling\nfrom ..parent import thing\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.is_empty());
+    }
+
+    #[test]
+    fn extract_syntax_error_returns_empty() {
+        let f = write_temp_py("def broken(\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.is_empty());
+    }
+
+    #[test]
+    fn extract_nonexistent_file_returns_empty() {
+        let modules = extract_imported_modules(Utf8Path::new("/nonexistent/file.py"));
+        assert!(modules.is_empty());
+    }
+
+    #[test]
+    fn extract_import_inside_function() {
+        let f = write_temp_py("def foo():\n    import json\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("json"));
+    }
+
+    #[test]
+    fn extract_import_inside_if() {
+        let f = write_temp_py("if True:\n    import csv\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("csv"));
+    }
+
+    #[test]
+    fn extract_import_inside_try() {
+        let f =
+            write_temp_py("try:\n    import fast_lib\nexcept ImportError:\n    import slow_lib\n");
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("fast_lib"));
+        assert!(modules.contains("slow_lib"));
+    }
+
+    #[test]
+    fn extract_multiple_from_imports() {
+        let f = write_temp_py(
+            "from pathlib import Path\nfrom collections.abc import Sequence\nimport ast\n",
+        );
+        let modules = extract_imported_modules(&temp_path(&f));
+        assert!(modules.contains("pathlib"));
+        assert!(modules.contains("collections"));
+        assert!(modules.contains("collections.abc"));
+        assert!(modules.contains("ast"));
+    }
+
+    // ── file_to_modules ──────────────────────────────────────────────
+
+    #[test]
+    fn file_to_modules_simple() {
+        let mods = file_to_modules("myapp/utils.py");
+        assert_eq!(mods, vec!["myapp.utils", "myapp"]);
+    }
+
+    #[test]
+    fn file_to_modules_deep() {
+        let mods = file_to_modules("myapp/sub/foo.py");
+        assert_eq!(mods, vec!["myapp.sub.foo", "myapp.sub", "myapp"]);
+    }
+
+    #[test]
+    fn file_to_modules_init() {
+        let mods = file_to_modules("myapp/__init__.py");
+        assert_eq!(mods, vec!["myapp"]);
+    }
+
+    #[test]
+    fn file_to_modules_single_file() {
+        let mods = file_to_modules("setup.py");
+        assert_eq!(mods, vec!["setup"]);
+    }
+
+    // ── resolve_affected ─────────────────────────────────────────────
+
+    #[test]
+    fn resolve_affected_matches_import() {
+        let f = write_temp_py("import myapp.utils\n");
+        let test_paths = vec![temp_path(&f)];
+        let changed = vec!["myapp/utils.py".to_string()];
+
+        let affected = resolve_affected(&test_paths, &changed);
+        assert_eq!(affected.len(), 1);
+    }
+
+    #[test]
+    fn resolve_affected_no_match() {
+        let f = write_temp_py("import unrelated\n");
+        let test_paths = vec![temp_path(&f)];
+        let changed = vec!["myapp/utils.py".to_string()];
+
+        let affected = resolve_affected(&test_paths, &changed);
+        assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn resolve_affected_prefix_match() {
+        let f = write_temp_py("from myapp.sub.module import thing\n");
+        let test_paths = vec![temp_path(&f)];
+        let changed = vec!["myapp/sub/module.py".to_string()];
+
+        let affected = resolve_affected(&test_paths, &changed);
+        assert_eq!(affected.len(), 1);
+    }
+
+    #[test]
+    fn resolve_affected_empty_changed() {
+        let f = write_temp_py("import os\n");
+        let test_paths = vec![temp_path(&f)];
+
+        let affected = resolve_affected(&test_paths, &[]);
+        assert!(affected.is_empty());
+    }
+}

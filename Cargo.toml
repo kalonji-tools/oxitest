@@ -31,6 +31,7 @@ camino = "1"
 rand = "0.10.1"
 similar = "3"
 quick-xml = { version = "0.40", features = ["serialize"] }
+rustpython-parser = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
