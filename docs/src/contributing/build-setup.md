@@ -3,14 +3,14 @@
 !!! abstract "Contributing"
     How to set up the development environment for oxitest.
 
-## Nix (recommended)
+## devenv (recommended)
 
-oxitest uses Nix for reproducible development environments. With Nix installed, a single command
-gives you a shell with the complete toolchain — Rust toolchain, Python 3.12, maturin, uv, ruff,
-ty, mkdocs-material, and pre-commit hooks.
+oxitest uses [devenv](https://devenv.sh/) for reproducible development environments. With devenv
+installed, a single command gives you a shell with the complete toolchain — Rust toolchain,
+Python 3.12, maturin, uv, ruff, ty, mkdocs-material, and pre-commit hooks.
 
 ```console
-$ nix develop
+$ devenv shell
 ```
 
 The shell hook prints active versions and installs git hooks via `prek`.
@@ -45,7 +45,7 @@ mkdocs serve --dev-addr localhost:8000
 ## Using bacon
 
 [bacon](https://dystroy.org/bacon/) is a background code checker that watches source files and
-re-runs commands on change. It is included in the Nix devshell.
+re-runs commands on change. It is included in the devenv shell.
 
 Start it with the default job (runs oxitest tests):
 

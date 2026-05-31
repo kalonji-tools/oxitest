@@ -5,10 +5,10 @@ For deeper topics, links point to the full [documentation site](https://kalonji-
 
 ## Quick start
 
-oxitest uses [Nix](https://nixos.org/) for a reproducible dev environment. With Nix installed:
+oxitest uses [devenv](https://devenv.sh/) for a reproducible dev environment. With devenv installed:
 
 ```bash
-nix develop          # shell with Rust, Python 3.12, maturin, uv, all dev tools
+devenv shell         # shell with Rust, Python 3.12, maturin, uv, all dev tools
 just health          # verify toolchain
 just dev             # full cycle: Rust tests, build extension, Python tests
 ```
