@@ -5,6 +5,16 @@ use crate::test_doubles::doubles::{
 };
 use crate::types::ExitCode;
 
+/// Helper: set the keyword in the command variant of a pipeline context.
+fn set_keyword(ctx: &mut PipelineContext, keyword: &str) {
+    match &mut ctx.command {
+        config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
+        config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
+        config::Command::List(a) => a.filter.keyword = Some(keyword.to_string()),
+        _ => {}
+    }
+}
+
 mod loop_tests {
     use super::*;
 
@@ -307,7 +317,7 @@ mod filter_phase_contract_tests {
             let mut ctx = make_ctx();
             ctx.items.push(make_item_raw("tests/test_a.py::test_alpha"));
             ctx.items.push(make_item_raw("tests/test_a.py::test_beta"));
-            ctx.cli.keyword = Some("alpha".to_string());
+            set_keyword(&mut ctx, "alpha");
 
             let result = phases::FilterPhase.execute(py, &mut ctx);
 
@@ -399,7 +409,7 @@ mod context_threading_tests {
             assert_eq!(ctx.items.len(), 2);
             assert_eq!(ctx.violated_items.len(), 1);
 
-            ctx.cli.keyword = Some("alpha".to_string());
+            set_keyword(&mut ctx, "alpha");
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
             assert_eq!(ctx.items.len(), 1);
@@ -432,13 +442,12 @@ mod context_threading_tests {
             let mut ctx = make_ctx();
             ctx.items.push(make_item_raw("tests/test_a.py::test_alpha"));
             ctx.items.push(make_item_raw("tests/test_a.py::test_beta"));
-            ctx.cli.keyword = Some("alpha".to_string());
+            set_keyword(&mut ctx, "alpha");
 
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
             assert_eq!(ctx.items.len(), 1);
 
-            ctx.cli.list = true;
             let list_result = phases::ListPhase.execute(py, &mut ctx);
             assert!(matches!(
                 list_result,
@@ -454,8 +463,7 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            ctx.cli.keyword = Some("good".to_string());
-            ctx.cli.list = true;
+            set_keyword(&mut ctx, "good");
             ctx.items.push(make_item_raw("tests/test_a.py::test_good"));
             ctx.items.push(make_item_raw("tests/test_a.py::test_bad"));
             ctx.items.push(make_item_raw("tests/test_a.py::test_other"));

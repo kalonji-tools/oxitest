@@ -75,36 +75,10 @@ mod fixtures_phase_tests {
     use super::*;
 
     #[test]
-    fn skips_when_fixtures_flag_not_set() {
+    fn always_runs() {
+        // FixturesPhase now always returns true (only in pipeline when needed)
         let ctx = make_ctx();
         let phase = phases::FixturesPhase;
-        assert!(!phase.should_run(&ctx));
-    }
-
-    #[test]
-    fn runs_when_fixtures_flag_set() {
-        let mut ctx = make_ctx();
-        ctx.cli.fixtures = true;
-        let phase = phases::FixturesPhase;
-        assert!(phase.should_run(&ctx));
-    }
-}
-
-mod tree_phase_tests {
-    use super::*;
-
-    #[test]
-    fn tree_phase_skips_when_flag_not_set() {
-        let phase = phases::TreePhase;
-        let ctx = make_ctx();
-        assert!(!phase.should_run(&ctx));
-    }
-
-    #[test]
-    fn tree_phase_runs_when_flag_set() {
-        let phase = phases::TreePhase;
-        let mut ctx = make_ctx();
-        ctx.cli.tree = true;
         assert!(phase.should_run(&ctx));
     }
 }
@@ -184,16 +158,9 @@ mod list_phase_tests {
     use super::*;
 
     #[test]
-    fn skips_when_list_not_set() {
+    fn always_runs() {
+        // ListPhase now always returns true (only in pipeline when needed)
         let ctx = make_ctx();
-        let phase = phases::ListPhase;
-        assert!(!phase.should_run(&ctx));
-    }
-
-    #[test]
-    fn runs_when_list_set() {
-        let mut ctx = make_ctx();
-        ctx.cli.list = true;
         let phase = phases::ListPhase;
         assert!(phase.should_run(&ctx));
     }

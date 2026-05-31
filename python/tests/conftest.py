@@ -33,6 +33,8 @@ __all__ = [
     "make_session_with",
     "RecordingDebugger",
     "run_oxitest",
+    "run_oxitest_env",
+    "run_oxitest_subcmd",
     "run_test",
     "write_test_file",
 ]
@@ -119,6 +121,42 @@ def run_oxitest(
             "never",
             *extra_args,
         ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return result.stdout, result.stderr, result.returncode
+
+
+def run_oxitest_subcmd(
+    tmp_path,
+    subcmd: str,
+    *extra_args: str,
+    timeout: int = 60,
+) -> tuple[str, str, int]:
+    """Run oxitest with a subcommand as a subprocess."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            subcmd,
+            str(tmp_path),
+            "--color",
+            "never",
+            *extra_args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return result.stdout, result.stderr, result.returncode
+
+
+def run_oxitest_env() -> tuple[str, str, int]:
+    """Run `oxitest env` (no paths needed)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", "env"],
         capture_output=True,
         text=True,
         timeout=60,

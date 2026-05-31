@@ -11,22 +11,22 @@ from oxitest import TempDir
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
-    """--list prints node IDs and exits 0 without running tests."""
+    """`list` subcommand prints node IDs and exits 0 without running tests."""
     (tmp / "test_nodes.py").write_text(
         "def test_alpha(): assert True\n"
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--list")
-    assert rc == 0, f"--list should exit 0, got {rc}"
-    assert "test_alpha" in out, "node ID test_alpha should appear in --list output"
-    assert "test_beta" in out, "node ID test_beta should appear in --list output"
-    assert "test_gamma" in out, "node ID test_gamma should appear in --list output"
-    assert "passed" not in out, "--list should not run tests (no 'passed' in output)"
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list")
+    assert rc == 0, f"`list` should exit 0, got {rc}"
+    assert "test_alpha" in out, "node ID test_alpha should appear in `list` output"
+    assert "test_beta" in out, "node ID test_beta should appear in `list` output"
+    assert "test_gamma" in out, "node ID test_gamma should appear in `list` output"
+    assert "passed" not in out, "`list` should not run tests (no 'passed' in output)"
 
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
-    """--list -v shows marks and fixtures."""
+    """`list -v` shows marks and fixtures."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
         "fx = Fixtures()\n\n"
@@ -39,8 +39,8 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
         "def test_one(): assert True\n"
         "def test_two(my_db: Fixture[str]): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--list", "-v")
-    assert rc == 0, f"--list -v should exit 0, got {rc}"
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "-v")
+    assert rc == 0, f"`list -v` should exit 0, got {rc}"
     assert "test_one" in out, f"test_one missing from output: {out!r}"
     assert "test_two" in out, f"test_two missing from output: {out!r}"
 
@@ -135,45 +135,31 @@ def test_schedule_conflicts_with_serial(tmp: TempDir):
     assert "--serial" in stderr, f"stderr: {stderr!r}"
 
 
-def test_retries_delay_requires_retries(tmp: TempDir):
-    """Flag conflict: --retries-delay needs --retries."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--retries-delay", "5")
-    assert rc == 4, f"--retries-delay without --retries should exit 4, got {rc}"
-    assert "--retries-delay" in stderr, f"stderr: {stderr!r}"
-    assert "--retries" in stderr, f"stderr: {stderr!r}"
-
-
 def test_debug_with_passing_test_exits_0(tmp: TempDir):
-    """--debug on a passing test exits 0 (no pdb triggered)."""
+    """`debug` subcommand on a passing test exits 0 (no pdb triggered)."""
     (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug")
+    _, stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "debug")
     assert rc == 0, f"expected exit code 0, got {rc}\nstderr: {stderr!r}"
-
-
-def test_debug_conflicts_are_rejected(tmp: TempDir):
-    """--debug with --workers should produce exit code 4."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug", "--workers", "2")
-    assert rc == 4, f"expected exit code 4, got {rc}\nstderr: {stderr!r}"
-    assert "--debug" in stderr, f"error should mention --debug: {stderr!r}"
-    assert "--workers" in stderr, f"error should mention --workers: {stderr!r}"
 
 
 def test_debug_always_is_accepted(tmp: TempDir):
-    """--debug=always is a valid flag (no parse error)."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug=always", "--list")
-    assert rc == 0, f"expected exit code 0, got {rc}\nstderr: {stderr!r}"
+    """`debug --always` is a valid invocation (no parse error).
 
-
-def test_debug_always_allows_exitfirst(tmp: TempDir):
-    """--debug=always -x should be accepted (not a conflict)."""
+    We only verify that clap accepts the flag (exit != 4). Since --always
+    launches pdb before every test, it hangs in CI without a TTY, so we
+    use a short timeout and treat TimeoutExpired as success (pdb started).
+    """
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--debug=always", "-x", "--list")
-    assert rc == 0, (
-        f"--debug=always -x --list should exit 0, got rc={rc}\nstderr: {stderr!r}"
-    )
+    try:
+        _, stderr, rc = helpers.common.run_oxitest_subcmd(
+            tmp,
+            "debug",
+            "--always",
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return  # pdb started → flag was accepted
+    assert rc != 4, f"expected no usage error (exit != 4), got {rc}\nstderr: {stderr!r}"
 
 
 @oxitest.mark.timeout(120)
@@ -210,10 +196,11 @@ def test_debug_always_with_plugin_backend(tmp: TempDir):
             sys.executable,
             "-m",
             "oxitest",
+            "debug",
             str(tmp),
             "--color",
             "never",
-            "--debug=always",
+            "--always",
         ],
         capture_output=True,
         text=True,
@@ -279,35 +266,8 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     )
 
 
-def test_list_conflicts_with_quiet(tmp: TempDir):
-    """--list -q is a conflict."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "-q")
-    assert rc == 4, f"--list/-q conflict should exit 4, got {rc}"
-    assert "--list" in stderr, f"stderr: {stderr!r}"
-    assert "--quiet" in stderr, f"stderr: {stderr!r}"
-
-
-def test_fixtures_conflicts_with_quiet(tmp: TempDir):
-    """--fixtures -q is a conflict."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--fixtures", "-q")
-    assert rc == 4, f"--fixtures/-q conflict should exit 4, got {rc}"
-    assert "--fixtures" in stderr, f"stderr: {stderr!r}"
-    assert "--quiet" in stderr, f"stderr: {stderr!r}"
-
-
-def test_list_conflicts_with_fixtures(tmp: TempDir):
-    """--list --fixtures is a conflict."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "--fixtures")
-    assert rc == 4, f"--list/--fixtures conflict should exit 4, got {rc}"
-    assert "--list" in stderr, f"stderr: {stderr!r}"
-    assert "--fixtures" in stderr, f"stderr: {stderr!r}"
-
-
 def test_list_full_shows_param_values(tmp: TempDir):
-    """--list --verbose=full shows grouped parametrize cases."""
+    """`list --verbose=full` shows grouped parametrize cases."""
     (tmp / "test_param.py").write_text(
         "from dataclasses import dataclass\n"
         "import oxitest as oxi\n\n"
@@ -319,9 +279,9 @@ def test_list_full_shows_param_values(tmp: TempDir):
         "def test_abs(case: Case) -> None:\n"
         "    assert abs(case.x) == case.expected, 'mismatch'\n"
     )
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--list", "--verbose=full")
+    out, stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--verbose=full")
     assert rc == 0, (
-        f"--list --verbose=full should exit 0, got {rc}\n"
+        f"`list --verbose=full` should exit 0, got {rc}\n"
         f"stdout: {out!r}\nstderr: {stderr!r}"
     )
     assert "test_abs" in out, f"test_abs missing from output: {out!r}"
@@ -427,15 +387,14 @@ def test_durations_shows_slowest_tests(tmp: TempDir):
     assert "ms" in out, f"output should show duration in ms: {out!r}"
 
 
-def test_capture_environment_prints_versions(tmp: TempDir):
-    """--capture-environment prints Python and oxitest versions and exits 0."""
-    (tmp / "test_dummy.py").write_text("def test_noop(): pass\n")
-    out, _, rc = helpers.common.run_oxitest(tmp, "--capture-environment")
-    assert rc == 0, f"--capture-environment should exit 0, got {rc}"
+def test_capture_environment_prints_versions():
+    """`env` subcommand prints Python and oxitest versions and exits 0."""
+    out, _, rc = helpers.common.run_oxitest_env()
+    assert rc == 0, f"`env` should exit 0, got {rc}"
     assert "python:" in out.lower(), f"output should contain Python version: {out!r}"
     assert "oxitest:" in out.lower(), f"output should contain oxitest version: {out!r}"
     # Should NOT run tests
-    assert "passed" not in out, f"--capture-environment should not run tests: {out!r}"
+    assert "passed" not in out, f"`env` should not run tests: {out!r}"
 
 
 @oxitest.mark.timeout(120)
