@@ -50,7 +50,7 @@ If you can pick a stricter language, do it. The compiler catches what review mis
 
 ### Isolated environment
 
-A [Nix](https://nixos.org/) flake defines the exact toolchain: Rust compiler, Python
+A [devenv](https://devenv.sh/) environment defines the exact toolchain: Rust compiler, Python
 interpreter, maturin, uv, and CLI tools. Every contributor — human or AI — enters the
 same shell with the same versions. No "works on my machine."
 
@@ -180,7 +180,7 @@ take manually.
 But speed without structure is just chaos delivered faster. The value comes from the
 combination:
 
-- [**Nix**](https://nixos.org/) ensures reproducibility.
+- [**devenv**](https://devenv.sh/) ensures reproducibility.
 - [**prek**](https://github.com/kalonji-tools/prek) enforces quality at the commit boundary.
 - **Rust's compiler** catches mistakes before review.
 - [**worktrunk**](https://github.com/anthropics/worktrunk) enables safe parallel worktrees.
