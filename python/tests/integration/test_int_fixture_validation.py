@@ -24,7 +24,7 @@ def test_uses_typo(sotre: oxitest.Fixture[int]) -> None:
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_typo.py").write_text(test_file)
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 3, f"expected exit code 3 (CollectError), got {rc}"
+    helpers.integ.assert_collection_error(out, rc)
     assert "fixture" in out.lower() and "sotre" in out.lower(), (
         f"expected fixture error in output: {out}"
     )
@@ -50,7 +50,7 @@ def test_uses_store(store: oxitest.Fixture[int]) -> None:
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_ok.py").write_text(test_file)
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit code 0, got {rc}. Output: {out}"
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_did_you_mean_suggestion(tmp: TempDir):
@@ -73,6 +73,6 @@ def test_typo(sotre: oxitest.Fixture[int]) -> None:
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_typo.py").write_text(test_file)
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 3, f"expected exit code 3 (CollectError), got {rc}"
-    assert "did you mean" in out.lower(), f"expected suggestion in output: {out}"
+    helpers.integ.assert_collection_error(out, rc)
+    helpers.integ.assert_contains(out.lower(), "did you mean")
     assert "store" in out, f"expected 'store' suggestion in output: {out}"

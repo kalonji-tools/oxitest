@@ -13,9 +13,8 @@ def test_show_locals_displays_variables(tmp: TempDir):
         "    assert x == 0, 'wrong value'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--show-locals")
-    assert rc == 1, f"should fail, got {rc}"
-    assert "x" in out, f"local 'x' should appear: {out!r}"
-    assert "42" in out, f"local value '42' should appear: {out!r}"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_contains(out, "x", "42")
 
 
 def test_show_internals_shows_bridge_frames(tmp: TempDir):
@@ -24,16 +23,16 @@ def test_show_internals_shows_bridge_frames(tmp: TempDir):
         "def test_fail():\n    assert False, 'boom'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--show-internals")
-    assert rc == 1, f"should fail, got {rc}"
-    assert "oxitest/" in out, f"internal frame should appear: {out!r}"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_contains(out, "oxitest/")
 
 
 def test_default_hides_internals(tmp: TempDir):
     """Without --show-internals, internal frames are filtered."""
     (tmp / "test_hidden.py").write_text("def test_fail():\n    assert False, 'boom'\n")
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 1, f"should fail, got {rc}"
-    assert "oxitest/_bridge" not in out, f"internal frame should be hidden: {out!r}"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_excludes(out, "oxitest/_bridge")
 
 
 def test_default_no_locals(tmp: TempDir):
@@ -42,5 +41,5 @@ def test_default_no_locals(tmp: TempDir):
         "def test_with_locals():\n    secret = 'hidden'\n    assert False, 'fail'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 1, f"should fail, got {rc}"
-    assert "secret" not in out, f"locals should not appear by default: {out!r}"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_excludes(out, "secret")
