@@ -183,7 +183,7 @@ def _expand_composed(
 ) -> list[CollectedItem]:
     """Expand composed _PartialCases layers via cartesian product."""
     _validate_composition(layers)
-    layer_items = [list(layer.items()) for layer in layers]
+    layer_items = [layer.items() for layer in layers]
     items: list[CollectedItem] = []
     for combo in itertools.product(*layer_items):
         compound_id = "-".join(case_id for case_id, _ in combo)

@@ -10,7 +10,7 @@ __all__ = [
     "PROTOCOL_VERSION",
 ]
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from typing import Any
 
@@ -56,6 +56,14 @@ _NON_FAILURE_STATUSES = frozenset(
 )
 
 PROTOCOL_VERSION: int = 1
+
+_WIRE_EXCLUDE_ATTRS: frozenset[str] = frozenset(
+    {
+        "status",  # serialized as "outcome"
+        "exc_type",  # not sent over the wire
+        "frames",  # needs asdict() transformation
+    }
+)
 
 
 @dataclass
@@ -113,20 +121,16 @@ class TestResult:
             "protocol_version": PROTOCOL_VERSION,
         }
         # Optional fields — omit falsy values for compact JSON
-        optional = {
-            "failure_repr": self.failure_repr,
-            "message": self.message,
-            "file": self.file,
-            "lineno": self.lineno,
-            "source_line": self.source_line,
-            "no_message_lines": self.no_message_lines,
-            "left": self.left,
-            "right": self.right,
-            "op": self.op,
-            "strict": self.strict,
-            "frames": [asdict(f) for f in self.frames] if self.frames else None,
-        }
-        output.update({k: v for k, v in optional.items() if v})
+        # Wire fields: "failure_repr": "message": "file": "lineno":
+        # "source_line": "no_message_lines": "left": "right": "op": "strict":
+        # "frames":
+        if failure_repr := self.failure_repr:
+            output["failure_repr"] = failure_repr
+        for f in fields(self):
+            if f.name not in _WIRE_EXCLUDE_ATTRS and (value := getattr(self, f.name)):
+                output[f.name] = value
+        if self.frames:
+            output["frames"] = [asdict(f) for f in self.frames]
         return output
 
     @classmethod
