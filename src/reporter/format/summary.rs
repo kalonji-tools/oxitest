@@ -15,18 +15,46 @@ pub(crate) fn plural(n: usize) -> &'static str {
     }
 }
 
-pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color: bool) -> String {
-    let sep = color_dim(&"═".repeat(sep_width()), use_color);
-    let mut parts: Vec<String> = Vec::new();
-    if stats.failed > 0 {
-        parts.push(color_fail(&format!("{} failed", stats.failed), use_color));
+/// Push a colored stat entry into `parts` when `count > 0`.
+fn push_stat(
+    parts: &mut Vec<String>,
+    count: usize,
+    label: &str,
+    color_fn: fn(&str, bool) -> String,
+    use_color: bool,
+) {
+    if count > 0 {
+        parts.push(color_fn(&format!("{count} {label}"), use_color));
     }
-    if stats.errored > 0 {
-        parts.push(color_error_token(
-            &format!("{} error{}", stats.errored, plural(stats.errored)),
+}
+
+/// Like [`push_stat`] but appends a plural suffix to the label.
+fn push_stat_plural(
+    parts: &mut Vec<String>,
+    count: usize,
+    label: &str,
+    color_fn: fn(&str, bool) -> String,
+    use_color: bool,
+) {
+    if count > 0 {
+        parts.push(color_fn(
+            &format!("{count} {label}{}", plural(count)),
             use_color,
         ));
     }
+}
+
+pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color: bool) -> String {
+    let sep = color_dim(&"═".repeat(sep_width()), use_color);
+    let mut parts: Vec<String> = Vec::new();
+    push_stat(&mut parts, stats.failed, "failed", color_fail, use_color);
+    push_stat_plural(
+        &mut parts,
+        stats.errored,
+        "error",
+        color_error_token,
+        use_color,
+    );
     if stats.xpassed > 0 {
         let xpassed_str = format!("{} xpassed", stats.xpassed);
         if stats.xpassed_strict > 0 {
@@ -35,30 +63,18 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
             parts.push(color_warn(&xpassed_str, use_color));
         }
     }
-    if stats.timeout > 0 {
-        parts.push(color_timeout(
-            &format!("{} timeout{}", stats.timeout, plural(stats.timeout)),
-            use_color,
-        ));
-    }
-    if stats.passed > 0 {
-        parts.push(color_pass(&format!("{} passed", stats.passed), use_color));
-    }
-    if stats.skipped > 0 {
-        parts.push(color_skip(&format!("{} skipped", stats.skipped), use_color));
-    }
-    if stats.xfailed > 0 {
-        parts.push(color_dim(&format!("{} xfailed", stats.xfailed), use_color));
-    }
-    if stats.warned > 0 {
-        parts.push(color_warn(
-            &format!("{} warning{}", stats.warned, plural(stats.warned)),
-            use_color,
-        ));
-    }
-    if stats.flaky > 0 {
-        parts.push(color_warn(&format!("{} flaky", stats.flaky), use_color));
-    }
+    push_stat_plural(
+        &mut parts,
+        stats.timeout,
+        "timeout",
+        color_timeout,
+        use_color,
+    );
+    push_stat(&mut parts, stats.passed, "passed", color_pass, use_color);
+    push_stat(&mut parts, stats.skipped, "skipped", color_skip, use_color);
+    push_stat(&mut parts, stats.xfailed, "xfailed", color_dim, use_color);
+    push_stat_plural(&mut parts, stats.warned, "warning", color_warn, use_color);
+    push_stat(&mut parts, stats.flaky, "flaky", color_warn, use_color);
     if collect_err_count > 0 {
         parts.push(format!(
             "{} collection error{}",
