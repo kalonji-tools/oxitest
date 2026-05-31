@@ -7,8 +7,8 @@ use std::sync::Arc;
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::types::ExitCode;
 use crate::{
-    bare_asserts, bridge, cache, config, filter, marker, parallel, reporter, scheduler, strict,
-    types,
+    bare_asserts, bridge, cache, config, filter, marker, parallel, prescan, reporter, scheduler,
+    strict, types,
 };
 use pyo3::prelude::*;
 use traits::{ExecutionHarness, ModuleCollector, ParallelRunner, Session, TestRunner};
@@ -44,6 +44,13 @@ pub(super) fn collect_items(
     let collect_violations = cfg.strict.is_some();
 
     for file in test_files {
+        // Pre-scan: skip Python import entirely if file has no test functions.
+        // Falls through on read/syntax errors so Python can report proper diagnostics.
+        if prescan::has_test_functions(file) == Some(false) {
+            tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
+            continue;
+        }
+
         let mtime = file_mtime_secs(file);
         // Skip cache when collecting violations — violations are not cached.
         let cached = if collect_violations {
