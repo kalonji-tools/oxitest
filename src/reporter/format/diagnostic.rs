@@ -65,6 +65,187 @@ pub(crate) fn pad_to(s: &str, width: usize) -> String {
     }
 }
 
+/// Render the WHERE section: `┌ file:line`.
+fn render_where(out: &mut String, file: &str, lineno: crate::types::LineNo, use_color: bool) {
+    if file.is_empty() {
+        return;
+    }
+    let loc = format!("{file}:{lineno}");
+    let _ = writeln!(
+        out,
+        "{}{} {}",
+        BOX.margin,
+        color_dim(BOX.open, use_color),
+        color_dim_cyan(&loc, use_color)
+    );
+    let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+}
+
+/// Render the WITH WHAT section: inline param key=value pairs.
+fn render_params(out: &mut String, param_values: &[(String, String)], use_color: bool) {
+    if param_values.is_empty() {
+        return;
+    }
+    let params_str = param_values
+        .iter()
+        .map(|(k, v)| {
+            format!(
+                "{} {} {}",
+                color_dim(k, use_color),
+                color_dim("=", use_color),
+                v,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(&color_dim(", ", use_color));
+    let _ = writeln!(
+        out,
+        "{}{}  {}",
+        BOX.margin,
+        color_dim(BOX.vert, use_color),
+        params_str
+    );
+    let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+}
+
+/// Render the WHAT section: bold source line hero + optional failure-frame locals.
+fn render_source(
+    out: &mut String,
+    parts: &crate::types::DiagnosticParts<'_>,
+    show_locals: bool,
+    use_color: bool,
+) {
+    if parts.source_line.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "{}{}  {}",
+        BOX.margin,
+        color_dim(BOX.vert, use_color),
+        color_bold_white(parts.source_line, use_color)
+    );
+    if show_locals {
+        let failure_locals = parts.frames.iter().find_map(|f| {
+            if f.file.as_str() == parts.file && f.lineno == parts.lineno && !f.locals.is_empty() {
+                Some(&f.locals)
+            } else {
+                None
+            }
+        });
+        if let Some(locals) = failure_locals {
+            render_locals(out, locals, 4, use_color);
+        }
+    }
+    let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+}
+
+/// Render local variable bindings at a given indentation depth.
+fn render_locals(out: &mut String, locals: &[(String, String)], indent: usize, use_color: bool) {
+    let pad = " ".repeat(indent);
+    for (name, value) in locals {
+        let _ = writeln!(
+            out,
+            "{}{}{pad}{} = {}",
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
+            color_dim(name, use_color),
+            color_dim(value, use_color)
+        );
+    }
+}
+
+/// Render the TRACE section: non-failure traceback frames.
+fn render_trace(
+    out: &mut String,
+    parts: &crate::types::DiagnosticParts<'_>,
+    show_locals: bool,
+    use_color: bool,
+) {
+    let trace_frames: Vec<_> = parts
+        .frames
+        .iter()
+        .filter(|f| !(f.file.as_str() == parts.file && f.lineno == parts.lineno))
+        .collect();
+    if trace_frames.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "{}{}  {}",
+        BOX.margin,
+        color_dim(BOX.vert, use_color),
+        color_dim("trace", use_color)
+    );
+    for (i, f) in trace_frames.iter().enumerate() {
+        if i > 0 {
+            let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+        }
+        let loc = format!("{}:{} in {}", f.file, f.lineno, f.name);
+        let _ = writeln!(
+            out,
+            "{}{}    {}",
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
+            color_dim(&loc, use_color)
+        );
+        if !f.line.is_empty() {
+            let _ = writeln!(
+                out,
+                "{}{}      {}",
+                BOX.margin,
+                color_dim(BOX.vert, use_color),
+                color_bold_white(&f.line, use_color)
+            );
+        }
+        if show_locals && !f.locals.is_empty() {
+            render_locals(out, &f.locals, 8, use_color);
+        }
+    }
+    let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+}
+
+/// Render the HINT section: fix suggestion inside box.
+fn render_hint(out: &mut String, outcome: &TestOutcome, use_color: bool) {
+    if let Some(hint_text) = super::suggestions::suggest_fix(outcome) {
+        let _ = writeln!(
+            out,
+            "{}{}  {}",
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
+            color_blue(&format!("hint: {hint_text}"), use_color)
+        );
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+    }
+}
+
+/// Render the WHY section: closing `└` message.
+fn render_closing(out: &mut String, message: &str, use_color: bool) {
+    if message.is_empty() {
+        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.close, use_color));
+        return;
+    }
+    let mut lines = message.lines();
+    if let Some(first) = lines.next() {
+        let _ = writeln!(
+            out,
+            "{}{} {}",
+            BOX.margin,
+            color_dim(BOX.close, use_color),
+            color_dim(first, use_color)
+        );
+    }
+    for cont in lines {
+        let _ = writeln!(
+            out,
+            "{}{}  {}",
+            BOX.margin,
+            color_dim(BOX.vert, use_color),
+            color_dim(cont, use_color)
+        );
+    }
+}
+
 /// Render a box-style diagnostic block for a failing test.
 ///
 /// Produces the indented `┌ ... └` box shown below each failure line.
@@ -88,182 +269,17 @@ pub(crate) fn fmt_diagnostic_block(
     };
 
     let is_error = matches!(outcome, TestOutcome::Error { .. });
-
     let mut out = String::new();
 
-    // ── WHERE: ┌ file:line ──────────────────────────────────────────
-    if !parts.file.is_empty() {
-        let loc = format!("{}:{}", parts.file, parts.lineno);
-        let _ = writeln!(
-            out,
-            "{}{} {}",
-            BOX.margin,
-            color_dim(BOX.open, use_color),
-            color_dim_cyan(&loc, use_color)
-        );
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-    }
-
-    // ── WITH WHAT: inline params ────────────────────────────────────
-    if !item.param_values.is_empty() {
-        let params_str = item
-            .param_values
-            .iter()
-            .map(|(k, v)| {
-                format!(
-                    "{} {} {}",
-                    color_dim(k, use_color),
-                    color_dim("=", use_color),
-                    v,
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(&color_dim(", ", use_color));
-        let _ = writeln!(
-            out,
-            "{}{}  {}",
-            BOX.margin,
-            color_dim(BOX.vert, use_color),
-            params_str
-        );
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-    }
-
-    // ── WHAT: source line (hero) ────────────────────────────────────
-    if !parts.source_line.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}{}  {}",
-            BOX.margin,
-            color_dim(BOX.vert, use_color),
-            color_bold_white(parts.source_line, use_color)
-        );
-
-        // Show locals for the failure frame if show_locals is on
-        if show_locals {
-            // Find the failure frame (matching file:lineno) and render its locals
-            let failure_locals = parts.frames.iter().find_map(|f| {
-                if f.file.as_str() == parts.file && f.lineno == parts.lineno && !f.locals.is_empty()
-                {
-                    Some(&f.locals)
-                } else {
-                    None
-                }
-            });
-            if let Some(locals) = failure_locals {
-                for (name, value) in locals {
-                    let _ = writeln!(
-                        out,
-                        "{}{}    {} = {}",
-                        BOX.margin,
-                        color_dim(BOX.vert, use_color),
-                        color_dim(name, use_color),
-                        color_dim(value, use_color)
-                    );
-                }
-            }
-        }
-
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-    }
-
-    // ── VALUES: diff / value labels ─────────────────────────────────
+    render_where(&mut out, parts.file, parts.lineno, use_color);
+    render_params(&mut out, &item.param_values, use_color);
+    render_source(&mut out, &parts, show_locals, use_color);
     if !is_error {
         render_values(&mut out, parts.left, parts.right, parts.op, use_color);
     }
-
-    // ── TRACE: non-failure frames ───────────────────────────────────
-    let visible_frames: Vec<&crate::types::Frame> = parts.frames.iter().collect();
-    // Exclude the failure frame (same file:lineno as the diagnostic location)
-    let trace_frames: Vec<_> = visible_frames
-        .iter()
-        .filter(|f| !(f.file.as_str() == parts.file && f.lineno == parts.lineno))
-        .collect();
-    if !trace_frames.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}{}  {}",
-            BOX.margin,
-            color_dim(BOX.vert, use_color),
-            color_dim("trace", use_color)
-        );
-        for (i, f) in trace_frames.iter().enumerate() {
-            if i > 0 {
-                let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-            }
-            let loc = format!("{}:{} in {}", f.file, f.lineno, f.name);
-            let _ = writeln!(
-                out,
-                "{}{}    {}",
-                BOX.margin,
-                color_dim(BOX.vert, use_color),
-                color_dim(&loc, use_color)
-            );
-            if !f.line.is_empty() {
-                let _ = writeln!(
-                    out,
-                    "{}{}      {}",
-                    BOX.margin,
-                    color_dim(BOX.vert, use_color),
-                    color_bold_white(&f.line, use_color)
-                );
-            }
-            // Show locals for trace frames if show_locals
-            if show_locals && !f.locals.is_empty() {
-                for (name, value) in &f.locals {
-                    let _ = writeln!(
-                        out,
-                        "{}{}        {} = {}",
-                        BOX.margin,
-                        color_dim(BOX.vert, use_color),
-                        color_dim(name, use_color),
-                        color_dim(value, use_color)
-                    );
-                }
-            }
-        }
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-    }
-
-    // ── HINT: suggestion inside box ─────────────────────────────────
-    if let Some(hint_text) = super::suggestions::suggest_fix(outcome) {
-        let _ = writeln!(
-            out,
-            "{}{}  {}",
-            BOX.margin,
-            color_dim(BOX.vert, use_color),
-            color_blue(&format!("hint: {}", hint_text), use_color)
-        );
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
-    }
-
-    // ── WHY: closing └ message ──────────────────────────────────────
-    let closing_message = parts.message;
-
-    if closing_message.is_empty() {
-        let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.close, use_color));
-    } else {
-        // Multi-line messages: first line on └, continuation lines on │
-        let mut lines = closing_message.lines();
-        if let Some(first) = lines.next() {
-            let _ = writeln!(
-                out,
-                "{}{} {}",
-                BOX.margin,
-                color_dim(BOX.close, use_color),
-                color_dim(first, use_color)
-            );
-        }
-        for cont in lines {
-            let _ = writeln!(
-                out,
-                "{}{}  {}",
-                BOX.margin,
-                color_dim(BOX.vert, use_color),
-                color_dim(cont, use_color)
-            );
-        }
-    }
+    render_trace(&mut out, &parts, show_locals, use_color);
+    render_hint(&mut out, outcome, use_color);
+    render_closing(&mut out, parts.message, use_color);
 
     out
 }
