@@ -103,61 +103,46 @@ impl PipelinePhase for FixturesPhase {
         "fixtures"
     }
 
-    fn should_run(&self, ctx: &PipelineContext) -> bool {
-        ctx.cli.fixtures
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
-
         let verbosity = ctx.cfg.verbosity as i32;
 
-        match session.list_fixtures(py, verbosity, ctx.cli.keyword.as_deref(), ctx.use_color) {
-            Ok(output) => {
-                if !output.is_empty() {
-                    println!("{output}");
+        let is_tree = matches!(
+            &ctx.command,
+            crate::config::Command::Fixtures(a) if a.tree
+        );
+
+        if is_tree {
+            match session.tree_fixtures(py, verbosity, None, ctx.use_color) {
+                Ok(output) => {
+                    if output.starts_with("error:") {
+                        eprintln!("{output}");
+                        return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+                    }
+                    if !output.is_empty() {
+                        println!("{output}");
+                    }
                 }
-            }
-            Err(e) => {
-                eprintln!("Error listing fixtures: {e}");
-                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
-            }
-        }
-        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
-    }
-}
-
-// ─── TreePhase ───────────────────────────────────────────────────────────────
-
-pub(crate) struct TreePhase;
-
-impl PipelinePhase for TreePhase {
-    fn name(&self) -> &'static str {
-        "tree"
-    }
-
-    fn should_run(&self, ctx: &PipelineContext) -> bool {
-        ctx.cli.tree
-    }
-
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
-        let session = ctx.session.as_ref().expect("SessionPhase must run first");
-
-        let verbosity = ctx.cfg.verbosity as i32;
-
-        match session.tree_fixtures(py, verbosity, ctx.cli.keyword.as_deref(), ctx.use_color) {
-            Ok(output) => {
-                if output.starts_with("error:") {
-                    eprintln!("{output}");
+                Err(e) => {
+                    eprintln!("Error rendering fixture tree: {e}");
                     return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
                 }
-                if !output.is_empty() {
-                    println!("{output}");
-                }
             }
-            Err(e) => {
-                eprintln!("Error rendering fixture tree: {e}");
-                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+        } else {
+            match session.list_fixtures(py, verbosity, None, ctx.use_color) {
+                Ok(output) => {
+                    if !output.is_empty() {
+                        println!("{output}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error listing fixtures: {e}");
+                    return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+                }
             }
         }
         Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
@@ -339,7 +324,20 @@ impl PipelinePhase for FilterPhase {
                 vec![],
             )
         };
-        match helpers::apply_filters(items, &ctx.cli, &ctx.cfg, &ctx.cache, &make_rep) {
+        let (keyword, marker) = match &ctx.command {
+            crate::config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
+            crate::config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
+            crate::config::Command::List(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
+            _ => (None, None),
+        };
+        match helpers::apply_filters(
+            items,
+            keyword.as_deref(),
+            marker.as_deref(),
+            &ctx.cfg,
+            &ctx.cache,
+            &make_rep,
+        ) {
             Ok(filtered) => {
                 ctx.items = filtered;
                 Ok(PhaseOutcome::Continue)
@@ -359,8 +357,8 @@ impl PipelinePhase for ListPhase {
         "list"
     }
 
-    fn should_run(&self, ctx: &PipelineContext) -> bool {
-        ctx.cli.list
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
     }
 
     fn execute(
@@ -422,6 +420,11 @@ impl PipelinePhase for ExecutionPhase<'_> {
             vec![]
         };
 
+        let (json_path, junit_path) = match &ctx.command {
+            crate::config::Command::Run(a) => (a.json.clone(), a.junit_xml.clone()),
+            _ => (None, None),
+        };
+
         let rep = reporter::make_reporter(
             ctx.base
                 .clone()
@@ -431,8 +434,8 @@ impl PipelinePhase for ExecutionPhase<'_> {
                 .strict_suite_lines(std::mem::take(&mut ctx.suite_lines))
                 .build(),
             ctx.is_tty,
-            ctx.cli.json.clone(),
-            ctx.cli.junit_xml.clone(),
+            json_path,
+            junit_path,
             plugin_reporters,
         );
         ctx.reporter = Some(rep);
