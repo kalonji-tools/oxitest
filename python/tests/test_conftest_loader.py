@@ -276,7 +276,9 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
 
 
 @oxitest.mark.inprocess
-def test_load_fixtures_registers_conftest_in_sys_modules(tmp: TempDir):
+def test_load_fixtures_registers_conftest_in_sys_modules(
+    tmp: TempDir, clean_sys_modules: Fixture[None]
+):
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
 
     f = tmp / "conftest.py"
@@ -399,7 +401,9 @@ def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir):
 
 
 @oxitest.mark.inprocess
-def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
+def test_create_session_attaches_helpers_to_conftest_module(
+    tmp: TempDir, clean_sys_modules: Fixture[None]
+):
     f = tmp / "conftest.py"
     f.write_text(
         "import oxitest\n"
@@ -426,7 +430,9 @@ def test_create_session_attaches_helpers_to_conftest_module(tmp: TempDir):
 
 
 @oxitest.mark.inprocess
-def test_create_session_helpers_contain_public_functions(tmp: TempDir):
+def test_create_session_helpers_contain_public_functions(
+    tmp: TempDir, clean_sys_modules: Fixture[None]
+):
     f = tmp / "conftest.py"
     f.write_text(
         "import oxitest\n"
@@ -470,7 +476,9 @@ def test_create_session_empty_conftest_still_warns(tmp: TempDir):
 
 
 @oxitest.mark.inprocess
-def test_create_session_helpers_empty_when_no_callables(tmp: TempDir):
+def test_create_session_helpers_empty_when_no_callables(
+    tmp: TempDir, clean_sys_modules: Fixture[None]
+):
     """helpers is present but scope has no attrs when conftest has only fixtures."""
     f = tmp / "conftest.py"
     f.write_text(

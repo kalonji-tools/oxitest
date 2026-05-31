@@ -14,8 +14,7 @@ def test_oxi_mark_applies_to_all_tests(tmp: TempDir):
     )
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "2 passed" in out, f"expected 2 passed, got: {out}"
+    helpers.integ.assert_passed(out, rc, count=2)
 
 
 def test_oxi_mark_visible_to_marker_filter(tmp: TempDir):
@@ -29,8 +28,7 @@ def test_oxi_mark_visible_to_marker_filter(tmp: TempDir):
     (tmp / "test_other.py").write_text("def test_c(): assert True\n")
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
     out, _, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "2 passed" in out, f"-m slow should select 2 tests, got: {out}"
+    helpers.integ.assert_passed(out, rc, count=2)
 
 
 def test_oxi_mark_per_test_override(tmp: TempDir):
@@ -43,9 +41,8 @@ def test_oxi_mark_per_test_override(tmp: TempDir):
         "def test_runs(): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "1 passed" in out, f"expected 1 passed, got: {out}"
-    assert "1 skipped" in out, f"expected 1 skipped, got: {out}"
+    helpers.integ.assert_passed(out, rc, count=1)
+    helpers.integ.assert_contains(out, "1 skipped")
 
 
 def test_oxi_mark_strict_validates_module_marks(tmp: TempDir):
@@ -55,9 +52,7 @@ def test_oxi_mark_strict_validates_module_marks(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--strict")
     assert rc != 0, f"--strict should fail for skip without reason, got rc={rc}"
-    assert "missing-mark-reason" in out, (
-        f"expected missing-mark-reason violation, got: {out}"
-    )
+    helpers.integ.assert_contains(out, "missing-mark-reason")
 
 
 def test_oxi_mark_single_mark_not_list(tmp: TempDir):
@@ -67,5 +62,4 @@ def test_oxi_mark_single_mark_not_list(tmp: TempDir):
     )
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "1 passed" in out, f"expected 1 passed, got: {out}"
+    helpers.integ.assert_passed(out, rc, count=1)

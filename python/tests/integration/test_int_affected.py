@@ -24,6 +24,5 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir):
         "        f'stderr: {result.stderr}'\n"
         "    )\n"
     )
-    out, stderr, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out!r}\nstderr: {stderr!r}"
-    assert "1 passed" in out, f"expected '1 passed' in output: {out!r}"
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=1)

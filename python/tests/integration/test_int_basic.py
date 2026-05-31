@@ -9,15 +9,13 @@ def test_all_pass_exits_zero(tmp: TempDir):
         "def test_a(): assert 1 == 1\ndef test_b(): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"all-pass should exit 0, got {rc}"
-    assert "passed" in out, "summary should mention passed"
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_failure_exits_one(tmp: TempDir):
     (tmp / "test_fail.py").write_text("def test_x(): assert 1 == 2\n")
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 1, f"failure should exit 1, got {rc}"
-    assert "failed" in out, "summary should mention failed"
+    helpers.integ.assert_failed(out, rc)
 
 
 def test_all_skip_exits_zero(tmp: TempDir):
@@ -28,7 +26,7 @@ def test_all_skip_exits_zero(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
     assert rc == 0, f"all-skip should exit 0, got {rc}"
-    assert "skipped" in out, "summary should mention skipped"
+    helpers.integ.assert_contains(out, "skipped")
 
 
 def test_xfail_exits_zero(tmp: TempDir):
@@ -39,7 +37,7 @@ def test_xfail_exits_zero(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
     assert rc == 0, f"xfail should exit 0, got {rc}"
-    assert "xfailed" in out, "summary should mention xfailed"
+    helpers.integ.assert_contains(out, "xfailed")
 
 
 def test_mixed_pass_and_fail(tmp: TempDir):
@@ -47,9 +45,8 @@ def test_mixed_pass_and_fail(tmp: TempDir):
         "def test_good(): assert True\ndef test_bad(): assert False\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 1, f"mixed should exit 1, got {rc}"
-    assert "passed" in out, "summary should mention passed"
-    assert "failed" in out, "summary should mention failed"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_contains(out, "passed", "failed")
 
 
 def test_no_tests_collected(tmp: TempDir):
@@ -83,5 +80,4 @@ def test_composed_parametrize_runs_cartesian_product(tmp: TempDir):
         "    assert multiplier > 0, 'multiplier should be positive'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\n{out}"
-    assert "4 passed" in out, f"2x2 should produce 4 tests, got: {out}"
+    helpers.integ.assert_passed(out, rc, count=4)
