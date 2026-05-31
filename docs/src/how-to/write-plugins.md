@@ -536,8 +536,8 @@ def oxitest_plugin(config=None) -> Plugin:
 
 oxitest owns capture management and banners. The backend only provides the
 debugger interaction — `trace()` is called before test execution in
-`--debug=always` mode, and `post_mortem()` is called on test failure in any
-`--debug` mode.
+`oxitest debug --always` mode, and `post_mortem()` is called on test failure in
+any `oxitest debug` mode.
 
 **Rules:**
 
