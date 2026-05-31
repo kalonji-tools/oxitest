@@ -449,6 +449,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
             cache: &ctx.cache,
             session,
             conftest_files: &ctx.conftest_files,
+            python_bin: &ctx.python_bin,
             runner: self.runner,
             parallel: self.parallel,
         };
