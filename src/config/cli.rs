@@ -119,6 +119,10 @@ pub struct Cli {
     #[arg(long, visible_alias = "fx")]
     pub fixtures: bool,
 
+    /// Show fixture dependency tree and exit
+    #[arg(long)]
+    pub tree: bool,
+
     /// Quiet output (minimal detail for --fixtures)
     #[arg(short = 'q', long)]
     pub quiet: bool,
@@ -280,6 +284,7 @@ impl Cli {
         let action_modes = [
             (self.list, "--list"),
             (self.fixtures, "--fixtures"),
+            (self.tree, "--tree"),
             (self.capture_environment, "--capture-environment"),
         ];
         let active: Vec<&str> = action_modes
@@ -301,6 +306,9 @@ impl Cli {
             }
             if self.fixtures {
                 return Err("--quiet suppresses output, but --fixtures requests it.".to_string());
+            }
+            if self.tree {
+                return Err("--quiet suppresses output, but --tree requests it.".to_string());
             }
         }
 
@@ -793,6 +801,36 @@ mod validate_tests {
     #[test]
     fn test_show_internals_with_tb_detail_is_valid() {
         let cli = Cli::try_parse_from(["oxitest", "--show-internals", "--tb", "detail"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn test_tree_conflicts_with_list() {
+        let cli = Cli::try_parse_from(["oxitest", "--tree", "--list"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--tree"), "error: {err}");
+        assert!(err.contains("--list"), "error: {err}");
+    }
+
+    #[test]
+    fn test_tree_conflicts_with_fixtures() {
+        let cli = Cli::try_parse_from(["oxitest", "--tree", "--fixtures"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--tree"), "error: {err}");
+        assert!(err.contains("--fixtures"), "error: {err}");
+    }
+
+    #[test]
+    fn test_tree_conflicts_with_quiet() {
+        let cli = Cli::try_parse_from(["oxitest", "--tree", "-q"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--tree"), "error: {err}");
+        assert!(err.contains("--quiet"), "error: {err}");
+    }
+
+    #[test]
+    fn test_tree_alone_is_valid() {
+        let cli = Cli::try_parse_from(["oxitest", "--tree"]).unwrap();
         assert!(cli.validate().is_ok());
     }
 }
