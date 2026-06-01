@@ -25,6 +25,7 @@ flags:
 
 ignore:
   # Rust: PyO3 entry points — only testable through Python integration tests
+  - "src/assert_rewriter.rs"
   - "src/bridge.rs"
   - "src/lib.rs"
   - "src/pipeline/traits.rs"
