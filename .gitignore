@@ -7,7 +7,7 @@ target/
 *.pyd
 __pycache__/
 *.pyc
-.venv/
+.venv
 dist/
 
 .superpowers/

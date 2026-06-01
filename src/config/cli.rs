@@ -383,6 +383,21 @@ pub struct FixturesArgs {
     pub color: Option<ColorMode>,
 }
 
+/// Arguments for `oxitest plugins`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct PluginsArgs {
+    #[command(flatten)]
+    pub verbosity: VerbosityArgs,
+
+    /// Quiet output (minimal detail)
+    #[arg(short = 'q', long, help_heading = "Output")]
+    pub quiet: bool,
+
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+}
+
 // ── Command enum ─────────────────────────────────────────────────────────────
 
 /// Available subcommands.
@@ -396,6 +411,8 @@ pub enum Command {
     List(ListArgs),
     /// Inspect registered fixtures
     Fixtures(FixturesArgs),
+    /// List registered plugins and their protocols
+    Plugins(PluginsArgs),
     /// Print environment information (version, Python, rustc, OS)
     Env,
 }
@@ -502,6 +519,21 @@ impl FixturesArgs {
             .command
             .map(|cmd| match cmd {
                 Command::Fixtures(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
+    }
+}
+
+#[cfg(test)]
+impl PluginsArgs {
+    #[allow(dead_code)]
+    pub fn default_for_test() -> Self {
+        OxitestCli::try_parse_from(["oxitest", "plugins"])
+            .expect("default PluginsArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::Plugins(args) => args,
                 _ => unreachable!(),
             })
             .unwrap()
@@ -630,6 +662,30 @@ mod tests {
         let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures", "-q"])).unwrap();
         let Command::Fixtures(args) = cmd else {
             panic!("expected Command::Fixtures");
+        };
+        assert!(args.quiet);
+    }
+
+    #[test]
+    fn plugins_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins"])).unwrap();
+        assert!(matches!(cmd, Command::Plugins(_)));
+    }
+
+    #[test]
+    fn plugins_with_verbose() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins", "-v"])).unwrap();
+        let Command::Plugins(args) = cmd else {
+            panic!("expected Command::Plugins");
+        };
+        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
+    }
+
+    #[test]
+    fn plugins_with_quiet() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins", "-q"])).unwrap();
+        let Command::Plugins(args) = cmd else {
+            panic!("expected Command::Plugins");
         };
         assert!(args.quiet);
     }

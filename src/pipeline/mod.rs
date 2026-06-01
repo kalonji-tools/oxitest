@@ -177,6 +177,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::List(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Plugins(_) => None,
         _ => None,
     };
     let rootdir = config::find_rootdir(first_path);
@@ -203,6 +204,16 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
             cfg
         }
         config::Command::Fixtures(args) => {
+            let mut cfg = config::Config::load(&rootdir);
+            if let Some(level) = args.verbosity.resolve() {
+                cfg.verbosity = level;
+            }
+            if let Some(color) = args.color {
+                cfg.color = color;
+            }
+            cfg
+        }
+        config::Command::Plugins(args) => {
             let mut cfg = config::Config::load(&rootdir);
             if let Some(level) = args.verbosity.resolve() {
                 cfg.verbosity = level;
@@ -329,6 +340,11 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             &phases::FileCollectionPhase,
             &phases::SessionPhase,
             &phases::FixturesPhase,
+        ],
+        config::Command::Plugins(_) => &[
+            &phases::FileCollectionPhase,
+            &phases::SessionPhase,
+            &phases::PluginsPhase,
         ],
         config::Command::Env => unreachable!("handled in setup"),
     };
