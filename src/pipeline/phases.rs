@@ -149,6 +149,38 @@ impl PipelinePhase for FixturesPhase {
     }
 }
 
+// ─── PluginsPhase ─────────────────────────────────────────────────────────────
+
+pub(crate) struct PluginsPhase;
+
+impl PipelinePhase for PluginsPhase {
+    fn name(&self) -> &'static str {
+        "plugins"
+    }
+
+    fn should_run(&self, _ctx: &PipelineContext) -> bool {
+        true
+    }
+
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
+        let session = ctx.session.as_ref().expect("SessionPhase must run first");
+        let verbosity = ctx.cfg.verbosity as i32;
+
+        match session.list_plugins(py, verbosity, ctx.use_color) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    println!("{output}");
+                }
+            }
+            Err(e) => {
+                eprintln!("Error listing plugins: {e}");
+                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+            }
+        }
+        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
+    }
+}
+
 // ─── CollectionPhase ─────────────────────────────────────────────────────────
 
 /// Imports test modules and collects test items + violations.
