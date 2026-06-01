@@ -14,13 +14,11 @@ __all__ = [
 import inspect
 import linecache
 import reprlib
-import textwrap
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
-from oxitest._bridge._ast_utils import find_bare_assert_lines
 from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import ExecutionWrapper
@@ -231,22 +229,6 @@ def _compose(
     return lambda: wrapper(inner)
 
 
-def _find_bare_asserts(fn: object) -> list[int]:
-    """Fallback bare-assert detection for modules loaded without the AST rewriter.
-
-    Normally _oxitest_bare_asserts is populated by ast_rewriter.py during module
-    import. This function re-parses the function source at runtime when that
-    attribute is missing (e.g., module imported outside _load_module).
-    """
-    try:
-        source_lines, start_line = inspect.getsourcelines(cast(Any, fn))
-        source = textwrap.dedent("".join(source_lines))
-        return sorted(find_bare_assert_lines(source, start_line=start_line))
-    except (OSError, TypeError):
-        # SyntaxError is handled inside find_bare_assert_lines.
-        return []
-
-
 async def _run_base_async(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
@@ -336,9 +318,7 @@ class BareAssertMiddleware:
             self._module, "_oxitest_bare_asserts", {}
         )
         _simple_fn_name = plan.fn_name.split("::")[-1]
-        plan.no_message_lines = tuple(
-            _bare_map.get(_simple_fn_name, _find_bare_asserts(plan.fn))
-        )
+        plan.no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
         return next_fn
 
 
