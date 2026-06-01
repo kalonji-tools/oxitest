@@ -5,6 +5,7 @@
 use pyo3::prelude::*;
 
 mod affected;
+mod assert_rewriter;
 mod bare_asserts;
 mod bridge;
 mod cache;
@@ -33,6 +34,15 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     pipeline::run(py, args)
 }
 
+#[pyfunction]
+fn rewrite_asserts(
+    py: Python<'_>,
+    source: &str,
+    filename: &str,
+) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+    assert_rewriter::rewrite_asserts(py, source, filename)
+}
+
 #[pymodule]
 fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register a stderr tracing subscriber. try_init() is a no-op if a global
@@ -46,5 +56,6 @@ fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .with_writer(reporter::tracing_writer::PbMakeWriter::new())
         .try_init();
     m.add_function(wrap_pyfunction!(run, m)?)?;
+    m.add_function(wrap_pyfunction!(rewrite_asserts, m)?)?;
     Ok(())
 }
