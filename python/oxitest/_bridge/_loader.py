@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import importlib.util
 import sys
 import traceback
@@ -11,8 +10,6 @@ from typing import Any, cast
 from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
-    OxitestAssertRewriter,
-    _BareAssertCollector,
     _OxitestAssertionError,
 )
 from oxitest._bridge.result import _error_result
@@ -48,6 +45,8 @@ def _load_module(module_path: str, unique_name: str) -> Any:
     Raises _LoadError if the file cannot be read, parsed, or executed.
     unique_name is used as the sys.modules key; caller is responsible for cleanup.
     """
+    from oxitest._oxitest import rewrite_asserts
+
     path = Path(module_path)
     spec = importlib.util.spec_from_file_location(unique_name, path)
     if spec is None or spec.loader is None:
@@ -57,15 +56,11 @@ def _load_module(module_path: str, unique_name: str) -> Any:
     sys.modules[unique_name] = module
     try:
         source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=module_path)
-        collector = _BareAssertCollector()
-        collector.visit(tree)
-        tree = OxitestAssertRewriter().visit(tree)
-        ast.fix_missing_locations(tree)
+        tree, bare_asserts = rewrite_asserts(source, module_path)
         code = compile(tree, module_path, "exec")
         module.__dict__["_OxitestAssertionError"] = _OxitestAssertionError
         module.__dict__["_oxitest_no_rhs"] = _OXITEST_NO_RHS
-        module.__dict__["_oxitest_bare_asserts"] = collector.by_fn
+        module.__dict__["_oxitest_bare_asserts"] = bare_asserts
         exec(code, module.__dict__)  # noqa: S102
         return module
     except Exception as exc:

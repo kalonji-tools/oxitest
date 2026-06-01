@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-import ast
 from typing import Any
 
 from oxitest._bridge.ast_rewriter import (
     _OXITEST_NO_RHS,
-    OxitestAssertRewriter,
     _OxitestAssertionError,
 )
 
 
 def _exec_rewritten(src: str, ns: dict[str, Any]) -> None:
-    """Parse, rewrite, compile, and exec src with the given namespace."""
-    tree = ast.parse(src)
-    tree = OxitestAssertRewriter().visit(tree)
-    ast.fix_missing_locations(tree)
+    """Parse, rewrite via Rust, compile, and exec src with the given namespace."""
+    from oxitest._oxitest import rewrite_asserts
+
+    tree, _bare = rewrite_asserts(src, "<test>")
     code = compile(tree, "<test>", "exec")
     exec(code, ns)  # noqa: S102
 
@@ -112,3 +110,32 @@ def test_passing_assert_does_not_raise():
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 42}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     ns["test_f"]()  # must not raise
+
+
+def test_bare_assert_map_returned():
+    """Rust rewriter returns bare-assert-by-function map."""
+    from oxitest._oxitest import rewrite_asserts
+
+    src = (
+        "def test_a():\n    assert True\n    assert 1 == 1, 'ok'\n"
+        "\ndef test_b():\n    assert False\n"
+    )
+    _tree, bare = rewrite_asserts(src, "<test>")
+    # test_a has one bare assert on line 2 (line 3 has a message)
+    assert bare["test_a"] == [2], f"expected [2], got {bare.get('test_a')}"
+    # test_b has one bare assert on line 6
+    assert bare["test_b"] == [6], f"expected [6], got {bare.get('test_b')}"
+
+
+def test_bare_assert_nested_fn_attributed_to_outer():
+    """Bare asserts in nested functions attribute to outermost function."""
+    from oxitest._oxitest import rewrite_asserts
+
+    src = (
+        "def test_outer():\n    def helper():\n        assert True\n    assert False\n"
+    )
+    _tree, bare = rewrite_asserts(src, "<test>")
+    # Both the nested assert (line 3) and direct assert (line 4) attribute to test_outer
+    assert bare["test_outer"] == [3, 4], (
+        f"expected [3, 4], got {bare.get('test_outer')}"
+    )
