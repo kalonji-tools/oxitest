@@ -1,3 +1,8 @@
+import ast
+
 from oxitest._exit_code import ExitCode as ExitCode
 
 def run(args: list[str]) -> int: ...
+def rewrite_asserts(
+    source: str, filename: str
+) -> tuple[ast.Module, dict[str, list[int]]]: ...
