@@ -280,6 +280,26 @@ standard `warnings.filterwarnings` call in the child conftest.
 
 ---
 
+```text
+shared fixture is immutable: cannot set attribute '<name>'
+```
+
+**Cause:** Test code attempted to set an attribute, delete an attribute, set an
+item, or delete an item on a value returned by a `shared=True` fixture. Shared
+fixtures use a frozen proxy to prevent cross-test mutation.
+
+**Fix:** Either remove `shared=True` from the fixture (each test gets its own
+copy), or restructure the test to avoid mutation:
+
+```python
+# Don't mutate the shared value
+def test_read_only(config: Fixture[AppConfig]):
+    local = dataclasses.replace(config, debug=True)  # copy instead
+    assert local.debug
+```
+
+---
+
 ## Execution errors
 
 Execution errors occur while tests are running.
@@ -452,5 +472,29 @@ a parameter name.
 that uses it. If the fixture is intentionally unused (e.g., an `autouse`
 fixture), verify that it is marked with `autouse=True` -- autouse fixtures
 are excluded from this check.
+
+---
+
+### `single-case-parametrize`
+
+```text
+strict: @parametrize with a single case — use a plain test instead
+```
+
+**Cause:** A `@oxi.parametrize` decorator has exactly one case. This adds
+indirection without benefit.
+
+**Fix:** Remove the decorator and inline the value, or add more test cases:
+
+```python
+# Before
+@oxi.parametrize("x", [42])
+def test_answer(x: int):
+    assert x == 42
+
+# After
+def test_answer():
+    assert 42 == 42
+```
 
 ---
