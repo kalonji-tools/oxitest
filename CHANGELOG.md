@@ -1,6 +1,33 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.11.0] - 2026-06-02
+
+### Bug Fixes
+
+
+- Use seed_data fixture and correct parametrize signatures
+
+### Features
+
+
+- Add Rust assert rewriter module
+- Wire Python to Rust and delete Python rewriter
+- Add test counting and parametrize case detection to prescan
+- Add --count flag for instant prescan-only test counting
+- Add --collection-profile for per-file timing breakdown
+- `oxitest plugins` subcommand (#625)
+- Scheduling transparency with -v (#628)
+- Dataclass field diffs in assertion output (#623)
+- Fixture cache hit rate reporting (#630)
+- DSL engine — lexer, parser, evaluator, resource types
+- Instant-tier AST extraction for tests, marks, helpers
+- Output formatters — columnar, tab, jsonl, inspect card
+- Add Query command, remove list/fixtures/plugins subcommands
+- Full-tier Python bridge for fixture and plugin queries
+- Fzf interactive fuzzy finder for queries
+- Respect .gitignore in file discovery
+
 ## [0.10.0] - 2026-05-31
 
 ### Bug Fixes
