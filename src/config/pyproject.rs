@@ -50,6 +50,7 @@ pub(super) struct OxitestConfig {
     pub(super) auto_arrange: Option<AutoArrangeToml>,
     pub(super) show_locals: Option<bool>,
     pub(super) show_internals: Option<bool>,
+    pub(super) use_gitignore: Option<bool>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {
