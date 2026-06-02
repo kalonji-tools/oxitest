@@ -18,6 +18,7 @@ mod marker;
 mod parallel;
 mod pipeline;
 mod python_ast;
+mod query;
 mod reporter;
 mod retry;
 mod scheduler;
