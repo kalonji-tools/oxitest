@@ -66,8 +66,9 @@ If no `plugin_settings` table exists for the plugin, `config` is `None`.
 
 ## Protocols
 
-The `Plugin` dataclass has five fields, one per protocol. Each field is a list,
-so a single plugin can provide multiple implementations of the same protocol.
+The `Plugin` dataclass has seven fields — five list-based protocol fields and
+two singleton fields (`async_backend` and `debugger_backend`). Each list field
+allows a single plugin to provide multiple implementations of the same protocol.
 
 ```python
 @dataclass
