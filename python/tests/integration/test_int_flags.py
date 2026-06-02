@@ -41,7 +41,7 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
         "def test_gamma(): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list")
-    assert rc == 0, f"`list` should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_alpha", "test_beta", "test_gamma")
     helpers.integ.assert_excludes(out, "passed")
 
@@ -61,7 +61,7 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
         "def test_two(my_db: Fixture[str]): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "-v")
-    assert rc == 0, f"`list -v` should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_one", "test_two")
 
 
@@ -90,7 +90,7 @@ def test_json_output(tmp: TempDir):
     )
     json_path = Path(tmp) / "results.json"
     out, _, rc = helpers.common.run_oxitest(tmp, "--json", str(json_path))
-    assert rc == 0, f"--json run should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     assert json_path.exists(), "--json should create the output file"
     data = json.loads(json_path.read_text())
     passed = data["results"]["summary"]["passed"]
@@ -104,7 +104,7 @@ def test_junit_xml_output(tmp: TempDir):
     )
     xml_path = Path(tmp) / "results.xml"
     out, _, rc = helpers.common.run_oxitest(tmp, "--junit-xml", str(xml_path))
-    assert rc == 0, f"--junit-xml run should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     assert xml_path.exists(), "--junit-xml should create the output file"
     xml_content = xml_path.read_text()
     helpers.integ.assert_contains(
@@ -139,7 +139,7 @@ def test_v_with_quiet_is_valid(tmp: TempDir):
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
     out, _, rc = helpers.common.run_oxitest(tmp, "-v", "-q")
     # Quiet trumps, so this runs silently with exit 0
-    assert rc == 0, f"-v/-q should be valid, got {rc}"
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_schedule_conflicts_with_serial(tmp: TempDir):
@@ -153,8 +153,8 @@ def test_schedule_conflicts_with_serial(tmp: TempDir):
 def test_debug_with_passing_test_exits_0(tmp: TempDir):
     """`debug` subcommand on a passing test exits 0 (no pdb triggered)."""
     (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
-    _, stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "debug")
-    assert rc == 0, f"expected exit code 0, got {rc}\nstderr: {stderr!r}"
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "debug")
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_debug_always_is_accepted(tmp: TempDir):
@@ -254,8 +254,8 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 """,
         "test_fail_tmp.py",
     )
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
-    assert rc != 0, "test should fail"
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
+    helpers.integ.assert_failed(out, rc)
     helpers.integ.assert_contains(stderr, "KEPT", "--keep-tmp")
 
 
@@ -273,8 +273,8 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 """,
         "test_pass_tmp.py",
     )
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
-    assert rc == 0, "test should pass"
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_excludes(stderr, "KEPT")
 
 
@@ -292,10 +292,7 @@ def test_list_full_shows_param_values(tmp: TempDir):
         "    assert abs(case.x) == case.expected, 'mismatch'\n"
     )
     out, stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--verbose=full")
-    assert rc == 0, (
-        f"`list --verbose=full` should exit 0, got {rc}\n"
-        f"stdout: {out!r}\nstderr: {stderr!r}"
-    )
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_abs", "[pos]", "[neg]")
 
 
@@ -355,7 +352,7 @@ def test_tb_line_shows_compact_failure(tmp: TempDir):
         "def test_boom():\n    assert 1 == 2, 'one is not two'\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "line")
-    assert rc != 0, "test should fail"
+    helpers.integ.assert_failed(out, rc)
     # --tb=line emits a one-liner with file:line and message
     helpers.integ.assert_contains(out, "test_fail.py", "one is not two")
     # No diagnostic box chrome
@@ -379,7 +376,7 @@ def test_timeout_cli_flag(tmp: TempDir):
         "import time\n\ndef test_hangs():\n    time.sleep(30)\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--timeout", "1")
-    assert rc != 0, f"timed-out test should fail, got rc={rc}"
+    helpers.integ.assert_failed(out, rc)
     assert "1 failed" in out or "timeout" in out.lower(), (
         f"output should indicate timeout failure: {out!r}"
     )
@@ -395,16 +392,15 @@ def test_durations_shows_slowest_tests(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--durations", "1")
     helpers.integ.assert_passed(out, rc)
-    assert "slowest" in out.lower(), f"output should contain 'slowest': {out!r}"
+    helpers.integ.assert_contains(out.lower(), "slowest")
     helpers.integ.assert_contains(out, "ms")
 
 
 def test_capture_environment_prints_versions():
     """`env` subcommand prints Python and oxitest versions and exits 0."""
     out, _, rc = helpers.common.run_oxitest_env()
-    assert rc == 0, f"`env` should exit 0, got {rc}"
-    assert "python:" in out.lower(), f"output should contain Python version: {out!r}"
-    assert "oxitest:" in out.lower(), f"output should contain oxitest version: {out!r}"
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out.lower(), "python:", "oxitest:")
     # Should NOT run tests
     helpers.integ.assert_excludes(out, "passed")
 
@@ -420,8 +416,4 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir):
     )
     (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
     out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
-    assert rc == 0, (
-        f"inprocess + parallel should exit 0, got {rc}\n"
-        f"stdout: {out!r}\nstderr: {stderr!r}"
-    )
     helpers.integ.assert_passed(out, rc, count=2)
