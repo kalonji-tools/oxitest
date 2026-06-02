@@ -17,7 +17,7 @@ import reprlib
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._mark_api import MarkInfo
@@ -115,6 +115,37 @@ def _get_frames(
     return tuple(frames)
 
 
+_FIELD_DIFF_SENTINEL = object()
+
+
+def _compute_field_diffs(
+    left: object,
+    right: object,
+) -> tuple[tuple[str, str, str], ...]:
+    """Compute field-level diffs for dataclass instances.
+
+    Returns tuple of (field_name, left_repr, right_repr) for differing fields.
+    Returns empty tuple if not both dataclasses of the same type.
+    """
+    if type(left) is not type(right):
+        return ()
+    if not hasattr(left, "__dataclass_fields__"):
+        return ()
+    diffs: list[tuple[str, str, str]] = []
+    dc_fields = cast(dict[str, Any], left.__dataclass_fields__)
+    for name in dc_fields:
+        lv = getattr(left, name, _FIELD_DIFF_SENTINEL)
+        rv = getattr(right, name, _FIELD_DIFF_SENTINEL)
+        if lv is _FIELD_DIFF_SENTINEL or rv is _FIELD_DIFF_SENTINEL:
+            continue
+        try:
+            if lv != rv:
+                diffs.append((name, _repr_safe(lv), _repr_safe(rv)))
+        except Exception:  # noqa: BLE001
+            continue
+    return tuple(diffs)
+
+
 def _handle_assertion_error(
     exc: AssertionError,
     *,
@@ -128,9 +159,11 @@ def _handle_assertion_error(
         left_repr = _repr_safe(exc.left)
         right_repr = _repr_safe(exc.right) if exc.right is not _OXITEST_NO_RHS else ""
         op = exc.op
+        field_diffs = _compute_field_diffs(exc.left, exc.right) if op == "==" else ()
     else:
         msg = str(exc) if str(exc) else ""
         left_repr = right_repr = op = ""
+        field_diffs = ()
     return TestResult(
         status=StatusKind.FAILED,
         message=msg,
@@ -140,6 +173,7 @@ def _handle_assertion_error(
         left=left_repr,
         right=right_repr,
         op=op,
+        field_diffs=field_diffs,
         exc_type="AssertionError",
         frames=_get_frames(exc, show_internals=show_internals, show_locals=show_locals),
     )

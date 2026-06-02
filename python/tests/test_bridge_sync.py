@@ -30,6 +30,7 @@ def test_test_result_fields_match_rust_test_result():
         strict=True,
         exc_type="",
         frames=(),
+        field_diffs=(),
     )
     expected_fields = {
         "status",
@@ -44,6 +45,7 @@ def test_test_result_fields_match_rust_test_result():
         "strict",
         "exc_type",
         "frames",
+        "field_diffs",
     }
     actual_fields = {f.name for f in dataclasses.fields(result)}
     assert actual_fields == expected_fields, (

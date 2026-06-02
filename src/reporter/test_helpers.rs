@@ -49,6 +49,7 @@ pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> Te
         right: String::new(),
         op: String::new(),
         frames: vec![],
+        field_diffs: vec![],
     }
 }
 
@@ -93,6 +94,7 @@ pub(crate) fn make_outcome(status: &str) -> TestOutcome {
         op: "",
         strict: false,
         frames: &[],
+        field_diffs: &[],
     })
 }
 

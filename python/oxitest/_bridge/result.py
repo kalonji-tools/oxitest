@@ -62,6 +62,7 @@ _WIRE_EXCLUDE_ATTRS: frozenset[str] = frozenset(
         "status",  # serialized as "outcome"
         "exc_type",  # not sent over the wire
         "frames",  # needs asdict() transformation
+        "field_diffs",  # needs list-of-list transformation
     }
 )
 
@@ -85,6 +86,7 @@ class TestResult:
     strict: bool = True
     exc_type: str = ""
     frames: tuple[Frame, ...] = ()
+    field_diffs: tuple[tuple[str, str, str], ...] = ()
 
     @property
     def failure_repr(self) -> str | None:
@@ -123,7 +125,7 @@ class TestResult:
         # Optional fields — omit falsy values for compact JSON
         # Wire fields: "failure_repr": "message": "file": "lineno":
         # "source_line": "no_message_lines": "left": "right": "op": "strict":
-        # "frames":
+        # "frames": "field_diffs":
         if failure_repr := self.failure_repr:
             output["failure_repr"] = failure_repr
         for f in fields(self):
@@ -131,6 +133,8 @@ class TestResult:
                 output[f.name] = value
         if self.frames:
             output["frames"] = [asdict(f) for f in self.frames]
+        if self.field_diffs:
+            output["field_diffs"] = [list(fd) for fd in self.field_diffs]
         return output
 
     @classmethod
