@@ -205,6 +205,130 @@ fn extract_case_count(args: &[ast::Expr]) -> usize {
     }
 }
 
+/// Extract the mark name from a single decorator expression.
+///
+/// Recognises `oxi.mark.NAME` and `oxitest.mark.NAME` in both bare decorator
+/// form (`@oxi.mark.slow`) and call form (`@oxi.mark.slow()`).
+/// Returns `None` for `parametrize` or unrecognised patterns.
+pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
+    // Unwrap call form: @oxi.mark.slow(...) → look at the func
+    let attr_expr = match dec {
+        ast::Expr::Call(call) => &call.func,
+        other => other,
+    };
+
+    // Must be an attribute access: oxi.mark.NAME
+    let ast::Expr::Attribute(outer) = attr_expr else {
+        return None;
+    };
+    let mark_name = outer.attr.as_str();
+    if mark_name == "parametrize" {
+        return None;
+    }
+
+    // The value of `oxi.mark.NAME` is `oxi.mark` — another attribute
+    let ast::Expr::Attribute(inner) = &*outer.value else {
+        return None;
+    };
+    if inner.attr.as_str() != "mark" {
+        return None;
+    }
+
+    // The value of `oxi.mark` must be `oxi` or `oxitest`
+    let ast::Expr::Name(name_node) = &*inner.value else {
+        return None;
+    };
+    let ns = name_node.id.as_str();
+    if ns != "oxi" && ns != "oxitest" {
+        return None;
+    }
+
+    Some(mark_name.to_string())
+}
+
+/// Collect mark names from a Test* class's method decorators into `marks`.
+fn collect_mark_names(stmt: &ast::Stmt, marks: &mut std::collections::BTreeSet<String>) {
+    let ast::Stmt::ClassDef(cls) = stmt else {
+        return;
+    };
+    if !is_test_class(&cls.name) {
+        return;
+    }
+    for method in &cls.body {
+        let decorators = match method {
+            ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => &f.decorator_list,
+            ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => &f.decorator_list,
+            _ => continue,
+        };
+        for dec in decorators {
+            if let Some(name) = extract_mark_name(dec) {
+                marks.insert(name);
+            }
+        }
+    }
+}
+
+/// Extract all unique mark names from test functions and Test* class methods
+/// in the given statement list.
+///
+/// Skips `parametrize`. Returns a sorted, deduplicated `Vec<String>`.
+pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
+    let mut marks = std::collections::BTreeSet::new();
+
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => {
+                for dec in &f.decorator_list {
+                    if let Some(name) = extract_mark_name(dec) {
+                        marks.insert(name);
+                    }
+                }
+            }
+            ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => {
+                for dec in &f.decorator_list {
+                    if let Some(name) = extract_mark_name(dec) {
+                        marks.insert(name);
+                    }
+                }
+            }
+            cls @ ast::Stmt::ClassDef(_) => {
+                collect_mark_names(cls, &mut marks);
+            }
+            _ => {}
+        }
+    }
+
+    marks.into_iter().collect()
+}
+
+/// Extract public, non-test, non-dunder function names from a module's statements.
+///
+/// Includes top-level function definitions whose names:
+/// - do not start with `_`
+/// - do not start with `test_`
+///
+/// Returns a sorted `Vec<String>`.
+pub(crate) fn extract_helpers(stmts: &[ast::Stmt]) -> Vec<String> {
+    let mut names = std::collections::BTreeSet::new();
+
+    for stmt in stmts {
+        let fn_name = match stmt {
+            ast::Stmt::FunctionDef(f) => f.name.as_str(),
+            ast::Stmt::AsyncFunctionDef(f) => f.name.as_str(),
+            _ => continue,
+        };
+        if fn_name.starts_with('_') {
+            continue;
+        }
+        if is_test_fn(fn_name) {
+            continue;
+        }
+        names.insert(fn_name.to_string());
+    }
+
+    names.into_iter().collect()
+}
+
 /// Result of pre-scanning a Python file for test functions.
 #[derive(Debug)]
 pub(crate) enum PrescanResult {
@@ -216,6 +340,7 @@ pub(crate) enum PrescanResult {
         #[allow(dead_code)]
         test_count: usize,
         /// Test count adjusted for static parametrize multipliers.
+        #[allow(dead_code)]
         adjusted_test_count: usize,
     },
     /// File has no test functions.
@@ -684,5 +809,101 @@ pub(crate) mod tests {
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
+    }
+
+    // ── extract_decorator_marks ──────────────────────────────────────────────
+
+    #[test]
+    fn extract_marks_from_decorator() {
+        let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(extract_decorator_marks(&stmts), vec!["slow"]);
+    }
+
+    #[test]
+    fn extract_marks_multiple() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.slow\ndef test_a(): pass\n\n@oxi.mark.integration\ndef test_b(): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let marks = extract_decorator_marks(&stmts);
+        assert!(marks.contains(&"slow".to_string()));
+        assert!(marks.contains(&"integration".to_string()));
+    }
+
+    #[test]
+    fn extract_marks_skip_parametrize() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.parametrize(\"x\", [1, 2])\ndef test_it(x): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(extract_decorator_marks(&stmts), Vec::<String>::new());
+    }
+
+    #[test]
+    fn extract_marks_deduplicates() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.slow\ndef test_a(): pass\n\n@oxi.mark.slow\ndef test_b(): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let marks = extract_decorator_marks(&stmts);
+        assert_eq!(marks, vec!["slow"]);
+    }
+
+    #[test]
+    fn extract_marks_from_class_methods() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\nclass TestGroup:\n    @oxi.mark.slow\n    def test_method(self): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let marks = extract_decorator_marks(&stmts);
+        assert_eq!(marks, vec!["slow"]);
+    }
+
+    #[test]
+    fn extract_marks_oxitest_prefix() {
+        let f = write_temp_py("import oxitest\n\n@oxitest.mark.slow\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(extract_decorator_marks(&stmts), vec!["slow"]);
+    }
+
+    #[test]
+    fn extract_marks_call_form() {
+        // @oxi.mark.slow() as a call (with no args)
+        let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow()\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(extract_decorator_marks(&stmts), vec!["slow"]);
+    }
+
+    // ── extract_helpers ──────────────────────────────────────────────────────
+
+    #[test]
+    fn extract_helpers_public_functions() {
+        let f = write_temp_py(
+            "def make_thing(): pass\ndef _private(): pass\ndef another_helper(): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts);
+        assert!(helpers.contains(&"make_thing".to_string()));
+        assert!(helpers.contains(&"another_helper".to_string()));
+        assert!(!helpers.contains(&"_private".to_string()));
+    }
+
+    #[test]
+    fn extract_helpers_skips_test_functions() {
+        let f = write_temp_py("def test_foo(): pass\ndef helper(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts);
+        assert!(!helpers.contains(&"test_foo".to_string()));
+        assert!(helpers.contains(&"helper".to_string()));
+    }
+
+    #[test]
+    fn extract_helpers_skips_dunder() {
+        let f = write_temp_py("def __helpers_namespace__(): pass\ndef public_fn(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts);
+        assert!(!helpers.contains(&"__helpers_namespace__".to_string()));
+        assert!(helpers.contains(&"public_fn".to_string()));
     }
 }
