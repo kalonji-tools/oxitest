@@ -933,52 +933,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_hard_failure_failed() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert!(o.is_hard_failure());
-    }
-
-    #[test]
-    fn test_is_hard_failure_error() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert!(o.is_hard_failure());
-    }
-
-    #[test]
-    fn test_is_hard_failure_xpassed_strict() {
-        assert!(TestOutcome::XPassed { strict: true }.is_hard_failure());
-    }
-
-    #[test]
-    fn test_is_hard_failure_xpassed_lenient() {
-        assert!(!TestOutcome::XPassed { strict: false }.is_hard_failure());
-    }
-
-    #[test]
-    fn test_is_hard_failure_passed() {
-        assert!(!TestOutcome::Passed {
-            no_message_lines: vec![]
-        }
-        .is_hard_failure());
-    }
-
-    #[test]
     fn test_item_non_parametrize_has_none_param_id() {
         let item = TestItem {
             node_id: NodeId::new("test.py", "test_foo", None),
@@ -1058,14 +1012,6 @@ mod tests {
     }
 
     #[test]
-    fn test_outcome_timeout_is_hard_failure() {
-        let o = TestOutcome::Timeout {
-            message: "Timed out after 5s".to_string(),
-        };
-        assert!(o.is_hard_failure());
-    }
-
-    #[test]
     fn test_outcome_timeout_stores_message() {
         let o = TestOutcome::Timeout {
             message: "Timed out after 3s".to_string(),
@@ -1079,222 +1025,250 @@ mod tests {
     // ── dot_char ─────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_dot_char_passed_no_bare_assert() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![]
-            }
-            .dot_char(),
-            '.'
-        );
-    }
-
-    #[test]
-    fn test_dot_char_passed_bare_assert() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![5]
-            }
-            .dot_char(),
-            '\u{00B7}'
-        );
-    }
-
-    #[test]
-    fn test_dot_char_failed() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.dot_char(), 'F');
-    }
-
-    #[test]
-    fn test_dot_char_error() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.dot_char(), 'E');
-    }
-
-    #[test]
-    fn test_dot_char_skipped() {
-        assert_eq!(
-            TestOutcome::Skipped {
-                reason: String::new()
-            }
-            .dot_char(),
-            's'
-        );
-    }
-
-    #[test]
-    fn test_dot_char_warned() {
-        assert_eq!(
-            TestOutcome::Warned {
-                reason: String::new(),
-                no_message_lines: vec![]
-            }
-            .dot_char(),
-            '.'
-        );
-    }
-
-    #[test]
-    fn test_dot_char_xfailed() {
-        assert_eq!(
-            TestOutcome::XFailed {
-                reason: String::new()
-            }
-            .dot_char(),
-            'x'
-        );
-    }
-
-    #[test]
-    fn test_dot_char_xpassed() {
-        assert_eq!(TestOutcome::XPassed { strict: true }.dot_char(), 'X');
-        assert_eq!(TestOutcome::XPassed { strict: false }.dot_char(), 'X');
-    }
-
-    #[test]
-    fn test_dot_char_timeout() {
-        assert_eq!(
-            TestOutcome::Timeout {
-                message: String::new()
-            }
-            .dot_char(),
-            'T'
-        );
+    fn dot_char_all_variants() {
+        let cases: Vec<(TestOutcome, char)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                '.',
+            ),
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![5],
+                },
+                '\u{00B7}',
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                'F',
+            ),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                'E',
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                's',
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                '.',
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                'x',
+            ),
+            (TestOutcome::XPassed { strict: true }, 'X'),
+            (TestOutcome::XPassed { strict: false }, 'X'),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                'T',
+            ),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                'f',
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.dot_char(),
+                expected,
+                "dot_char mismatch for {outcome:?}"
+            );
+        }
     }
 
     // ── label ────────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_label_passed_is_empty() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![]
-            }
-            .label(),
-            ""
-        );
-    }
-
-    #[test]
-    fn test_label_passed_bare_assert_is_empty() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![5]
-            }
-            .label(),
-            ""
-        );
-    }
-
-    #[test]
-    fn test_label_failed() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.label(), "FAIL ");
-    }
-
-    #[test]
-    fn test_label_error() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.label(), "ERROR");
-    }
-
-    #[test]
-    fn test_label_skipped() {
-        assert_eq!(
-            TestOutcome::Skipped {
-                reason: String::new()
-            }
-            .label(),
-            "SKIP "
-        );
-    }
-
-    #[test]
-    fn test_label_warned() {
-        assert_eq!(
-            TestOutcome::Warned {
-                reason: String::new(),
-                no_message_lines: vec![]
-            }
-            .label(),
-            "WARN "
-        );
-    }
-
-    #[test]
-    fn test_label_xfailed() {
-        assert_eq!(
-            TestOutcome::XFailed {
-                reason: String::new()
-            }
-            .label(),
-            "XFAIL"
-        );
-    }
-
-    #[test]
-    fn test_label_xpassed() {
-        // Both strict variants return same text; color differs in tty.rs
-        assert_eq!(TestOutcome::XPassed { strict: true }.label(), "XPASS");
-        assert_eq!(TestOutcome::XPassed { strict: false }.label(), "XPASS");
-    }
-
-    #[test]
-    fn test_label_timeout() {
-        assert_eq!(
-            TestOutcome::Timeout {
-                message: String::new()
-            }
-            .label(),
-            "TIME "
-        );
+    fn label_all_variants() {
+        let cases: Vec<(TestOutcome, &str)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                "",
+            ),
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![5],
+                },
+                "",
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                "FAIL ",
+            ),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                "ERROR",
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                "SKIP ",
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                "WARN ",
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                "XFAIL",
+            ),
+            // Both strict variants return same text; color differs in tty.rs
+            (TestOutcome::XPassed { strict: true }, "XPASS"),
+            (TestOutcome::XPassed { strict: false }, "XPASS"),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                "TIME ",
+            ),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                "FLAKY",
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(outcome.label(), expected, "label mismatch for {outcome:?}");
+        }
     }
 
     // ── as_str ───────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_as_str_all_variants() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![]
-            }
-            .as_str(),
-            "passed"
-        );
-        assert_eq!(
+    fn as_str_all_variants() {
+        let cases: Vec<(TestOutcome, &str)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                "passed",
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                "failed",
+            ),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                "error",
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                "skipped",
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                "warned",
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                "xfailed",
+            ),
+            (TestOutcome::XPassed { strict: false }, "xpassed"),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                "timeout",
+            ),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                "flaky",
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.as_str(),
+                expected,
+                "as_str mismatch for {outcome:?}"
+            );
+        }
+    }
+
+    // ── is_hard_failure ──────────────────────────────────────────────────────
+
+    #[test]
+    fn is_hard_failure_all_variants() {
+        let hard: Vec<TestOutcome> = vec![
             TestOutcome::Failed {
                 message: String::new(),
                 file: Utf8PathBuf::new(),
@@ -1305,67 +1279,51 @@ mod tests {
                 op: String::new(),
                 frames: vec![],
                 field_diffs: vec![],
-            }
-            .as_str(),
-            "failed"
-        );
-        assert_eq!(
+            },
             TestOutcome::Error {
                 message: String::new(),
                 file: Utf8PathBuf::new(),
                 lineno: LineNo::ZERO,
                 source_line: String::new(),
                 frames: vec![],
-            }
-            .as_str(),
-            "error"
-        );
-        assert_eq!(
+            },
+            TestOutcome::XPassed { strict: true },
+            TestOutcome::Timeout {
+                message: String::new(),
+            },
+        ];
+        for outcome in &hard {
+            assert!(
+                outcome.is_hard_failure(),
+                "expected hard failure for {outcome:?}"
+            );
+        }
+
+        let not_hard: Vec<TestOutcome> = vec![
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
             TestOutcome::Skipped {
-                reason: String::new()
-            }
-            .as_str(),
-            "skipped"
-        );
-        assert_eq!(
+                reason: String::new(),
+            },
             TestOutcome::Warned {
                 reason: String::new(),
-                no_message_lines: vec![]
-            }
-            .as_str(),
-            "warned"
-        );
-        assert_eq!(
+                no_message_lines: vec![],
+            },
             TestOutcome::XFailed {
-                reason: String::new()
-            }
-            .as_str(),
-            "xfailed"
-        );
-        assert_eq!(TestOutcome::XPassed { strict: false }.as_str(), "xpassed");
-        assert_eq!(
-            TestOutcome::Timeout {
-                message: String::new()
-            }
-            .as_str(),
-            "timeout"
-        );
-    }
-
-    #[test]
-    fn test_flaky_outcome_is_not_hard_failure() {
-        let outcome = TestOutcome::Flaky {
-            message: "flaky".to_string(),
-        };
-        assert!(!outcome.is_hard_failure());
-    }
-
-    #[test]
-    fn test_flaky_outcome_as_str() {
-        let outcome = TestOutcome::Flaky {
-            message: "flaky".to_string(),
-        };
-        assert_eq!(outcome.as_str(), "flaky");
+                reason: String::new(),
+            },
+            TestOutcome::XPassed { strict: false },
+            TestOutcome::Flaky {
+                message: String::new(),
+            },
+        ];
+        for outcome in &not_hard {
+            assert!(
+                !outcome.is_hard_failure(),
+                "expected non-hard-failure for {outcome:?}"
+            );
+        }
     }
 
     #[test]
@@ -1646,138 +1604,125 @@ mod message_tests {
     use super::*;
 
     #[test]
-    fn passed_returns_none() {
-        let o = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
-        assert!(o.message().is_none());
+    fn message_populated_variants() {
+        let cases: Vec<(TestOutcome, Option<&str>)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                None,
+            ),
+            (TestOutcome::XPassed { strict: true }, None),
+            (TestOutcome::XPassed { strict: false }, None),
+            (
+                TestOutcome::Failed {
+                    message: "assertion failed".to_string(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                Some("assertion failed"),
+            ),
+            (
+                TestOutcome::Error {
+                    message: "ImportError".to_string(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                Some("ImportError"),
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: "not ready".to_string(),
+                },
+                Some("not ready"),
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: "DeprecationWarning".to_string(),
+                    no_message_lines: vec![],
+                },
+                Some("DeprecationWarning"),
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: "known bug".to_string(),
+                },
+                Some("known bug"),
+            ),
+            (
+                TestOutcome::Timeout {
+                    message: "exceeded 5s".to_string(),
+                },
+                Some("exceeded 5s"),
+            ),
+            (
+                TestOutcome::Flaky {
+                    message: "flaky test".to_string(),
+                },
+                Some("flaky test"),
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.message(),
+                expected,
+                "message mismatch for {outcome:?}"
+            );
+        }
     }
 
     #[test]
-    fn failed_returns_message() {
-        let o = TestOutcome::Failed {
-            message: "assertion failed".to_string(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.message(), Some("assertion failed"));
-    }
-
-    #[test]
-    fn failed_empty_message_returns_none() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert!(o.message().is_none());
-    }
-
-    #[test]
-    fn error_returns_message() {
-        let o = TestOutcome::Error {
-            message: "ImportError".to_string(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.message(), Some("ImportError"));
-    }
-
-    #[test]
-    fn error_empty_message_returns_none() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert!(o.message().is_none());
-    }
-
-    #[test]
-    fn skipped_returns_reason() {
-        let o = TestOutcome::Skipped {
-            reason: "not ready".to_string(),
-        };
-        assert_eq!(o.message(), Some("not ready"));
-    }
-
-    #[test]
-    fn skipped_empty_reason_returns_none() {
-        let o = TestOutcome::Skipped {
-            reason: String::new(),
-        };
-        assert!(o.message().is_none());
-    }
-
-    #[test]
-    fn warned_returns_reason() {
-        let o = TestOutcome::Warned {
-            reason: "DeprecationWarning".to_string(),
-            no_message_lines: vec![],
-        };
-        assert_eq!(o.message(), Some("DeprecationWarning"));
-    }
-
-    #[test]
-    fn xfailed_returns_reason() {
-        let o = TestOutcome::XFailed {
-            reason: "known bug".to_string(),
-        };
-        assert_eq!(o.message(), Some("known bug"));
-    }
-
-    #[test]
-    fn xfailed_empty_reason_returns_none() {
-        let o = TestOutcome::XFailed {
-            reason: String::new(),
-        };
-        assert!(o.message().is_none());
-    }
-
-    #[test]
-    fn xpassed_returns_none() {
-        assert!(TestOutcome::XPassed { strict: true }.message().is_none());
-        assert!(TestOutcome::XPassed { strict: false }.message().is_none());
-    }
-
-    #[test]
-    fn timeout_returns_message() {
-        let o = TestOutcome::Timeout {
-            message: "exceeded 5s".to_string(),
-        };
-        assert_eq!(o.message(), Some("exceeded 5s"));
-    }
-
-    #[test]
-    fn flaky_returns_message() {
-        let o = TestOutcome::Flaky {
-            message: "flaky test".to_string(),
-        };
-        assert_eq!(o.message(), Some("flaky test"));
-    }
-
-    #[test]
-    fn flaky_empty_message_returns_none() {
-        let o = TestOutcome::Flaky {
-            message: String::new(),
-        };
-        assert!(o.message().is_none());
+    fn message_empty_string_returns_none() {
+        let cases: Vec<TestOutcome> = vec![
+            TestOutcome::Failed {
+                message: String::new(),
+                file: Utf8PathBuf::new(),
+                lineno: LineNo::ZERO,
+                source_line: String::new(),
+                left: String::new(),
+                right: String::new(),
+                op: String::new(),
+                frames: vec![],
+                field_diffs: vec![],
+            },
+            TestOutcome::Error {
+                message: String::new(),
+                file: Utf8PathBuf::new(),
+                lineno: LineNo::ZERO,
+                source_line: String::new(),
+                frames: vec![],
+            },
+            TestOutcome::Skipped {
+                reason: String::new(),
+            },
+            TestOutcome::Warned {
+                reason: String::new(),
+                no_message_lines: vec![],
+            },
+            TestOutcome::XFailed {
+                reason: String::new(),
+            },
+            TestOutcome::Timeout {
+                message: String::new(),
+            },
+            TestOutcome::Flaky {
+                message: String::new(),
+            },
+        ];
+        for outcome in cases {
+            assert!(
+                outcome.message().is_none(),
+                "expected None for empty message/reason in {outcome:?}"
+            );
+        }
     }
 }
 
@@ -1786,96 +1731,79 @@ mod ctrf_status_tests {
     use super::*;
 
     #[test]
-    fn passed_is_passed() {
-        let o = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
-        assert_eq!(o.ctrf_status(), "passed");
-    }
-
-    #[test]
-    fn warned_is_passed() {
-        let o = TestOutcome::Warned {
-            reason: String::new(),
-            no_message_lines: vec![],
-        };
-        assert_eq!(o.ctrf_status(), "passed");
-    }
-
-    #[test]
-    fn failed_is_failed() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.ctrf_status(), "failed");
-    }
-
-    #[test]
-    fn error_is_failed() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.ctrf_status(), "failed");
-    }
-
-    #[test]
-    fn skipped_is_skipped() {
-        let o = TestOutcome::Skipped {
-            reason: String::new(),
-        };
-        assert_eq!(o.ctrf_status(), "skipped");
-    }
-
-    #[test]
-    fn xfailed_is_skipped() {
-        let o = TestOutcome::XFailed {
-            reason: String::new(),
-        };
-        assert_eq!(o.ctrf_status(), "skipped");
-    }
-
-    #[test]
-    fn xpassed_strict_is_failed() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: true }.ctrf_status(),
-            "failed"
-        );
-    }
-
-    #[test]
-    fn xpassed_lenient_is_passed() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: false }.ctrf_status(),
-            "passed"
-        );
-    }
-
-    #[test]
-    fn timeout_is_failed() {
-        let o = TestOutcome::Timeout {
-            message: String::new(),
-        };
-        assert_eq!(o.ctrf_status(), "failed");
-    }
-
-    #[test]
-    fn flaky_is_passed() {
-        let o = TestOutcome::Flaky {
-            message: String::new(),
-        };
-        assert_eq!(o.ctrf_status(), "passed");
+    fn ctrf_status_all_variants() {
+        let cases: Vec<(TestOutcome, &str)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                "passed",
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                "passed",
+            ),
+            (TestOutcome::XPassed { strict: false }, "passed"),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                "passed",
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                "failed",
+            ),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                "failed",
+            ),
+            (TestOutcome::XPassed { strict: true }, "failed"),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                "failed",
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                "skipped",
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                "skipped",
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.ctrf_status(),
+                expected,
+                "ctrf_status mismatch for {outcome:?}"
+            );
+        }
     }
 }
 
@@ -1930,35 +1858,36 @@ mod diagnostic_parts_tests {
     }
 
     #[test]
-    fn passed_returns_none() {
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
-        assert!(outcome.diagnostic_parts().is_none());
-    }
-
-    #[test]
-    fn skipped_returns_none() {
-        let outcome = TestOutcome::Skipped {
-            reason: "not ready".to_string(),
-        };
-        assert!(outcome.diagnostic_parts().is_none());
-    }
-
-    #[test]
-    fn timeout_returns_none() {
-        let outcome = TestOutcome::Timeout {
-            message: "exceeded 5s".to_string(),
-        };
-        assert!(outcome.diagnostic_parts().is_none());
-    }
-
-    #[test]
-    fn flaky_returns_none() {
-        let outcome = TestOutcome::Flaky {
-            message: "flaky".to_string(),
-        };
-        assert!(outcome.diagnostic_parts().is_none());
+    fn non_diagnostic_variants_return_none() {
+        let cases: Vec<TestOutcome> = vec![
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            TestOutcome::Skipped {
+                reason: "not ready".to_string(),
+            },
+            TestOutcome::Warned {
+                reason: String::new(),
+                no_message_lines: vec![],
+            },
+            TestOutcome::XFailed {
+                reason: String::new(),
+            },
+            TestOutcome::XPassed { strict: true },
+            TestOutcome::XPassed { strict: false },
+            TestOutcome::Timeout {
+                message: "exceeded 5s".to_string(),
+            },
+            TestOutcome::Flaky {
+                message: "flaky".to_string(),
+            },
+        ];
+        for outcome in cases {
+            assert!(
+                outcome.diagnostic_parts().is_none(),
+                "expected None for {outcome:?}"
+            );
+        }
     }
 }
 
@@ -1967,114 +1896,79 @@ mod color_category_tests {
     use super::*;
 
     #[test]
-    fn passed_is_pass() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![]
-            }
-            .color_category(),
-            ColorCategory::Pass
-        );
-    }
-
-    #[test]
-    fn failed_is_fail() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.color_category(), ColorCategory::Fail);
-    }
-
-    #[test]
-    fn error_is_error() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.color_category(), ColorCategory::Error);
-    }
-
-    #[test]
-    fn skipped_is_skip() {
-        assert_eq!(
-            TestOutcome::Skipped {
-                reason: String::new()
-            }
-            .color_category(),
-            ColorCategory::Skip
-        );
-    }
-
-    #[test]
-    fn warned_is_warn() {
-        assert_eq!(
-            TestOutcome::Warned {
-                reason: String::new(),
-                no_message_lines: vec![]
-            }
-            .color_category(),
-            ColorCategory::Warn
-        );
-    }
-
-    #[test]
-    fn xfailed_is_dim() {
-        assert_eq!(
-            TestOutcome::XFailed {
-                reason: String::new()
-            }
-            .color_category(),
-            ColorCategory::Dim
-        );
-    }
-
-    #[test]
-    fn xpassed_strict_is_fail() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: true }.color_category(),
-            ColorCategory::Fail
-        );
-    }
-
-    #[test]
-    fn xpassed_lenient_is_warn() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: false }.color_category(),
-            ColorCategory::Warn
-        );
-    }
-
-    #[test]
-    fn timeout_is_timeout() {
-        assert_eq!(
-            TestOutcome::Timeout {
-                message: String::new()
-            }
-            .color_category(),
-            ColorCategory::Timeout
-        );
-    }
-
-    #[test]
-    fn flaky_is_warn() {
-        assert_eq!(
-            TestOutcome::Flaky {
-                message: String::new()
-            }
-            .color_category(),
-            ColorCategory::Warn
-        );
+    fn color_category_all_variants() {
+        let cases: Vec<(TestOutcome, ColorCategory)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                ColorCategory::Pass,
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                ColorCategory::Fail,
+            ),
+            (TestOutcome::XPassed { strict: true }, ColorCategory::Fail),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                ColorCategory::Error,
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                ColorCategory::Skip,
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                ColorCategory::Warn,
+            ),
+            (TestOutcome::XPassed { strict: false }, ColorCategory::Warn),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                ColorCategory::Warn,
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                ColorCategory::Dim,
+            ),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                ColorCategory::Timeout,
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.color_category(),
+                expected,
+                "color_category mismatch for {outcome:?}"
+            );
+        }
     }
 }
 
@@ -2083,114 +1977,82 @@ mod junit_category_tests {
     use super::*;
 
     #[test]
-    fn passed_is_passed() {
-        assert_eq!(
-            TestOutcome::Passed {
-                no_message_lines: vec![]
-            }
-            .junit_category(),
-            JunitCategory::Passed
-        );
-    }
-
-    #[test]
-    fn failed_is_failed() {
-        let o = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
-        assert_eq!(o.junit_category(), JunitCategory::Failed);
-    }
-
-    #[test]
-    fn error_is_error() {
-        let o = TestOutcome::Error {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
-        assert_eq!(o.junit_category(), JunitCategory::Error);
-    }
-
-    #[test]
-    fn skipped_is_skipped() {
-        assert_eq!(
-            TestOutcome::Skipped {
-                reason: String::new()
-            }
-            .junit_category(),
-            JunitCategory::Skipped
-        );
-    }
-
-    #[test]
-    fn warned_is_passed() {
-        assert_eq!(
-            TestOutcome::Warned {
-                reason: String::new(),
-                no_message_lines: vec![]
-            }
-            .junit_category(),
-            JunitCategory::Passed
-        );
-    }
-
-    #[test]
-    fn xfailed_is_skipped() {
-        assert_eq!(
-            TestOutcome::XFailed {
-                reason: String::new()
-            }
-            .junit_category(),
-            JunitCategory::Skipped
-        );
-    }
-
-    #[test]
-    fn xpassed_strict_is_failed() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: true }.junit_category(),
-            JunitCategory::Failed
-        );
-    }
-
-    #[test]
-    fn xpassed_lenient_is_passed() {
-        assert_eq!(
-            TestOutcome::XPassed { strict: false }.junit_category(),
-            JunitCategory::Passed
-        );
-    }
-
-    #[test]
-    fn timeout_is_error() {
-        assert_eq!(
-            TestOutcome::Timeout {
-                message: String::new()
-            }
-            .junit_category(),
-            JunitCategory::Error
-        );
-    }
-
-    #[test]
-    fn flaky_is_passed() {
-        assert_eq!(
-            TestOutcome::Flaky {
-                message: String::new()
-            }
-            .junit_category(),
-            JunitCategory::Passed
-        );
+    fn junit_category_all_variants() {
+        let cases: Vec<(TestOutcome, JunitCategory)> = vec![
+            (
+                TestOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                JunitCategory::Passed,
+            ),
+            (
+                TestOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                JunitCategory::Passed,
+            ),
+            (
+                TestOutcome::XPassed { strict: false },
+                JunitCategory::Passed,
+            ),
+            (
+                TestOutcome::Flaky {
+                    message: String::new(),
+                },
+                JunitCategory::Passed,
+            ),
+            (
+                TestOutcome::Failed {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                JunitCategory::Failed,
+            ),
+            (TestOutcome::XPassed { strict: true }, JunitCategory::Failed),
+            (
+                TestOutcome::Error {
+                    message: String::new(),
+                    file: Utf8PathBuf::new(),
+                    lineno: LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                JunitCategory::Error,
+            ),
+            (
+                TestOutcome::Timeout {
+                    message: String::new(),
+                },
+                JunitCategory::Error,
+            ),
+            (
+                TestOutcome::Skipped {
+                    reason: String::new(),
+                },
+                JunitCategory::Skipped,
+            ),
+            (
+                TestOutcome::XFailed {
+                    reason: String::new(),
+                },
+                JunitCategory::Skipped,
+            ),
+        ];
+        for (outcome, expected) in cases {
+            assert_eq!(
+                outcome.junit_category(),
+                expected,
+                "junit_category mismatch for {outcome:?}"
+            );
+        }
     }
 }
 
