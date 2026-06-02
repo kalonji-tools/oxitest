@@ -26,9 +26,7 @@ def test_strict_abort_unused_fixture(tmp: TempDir):
     # Assert
     helpers.integ.assert_collection_error(out, rc)
     combined = out + stderr
-    assert "unused" in combined.lower(), (
-        f"output should mention 'unused': stdout={out!r}, stderr={stderr!r}"
-    )
+    helpers.integ.assert_contains(combined.lower(), "unused")
 
 
 def test_strict_abort_missing_return_annotation(tmp: TempDir):
@@ -91,13 +89,8 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir):
     out, stderr, rc = helpers.common.run_oxitest(root)
 
     # Assert — test passes but shadow warning appears
-    assert rc == 0, (
-        f"test should pass, got rc={rc}\nstdout: {out!r}\nstderr: {stderr!r}"
-    )
-    combined = out + stderr
-    assert "shadow" in combined.lower(), (
-        f"output should mention 'shadow': stdout={out!r}, stderr={stderr!r}"
-    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains((out + stderr).lower(), "shadow")
 
 
 def test_teardown_warning_includes_test_name(tmp: TempDir):
@@ -122,15 +115,7 @@ def test_teardown_warning_includes_test_name(tmp: TempDir):
     out, stderr, rc = helpers.common.run_oxitest(tmp)
 
     # Assert — test passes, teardown warning includes test function name
-    assert rc == 0, (
-        f"test should pass despite teardown error, got rc={rc}\n"
-        f"stdout: {out!r}\nstderr: {stderr!r}"
-    )
+    helpers.integ.assert_passed(out, rc)
     combined = out + stderr
-    assert "test_uses_exploding" in combined, (
-        f"teardown warning should include test function name: "
-        f"stdout={out!r}, stderr={stderr!r}"
-    )
-    assert "teardown" in combined.lower(), (
-        f"output should mention 'teardown': stdout={out!r}, stderr={stderr!r}"
-    )
+    helpers.integ.assert_contains(combined, "test_uses_exploding")
+    helpers.integ.assert_contains(combined.lower(), "teardown")

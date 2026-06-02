@@ -38,7 +38,7 @@ def test_serial_and_default_both_pass(tmp: TempDir):
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    _, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
-    _, _, default_rc = helpers.common.run_oxitest(tmp)
-    assert serial_rc == 0, f"serial run should exit 0, got {serial_rc}"
-    assert default_rc == 0, f"default run should exit 0, got {default_rc}"
+    serial_out, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
+    default_out, _, default_rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(serial_out, serial_rc)
+    helpers.integ.assert_passed(default_out, default_rc)
