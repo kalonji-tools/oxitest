@@ -44,3 +44,56 @@ def test_failed_first_runs_all(tmp: TempDir):
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--failed=first")
     helpers.integ.assert_passed(out, rc, count=2)
+
+
+def test_failed_only_parallel(tmp: TempDir):
+    """--failed=only with --workers 2 reruns only previously-failed tests."""
+    # Three test files ensure work is distributed across workers.
+    (tmp / "test_a.py").write_text(
+        "def test_a1(): assert True\ndef test_a2(): assert True\n"
+    )
+    (tmp / "test_b.py").write_text(
+        "def test_b1(): assert True\ndef test_b2(): assert False\n"
+    )
+    (tmp / "test_c.py").write_text(
+        "def test_c1(): assert True\ndef test_c2(): assert True\n"
+    )
+
+    # First run: populate cache with one failure.
+    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    helpers.integ.assert_failed(out, rc, count=1)
+
+    # Fix the failing test.
+    (tmp / "test_b.py").write_text(
+        "def test_b1(): assert True\ndef test_b2(): assert True\n"
+    )
+
+    # Re-run with --failed=only in parallel.
+    out, _, rc = helpers.common.run_oxitest(tmp, "--failed=only", "--workers", "2")
+    helpers.integ.assert_passed(out, rc, count=1)
+
+
+def test_failed_first_parallel(tmp: TempDir):
+    """--failed=first with --workers 2 runs all tests, failed ones first."""
+    (tmp / "test_a.py").write_text(
+        "def test_a1(): assert True\ndef test_a2(): assert True\n"
+    )
+    (tmp / "test_b.py").write_text(
+        "def test_b1(): assert True\ndef test_b2(): assert False\n"
+    )
+    (tmp / "test_c.py").write_text(
+        "def test_c1(): assert True\ndef test_c2(): assert True\n"
+    )
+
+    # First run: populate cache with one failure.
+    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    helpers.integ.assert_failed(out, rc, count=1)
+
+    # Fix the failing test.
+    (tmp / "test_b.py").write_text(
+        "def test_b1(): assert True\ndef test_b2(): assert True\n"
+    )
+
+    # Re-run with --failed=first in parallel — all 6 tests should run and pass.
+    out, _, rc = helpers.common.run_oxitest(tmp, "--failed=first", "--workers", "2")
+    helpers.integ.assert_passed(out, rc, count=6)
