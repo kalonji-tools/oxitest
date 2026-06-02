@@ -67,7 +67,7 @@ just help
 - `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
 - `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances, builds a `FixtureSession`
 - `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
-- `ast_rewriter.py` — rewrites `assert` statements into `_OxitestAssertionError` calls for enriched failure output
+- `_assert_error.py` — `_OxitestAssertionError` exception class and `_OXITEST_NO_RHS` sentinel for enriched assertion diagnostics
 - `parametrize.py` — resolves `@mark.parametrize` kwargs into per-case values
 - `marks.py` — mark evaluation: skip, xfail, timeout, and custom marks
 - `proxy.py` / `proxy_ns.py` — `FrozenProxy` (shared fixtures) and `FixturesProxy` (namespace-aware `fx: Fixtures` injection)

@@ -56,7 +56,7 @@ graph TD
         EXECUTOR["executor.py<br/>run single test"]
         WORKER["worker.py<br/>subprocess entry point"]
         CONFTEST["conftest_loader.py<br/>fixture registration"]
-        AST["ast_rewriter.py<br/>assert rewriting"]
+        AST["_assert_error.py<br/>assertion error types"]
 
         subgraph Fixtures
             FX_SESSION["_fixture_session.py<br/>resolution + lifecycle"]

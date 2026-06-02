@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from oxitest._bridge.ast_rewriter import (
+from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )

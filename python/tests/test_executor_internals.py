@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from conftest import helpers
 from oxitest import TempDir
+from oxitest._bridge._assert_error import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge._middleware import (
     _compose,
     _handle_assertion_error,
     _handle_runtime_exception,
 )
-from oxitest._bridge.ast_rewriter import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge.result import StatusKind, TestResult
 
 
