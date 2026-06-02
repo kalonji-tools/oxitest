@@ -87,6 +87,33 @@ it exceeds the count threshold, because three workers at 250ms each would take 7
 A suite of 20 tests where each takes 2 seconds will run in parallel even though it is small,
 because the 40 seconds of test time dwarfs the spawn cost.
 
+## Three-phase parallel execution
+
+When parallel mode is chosen, oxitest partitions tests into three groups before
+dispatching to workers:
+
+1. **Inprocess tests** — tests marked with `@oxi.mark.inprocess` are held back
+   and run on the main process. These tests need access to resources (e.g. a
+   debugger, global state) that do not survive serialization to a worker.
+
+2. **Auto-arranged tests** — tests that inject `shared=True` fixtures are grouped
+   by fixture affinity. oxitest computes connected components of the fixture
+   dependency graph and assigns each component to the main process. This prevents
+   shared fixture values from being serialized across process boundaries.
+
+   Auto-arrangement applies when the total test count is below the
+   `min_parallel_tests` threshold (default: 100). The `auto_arrange_threshold`
+   key (default: 70%) guards against degenerate cases: if the largest group
+   exceeds this percentage of total tests, oxitest falls back to serial
+   execution instead. Set `auto_arrange = false` in `pyproject.toml` to
+   disable auto-arrangement entirely.
+
+3. **Remaining tests** — everything else is distributed across worker processes
+   by the scheduler.
+
+This partitioning happens transparently. Run with `-v` (verbose) to see which
+tests land in each group and why.
+
 ## The planned redesign: free-threaded Python
 
 CPython 3.13 introduced an experimental build mode that disables the GIL entirely. In a
@@ -119,3 +146,10 @@ struct would be populated by a direct in-process call rather than a deserialized
     depends on — stable free-threaded Python support in PyO3 — is ready.
 
 Progress on the redesign is tracked in [issue #74](https://github.com/kalonji-tools/oxitest/issues/74).
+
+## See also
+
+- [Run in parallel](../how-to/run-in-parallel.md) — practical guide to parallel configuration
+- [Worker protocol](worker-protocol.md) — the JSON wire format between coordinator and workers
+- [Configuration](../reference/configuration.md) — `auto_arrange`, `spawn_overhead_ms`, `min_parallel_tests`
+- [Performance](performance.md) — where speedups come from
