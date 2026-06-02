@@ -25,10 +25,13 @@ pytest solves this with its own AST rewriting. oxitest does the same, for the sa
 
 ## The solution: rewrite the AST before execution
 
-oxitest's `OxitestAssertRewriter` is a Python `ast.NodeTransformer`. It runs on the parsed
-syntax tree of each test module before any code in that module executes.
+oxitest's assert rewriter operates at the Rust level using PyO3 to walk the Python
+AST. When a test module is imported, the custom loader (`_loader.py`) calls into a
+Rust function that visits every `assert` statement in the AST and rewrites it into a
+`raise _OxitestAssertionError(...)` with left-hand side, right-hand side, and operator
+captured as arguments. The rewritten AST is then compiled and executed normally.
 
-The transformer walks the tree looking for `Assert` nodes. When it finds one, it replaces it
+The rewriter walks the tree looking for `Assert` nodes. When it finds one, it replaces it
 with generated code that:
 
 1. Evaluates the left-hand side and stores it in a local variable.
@@ -107,6 +110,29 @@ For multi-line string comparisons, oxitest produces a unified diff (similar to `
 using the `similar` crate. Each removed line is prefixed with `-` and each added line
 with `+`.
 
+## Dataclass field diffs
+
+When an `assert ==` comparison fails between two dataclass instances, oxitest
+detects this at exception time and computes per-field diffs. Instead of showing
+a single opaque comparison, the diagnostic box lists each field where the values
+diverge:
+
+```text
+  ┌ test_user.py:12
+  │
+  │   assert updated == expected
+  │
+  │   field diffs (User):
+  │     name  "alice" != "Alice"
+  │     age   30 != 31
+  │
+  └ assert updated == expected
+```
+
+This works automatically for any class decorated with `@dataclasses.dataclass`.
+No configuration is needed. The field diff appears inside the diagnostic box
+alongside the standard left/right/operator output.
+
 ## Fix suggestions
 
 When oxitest can diagnose the likely cause of an error, it appends a `hint:` line to the
@@ -180,3 +206,9 @@ tests are silent. Failures are printed at the end before the summary.
 
 With `-v` (verbose), every test result is printed as it completes — including passing tests
 with their duration.
+
+## See also
+
+- [Strict mode](strict-mode.md) — bare asserts as a strict violation
+- [CLI reference](../reference/cli.md) — `--tb`, `--show-locals`, `--show-internals` flags
+- [Errors reference](../reference/errors.md) — error message catalog
