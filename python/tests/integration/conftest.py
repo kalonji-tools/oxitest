@@ -1,19 +1,14 @@
-"""Integration test fixtures and helpers.
+"""Integration test helpers.
 
-Fixtures here depend on the built-in ``TempDir`` and demonstrate
-yield fixtures with teardown. Helpers are accessible via
-``helpers.integ.<function>()``.
+Helper functions are accessible via ``helpers.integ.<function>()``.
 """
 
 from __future__ import annotations
 
-import subprocess
 import textwrap
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import oxitest
-from oxitest import TempDir, Yields
 
 if TYPE_CHECKING:
     from oxitest._bridge._helper_namespace import HelperNamespace
@@ -23,27 +18,6 @@ if TYPE_CHECKING:
 __helpers_namespace__ = "integ"
 
 fx = oxitest.Fixtures()
-
-
-@fx.fixture
-def git_repo(tmp: TempDir) -> Yields[Path]:
-    """Tmp dir initialized as a git repo with an initial commit."""
-    git = ["git", "-C", str(tmp)]
-    subprocess.run([*git, "init"], check=True, capture_output=True)
-    subprocess.run(
-        [*git, "config", "user.email", "test@test.com"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        [*git, "config", "user.name", "Test"],
-        check=True,
-        capture_output=True,
-    )
-    (tmp / ".gitkeep").write_text("")
-    subprocess.run([*git, "add", "."], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-m", "init"], check=True, capture_output=True)
-    yield tmp
 
 
 # ── Helpers (helpers.integ namespace) ─────────────────────────────────────────

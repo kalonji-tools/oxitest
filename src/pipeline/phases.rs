@@ -168,7 +168,7 @@ impl PipelinePhase for CollectionPhase<'_> {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
         ctx.cache.invalidate_modules();
-        let (items, errors, raw_violations) = helpers::collect_items(
+        let (items, errors, raw_violations, profile) = helpers::collect_items(
             py,
             &ctx.test_files,
             &ctx.cfg,
@@ -176,6 +176,7 @@ impl PipelinePhase for CollectionPhase<'_> {
             self.collector,
             &mut ctx.cache,
         );
+        ctx.collection_profile = profile;
         if !errors.is_empty() {
             return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
                 &errors,
@@ -190,6 +191,10 @@ impl PipelinePhase for CollectionPhase<'_> {
             if let Ok(unused) = bridge::find_unused_fixtures(py, session, &ctx.items) {
                 ctx.raw_violations.extend(unused);
             }
+        }
+
+        if let Some(ref profile) = ctx.collection_profile {
+            eprintln!("{}", helpers::format_collection_profile(profile));
         }
 
         Ok(PhaseOutcome::Continue)
@@ -366,10 +371,29 @@ impl PipelinePhase for ListPhase {
         _py: Python<'_>,
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
-        println!(
-            "{}",
-            helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
+        let is_count = matches!(
+            &ctx.command,
+            crate::config::Command::List(a) if a.count
         );
+
+        if is_count {
+            let (tests, files, unavailable) = helpers::count_prescan_tests(&ctx.test_files);
+            if unavailable > 0 {
+                println!(
+                    "{}",
+                    helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
+                );
+            } else {
+                let file_word = if files == 1 { "file" } else { "files" };
+                let test_word = if tests == 1 { "test" } else { "tests" };
+                println!("{tests} {test_word} in {files} {file_word}");
+            }
+        } else {
+            println!(
+                "{}",
+                helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
+            );
+        }
         Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }

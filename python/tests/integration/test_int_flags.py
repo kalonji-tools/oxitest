@@ -7,7 +7,30 @@ from pathlib import Path
 
 import oxitest
 from conftest import helpers
-from oxitest import Fixture, TempDir
+from oxitest import Fixture, TempDir, Yields
+
+fx = oxitest.Fixtures()
+
+
+@fx.fixture
+def git_repo(tmp: TempDir) -> Yields[Path]:
+    """Tmp dir initialized as a git repo with an initial commit."""
+    git = ["git", "-C", str(tmp)]
+    subprocess.run([*git, "init"], check=True, capture_output=True)
+    subprocess.run(
+        [*git, "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [*git, "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    (tmp / ".gitkeep").write_text("")
+    subprocess.run([*git, "add", "."], check=True, capture_output=True)
+    subprocess.run([*git, "commit", "-m", "init"], check=True, capture_output=True)
+    yield tmp
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
