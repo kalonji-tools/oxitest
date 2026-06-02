@@ -70,6 +70,17 @@ ports, files). If your tests depend on shared external state, either:
 2. Design tests to use isolated resources (see [Use built-in fixtures](use-builtin-fixtures.md)
    for `TempDir` and `Patcher`).
 
+To exclude individual tests instead of the entire suite, use `@oxi.mark.inprocess`:
+
+```python
+@oxi.mark.inprocess
+def test_modifies_global_state():
+    ...
+```
+
+This test runs on the main process while all other tests are distributed to workers.
+See [Use markers](use-markers.md) for details.
+
 ## Understand session-scoped fixture behaviour in parallel runs
 
 Fixtures declared with `shared=True` are intended to run once per test session.
@@ -100,6 +111,32 @@ Cross-process fixture sharing (e.g. via sockets or shared memory) is explicitly
 out of scope for oxitest. This limitation is inherent to the subprocess worker
 model — see [Parallelism](../explanation/parallelism.md) for the full rationale
 and the planned redesign ([#74](https://github.com/kalonji-tools/oxitest/issues/74)).
+
+## Choose a scheduling strategy
+
+```console
+$ oxitest --schedule longest-first
+```
+
+| Strategy | Description |
+|----------|-------------|
+| `longest-first` | Schedule the slowest tests first (requires warm cache). Default when cache is available. |
+| `failed-first` | Run previously-failed tests before others. |
+| `random` | Randomize execution order. Useful for detecting order-dependent tests. |
+
+## See scheduling decisions
+
+Run with `-v` to print diagnostic messages explaining why oxitest chose serial
+or parallel mode, how many workers it spawned, and which tests were routed to the
+main process:
+
+```console
+$ oxitest -v
+```
+
+The diagnostics print to stderr and include: the serial/parallel decision reason,
+the schedule strategy, the worker count formula, inprocess partitions, and
+auto-arrange groups.
 
 ## See also
 

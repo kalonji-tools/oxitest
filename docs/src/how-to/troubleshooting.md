@@ -80,6 +80,8 @@ $ oxitest -vv
 
 Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --show-internals -vv`.
 
+See [Debug tests](debug-tests.md) for the full `oxitest debug` workflow.
+
 ## Why is test collection slow?
 
 oxitest walks directories recursively during collection. If it scans large
@@ -103,6 +105,18 @@ norecursedirs = [".git", "__pycache__", ".venv", "node_modules", "data"]
 
 If collection is still slow, verify you are not scanning into virtual
 environments, `node_modules`, or large data directories.
+
+## How do I diagnose per-file collection time?
+
+Use `--collection-profile` to see a timing breakdown for each file:
+
+```console
+$ oxitest --collection-profile
+```
+
+This prints prescan time (Rust-side AST analysis) and collection time (Python
+import + discovery) for each test file to stderr. Look for files where collection
+time is disproportionately high — they likely have expensive module-level imports.
 
 ## How do I clear the cache?
 
@@ -150,3 +164,14 @@ $ oxitest --failed=first
 - [CLI reference](../reference/cli.md) — full list of command-line options
 - [Error reference](../reference/errors.md) — catalog of error messages with causes and fixes
 - [Exit codes](../reference/exit-codes.md) — what each exit code means
+
+## How do I include environment info in a bug report?
+
+Run `oxitest env` to print version, Python interpreter, Rust compiler, and
+OS information:
+
+```console
+$ oxitest env
+```
+
+Include this output when filing bug reports or asking for help.
