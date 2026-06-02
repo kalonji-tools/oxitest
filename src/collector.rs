@@ -144,6 +144,7 @@ mod tests {
             retries_delay_secs: 0,
             keep_tmp: None,
             auto_arrange_threshold: Some(70),
+            collection_profile: false,
         }
     }
 

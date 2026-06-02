@@ -222,6 +222,7 @@ pub struct Config {
     pub retries_delay_secs: u64,
     pub keep_tmp: Option<KeepTmpMode>,
     pub auto_arrange_threshold: Option<u8>,
+    pub collection_profile: bool,
 }
 
 impl Default for Config {
@@ -269,6 +270,7 @@ impl Default for Config {
             retries_delay_secs: 0,
             keep_tmp: None,
             auto_arrange_threshold: Some(70),
+            collection_profile: false,
         }
     }
 }
@@ -514,6 +516,7 @@ impl Config {
         if let Some(level) = args.verbosity.resolve() {
             self.verbosity = level;
         }
+        self.collection_profile = args.collection_profile;
 
         // ── Shared overrides ────────────────────────────────────────────
         self.apply_overrides(Overrides {
