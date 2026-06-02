@@ -5,6 +5,7 @@ use super::{
     ColorMode, FailedMode, KeepTmpMode, ScheduleStrategy, StrictMode, TbStyle, Verbosity,
     WorkerCount,
 };
+use crate::query::resource::ResourceKind;
 
 // ── DebugMode ────────────────────────────────────────────────────────────────
 
@@ -16,9 +17,18 @@ pub enum DebugMode {
     Always,
 }
 
+// ── QueryFormat ──────────────────────────────────────────────────────────────
+
+/// Output format for the query subcommand.
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum QueryFormat {
+    /// JSON lines (one object per entry)
+    Jsonl,
+}
+
 // ── Shared flag groups ───────────────────────────────────────────────────────
 
-/// Keyword and marker filtering flags, shared by run/debug/list.
+/// Keyword and marker filtering flags, shared by run/debug.
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct FilteringArgs {
     /// Only run tests matching the keyword expression
@@ -351,59 +361,71 @@ impl DebugArgs {
     }
 }
 
-/// Arguments for `oxitest list`.
+/// Arguments for `oxitest query`.
 #[derive(clap::Args, Debug, Clone)]
-pub struct ListArgs {
-    /// Paths to test files or directories (default: current directory)
-    pub paths: Vec<Utf8PathBuf>,
+#[command(after_help = "\
+RESOURCES:
+  tests      Test functions (instant)
+  fixtures   Registered fixtures (requires Python)
+  marks      Mark decorators (instant)
+  helpers    Conftest helper functions (instant)
+  plugins    Registered plugins (requires Python)
 
-    /// Show only the total test count (fast, no Python invocation)
-    #[arg(long, help_heading = "Output")]
+PREDICATES:
+  name()     Primary identifier match         [all resources]
+  source()   Source file path match           [all resources]
+  mark()     Has matching mark                [tests]
+  shared()   Is shared fixture                [fixtures]
+  autouse()  Is autouse fixture               [fixtures]
+  async()    Is async                         [tests, fixtures]
+  protocol() Implements protocol              [plugins]
+
+MATCHERS:
+  name(foo)       Contains 'foo' (default)
+  name(=exact)    Exact match
+  name(~partial)  Explicit contains
+  name(/re.*/)    Regex match
+
+EXAMPLES:
+  oxitest query tests                        List all tests
+  oxitest query tests -E 'mark(slow)'        Tests marked @slow
+  oxitest query tests -E 'async() & !mark(skip)'
+  oxitest query fixtures -E 'shared()'
+  oxitest query tests --fzf                  Interactive fuzzy finder
+  oxitest query tests --inspect test_foo     Show details for test_foo
+  oxitest query tests --format jsonl         JSON lines output
+  oxitest query tests --count                Just the count\
+")]
+pub struct QueryArgs {
+    /// Resource type to query
+    pub resource: ResourceKind,
+
+    /// Filter expression (DSL)
+    #[arg(short = 'E', value_name = "EXPR")]
+    pub expression: Option<String>,
+
+    /// Interactive fuzzy finder
+    #[arg(long)]
+    pub fzf: bool,
+
+    /// Inspect a single item by identifier
+    #[arg(long, value_name = "ID")]
+    pub inspect: Option<String>,
+
+    /// Output format
+    #[arg(long, value_enum)]
+    pub format: Option<QueryFormat>,
+
+    /// Show only the count
+    #[arg(long)]
     pub count: bool,
 
-    #[command(flatten)]
-    pub filter: FilteringArgs,
-
-    #[command(flatten)]
-    pub verbosity: VerbosityArgs,
-
-    /// Color output mode: auto, always, never
-    #[arg(long, value_enum, help_heading = "Output")]
-    pub color: Option<ColorMode>,
-}
-
-/// Arguments for `oxitest fixtures`.
-#[derive(clap::Args, Debug, Clone)]
-pub struct FixturesArgs {
-    /// Show fixture dependency tree
+    /// Show fixture dependency tree (fixtures only)
     #[arg(long)]
     pub tree: bool,
 
-    #[command(flatten)]
-    pub verbosity: VerbosityArgs,
-
-    /// Quiet output (minimal detail)
-    #[arg(short = 'q', long, help_heading = "Output")]
-    pub quiet: bool,
-
-    /// Color output mode: auto, always, never
-    #[arg(long, value_enum, help_heading = "Output")]
-    pub color: Option<ColorMode>,
-}
-
-/// Arguments for `oxitest plugins`.
-#[derive(clap::Args, Debug, Clone)]
-pub struct PluginsArgs {
-    #[command(flatten)]
-    pub verbosity: VerbosityArgs,
-
-    /// Quiet output (minimal detail)
-    #[arg(short = 'q', long, help_heading = "Output")]
-    pub quiet: bool,
-
-    /// Color output mode: auto, always, never
-    #[arg(long, value_enum, help_heading = "Output")]
-    pub color: Option<ColorMode>,
+    /// Paths to test files or directories
+    pub paths: Vec<Utf8PathBuf>,
 }
 
 // ── Command enum ─────────────────────────────────────────────────────────────
@@ -415,12 +437,8 @@ pub enum Command {
     Run(RunArgs),
     /// Interactive debugger session
     Debug(DebugArgs),
-    /// List collected tests without executing
-    List(ListArgs),
-    /// Inspect registered fixtures
-    Fixtures(FixturesArgs),
-    /// List registered plugins and their protocols
-    Plugins(PluginsArgs),
+    /// Query tests, fixtures, marks, helpers, or plugins
+    Query(QueryArgs),
     /// Print environment information (version, Python, rustc, OS)
     Env,
 }
@@ -504,44 +522,14 @@ impl DebugArgs {
 }
 
 #[cfg(test)]
-impl ListArgs {
+impl QueryArgs {
     #[allow(dead_code)]
     pub fn default_for_test() -> Self {
-        OxitestCli::try_parse_from(["oxitest", "list"])
-            .expect("default ListArgs must parse")
+        OxitestCli::try_parse_from(["oxitest", "query", "tests"])
+            .expect("default QueryArgs must parse")
             .command
             .map(|cmd| match cmd {
-                Command::List(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
-    }
-}
-
-#[cfg(test)]
-impl FixturesArgs {
-    #[allow(dead_code)]
-    pub fn default_for_test() -> Self {
-        OxitestCli::try_parse_from(["oxitest", "fixtures"])
-            .expect("default FixturesArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                Command::Fixtures(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
-    }
-}
-
-#[cfg(test)]
-impl PluginsArgs {
-    #[allow(dead_code)]
-    pub fn default_for_test() -> Self {
-        OxitestCli::try_parse_from(["oxitest", "plugins"])
-            .expect("default PluginsArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                Command::Plugins(args) => args,
+                Command::Query(args) => args,
                 _ => unreachable!(),
             })
             .unwrap()
@@ -627,90 +615,83 @@ mod tests {
     }
 
     #[test]
-    fn list_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "list"])).unwrap();
-        assert!(matches!(cmd, Command::List(_)));
+    fn env_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "env"])).unwrap();
+        assert!(matches!(cmd, Command::Env));
+    }
+
+    // ── Query subcommand tests ────────────────────────────────────────────────
+
+    #[test]
+    fn query_tests_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests"])).unwrap();
+        assert!(matches!(cmd, Command::Query(_)));
     }
 
     #[test]
-    fn list_with_keyword() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "-k", "foo"])).unwrap();
-        let Command::List(args) = cmd else {
-            panic!("expected Command::List");
+    fn query_fixtures_subcommand() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "fixtures"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
         };
-        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
+        assert_eq!(args.resource, ResourceKind::Fixtures);
     }
 
     #[test]
-    fn list_with_marker() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "-m", "slow"])).unwrap();
-        let Command::List(args) = cmd else {
-            panic!("expected Command::List");
+    fn query_with_expression() {
+        let cmd =
+            OxitestCli::resolve(&s(["oxitest", "query", "tests", "-E", "name(~foo)"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
         };
-        assert_eq!(args.filter.marker.as_deref(), Some("slow"));
+        assert_eq!(args.expression.as_deref(), Some("name(~foo)"));
     }
 
     #[test]
-    fn list_with_count_flag() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "--count"])).unwrap();
-        let Command::List(args) = cmd else {
-            panic!("expected Command::List");
+    fn query_with_fzf() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--fzf"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
+        };
+        assert!(args.fzf);
+    }
+
+    #[test]
+    fn query_with_inspect() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--inspect", "test_foo"]))
+            .unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
+        };
+        assert_eq!(args.inspect.as_deref(), Some("test_foo"));
+    }
+
+    #[test]
+    fn query_with_format_jsonl() {
+        let cmd =
+            OxitestCli::resolve(&s(["oxitest", "query", "tests", "--format", "jsonl"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
+        };
+        assert_eq!(args.format, Some(QueryFormat::Jsonl));
+    }
+
+    #[test]
+    fn query_with_count() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--count"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
         };
         assert!(args.count);
     }
 
     #[test]
-    fn fixtures_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures"])).unwrap();
-        assert!(matches!(cmd, Command::Fixtures(_)));
-    }
-
-    #[test]
-    fn fixtures_with_tree() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures", "--tree"])).unwrap();
-        let Command::Fixtures(args) = cmd else {
-            panic!("expected Command::Fixtures");
+    fn query_with_tree() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "fixtures", "--tree"])).unwrap();
+        let Command::Query(args) = cmd else {
+            panic!("expected Command::Query");
         };
         assert!(args.tree);
-    }
-
-    #[test]
-    fn fixtures_with_quiet() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures", "-q"])).unwrap();
-        let Command::Fixtures(args) = cmd else {
-            panic!("expected Command::Fixtures");
-        };
-        assert!(args.quiet);
-    }
-
-    #[test]
-    fn plugins_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins"])).unwrap();
-        assert!(matches!(cmd, Command::Plugins(_)));
-    }
-
-    #[test]
-    fn plugins_with_verbose() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins", "-v"])).unwrap();
-        let Command::Plugins(args) = cmd else {
-            panic!("expected Command::Plugins");
-        };
-        assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
-    }
-
-    #[test]
-    fn plugins_with_quiet() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "plugins", "-q"])).unwrap();
-        let Command::Plugins(args) = cmd else {
-            panic!("expected Command::Plugins");
-        };
-        assert!(args.quiet);
-    }
-
-    #[test]
-    fn env_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "env"])).unwrap();
-        assert!(matches!(cmd, Command::Env));
     }
 
     // ── FailedFilterArgs::resolve ─────────────────────────────────────────────

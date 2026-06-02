@@ -18,14 +18,12 @@ subcommand is equivalent to `oxitest run`.
 |------------|---------|
 | `run` | Run tests (default when no subcommand is given) |
 | `debug` | Run tests under an interactive debugger |
-| `list` | List collected tests without running them |
-| `fixtures` | List or visualise registered fixtures |
-| `plugins`  | List registered plugins and their protocols |
+| `query` | Inspect tests, fixtures, marks, helpers, or plugins without running them |
 | `env` | Print environment information and exit |
 
 `PATHS` is one or more files or directories to collect tests from. Defaults to
-the current working directory when omitted (applies to `run`, `debug`, `list`,
-and `fixtures`).
+the current working directory when omitted (applies to `run`, `debug`, and
+`query tests`/`query fixtures`).
 
 ---
 
@@ -116,59 +114,98 @@ See [Debug tests](../how-to/debug-tests.md) for usage examples.
 
 ---
 
-## `oxitest list`
+## `oxitest query`
 
-List collected tests and exit without running them.
+Inspect project resources — tests, fixtures, marks, helpers, or plugins — and
+exit without running any tests.
 
 ```text
-oxitest list [OPTIONS] [PATHS...]
+oxitest query <resource> [OPTIONS] [PATHS...]
+```
+
+The `<resource>` argument selects what to inspect:
+
+| Resource | What it lists | Requires Python |
+|----------|---------------|-----------------|
+| `tests` | Collected test items | Yes (collection) |
+| `fixtures` | Registered fixtures | Yes |
+| `marks` | All marks used in the project | No (Rust AST) |
+| `helpers` | Conftest helper namespaces | No (Rust AST) |
+| `plugins` | Registered plugins and protocols | Yes |
+
+Resources that use Rust AST (`marks`, `helpers`) are instant — they never
+invoke Python. `tests`, `fixtures`, and `plugins` require Python.
+
+### Common flags
+
+These flags apply to all resources:
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `-E` | — | `EXPR` | — | DSL filter expression. See [Query DSL](#query-dsl). |
+| `--fzf` | — | flag | `false` | Open results in an interactive fuzzy-finder. |
+| `--inspect` | — | `ID` | — | Show a single-item detail card for the given identifier. |
+| `--format` | — | `jsonl` | — | Output as JSON Lines (one JSON object per result). |
+| `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
+
+### `query tests`
+
+```text
+oxitest query tests [OPTIONS] [PATHS...]
 ```
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. |
-| `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression. |
-| `--affected` | — | `REF` | — | Filter to tests affected by git changes. |
+| `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `source()`, `mark()`. |
 | `--count` | — | flag | `false` | Show only the total test count. Fast: uses Rust-side prescan without invoking Python. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` shows marks and fixtures per test. `-vv` groups parametrize cases with expanded values. |
+| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
+| `--inspect` | — | `ID` | — | Show detail card for a single test. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
----
+!!! tip
+    `oxitest query tests --count` never invokes Python. It uses the Rust-side
+    prescan to count tests instantly, even in large projects.
 
-## `oxitest fixtures`
+### `query fixtures`
 
 List all registered fixtures and exit. Use `--tree` to visualise the dependency
 graph.
 
 ```text
-oxitest fixtures [OPTIONS] [PATHS...]
+oxitest query fixtures [OPTIONS] [PATHS...]
 ```
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--tree` | — | flag | `false` | Show fixture dependency tree instead of a flat list. Visualises which fixtures depend on which. Detects circular dependencies. |
+| `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `shared()`, `autouse()`, `async()`. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. With `--tree`: `-v` adds tags (`shared`, `async`, `autouse`); `-vv` also adds origin (`conftest.py` path). |
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail). |
+| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
+| `--inspect` | — | `ID` | — | Show detail card for a single fixture. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
-### Fixture tree
+#### Fixture tree
 
-`oxitest fixtures --tree` renders all fixtures as a dependency tree. Each
+`oxitest query fixtures --tree` renders all fixtures as a dependency tree. Each
 fixture is a node; arrows point to its dependencies. Useful for understanding
 fixture relationships and debugging circular dependencies.
 
 ```console
-$ oxitest fixtures --tree
+$ oxitest query fixtures --tree
 db
 └── config
 
 ── 2 fixtures
 ```
 
-Use `-k` to filter which fixtures appear as roots:
+Use `-E` to filter which fixtures appear as roots:
 
 ```console
-$ oxitest fixtures --tree -k db
+$ oxitest query fixtures --tree -E 'name(db)'
 db
 └── config
 
@@ -183,12 +220,78 @@ Verbosity controls the amount of detail per node:
 | `-v` | Names + tags (`shared`, `async`, `autouse`). |
 | `-vv` | Names + tags + origin (`conftest.py` path). |
 
-When a circular dependency is detected, `oxitest fixtures --tree` prints an
-error and exits with a non-zero exit code:
+When a circular dependency is detected, `oxitest query fixtures --tree` prints
+an error and exits with a non-zero exit code:
 
 ```console
-$ oxitest fixtures --tree
+$ oxitest query fixtures --tree
 error: Circular fixture dependency: a -> b -> a
+```
+
+### `query marks`
+
+List all marks used across test files. Uses Rust AST — no Python required.
+
+```text
+oxitest query marks [OPTIONS] [PATHS...]
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`. |
+| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
+
+### `query helpers`
+
+List all conftest helper namespaces. Uses Rust AST — no Python required.
+
+```text
+oxitest query helpers [OPTIONS] [PATHS...]
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`. |
+| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
+
+### `query plugins`
+
+List all registered plugins and the protocols they implement.
+
+```text
+oxitest query plugins [OPTIONS]
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`, `protocol()`. |
+| `--verbose` | `-v` | flag | `false` | Show detailed protocol information. |
+| `--quiet` | `-q` | flag | `false` | Suppress header output. |
+| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
+
+### Query DSL
+
+The `-E '<expr>'` flag filters results using a small predicate DSL. Predicates
+vary by resource but the syntax is consistent:
+
+| Predicate | Resources | Matches when… |
+|-----------|-----------|---------------|
+| `name(pat)` | all | name contains `pat` (substring, case-insensitive) |
+| `source(pat)` | tests | node ID or file path contains `pat` |
+| `mark(name)` | tests | test has the given mark |
+| `scope(s)` | fixtures | fixture has scope `s` (`function`, `module`, `session`) |
+| `autouse()` | fixtures | fixture is declared `autouse=True` |
+| `async()` | fixtures | fixture is an async function |
+| `protocol(p)` | plugins | plugin implements protocol `p` |
+
+Expressions can be combined with `and`, `or`, `not`, and parentheses:
+
+```text
+-E 'mark(slow) and not source(test_legacy)'
+-E 'scope(session) or autouse()'
 ```
 
 ---
@@ -204,22 +307,6 @@ oxitest env
 
 No flags. Version information is available here rather than via a `--version`
 flag.
-
----
-
-## `oxitest plugins`
-
-List all registered plugins and the protocols they implement.
-
-```console
-$ oxitest plugins
-```
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `-v, --verbose` | flag | `false` | Show detailed protocol information |
-| `-q, --quiet` | flag | `false` | Suppress header output |
-| `--color` | `auto\|always\|never` | `auto` | Color output |
 
 ---
 
