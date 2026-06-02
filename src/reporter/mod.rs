@@ -349,6 +349,7 @@ mod json_tests {
                 right: "1".to_string(),
                 op: "==".to_string(),
                 frames: vec![],
+                field_diffs: vec![],
             },
             DurationMs::new(8.0),
         );

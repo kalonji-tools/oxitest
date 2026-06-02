@@ -131,6 +131,7 @@ mod tests {
             right: "2".to_string(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert!(suggest_fix(&outcome).is_none());
     }

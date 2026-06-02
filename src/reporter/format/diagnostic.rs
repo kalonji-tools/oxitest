@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use crate::config::TbStyle;
 use crate::types::{TestItem, TestOutcome};
 
+use super::diff::fmt_field_diffs;
 use super::fmt_diff;
 use crate::reporter::colors::{color_blue, color_bold_white, color_dim, color_dim_cyan};
 
@@ -275,7 +276,14 @@ pub(crate) fn fmt_diagnostic_block(
     render_params(&mut out, &item.param_values, use_color);
     render_source(&mut out, &parts, show_locals, use_color);
     if !is_error {
-        render_values(&mut out, parts.left, parts.right, parts.op, use_color);
+        render_values(
+            &mut out,
+            parts.left,
+            parts.right,
+            parts.op,
+            parts.field_diffs,
+            use_color,
+        );
     }
     render_trace(&mut out, &parts, show_locals, use_color);
     render_hint(&mut out, outcome, use_color);
@@ -285,7 +293,14 @@ pub(crate) fn fmt_diagnostic_block(
 }
 
 /// Render the VALUES section (diff lines without a section label).
-fn render_values(out: &mut String, left: &str, right: &str, op: &str, use_color: bool) {
+fn render_values(
+    out: &mut String,
+    left: &str,
+    right: &str,
+    op: &str,
+    field_diffs: &[(String, String, String)],
+    use_color: bool,
+) {
     if !op.is_empty() && !left.is_empty() && !right.is_empty() {
         let diff = fmt_diff(left, right, op, use_color);
         if !diff.is_empty() {
@@ -299,6 +314,21 @@ fn render_values(out: &mut String, left: &str, right: &str, op: &str, use_color:
                 );
             }
             let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+        }
+        if !field_diffs.is_empty() && op == "==" {
+            let field_diff_output = fmt_field_diffs(field_diffs, left, use_color);
+            if !field_diff_output.is_empty() {
+                let _ = writeln!(out, "{}{}", BOX.margin, color_dim(BOX.vert, use_color));
+                for line in field_diff_output.lines() {
+                    let _ = writeln!(
+                        out,
+                        "{}{}  {}",
+                        BOX.margin,
+                        color_dim(BOX.vert, use_color),
+                        line
+                    );
+                }
+            }
         }
     } else if !op.is_empty() {
         // op set but right empty — show left only
@@ -418,6 +448,7 @@ mod tests {
             right: "42".to_string(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "missing left label");
@@ -438,6 +469,7 @@ mod tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("value:"), "missing value label");
@@ -460,6 +492,7 @@ mod tests {
             right: "42".to_string(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
@@ -513,6 +546,7 @@ mod tests {
             right: String::new(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "left should appear");
@@ -661,6 +695,7 @@ mod tests {
                     locals: vec![],
                 },
             ],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // New format uses "trace" not "frames"
@@ -705,6 +740,7 @@ mod tests {
                 line: "assert False".to_string(),
                 locals: vec![],
             }],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Only the failure frame exists, so no trace section
@@ -769,6 +805,7 @@ mod tests {
                 line: "assert result == 10".to_string(),
                 locals: vec![("result".to_string(), "7".to_string())],
             }],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false);
         assert!(
@@ -797,6 +834,7 @@ mod tests {
                 line: "assert result == 10".to_string(),
                 locals: vec![("result".to_string(), "7".to_string())],
             }],
+            field_diffs: vec![],
         };
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
@@ -881,6 +919,7 @@ mod tests {
                 right: "2".to_string(),
                 op: "==".to_string(),
                 frames: vec![],
+                field_diffs: vec![],
             };
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);

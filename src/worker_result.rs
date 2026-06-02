@@ -102,6 +102,8 @@ pub(crate) struct WorkerResult {
     pub strict: bool,
     #[serde(default)]
     pub frames: Vec<FrameEntry>,
+    #[serde(default)]
+    pub field_diffs: Vec<(String, String, String)>,
 }
 
 impl WorkerResult {
@@ -155,6 +157,7 @@ impl WorkerResult {
             op: self.op.as_deref().unwrap_or_default(),
             strict: self.strict,
             frames: &frames,
+            field_diffs: &self.field_diffs,
         })
     }
 }
@@ -178,6 +181,7 @@ impl WorkerResult {
             op: None,
             strict: false,
             frames: vec![],
+            field_diffs: vec![],
         }
     }
 
