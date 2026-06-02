@@ -10,7 +10,6 @@ fn set_keyword(ctx: &mut PipelineContext, keyword: &str) {
     match &mut ctx.command {
         config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
         config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
-        config::Command::List(a) => a.filter.keyword = Some(keyword.to_string()),
         _ => {}
     }
 }
@@ -345,44 +344,6 @@ mod filter_phase_contract_tests {
     }
 }
 
-mod list_phase_contract_tests {
-    use super::*;
-    use crate::reporter::test_helpers::make_item_raw;
-
-    #[test]
-    fn list_phase_returns_early_exit_zero() {
-        Python::initialize();
-        Python::attach(|py| {
-            let mut ctx = make_ctx();
-            ctx.items.push(make_item_raw("tests/test_a.py::test_one"));
-
-            let result = phases::ListPhase.execute(py, &mut ctx);
-
-            assert!(result.is_ok());
-            assert!(matches!(
-                result.unwrap(),
-                PhaseOutcome::EarlyExit(ExitCode::Success)
-            ));
-        });
-    }
-
-    #[test]
-    fn list_phase_empty_items_still_exits_zero() {
-        Python::initialize();
-        Python::attach(|py| {
-            let mut ctx = make_ctx();
-
-            let result = phases::ListPhase.execute(py, &mut ctx);
-
-            assert!(result.is_ok());
-            assert!(matches!(
-                result.unwrap(),
-                PhaseOutcome::EarlyExit(ExitCode::Success)
-            ));
-        });
-    }
-}
-
 mod context_threading_tests {
     use super::*;
     use crate::bridge::{RawViolation, ViolationKind};
@@ -436,7 +397,7 @@ mod context_threading_tests {
     }
 
     #[test]
-    fn filter_then_list_threads_filtered_items() {
+    fn filter_preserves_items_after_filtering() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
@@ -447,18 +408,12 @@ mod context_threading_tests {
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
             assert_eq!(ctx.items.len(), 1);
-
-            let list_result = phases::ListPhase.execute(py, &mut ctx);
-            assert!(matches!(
-                list_result,
-                Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
-            ));
-            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.items[0].node_id.as_ref().contains("alpha"));
         });
     }
 
     #[test]
-    fn full_pure_rust_chain_strict_filter_list() {
+    fn full_pure_rust_chain_strict_filter() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
@@ -473,11 +428,7 @@ mod context_threading_tests {
                 detail: "line 3".to_string(),
             });
 
-            let pipeline: &[&dyn PipelinePhase] = &[
-                &phases::StrictPhase,
-                &phases::FilterPhase,
-                &phases::ListPhase,
-            ];
+            let pipeline: &[&dyn PipelinePhase] = &[&phases::StrictPhase, &phases::FilterPhase];
             let result = run_pipeline(py, pipeline, &mut ctx);
 
             assert_eq!(result, Ok(ExitCode::Success));

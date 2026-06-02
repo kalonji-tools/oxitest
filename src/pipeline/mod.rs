@@ -12,7 +12,7 @@ pub(crate) mod traits;
 use std::sync::Arc;
 
 use crate::types::ExitCode;
-use crate::{bridge, cache, config, reporter, strict, types};
+use crate::{bridge, cache, config, query, reporter, strict, types};
 use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
@@ -178,8 +178,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let first_path = match &command {
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::List(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Plugins(_) => None,
+        config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
         _ => None,
     };
     let rootdir = config::find_rootdir(first_path);
@@ -188,43 +187,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let cfg = match &command {
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
-        config::Command::List(args) => {
-            let mut cfg = config::Config::load(&rootdir);
-            if let Some(ref val) = args.filter.affected {
-                if val.is_empty() {
-                    cfg.affected = Some(cfg.affected_base.clone());
-                } else {
-                    cfg.affected = Some(val.clone());
-                }
-            }
-            if let Some(level) = args.verbosity.resolve() {
-                cfg.verbosity = level;
-            }
-            if let Some(color) = args.color {
-                cfg.color = color;
-            }
-            cfg
-        }
-        config::Command::Fixtures(args) => {
-            let mut cfg = config::Config::load(&rootdir);
-            if let Some(level) = args.verbosity.resolve() {
-                cfg.verbosity = level;
-            }
-            if let Some(color) = args.color {
-                cfg.color = color;
-            }
-            cfg
-        }
-        config::Command::Plugins(args) => {
-            let mut cfg = config::Config::load(&rootdir);
-            if let Some(level) = args.verbosity.resolve() {
-                cfg.verbosity = level;
-            }
-            if let Some(color) = args.color {
-                cfg.color = color;
-            }
-            cfg
-        }
+        config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
         config::Command::Env => unreachable!("handled above"),
     };
 
@@ -328,31 +291,24 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             // No RetryPhase in debug mode
             &phases::FinalizePhase,
         ],
-        config::Command::List(ref a) if a.count => &[
-            &phases::FileCollectionPhase,
-            &phases::AffectedPhase,
-            &phases::ListPhase,
-        ],
-        config::Command::List(_) => &[
-            &phases::FileCollectionPhase,
-            &phases::AffectedPhase,
-            &phases::SessionPhase,
-            &phases::CollectionPhase {
-                collector: &collector_impl,
-            },
-            &phases::FilterPhase,
-            &phases::ListPhase,
-        ],
-        config::Command::Fixtures(_) => &[
-            &phases::FileCollectionPhase,
-            &phases::SessionPhase,
-            &phases::FixturesPhase,
-        ],
-        config::Command::Plugins(_) => &[
-            &phases::FileCollectionPhase,
-            &phases::SessionPhase,
-            &phases::PluginsPhase,
-        ],
+        config::Command::Query(ref args) => {
+            if query::needs_python(args.resource, args.expression.as_deref()) || args.tree {
+                // Full tier: need SessionPhase
+                &[
+                    &phases::FileCollectionPhase,
+                    &phases::AffectedPhase,
+                    &phases::SessionPhase,
+                    &phases::QueryPhase,
+                ]
+            } else {
+                // Instant tier: no Python needed
+                &[
+                    &phases::FileCollectionPhase,
+                    &phases::AffectedPhase,
+                    &phases::QueryPhase,
+                ]
+            }
+        }
         config::Command::Env => unreachable!("handled in setup"),
     };
 

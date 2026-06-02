@@ -1,8 +1,0 @@
----
-source: src/pipeline_tests.rs
-expression: "helpers::format_test_list(&items, Verbosity::Detailed)"
----
-tests/test_a.py::test_one
-tests/test_a.py::test_two    marks: slow, network    fixtures: db, tmp
-
-2 tests

@@ -111,23 +111,6 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// List all registered fixtures as a formatted string for `--fixtures`.
-    pub fn list_fixtures(
-        &self,
-        py: Python<'_>,
-        verbosity: i32,
-        pattern: Option<&str>,
-        use_color: bool,
-    ) -> PyResult<String> {
-        let lister = py.import("oxitest._bridge.fixture_lister")?;
-        let registry = self.0.bind(py).getattr("_registry")?;
-        let result = lister.call_method1(
-            "list_fixtures_from_registry",
-            (registry, verbosity, pattern, use_color),
-        )?;
-        result.extract::<String>()
-    }
-
     /// Render fixture dependency tree as a formatted string for `--tree`.
     pub fn tree_fixtures(
         &self,
@@ -141,22 +124,6 @@ impl FixtureSession {
         let result = lister.call_method1(
             "tree_fixtures_from_registry",
             (registry, verbosity, pattern, use_color),
-        )?;
-        result.extract::<String>()
-    }
-
-    /// List all registered plugins as a formatted string for `plugins` subcommand.
-    pub fn list_plugins(
-        &self,
-        py: Python<'_>,
-        verbosity: i32,
-        use_color: bool,
-    ) -> PyResult<String> {
-        let lister = py.import("oxitest._bridge.plugin_lister")?;
-        let registry = self.0.bind(py).getattr("_plugin_registry")?;
-        let result = lister.call_method1(
-            "list_plugins_from_registry",
-            (registry, verbosity, use_color),
         )?;
         result.extract::<String>()
     }
@@ -203,6 +170,28 @@ impl FixtureSession {
             misses: total_misses,
             breakdown,
         })
+    }
+
+    /// Return fixture definitions as a list of field maps for the query engine.
+    pub(crate) fn fixture_entries(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Vec<std::collections::HashMap<String, String>>> {
+        let module = py.import("oxitest._bridge.query_bridge")?;
+        let registry = self.0.bind(py).getattr("_registry")?;
+        let result = module.call_method1("fixture_entries", (registry,))?;
+        result.extract()
+    }
+
+    /// Return plugin entries as a list of field maps for the query engine.
+    pub(crate) fn plugin_entries(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Vec<std::collections::HashMap<String, String>>> {
+        let module = py.import("oxitest._bridge.query_bridge")?;
+        let registry = self.0.bind(py).getattr("_plugin_registry")?;
+        let result = module.call_method1("plugin_entries", (registry,))?;
+        result.extract()
     }
 
     /// Returns this session as a bound Python object for passing to bridge calls.

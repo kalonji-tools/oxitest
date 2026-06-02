@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 mod cli;
-pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, RunArgs};
+pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, QueryFormat, RunArgs};
 
 mod pyproject;
 use pyproject::{AutoArrangeToml, OxitestConfig, PyprojectToml};
@@ -574,6 +574,11 @@ impl Config {
             auto_arrange_threshold: None,
         });
 
+        self
+    }
+
+    pub fn merge_query_args(mut self, args: &cli::QueryArgs) -> Self {
+        self.merge_paths(&args.paths);
         self
     }
 
