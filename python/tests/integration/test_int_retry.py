@@ -32,5 +32,5 @@ def test_flaky_test_exits_0(tmp: TempDir):
         "    marker.unlink()\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1", "--serial")
-    assert rc == 0, f"flaky test with --retries 1 should exit 0, got {rc}; out={out!r}"
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "flaky")

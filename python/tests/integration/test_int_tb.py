@@ -43,7 +43,7 @@ def test_show_locals_conflict_with_tb_no(tmp: TempDir):
     """--show-locals with --tb=no is rejected."""
     (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n")
     out, err, rc = helpers.common.run_oxitest(tmp, "--show-locals", "--tb=no")
-    assert rc != 0, "should fail with conflict"
+    helpers.integ.assert_failed(out, rc)
     combined = out + err
     assert "requires" in combined.lower() or "detail" in combined.lower(), (
         f"error should mention detail requirement: {combined!r}"
@@ -54,7 +54,7 @@ def test_show_internals_conflict_with_tb_line(tmp: TempDir):
     """--show-internals with --tb=line is rejected."""
     (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n")
     out, err, rc = helpers.common.run_oxitest(tmp, "--show-internals", "--tb=line")
-    assert rc != 0, "should fail with conflict"
+    helpers.integ.assert_failed(out, rc)
     combined = out + err
     assert "requires" in combined.lower() or "detail" in combined.lower(), (
         f"error should mention detail requirement: {combined!r}"

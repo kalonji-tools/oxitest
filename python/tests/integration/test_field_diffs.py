@@ -27,10 +27,8 @@ def test_dataclass_field_diffs_shown(tmp: TempDir):
         },
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc != 0, "test should fail"
-    assert "field diffs" in out, f"expected field diffs in output: {out!r}"
-    assert "email" in out, f"expected 'email' field: {out!r}"
-    assert "age" in out, f"expected 'age' field: {out!r}"
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_contains(out, "field diffs", "email", "age")
 
 
 def test_non_dataclass_no_field_diffs(tmp: TempDir):
@@ -44,7 +42,5 @@ def test_non_dataclass_no_field_diffs(tmp: TempDir):
         },
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc != 0, f"test should fail, got exit {rc}\n{out}"
-    assert "field diffs" not in out, (
-        f"field diffs should not appear for non-dataclass: {out!r}"
-    )
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_excludes(out, "field diffs")

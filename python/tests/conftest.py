@@ -38,6 +38,7 @@ __all__ = [
     "run_oxitest",
     "run_oxitest_env",
     "run_oxitest_subcmd",
+    "run_oxitest_subcmd_cwd",
     "run_test",
     "write_test_file",
     "write_test_module",
@@ -174,6 +175,35 @@ def run_oxitest_subcmd(
         capture_output=True,
         text=True,
         timeout=timeout,
+    )
+    return result.stdout, result.stderr, result.returncode
+
+
+def run_oxitest_subcmd_cwd(
+    tmp_path,
+    subcmd: str,
+    *extra_args: str,
+    timeout: int = 60,
+) -> tuple[str, str, int]:
+    """Run oxitest subcommand using cwd instead of a path argument.
+
+    Some subcommands (``fixtures``, ``plugins``) don't accept a positional
+    path — they discover the project via the working directory.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            subcmd,
+            "--color",
+            "never",
+            *extra_args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        cwd=str(tmp_path),
     )
     return result.stdout, result.stderr, result.returncode
 

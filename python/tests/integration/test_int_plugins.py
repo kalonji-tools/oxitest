@@ -1,47 +1,23 @@
 """Integration tests: `oxitest plugins` subcommand."""
 
-import subprocess
-import sys
-
+from conftest import helpers
 from oxitest import TempDir
-
-
-def _run_plugins(tmp: TempDir, *extra_args: str) -> tuple[str, str, int]:
-    """Run `oxitest plugins` with cwd set to tmp."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            "plugins",
-            "--color",
-            "never",
-            *extra_args,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    return result.stdout, result.stderr, result.returncode
 
 
 def test_plugins_no_plugins_configured(tmp: TempDir):
     """`plugins` with no plugins shows 'no plugins configured' and exits 0."""
     (tmp / "pyproject.toml").write_text("[tool.oxitest]\ntestpaths = ['.']\n")
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = _run_plugins(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "no plugins configured" in out, (
-        f"expected 'no plugins configured' in: {out!r}"
-    )
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "no plugins configured")
 
 
 def test_plugins_exits_zero(tmp: TempDir):
     """`plugins` exits 0 even with no pyproject.toml."""
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = _run_plugins(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_plugins_with_configured_plugin(tmp: TempDir):
@@ -61,7 +37,6 @@ def test_plugins_with_configured_plugin(tmp: TempDir):
         "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, err, rc = _run_plugins(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstderr: {err}\nstdout: {out}"
-    assert "my_plugin" in out, f"expected 'my_plugin' in output: {out!r}"
-    assert "LogBackend" in out, f"expected 'LogBackend' in output: {out!r}"
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "my_plugin", "LogBackend")
