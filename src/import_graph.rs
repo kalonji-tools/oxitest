@@ -229,6 +229,13 @@ mod tests {
         assert_eq!(mods, vec!["setup"]);
     }
 
+    #[test]
+    fn file_to_modules_unicode_path() {
+        let mods = file_to_modules("utils/données.py");
+        assert!(mods.contains(&"utils.données".to_string()));
+        assert!(mods.contains(&"utils".to_string()));
+    }
+
     // ── resolve_affected ─────────────────────────────────────────────
 
     #[test]

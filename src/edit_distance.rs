@@ -122,4 +122,34 @@ mod tests {
         let result = closest_match("fixtuer", candidates.iter().copied(), 3);
         assert_eq!(result, Some("fixture"));
     }
+
+    #[test]
+    fn accented_chars_count_as_single_operations() {
+        // café → cafe: one substitution (é → e)
+        assert_eq!(edit_distance("café", "cafe"), 1);
+    }
+
+    #[test]
+    fn cjk_characters() {
+        assert_eq!(edit_distance("你好世界", "你好世界"), 0);
+        assert_eq!(edit_distance("你好", "你坏"), 1);
+    }
+
+    #[test]
+    fn emoji_characters() {
+        assert_eq!(edit_distance("🎉🎊", "🎉🎊"), 0);
+        assert_eq!(edit_distance("🎉", "🎊"), 1);
+    }
+
+    #[test]
+    fn mixed_ascii_and_unicode() {
+        assert_eq!(edit_distance("test_café", "test_cafe"), 1);
+    }
+
+    #[test]
+    fn closest_match_with_unicode_candidates() {
+        let candidates = ["données", "donnée", "donner"];
+        let result = closest_match("donnees", candidates.iter().copied(), 2);
+        assert_eq!(result, Some("données"));
+    }
 }
