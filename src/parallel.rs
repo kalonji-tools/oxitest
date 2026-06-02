@@ -320,6 +320,7 @@ mod worker_count_tests {
 
     #[test]
     fn explicit_workers_bypasses_auto_scale() {
+        // Fixed(8) is returned directly — estimated duration is ignored.
         let count = compute_optimal_workers(
             Some(WorkerCount::Fixed(8)),
             false,
@@ -332,6 +333,7 @@ mod worker_count_tests {
 
     #[test]
     fn serial_returns_1() {
+        // serial=true always returns 1, regardless of other params.
         let count =
             compute_optimal_workers(None, true, 8, Some(Duration::from_millis(5000)), 250.0);
         assert_eq!(count, 1);
@@ -339,69 +341,106 @@ mod worker_count_tests {
 
     #[test]
     fn auto_scale_caps_to_needed_workers() {
-        // 500ms suite / 250ms per worker = 2 workers needed; cpu_count = 8 → use 2
-        let count =
-            compute_optimal_workers(None, false, 8, Some(Duration::from_millis(500)), 250.0);
-        assert_eq!(count, 2);
+        let est_ms: f64 = 500.0;
+        let overhead_ms: f64 = 250.0;
+        let cpu_count = 8;
+        // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(8, 2) = 2
+        let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let count = compute_optimal_workers(
+            None,
+            false,
+            cpu_count,
+            Some(Duration::from_millis(est_ms as u64)),
+            overhead_ms,
+        );
+        assert_eq!(count, expected);
     }
 
     #[test]
     fn auto_scale_caps_to_cpu_count() {
-        // 10_000ms / 250ms = 40 workers needed; cpu_count = 4 → use 4
-        let count =
-            compute_optimal_workers(None, false, 4, Some(Duration::from_millis(10_000)), 250.0);
-        assert_eq!(count, 4);
+        let est_ms: f64 = 10_000.0;
+        let overhead_ms: f64 = 250.0;
+        let cpu_count = 4;
+        // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(4, 40) = 4
+        let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let count = compute_optimal_workers(
+            None,
+            false,
+            cpu_count,
+            Some(Duration::from_millis(est_ms as u64)),
+            overhead_ms,
+        );
+        assert_eq!(count, expected);
     }
 
     #[test]
     fn cold_cache_returns_cpu_count() {
+        // No timing estimate (cold cache) → fall back to cpu_count.
         let count = compute_optimal_workers(None, false, 6, None, 250.0);
         assert_eq!(count, 6);
     }
 
     #[test]
     fn short_suite_uses_one_worker() {
-        // 200ms suite / 250ms per worker < 1 → ceil = 1
-        let count =
-            compute_optimal_workers(None, false, 8, Some(Duration::from_millis(200)), 250.0);
-        assert_eq!(count, 1);
+        let est_ms: f64 = 200.0;
+        let overhead_ms: f64 = 250.0;
+        let cpu_count = 8;
+        // Formula: min(cpu_count, ceil(est_ms / overhead_ms)).max(1) = min(8, 1).max(1) = 1
+        let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize).max(1);
+        let count = compute_optimal_workers(
+            None,
+            false,
+            cpu_count,
+            Some(Duration::from_millis(est_ms as u64)),
+            overhead_ms,
+        );
+        assert_eq!(count, expected);
     }
 
     #[test]
     fn serial_overrides_explicit_workers() {
-        // Serial must be absolute even when workers is explicitly set
+        // serial=true takes priority even when workers is explicitly Fixed(4).
         let count = compute_optimal_workers(Some(WorkerCount::Fixed(4)), true, 8, None, 250.0);
         assert_eq!(count, 1);
     }
 
     #[test]
     fn auto_warm_cache_scales_to_needed() {
-        // 500ms suite / 250ms overhead = 2 workers needed; cpu = 8 → use 2
+        let est_ms: f64 = 500.0;
+        let overhead_ms: f64 = 250.0;
+        let cpu_count = 8;
+        // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(8, 2) = 2
+        let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
         let count = compute_optimal_workers(
             Some(WorkerCount::Auto),
             false,
-            8,
-            Some(Duration::from_millis(500)),
-            250.0,
+            cpu_count,
+            Some(Duration::from_millis(est_ms as u64)),
+            overhead_ms,
         );
-        assert_eq!(count, 2);
+        assert_eq!(count, expected);
     }
 
     #[test]
     fn auto_warm_cache_caps_to_cpu() {
-        // 10_000ms / 250ms = 40 needed; cpu = 4 → use 4
+        let est_ms: f64 = 10_000.0;
+        let overhead_ms: f64 = 250.0;
+        let cpu_count = 4;
+        // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(4, 40) = 4
+        let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
         let count = compute_optimal_workers(
             Some(WorkerCount::Auto),
             false,
-            4,
-            Some(Duration::from_millis(10_000)),
-            250.0,
+            cpu_count,
+            Some(Duration::from_millis(est_ms as u64)),
+            overhead_ms,
         );
-        assert_eq!(count, 4);
+        assert_eq!(count, expected);
     }
 
     #[test]
     fn auto_cold_cache_returns_cpu_count() {
+        // WorkerCount::Auto + cold cache (None) → fall back to cpu_count.
         let count = compute_optimal_workers(Some(WorkerCount::Auto), false, 6, None, 250.0);
         assert_eq!(count, 6);
     }
