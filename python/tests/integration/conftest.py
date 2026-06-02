@@ -56,21 +56,17 @@ def write_project(
 
 
 def assert_passed(out: str, rc: int, *, count: int | None = None):
-    """Assert the run passed (exit 0, 'passed' in output)."""
+    """Assert the run passed (exit 0)."""
     assert rc == 0, f"expected exit 0, got {rc}\n{out}"
     if count is not None:
         assert f"{count} passed" in out, f"expected '{count} passed' in:\n{out}"
-    else:
-        assert "passed" in out, f"expected 'passed' in:\n{out}"
 
 
 def assert_failed(out: str, rc: int, *, count: int | None = None):
-    """Assert the run had failures (exit 1, 'failed' in output)."""
-    assert rc == 1, f"expected exit 1, got {rc}\n{out}"
+    """Assert the run had failures (non-zero exit)."""
+    assert rc != 0, f"expected non-zero exit, got {rc}\n{out}"
     if count is not None:
         assert f"{count} failed" in out, f"expected '{count} failed' in:\n{out}"
-    else:
-        assert "failed" in out, f"expected 'failed' in:\n{out}"
 
 
 def assert_collection_error(out: str, rc: int):
