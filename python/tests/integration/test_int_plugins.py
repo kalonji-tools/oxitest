@@ -1,4 +1,4 @@
-"""Integration tests: `oxitest plugins` subcommand."""
+"""Integration tests: `oxitest query plugins` subcommand."""
 
 from conftest import helpers
 from oxitest import TempDir
@@ -8,15 +8,15 @@ def test_plugins_no_plugins_configured(tmp: TempDir):
     """`plugins` with no plugins shows 'no plugins configured' and exits 0."""
     (tmp / "pyproject.toml").write_text("[tool.oxitest]\ntestpaths = ['.']\n")
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "query", "plugins")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "no plugins configured")
+    helpers.integ.assert_contains(out, "no results")
 
 
 def test_plugins_exits_zero(tmp: TempDir):
     """`plugins` exits 0 even with no pyproject.toml."""
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "query", "plugins")
     helpers.integ.assert_passed(out, rc)
 
 
@@ -37,6 +37,12 @@ def test_plugins_with_configured_plugin(tmp: TempDir):
         "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "plugins")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "query", "plugins")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "my_plugin", "LogBackend")
+    helpers.integ.assert_contains(out, "my_plugin")
+    # Protocol details are in the inspect card
+    out2, _, rc2 = helpers.common.run_oxitest_subcmd_cwd(
+        tmp, "query", "plugins", "--inspect", "my_plugin"
+    )
+    helpers.integ.assert_passed(out2, rc2)
+    helpers.integ.assert_contains(out2, "LogBackend")

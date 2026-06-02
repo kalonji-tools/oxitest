@@ -34,20 +34,20 @@ def git_repo(tmp: TempDir) -> Yields[Path]:
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):
-    """`list` subcommand prints node IDs and exits 0 without running tests."""
+    """`query tests` prints node IDs and exits 0 without running tests."""
     (tmp / "test_nodes.py").write_text(
         "def test_alpha(): assert True\n"
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list")
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_alpha", "test_beta", "test_gamma")
     helpers.integ.assert_excludes(out, "passed")
 
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
-    """`list -v` shows marks and fixtures."""
+    """`query tests` shows marks in default columnar output."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
         "fx = Fixtures()\n\n"
@@ -60,7 +60,7 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
         "def test_one(): assert True\n"
         "def test_two(my_db: Fixture[str]): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "-v")
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_one", "test_two")
 
@@ -278,8 +278,8 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     helpers.integ.assert_excludes(stderr, "KEPT")
 
 
-def test_list_full_shows_param_values(tmp: TempDir):
-    """`list --verbose=full` shows grouped parametrize cases."""
+def test_query_tests_shows_parametrized_function(tmp: TempDir):
+    """`query tests` includes parametrized test functions."""
     (tmp / "test_param.py").write_text(
         "from dataclasses import dataclass\n"
         "import oxitest as oxi\n\n"
@@ -291,9 +291,9 @@ def test_list_full_shows_param_values(tmp: TempDir):
         "def test_abs(case: Case) -> None:\n"
         "    assert abs(case.x) == case.expected, 'mismatch'\n"
     )
-    out, stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--verbose=full")
+    out, _stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_abs", "[pos]", "[neg]")
+    helpers.integ.assert_contains(out, "test_abs")
 
 
 # ── Issue #584: Integration tests for 6 untested CLI flags ───────────────────

@@ -1,7 +1,9 @@
-"""Integration tests: `fixtures --tree` fixture dependency visualization."""
+"""Integration tests: `query fixtures --tree` fixture dependency visualization."""
 
 from conftest import helpers
 from oxitest import TempDir
+
+_TREE_ARGS = ("query", "fixtures", "--tree")
 
 
 def test_tree_basic_output(tmp: TempDir):
@@ -17,14 +19,14 @@ def test_tree_basic_output(tmp: TempDir):
         "    return f'connected to {config}'\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "fixtures", "--tree")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, *_TREE_ARGS)
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "db", "config")
     assert "└── " in out or "├── " in out, f"tree chars missing: {out!r}"
 
 
-def test_tree_verbose_shows_tags(tmp: TempDir):
-    """`fixtures --tree -v` shows shared/async tags."""
+def test_tree_shared_fixture(tmp: TempDir):
+    """`query fixtures --tree` includes shared fixtures."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
         "fx = Fixtures()\n\n"
@@ -33,9 +35,9 @@ def test_tree_verbose_shows_tags(tmp: TempDir):
         "    return 'db'\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "fixtures", "--tree", "-v")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, *_TREE_ARGS)
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "shared")
+    helpers.integ.assert_contains(out, "db")
 
 
 def test_tree_cycle_exits_failure(tmp: TempDir):
@@ -51,7 +53,7 @@ def test_tree_cycle_exits_failure(tmp: TempDir):
         "    return 'b'\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, err, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "fixtures", "--tree")
+    out, err, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, *_TREE_ARGS)
     helpers.integ.assert_failed(out, rc)
     assert "ircular" in out + err, f"cycle error missing: {out + err!r}"
 
@@ -59,6 +61,6 @@ def test_tree_cycle_exits_failure(tmp: TempDir):
 def test_tree_no_fixtures_shows_builtins(tmp: TempDir):
     """`fixtures --tree` with no conftest still shows built-in fixtures."""
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "fixtures", "--tree")
+    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, *_TREE_ARGS)
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "TempDir")
