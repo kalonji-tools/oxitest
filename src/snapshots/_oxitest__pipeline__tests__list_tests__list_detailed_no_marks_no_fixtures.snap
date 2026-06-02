@@ -1,7 +1,0 @@
----
-source: src/pipeline_tests.rs
-expression: "helpers::format_test_list(&items, Verbosity::Detailed)"
----
-tests/test_a.py::test_plain
-
-1 test

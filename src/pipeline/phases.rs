@@ -11,7 +11,7 @@ use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{PhaseOutcome, PipelineContext, PipelinePhase};
 use crate::cache::{ModuleCache, TimingCache};
 use crate::types::ExitCode;
-use crate::{affected, bridge, collector, parallel, reporter, retry, types};
+use crate::{affected, bridge, collector, parallel, query, reporter, retry, types};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
 
@@ -94,13 +94,13 @@ impl PipelinePhase for SessionPhase {
     }
 }
 
-// ─── FixturesPhase ────────────────────────────────────────────────────────────
+// ─── QueryPhase ───────────────────────────────────────────────────────────────
 
-pub(crate) struct FixturesPhase;
+pub(crate) struct QueryPhase;
 
-impl PipelinePhase for FixturesPhase {
+impl PipelinePhase for QueryPhase {
     fn name(&self) -> &'static str {
-        "fixtures"
+        "query"
     }
 
     fn should_run(&self, _ctx: &PipelineContext) -> bool {
@@ -108,15 +108,18 @@ impl PipelinePhase for FixturesPhase {
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
-        let session = ctx.session.as_ref().expect("SessionPhase must run first");
-        let verbosity = ctx.cfg.verbosity as i32;
+        let crate::config::Command::Query(ref args) = ctx.command else {
+            unreachable!("QueryPhase only runs for Command::Query");
+        };
 
-        let is_tree = matches!(
-            &ctx.command,
-            crate::config::Command::Fixtures(a) if a.tree
-        );
-
-        if is_tree {
+        // --tree is only valid for fixtures resource
+        if args.tree {
+            if args.resource != query::resource::ResourceKind::Fixtures {
+                eprintln!("error: --tree is only valid for the 'fixtures' resource");
+                return Ok(PhaseOutcome::EarlyExit(ExitCode::UsageError));
+            }
+            let session = ctx.session.as_ref().expect("SessionPhase must run first");
+            let verbosity = ctx.cfg.verbosity as i32;
             match session.tree_fixtures(py, verbosity, None, ctx.use_color) {
                 Ok(output) => {
                     if output.starts_with("error:") {
@@ -132,52 +135,50 @@ impl PipelinePhase for FixturesPhase {
                     return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
                 }
             }
-        } else {
-            match session.list_fixtures(py, verbosity, None, ctx.use_color) {
-                Ok(output) => {
-                    if !output.is_empty() {
-                        println!("{output}");
-                    }
-                }
+            return Ok(PhaseOutcome::EarlyExit(ExitCode::Success));
+        }
+
+        // Handle --fzf
+        if args.fzf {
+            match crate::query::fzf::run_fzf(
+                py,
+                args,
+                &ctx.test_files,
+                &ctx.conftest_files,
+                ctx.session.as_ref(),
+                &ctx.cfg,
+                ctx.use_color,
+            ) {
+                Ok(()) => return Ok(PhaseOutcome::EarlyExit(ExitCode::Success)),
                 Err(e) => {
-                    eprintln!("Error listing fixtures: {e}");
+                    eprintln!("error: {e}");
                     return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
                 }
             }
         }
-        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
-    }
-}
 
-// ─── PluginsPhase ─────────────────────────────────────────────────────────────
-
-pub(crate) struct PluginsPhase;
-
-impl PipelinePhase for PluginsPhase {
-    fn name(&self) -> &'static str {
-        "plugins"
-    }
-
-    fn should_run(&self, _ctx: &PipelineContext) -> bool {
-        true
-    }
-
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
-        let session = ctx.session.as_ref().expect("SessionPhase must run first");
-        let verbosity = ctx.cfg.verbosity as i32;
-
-        match session.list_plugins(py, verbosity, ctx.use_color) {
+        // Standard query path
+        match query::run_query(
+            py,
+            args,
+            &ctx.test_files,
+            &ctx.conftest_files,
+            ctx.session.as_ref(),
+            &ctx.cfg,
+            ctx.is_tty,
+            ctx.use_color,
+        ) {
             Ok(output) => {
                 if !output.is_empty() {
-                    println!("{output}");
+                    print!("{output}");
                 }
+                Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
             }
-            Err(e) => {
-                eprintln!("Error listing plugins: {e}");
-                return Ok(PhaseOutcome::EarlyExit(ExitCode::Failure));
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                Ok(PhaseOutcome::EarlyExit(ExitCode::UsageError))
             }
         }
-        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }
 
@@ -364,7 +365,6 @@ impl PipelinePhase for FilterPhase {
         let (keyword, marker) = match &ctx.command {
             crate::config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
             crate::config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
-            crate::config::Command::List(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
             _ => (None, None),
         };
         match helpers::apply_filters(
@@ -381,52 +381,6 @@ impl PipelinePhase for FilterPhase {
             }
             Err(code) => Ok(PhaseOutcome::EarlyExit(code)),
         }
-    }
-}
-
-// ─── ListPhase ───────────────────────────────────────────────────────────────
-
-/// Handles `--list`: prints collected tests and exits without execution.
-pub(crate) struct ListPhase;
-
-impl PipelinePhase for ListPhase {
-    fn name(&self) -> &'static str {
-        "list"
-    }
-
-    fn should_run(&self, _ctx: &PipelineContext) -> bool {
-        true
-    }
-
-    fn execute(
-        &self,
-        _py: Python<'_>,
-        ctx: &mut PipelineContext,
-    ) -> Result<PhaseOutcome, ExitCode> {
-        let is_count = matches!(
-            &ctx.command,
-            crate::config::Command::List(a) if a.count
-        );
-
-        if is_count {
-            let (tests, files, unavailable) = helpers::count_prescan_tests(&ctx.test_files);
-            if unavailable > 0 {
-                println!(
-                    "{}",
-                    helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
-                );
-            } else {
-                let file_word = if files == 1 { "file" } else { "files" };
-                let test_word = if tests == 1 { "test" } else { "tests" };
-                println!("{tests} {test_word} in {files} {file_word}");
-            }
-        } else {
-            println!(
-                "{}",
-                helpers::format_test_list(&ctx.items, ctx.cfg.verbosity)
-            );
-        }
-        Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
     }
 }
 
