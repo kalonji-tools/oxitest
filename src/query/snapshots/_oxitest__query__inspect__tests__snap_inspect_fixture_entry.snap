@@ -1,0 +1,10 @@
+---
+source: src/query/inspect.rs
+expression: "format_inspect(&e, ResourceKind::Fixtures)"
+---
+─── db_session ───
+
+  source:       conftest.py
+  shared:       true
+  autouse:      true
+  async:        false

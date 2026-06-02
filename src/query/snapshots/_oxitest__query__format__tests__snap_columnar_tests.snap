@@ -1,0 +1,9 @@
+---
+source: src/query/format.rs
+expression: "format_columnar(&entries, &[\"name\", \"mark\", \"async\"])"
+---
+test_add           slow          false
+test_network_call  network,slow  true
+test_plain                       false
+
+3 results
