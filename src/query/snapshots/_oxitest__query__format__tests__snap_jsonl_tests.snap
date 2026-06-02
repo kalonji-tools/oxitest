@@ -1,0 +1,6 @@
+---
+source: src/query/format.rs
+expression: format_jsonl(&entries)
+---
+{"name":"test_foo","source":"tests/test_a.py"}
+{"name":"test_bar","source":"tests/test_b.py"}

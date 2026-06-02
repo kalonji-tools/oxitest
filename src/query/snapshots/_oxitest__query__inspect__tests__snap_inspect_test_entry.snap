@@ -1,0 +1,11 @@
+---
+source: src/query/inspect.rs
+expression: "format_inspect(&e, ResourceKind::Tests)"
+---
+─── test_network_call ───
+
+  source:       tests/test_api.py
+  mark:
+    - slow
+    - network
+  async:        true
