@@ -23,6 +23,7 @@ __all__ = [
 
 import inspect
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -264,6 +265,10 @@ class _NullFixtureSession:
     ) -> str | None:
         return None
 
+    def get_cache_stats(self) -> dict[str, Any]:
+        """Return empty cache stats (null session has no shared fixtures)."""
+        return {"total_hits": 0, "total_misses": 0, "breakdown": []}
+
 
 # ── _TestContext ──────────────────────────────────────────────────────────────
 
@@ -374,10 +379,15 @@ class _Scope:
 
     cache: dict[str, Any] = field(default_factory=dict)
     teardowns: list[Callable[[], None]] = field(default_factory=list)
+    _hits: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    _misses: dict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     def get_or_create(self, name: str, factory: Callable[[], Any]) -> Any:
         if name not in self.cache:
             self.cache[name] = factory()
+            self._misses[name] += 1
+        else:
+            self._hits[name] += 1
         return self.cache[name]
 
     def drain(self) -> None:
@@ -581,6 +591,23 @@ class FixtureSession:
         # so that shared fixture teardowns can still access session-scoped builtins.
         self._shared_scope.drain()
         self._session_scope.drain()
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        """Return shared fixture cache hit/miss statistics."""
+        s = self._shared_scope
+        names = sorted(set(s._hits.keys()) | set(s._misses.keys()))
+        return {
+            "total_hits": sum(s._hits.values()),
+            "total_misses": sum(s._misses.values()),
+            "breakdown": [
+                {
+                    "name": n,
+                    "hits": s._hits.get(n, 0),
+                    "misses": s._misses.get(n, 0),
+                }
+                for n in names
+            ],
+        }
 
     def has_shared_fixtures(self) -> bool:
         """Return True if the effective (most-local) definition has shared=True."""

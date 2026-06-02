@@ -16,20 +16,20 @@ fx = oxitest.Fixtures()
 def git_repo(tmp: TempDir) -> Yields[Path]:
     """Tmp dir initialized as a git repo with an initial commit."""
     git = ["git", "-C", str(tmp)]
-    subprocess.run([*git, "init"], check=True, capture_output=True)
-    subprocess.run(
-        [*git, "config", "user.email", "test@test.com"],
-        check=True,
-        capture_output=True,
+    # Clear git env vars that prek/pre-commit may set, which would
+    # make git commands target the wrong repo.
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
     )
-    subprocess.run(
-        [*git, "config", "user.name", "Test"],
-        check=True,
-        capture_output=True,
-    )
+    run(*git, "init")
+    run(*git, "config", "user.email", "test@test.com")
+    run(*git, "config", "user.name", "Test")
     (tmp / ".gitkeep").write_text("")
-    subprocess.run([*git, "add", "."], check=True, capture_output=True)
-    subprocess.run([*git, "commit", "-m", "init"], check=True, capture_output=True)
+    run(*git, "add", ".")
+    run(*git, "commit", "-m", "init")
     yield tmp
 
 
@@ -308,21 +308,41 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]):
     tmp = git_repo
     git = ["git", "-C", str(tmp)]
 
+    # Clear git env vars that prek/pre-commit may set.
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
+    )
+
     # Create and commit a baseline test file (on top of git_repo's init commit)
     (tmp / "test_old.py").write_text("def test_old(): assert True\n")
-    subprocess.run([*git, "add", "."], check=True, capture_output=True)
-    subprocess.run(
-        [*git, "commit", "-m", "baseline"],
-        check=True,
-        capture_output=True,
-    )
+    run(*git, "add", ".")
+    run(*git, "commit", "-m", "baseline")
 
     # Add a new test file and stage it (git diff HEAD sees staged changes)
     (tmp / "test_new.py").write_text("def test_new(): assert True\n")
-    subprocess.run([*git, "add", "test_new.py"], check=True, capture_output=True)
+    run(*git, "add", "test_new.py")
 
-    # Act
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--affected=HEAD")
+    # Act — use clean env so oxitest doesn't see prek's GIT_* vars
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            str(tmp),
+            "--color",
+            "never",
+            "--affected=HEAD",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(tmp),
+        env=clean_env,
+    )
+    out, _, rc = result.stdout, result.stderr, result.returncode
 
     # Assert — only the new file should be collected (1 test, not 2)
     helpers.integ.assert_passed(out, rc, count=1)

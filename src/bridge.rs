@@ -184,6 +184,27 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Fetch shared fixture cache hit/miss statistics.
+    pub fn get_cache_stats(&self, py: Python<'_>) -> PyResult<crate::reporter::FixtureCacheStats> {
+        let result = self.0.bind(py).call_method0("get_cache_stats")?;
+        let total_hits: usize = result.get_item("total_hits")?.extract()?;
+        let total_misses: usize = result.get_item("total_misses")?.extract()?;
+        let breakdown_list = result.get_item("breakdown")?;
+        let mut breakdown = Vec::new();
+        for entry in breakdown_list.try_iter()? {
+            let entry: Bound<'_, PyAny> = entry?;
+            let name: String = entry.get_item("name")?.extract()?;
+            let hits: usize = entry.get_item("hits")?.extract()?;
+            let misses: usize = entry.get_item("misses")?.extract()?;
+            breakdown.push(crate::reporter::FixtureCacheEntry { name, hits, misses });
+        }
+        Ok(crate::reporter::FixtureCacheStats {
+            hits: total_hits,
+            misses: total_misses,
+            breakdown,
+        })
+    }
+
     /// Returns this session as a bound Python object for passing to bridge calls.
     pub(crate) fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.0.bind(py).clone()

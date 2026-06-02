@@ -603,17 +603,23 @@ impl PipelinePhase for FinalizePhase {
         true
     }
 
-    fn execute(
-        &self,
-        _py: Python<'_>,
-        ctx: &mut PipelineContext,
-    ) -> Result<PhaseOutcome, ExitCode> {
+    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         helpers::finalize(
             &mut ctx.cache,
             &ctx.timings,
             ctx.cfg.cache_max_age,
             &ctx.rootdir,
         );
+        // Fetch fixture cache stats from Python session.
+        if let Some(session) = ctx.session.as_ref() {
+            if let Ok(stats) = session.get_cache_stats(py) {
+                if stats.hits + stats.misses > 0 {
+                    if let Some(rep) = ctx.reporter.as_deref_mut() {
+                        rep.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
+                    }
+                }
+            }
+        }
         let mut rep = ctx.reporter.take().expect("ExecutionPhase must run first");
         let code = rep
             .finish(&[], ctx.interrupted, &reporter::RunStats::new())
