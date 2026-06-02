@@ -31,7 +31,7 @@ pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub use tty::TtyReporter;
 
 use format::{fmt_summary, fmt_tip_block, fmt_warning_block};
-pub(crate) use stats::RunStats;
+pub(crate) use stats::{FixtureCacheEntry, FixtureCacheStats, RunStats};
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
 pub(crate) use format::sep_width;
@@ -148,6 +148,15 @@ pub trait Reporter {
     /// `context` identifies what failed (e.g. "end_module(path)" or "end_session").
     /// `error` is the stringified error message.
     fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
+
+    /// Set fixture cache statistics for display in the summary.
+    fn set_fixture_cache_stats(
+        &mut self,
+        _hits: usize,
+        _misses: usize,
+        _breakdown: Vec<stats::FixtureCacheEntry>,
+    ) {
+    }
 }
 
 // ─── Deferred-failure dedup ──────────────────────────────────────────────────
@@ -239,6 +248,17 @@ impl Reporter for CompositeReporter {
         for r in &mut self.reporters {
             r.record_teardown_warning(context, error);
         }
+    }
+
+    fn set_fixture_cache_stats(
+        &mut self,
+        hits: usize,
+        misses: usize,
+        breakdown: Vec<stats::FixtureCacheEntry>,
+    ) {
+        self.stats.fixture_cache_hits = hits;
+        self.stats.fixture_cache_misses = misses;
+        self.stats.fixture_cache_breakdown = breakdown;
     }
 }
 
@@ -448,6 +468,19 @@ pub(crate) fn print_summary_section(
             );
             for (node_id, ms) in &slowest {
                 println!("  {:>8.2}ms  {}", ms, node_id);
+            }
+        }
+    }
+    // Fixture cache stats — always shown when shared fixtures were used.
+    if let Some(summary) = stats.fixture_cache_summary() {
+        println!("\n{}", colors::color_dim(&summary, opts.use_color));
+        if opts.verbosity >= crate::config::Verbosity::Detailed {
+            let mut entries = stats.fixture_cache_breakdown.clone();
+            entries.sort_by_key(|e| std::cmp::Reverse(e.hits + e.misses));
+            for e in &entries {
+                let total = e.hits + e.misses;
+                let pct = (100 * e.hits).checked_div(total).unwrap_or(0);
+                println!("    {:<14} {}/{} ({}%)", e.name, e.hits, total, pct);
             }
         }
     }
