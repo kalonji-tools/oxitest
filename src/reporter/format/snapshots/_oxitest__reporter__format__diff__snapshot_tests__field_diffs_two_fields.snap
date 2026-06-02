@@ -1,0 +1,7 @@
+---
+source: src/reporter/format/diff.rs
+expression: result
+---
+field diffs (User):
+  email  'alice@example.com' != 'alice@test.com'
+  age    30 != 31

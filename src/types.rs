@@ -348,6 +348,7 @@ pub enum TestOutcome {
         right: String,
         op: String,
         frames: Vec<Frame>,
+        field_diffs: Vec<(String, String, String)>,
     },
     Error {
         message: String,
@@ -519,6 +520,7 @@ impl TestOutcome {
                 right,
                 op,
                 frames,
+                field_diffs,
             } => Some(DiagnosticParts {
                 file: file.as_str(),
                 lineno: *lineno,
@@ -528,6 +530,7 @@ impl TestOutcome {
                 left,
                 right,
                 op,
+                field_diffs,
             }),
             TestOutcome::Error {
                 message,
@@ -544,6 +547,7 @@ impl TestOutcome {
                 left: "",
                 right: "",
                 op: "",
+                field_diffs: &[],
             }),
             _ => None,
         }
@@ -572,6 +576,8 @@ pub struct DiagnosticParts<'a> {
     pub right: &'a str,
     /// Comparison operator (empty for Error outcomes or non-comparison assertions).
     pub op: &'a str,
+    /// Per-field diffs for dataclass/object comparisons: `(field_name, left_value, right_value)`.
+    pub field_diffs: &'a [(String, String, String)],
 }
 
 /// Classification of a [`TestOutcome`] for color/style selection in TTY output.
@@ -725,6 +731,7 @@ pub struct RawOutcome<'a> {
     pub op: &'a str,
     pub strict: bool,
     pub frames: &'a [Frame],
+    pub field_diffs: &'a [(String, String, String)],
 }
 
 impl TestOutcome {
@@ -750,6 +757,7 @@ impl TestOutcome {
                 right: r.right.to_owned(),
                 op: r.op.to_owned(),
                 frames: r.frames.to_vec(),
+                field_diffs: r.field_diffs.to_vec(),
             },
             "skipped" => TestOutcome::Skipped {
                 reason: r.message.to_owned(),
@@ -788,6 +796,7 @@ mod failure_accumulator_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert!(!acc.record(&outcome));
         assert!(!acc.record(&outcome));
@@ -805,6 +814,7 @@ mod failure_accumulator_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let pass = TestOutcome::Passed {
             no_message_lines: vec![],
@@ -842,6 +852,7 @@ mod tests {
             right: "1".to_string(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         if let TestOutcome::Failed {
             lineno,
@@ -932,6 +943,7 @@ mod tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert!(o.is_hard_failure());
     }
@@ -1099,6 +1111,7 @@ mod tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.dot_char(), 'F');
     }
@@ -1201,6 +1214,7 @@ mod tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.label(), "FAIL ");
     }
@@ -1290,6 +1304,7 @@ mod tests {
                 right: String::new(),
                 op: String::new(),
                 frames: vec![],
+                field_diffs: vec![],
             }
             .as_str(),
             "failed"
@@ -1478,6 +1493,7 @@ mod tests {
             op: "==",
             strict: false,
             frames: &[],
+            field_diffs: &[],
         }
     }
 
@@ -1503,6 +1519,7 @@ mod tests {
             op: "==",
             strict: false,
             frames: &[],
+            field_diffs: &[],
         });
         match o {
             TestOutcome::Failed {
@@ -1587,6 +1604,7 @@ mod tests {
                 right: String::new(),
                 op: String::new(),
                 frames: vec![],
+                field_diffs: vec![],
             },
             TestOutcome::Error {
                 message: String::new(),
@@ -1646,6 +1664,7 @@ mod message_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.message(), Some("assertion failed"));
     }
@@ -1661,6 +1680,7 @@ mod message_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert!(o.message().is_none());
     }
@@ -1793,6 +1813,7 @@ mod ctrf_status_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.ctrf_status(), "failed");
     }
@@ -1873,6 +1894,7 @@ mod diagnostic_parts_tests {
             right: "4".to_string(),
             op: "==".to_string(),
             frames: vec![],
+            field_diffs: vec![],
         };
         let parts = outcome
             .diagnostic_parts()
@@ -1966,6 +1988,7 @@ mod color_category_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.color_category(), ColorCategory::Fail);
     }
@@ -2081,6 +2104,7 @@ mod junit_category_tests {
             right: String::new(),
             op: String::new(),
             frames: vec![],
+            field_diffs: vec![],
         };
         assert_eq!(o.junit_category(), JunitCategory::Failed);
     }

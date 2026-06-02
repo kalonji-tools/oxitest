@@ -179,6 +179,47 @@ fn pretty_print_collection(s: &str) -> String {
     out
 }
 
+/// Renders a field-by-field diff section for dataclass comparisons.
+///
+/// Each entry is `(field_name, left_repr, right_repr)`.
+/// Returns empty string if `field_diffs` is empty.
+pub(crate) fn fmt_field_diffs(
+    field_diffs: &[(String, String, String)],
+    left_repr: &str,
+    use_color: bool,
+) -> String {
+    if field_diffs.is_empty() {
+        return String::new();
+    }
+
+    use std::fmt::Write;
+    let mut out = String::new();
+
+    // Extract type name from left repr: "User(name=..." → "User"
+    let type_name = left_repr
+        .find('(')
+        .map(|i| &left_repr[..i])
+        .unwrap_or("dataclass");
+
+    let name_width = field_diffs
+        .iter()
+        .map(|(name, _, _)| name.len())
+        .max()
+        .unwrap_or(0);
+
+    writeln!(out, "field diffs ({type_name}):").unwrap();
+    for (name, left, right) in field_diffs {
+        let left_colored = color_fail(left, use_color);
+        let right_colored = color_pass(right, use_color);
+        writeln!(
+            out,
+            "  {name:<name_width$}  {left_colored} != {right_colored}",
+        )
+        .unwrap();
+    }
+    out
+}
+
 /// Produces a colored diff string for assertion failures.
 ///
 /// - Returns empty string if both values are empty or identical.
@@ -264,6 +305,30 @@ mod snapshot_tests {
     fn collection_diff_nested() {
         let result = fmt_diff("[{'a': 1}, {'b': 2}]", "[{'a': 1}, {'b': 3}]", "==", false);
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn field_diffs_two_fields() {
+        let diffs = vec![
+            (
+                "email".to_string(),
+                "'alice@example.com'".to_string(),
+                "'alice@test.com'".to_string(),
+            ),
+            ("age".to_string(), "30".to_string(), "31".to_string()),
+        ];
+        let result = fmt_field_diffs(
+            &diffs,
+            "User(name='alice', email='alice@example.com', age=30)",
+            false,
+        );
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn field_diffs_empty_returns_empty() {
+        let result = fmt_field_diffs(&[], "User()", false);
+        assert!(result.is_empty());
     }
 }
 

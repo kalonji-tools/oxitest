@@ -42,6 +42,7 @@ struct TestResult {
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
     frames: Vec<BridgeFrame>,
+    field_diffs: Vec<(String, String, String)>,
 }
 
 /// Long-lived Python fixture session held across the test loop.
@@ -523,5 +524,6 @@ fn try_run_test_with_session_obj(
         op: &r.op,
         strict: r.strict,
         frames: &frames,
+        field_diffs: &r.field_diffs,
     }))
 }
