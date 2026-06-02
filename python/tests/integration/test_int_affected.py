@@ -16,7 +16,7 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir):
         "\n"
         "def test_nested_list():\n"
         "    result = subprocess.run(\n"
-        "        [sys.executable, '-m', 'oxitest', 'list', '.', '--color', 'never'],\n"
+        "        [sys.executable, '-m', 'oxitest', 'query', 'tests', '.'],\n"
         "        capture_output=True, text=True, timeout=30,\n"
         "    )\n"
         "    assert result.returncode == 0, (\n"
