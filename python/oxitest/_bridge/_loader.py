@@ -7,11 +7,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from oxitest._bridge._errors import LoadError as _LoadError
-from oxitest._bridge.ast_rewriter import (
+from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )
+from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.result import _error_result
 
 __all__ = ["_load_module", "_resolve_fn", "_LoadError", "ModuleCache"]

@@ -19,14 +19,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
+from oxitest._bridge._assert_error import (
+    _OXITEST_NO_RHS,
+    _OxitestAssertionError,
+)
 from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import ExecutionWrapper
 from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
-from oxitest._bridge.ast_rewriter import (
-    _OXITEST_NO_RHS,
-    _OxitestAssertionError,
-)
 from oxitest._bridge.fixtures import FixtureTeardownWarning
 from oxitest._bridge.result import Frame, StatusKind, TestResult, _error_result
 
