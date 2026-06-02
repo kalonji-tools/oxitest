@@ -45,7 +45,10 @@ Each line on stdin is a JSON object:
         {"fn_name": "test_mul", "param_id": "x0"}
     ],
     "conftest_paths": ["tests/conftest.py", "conftest.py"],
-    "timeout_secs": 30
+    "timeout_secs": 30,
+    "keep_tmp": "failed",
+    "show_locals": true,
+    "show_internals": false
 }
 ```
 
@@ -57,6 +60,9 @@ Each line on stdin is a JSON object:
 | `items[].param_id` | string \| null | Parametrize case ID (e.g. `"x0"`) or null |
 | `conftest_paths` | array of strings | Conftest files to load for fixture resolution |
 | `timeout_secs` | int \| null | Per-test timeout in seconds, or null for no timeout |
+| `keep_tmp` | `string \| null` | Optional. `"failed"`, `"always"`, or omitted. Controls TempDir preservation. |
+| `show_locals` | `bool \| null` | Optional. When `true`, worker captures local variables in traceback frames. |
+| `show_internals` | `bool \| null` | Optional. When `true`, worker includes internal (oxitest) frames in tracebacks. |
 
 ## Result Schema (stdout)
 
@@ -77,7 +83,9 @@ For each test item, the worker writes exactly one JSON line to stdout:
     "right": null,
     "op": null,
     "strict": false,
-    "frames": []
+    "frames": [],
+    "field_diffs": [["name", "\"alice\"", "\"Alice\""]],
+    "protocol_version": 1
 }
 ```
 
@@ -96,7 +104,9 @@ For each test item, the worker writes exactly one JSON line to stdout:
 | `right` | string \| null | Right operand repr for comparison assertions |
 | `op` | string \| null | Comparison operator (e.g. `"=="`, `"!="`, `"in"`) |
 | `strict` | bool | Whether the test was in strict xfail mode |
-| `frames` | array of objects | Stack frames from the traceback (empty for passed tests). Each object has `file` (string), `lineno` (int), `name` (string), `line` (string). |
+| `frames` | `array \| null` | Optional. Stack frames for failures. Each frame has `file`, `lineno`, `name`, `line`, and optionally `locals` (array of `[name, repr]` pairs when `show_locals` is enabled). |
+| `field_diffs` | `array \| null` | Optional. Per-field diffs for dataclass comparisons. Each entry is `[field_name, left_value, right_value]`. |
+| `protocol_version` | `int` | Wire format version (currently `1`). The coordinator warns once per drain call on version mismatch. |
 
 ## Outcome Values
 
@@ -149,3 +159,8 @@ reported as crashed errors via `drain_remaining_into_crashed()`.
 3. **No interleaving:** One task is fully processed before the next is read from stdin
 4. **Newline-delimited:** Each JSON object is on its own line (no pretty-printing)
 5. **Stdout only:** Results go to stdout; diagnostic output (tracebacks, prints) goes to stderr
+
+## See also
+
+- [Parallelism](parallelism.md) — why this design was chosen
+- [Architecture](../contributing/architecture.md) — where worker code lives in the codebase
