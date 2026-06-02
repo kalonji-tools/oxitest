@@ -97,3 +97,8 @@ if TYPE_CHECKING:
     from oxitest._bridge._helper_namespace import HelperNamespace
     helpers: HelperNamespace
 ```
+
+## See also
+
+- [Use fixtures](use-fixtures.md) — fixture injection and conftest loading
+- [Conftest helpers](../explanation/conftest-helpers.md) — design rationale for the helpers namespace

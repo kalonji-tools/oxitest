@@ -44,6 +44,7 @@ $ oxitest tests/
 ## Next steps
 
 !!! tip "Next steps"
+    - [Migrate from pytest](how-to/migrate-from-pytest.md) — coming from pytest? Start here.
     - [Getting started tutorial](tutorials/getting-started.md) — a full walkthrough from installation to your first fixture
     - [How-to guides](how-to/use-fixtures.md) — task-oriented recipes for fixtures, markers, parametrize, and more
     - [Reference](reference/cli.md) — CLI flags, configuration keys, exit codes, and JSON output format

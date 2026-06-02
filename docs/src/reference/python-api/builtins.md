@@ -161,3 +161,9 @@ def test_create_user(schema: Fixture[str], ctx: TestContext) -> None:
     # ctx.param_id  → None (not parametrized)
     ...
 ```
+
+## See also
+
+- [Use built-in fixtures](../../how-to/use-builtin-fixtures.md) — how-to guide with examples
+- [Fixture types](fixture-types.md) — `Fixture[T]`, `Yields[T]`, and other type annotations
+- [Configuration](../../reference/configuration.md) — `keep_tmp` setting

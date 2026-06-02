@@ -117,3 +117,9 @@ The practical implication: oxitest shows the most dramatic speedup on projects w
 suites and fast individual tests. It shows modest speedup on projects where individual tests are
 expensive. The parallel model adds a second lever: CPU-bound and I/O-bound suites both benefit
 from running multiple tests concurrently.
+
+## See also
+
+- [Benchmarks](benchmarks.md) — concrete numbers on real-world projects
+- [Parallelism](parallelism.md) — the subprocess worker model
+- [Configuration](../reference/configuration.md) — `min_parallel_tests`, `spawn_overhead_ms`

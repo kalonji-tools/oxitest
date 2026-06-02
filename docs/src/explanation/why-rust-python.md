@@ -104,3 +104,9 @@ speed advantage compounds with suite size.
 The design choice remains a bet: the things that can be made fast in Rust are worth the
 complexity, and the things that must stay in Python are few enough that the boundary stays
 manageable.
+
+## See also
+
+- [Architecture](../contributing/architecture.md) — how the Rust and Python layers are structured
+- [Performance](performance.md) — where the speed comes from
+- [Worker protocol](worker-protocol.md) — how Rust and Python communicate in parallel mode
