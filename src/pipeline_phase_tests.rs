@@ -71,14 +71,13 @@ mod session_phase_tests {
     }
 }
 
-mod fixtures_phase_tests {
+mod query_phase_tests {
     use super::*;
 
     #[test]
     fn always_runs() {
-        // FixturesPhase now always returns true (only in pipeline when needed)
         let ctx = make_ctx();
-        let phase = phases::FixturesPhase;
+        let phase = phases::QueryPhase;
         assert!(phase.should_run(&ctx));
     }
 }
@@ -150,18 +149,6 @@ mod filter_phase_tests {
     fn always_runs() {
         let ctx = make_ctx();
         let phase = phases::FilterPhase;
-        assert!(phase.should_run(&ctx));
-    }
-}
-
-mod list_phase_tests {
-    use super::*;
-
-    #[test]
-    fn always_runs() {
-        // ListPhase now always returns true (only in pipeline when needed)
-        let ctx = make_ctx();
-        let phase = phases::ListPhase;
         assert!(phase.should_run(&ctx));
     }
 }
