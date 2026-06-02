@@ -156,22 +156,20 @@ def run_oxitest(
 
 def run_oxitest_subcmd(
     tmp_path,
-    subcmd: str,
-    *extra_args: str,
+    *subcmd_and_args: str,
     timeout: int = 60,
 ) -> tuple[str, str, int]:
-    """Run oxitest with a subcommand as a subprocess."""
+    """Run oxitest with a subcommand as a subprocess.
+
+    Accepts the subcommand parts and extra args as positional arguments.
+    For example: ``run_oxitest_subcmd(tmp, "query", "tests", "--count")``.
+    """
+    # Only pass --color=never for commands that support it (not query).
+    cmd = [sys.executable, "-m", "oxitest", *subcmd_and_args, str(tmp_path)]
+    if subcmd_and_args and subcmd_and_args[0] != "query":
+        cmd.extend(["--color", "never"])
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            subcmd,
-            str(tmp_path),
-            "--color",
-            "never",
-            *extra_args,
-        ],
+        cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -181,25 +179,19 @@ def run_oxitest_subcmd(
 
 def run_oxitest_subcmd_cwd(
     tmp_path,
-    subcmd: str,
-    *extra_args: str,
+    *subcmd_and_args: str,
     timeout: int = 60,
 ) -> tuple[str, str, int]:
     """Run oxitest subcommand using cwd instead of a path argument.
 
-    Some subcommands (``fixtures``, ``plugins``) don't accept a positional
-    path — they discover the project via the working directory.
+    Some subcommands (``query plugins``, ``query fixtures``) discover the
+    project via the working directory rather than a positional path.
     """
+    cmd = [sys.executable, "-m", "oxitest", *subcmd_and_args]
+    if subcmd_and_args and subcmd_and_args[0] != "query":
+        cmd.extend(["--color", "never"])
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            subcmd,
-            "--color",
-            "never",
-            *extra_args,
-        ],
+        cmd,
         capture_output=True,
         text=True,
         timeout=timeout,

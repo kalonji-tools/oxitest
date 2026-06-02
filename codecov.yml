@@ -43,3 +43,5 @@ ignore:
   - "python/oxitest/_bridge/_async_backend.py"
   # Import graph: only called from Rust via --affected, has own test suite
   - "python/oxitest/_bridge/import_graph.py"
+  # Query bridge: only called from Rust pipeline, uses simple dict returns (no typed wire format)
+  - "python/oxitest/_bridge/query_bridge.py"
