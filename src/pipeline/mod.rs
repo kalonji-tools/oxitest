@@ -142,8 +142,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         .chain(args.iter().cloned())
         .collect();
 
-    let command = match config::OxitestCli::resolve(&argv) {
-        Ok(c) => c,
+    let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
+        Ok(pair) => pair,
         Err(e) => {
             // Clap formats this for the user; subscriber may not be initialised yet.
             eprintln!("{}", e);
@@ -190,6 +190,12 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
         config::Command::Env => unreachable!("handled above"),
     };
+
+    // Apply top-level flags that override config values regardless of subcommand.
+    let mut cfg = cfg;
+    if !use_gitignore {
+        cfg.use_gitignore = false;
+    }
 
     let cache = cache::TestCache::load(&rootdir);
 

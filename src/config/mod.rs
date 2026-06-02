@@ -223,6 +223,7 @@ pub struct Config {
     pub keep_tmp: Option<KeepTmpMode>,
     pub auto_arrange_threshold: Option<u8>,
     pub collection_profile: bool,
+    pub use_gitignore: bool,
 }
 
 impl Default for Config {
@@ -271,6 +272,7 @@ impl Default for Config {
             keep_tmp: None,
             auto_arrange_threshold: Some(70),
             collection_profile: false,
+            use_gitignore: true,
         }
     }
 }
@@ -441,6 +443,7 @@ impl Config {
         }
         apply_if_some!(self, python_files, tc.python_files);
         apply_if_some!(self, norecursedirs, tc.norecursedirs);
+        apply_if_some!(self, use_gitignore, tc.use_gitignore);
 
         // ── Execution (unique to TOML) ──────────────────────────────────
         apply_if_some!(self, maxfail, tc.maxfail);
@@ -647,7 +650,8 @@ mod tests {
     fn parse_run(args: &[&str]) -> RunArgs {
         let mut argv: Vec<String> = vec!["oxitest".to_string(), "run".to_string()];
         argv.extend(args.iter().map(|s| s.to_string()));
-        match OxitestCli::resolve(&argv).unwrap() {
+        let (cmd, _) = OxitestCli::resolve(&argv).unwrap();
+        match cmd {
             Command::Run(a) => a,
             _ => panic!("expected Command::Run"),
         }
@@ -1911,5 +1915,40 @@ async_backend = "trio"
     fn test_auto_arrange_from_pyproject_false() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
         assert_eq!(cfg.auto_arrange_threshold, None);
+    }
+
+    // ── use_gitignore tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_use_gitignore_default_is_true() {
+        let cfg = Config::default();
+        assert!(cfg.use_gitignore);
+    }
+
+    #[test]
+    fn test_use_gitignore_from_pyproject_false() {
+        let cfg = Config::from_str("[tool.oxitest]\nuse_gitignore = false\n").unwrap();
+        assert!(!cfg.use_gitignore);
+    }
+
+    #[test]
+    fn test_use_gitignore_from_pyproject_true() {
+        let cfg = Config::from_str("[tool.oxitest]\nuse_gitignore = true\n").unwrap();
+        assert!(cfg.use_gitignore);
+    }
+
+    #[test]
+    fn test_use_gitignore_absent_defaults_true() {
+        let cfg = Config::from_str("[tool.oxitest]\n").unwrap();
+        assert!(cfg.use_gitignore);
+    }
+
+    #[test]
+    fn test_use_gitignore_cli_disables() {
+        let dir = TempDir::new().unwrap();
+        let mut cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        assert!(cfg.use_gitignore);
+        cfg.use_gitignore = false; // simulates what pipeline does with CLI flag
+        assert!(!cfg.use_gitignore);
     }
 }
