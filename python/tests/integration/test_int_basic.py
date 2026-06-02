@@ -25,7 +25,7 @@ def test_all_skip_exits_zero(tmp: TempDir):
         "def test_skipped(): pass\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"all-skip should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "skipped")
 
 
@@ -36,7 +36,7 @@ def test_xfail_exits_zero(tmp: TempDir):
         "def test_expected_fail(): assert False\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"xfail should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "xfailed")
 
 
@@ -52,7 +52,7 @@ def test_mixed_pass_and_fail(tmp: TempDir):
 def test_no_tests_collected(tmp: TempDir):
     (tmp / "test_empty.py").write_text("# no test functions\n")
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 0, f"no tests should exit 0, got {rc}"
+    helpers.integ.assert_passed(out, rc)
 
 
 def test_composed_parametrize_runs_cartesian_product(tmp: TempDir):

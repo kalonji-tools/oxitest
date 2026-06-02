@@ -73,7 +73,5 @@ def test_helpers_only_conftest_no_warning(tmp: TempDir):
         "def test_pass():\n    assert True\n",
     )
     stdout, _, rc = helpers.common.run_oxitest(root)
-    assert rc == 0, f"expected exit 0, got {rc}\n{stdout}"
-    assert "no Fixtures instance" not in stdout, (
-        f"unexpected warning in output:\n{stdout}"
-    )
+    helpers.integ.assert_passed(stdout, rc)
+    helpers.integ.assert_excludes(stdout, "no Fixtures instance")

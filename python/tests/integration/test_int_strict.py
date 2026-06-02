@@ -32,7 +32,7 @@ def test_strict_enforce_reports_violations(tmp: TempDir):
     pyproject = Path(tmp) / "pyproject.toml"
     pyproject.write_text('[tool.oxitest]\nstrict = "enforce"\n')
     out, _, rc = helpers.common.run_oxitest(tmp)
-    assert rc == 1, f"strict enforce with violations should exit 1, got {rc}"
+    helpers.integ.assert_failed(out, rc)
 
 
 def test_no_strict_bare_assert_passes(tmp: TempDir):

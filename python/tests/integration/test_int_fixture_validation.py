@@ -25,9 +25,7 @@ def test_uses_typo(sotre: oxitest.Fixture[int]) -> None:
     (tmp / "test_typo.py").write_text(test_file)
     out, _, rc = helpers.common.run_oxitest(tmp)
     helpers.integ.assert_collection_error(out, rc)
-    assert "fixture" in out.lower() and "sotre" in out.lower(), (
-        f"expected fixture error in output: {out}"
-    )
+    helpers.integ.assert_contains(out.lower(), "fixture", "sotre")
 
 
 def test_valid_fixture_names_pass(tmp: TempDir):
@@ -75,4 +73,4 @@ def test_typo(sotre: oxitest.Fixture[int]) -> None:
     out, _, rc = helpers.common.run_oxitest(tmp)
     helpers.integ.assert_collection_error(out, rc)
     helpers.integ.assert_contains(out.lower(), "did you mean")
-    assert "store" in out, f"expected 'store' suggestion in output: {out}"
+    helpers.integ.assert_contains(out, "store")

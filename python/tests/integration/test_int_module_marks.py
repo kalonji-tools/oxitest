@@ -51,7 +51,7 @@ def test_oxi_mark_strict_validates_module_marks(tmp: TempDir):
         "import oxitest\noxi_mark = [oxitest.mark.skip]\ndef test_a(): assert True\n"
     )
     out, _, rc = helpers.common.run_oxitest(tmp, "--strict")
-    assert rc != 0, f"--strict should fail for skip without reason, got rc={rc}"
+    helpers.integ.assert_failed(out, rc)
     helpers.integ.assert_contains(out, "missing-mark-reason")
 
 

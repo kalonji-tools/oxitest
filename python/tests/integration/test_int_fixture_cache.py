@@ -1,29 +1,7 @@
 """Integration tests: fixture cache hit rate reporting."""
 
-import subprocess
-import sys
-
+from conftest import helpers
 from oxitest import TempDir
-
-
-def _run(tmp: TempDir, *extra_args: str) -> tuple[str, str, int]:
-    """Run oxitest with cwd set to tmp."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp),
-            "--color",
-            "never",
-            *extra_args,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    return result.stdout, result.stderr, result.returncode
 
 
 def test_no_shared_fixtures_no_cache_stats(tmp: TempDir):
@@ -40,11 +18,9 @@ def test_no_shared_fixtures_no_cache_stats(tmp: TempDir):
         "def test_one(db: Fixture[str]):\n"
         "    assert db == 'conn', 'db should be conn'\n"
     )
-    out, _, rc = _run(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "shared fixture cache" not in out, (
-        f"expected no cache stats without shared fixtures: {out!r}"
-    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_excludes(out, "shared fixture cache")
 
 
 def test_shared_fixture_shows_cache_stats(tmp: TempDir):
@@ -63,10 +39,9 @@ def test_shared_fixture_shows_cache_stats(tmp: TempDir):
         "def test_two(db: Fixture[str]):\n"
         "    assert db == 'conn', 'db should be conn'\n"
     )
-    out, _, rc = _run(tmp)
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "shared fixture cache" in out, f"expected cache stats in output: {out!r}"
-    assert "hits" in out, f"expected 'hits' in output: {out!r}"
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "shared fixture cache", "hits")
 
 
 def test_verbose_shows_per_fixture_breakdown(tmp: TempDir):
@@ -85,6 +60,6 @@ def test_verbose_shows_per_fixture_breakdown(tmp: TempDir):
         "def test_two(db: Fixture[str]):\n"
         "    assert db == 'conn', 'db should be conn'\n"
     )
-    out, _, rc = _run(tmp, "-v")
-    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out}"
-    assert "db" in out, f"expected 'db' in per-fixture breakdown: {out!r}"
+    out, _, rc = helpers.common.run_oxitest(tmp, "-v")
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "db")
