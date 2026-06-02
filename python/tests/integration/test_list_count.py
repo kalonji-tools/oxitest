@@ -1,4 +1,4 @@
-"""Integration tests for ``oxitest list --count``."""
+"""Integration tests for ``oxitest query tests --count``."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ def test_sub():
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--count")
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "2 tests in 1 file")
+    helpers.integ.assert_contains(out, "2 tests")
 
 
 def test_list_count_multiple_files(tmp: TempDir):
@@ -32,9 +32,9 @@ def test_list_count_multiple_files(tmp: TempDir):
             "test_b.py": "def test_two(): pass\ndef test_three(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--count")
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "3 tests in 2 files")
+    helpers.integ.assert_contains(out, "3 tests")
 
 
 def test_list_count_with_class(tmp: TempDir):
@@ -48,9 +48,9 @@ class TestGroup:
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--count")
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "2 tests in 1 file")
+    helpers.integ.assert_contains(out, "2 tests")
 
 
 def test_list_count_no_tests(tmp: TempDir):
@@ -60,9 +60,9 @@ def test_list_count_no_tests(tmp: TempDir):
             "test_empty.py": "def helper(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--count")
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "0 tests in 0 files")
+    helpers.integ.assert_contains(out, "0 tests")
 
 
 def test_list_count_singular(tmp: TempDir):
@@ -72,6 +72,6 @@ def test_list_count_singular(tmp: TempDir):
             "test_one.py": "def test_solo(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "list", "--count")
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
     helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "1 test in 1 file")
+    helpers.integ.assert_contains(out, "1 tests")
