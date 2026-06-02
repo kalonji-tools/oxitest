@@ -811,6 +811,7 @@ dependencies = [
  "console",
  "crossbeam-channel",
  "globset",
+ "ignore",
  "indexmap",
  "indicatif",
  "insta",
@@ -829,7 +830,6 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "walkdir",
 ]
 
 [[package]]

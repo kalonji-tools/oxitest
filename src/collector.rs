@@ -6,8 +6,8 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
+use ignore::WalkBuilder;
 use std::collections::HashSet;
-use walkdir::WalkDir;
 
 use crate::config::Config;
 
@@ -70,20 +70,28 @@ fn collect_from(
         return;
     }
 
-    for entry in WalkDir::new(path)
+    let norecursedirs = config.norecursedirs.clone();
+    let walker = WalkBuilder::new(path)
         .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy(); // OsStr from walkdir
-            if e.file_type().is_dir() {
-                return !config.norecursedirs.iter().any(|d| d == name.as_ref());
+        .hidden(false)
+        .git_ignore(config.use_gitignore)
+        .git_global(false)
+        .git_exclude(false)
+        .filter_entry(move |e| {
+            if e.file_type().is_some_and(|ft| ft.is_dir()) {
+                let name = e.file_name().to_string_lossy();
+                return !norecursedirs.iter().any(|d| d == name.as_ref());
             }
             true
         })
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_dir() {
-            let conftest_std = entry.path().join("conftest.py"); // &Path from walkdir
+        .build();
+
+    for entry in walker.filter_map(|e| e.ok()) {
+        let Some(ft) = entry.file_type() else {
+            continue;
+        };
+        if ft.is_dir() {
+            let conftest_std = entry.path().join("conftest.py");
             if conftest_std.exists() {
                 match Utf8PathBuf::from_path_buf(conftest_std) {
                     Ok(utf8) => {
@@ -92,8 +100,8 @@ fn collect_from(
                     Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 conftest path"),
                 }
             }
-        } else if entry.file_type().is_file() {
-            let filename = entry.file_name(); // OsStr — glob accepts AsRef<Path>
+        } else if ft.is_file() {
+            let filename = entry.file_name();
             if glob_set.is_match(filename) {
                 match Utf8PathBuf::from_path_buf(entry.into_path()) {
                     Ok(utf8) => out.push(utf8),
@@ -145,6 +153,7 @@ mod tests {
             keep_tmp: None,
             auto_arrange_threshold: Some(70),
             collection_profile: false,
+            use_gitignore: true,
         }
     }
 
@@ -264,6 +273,100 @@ mod tests {
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
         let (_, conftests) = collect_files(&config).unwrap();
         assert_eq!(conftests.len(), 1);
+    }
+
+    #[test]
+    fn test_collect_respects_gitignore() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        dir.child(".gitignore").write_str("ignored_dir/\n").unwrap();
+        dir.child("ignored_dir/test_hidden.py").touch().unwrap();
+        dir.child("test_visible.py").touch().unwrap();
+
+        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
+        let (files, _) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
+    }
+
+    #[test]
+    fn test_collect_gitignore_disabled() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        dir.child(".gitignore").write_str("ignored_dir/\n").unwrap();
+        dir.child("ignored_dir/test_hidden.py").touch().unwrap();
+        dir.child("test_visible.py").touch().unwrap();
+
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
+        let config = Config {
+            use_gitignore: false,
+            ..make_config(utf8_dir)
+        };
+        let (files, _) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 2);
+    }
+
+    #[test]
+    fn test_collect_no_git_repo_still_works() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("test_foo.py").touch().unwrap();
+        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
+        let (files, _) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 1);
+    }
+
+    #[test]
+    fn test_collect_gitignore_and_norecursedirs_additive() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        dir.child(".gitignore").write_str("git_ignored/\n").unwrap();
+        dir.child("git_ignored/test_a.py").touch().unwrap();
+        dir.child("custom_ignored/test_b.py").touch().unwrap();
+        dir.child("test_visible.py").touch().unwrap();
+
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
+        let config = Config {
+            norecursedirs: vec![
+                ".git".to_string(),
+                "__pycache__".to_string(),
+                "custom_ignored".to_string(),
+            ],
+            ..make_config(utf8_dir)
+        };
+        let (files, _) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
+    }
+
+    #[test]
+    fn test_collect_gitignore_filters_conftest_too() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        dir.child(".gitignore").write_str("ignored_dir/\n").unwrap();
+        dir.child("ignored_dir/conftest.py").touch().unwrap();
+        dir.child("ignored_dir/test_hidden.py").touch().unwrap();
+        dir.child("test_visible.py").touch().unwrap();
+
+        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
+        let (files, conftests) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(conftests.is_empty());
     }
 
     #[test]

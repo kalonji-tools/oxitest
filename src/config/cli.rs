@@ -449,6 +449,10 @@ pub enum Command {
 #[derive(Parser, Debug)]
 #[command(name = "oxitest", about = "A fast Python test runner")]
 pub struct OxitestCli {
+    /// Disable .gitignore-aware file filtering
+    #[arg(long)]
+    pub no_use_gitignore: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -456,31 +460,52 @@ pub struct OxitestCli {
 impl OxitestCli {
     /// Parse arguments, falling back to implicit `run` when no subcommand is given.
     ///
+    /// Returns `(Command, use_gitignore)` where `use_gitignore` is `true` unless
+    /// `--no-use-gitignore` was passed.
+    ///
     /// Tries parsing with subcommands first. On failure (e.g. `oxitest tests/ -k foo`
     /// without an explicit `run`), falls back to parsing all args as `RunArgs`.
-    pub fn resolve(args: &[String]) -> Result<Command, clap::Error> {
+    pub fn resolve(args: &[String]) -> Result<(Command, bool), clap::Error> {
         // First, try normal parsing with subcommands.
         match OxitestCli::try_parse_from(args) {
             Ok(cli) => {
+                let use_gitignore = !cli.no_use_gitignore;
                 if let Some(cmd) = cli.command {
-                    return Ok(cmd);
+                    return Ok((cmd, use_gitignore));
                 }
                 // No subcommand given (bare `oxitest`) — treat as `run` with no args.
                 let run_args = vec![args[0].clone(), "run".to_string()];
                 // (no extra args to forward)
                 let cli = OxitestCli::try_parse_from(&run_args)?;
-                Ok(cli.command.unwrap())
+                Ok((cli.command.unwrap(), use_gitignore))
             }
             Err(e) => {
-                // If the initial parse failed, try inserting "run" after the binary name
-                // to handle implicit default subcommand (e.g. `oxitest tests/ -k foo`).
+                // If the initial parse failed, try inserting "run" to handle implicit default
+                // subcommand (e.g. `oxitest tests/ -k foo` or
+                // `oxitest --no-use-gitignore tests/`).
+                //
+                // Top-level (global) flags like `--no-use-gitignore` can appear anywhere in
+                // the args. We extract them, place them before the inserted "run" subcommand,
+                // and pass the rest as subcommand args.
                 if args.len() > 1 {
+                    let global_flags: &[&str] = &["--no-use-gitignore"];
                     let mut run_args = Vec::with_capacity(args.len() + 1);
                     run_args.push(args[0].clone());
+                    // Extract global flags from anywhere in args[1..]
+                    for arg in &args[1..] {
+                        if global_flags.contains(&arg.as_str()) {
+                            run_args.push(arg.clone());
+                        }
+                    }
                     run_args.push("run".to_string());
-                    run_args.extend_from_slice(&args[1..]);
+                    // Then the rest (non-global args) in original order
+                    for arg in &args[1..] {
+                        if !global_flags.contains(&arg.as_str()) {
+                            run_args.push(arg.clone());
+                        }
+                    }
                     match OxitestCli::try_parse_from(&run_args) {
-                        Ok(cli) => Ok(cli.command.unwrap()),
+                        Ok(cli) => Ok((cli.command.unwrap(), !cli.no_use_gitignore)),
                         Err(_) => Err(e), // Return the original error for better UX
                     }
                 } else {
@@ -552,19 +577,19 @@ mod tests {
 
     #[test]
     fn bare_oxitest_defaults_to_run() {
-        let cmd = OxitestCli::resolve(&s(["oxitest"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest"])).unwrap();
         assert!(matches!(cmd, Command::Run(_)));
     }
 
     #[test]
     fn explicit_run_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
         assert!(matches!(cmd, Command::Run(_)));
     }
 
     #[test]
     fn implicit_run_with_path() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "tests/"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "tests/"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
@@ -573,7 +598,7 @@ mod tests {
 
     #[test]
     fn implicit_run_with_flags() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "-k", "foo"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "-k", "foo"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
@@ -582,7 +607,7 @@ mod tests {
 
     #[test]
     fn implicit_run_with_path_and_flags() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "tests/", "-k", "foo"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "tests/", "-k", "foo"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
@@ -592,13 +617,13 @@ mod tests {
 
     #[test]
     fn debug_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
         assert!(matches!(cmd, Command::Debug(_)));
     }
 
     #[test]
     fn debug_with_always() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "debug", "--always"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "debug", "--always"])).unwrap();
         let Command::Debug(args) = cmd else {
             panic!("expected Command::Debug");
         };
@@ -607,7 +632,7 @@ mod tests {
 
     #[test]
     fn debug_default_is_post_mortem() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "debug"])).unwrap();
         let Command::Debug(args) = cmd else {
             panic!("expected Command::Debug");
         };
@@ -616,7 +641,7 @@ mod tests {
 
     #[test]
     fn env_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "env"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "env"])).unwrap();
         assert!(matches!(cmd, Command::Env));
     }
 
@@ -624,13 +649,13 @@ mod tests {
 
     #[test]
     fn query_tests_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "tests"])).unwrap();
         assert!(matches!(cmd, Command::Query(_)));
     }
 
     #[test]
     fn query_fixtures_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "fixtures"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "fixtures"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
@@ -639,7 +664,7 @@ mod tests {
 
     #[test]
     fn query_with_expression() {
-        let cmd =
+        let (cmd, _) =
             OxitestCli::resolve(&s(["oxitest", "query", "tests", "-E", "name(~foo)"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
@@ -649,7 +674,7 @@ mod tests {
 
     #[test]
     fn query_with_fzf() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--fzf"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--fzf"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
@@ -658,8 +683,9 @@ mod tests {
 
     #[test]
     fn query_with_inspect() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--inspect", "test_foo"]))
-            .unwrap();
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "query", "tests", "--inspect", "test_foo"]))
+                .unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
@@ -668,7 +694,7 @@ mod tests {
 
     #[test]
     fn query_with_format_jsonl() {
-        let cmd =
+        let (cmd, _) =
             OxitestCli::resolve(&s(["oxitest", "query", "tests", "--format", "jsonl"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
@@ -678,7 +704,7 @@ mod tests {
 
     #[test]
     fn query_with_count() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--count"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--count"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
@@ -687,7 +713,7 @@ mod tests {
 
     #[test]
     fn query_with_tree() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "query", "fixtures", "--tree"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "fixtures", "--tree"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
@@ -698,28 +724,28 @@ mod tests {
 
     #[test]
     fn lf_resolves_to_failed_only() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--lf"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--lf"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
 
     #[test]
     fn ff_resolves_to_failed_first() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--ff"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--ff"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), Some(FailedMode::First));
     }
 
     #[test]
     fn failed_only_canonical() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "only"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "only"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
 
     #[test]
     fn failed_first_canonical() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "first"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--failed", "first"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), Some(FailedMode::First));
     }
@@ -738,14 +764,14 @@ mod tests {
 
     #[test]
     fn no_failed_flags_resolves_none() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), None);
     }
 
     #[test]
     fn lf_in_debug_subcommand() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "debug", "--lf"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "debug", "--lf"])).unwrap();
         let Command::Debug(args) = cmd else { panic!() };
         assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
@@ -754,22 +780,23 @@ mod tests {
 
     #[test]
     fn exitfirst_conflicts_with_maxfail() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-x", "--maxfail", "5"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "-x", "--maxfail", "5"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_err());
     }
 
     #[test]
     fn schedule_conflicts_with_serial() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--serial", "--schedule", "random"]))
-            .unwrap();
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "run", "--serial", "--schedule", "random"]))
+                .unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_err());
     }
 
     #[test]
     fn show_locals_with_tb_no_conflicts() {
-        let cmd =
+        let (cmd, _) =
             OxitestCli::resolve(&s(["oxitest", "run", "--show-locals", "--tb", "no"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_err());
@@ -777,15 +804,16 @@ mod tests {
 
     #[test]
     fn show_internals_with_tb_line_conflicts() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--show-internals", "--tb", "line"]))
-            .unwrap();
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "run", "--show-internals", "--tb", "line"]))
+                .unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_err());
     }
 
     #[test]
     fn show_locals_alone_is_valid() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--show-locals"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--show-locals"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         // default tb is None (→ detail), so no conflict
         assert!(args.validate().is_ok());
@@ -793,14 +821,14 @@ mod tests {
 
     #[test]
     fn no_flags_is_valid() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_ok());
     }
 
     #[test]
     fn run_with_collection_profile() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--collection-profile"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--collection-profile"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
@@ -810,7 +838,7 @@ mod tests {
     #[test]
     fn v_and_verbose_conflict() {
         // clap accepts -v and --verbose=full at parse time; validate() catches the mix.
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-v", "--verbose=full"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "-v", "--verbose=full"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_err());
     }
@@ -819,36 +847,69 @@ mod tests {
 
     #[test]
     fn short_v_resolves_detailed() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-v"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "-v"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
     }
 
     #[test]
     fn short_vv_resolves_full() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "-vv"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "-vv"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.verbosity.resolve(), Some(Verbosity::Full));
     }
 
     #[test]
     fn long_verbose_bare_resolves_detailed() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--verbose"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--verbose"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.verbosity.resolve(), Some(Verbosity::Detailed));
     }
 
     #[test]
     fn long_verbose_full() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--verbose=full"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--verbose=full"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.verbosity.resolve(), Some(Verbosity::Full));
     }
 
     #[test]
     fn no_verbose_resolves_none() {
-        let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert_eq!(args.verbosity.resolve(), None);
+    }
+
+    // ── --no-use-gitignore tests ──────────────────────────────────────────────
+
+    #[test]
+    fn no_use_gitignore_flag() {
+        let (cmd, use_gi) =
+            OxitestCli::resolve(&s(["oxitest", "--no-use-gitignore", "run"])).unwrap();
+        assert!(matches!(cmd, Command::Run(_)));
+        assert!(!use_gi);
+    }
+
+    #[test]
+    fn use_gitignore_default_is_true() {
+        let (_, use_gi) = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
+        assert!(use_gi);
+    }
+
+    #[test]
+    fn no_use_gitignore_with_implicit_run() {
+        let (cmd, use_gi) =
+            OxitestCli::resolve(&s(["oxitest", "--no-use-gitignore", "tests/"])).unwrap();
+        assert!(matches!(cmd, Command::Run(_)));
+        assert!(!use_gi);
+    }
+
+    #[test]
+    fn no_use_gitignore_after_path_implicit_run() {
+        // Simulates how run_oxitest helper calls it: path first, flag after
+        let (cmd, use_gi) =
+            OxitestCli::resolve(&s(["oxitest", "tests/", "--no-use-gitignore"])).unwrap();
+        assert!(matches!(cmd, Command::Run(_)));
+        assert!(!use_gi);
     }
 }
