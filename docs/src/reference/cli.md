@@ -3,6 +3,8 @@
 !!! abstract "Reference"
     Complete reference for all oxitest command-line options.
 
+Most flags have a `pyproject.toml` equivalent. See [Configuration](configuration.md) for the full key table.
+
 ## Invocation
 
 ```text
@@ -18,6 +20,7 @@ subcommand is equivalent to `oxitest run`.
 | `debug` | Run tests under an interactive debugger |
 | `list` | List collected tests without running them |
 | `fixtures` | List or visualise registered fixtures |
+| `plugins`  | List registered plugins and their protocols |
 | `env` | Print environment information and exit |
 
 `PATHS` is one or more files or directories to collect tests from. Defaults to
@@ -39,7 +42,7 @@ oxitest [OPTIONS] [PATHS...]        # equivalent
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `-k` | — | `EXPR` | — | Filter tests by keyword expression. Only tests whose names contain the expression are run. |
+| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. Only tests whose node ID contains the substring are run. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression (`and`/`or`/`not` supported). |
 | `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
 | `--lf` | — | flag | — | Alias for `--failed only`. Run only previously-failed tests. |
@@ -73,6 +76,7 @@ oxitest [OPTIONS] [PATHS...]        # equivalent
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. `auto` detects TTY. `always` forces color (useful in pipes). `never` disables color. |
 | `--durations` | — | integer | — | Show the N slowest tests at end of run. |
 | `--keep-tmp` | — | `failed\|always` | — | Keep temporary directories created by `TempDir`. `failed` keeps them only for failed tests; `always` keeps them unconditionally. |
+| `--collection-profile` | — | flag | `false` | Print per-file prescan and collection timing breakdown to stderr. Useful for diagnosing slow collection. |
 
 ### Reports
 
@@ -95,7 +99,7 @@ oxitest debug [OPTIONS] [PATHS...]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--always` | — | flag | `false` | Pause the debugger before every test (trace mode). Without `--always`, the debugger only activates on test failure (post-mortem mode). |
-| `-k` | — | `EXPR` | — | Filter tests by keyword expression. |
+| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression. |
 | `--failed` | — | `only\|first` | — | Failed-test mode. |
 | `--lf` | — | flag | — | Alias for `--failed only`. |
@@ -122,9 +126,10 @@ oxitest list [OPTIONS] [PATHS...]
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `-k` | — | `EXPR` | — | Filter tests by keyword expression. |
+| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. |
 | `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression. |
 | `--affected` | — | `REF` | — | Filter to tests affected by git changes. |
+| `--count` | — | flag | `false` | Show only the total test count. Fast: uses Rust-side prescan without invoking Python. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` shows marks and fixtures per test. `-vv` groups parametrize cases with expanded values. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
@@ -199,6 +204,22 @@ oxitest env
 
 No flags. Version information is available here rather than via a `--version`
 flag.
+
+---
+
+## `oxitest plugins`
+
+List all registered plugins and the protocols they implement.
+
+```console
+$ oxitest plugins
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-v, --verbose` | flag | `false` | Show detailed protocol information |
+| `-q, --quiet` | flag | `false` | Suppress header output |
+| `--color` | `auto\|always\|never` | `auto` | Color output |
 
 ---
 
