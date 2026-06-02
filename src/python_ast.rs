@@ -125,12 +125,98 @@ pub(crate) fn has_test_functions(path: &Utf8Path) -> Option<bool> {
     Some(false)
 }
 
+/// Count the number of test functions in a parsed module.
+#[cfg(test)]
+pub(crate) fn count_tests(stmts: &[ast::Stmt]) -> usize {
+    let mut count = 0;
+    for stmt in stmts {
+        if is_test_function(stmt) {
+            count += 1;
+        } else if let ast::Stmt::ClassDef(cls) = stmt {
+            if is_test_class(&cls.name) {
+                count += cls.body.iter().filter(|s| is_test_function(s)).count();
+            }
+        }
+    }
+    count
+}
+
+/// Count the parametrize case multiplier for a single function statement.
+///
+/// Inspects decorator lists for `oxi.parametrize(...)`, `oxi.mark.parametrize(...)`,
+/// or `oxitest.mark.parametrize(...)` calls. When the second argument is a list
+/// or tuple literal, returns the product of all detected case counts. Falls back
+/// to 1 per undetectable decorator (dynamic expressions, name references).
+///
+/// Returns 1 if the function has no parametrize decorators.
+pub(crate) fn count_parametrize_cases(stmt: &ast::Stmt) -> usize {
+    let decorators = match stmt {
+        ast::Stmt::FunctionDef(f) => &f.decorator_list,
+        ast::Stmt::AsyncFunctionDef(f) => &f.decorator_list,
+        _ => return 1,
+    };
+
+    let mut product = 1;
+    for dec in decorators {
+        if let ast::Expr::Call(call) = &dec {
+            if is_parametrize_call(&call.func) {
+                let cases = extract_case_count(&call.args);
+                product *= cases;
+            }
+        }
+    }
+    product
+}
+
+/// Check if a call target is one of the recognized parametrize forms.
+fn is_parametrize_call(func: &ast::Expr) -> bool {
+    if let ast::Expr::Attribute(attr) = func {
+        if attr.attr.as_str() == "parametrize" {
+            if let ast::Expr::Name(n) = &*attr.value {
+                let s = n.id.as_str();
+                if s == "oxi" || s == "oxitest" {
+                    return true;
+                }
+            }
+            if let ast::Expr::Attribute(inner) = &*attr.value {
+                if inner.attr.as_str() == "mark" {
+                    if let ast::Expr::Name(n) = &*inner.value {
+                        let s = n.id.as_str();
+                        if s == "oxi" || s == "oxitest" {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Extract the case count from parametrize arguments.
+fn extract_case_count(args: &[ast::Expr]) -> usize {
+    if args.len() < 2 {
+        return 1;
+    }
+    match &args[1] {
+        ast::Expr::List(list) => list.elts.len().max(1),
+        ast::Expr::Tuple(tuple) => tuple.elts.len().max(1),
+        _ => 1,
+    }
+}
+
 /// Result of pre-scanning a Python file for test functions.
+#[derive(Debug)]
 pub(crate) enum PrescanResult {
     /// File has test functions; the parsed AST is available for reuse.
     HasTests {
         source: String,
         stmts: Vec<ast::Stmt>,
+        /// Raw test function count (without parametrize expansion). Only read in tests.
+        #[allow(dead_code)]
+        test_count: usize,
+        /// Test count adjusted for static parametrize multipliers.
+        adjusted_test_count: usize,
     },
     /// File has no test functions.
     NoTests,
@@ -150,19 +236,26 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
         None => return PrescanResult::Unavailable,
     };
 
-    let has_tests = parsed.1.iter().any(|stmt| {
+    let mut test_count = 0;
+    let mut adjusted_test_count = 0;
+
+    for stmt in &parsed.1 {
         if is_test_function(stmt) {
-            return true;
-        }
-        if let ast::Stmt::ClassDef(cls) = stmt {
-            if is_test_class(&cls.name) && cls.body.iter().any(is_test_function) {
-                return true;
+            test_count += 1;
+            adjusted_test_count += count_parametrize_cases(stmt);
+        } else if let ast::Stmt::ClassDef(cls) = stmt {
+            if is_test_class(&cls.name) {
+                for method in &cls.body {
+                    if is_test_function(method) {
+                        test_count += 1;
+                        adjusted_test_count += count_parametrize_cases(method);
+                    }
+                }
             }
         }
-        false
-    });
+    }
 
-    if !has_tests {
+    if test_count == 0 {
         return PrescanResult::NoTests;
     }
 
@@ -170,11 +263,15 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
         PrescanResult::HasTests {
             source: parsed.0,
             stmts: parsed.1,
+            test_count,
+            adjusted_test_count,
         }
     } else {
         PrescanResult::HasTests {
             source: String::new(),
             stmts: Vec::new(),
+            test_count,
+            adjusted_test_count,
         }
     }
 }
@@ -403,5 +500,189 @@ pub(crate) mod tests {
     fn prescan_file_with_only_imports() {
         let f = write_temp_py("import os\nfrom pathlib import Path\n");
         assert_eq!(has_test_functions(&temp_path(&f)), Some(false));
+    }
+
+    // ── count_tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn count_tests_single_function() {
+        let f = write_temp_py("def test_foo(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 1);
+    }
+
+    #[test]
+    fn count_tests_multiple_functions() {
+        let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\ndef helper(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 2);
+    }
+
+    #[test]
+    fn count_tests_async_function() {
+        let f = write_temp_py("async def test_async(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 1);
+    }
+
+    #[test]
+    fn count_tests_class_methods() {
+        let f = write_temp_py(
+            "class TestFoo:\n    def test_a(self): pass\n    def test_b(self): pass\n    def helper(self): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 2);
+    }
+
+    #[test]
+    fn count_tests_mixed_module_and_class() {
+        let f = write_temp_py(
+            "def test_top(): pass\nclass TestGroup:\n    def test_inner(self): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 2);
+    }
+
+    #[test]
+    fn count_tests_non_test_class_ignored() {
+        let f = write_temp_py("class Helper:\n    def test_bar(self): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 0);
+    }
+
+    #[test]
+    fn count_tests_empty_file() {
+        let f = write_temp_py("");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 0);
+    }
+
+    #[test]
+    fn count_tests_no_tests() {
+        let f = write_temp_py("def helper(): pass\ndef setup(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_tests(&stmts), 0);
+    }
+
+    // ── prescan_with_ast test_count ─────────────────────────────────
+
+    #[test]
+    fn prescan_with_ast_populates_test_count() {
+        let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\ndef helper(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { test_count, .. } => assert_eq!(test_count, 2),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_with_ast_test_count_includes_class_methods() {
+        let f = write_temp_py(
+            "def test_top(): pass\nclass TestGroup:\n    def test_a(self): pass\n    def test_b(self): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { test_count, .. } => assert_eq!(test_count, 3),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    // ── count_parametrize_cases ─────────────────────────────────────
+
+    #[test]
+    fn parametrize_list_literal() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[1]), 3);
+    }
+
+    #[test]
+    fn parametrize_tuple_literal() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", (1, 2))\ndef test_it(x): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[1]), 2);
+    }
+
+    #[test]
+    fn parametrize_dynamic_fallback() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", MY_CASES)\ndef test_it(x): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[1]), 1);
+    }
+
+    #[test]
+    fn parametrize_stacked_product() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(\"a\", [1, 2])\n@oxi.parametrize(\"b\", [10, 20, 30])\ndef test_it(a, b): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        // stmts[0] = import, stmts[1] = decorated function
+        assert_eq!(count_parametrize_cases(&stmts[1]), 6);
+    }
+
+    #[test]
+    fn parametrize_no_decorator() {
+        let f = write_temp_py("def test_plain(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[0]), 1);
+    }
+
+    #[test]
+    fn parametrize_non_parametrize_decorator_ignored() {
+        let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[1]), 1);
+    }
+
+    #[test]
+    fn parametrize_mark_parametrize_form() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(count_parametrize_cases(&stmts[1]), 3);
+    }
+
+    #[test]
+    fn prescan_with_ast_adjusted_count_with_parametrize() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n\ndef test_plain(): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                test_count,
+                adjusted_test_count,
+                ..
+            } => {
+                assert_eq!(test_count, 2);
+                assert_eq!(adjusted_test_count, 4); // 3 param cases + 1 plain
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_with_ast_adjusted_count_no_parametrize() {
+        let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                test_count,
+                adjusted_test_count,
+                ..
+            } => {
+                assert_eq!(test_count, 2);
+                assert_eq!(adjusted_test_count, 2);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
     }
 }
