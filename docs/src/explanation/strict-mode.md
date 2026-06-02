@@ -15,7 +15,7 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The four checks
+## The six checks
 
 ### Bare assert
 
@@ -76,6 +76,73 @@ without documentation. The description appears in `--collect-only` output and se
 only canonical explanation of what the marker means.
 
 Detection: config parse time, not per-test.
+
+### Missing return annotation
+
+=== "Triggers"
+
+    ```python
+    fx = oxitest.Fixtures()
+
+    @fx.fixture
+    def db_conn():
+        return Connection()
+    ```
+
+=== "Clean"
+
+    ```python
+    fx = oxitest.Fixtures()
+
+    @fx.fixture
+    def db_conn() -> Connection:
+        return Connection()
+    ```
+
+Fixtures without a return type annotation prevent downstream type checking from
+propagating fixture types into test parameters. Strict mode flags these so the
+type checker can do its job.
+
+### Single-case parametrize
+
+=== "Triggers"
+
+    ```python
+    @oxi.parametrize("x", [42])
+    def test_answer(x: int):
+        assert x == 42
+    ```
+
+=== "Clean"
+
+    ```python
+    def test_answer():
+        assert 42 == 42
+    ```
+
+A `@parametrize` decorator with a single case adds indirection without benefit.
+Strict mode flags these — either add more cases or inline the value.
+
+### Unused fixture
+
+=== "Triggers"
+
+    ```python
+    # conftest.py
+    fx = oxitest.Fixtures()
+
+    @fx.fixture
+    def unused_helper() -> str:
+        return "never injected"
+    ```
+
+=== "Clean"
+
+    Remove the fixture definition, or use it in at least one test.
+
+Conftest fixtures that are never injected into any collected test are flagged as
+unused. Autouse fixtures, built-in fixtures, and transitive dependencies of used
+fixtures are excluded from this check.
 
 ## Two modes
 

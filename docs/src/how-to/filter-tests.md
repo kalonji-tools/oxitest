@@ -1,29 +1,35 @@
 # Filter Tests
 
 !!! abstract "How-to"
-    Run a targeted subset of your test suite using keyword expressions or file paths.
+    Run a targeted subset of your test suite using keyword substring matching,
+    marker expressions, or file paths.
 
-## Filter by keyword
+## Filter by keyword substring
 
-Run only tests whose name contains a substring:
+Run only tests whose node ID contains a substring:
 
 ```console
 $ oxitest -k add
 ```
 
-This matches any test whose name or node ID contains `add`, e.g. `test_add`, `test_add_negative`.
+This matches any test whose full node ID (`path/to/test_file.py::test_function_name`)
+contains `add`, e.g. `test_add`, `test_add_negative`.
 
-## Combine keywords with logical operators
+The match is a plain substring check — there are no boolean operators.
+To run tests matching multiple keywords, run oxitest once per keyword or
+use marker-based filtering instead.
 
-Use `and`, `or`, and `not` to build compound expressions:
+## Filter by marker expression
+
+Use `-m` with `and`, `or`, and `not` to build compound expressions over markers:
 
 ```console
-$ oxitest -k "add or subtract"
-$ oxitest -k "math and not slow"
-$ oxitest -k "not slow"
+$ oxitest -m "slow or integration"
+$ oxitest -m "not slow"
+$ oxitest -m "database and not slow"
 ```
 
-Expressions are matched against the full node ID (`path/to/test_file.py::test_function_name`).
+Markers must be registered in `pyproject.toml` (see [Use markers](use-markers.md)).
 
 ## Run a specific file
 

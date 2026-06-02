@@ -60,7 +60,7 @@ Retries are skipped entirely if the run was interrupted (e.g. by `--maxfail` or
 ## Flaky test detection
 
 A test is flaky when it fails in the initial phase but passes on at least one
-retry. oxitest synthesises a `FLAKY` outcome for it — this outcome is distinct
+retry. oxitest synthesizes a `FLAKY` outcome for it — this outcome is distinct
 from `passed` and is never produced by the test worker directly.
 
 In verbose mode the label `FLAKY` appears next to the test name and the retry
