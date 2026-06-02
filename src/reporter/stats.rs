@@ -1,5 +1,21 @@
 use crate::types::{DurationMs, TestItem, TestOutcome};
 
+/// Per-fixture cache hit/miss entry.
+#[derive(Clone, Debug)]
+pub(crate) struct FixtureCacheEntry {
+    pub(crate) name: String,
+    pub(crate) hits: usize,
+    pub(crate) misses: usize,
+}
+
+/// Aggregate fixture cache statistics returned by the bridge.
+#[derive(Clone, Debug)]
+pub(crate) struct FixtureCacheStats {
+    pub(crate) hits: usize,
+    pub(crate) misses: usize,
+    pub(crate) breakdown: Vec<FixtureCacheEntry>,
+}
+
 #[derive(Clone)]
 pub(crate) struct RunStats {
     pub(crate) passed: usize,
@@ -16,6 +32,9 @@ pub(crate) struct RunStats {
     pub(crate) tip_lines: Vec<(String, usize)>,
     pub(crate) warning_msgs: Vec<(String, String)>,
     pub(crate) timings: Vec<(String, f64)>,
+    pub(crate) fixture_cache_hits: usize,
+    pub(crate) fixture_cache_misses: usize,
+    pub(crate) fixture_cache_breakdown: Vec<FixtureCacheEntry>,
 }
 
 impl RunStats {
@@ -35,6 +54,9 @@ impl RunStats {
             tip_lines: Vec::new(),
             warning_msgs: Vec::new(),
             timings: Vec::new(),
+            fixture_cache_hits: 0,
+            fixture_cache_misses: 0,
+            fixture_cache_breakdown: Vec::new(),
         }
     }
 
@@ -135,6 +157,21 @@ impl RunStats {
         sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         sorted.truncate(n);
         sorted
+    }
+
+    /// Format the fixture cache stats summary line.
+    ///
+    /// Returns `None` if no shared fixtures were used.
+    pub(crate) fn fixture_cache_summary(&self) -> Option<String> {
+        let total = self.fixture_cache_hits + self.fixture_cache_misses;
+        if total == 0 {
+            return None;
+        }
+        let pct = 100 * self.fixture_cache_hits / total;
+        Some(format!(
+            "shared fixture cache: {}/{} hits ({}%)",
+            self.fixture_cache_hits, total, pct
+        ))
     }
 
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
