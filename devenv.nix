@@ -32,6 +32,9 @@ in
 
     # Release tooling
     git-cliff
+
+    # Interactive query browsing
+    fzf
   ];
 
   env = {
