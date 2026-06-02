@@ -195,6 +195,43 @@ def test_two_phases(warn: WarnCapture) -> None:
 | Best for | Asserting a specific call site emits a warning | Inspecting all warnings in a test, including teardown |
 | Captures teardown warnings | No | Yes |
 
+## TestContext — test metadata and finalizers
+
+Inject `TestContext` to access metadata about the running test and register
+teardown callbacks:
+
+```python
+from oxitest import TestContext
+
+def test_metadata(ctx: TestContext):
+    print(ctx.name)        # "test_metadata"
+    print(ctx.module_path) # "tests/test_example.py"
+    print(ctx.node_id)     # "tests/test_example.py::test_metadata"
+```
+
+### Register a finalizer
+
+Use `ctx.addfinalizer()` to register a callback that runs after the test,
+regardless of pass or fail:
+
+```python
+def test_with_cleanup(ctx: TestContext):
+    resource = acquire_expensive_resource()
+    ctx.addfinalizer(resource.release)
+    assert resource.is_ready()
+```
+
+### Access parametrize info
+
+For parametrized tests, `ctx.param_id` and `ctx.param` provide the current
+case identifier and value:
+
+```python
+@oxi.parametrize("n", [1, 2, 3])
+def test_positive(n: int, ctx: TestContext):
+    print(ctx.param_id)  # "1", "2", or "3"
+```
+
 ## Access built-in fixtures via `fx.oxi`
 
 If your test already uses the [namespace proxy](use-fixtures.md#access-built-in-fixtures-via-fxoxi)

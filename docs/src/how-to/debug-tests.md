@@ -116,3 +116,25 @@ $ oxitest debug tests/test_specific.py -k test_name
 **"I want to see all variables at the failure point"**
 
 In the debugger, type `locals()` or use `pp locals()` for a formatted view.
+
+## Show local variables in tracebacks
+
+Use `--show-locals` to include local variable values in each traceback frame:
+
+```console
+$ oxitest --show-locals tests/test_math.py
+```
+
+For internal frames (oxitest's own code), add `--show-internals`:
+
+```console
+$ oxitest --show-internals --tb=detail tests/test_math.py
+```
+
+Both flags require `--tb=detail` (the default).
+
+## See also
+
+- [Troubleshooting](troubleshooting.md) — common problems and quick fixes
+- [CLI reference](../reference/cli.md) — `debug` subcommand and all flags
+- [Assertion diagnostics](../explanation/assertion-diagnostics.md) — how the diagnostic box works

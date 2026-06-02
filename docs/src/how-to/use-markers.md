@@ -122,6 +122,48 @@ oxitest kills the test and marks it failed if it exceeds the timeout. `seconds` 
 a positive integer. A global timeout can also be set in `pyproject.toml` via the
 `timeout` key.
 
+## Apply marks to every test in a file
+
+Set the `oxi_mark` module-level variable to apply one or more marks to every
+test function in the file:
+
+```python
+import oxitest as oxi
+
+oxi_mark = oxi.mark.timeout(5)
+
+def test_one():
+    ...
+
+def test_two():
+    ...
+```
+
+Both tests inherit the 5-second timeout. To apply multiple marks, use a list:
+
+```python
+oxi_mark = [oxi.mark.timeout(5), oxi.mark.slow]
+```
+
+## Force a test to run on the main process
+
+Use `@oxi.mark.inprocess` to exclude a test from worker subprocesses during
+parallel runs. The test runs on the coordinator process instead:
+
+```python
+import oxitest as oxi
+
+@oxi.mark.inprocess
+def test_needs_debugger():
+    breakpoint()
+    assert True
+```
+
+This is useful for tests that require `breakpoint()`, global mutable state, or
+resources that cannot be serialized to a subprocess.
+
 ## See also
 
+- [Filter tests](filter-tests.md) — filter by keyword with `-k` or by marker with `-m`
+- [Run in parallel](run-in-parallel.md) — how `@oxi.mark.inprocess` interacts with parallel execution
 - [Strict mode](../explanation/strict-mode.md) — how strict mode enforces marker descriptions and other conventions
