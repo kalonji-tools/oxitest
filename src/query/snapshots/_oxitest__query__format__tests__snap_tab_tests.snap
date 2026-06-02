@@ -1,0 +1,6 @@
+---
+source: src/query/format.rs
+expression: "format_tab(&entries, &[\"name\", \"mark\", \"async\"])"
+---
+test_add	slow	false
+test_sub		false
