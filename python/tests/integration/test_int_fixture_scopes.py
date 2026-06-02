@@ -1,0 +1,129 @@
+"""Integration tests: fixture scope interactions."""
+
+from conftest import helpers
+from oxitest import TempDir
+
+
+def test_shared_fixture_with_parametrize(tmp: TempDir):
+    """shared=True fixture is instantiated once across all parametrize cases."""
+    (tmp / "conftest.py").write_text(
+        "import oxitest as oxi\n"
+        "from oxitest import Fixture\n"
+        "fx = oxi.Fixtures()\n"
+        "\n"
+        "call_count = 0\n"
+        "\n"
+        "@fx.fixture(shared=True)\n"
+        "def db() -> str:\n"
+        "    global call_count\n"
+        "    call_count += 1\n"
+        "    return f'conn-{call_count}'\n"
+    )
+    (tmp / "test_shared_param.py").write_text(
+        "from dataclasses import dataclass\n"
+        "from oxitest import Fixture\n"
+        "import oxitest as oxi\n"
+        "\n"
+        "@dataclass(frozen=True)\n"
+        "class Case:\n"
+        "    val: int\n"
+        "\n"
+        "@oxi.parametrize(a=Case(1), b=Case(2), c=Case(3))\n"
+        "def test_uses_same_db(db: Fixture[str], case: Case):\n"
+        "    # shared fixture: always conn-1 regardless of parametrize case\n"
+        "    assert db == 'conn-1', f'expected conn-1, got {db}'\n"
+    )
+
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=3)
+
+
+def test_shared_and_autouse_both_apply(tmp: TempDir):
+    """shared=True fixture combined with autouse fixture — both are injected."""
+    (tmp / "conftest.py").write_text(
+        "import oxitest as oxi\n"
+        "from oxitest import Fixture\n"
+        "fx = oxi.Fixtures()\n"
+        "\n"
+        "log = []\n"
+        "\n"
+        "@fx.fixture(shared=True)\n"
+        "def db() -> str:\n"
+        "    return 'shared-conn'\n"
+        "\n"
+        "@fx.fixture(autouse=True)\n"
+        "def setup():\n"
+        "    log.append('setup')\n"
+    )
+    (tmp / "test_both.py").write_text(
+        "from oxitest import Fixture\n"
+        "\n"
+        "def test_a(db: Fixture[str]):\n"
+        "    assert db == 'shared-conn'\n"
+        "\n"
+        "def test_b(db: Fixture[str]):\n"
+        "    assert db == 'shared-conn'\n"
+    )
+
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=2)
+
+
+def test_yield_fixture_teardown_lifo(tmp: TempDir):
+    """Yield fixtures tear down in LIFO order (reverse of setup)."""
+    (tmp / "conftest.py").write_text(
+        "import oxitest as oxi\n"
+        "from oxitest import Fixture, Yields\n"
+        "fx = oxi.Fixtures()\n"
+        "\n"
+        "order = []\n"
+        "\n"
+        "@fx.fixture\n"
+        "def first() -> Yields[str]:\n"
+        "    order.append('setup-first')\n"
+        "    yield 'first'\n"
+        "    order.append('teardown-first')\n"
+        "\n"
+        "@fx.fixture\n"
+        "def second(first: Fixture[str]) -> Yields[str]:\n"
+        "    order.append('setup-second')\n"
+        "    yield f'{first}+second'\n"
+        "    order.append('teardown-second')\n"
+    )
+    (tmp / "test_ordering.py").write_text(
+        "from oxitest import Fixture\n"
+        "import conftest\n"
+        "\n"
+        "def test_uses_both(second: Fixture[str]):\n"
+        "    assert second == 'first+second'\n"
+        "\n"
+        "def test_teardown_was_lifo():\n"
+        "    # After test_uses_both tears down, order should show LIFO\n"
+        "    assert conftest.order == [\n"
+        "        'setup-first', 'setup-second',\n"
+        "        'teardown-second', 'teardown-first',\n"
+        "    ], f'unexpected order: {conftest.order}'\n"
+    )
+
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=2)
+
+
+def test_skip_takes_precedence_over_xfail(tmp: TempDir):
+    """When both @mark.skip and @mark.xfail are applied, skip takes precedence."""
+    (tmp / "test_marks.py").write_text(
+        "import oxitest as oxi\n"
+        "\n"
+        "@oxi.mark.skip(reason='not ready')\n"
+        "@oxi.mark.xfail(reason='known bug')\n"
+        "def test_both_marks():\n"
+        "    assert False\n"
+        "\n"
+        "def test_plain_pass():\n"
+        "    assert True\n"
+    )
+
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "1 skipped")
+    helpers.integ.assert_contains(out, "1 passed")
