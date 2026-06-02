@@ -18,7 +18,7 @@ graph TD
     subgraph Rust["Rust Core (src/)"]
         LIB["lib.rs<br/>PyO3 entry point"]
         CONFIG["config/<br/>CLI + pyproject.toml"]
-        PIPELINE["pipeline/<br/>11-phase orchestrator"]
+        PIPELINE["pipeline/<br/>multi-phase orchestrator"]
 
         subgraph Discovery
             COLLECTOR["collector.rs<br/>filesystem walk"]
@@ -97,7 +97,7 @@ graph TD
 
 ## Pipeline flow
 
-The pipeline is a sequence of 11 phases, each implementing the `PipelinePhase` trait.
+The pipeline is a sequence of phases, each implementing the `PipelinePhase` trait.
 Phases can be conditionally skipped (`should_run`) and may exit early (`PhaseOutcome::Abort`).
 
 ```mermaid
@@ -172,6 +172,20 @@ flowchart TD
     style LI_Y fill:#f3e5f5
 ```
 
+### Per-command phase sequences
+
+`run()` dispatches different phase sequences depending on the subcommand:
+
+| Command | Phases |
+|---------|--------|
+| `run` | FileCollection → Affected → Session → Collection → FixtureValidation → Strict → Filter → Execution → Retry → Finalize |
+| `debug` | FileCollection → Affected → Session → Collection → FixtureValidation → Filter → Execution → Finalize |
+| `list` | FileCollection → Affected → Session → Collection → Filter → List |
+| `list --count` | FileCollection → Affected → List (no Python — uses Rust prescan) |
+| `fixtures` | FileCollection → Session → Fixtures |
+| `plugins` | FileCollection → Session → Plugins |
+| `env` | Prints environment info and exits (no phases) |
+
 **Parallel vs serial decision:**
 
 - *Cold cache* (no timing data): run serially if collected test count is below `min_parallel_tests` (default: 100).
@@ -189,14 +203,21 @@ all in Rust, without GIL contention at the coordination layer.
 | `lib` | `src/lib.rs` | Entry point — delegates to `pipeline::run()` |
 | `pipeline` | `src/pipeline/` | Pipeline orchestrator (`mod.rs`): discovery → execution → cache update. Trait seams (`traits.rs`): `Session`, `ModuleCollector`, `TestRunner`, `ParallelRunner`. `ExecutionContext` bundles config/cache/session/conftest for the run phase. |
 | `config` | `src/config/` | `mod.rs`: shared types + `Config` struct. `cli.rs`: CLI parsing (`clap`). `pyproject.rs`: TOML deserialization. |
-| `collector` | `src/collector.rs` | File system walk: finds test files and conftest files |
+| `assert_rewriter` | `src/assert_rewriter.rs` | PyO3 AST walk that rewrites `assert` nodes into diagnostic-rich raises. Called by `_loader.py`. |
+| `affected` | `src/affected.rs` | Git-aware test file filtering for `--affected`. Orchestrates `git_changed_files`, `classify_changed_files`, and `import_graph` to filter before collection. |
+| `bare_asserts` | `src/bare_asserts.rs` | Collects bare assert locations from Python AST for strict-mode violations. |
 | `bridge` | `src/bridge.rs` | PyO3 bridge: imports Python modules, collects `TestItem` list, runs individual tests. `_with_session_obj` variants take `Bound<'_, PyAny>`. |
+| `cache` | `src/cache.rs` | Timing cache: load/save `timings.json`, invalidation, duration estimation, `sort_groups` |
+| `collector` | `src/collector.rs` | File system walk: finds test files and conftest files |
+| `filter` | `src/filter.rs` | Keyword filtering, marker name validation, `--failed=only`/`--failed=first` logic, `group_by_module` |
+| `import_graph` | `src/import_graph.rs` | Rust-side import graph analysis for `--affected` filtering. Uses `python_ast::parse_file`. |
+| `marker` | `src/marker.rs` | Marker expression parser and evaluator (`and`/`or`/`not`) |
+| `parallel` | `src/parallel.rs` | Subprocess worker pool: spawns `python -m oxitest._bridge.worker`, communicates over stdio JSON |
+| `python_ast` | `src/python_ast.rs` | Shared Python AST utilities: `parse_file`, `build_line_index`, `prescan_with_ast`, test naming predicates. Single entry point for all `rustpython-parser` usage. |
+| `reporter` | `src/reporter/` | Terminal output (`tty.rs`, `ci.rs`), JSON output (`json.rs`), plugin reporters (`plugin.rs`), exit codes (`exit.rs` + `ExitVote` enum), progress bars, timing summaries. Formatting in `format/` (diagnostics, summaries). |
+| `retry` | `src/retry.rs` | Flaky test detection and retry logic. `RetryContext`, `run_retries()`, `identify_failed_items()`, `merge_flaky_timings()`. |
+| `scheduler` | `src/scheduler.rs` | Work-stealing scheduler; preserves insertion order; cache pre-sorts groups by duration |
+| `strict` | `src/strict.rs` | Strict-mode violation checking: bare asserts, dict parametrize, missing mark reason, unregistered markers |
 | `types` | `src/types.rs` | Core data types: `TestItem`, `TestOutcome`, `OutcomeKind`, `NodeId`, `CollectError`, `TestTiming`, `Frame`, `FailureAccumulator` |
 | `worker_result` | `src/worker_result.rs` | Worker subprocess JSON contract: `WorkerResult` (receive), `WorkerTask`/`WorkerTaskItem` (send) |
-| `filter` | `src/filter.rs` | Keyword filtering, marker name validation, `--failed=only`/`--failed=first` logic, `group_by_module` |
-| `marker` | `src/marker.rs` | Marker expression parser and evaluator (`and`/`or`/`not`) |
-| `cache` | `src/cache.rs` | Timing cache: load/save `timings.json`, invalidation, duration estimation, `sort_groups` |
-| `scheduler` | `src/scheduler.rs` | Work-stealing scheduler; preserves insertion order; cache pre-sorts groups by duration |
-| `parallel` | `src/parallel.rs` | Subprocess worker pool: spawns `python -m oxitest._bridge.worker`, communicates over stdio JSON |
-| `strict` | `src/strict.rs` | Strict-mode violation checking: bare asserts, dict parametrize, missing mark reason, unregistered markers |
-| `reporter` | `src/reporter/` | Terminal output (`tty.rs`, `ci.rs`), JSON output (`json.rs`), plugin reporters (`plugin.rs`), exit codes (`exit.rs` + `ExitVote` enum), progress bars, timing summaries. Formatting in `format/` (diagnostics, summaries). |
+| `worker_session` | `src/worker_session.rs` | Worker process lifecycle: `WorkerSession`, `setup_worker_process`, `spawn_worker`. Split from `parallel.rs`. |
