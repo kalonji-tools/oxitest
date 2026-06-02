@@ -74,6 +74,7 @@ pub(crate) struct PipelineContext {
     pub(crate) interrupted: bool,
     pub(crate) python_bin: String,
     pub(crate) reporter: Option<Box<dyn reporter::Reporter>>,
+    pub(crate) collection_profile: Option<helpers::CollectionProfile>,
 }
 
 impl PipelineContext {
@@ -102,6 +103,7 @@ impl PipelineContext {
             timings: Vec::new(),
             interrupted: false,
             reporter: None,
+            collection_profile: None,
         }
     }
 
@@ -314,6 +316,11 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             },
             // No RetryPhase in debug mode
             &phases::FinalizePhase,
+        ],
+        config::Command::List(ref a) if a.count => &[
+            &phases::FileCollectionPhase,
+            &phases::AffectedPhase,
+            &phases::ListPhase,
         ],
         config::Command::List(_) => &[
             &phases::FileCollectionPhase,

@@ -217,6 +217,10 @@ pub struct RunArgs {
     #[arg(long, value_name = "N", help_heading = "Output")]
     pub durations: Option<usize>,
 
+    /// Show collection timing breakdown (prescan, Python import, fixture resolution)
+    #[arg(long, help_heading = "Output")]
+    pub collection_profile: bool,
+
     /// Preserve TempDir contents instead of cleaning up.
     /// Bare `--keep-tmp` defaults to failed mode (preserve on test failure only).
     /// Use `--keep-tmp=MODE` with `=` (e.g. `--keep-tmp=always`).
@@ -352,6 +356,10 @@ impl DebugArgs {
 pub struct ListArgs {
     /// Paths to test files or directories (default: current directory)
     pub paths: Vec<Utf8PathBuf>,
+
+    /// Show only the total test count (fast, no Python invocation)
+    #[arg(long, help_heading = "Output")]
+    pub count: bool,
 
     #[command(flatten)]
     pub filter: FilteringArgs,
@@ -611,6 +619,15 @@ mod tests {
     }
 
     #[test]
+    fn list_with_count_flag() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "list", "--count"])).unwrap();
+        let Command::List(args) = cmd else {
+            panic!("expected Command::List");
+        };
+        assert!(args.count);
+    }
+
+    #[test]
     fn fixtures_subcommand() {
         let cmd = OxitestCli::resolve(&s(["oxitest", "fixtures"])).unwrap();
         assert!(matches!(cmd, Command::Fixtures(_)));
@@ -742,6 +759,15 @@ mod tests {
         let cmd = OxitestCli::resolve(&s(["oxitest", "run"])).unwrap();
         let Command::Run(args) = cmd else { panic!() };
         assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn run_with_collection_profile() {
+        let cmd = OxitestCli::resolve(&s(["oxitest", "run", "--collection-profile"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert!(args.collection_profile);
     }
 
     #[test]
