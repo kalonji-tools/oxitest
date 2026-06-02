@@ -240,6 +240,7 @@ mod tests {
                 right: String::new(),
                 op: String::new(),
                 frames: vec![],
+                field_diffs: vec![],
             },
         )]);
         assert!(
