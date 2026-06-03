@@ -6,7 +6,7 @@ import sys
 from conftest import helpers
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
-from oxitest._bridge._middleware import _is_debuggable
+from oxitest._bridge._diagnostics import is_debuggable as _is_debuggable
 from oxitest._bridge.executor import (
     _debug_post_mortem,
     _print_banner,

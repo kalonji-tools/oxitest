@@ -11,6 +11,7 @@ from __future__ import annotations
 __all__ = [
     "evaluate_marks",
     "ExecutionWrapper",
+    "MarkWrapper",
     "_HandlerContext",
     "MarkHandler",
     "_PluginMarkHandler",
@@ -25,7 +26,10 @@ from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._timeout import make_timeout_wrapper
 from oxitest._bridge.result import StatusKind, TestResult
 
-ExecutionWrapper = Callable[[Callable[[], TestResult]], TestResult]
+MarkWrapper = Callable[[Callable[[], TestResult]], TestResult]
+
+#: Backward-compatible alias — external consumers may still use this name.
+ExecutionWrapper = MarkWrapper
 
 
 @dataclasses.dataclass
@@ -37,7 +41,7 @@ class MarkEvalResult:
     """
 
     short_circuit: TestResult | None = None
-    wrapper: ExecutionWrapper | None = None
+    wrapper: MarkWrapper | None = None
 
 
 @dataclasses.dataclass
@@ -118,7 +122,7 @@ class _TimeoutHandler(MarkHandler):
 
 
 class _PluginMarkHandler(MarkHandler):
-    """Adapter: wraps a plugin ExecutionWrapper as a MarkHandler."""
+    """Adapter: wraps a plugin execution wrapper as a MarkHandler."""
 
     def __init__(self, pw: Any) -> None:
         self.mark_name = pw.marker
@@ -155,7 +159,7 @@ def evaluate_marks(
     marks: list[MarkInfo],
     ctx: _HandlerContext,
     plugin_handlers: list[MarkHandler] | None = None,
-) -> tuple[TestResult | None, list[ExecutionWrapper]]:
+) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Run marks through the handler registry.
 
     Returns (short_circuit, wrappers).
@@ -166,7 +170,7 @@ def evaluate_marks(
     registry = _MARK_REGISTRY
     if plugin_handlers:
         registry = {**_MARK_REGISTRY, **{h.mark_name: h for h in plugin_handlers}}
-    wrappers: list[ExecutionWrapper] = []
+    wrappers: list[MarkWrapper] = []
     for mark in marks:
         handler = registry.get(mark.name)
         if handler is None:
