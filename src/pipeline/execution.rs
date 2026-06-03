@@ -168,7 +168,7 @@ impl super::traits::ExecutionHarness for ParallelHarness<'_> {
 /// because they feed directly into the parallel-dispatch decision.
 pub(super) fn execute(
     py: Python<'_>,
-    clean_items: Vec<Arc<types::TestItem>>,
+    clean_items: &[Arc<types::TestItem>],
     violated_items: Vec<Arc<types::TestItem>>,
     all_violations: Vec<strict::StrictViolation>,
     ctx: &ExecutionContext<'_>,
@@ -188,7 +188,7 @@ pub(super) fn execute(
         }
     }
 
-    let estimated = ctx.cache.estimated_duration(&clean_items);
+    let estimated = ctx.cache.estimated_duration(clean_items);
 
     let mut groups = filter::group_by_module(clean_items);
     let failed_ids = ctx.cache.last_failed_ids();
