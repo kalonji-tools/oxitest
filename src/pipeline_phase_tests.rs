@@ -30,22 +30,17 @@ mod pipeline_context_tests {
     #[test]
     fn context_starts_with_empty_items() {
         let ctx = make_ctx();
-        assert!(ctx.items.is_empty());
-        assert!(ctx.raw_violations.is_empty());
-        assert!(ctx.violated_items.is_empty());
-        assert!(ctx.all_violations.is_empty());
-        assert!(ctx.suite_lines.is_empty());
-        assert!(ctx.timings.is_empty());
+        assert!(matches!(ctx.collection, CollectionState::Empty));
+        assert!(ctx.execution_results.is_none());
         assert!(ctx.test_files.is_empty());
         assert!(ctx.conftest_files.is_empty());
-        assert!(!ctx.interrupted);
     }
 
     #[test]
     fn context_session_starts_none() {
         let ctx = make_ctx();
         assert!(ctx.session.is_none());
-        assert!(ctx.reporter.is_none());
+        assert!(ctx.execution_results.is_none());
     }
 }
 
@@ -183,7 +178,11 @@ mod retry_phase_tests {
     fn skips_when_interrupted() {
         let mut ctx = make_ctx();
         ctx.cfg.retries = 2;
-        ctx.interrupted = true;
+        ctx.execution_results = Some(ExecutionResults {
+            timings: Vec::new(),
+            interrupted: true,
+            reporter: ctx.make_error_reporter(),
+        });
         let phase = phases::RetryPhase {
             runner: &crate::pipeline::traits::BridgeRunner,
         };
@@ -194,7 +193,11 @@ mod retry_phase_tests {
     fn runs_when_retries_set_and_not_interrupted() {
         let mut ctx = make_ctx();
         ctx.cfg.retries = 2;
-        ctx.interrupted = false;
+        ctx.execution_results = Some(ExecutionResults {
+            timings: Vec::new(),
+            interrupted: false,
+            reporter: ctx.make_error_reporter(),
+        });
         let phase = phases::RetryPhase {
             runner: &crate::pipeline::traits::BridgeRunner,
         };
