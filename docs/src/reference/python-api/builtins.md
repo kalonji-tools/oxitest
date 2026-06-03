@@ -123,7 +123,7 @@ keep_tmp = "failed"
 
 ## TestContext
 
-::: oxitest._bridge._fixture_session._TestContext
+::: oxitest._bridge._builtin_context._TestContext
     options:
       show_root_heading: false
       show_root_toc_entry: false
