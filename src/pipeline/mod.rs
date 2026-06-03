@@ -52,6 +52,49 @@ pub(crate) trait PipelinePhase {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode>;
 }
 
+/// Results from the execution phase: timings, interrupt status, and the
+/// reporter instance.  Bundled into a single struct so downstream phases
+/// (retry, finalize) can access them via one `Option` instead of three
+/// independent fields.
+pub(crate) struct ExecutionResults {
+    pub(crate) timings: Vec<types::TestTiming>,
+    pub(crate) interrupted: bool,
+    pub(crate) reporter: Box<dyn reporter::Reporter>,
+}
+
+/// Tracks the lifecycle of collected test items through the pipeline.
+///
+/// Each variant represents a well-defined stage.  Phases `match` on the
+/// current variant and transition to the next, making illegal states
+/// unrepresentable.
+#[derive(Debug)]
+pub(crate) enum CollectionState {
+    /// No items collected yet (initial state).
+    Empty,
+    /// Items have been collected from test files but not yet partitioned
+    /// by strict-mode checks.
+    Collected {
+        items: Vec<Arc<types::TestItem>>,
+        raw_violations: Vec<bridge::RawViolation>,
+    },
+    /// Strict-mode checks have partitioned items into clean vs violated.
+    Partitioned {
+        clean_items: Vec<Arc<types::TestItem>>,
+        violated_items: Vec<Arc<types::TestItem>>,
+        all_violations: Vec<strict::StrictViolation>,
+        suite_lines: Vec<String>,
+    },
+    /// Filters (-k, -m, --failed) have been applied; items are ready to run.
+    Ready {
+        clean_items: Vec<Arc<types::TestItem>>,
+        violated_items: Vec<Arc<types::TestItem>>,
+        all_violations: Vec<strict::StrictViolation>,
+        suite_lines: Vec<String>,
+    },
+    /// Execution has completed; only the original items are kept for retry.
+    Executed { items: Vec<Arc<types::TestItem>> },
+}
+
 /// Shared mutable state that flows through every pipeline phase.
 ///
 /// Populated incrementally: early phases (file collection, session setup)
@@ -68,15 +111,9 @@ pub(crate) struct PipelineContext {
     pub(crate) test_files: Vec<camino::Utf8PathBuf>,
     pub(crate) conftest_files: Vec<camino::Utf8PathBuf>,
     pub(crate) session: Option<bridge::FixtureSession>,
-    pub(crate) items: Vec<Arc<types::TestItem>>,
-    pub(crate) raw_violations: Vec<bridge::RawViolation>,
-    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
-    pub(crate) all_violations: Vec<strict::StrictViolation>,
-    pub(crate) suite_lines: Vec<String>,
-    pub(crate) timings: Vec<types::TestTiming>,
-    pub(crate) interrupted: bool,
+    pub(crate) collection: CollectionState,
+    pub(crate) execution_results: Option<ExecutionResults>,
     pub(crate) python_bin: String,
-    pub(crate) reporter: Option<Box<dyn reporter::Reporter>>,
     pub(crate) collection_profile: Option<collection::CollectionProfile>,
 }
 
@@ -98,14 +135,8 @@ impl PipelineContext {
             test_files: Vec::new(),
             conftest_files: Vec::new(),
             session: None,
-            items: Vec::new(),
-            raw_violations: Vec::new(),
-            violated_items: Vec::new(),
-            all_violations: Vec::new(),
-            suite_lines: Vec::new(),
-            timings: Vec::new(),
-            interrupted: false,
-            reporter: None,
+            collection: CollectionState::Empty,
+            execution_results: None,
             collection_profile: None,
         }
     }
