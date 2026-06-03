@@ -558,6 +558,17 @@ impl PipelinePhase for FinalizePhase {
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
+        // Fetch fixture timings from the Python session before finalizing.
+        if let Some(session) = ctx.session.as_ref() {
+            if let Ok(timings) = session.get_fixture_timings(py) {
+                if !timings.is_empty() {
+                    if let Some(rep) = ctx.reporter.as_deref_mut() {
+                        rep.set_fixture_timings(timings);
+                    }
+                }
+            }
+        }
+
         helpers::finalize(
             &mut ctx.cache,
             &ctx.timings,

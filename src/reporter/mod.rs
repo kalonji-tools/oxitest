@@ -31,7 +31,7 @@ pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub use tty::TtyReporter;
 
 use format::{fmt_summary, fmt_tip_block, fmt_warning_block};
-pub(crate) use stats::{FixtureCacheEntry, FixtureCacheStats, RunStats};
+pub(crate) use stats::{FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry, RunStats};
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
 pub(crate) use format::sep_width;
@@ -157,6 +157,9 @@ pub trait Reporter {
         _breakdown: Vec<stats::FixtureCacheEntry>,
     ) {
     }
+
+    /// Set fixture timing data for display in the summary.
+    fn set_fixture_timings(&mut self, _timings: Vec<stats::FixtureTimingEntry>) {}
 }
 
 // ─── Deferred-failure dedup ──────────────────────────────────────────────────
@@ -259,6 +262,10 @@ impl Reporter for CompositeReporter {
         self.stats.fixture_cache_hits = hits;
         self.stats.fixture_cache_misses = misses;
         self.stats.fixture_cache_breakdown = breakdown;
+    }
+
+    fn set_fixture_timings(&mut self, timings: Vec<stats::FixtureTimingEntry>) {
+        self.stats.fixture_timings = timings;
     }
 }
 
@@ -469,6 +476,38 @@ pub(crate) fn print_summary_section(
             );
             for (node_id, ms) in &slowest {
                 println!("  {:>8.2}ms  {}", ms, node_id);
+            }
+        }
+        let slowest_fx = stats.slowest_fixtures(n);
+        if !slowest_fx.is_empty() {
+            println!(
+                "\n{}",
+                colors::color_dim(
+                    &format!("slowest {} fixtures", slowest_fx.len()),
+                    opts.use_color,
+                )
+            );
+            for entry in &slowest_fx {
+                let detail = if entry.teardown_count > 0 {
+                    format!(
+                        "setup {:.2}ms ({}) + teardown {:.2}ms ({})",
+                        entry.total_setup_ms,
+                        entry.setup_count,
+                        entry.total_teardown_ms,
+                        entry.teardown_count,
+                    )
+                } else {
+                    format!(
+                        "setup {:.2}ms ({})",
+                        entry.total_setup_ms, entry.setup_count
+                    )
+                };
+                println!(
+                    "  {:>8.2}ms  {} \u{2014} {}",
+                    entry.total_ms(),
+                    entry.name,
+                    detail,
+                );
             }
         }
     }
