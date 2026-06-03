@@ -396,6 +396,31 @@ def test_durations_shows_slowest_tests(tmp: TempDir):
     helpers.integ.assert_contains(out, "ms")
 
 
+def test_durations_shows_fixture_timings(tmp: TempDir):
+    """--durations shows slowest fixtures alongside slowest tests."""
+    (tmp / "conftest.py").write_text(
+        "import time\n"
+        "import oxitest as oxi\n\n"
+        "fx = oxi.Fixtures()\n\n"
+        "@fx.fixture\n"
+        "def slow_setup() -> int:\n"
+        "    time.sleep(0.05)\n"
+        "    return 42\n"
+    )
+    (tmp / "test_fx_timing.py").write_text(
+        "import oxitest as oxi\n\n"
+        "def test_uses_slow(slow_setup: oxi.Fixture[int]):\n"
+        '    assert slow_setup == 42, "fixture should return 42"\n'
+    )
+    out, err, rc = helpers.common.run_oxitest(tmp, "--durations", "5")
+    assert rc == 0, (
+        f"--durations with fixtures should exit 0, got {rc}\n"
+        f"stdout: {out!r}\nstderr: {err!r}"
+    )
+    assert "slow_setup" in out, f"fixture name should appear in output: {out!r}"
+    assert "setup" in out.lower(), f"output should mention setup: {out!r}"
+
+
 def test_capture_environment_prints_versions():
     """`env` subcommand prints Python and oxitest versions and exits 0."""
     out, _, rc = helpers.common.run_oxitest_env()

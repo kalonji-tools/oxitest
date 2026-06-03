@@ -235,3 +235,45 @@ def test_protocol_version_always_present():
     assert wire["protocol_version"] == PROTOCOL_VERSION, (
         f"expected {PROTOCOL_VERSION}, got {wire['protocol_version']}"
     )
+
+
+# Fixture timing shape tests.
+
+
+def test_get_fixture_timings_returns_expected_shape():
+    """get_fixture_timings() returns list of dicts with required keys."""
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge._fixture_session import FixtureSession
+
+    session = FixtureSession(FixtureRegistry())
+    timings = session.get_fixture_timings()
+    assert isinstance(timings, list), "timings must be a list"
+    assert timings == [], "empty session should produce empty timings"
+
+
+def test_get_fixture_timings_entry_has_required_keys():
+    """Each timing entry has the 5 required keys with correct types."""
+    from conftest import helpers
+
+    session = helpers.common.make_session_with("timed_fx", lambda: 1)
+    session.begin_module("mod.py")
+    session.get_fixture("timed_fx", "mod.py", [])
+    timings = session.get_fixture_timings()
+
+    assert len(timings) == 1, "expected exactly one timing entry"
+    entry = timings[0]
+    required_keys = {
+        "name",
+        "total_setup_ms",
+        "setup_count",
+        "total_teardown_ms",
+        "teardown_count",
+    }
+    assert set(entry.keys()) == required_keys, f"wrong keys: {set(entry.keys())}"
+    assert isinstance(entry["name"], str), "name must be str"
+    assert isinstance(entry["total_setup_ms"], float), "total_setup_ms must be float"
+    assert isinstance(entry["setup_count"], int), "setup_count must be int"
+    assert isinstance(entry["total_teardown_ms"], float), (
+        "total_teardown_ms must be float"
+    )
+    assert isinstance(entry["teardown_count"], int), "teardown_count must be int"
