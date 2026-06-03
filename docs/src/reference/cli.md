@@ -72,7 +72,7 @@ oxitest [OPTIONS] [PATHS...]        # equivalent
 | `--tips` | — | flag | `false` | Expand assertion tip output from a count to a full `file:line` list (see [Tips](#tips)). |
 | `--warnings` | — | flag | `false` | Expand warning details. Without this flag, only a count is shown. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. `auto` detects TTY. `always` forces color (useful in pipes). `never` disables color. |
-| `--durations` | — | integer | — | Show the N slowest tests at end of run. |
+| `--durations` | — | integer | — | Show the N slowest tests and N slowest fixtures at end of run. |
 | `--keep-tmp` | — | `failed\|always` | — | Keep temporary directories created by `TempDir`. `failed` keeps them only for failed tests; `always` keeps them unconditionally. |
 | `--collection-profile` | — | flag | `false` | Print per-file prescan and collection timing breakdown to stderr. Useful for diagnosing slow collection. |
 
