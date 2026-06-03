@@ -1,17 +1,19 @@
 //! Pipeline phase implementations.
 //!
 //! Each phase is a unit struct implementing [`PipelinePhase`]. Phases read
-//! from and write to [`PipelineContext`], delegating to helper functions
-//! in [`super::helpers`] for the actual work.
+//! from and write to [`PipelineContext`], delegating to submodule functions
+//! for the actual work.
 
 use pyo3::prelude::*;
 
-use super::helpers;
 use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
-use super::{PhaseOutcome, PipelineContext, PipelinePhase};
-use crate::cache::{ModuleCache, TimingCache};
+use super::{collection, execution, helpers, PhaseOutcome, PipelineContext, PipelinePhase};
+use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
 use crate::types::ExitCode;
-use crate::{affected, bridge, collector, parallel, query, reporter, retry, types};
+use crate::{
+    affected, bridge, collector, config, filter, marker, parallel, query, reporter, retry, strict,
+    types,
+};
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
 
@@ -201,7 +203,7 @@ impl PipelinePhase for CollectionPhase<'_> {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
         ctx.cache.invalidate_modules();
-        let (items, errors, raw_violations, profile) = helpers::collect_items(
+        let (items, errors, raw_violations, profile) = collection::collect_items(
             py,
             &ctx.test_files,
             &ctx.cfg,
@@ -227,7 +229,7 @@ impl PipelinePhase for CollectionPhase<'_> {
         }
 
         if let Some(ref profile) = ctx.collection_profile {
-            eprintln!("{}", helpers::format_collection_profile(profile));
+            eprintln!("{}", collection::format_collection_profile(profile));
         }
 
         Ok(PhaseOutcome::Continue)
@@ -317,16 +319,56 @@ impl PipelinePhase for StrictPhase {
     ) -> Result<PhaseOutcome, ExitCode> {
         let raw_violations = std::mem::take(&mut ctx.raw_violations);
         let items = std::mem::take(&mut ctx.items);
-        match helpers::apply_strict(&ctx.cfg, items, raw_violations, ctx.use_color) {
-            Ok(strict_result) => {
-                ctx.items = strict_result.clean_items;
-                ctx.violated_items = strict_result.violated_items;
-                ctx.all_violations = strict_result.all_violations;
-                ctx.suite_lines = strict_result.suite_lines;
-                Ok(PhaseOutcome::Continue)
-            }
-            Err(code) => Ok(PhaseOutcome::EarlyExit(code)),
+
+        // Build the full violation list.
+        let all_violations: Vec<strict::StrictViolation> = if ctx.cfg.strict.is_some() {
+            let mut v = strict::check_config(&ctx.cfg);
+            v.extend(strict::check_collected(raw_violations));
+            v
+        } else {
+            vec![]
+        };
+
+        // Abort mode: print and signal early exit.
+        if ctx.cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
+            let abort_lines: Vec<String> = all_violations
+                .iter()
+                .map(strict::format_violation_line)
+                .collect();
+            reporter::print_strict_abort(&abort_lines, ctx.use_color);
+            return Ok(PhaseOutcome::EarlyExit(ExitCode::CollectError));
         }
+
+        // Enforce mode: build suite-level violation lines.
+        let suite_lines: Vec<String> = if ctx.cfg.strict == Some(config::StrictMode::Enforce) {
+            strict::suite_level(&all_violations)
+                .iter()
+                .map(|v| v.to_string())
+                .collect()
+        } else {
+            vec![]
+        };
+
+        // Partition items into violated vs. clean.
+        let (violated_items, clean_items): (Vec<_>, Vec<_>) =
+            if ctx.cfg.strict == Some(config::StrictMode::Enforce) {
+                let violated_ids: std::collections::HashSet<&str> = all_violations
+                    .iter()
+                    .filter_map(|v| v.node_id())
+                    .map(|id| id.as_ref())
+                    .collect();
+                items
+                    .into_iter()
+                    .partition(|i| violated_ids.contains(i.node_id.as_ref()))
+            } else {
+                (vec![], items)
+            };
+
+        ctx.items = clean_items;
+        ctx.violated_items = violated_items;
+        ctx.all_violations = all_violations;
+        ctx.suite_lines = suite_lines;
+        Ok(PhaseOutcome::Continue)
     }
 }
 
@@ -350,37 +392,68 @@ impl PipelinePhase for FilterPhase {
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
         let items = std::mem::take(&mut ctx.items);
-        let make_rep = || {
-            reporter::make_reporter(
-                ctx.base
-                    .clone()
-                    .verbosity(crate::config::Verbosity::Normal)
-                    .build(),
-                ctx.is_tty,
-                None,
-                None,
-                vec![],
-            )
-        };
-        let (keyword, marker) = match &ctx.command {
-            crate::config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
-            crate::config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
+        let (keyword, marker_expr) = match &ctx.command {
+            config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
+            config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
             _ => (None, None),
         };
-        match helpers::apply_filters(
-            items,
-            keyword.as_deref(),
-            marker.as_deref(),
-            &ctx.cfg,
-            &ctx.cache,
-            &make_rep,
-        ) {
-            Ok(filtered) => {
-                ctx.items = filtered;
-                Ok(PhaseOutcome::Continue)
+
+        // Keyword filter (-k).
+        let items = filter::filter_items(items, keyword.as_deref());
+
+        // Marker expression filter (-m).
+        let items = if let Some(expr) = marker_expr.as_deref() {
+            match marker::filter_by_marker_expr(items, expr) {
+                Ok(items) => items,
+                Err(e) => {
+                    let code = ctx
+                        .make_error_reporter()
+                        .finish(
+                            &[types::CollectError::PyError(format!(
+                                "invalid -m expression: {}",
+                                e
+                            ))],
+                            false,
+                            &reporter::RunStats::new(),
+                        )
+                        .code();
+                    return Ok(PhaseOutcome::EarlyExit(code));
+                }
             }
-            Err(code) => Ok(PhaseOutcome::EarlyExit(code)),
-        }
+        } else {
+            items
+        };
+
+        // Last-failed filter (--failed=only / --failed=first).
+        let total_before_failed_filter = items.len();
+        let items = match ctx.cfg.failed {
+            Some(config::FailedMode::Only) => {
+                let failed_ids = ctx.cache.last_failed_ids();
+                if failed_ids.is_empty() {
+                    tracing::info!(
+                        count = items.len(),
+                        "no recorded failures — running all tests"
+                    );
+                    items
+                } else {
+                    let filtered = filter::filter_last_failed(items, &failed_ids);
+                    tracing::info!(
+                        running = filtered.len(),
+                        total = total_before_failed_filter,
+                        "running tests in --failed=only mode"
+                    );
+                    filtered
+                }
+            }
+            Some(config::FailedMode::First) => {
+                let failed_ids = ctx.cache.last_failed_ids();
+                filter::sort_failed_first(items, &failed_ids)
+            }
+            None => items,
+        };
+
+        ctx.items = items;
+        Ok(PhaseOutcome::Continue)
     }
 }
 
@@ -462,7 +535,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
         let all_violations = std::mem::take(&mut ctx.all_violations);
         let items = std::mem::take(&mut ctx.items);
 
-        let exec_ctx = helpers::ExecutionContext {
+        let exec_ctx = execution::ExecutionContext {
             cfg: &ctx.cfg,
             cache: &ctx.cache,
             session,
@@ -475,7 +548,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
         let parallel::PhaseResult {
             interrupted,
             timings,
-        } = helpers::execute(
+        } = execution::execute(
             py,
             items.clone(),
             violated_items,
