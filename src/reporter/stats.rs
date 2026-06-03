@@ -16,6 +16,23 @@ pub(crate) struct FixtureCacheStats {
     pub(crate) breakdown: Vec<FixtureCacheEntry>,
 }
 
+/// Per-fixture timing aggregate returned by the Python bridge.
+#[derive(Clone, Debug)]
+pub(crate) struct FixtureTimingEntry {
+    pub(crate) name: String,
+    pub(crate) total_setup_ms: f64,
+    pub(crate) setup_count: usize,
+    pub(crate) total_teardown_ms: f64,
+    pub(crate) teardown_count: usize,
+}
+
+impl FixtureTimingEntry {
+    /// Total time (setup + teardown) for sorting.
+    pub(crate) fn total_ms(&self) -> f64 {
+        self.total_setup_ms + self.total_teardown_ms
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RunStats {
     pub(crate) passed: usize,
@@ -35,6 +52,7 @@ pub(crate) struct RunStats {
     pub(crate) fixture_cache_hits: usize,
     pub(crate) fixture_cache_misses: usize,
     pub(crate) fixture_cache_breakdown: Vec<FixtureCacheEntry>,
+    pub(crate) fixture_timings: Vec<FixtureTimingEntry>,
 }
 
 impl RunStats {
@@ -57,6 +75,7 @@ impl RunStats {
             fixture_cache_hits: 0,
             fixture_cache_misses: 0,
             fixture_cache_breakdown: Vec::new(),
+            fixture_timings: Vec::new(),
         }
     }
 
@@ -174,6 +193,26 @@ impl RunStats {
         ))
     }
 
+    #[cfg(test)]
+    pub(crate) fn record_fixture_timing(&mut self, entry: FixtureTimingEntry) {
+        self.fixture_timings.push(entry);
+    }
+
+    /// Returns the N slowest fixtures, sorted by total time (setup + teardown) descending.
+    pub(crate) fn slowest_fixtures(&self, n: usize) -> Vec<FixtureTimingEntry> {
+        if n == 0 {
+            return vec![];
+        }
+        let mut sorted = self.fixture_timings.clone();
+        sorted.sort_by(|a, b| {
+            b.total_ms()
+                .partial_cmp(&a.total_ms())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        sorted.truncate(n);
+        sorted
+    }
+
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
         if !lines.is_empty() {
             let file = item.module_path.to_string();
@@ -251,5 +290,54 @@ mod tests {
         stats.record_strict_suite(3);
         stats.record_strict_suite(2);
         assert_eq!(stats.strict_suite, 5);
+    }
+
+    #[test]
+    fn test_slowest_fixtures_returns_sorted_descending() {
+        let mut stats = RunStats::new();
+        stats.record_fixture_timing(FixtureTimingEntry {
+            name: "fast_fx".into(),
+            total_setup_ms: 5.0,
+            setup_count: 1,
+            total_teardown_ms: 0.0,
+            teardown_count: 0,
+        });
+        stats.record_fixture_timing(FixtureTimingEntry {
+            name: "slow_fx".into(),
+            total_setup_ms: 200.0,
+            setup_count: 1,
+            total_teardown_ms: 50.0,
+            teardown_count: 1,
+        });
+        let top = stats.slowest_fixtures(2);
+        assert_eq!(top[0].name, "slow_fx");
+        assert_eq!(top[1].name, "fast_fx");
+    }
+
+    #[test]
+    fn test_slowest_fixtures_zero_returns_empty() {
+        let mut stats = RunStats::new();
+        stats.record_fixture_timing(FixtureTimingEntry {
+            name: "fx".into(),
+            total_setup_ms: 10.0,
+            setup_count: 1,
+            total_teardown_ms: 0.0,
+            teardown_count: 0,
+        });
+        assert!(stats.slowest_fixtures(0).is_empty());
+    }
+
+    #[test]
+    fn test_slowest_fixtures_n_greater_than_count_returns_all() {
+        let mut stats = RunStats::new();
+        stats.record_fixture_timing(FixtureTimingEntry {
+            name: "fx".into(),
+            total_setup_ms: 10.0,
+            setup_count: 1,
+            total_teardown_ms: 0.0,
+            teardown_count: 0,
+        });
+        let top = stats.slowest_fixtures(10);
+        assert_eq!(top.len(), 1);
     }
 }

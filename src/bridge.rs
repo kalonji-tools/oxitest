@@ -172,6 +172,31 @@ impl FixtureSession {
         })
     }
 
+    /// Fetch per-fixture setup/teardown timing aggregates.
+    pub fn get_fixture_timings(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Vec<crate::reporter::FixtureTimingEntry>> {
+        let result = self.0.bind(py).call_method0("get_fixture_timings")?;
+        let mut timings = Vec::new();
+        for entry in result.try_iter()? {
+            let entry: Bound<'_, PyAny> = entry?;
+            let name: String = entry.get_item("name")?.extract()?;
+            let total_setup_ms: f64 = entry.get_item("total_setup_ms")?.extract()?;
+            let setup_count: usize = entry.get_item("setup_count")?.extract()?;
+            let total_teardown_ms: f64 = entry.get_item("total_teardown_ms")?.extract()?;
+            let teardown_count: usize = entry.get_item("teardown_count")?.extract()?;
+            timings.push(crate::reporter::FixtureTimingEntry {
+                name,
+                total_setup_ms,
+                setup_count,
+                total_teardown_ms,
+                teardown_count,
+            });
+        }
+        Ok(timings)
+    }
+
     /// Return fixture definitions as a list of field maps for the query engine.
     pub(crate) fn fixture_entries(
         &self,
