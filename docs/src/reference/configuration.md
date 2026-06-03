@@ -52,7 +52,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `maxfail` | integer | `0` | Stop after N failures. `0` means unlimited. CLI `--maxfail` overrides. |
 | `retries` | integer | — | Number of times to retry a failed test before recording it as failed. When omitted, no retries are performed. |
 | `retries_delay` | integer | — | Delay in seconds between retry attempts. When omitted, retries run immediately. |
-| `durations` | integer | — | Show the N slowest tests at end of run. CLI `--durations` overrides. |
+| `durations` | integer | — | Show the N slowest tests and N slowest fixtures at end of run. CLI `--durations` overrides. |
 | `serial` | boolean | `false` | Run all tests in a single process. CLI `--serial` overrides. |
 | `color` | string | `"auto"` | Color output mode. One of: `"auto"`, `"always"`, `"never"`. CLI `--color` overrides. |
 | `plugins` | list of strings | `[]` | Python module paths of oxitest plugins to load. Each module must export an `oxitest_plugin(config=None)` function returning `oxitest.Plugin`. |
