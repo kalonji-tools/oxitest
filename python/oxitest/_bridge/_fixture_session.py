@@ -22,6 +22,7 @@ __all__ = [
 ]
 
 import inspect
+import time
 import warnings
 from collections import defaultdict
 from collections.abc import Callable
@@ -223,6 +224,8 @@ class _SessionProtocol(Protocol):
         func: Callable[..., Any],
     ) -> str | None: ...
 
+    def get_fixture_timings(self) -> list[dict[str, Any]]: ...
+
 
 class _NullFixtureSession:
     """Null Object for when no conftest session is available.
@@ -268,6 +271,10 @@ class _NullFixtureSession:
     def get_cache_stats(self) -> dict[str, Any]:
         """Return empty cache stats (null session has no shared fixtures)."""
         return {"total_hits": 0, "total_misses": 0, "breakdown": []}
+
+    def get_fixture_timings(self) -> list[dict[str, Any]]:
+        """Return empty fixture timings (null session has no fixtures)."""
+        return []
 
 
 # ── _TestContext ──────────────────────────────────────────────────────────────
@@ -555,6 +562,8 @@ class FixtureSession:
         )
         self._keep_tmp: str | None = None
         self._result_cell: list[Any] | None = None
+        self._setup_times: dict[str, list[float]] = defaultdict(list)
+        self._teardown_times: dict[str, list[float]] = defaultdict(list)
 
     # ── Async delegation properties (used by executor.py via getattr) ────────
 
@@ -717,6 +726,20 @@ class FixtureSession:
                 continue
             unused.append((defn.conftest_path, name))
         return sorted(unused)
+
+    def get_fixture_timings(self) -> list[dict[str, Any]]:
+        """Return per-fixture setup and teardown timing aggregates."""
+        names = sorted(set(self._setup_times.keys()) | set(self._teardown_times.keys()))
+        return [
+            {
+                "name": n,
+                "total_setup_ms": float(sum(self._setup_times.get(n, []))),
+                "setup_count": len(self._setup_times.get(n, [])),
+                "total_teardown_ms": float(sum(self._teardown_times.get(n, []))),
+                "teardown_count": len(self._teardown_times.get(n, [])),
+            }
+            for n in names
+        ]
 
     def _can_plugin_resolve(
         self,
@@ -1017,7 +1040,9 @@ class FixtureSession:
         )
 
         with _fixture_scope(self, module_path, fn_teardowns):
+            _start = time.monotonic()
             value = self._async_mgr.resolve(defn.func, deps)
+            self._setup_times[defn.name].append((time.monotonic() - _start) * 1000.0)
 
         from oxitest._bridge.proxy import FrozenProxy
 
@@ -1050,13 +1075,30 @@ class FixtureSession:
         # resolve the live fixture instance via _fixture_context.
         with _fixture_scope(self, module_path, fn_teardowns):
             try:
+                _start = time.monotonic()
                 result = defn.func(**deps)
+                outcome = _unpack_sync(result, defn.name)
+                self._setup_times[defn.name].append(
+                    (time.monotonic() - _start) * 1000.0
+                )
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
-            outcome = _unpack_sync(result, defn.name)
 
         if outcome.teardown is not None:
-            scope_teardowns.append(outcome.teardown)
+            _original_td = outcome.teardown
+            _td_name = defn.name
+
+            def _timed_teardown(
+                _orig: Callable[[], None] = _original_td,
+                _name: str = _td_name,
+            ) -> None:
+                _td_start = time.monotonic()
+                _orig()
+                self._teardown_times[_name].append(
+                    (time.monotonic() - _td_start) * 1000.0
+                )
+
+            scope_teardowns.append(_timed_teardown)
         return outcome.value
 
 
