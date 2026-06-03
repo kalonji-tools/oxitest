@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 
 use crate::config::Verbosity;
-use crate::types::{CollectError, ColorCategory, DurationMs, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
+
+use super::ColorCategory;
 
 use super::colors::{
     color_bold_white, color_cyan, color_dim, color_dim_green, color_error_token, color_fail,
