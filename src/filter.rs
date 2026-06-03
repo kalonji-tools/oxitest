@@ -98,13 +98,13 @@ pub fn sort_failed_first(
 
 /// Group items by module path, preserving insertion order within each group.
 #[must_use = "returns grouped items; original is consumed"]
-pub fn group_by_module(items: Vec<Arc<TestItem>>) -> Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> {
+pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> {
     let mut groups: IndexMap<Utf8PathBuf, Vec<Arc<TestItem>>> = IndexMap::new();
     for item in items {
         groups
             .entry(item.module_path.clone())
             .or_default()
-            .push(item);
+            .push(Arc::clone(item));
     }
     groups.into_iter().collect()
 }
@@ -166,7 +166,7 @@ mod tests {
             make_item_in("test_a", "tests/test_mod.py"),
             make_item_in("test_b", "tests/test_mod.py"),
         ];
-        let groups = group_by_module(items);
+        let groups = group_by_module(&items);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].1.len(), 2);
     }
@@ -178,7 +178,7 @@ mod tests {
             make_item_in("test_b", "tests/test_y.py"),
             make_item_in("test_c", "tests/test_x.py"),
         ];
-        let groups = group_by_module(items);
+        let groups = group_by_module(&items);
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].0, Utf8PathBuf::from("tests/test_x.py"));
         assert_eq!(groups[0].1.len(), 2);
@@ -192,14 +192,14 @@ mod tests {
             make_item_in("test_a", "tests/test_x.py"),
             make_item_in("test_b", "tests/test_y.py"),
         ];
-        let groups = group_by_module(items);
+        let groups = group_by_module(&items);
         assert_eq!(groups[0].0, Utf8PathBuf::from("tests/test_x.py"));
         assert_eq!(groups[1].0, Utf8PathBuf::from("tests/test_y.py"));
     }
 
     #[test]
     fn test_group_by_module_empty_input() {
-        let groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = group_by_module(vec![]);
+        let groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = group_by_module(&[]);
         assert!(groups.is_empty());
     }
 
