@@ -4,7 +4,8 @@ __all__ = ["_WarnCapture", "_WarnCaptureFixture"]
 
 import warnings
 
-from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
+from oxitest._bridge._builtin_context import _BuiltinContext
+from oxitest._bridge._builtins._base import BuiltinFixture
 
 
 class _WarnCapture:
