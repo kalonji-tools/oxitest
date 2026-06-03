@@ -8,7 +8,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
+from oxitest._bridge._builtin_context import _BuiltinContext
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge.result import StatusKind
 
 # Statuses where the test did NOT fail — TempDir can be cleaned up safely.

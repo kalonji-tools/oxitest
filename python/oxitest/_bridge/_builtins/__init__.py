@@ -20,7 +20,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
+# ── TestContext registration ──────────────────────────────────────────────────
+# _TestContextFixture registers TestContext with BuiltinFixture._registry so
+# the resolver in FixtureSession._inject_builtin() handles it alongside all
+# other built-ins — no special-case needed in fixtures.py.
+from oxitest._bridge._builtin_context import _BuiltinContext, _TestContext
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (
     CaptureResult as CaptureResult,
     _FdCapture,
@@ -48,14 +53,6 @@ from oxitest._bridge._builtins._warncapture import (
     _WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
-
-# ── TestContext registration ──────────────────────────────────────────────────
-# Imported from _fixture_session (canonical location) rather than fixtures.py to
-# avoid circular imports during module initialization. _TestContextFixture
-# registers TestContext with BuiltinFixture._registry so the resolver in
-# FixtureSession._inject_builtin() handles it alongside all other built-ins —
-# no special-case needed in fixtures.py.
-from oxitest._bridge._fixture_session import _TestContext
 from oxitest._bridge._fixture_type import _FixtureMarker
 
 
