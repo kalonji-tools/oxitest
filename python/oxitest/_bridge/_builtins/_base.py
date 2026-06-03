@@ -1,34 +1,10 @@
 from __future__ import annotations
 
-__all__ = ["BuiltinFixture", "_BuiltinContext"]
+__all__ = ["BuiltinFixture"]
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from oxitest._bridge._test_meta import TestMeta
-    from oxitest._bridge.plugin_loader import PluginRegistry
-
-
-@dataclass
-class _BuiltinContext:
-    """Passed to BuiltinFixture.create() — carries injection-site metadata."""
-
-    meta: TestMeta
-    inject_scope: str  # "function" for test-level injections
-    teardown_stack: list[Callable[[], None]]
-    plugin_registry: PluginRegistry | None = field(default=None, repr=False)
-    keep_tmp: str | None = None
-    result_cell: list[Any] | None = field(default=None, repr=False)
-
-    @property
-    def module_path(self) -> str:
-        return self.meta.module_path
-
-    @property
-    def fn_name(self) -> str:
-        return self.meta.fn_name
+from oxitest._bridge._builtin_context import _BuiltinContext
 
 
 class BuiltinFixture:

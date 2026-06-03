@@ -10,6 +10,7 @@ from conftest import helpers
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
 from oxitest import Fixture, TempDir, raises  # noqa: F401
+from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins import (  # noqa: F401
     FdCapture,
     LogCapture,
@@ -18,7 +19,7 @@ from oxitest._bridge._builtins import (  # noqa: F401
     TempDirFactory,
     TestContext,  # noqa: F401
 )
-from oxitest._bridge._builtins._base import BuiltinFixture, _BuiltinContext
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._test_meta import TestMeta
 
 # ── BuiltinFixture base ───────────────────────────────────────────────────────
@@ -1049,7 +1050,7 @@ def test_logcapture_teardown_uninstalls_backends():
 def test_logcapture_fixture_registers_teardown():
     import logging
 
-    from oxitest._bridge._builtins._base import _BuiltinContext
+    from oxitest._bridge._builtin_context import _BuiltinContext
     from oxitest._bridge._builtins._logcapture import _LogCaptureFixture
 
     teardowns: list = []

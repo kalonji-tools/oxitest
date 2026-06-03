@@ -24,6 +24,7 @@ from typing import (
     overload,
 )
 
+from oxitest._bridge._builtin_context import _TestContext as _TestContext
 from oxitest._bridge._errors import (  # noqa: F401
     FixtureCycleError as FixtureCycleError,
     FixtureNotFoundError as FixtureNotFoundError,
@@ -44,7 +45,6 @@ from oxitest._bridge._fixture_session import (
     _fixture_context,
     _Scope as _Scope,
     _SessionProtocol as _SessionProtocol,
-    _TestContext as _TestContext,
     _warn_teardown as _warn_teardown,
 )
 from oxitest._bridge._fn_metadata import get_metadata, get_or_create
