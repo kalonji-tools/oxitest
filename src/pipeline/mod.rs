@@ -5,6 +5,9 @@
 //!
 //! Both serial and parallel execution paths converge through this module.
 
+mod arrange;
+mod collection;
+mod execution;
 mod helpers;
 pub(crate) mod phases;
 pub(crate) mod traits;
@@ -74,7 +77,7 @@ pub(crate) struct PipelineContext {
     pub(crate) interrupted: bool,
     pub(crate) python_bin: String,
     pub(crate) reporter: Option<Box<dyn reporter::Reporter>>,
-    pub(crate) collection_profile: Option<helpers::CollectionProfile>,
+    pub(crate) collection_profile: Option<collection::CollectionProfile>,
 }
 
 impl PipelineContext {
