@@ -17,10 +17,13 @@ mod format;
 pub(crate) mod json;
 pub(crate) mod junit;
 mod options;
+mod outcome_fmt;
 pub(crate) mod plugin;
 mod stats;
 pub(crate) mod tracing_writer;
 mod tty;
+
+pub(crate) use outcome_fmt::{ColorCategory, JunitCategory};
 
 #[cfg(test)]
 pub(crate) mod test_helpers;
