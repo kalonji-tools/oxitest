@@ -1,65 +1,3 @@
-use super::helpers;
-use super::*;
-
-mod mtime_tests {
-    use super::*;
-
-    #[test]
-    fn file_mtime_secs_returns_nonzero_for_existing_file() {
-        let mtime = helpers::file_mtime_secs(camino::Utf8Path::new(file!()));
-        assert!(mtime > 0, "mtime must be non-zero for an existing file");
-    }
-
-    #[test]
-    fn file_mtime_secs_returns_zero_for_missing_file() {
-        let mtime = helpers::file_mtime_secs(camino::Utf8Path::new("/nonexistent/path/xyz.py"));
-        assert_eq!(mtime, 0);
-    }
-}
-
-mod timeout_tests {
-    use super::*;
-    use crate::cache::TestCache;
-    use crate::reporter::test_helpers::make_item_raw as make_item;
-
-    #[test]
-    fn no_multiplier_returns_global() {
-        let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
-        let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(
-            helpers::resolve_timeout(&cache, &item, Some(30), None),
-            Some(30)
-        );
-    }
-
-    #[test]
-    fn no_multiplier_no_global_returns_none() {
-        let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
-        let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(helpers::resolve_timeout(&cache, &item, None, None), None);
-    }
-
-    #[test]
-    fn multiplier_cold_cache_falls_back_to_global() {
-        let cache = TestCache::load(camino::Utf8Path::new("/nonexistent")); // No cached entry → falls back to global
-        let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(
-            helpers::resolve_timeout(&cache, &item, Some(30), Some(3.0)),
-            Some(30)
-        );
-    }
-
-    #[test]
-    fn multiplier_with_no_global_and_no_cache_returns_none() {
-        let cache = TestCache::load(camino::Utf8Path::new("/nonexistent"));
-        let item = make_item("tests/test_foo.py::test_a");
-        assert_eq!(
-            helpers::resolve_timeout(&cache, &item, None, Some(3.0)),
-            None
-        );
-    }
-}
-
 mod ahash_tests {
     #[test]
     fn ahash_map_is_available() {
@@ -127,10 +65,10 @@ mod color_tests {
 }
 
 mod strict_pipeline_tests {
-    use super::*;
+    use crate::bridge;
     use crate::config::Config;
     use crate::reporter::test_helpers::make_item_raw as make_item;
-    use crate::strict::{PerTestViolation, StrictViolation};
+    use crate::strict::{self, PerTestViolation, StrictViolation};
     use crate::types::NodeId;
 
     #[test]
