@@ -10,7 +10,9 @@ use camino::Utf8PathBuf;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
 
-use crate::types::{CollectError, DurationMs, JunitCategory, TestItem, TestOutcome};
+use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
+
+use super::JunitCategory;
 
 use super::Reporter;
 
