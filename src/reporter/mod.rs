@@ -6,12 +6,9 @@
 //! [`JsonReporter`](json::JsonReporter) (CTRF format), and
 //! [`PyPluginReporter`](plugin::PyPluginReporter) (user-supplied Python plugins).
 
-use std::io::{self, Write};
-
-use crate::types::{CollectError, DurationMs, ExitCode};
-
 mod ci;
 mod colors;
+mod composite;
 mod exit;
 mod format;
 pub(crate) mod json;
@@ -19,8 +16,10 @@ pub(crate) mod junit;
 mod options;
 mod outcome_fmt;
 pub(crate) mod plugin;
+mod print;
 mod stats;
 pub(crate) mod tracing_writer;
+mod traits;
 mod tty;
 
 pub(crate) use outcome_fmt::{ColorCategory, JunitCategory};
@@ -29,141 +28,16 @@ pub(crate) use outcome_fmt::{ColorCategory, JunitCategory};
 pub(crate) mod test_helpers;
 
 pub use ci::CiReporter;
-pub(crate) use exit::compute_exit_code;
+pub(crate) use composite::CompositeReporter;
 pub use options::{ReporterOpts, ReporterOptsBuilder};
-pub use tty::TtyReporter;
-
-use format::{fmt_summary, fmt_tip_block, fmt_warning_block};
+pub(crate) use print::{print_collected, print_strict_abort, print_strict_suite_section};
 pub(crate) use stats::{FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry, RunStats};
+pub(crate) use traits::{standard_finish, StandardReporter};
+pub use traits::{ExitVote, Reporter};
+pub use tty::TtyReporter;
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
 pub(crate) use format::sep_width;
-
-// ─── ParametrizeBuffer ───────────────────────────────────────────────────────
-
-/// Buffers results for all cases of a single parametrized test function.
-///
-/// Parametrized cases are accumulated here so the reporter can emit a combined
-/// summary line (e.g. `test_add — 3 passed, 1 failed`) once all cases finish,
-/// rather than one line per case.
-///
-/// Statistics are computed incrementally on each `push()` to avoid repeated
-/// iteration over the results vector.
-pub(crate) struct ParametrizeBuffer {
-    pub fn_name: String,
-    pub results: Vec<(
-        crate::types::TestItem,
-        crate::types::TestOutcome,
-        DurationMs,
-    )>,
-    total_ms: DurationMs,
-    has_failure: bool,
-    passed_count: usize,
-}
-
-impl ParametrizeBuffer {
-    pub fn new(fn_name: String) -> Self {
-        Self {
-            fn_name,
-            results: Vec::new(),
-            total_ms: DurationMs::ZERO,
-            has_failure: false,
-            passed_count: 0,
-        }
-    }
-
-    pub fn push(
-        &mut self,
-        item: crate::types::TestItem,
-        outcome: crate::types::TestOutcome,
-        ms: DurationMs,
-    ) {
-        self.total_ms += ms;
-        if outcome.is_hard_failure() {
-            self.has_failure = true;
-        }
-        if matches!(outcome, crate::types::TestOutcome::Passed { .. }) {
-            self.passed_count += 1;
-        }
-        self.results.push((item, outcome, ms));
-    }
-
-    pub fn total_ms(&self) -> DurationMs {
-        self.total_ms
-    }
-
-    pub fn any_failed(&self) -> bool {
-        self.has_failure
-    }
-
-    pub fn passed_count(&self) -> usize {
-        self.passed_count
-    }
-}
-
-// ─── ExitVote ────────────────────────────────────────────────────────────────
-
-/// Exit code vote from a reporter.
-#[derive(Debug, Clone, Copy)]
-pub enum ExitVote {
-    /// Reporter does not influence exit code.
-    Abstain,
-    /// Reporter votes for this exit code.
-    Code(ExitCode),
-}
-
-impl ExitVote {
-    /// Extract the exit code, treating `Abstain` as `ExitCode::Success`.
-    pub fn code(self) -> ExitCode {
-        match self {
-            ExitVote::Abstain => ExitCode::Success,
-            ExitVote::Code(c) => c,
-        }
-    }
-}
-
-// ─── Trait ───────────────────────────────────────────────────────────────────
-
-/// Event sink for test results, progress, and the final summary.
-///
-/// Lifecycle per test: `test_started` → `test_completed`. After all tests,
-/// `finish` is called once with any collection errors and an interrupted flag.
-/// `finish` returns an [`ExitVote`] that contributes to the process exit code.
-///
-/// Implementers: [`TtyReporter`], [`CiReporter`], [`JsonReporter`], [`PyPluginReporter`],
-/// [`CompositeReporter`].
-pub trait Reporter {
-    fn test_started(&mut self, item: &crate::types::TestItem);
-    fn test_completed(
-        &mut self,
-        item: &crate::types::TestItem,
-        outcome: &crate::types::TestOutcome,
-        duration_ms: DurationMs,
-    );
-    fn finish(
-        &mut self,
-        collect_errors: &[CollectError],
-        interrupted: bool,
-        stats: &RunStats,
-    ) -> ExitVote;
-
-    /// Record a teardown warning (default: no-op).
-    /// `context` identifies what failed (e.g. "end_module(path)" or "end_session").
-    /// `error` is the stringified error message.
-    fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
-
-    /// Set fixture cache statistics for display in the summary.
-    fn set_fixture_cache_stats(
-        &mut self,
-        _hits: usize,
-        _misses: usize,
-        _breakdown: Vec<stats::FixtureCacheEntry>,
-    ) {
-    }
-
-    /// Set fixture timing data for display in the summary.
-    fn set_fixture_timings(&mut self, _timings: Vec<stats::FixtureTimingEntry>) {}
-}
 
 // ─── Deferred-failure dedup ──────────────────────────────────────────────────
 
@@ -182,93 +56,6 @@ pub(crate) fn remove_if_flaky<T>(
     if matches!(outcome, crate::types::TestOutcome::Flaky { .. }) {
         let target = item.node_id.as_ref();
         deferred.retain(|d| !matches_node(d, target));
-    }
-}
-
-// ─── Shared helpers ───────────────────────────────────────────────────────────
-
-/// Fans all reporter events to a list of inner reporters.
-///
-/// Owns the single [`RunStats`] for the run: records stats once in
-/// `test_completed` and passes them to sub-reporters via `finish`.
-/// `finish` collects [`ExitVote`]s from every inner reporter and returns the
-/// maximum code voted (treating `Abstain` as 0).
-pub struct CompositeReporter {
-    reporters: Vec<Box<dyn Reporter>>,
-    stats: RunStats,
-    strict_suite_count: usize,
-}
-
-impl CompositeReporter {
-    pub fn new(reporters: Vec<Box<dyn Reporter>>, strict_suite_count: usize) -> Self {
-        Self {
-            reporters,
-            stats: RunStats::new(),
-            strict_suite_count,
-        }
-    }
-}
-
-impl Reporter for CompositeReporter {
-    fn test_started(&mut self, item: &crate::types::TestItem) {
-        for r in &mut self.reporters {
-            r.test_started(item);
-        }
-    }
-
-    fn test_completed(
-        &mut self,
-        item: &crate::types::TestItem,
-        outcome: &crate::types::TestOutcome,
-        duration_ms: DurationMs,
-    ) {
-        self.stats.record(item, outcome);
-        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
-        for r in &mut self.reporters {
-            r.test_completed(item, outcome, duration_ms);
-        }
-    }
-
-    fn finish(
-        &mut self,
-        collect_errors: &[CollectError],
-        interrupted: bool,
-        _stats: &RunStats,
-    ) -> ExitVote {
-        self.stats.record_strict_suite(self.strict_suite_count);
-        self.reporters
-            .iter_mut()
-            .map(|r| r.finish(collect_errors, interrupted, &self.stats))
-            .filter_map(|v| match v {
-                ExitVote::Code(c) => Some(c),
-                ExitVote::Abstain => None,
-            })
-            .max()
-            .map_or(ExitVote::Code(ExitCode::Success), ExitVote::Code)
-    }
-
-    fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .warning_msgs
-            .push((context.to_string(), error.to_string()));
-        for r in &mut self.reporters {
-            r.record_teardown_warning(context, error);
-        }
-    }
-
-    fn set_fixture_cache_stats(
-        &mut self,
-        hits: usize,
-        misses: usize,
-        breakdown: Vec<stats::FixtureCacheEntry>,
-    ) {
-        self.stats.fixture_cache_hits = hits;
-        self.stats.fixture_cache_misses = misses;
-        self.stats.fixture_cache_breakdown = breakdown;
-    }
-
-    fn set_fixture_timings(&mut self, timings: Vec<stats::FixtureTimingEntry>) {
-        self.stats.fixture_timings = timings;
     }
 }
 
@@ -312,7 +99,7 @@ pub fn make_reporter(
 #[cfg(test)]
 mod json_tests {
     use super::*;
-    use crate::types::{LineNo, TestItem, TestOutcome};
+    use crate::types::{DurationMs, LineNo, TestItem, TestOutcome};
     use camino::Utf8PathBuf;
 
     // Uses "tests/test_mod.py" (not the shared helper's "tests/test_foo.py") because
@@ -439,177 +226,11 @@ mod json_tests {
     }
 }
 
-pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize) {
-    let suffix = if total == 1 { "" } else { "s" };
-    let from_fns = if fn_count > 0 && fn_count < total {
-        format!(
-            " from {} function{}",
-            fn_count,
-            if fn_count == 1 { "" } else { "s" }
-        )
-    } else {
-        String::new()
-    };
-    if async_count > 0 {
-        println!(
-            "collected {} item{}{} ({} async)\n",
-            total, suffix, from_fns, async_count
-        );
-    } else {
-        println!("collected {} item{}{}\n", total, suffix, from_fns);
-    }
-}
-
-pub(crate) fn print_summary_section(
-    stats: &RunStats,
-    opts: &ReporterOpts,
-    collect_errors: &[CollectError],
-    interrupted: bool,
-) -> ExitCode {
-    let tip_block = fmt_tip_block(&stats.tip_lines, opts.show_tips, opts.use_color);
-    let warn_block = fmt_warning_block(&stats.warning_msgs, opts.show_warnings, opts.use_color);
-    let summary = fmt_summary(stats, collect_errors.len(), opts.use_color);
-    println!("\n{}", summary);
-    if let Some(n) = opts.show_durations {
-        let slowest = stats.slowest(n);
-        if !slowest.is_empty() {
-            println!(
-                "\n{}",
-                colors::color_dim(&format!("slowest {} tests", slowest.len()), opts.use_color)
-            );
-            for (node_id, ms) in &slowest {
-                println!("  {:>8.2}ms  {}", ms, node_id);
-            }
-        }
-        let slowest_fx = stats.slowest_fixtures(n);
-        if !slowest_fx.is_empty() {
-            println!(
-                "\n{}",
-                colors::color_dim(
-                    &format!("slowest {} fixtures", slowest_fx.len()),
-                    opts.use_color,
-                )
-            );
-            for entry in &slowest_fx {
-                let detail = if entry.teardown_count > 0 {
-                    format!(
-                        "setup {:.2}ms ({}) + teardown {:.2}ms ({})",
-                        entry.total_setup_ms,
-                        entry.setup_count,
-                        entry.total_teardown_ms,
-                        entry.teardown_count,
-                    )
-                } else {
-                    format!(
-                        "setup {:.2}ms ({})",
-                        entry.total_setup_ms, entry.setup_count
-                    )
-                };
-                println!(
-                    "  {:>8.2}ms  {} \u{2014} {}",
-                    entry.total_ms(),
-                    entry.name,
-                    detail,
-                );
-            }
-        }
-    }
-    // Fixture cache stats — always shown when shared fixtures were used.
-    if let Some(summary) = stats.fixture_cache_summary() {
-        println!("\n{}", colors::color_dim(&summary, opts.use_color));
-        if opts.verbosity >= crate::config::Verbosity::Detailed {
-            let mut entries = stats.fixture_cache_breakdown.clone();
-            entries.sort_by_key(|e| std::cmp::Reverse(e.hits + e.misses));
-            for e in &entries {
-                let total = e.hits + e.misses;
-                let pct = (100 * e.hits).checked_div(total).unwrap_or(0);
-                println!("    {:<14} {}/{} ({}%)", e.name, e.hits, total, pct);
-            }
-        }
-    }
-    if !tip_block.is_empty() {
-        print!("{}", tip_block);
-    }
-    if !warn_block.is_empty() {
-        print!("{}", warn_block);
-    }
-    if !tip_block.is_empty() || !warn_block.is_empty() {
-        println!(
-            "{}",
-            colors::color_dim(&"═".repeat(sep_width()), opts.use_color)
-        );
-    }
-    flush();
-    compute_exit_code(stats, collect_errors.len(), interrupted)
-}
-
-fn flush() {
-    let _ = io::stdout().flush();
-}
-
-pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: bool) {
-    if !collect_errors.is_empty() {
-        println!("\nCOLLECTION ERRORS");
-        println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
-        let last = collect_errors.len() - 1;
-        for (i, ce) in collect_errors.iter().enumerate() {
-            println!("{}", ce);
-            if i < last {
-                println!();
-            }
-        }
-    }
-}
-
-pub(crate) fn print_strict_suite_section(opts: &ReporterOpts) {
-    if !opts.strict_suite_lines.is_empty() {
-        let hdr = format!(
-            "STRICT {}",
-            colors::color_dim(
-                &"═".repeat(sep_width().saturating_sub("STRICT ".len())),
-                opts.use_color,
-            )
-        );
-        println!("\n{}", hdr);
-        for line in &opts.strict_suite_lines {
-            println!("  {}", line);
-        }
-    }
-}
-
-pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
-    println!("\nSTRICT VIOLATIONS");
-    println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
-    for line in formatted_lines {
-        println!("  {}", line);
-    }
-    println!("strict violations found — aborting (exit 3)");
-}
-
-pub(crate) trait StandardReporter {
-    fn pre_finish(&mut self);
-    fn run_opts(&self) -> &ReporterOpts;
-}
-
-pub(crate) fn standard_finish(
-    r: &mut impl StandardReporter,
-    stats: &RunStats,
-    collect_errors: &[CollectError],
-    interrupted: bool,
-) -> ExitVote {
-    print_collect_errors(collect_errors, r.run_opts().use_color);
-    ExitVote::Code(print_summary_section(
-        stats,
-        r.run_opts(),
-        collect_errors,
-        interrupted,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::reporter::stats::RunStats;
+    use crate::types::{CollectError, DurationMs, ExitCode};
 
     #[test]
     fn test_slowest_block_included_when_show_durations_set() {
@@ -646,6 +267,7 @@ mod tests {
 
     #[test]
     fn test_print_collect_errors_is_noop_when_empty() {
+        use super::print::print_collect_errors;
         // smoke test — no panic when slice is empty
         print_collect_errors(&[], false);
         print_collect_errors(&[], true);
@@ -653,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_print_collect_errors_prints_when_non_empty() {
-        use crate::types::CollectError;
+        use super::print::print_collect_errors;
         // smoke test — function must not panic when given errors
         let errors = vec![CollectError::PyError("import failed".to_string())];
         print_collect_errors(&errors, false);
@@ -667,125 +289,7 @@ mod tests {
             "marker 'db' has no description".to_string(),
         ];
         // Should not panic. Output goes to stdout (captured in test harness).
-        super::print_strict_abort(&lines, false);
-    }
-
-    // ── ParametrizeBuffer ─────────────────────────────────────────────────────
-
-    #[test]
-    fn test_parametrize_buffer_total_ms_sums_all_durations() {
-        use crate::reporter::test_helpers::make_item;
-        use crate::types::TestOutcome;
-
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(10.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(25.5),
-        );
-        assert!(
-            (buf.total_ms().as_f64() - 35.5).abs() < 0.001,
-            "total_ms should sum all durations, got {}",
-            buf.total_ms()
-        );
-    }
-
-    #[test]
-    fn test_parametrize_buffer_any_failed_true_when_failure_present() {
-        use crate::reporter::test_helpers::{make_failed, make_item};
-        use crate::types::TestOutcome;
-
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(1.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            make_failed("oops", "t.py", 1, "assert x"),
-            DurationMs::new(1.0),
-        );
-        assert!(
-            buf.any_failed(),
-            "any_failed should be true when a Failed outcome is present"
-        );
-    }
-
-    #[test]
-    fn test_parametrize_buffer_any_failed_false_when_all_pass_or_skip() {
-        use crate::reporter::test_helpers::make_item;
-        use crate::types::TestOutcome;
-
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(1.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Skipped {
-                reason: "not ready".to_string(),
-            },
-            DurationMs::ZERO,
-        );
-        assert!(
-            !buf.any_failed(),
-            "any_failed should be false when no hard failures are present"
-        );
-    }
-
-    #[test]
-    fn test_parametrize_buffer_passed_count_counts_only_passed_outcomes() {
-        use crate::reporter::test_helpers::{make_failed, make_item};
-        use crate::types::TestOutcome;
-
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(1.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
-            DurationMs::new(1.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            make_failed("oops", "t.py", 1, "assert x"),
-            DurationMs::new(1.0),
-        );
-        buf.push(
-            (*make_item("test_add")).clone(),
-            TestOutcome::Skipped {
-                reason: "skip".to_string(),
-            },
-            DurationMs::ZERO,
-        );
-        assert_eq!(
-            buf.passed_count(),
-            2,
-            "passed_count should count only Passed outcomes, not Failed or Skipped"
-        );
+        print_strict_abort(&lines, false);
     }
 
     // ── CompositeReporter ─────────────────────────────────────────────────────
