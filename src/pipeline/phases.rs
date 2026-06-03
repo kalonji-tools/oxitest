@@ -7,7 +7,10 @@
 use pyo3::prelude::*;
 
 use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
-use super::{collection, execution, helpers, PhaseOutcome, PipelineContext, PipelinePhase};
+use super::{
+    collection, execution, helpers, CollectionState, ExecutionResults, PhaseOutcome,
+    PipelineContext, PipelinePhase,
+};
 use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
 use crate::types::ExitCode;
 use crate::{
@@ -71,7 +74,11 @@ impl PipelinePhase for SessionPhase {
                     )));
                 }
             };
-        ctx.raw_violations.extend(fixture_violations);
+        // Stash fixture violations in the Collected state for CollectionPhase to merge.
+        ctx.collection = CollectionState::Collected {
+            items: Vec::new(),
+            raw_violations: fixture_violations,
+        };
 
         if !ctx.cfg.plugins.is_empty() {
             if let Err(e) = session.load_plugins(py, &ctx.cfg.plugins, &ctx.cfg.plugin_settings) {
@@ -218,15 +225,32 @@ impl PipelinePhase for CollectionPhase<'_> {
                 &|| ctx.make_error_reporter(),
             )));
         }
-        ctx.items = items;
-        ctx.raw_violations.extend(raw_violations);
+
+        // Merge session-phase violations (if any) with collection violations.
+        let mut merged_violations =
+            match std::mem::replace(&mut ctx.collection, CollectionState::Empty) {
+                CollectionState::Collected {
+                    raw_violations: existing,
+                    ..
+                } => existing,
+                CollectionState::Empty => Vec::new(),
+                other => {
+                    panic!("expected Empty or Collected before CollectionPhase, got {other:?}")
+                }
+            };
+        merged_violations.extend(raw_violations);
 
         // Detect unused fixtures when strict mode is enabled.
         if ctx.cfg.strict.is_some() {
-            if let Ok(unused) = bridge::find_unused_fixtures(py, session, &ctx.items) {
-                ctx.raw_violations.extend(unused);
+            if let Ok(unused) = bridge::find_unused_fixtures(py, session, &items) {
+                merged_violations.extend(unused);
             }
         }
+
+        ctx.collection = CollectionState::Collected {
+            items,
+            raw_violations: merged_violations,
+        };
 
         if let Some(ref profile) = ctx.collection_profile {
             eprintln!("{}", collection::format_collection_profile(profile));
@@ -280,7 +304,11 @@ impl PipelinePhase for FixtureValidationPhase {
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
-        let errors = bridge::validate_fixture_names(py, session, &ctx.items)
+        let items = match &ctx.collection {
+            CollectionState::Collected { items, .. } => items,
+            other => panic!("expected Collected before FixtureValidationPhase, got {other:?}"),
+        };
+        let errors = bridge::validate_fixture_names(py, session, items)
             .map_err(|_| ExitCode::CollectError)?;
 
         if errors.is_empty() {
@@ -317,8 +345,14 @@ impl PipelinePhase for StrictPhase {
         _py: Python<'_>,
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
-        let raw_violations = std::mem::take(&mut ctx.raw_violations);
-        let items = std::mem::take(&mut ctx.items);
+        let (items, raw_violations) =
+            match std::mem::replace(&mut ctx.collection, CollectionState::Empty) {
+                CollectionState::Collected {
+                    items,
+                    raw_violations,
+                } => (items, raw_violations),
+                other => panic!("expected Collected before StrictPhase, got {other:?}"),
+            };
 
         // Build the full violation list.
         let all_violations: Vec<strict::StrictViolation> = if ctx.cfg.strict.is_some() {
@@ -364,10 +398,12 @@ impl PipelinePhase for StrictPhase {
                 (vec![], items)
             };
 
-        ctx.items = clean_items;
-        ctx.violated_items = violated_items;
-        ctx.all_violations = all_violations;
-        ctx.suite_lines = suite_lines;
+        ctx.collection = CollectionState::Partitioned {
+            clean_items,
+            violated_items,
+            all_violations,
+            suite_lines,
+        };
         Ok(PhaseOutcome::Continue)
     }
 }
@@ -391,7 +427,24 @@ impl PipelinePhase for FilterPhase {
         _py: Python<'_>,
         ctx: &mut PipelineContext,
     ) -> Result<PhaseOutcome, ExitCode> {
-        let items = std::mem::take(&mut ctx.items);
+        // Accept either Collected (strict skipped) or Partitioned (strict ran).
+        let (items, violated_items, all_violations, suite_lines) =
+            match std::mem::replace(&mut ctx.collection, CollectionState::Empty) {
+                CollectionState::Collected { items, .. } => {
+                    // Strict was skipped — no violations to carry forward.
+                    (items, vec![], vec![], vec![])
+                }
+                CollectionState::Partitioned {
+                    clean_items,
+                    violated_items,
+                    all_violations,
+                    suite_lines,
+                } => (clean_items, violated_items, all_violations, suite_lines),
+                other => {
+                    panic!("expected Collected or Partitioned before FilterPhase, got {other:?}")
+                }
+            };
+
         let (keyword, marker_expr) = match &ctx.command {
             config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
             config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
@@ -452,7 +505,12 @@ impl PipelinePhase for FilterPhase {
             None => items,
         };
 
-        ctx.items = items;
+        ctx.collection = CollectionState::Ready {
+            clean_items: items,
+            violated_items,
+            all_violations,
+            suite_lines,
+        };
         Ok(PhaseOutcome::Continue)
     }
 }
@@ -478,23 +536,33 @@ impl PipelinePhase for ExecutionPhase<'_> {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
 
-        let total = ctx.violated_items.len() + ctx.items.len();
+        let (clean_items, violated_items, all_violations, suite_lines) =
+            match std::mem::replace(&mut ctx.collection, CollectionState::Empty) {
+                CollectionState::Ready {
+                    clean_items,
+                    violated_items,
+                    all_violations,
+                    suite_lines,
+                } => (clean_items, violated_items, all_violations, suite_lines),
+                other => panic!("expected Ready before ExecutionPhase, got {other:?}"),
+            };
+
+        let total = violated_items.len() + clean_items.len();
         let fn_count = {
             let mut seen = std::collections::HashSet::new();
-            for item in ctx.items.iter().chain(ctx.violated_items.iter()) {
+            for item in clean_items.iter().chain(violated_items.iter()) {
                 seen.insert((&item.module_path, &item.fn_name));
             }
             seen.len()
         };
-        let async_count = ctx.items.iter().filter(|i| i.is_async).count();
-        let max_name_width = ctx
-            .items
+        let async_count = clean_items.iter().filter(|i| i.is_async).count();
+        let max_name_width = clean_items
             .iter()
-            .chain(ctx.violated_items.iter())
+            .chain(violated_items.iter())
             .map(|i| i.fn_name.len())
             .max()
             .unwrap_or(30);
-        ctx.cache.invalidate(&ctx.items);
+        ctx.cache.invalidate(&clean_items);
 
         // Fetch plugin reporters from Python registry.
         let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !ctx.cfg.plugins.is_empty() {
@@ -515,25 +583,20 @@ impl PipelinePhase for ExecutionPhase<'_> {
             _ => (None, None),
         };
 
-        let rep = reporter::make_reporter(
+        let mut rep = reporter::make_reporter(
             ctx.base
                 .clone()
                 .total(total)
                 .fn_count(fn_count)
                 .async_count(async_count)
                 .name_width(max_name_width)
-                .strict_suite_lines(std::mem::take(&mut ctx.suite_lines))
+                .strict_suite_lines(suite_lines)
                 .build(),
             ctx.is_tty,
             json_path,
             junit_path,
             plugin_reporters,
         );
-        ctx.reporter = Some(rep);
-
-        let violated_items = std::mem::take(&mut ctx.violated_items);
-        let all_violations = std::mem::take(&mut ctx.all_violations);
-        let items = std::mem::take(&mut ctx.items);
 
         let exec_ctx = execution::ExecutionContext {
             cfg: &ctx.cfg,
@@ -550,16 +613,19 @@ impl PipelinePhase for ExecutionPhase<'_> {
             timings,
         } = execution::execute(
             py,
-            items.clone(),
+            clean_items.clone(),
             violated_items,
             all_violations,
             &exec_ctx,
-            ctx.reporter.as_deref_mut().expect("just created"),
+            rep.as_mut(),
         );
 
-        ctx.items = items; // Restore for RetryPhase
-        ctx.timings = timings;
-        ctx.interrupted = interrupted;
+        ctx.collection = CollectionState::Executed { items: clean_items };
+        ctx.execution_results = Some(ExecutionResults {
+            timings,
+            interrupted,
+            reporter: rep,
+        });
         Ok(PhaseOutcome::Continue)
     }
 }
@@ -577,17 +643,26 @@ impl PipelinePhase for RetryPhase<'_> {
     }
 
     fn should_run(&self, ctx: &PipelineContext) -> bool {
-        ctx.cfg.retries > 0 && !ctx.interrupted
+        let not_interrupted = ctx
+            .execution_results
+            .as_ref()
+            .is_none_or(|r| !r.interrupted);
+        ctx.cfg.retries > 0 && not_interrupted
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
-        let rep = ctx
-            .reporter
-            .as_deref_mut()
+        let res = ctx
+            .execution_results
+            .as_mut()
             .expect("ExecutionPhase must run first");
 
-        let failed_items = retry::identify_failed_items(&ctx.items, &ctx.timings);
+        let items = match &ctx.collection {
+            CollectionState::Executed { items } => items,
+            other => panic!("expected Executed before RetryPhase, got {other:?}"),
+        };
+
+        let failed_items = retry::identify_failed_items(items, &res.timings);
         if failed_items.is_empty() {
             return Ok(PhaseOutcome::Continue);
         }
@@ -606,10 +681,10 @@ impl PipelinePhase for RetryPhase<'_> {
         let retry::RetryResult {
             flaky_ids,
             retry_timings,
-        } = retry::run_retries(&retry_ctx, &failed_items, rep);
+        } = retry::run_retries(&retry_ctx, &failed_items, res.reporter.as_mut());
 
-        let original_timings = std::mem::take(&mut ctx.timings);
-        ctx.timings = retry::merge_flaky_timings(original_timings, &flaky_ids, retry_timings);
+        let original_timings = std::mem::take(&mut res.timings);
+        res.timings = retry::merge_flaky_timings(original_timings, &flaky_ids, retry_timings);
 
         Ok(PhaseOutcome::Continue)
     }
@@ -631,20 +706,27 @@ impl PipelinePhase for FinalizePhase {
     }
 
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
+        let ExecutionResults {
+            timings,
+            interrupted,
+            mut reporter,
+        } = ctx
+            .execution_results
+            .take()
+            .expect("ExecutionPhase must run first");
+
         // Fetch fixture timings from the Python session before finalizing.
         if let Some(session) = ctx.session.as_ref() {
-            if let Ok(timings) = session.get_fixture_timings(py) {
-                if !timings.is_empty() {
-                    if let Some(rep) = ctx.reporter.as_deref_mut() {
-                        rep.set_fixture_timings(timings);
-                    }
+            if let Ok(ft) = session.get_fixture_timings(py) {
+                if !ft.is_empty() {
+                    reporter.set_fixture_timings(ft);
                 }
             }
         }
 
         helpers::finalize(
             &mut ctx.cache,
-            &ctx.timings,
+            &timings,
             ctx.cfg.cache_max_age,
             &ctx.rootdir,
         );
@@ -652,15 +734,12 @@ impl PipelinePhase for FinalizePhase {
         if let Some(session) = ctx.session.as_ref() {
             if let Ok(stats) = session.get_cache_stats(py) {
                 if stats.hits + stats.misses > 0 {
-                    if let Some(rep) = ctx.reporter.as_deref_mut() {
-                        rep.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
-                    }
+                    reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
                 }
             }
         }
-        let mut rep = ctx.reporter.take().expect("ExecutionPhase must run first");
-        let code = rep
-            .finish(&[], ctx.interrupted, &reporter::RunStats::new())
+        let code = reporter
+            .finish(&[], interrupted, &reporter::RunStats::new())
             .code();
         Ok(PhaseOutcome::EarlyExit(code))
     }
