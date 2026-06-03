@@ -613,7 +613,7 @@ impl PipelinePhase for ExecutionPhase<'_> {
             timings,
         } = execution::execute(
             py,
-            clean_items.clone(),
+            &clean_items,
             violated_items,
             all_violations,
             &exec_ctx,
