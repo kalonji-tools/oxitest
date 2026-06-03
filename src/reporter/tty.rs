@@ -10,9 +10,71 @@ use super::colors::{
     color_skip, color_timeout, color_warn,
 };
 use super::format::{fmt_diagnostic_block, pad_to, plural};
-use super::{ParametrizeBuffer, Reporter, ReporterOpts, StandardReporter};
+use super::{Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
+
+// ─── ParametrizeBuffer ───────────────────────────────────────────────────────
+
+/// Buffers results for all cases of a single parametrized test function.
+///
+/// Parametrized cases are accumulated here so the reporter can emit a combined
+/// summary line (e.g. `test_add — 3 passed, 1 failed`) once all cases finish,
+/// rather than one line per case.
+///
+/// Statistics are computed incrementally on each `push()` to avoid repeated
+/// iteration over the results vector.
+pub(crate) struct ParametrizeBuffer {
+    pub fn_name: String,
+    pub results: Vec<(
+        crate::types::TestItem,
+        crate::types::TestOutcome,
+        DurationMs,
+    )>,
+    total_ms: DurationMs,
+    has_failure: bool,
+    passed_count: usize,
+}
+
+impl ParametrizeBuffer {
+    pub fn new(fn_name: String) -> Self {
+        Self {
+            fn_name,
+            results: Vec::new(),
+            total_ms: DurationMs::ZERO,
+            has_failure: false,
+            passed_count: 0,
+        }
+    }
+
+    pub fn push(
+        &mut self,
+        item: crate::types::TestItem,
+        outcome: crate::types::TestOutcome,
+        ms: DurationMs,
+    ) {
+        self.total_ms += ms;
+        if outcome.is_hard_failure() {
+            self.has_failure = true;
+        }
+        if matches!(outcome, crate::types::TestOutcome::Passed { .. }) {
+            self.passed_count += 1;
+        }
+        self.results.push((item, outcome, ms));
+    }
+
+    pub fn total_ms(&self) -> DurationMs {
+        self.total_ms
+    }
+
+    pub fn any_failed(&self) -> bool {
+        self.has_failure
+    }
+
+    pub fn passed_count(&self) -> usize {
+        self.passed_count
+    }
+}
 
 fn truncate_name(name: &str, max_width: usize) -> Cow<'_, str> {
     if name.len() <= max_width {
@@ -642,8 +704,6 @@ mod tests {
 
     #[test]
     fn test_flush_param_group_all_passed_duration_before_cases() {
-        use crate::reporter::ParametrizeBuffer;
-
         let reporter = make_tty_reporter();
         let item = make_item("test_math");
         let outcome = TestOutcome::Passed {
@@ -682,8 +742,6 @@ mod tests {
 
     #[test]
     fn test_flush_param_group_singular_case() {
-        use crate::reporter::ParametrizeBuffer;
-
         let reporter = make_tty_reporter();
         let item = make_item("test_single");
         let outcome = TestOutcome::Passed {
@@ -795,5 +853,115 @@ mod tests {
         };
         reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
         assert!(reporter.running_tests.is_empty());
+    }
+
+    // ── ParametrizeBuffer ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parametrize_buffer_total_ms_sums_all_durations() {
+        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(10.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(25.5),
+        );
+        assert!(
+            (buf.total_ms().as_f64() - 35.5).abs() < 0.001,
+            "total_ms should sum all durations, got {}",
+            buf.total_ms()
+        );
+    }
+
+    #[test]
+    fn test_parametrize_buffer_any_failed_true_when_failure_present() {
+        use crate::reporter::test_helpers::make_failed;
+
+        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(1.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            make_failed("oops", "t.py", 1, "assert x"),
+            DurationMs::new(1.0),
+        );
+        assert!(
+            buf.any_failed(),
+            "any_failed should be true when a Failed outcome is present"
+        );
+    }
+
+    #[test]
+    fn test_parametrize_buffer_any_failed_false_when_all_pass_or_skip() {
+        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(1.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Skipped {
+                reason: "not ready".to_string(),
+            },
+            DurationMs::ZERO,
+        );
+        assert!(
+            !buf.any_failed(),
+            "any_failed should be false when no hard failures are present"
+        );
+    }
+
+    #[test]
+    fn test_parametrize_buffer_passed_count_counts_only_passed_outcomes() {
+        use crate::reporter::test_helpers::make_failed;
+
+        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(1.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Passed {
+                no_message_lines: vec![],
+            },
+            DurationMs::new(1.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            make_failed("oops", "t.py", 1, "assert x"),
+            DurationMs::new(1.0),
+        );
+        buf.push(
+            (*make_item("test_add")).clone(),
+            TestOutcome::Skipped {
+                reason: "skip".to_string(),
+            },
+            DurationMs::ZERO,
+        );
+        assert_eq!(
+            buf.passed_count(),
+            2,
+            "passed_count should count only Passed outcomes, not Failed or Skipped"
+        );
     }
 }
