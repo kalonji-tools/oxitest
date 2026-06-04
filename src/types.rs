@@ -1346,6 +1346,109 @@ mod tests {
         assert_eq!(item.lineno, LineNo::new(1));
     }
 
+    // ── TestOutcome builders ────────────────────────────────────────────────
+
+    #[test]
+    fn outcome_failed_builder_defaults() {
+        let outcome = TestOutcome::failed("oops").build();
+        match outcome {
+            TestOutcome::Failed {
+                message,
+                file,
+                lineno,
+                source_line,
+                left,
+                right,
+                op,
+                frames,
+                field_diffs,
+            } => {
+                assert_eq!(message, "oops");
+                assert_eq!(file.as_str(), "tests/test_foo.py");
+                assert_eq!(lineno, LineNo::new(1));
+                assert_eq!(source_line, "");
+                assert_eq!(left, "");
+                assert_eq!(right, "");
+                assert_eq!(op, "");
+                assert!(frames.is_empty());
+                assert!(field_diffs.is_empty());
+            }
+            other => panic!("expected Failed, got {}", other.as_str()),
+        }
+    }
+
+    #[test]
+    fn outcome_failed_builder_with_comparison() {
+        let outcome = TestOutcome::failed("assert x == 42")
+            .file("test.py")
+            .lineno(8)
+            .source("assert x == 42")
+            .comparison("41", "==", "42")
+            .build();
+        match outcome {
+            TestOutcome::Failed {
+                left,
+                op,
+                right,
+                file,
+                lineno,
+                ..
+            } => {
+                assert_eq!(left, "41");
+                assert_eq!(op, "==");
+                assert_eq!(right, "42");
+                assert_eq!(file.as_str(), "test.py");
+                assert_eq!(lineno, LineNo::new(8));
+            }
+            other => panic!("expected Failed, got {}", other.as_str()),
+        }
+    }
+
+    #[test]
+    fn outcome_error_builder_defaults() {
+        let outcome = TestOutcome::error("RuntimeError").build();
+        match outcome {
+            TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+            } => {
+                assert_eq!(message, "RuntimeError");
+                assert_eq!(file.as_str(), "tests/test_foo.py");
+                assert_eq!(lineno, LineNo::new(1));
+                assert_eq!(source_line, "");
+                assert!(frames.is_empty());
+            }
+            other => panic!("expected Error, got {}", other.as_str()),
+        }
+    }
+
+    #[test]
+    fn outcome_error_builder_with_overrides() {
+        let outcome = TestOutcome::error("ValueError")
+            .file("mod.py")
+            .lineno(5)
+            .source("int('abc')")
+            .build();
+        match outcome {
+            TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                ..
+            } => {
+                assert_eq!(message, "ValueError");
+                assert_eq!(file.as_str(), "mod.py");
+                assert_eq!(lineno, LineNo::new(5));
+                assert_eq!(source_line, "int('abc')");
+            }
+            other => panic!("expected Error, got {}", other.as_str()),
+        }
+    }
+
     fn raw(status: &str) -> RawOutcome<'_> {
         RawOutcome {
             status,
