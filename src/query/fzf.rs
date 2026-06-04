@@ -96,9 +96,9 @@ fn keybindings(resource: super::resource::ResourceKind) -> Vec<String> {
     match resource {
         ResourceKind::Tests => {
             // become() replaces fzf with the command — no flicker, clean handoff
-            // {1} = node_id (e.g. tests/test_a.py::test_foo), unique for -k matching
-            binds.push("--bind=enter:become(oxitest run -k {1})".to_string());
-            binds.push("--bind=ctrl-r:become(oxitest debug -k {1})".to_string());
+            // {1} = node_id (e.g. tests/test_a.py::test_foo)
+            binds.push(r#"--bind=enter:become(oxitest run -E "name(={1})")"#.to_string());
+            binds.push(r#"--bind=ctrl-r:become(oxitest debug -E "name(={1})")"#.to_string());
         }
         ResourceKind::Fixtures => {
             binds.push("--bind=enter:execute(oxitest query fixtures --tree)".to_string());
