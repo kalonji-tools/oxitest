@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 from conftest import helpers
-from oxitest._bridge._fixture_registry import FixtureDef
 from oxitest._bridge._fixture_session import _NullFixtureSession
 
 
@@ -82,15 +81,8 @@ def test_shared_fixture_setup_timed_once():
         return 99
 
     session = helpers.common.make_session(
-        FixtureDef(
-            name="shared_fx",
-            func=shared_fixture,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=True,
-            namespace="",
-            is_async=False,
+        helpers.common.make_fixture_def(
+            "shared_fx", shared_fixture, conftest_path="/conftest.py", shared=True
         )
     )
     session.begin_module("test_mod.py")
@@ -114,15 +106,8 @@ def test_multiple_fixtures_each_tracked_separately():
     teardowns: list = []
 
     session._registry.register(
-        FixtureDef(
-            name="fast_b",
-            func=lambda: 2,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=False,
-            namespace="",
-            is_async=False,
+        helpers.common.make_fixture_def(
+            "fast_b", lambda: 2, conftest_path="/conftest.py"
         )
     )
 
