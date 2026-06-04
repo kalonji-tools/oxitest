@@ -364,7 +364,6 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
 
     reg.register(helpers.common.make_fixture_def("my_fixture", side_effect_fixture))
     session = FixtureSession(reg)
-    session.begin_module(str(tmp / "test_exec.py"))
 
     path = _write_test(
         tmp,

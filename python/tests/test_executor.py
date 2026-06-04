@@ -323,7 +323,6 @@ def test_run_test_with_fixture_injected(tmp: TempDir):
         "def test_uses_val(val: Fixture[int]) -> None: assert val == 99\n"
     )
     session = helpers.common.make_session_with("val", lambda: 99)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
         f"test with injected fixture should pass, got status={result.status!r}, "
@@ -342,7 +341,6 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
         raise RuntimeError("db is down")
 
     session = helpers.common.make_session_with("bad", bad_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
         f"fixture setup error should produce status='error', got {result.status!r}"
@@ -364,7 +362,6 @@ def test_run_test_missing_fixture_returns_error_result(
         "from oxitest import Fixture\n"
         "def test_uses_missing(nonexistent: Fixture[int]) -> None: pass\n"
     )
-    fixture_session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_missing", fixture_session)
     assert result.status == "error", (
         f"missing fixture should produce status='error', got {result.status!r}"
@@ -389,7 +386,6 @@ def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir):
         torn_down.append(True)
 
     session = helpers.common.make_session_with("val", factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_fail", session)
     assert result.status == "failed", (
         f"test with failing assertion should produce status='failed', got "
@@ -418,7 +414,6 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         raise RuntimeError("teardown exploded")
 
     session = helpers.common.make_session_with("val", factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"teardown exception must not affect test result, got "
@@ -458,7 +453,6 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
     reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"teardown exception must not propagate to test result, got "
@@ -501,7 +495,6 @@ def test_multiple_teardown_failures_all_reported(
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
     reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"test result should be passed despite all teardowns failing, got "
@@ -587,7 +580,6 @@ def test_compact_parametrize_mixed_with_fixture(tmp: TempDir):
         "    assert db == 99\n"
     )
     session = helpers.common.make_session_with("db", lambda: 99)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_mixed", session, param_id="case1")
     assert result.status == "passed", (
         f"compact parametrize with fixture should pass, got status={result.status!r}, "
@@ -779,7 +771,6 @@ def test_async_test_with_async_fixture(tmp: TempDir):
         return 99
 
     session = helpers.common.make_session_with("val", async_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
         f"async test with async fixture should pass, got status={result.status!r}, "
@@ -795,7 +786,6 @@ def test_async_test_with_sync_fixture(tmp: TempDir):
         "    assert val == 42\n"
     )
     session = helpers.common.make_session_with("val", lambda: 42)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
         f"async test with sync fixture should pass, got status={result.status!r}, "
@@ -815,7 +805,6 @@ def test_async_fixture_setup_error(tmp: TempDir):
         raise RuntimeError("db is down")
 
     session = helpers.common.make_session_with("bad", bad_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
         f"async fixture setup error should produce status='error', "
@@ -838,7 +827,6 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
         return 99
 
     session = helpers.common.make_session_with("val", async_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "error", (
         f"sync test with async fixture should produce error, got {result.status!r}, "
@@ -867,7 +855,6 @@ def test_async_yield_fixture_provides_value(tmp: TempDir):
         yield 42
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "passed", (
         f"async yield fixture should provide value, got status={result.status!r}, "
@@ -891,7 +878,6 @@ def test_async_yield_fixture_teardown_runs(tmp: TempDir):
         log.append("teardown")
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"expected passed, got status={result.status!r}, msg={result.message!r}"
@@ -916,7 +902,6 @@ def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir):
         torn_down.append(True)
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_fail", session)
     assert result.status == "failed", f"test should fail, got status={result.status!r}"
     assert torn_down == [True], (
@@ -939,7 +924,6 @@ def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir):
         torn_down.append(True)
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_err", session)
     assert result.status == "error", f"test should error, got status={result.status!r}"
     assert torn_down == [True], (
@@ -972,7 +956,6 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir):
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
     reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"expected passed, got status={result.status!r}, msg={result.message!r}"
@@ -997,7 +980,6 @@ def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCaptur
         raise RuntimeError("teardown exploded")
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"teardown error should not affect test result, got status={result.status!r}, "
@@ -1022,7 +1004,6 @@ def test_async_yield_fixture_setup_error(tmp: TempDir):
         yield  # noqa: RET503
 
     session = helpers.common.make_session_with("bad", bad_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_bad", session)
     assert result.status == "error", (
         f"async yield fixture setup error should produce error, got {result.status!r}"
@@ -1044,7 +1025,6 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir):
         yield 42
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_val", session)
     assert result.status == "error", (
         f"sync test with async yield fixture should produce error, "
@@ -1122,7 +1102,6 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
         torn_down.append(True)
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_slow", session)
     assert result.status == "timeout", (
         f"test should timeout, got status={result.status!r}"
@@ -1157,7 +1136,6 @@ def test_shared_async_fixture_provides_value(tmp: TempDir):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_pool", session)
     assert result.status == "passed", (
         f"shared async fixture should provide value, got status={result.status!r}, "
@@ -1192,7 +1170,6 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     r1 = helpers.common.run_test(str(f), "test_a", session)
     r2 = helpers.common.run_test(str(f), "test_b", session)
     assert r1.status == "passed", f"test_a: {r1.status!r}, {r1.message!r}"
@@ -1228,7 +1205,6 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     r1 = helpers.common.run_test(str(f), "test_leaker", session)
     r2 = helpers.common.run_test(str(f), "test_clean", session)
     assert r1.status == "passed", f"test_leaker: {r1.status!r}, {r1.message!r}"
@@ -1266,7 +1242,6 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
         f"expected passed, got status={result.status!r}, msg={result.message!r}"
@@ -1307,7 +1282,6 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     r1 = helpers.common.run_test(str(f), "test_shared", session)
     r2 = helpers.common.run_test(str(f), "test_independent", session)
     assert r1.status == "passed", f"test_shared: {r1.status!r}, {r1.message!r}"
@@ -1402,7 +1376,6 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir):
         helpers.common.make_fixture_def("combo", sync_factory, conftest_path="/c.py")
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_combo", session)
     assert result.status == "error", (
         f"sync fixture depending on async fixture should error, "
@@ -1441,7 +1414,6 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir):
         )
     )
     session = FixtureSession(reg)
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_uses_pool", session)
     assert result.status == "error", (
         f"shared async depending on non-shared async should error, "

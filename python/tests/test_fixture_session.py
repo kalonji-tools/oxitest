@@ -16,7 +16,6 @@ def test_setup_timing_recorded_for_function_scoped_fixture():
         return 42
 
     session = helpers.common.make_session_with("slow_fixture", slow_fixture)
-    session.begin_module("test_mod.py")
     teardowns: list = []
     session.get_fixture("slow_fixture", "test_mod.py", teardowns)
 
@@ -54,7 +53,6 @@ def test_teardown_timing_recorded_for_yield_fixture():
         time.sleep(0.01)
 
     session = helpers.common.make_session_with("yield_fx", yield_fixture)
-    session.begin_module("test_mod.py")
     teardowns: list = []
     session.get_fixture("yield_fx", "test_mod.py", teardowns)
 
@@ -85,7 +83,6 @@ def test_shared_fixture_setup_timed_once():
             "shared_fx", shared_fixture, conftest_path="/conftest.py", shared=True
         )
     )
-    session.begin_module("test_mod.py")
     teardowns: list = []
 
     session.get_fixture("shared_fx", "test_mod.py", teardowns)
@@ -102,7 +99,6 @@ def test_shared_fixture_setup_timed_once():
 def test_multiple_fixtures_each_tracked_separately():
     """Each fixture gets its own timing entry."""
     session = helpers.common.make_session_with("fast_a", lambda: 1)
-    session.begin_module("test_mod.py")
     teardowns: list = []
 
     session._registry.register(
