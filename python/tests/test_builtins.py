@@ -753,7 +753,6 @@ def test_tempdir_injected_via_session():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(tmp: TempDir) -> None:  # type: ignore[valid-type]
         pass
@@ -778,7 +777,6 @@ def test_tempdir_factory_session_scoped():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(factory: TempDirFactory) -> None:  # type: ignore[valid-type]
         pass
@@ -797,7 +795,6 @@ def test_stdcapture_injected_via_session():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(cap: StdCapture) -> None:  # type: ignore[valid-type]
         pass
@@ -821,7 +818,6 @@ def test_patcher_injected_via_session():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(patch: Patcher) -> None:  # type: ignore[valid-type]
         pass
@@ -854,7 +850,6 @@ def test_testcontext_still_works_via_builtin_dispatch():
         helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
     )
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -1080,7 +1075,6 @@ def test_logcapture_injected_via_session():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(log: LogCapture) -> None:  # type: ignore[valid-type]
         pass

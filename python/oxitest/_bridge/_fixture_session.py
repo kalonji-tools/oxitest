@@ -512,10 +512,6 @@ class FixtureSession:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    def begin_module(self, module_path: str) -> None:
-        # Rust no longer calls this; kept as a no-op for test-suite compatibility.
-        pass
-
     def end_module(self, module_path: str) -> None:
         self._module_cache.evict(module_path)
 
