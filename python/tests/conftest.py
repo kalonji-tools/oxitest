@@ -115,18 +115,7 @@ def make_session(*defs: FixtureDef) -> FixtureSession:
 
 def make_session_with(name: str, factory) -> FixtureSession:
     """Shortcut: single-fixture session for quick tests."""
-    return make_session(
-        FixtureDef(
-            name=name,
-            func=factory,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=False,
-            namespace="",
-            is_async=False,
-        )
-    )
+    return make_session(make_fixture_def(name, factory, conftest_path="/conftest.py"))
 
 
 def run_oxitest(
