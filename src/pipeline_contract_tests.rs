@@ -3,18 +3,6 @@ use crate::reporter::test_helpers::make_ctx;
 use crate::test_doubles::doubles::{MockPhase, RecordingSession, StubCollector, StubRunner};
 use crate::types::{ExitCode, TestItem};
 
-/// Helper: set the collection state to `Collected` with given items and raw violations.
-fn set_collected(
-    ctx: &mut PipelineContext,
-    items: Vec<std::sync::Arc<types::TestItem>>,
-    raw_violations: Vec<bridge::RawViolation>,
-) {
-    ctx.collection = CollectionState::Collected {
-        items,
-        raw_violations,
-    };
-}
-
 /// Helper: extract items from collection state (works for Collected, Partitioned, Ready, Executed).
 fn get_items(ctx: &PipelineContext) -> &[std::sync::Arc<types::TestItem>] {
     match &ctx.collection {
@@ -32,15 +20,6 @@ fn get_violated_items(ctx: &PipelineContext) -> &[std::sync::Arc<types::TestItem
         CollectionState::Partitioned { violated_items, .. }
         | CollectionState::Ready { violated_items, .. } => violated_items,
         _ => &[],
-    }
-}
-
-/// Helper: set the keyword in the command variant of a pipeline context.
-fn set_keyword(ctx: &mut PipelineContext, keyword: &str) {
-    match &mut ctx.command {
-        config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
-        config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
-        _ => {}
     }
 }
 
@@ -272,8 +251,7 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
@@ -304,8 +282,7 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Abort);
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![TestItem::builder_raw("tests/test_a.py::test_one").arc()],
                 vec![RawViolation {
                     node_id: "tests/test_a.py::test_one".to_string(),
@@ -330,8 +307,7 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![TestItem::builder_raw("tests/test_a.py::test_clean").arc()],
                 vec![],
             );
@@ -356,15 +332,14 @@ mod filter_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
                 ],
                 vec![],
             );
-            set_keyword(&mut ctx, "alpha");
+            ctx.with_keyword("alpha");
 
             let result = phases::FilterPhase.execute(py, &mut ctx);
 
@@ -381,8 +356,7 @@ mod filter_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -412,8 +386,7 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
@@ -431,7 +404,7 @@ mod context_threading_tests {
             assert_eq!(get_items(&ctx).len(), 2);
             assert_eq!(get_violated_items(&ctx).len(), 1);
 
-            set_keyword(&mut ctx, "alpha");
+            ctx.with_keyword("alpha");
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
             let items = get_items(&ctx);
@@ -447,8 +420,7 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = None;
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -469,15 +441,14 @@ mod context_threading_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
                 ],
                 vec![],
             );
-            set_keyword(&mut ctx, "alpha");
+            ctx.with_keyword("alpha");
 
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
@@ -493,9 +464,8 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_keyword(&mut ctx, "good");
-            set_collected(
-                &mut ctx,
+            ctx.with_keyword("good");
+            ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
