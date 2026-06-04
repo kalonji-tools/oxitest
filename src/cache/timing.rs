@@ -153,8 +153,16 @@ mod tests {
 
     use super::super::test_helpers::{cache_with_entries, make_timing};
     use super::*;
-    use crate::reporter::test_helpers::{make_group, make_item_raw as make_item};
-    use crate::types::OutcomeKind;
+    use crate::types::{OutcomeKind, TestItem};
+    use std::sync::Arc;
+
+    fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
+        let items = names
+            .iter()
+            .map(|n| TestItem::builder(module, n).arc())
+            .collect();
+        (Utf8PathBuf::from(module), items)
+    }
 
     #[test]
     fn invalidate_removes_entries_not_in_items() {
@@ -162,7 +170,7 @@ mod tests {
             ("tests/test_foo.py::test_a", 10.0),
             ("tests/test_foo.py::test_b", 20.0),
         ]);
-        let items = vec![make_item("tests/test_foo.py::test_a")];
+        let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         cache.invalidate(&items);
         assert!(!cache
             .inner
@@ -177,7 +185,7 @@ mod tests {
     #[test]
     fn invalidate_keeps_entries_present_in_items() {
         let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
-        let items = vec![make_item("tests/test_foo.py::test_a")];
+        let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         cache.invalidate(&items);
         assert_eq!(cache.inner.timings.len(), 1);
     }
@@ -188,7 +196,7 @@ mod tests {
             ("tests/test_foo.py::test_a", 10.0),
             ("tests/test_foo.py::test_gone", 5.0),
         ]);
-        let items = vec![make_item("tests/test_foo.py::test_a")];
+        let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         cache.invalidate(&items);
         assert!(cache.dirty);
     }
@@ -196,7 +204,7 @@ mod tests {
     #[test]
     fn invalidate_does_not_set_dirty_when_nothing_pruned() {
         let mut cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
-        let items = vec![make_item("tests/test_foo.py::test_a")];
+        let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         cache.invalidate(&items);
         assert!(!cache.dirty);
     }
@@ -266,9 +274,9 @@ mod tests {
     fn estimated_duration_returns_none_below_half_coverage() {
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
         let items = vec![
-            make_item("tests/test_foo.py::test_a"),
-            make_item("tests/test_foo.py::test_b"),
-            make_item("tests/test_foo.py::test_c"),
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_c").arc(),
         ];
         assert!(cache.estimated_duration(&items).is_none());
     }
@@ -277,8 +285,8 @@ mod tests {
     fn estimated_duration_returns_some_at_exactly_half_coverage() {
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
         let items = vec![
-            make_item("tests/test_foo.py::test_a"),
-            make_item("tests/test_foo.py::test_b"),
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
         ];
         assert!(cache.estimated_duration(&items).is_some());
     }
@@ -290,8 +298,8 @@ mod tests {
             ("tests/test_foo.py::test_b", 200.0),
         ]);
         let items = vec![
-            make_item("tests/test_foo.py::test_a"),
-            make_item("tests/test_foo.py::test_b"),
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
         ];
         let est = cache.estimated_duration(&items).unwrap();
         assert_eq!(est.as_millis(), 300);
@@ -300,7 +308,7 @@ mod tests {
     #[test]
     fn suggested_timeout_secs_returns_none_for_uncached_item() {
         let cache = TestCache::empty();
-        let item = make_item("tests/test_foo.py::test_a");
+        let item = TestItem::builder_raw("tests/test_foo.py::test_a").arc();
         assert!(cache.suggested_timeout_secs(&item, 3.0).is_none());
     }
 
@@ -308,7 +316,7 @@ mod tests {
     fn suggested_timeout_secs_returns_scaled_duration() {
         // cached: 500ms = 0.5s -> multiplier 3.0 -> 1.5s -> ceil -> 2s
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 500.0)]);
-        let item = make_item("tests/test_foo.py::test_a");
+        let item = TestItem::builder_raw("tests/test_foo.py::test_a").arc();
         let timeout = cache.suggested_timeout_secs(&item, 3.0).unwrap();
         assert_eq!(timeout, 2); // ceil(0.5 * 3.0) = ceil(1.5) = 2
     }
@@ -317,7 +325,7 @@ mod tests {
     fn suggested_timeout_secs_rounds_up() {
         // cached: 100ms = 0.1s -> multiplier 2.0 -> 0.2s -> ceil -> 1s (minimum 1)
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 100.0)]);
-        let item = make_item("tests/test_foo.py::test_a");
+        let item = TestItem::builder_raw("tests/test_foo.py::test_a").arc();
         let timeout = cache.suggested_timeout_secs(&item, 2.0).unwrap();
         assert_eq!(timeout, 1); // ceil(0.2) = 1
     }
@@ -326,7 +334,7 @@ mod tests {
     fn suggested_timeout_secs_exact_seconds() {
         // cached: 2000ms = 2s -> multiplier 3.0 -> 6s exactly
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 2000.0)]);
-        let item = make_item("tests/test_foo.py::test_a");
+        let item = TestItem::builder_raw("tests/test_foo.py::test_a").arc();
         let timeout = cache.suggested_timeout_secs(&item, 3.0).unwrap();
         assert_eq!(timeout, 6);
     }
