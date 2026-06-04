@@ -116,10 +116,8 @@ impl Reporter for JsonReporter {
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
-    use crate::reporter::test_helpers::make_outcome;
     use crate::reporter::Reporter;
-    use crate::types::DurationMs;
-    use crate::types::TestItem;
+    use crate::types::{DurationMs, LineNo, RawOutcome, TestItem, TestOutcome};
     use insta::assert_snapshot;
 
     fn run_and_read(items: &[(&str, &str)]) -> String {
@@ -128,7 +126,20 @@ mod snapshot_tests {
         let mut rep = JsonReporter::new(path.clone());
         for (name, status) in items {
             let item = TestItem::builder("tests/test_foo.py", name).arc();
-            let outcome = make_outcome(status);
+            let outcome = TestOutcome::from_raw(RawOutcome {
+                status,
+                message: "",
+                file: "",
+                lineno: LineNo::ZERO,
+                source_line: "",
+                no_message_lines: &[],
+                left: "",
+                right: "",
+                op: "",
+                strict: false,
+                frames: &[],
+                field_diffs: &[],
+            });
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
         }
