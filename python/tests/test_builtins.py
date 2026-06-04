@@ -844,13 +844,15 @@ def test_patcher_injected_via_session():
 
 
 def test_testcontext_still_works_via_builtin_dispatch():
-    from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
+    from oxitest._bridge.fixtures import FixtureRegistry, FixtureSession
 
     def factory(ctx: Fixture[TestContext]) -> str:
         return "ok"
 
     reg = FixtureRegistry()
-    reg.register(FixtureDef("thing", factory, False, None, "/c.py"))
+    reg.register(
+        helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
+    )
     session = FixtureSession(reg)
     session.begin_module("t.py")
 

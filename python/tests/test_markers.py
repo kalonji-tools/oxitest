@@ -18,7 +18,6 @@ from oxitest._bridge._mark_registry import (
     evaluate_marks,
 )
 from oxitest._bridge.fixtures import (
-    FixtureDef,
     FixtureRegistry,
     FixtureSession,
 )
@@ -363,15 +362,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
     def side_effect_fixture():
         log.append("setup")
 
-    reg.register(
-        FixtureDef(
-            name="my_fixture",
-            func=side_effect_fixture,
-            autouse=False,
-            params=None,
-            conftest_path="",
-        )
-    )
+    reg.register(helpers.common.make_fixture_def("my_fixture", side_effect_fixture))
     session = FixtureSession(reg)
     session.begin_module(str(tmp / "test_exec.py"))
 
