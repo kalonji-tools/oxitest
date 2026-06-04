@@ -323,6 +323,154 @@ impl TestItem {
     }
 }
 
+/// Builder for [`TestOutcome::Failed`], used exclusively in tests.
+///
+/// Created via [`TestOutcome::failed(msg)`]. All fields default to sensible
+/// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) struct FailedOutcomeBuilder {
+    message: String,
+    file: Utf8PathBuf,
+    lineno: LineNo,
+    source_line: String,
+    left: String,
+    right: String,
+    op: String,
+    frames: Vec<Frame>,
+    field_diffs: Vec<(String, String, String)>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl FailedOutcomeBuilder {
+    pub(crate) fn file(mut self, f: &str) -> Self {
+        self.file = Utf8PathBuf::from(f);
+        self
+    }
+    pub(crate) fn lineno(mut self, n: usize) -> Self {
+        self.lineno = LineNo::new(n);
+        self
+    }
+    pub(crate) fn source(mut self, s: &str) -> Self {
+        self.source_line = s.to_string();
+        self
+    }
+    pub(crate) fn comparison(mut self, left: &str, op: &str, right: &str) -> Self {
+        self.left = left.to_string();
+        self.op = op.to_string();
+        self.right = right.to_string();
+        self
+    }
+    pub(crate) fn left(mut self, l: &str) -> Self {
+        self.left = l.to_string();
+        self
+    }
+    #[allow(dead_code)]
+    pub(crate) fn right(mut self, r: &str) -> Self {
+        self.right = r.to_string();
+        self
+    }
+    #[allow(dead_code)]
+    pub(crate) fn op(mut self, o: &str) -> Self {
+        self.op = o.to_string();
+        self
+    }
+    pub(crate) fn frames(mut self, f: Vec<Frame>) -> Self {
+        self.frames = f;
+        self
+    }
+    #[allow(dead_code)]
+    pub(crate) fn field_diffs(mut self, d: Vec<(String, String, String)>) -> Self {
+        self.field_diffs = d;
+        self
+    }
+    pub(crate) fn build(self) -> TestOutcome {
+        TestOutcome::Failed {
+            message: self.message,
+            file: self.file,
+            lineno: self.lineno,
+            source_line: self.source_line,
+            left: self.left,
+            right: self.right,
+            op: self.op,
+            frames: self.frames,
+            field_diffs: self.field_diffs,
+        }
+    }
+}
+
+/// Builder for [`TestOutcome::Error`], used exclusively in tests.
+///
+/// Created via [`TestOutcome::error(msg)`]. All fields default to sensible
+/// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) struct ErrorOutcomeBuilder {
+    message: String,
+    file: Utf8PathBuf,
+    lineno: LineNo,
+    source_line: String,
+    frames: Vec<Frame>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl ErrorOutcomeBuilder {
+    pub(crate) fn file(mut self, f: &str) -> Self {
+        self.file = Utf8PathBuf::from(f);
+        self
+    }
+    pub(crate) fn lineno(mut self, n: usize) -> Self {
+        self.lineno = LineNo::new(n);
+        self
+    }
+    pub(crate) fn source(mut self, s: &str) -> Self {
+        self.source_line = s.to_string();
+        self
+    }
+    pub(crate) fn frames(mut self, f: Vec<Frame>) -> Self {
+        self.frames = f;
+        self
+    }
+    pub(crate) fn build(self) -> TestOutcome {
+        TestOutcome::Error {
+            message: self.message,
+            file: self.file,
+            lineno: self.lineno,
+            source_line: self.source_line,
+            frames: self.frames,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl TestOutcome {
+    pub(crate) fn failed(msg: &str) -> FailedOutcomeBuilder {
+        FailedOutcomeBuilder {
+            message: msg.to_string(),
+            file: Utf8PathBuf::from("tests/test_foo.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            frames: vec![],
+            field_diffs: vec![],
+        }
+    }
+    pub(crate) fn error(msg: &str) -> ErrorOutcomeBuilder {
+        ErrorOutcomeBuilder {
+            message: msg.to_string(),
+            file: Utf8PathBuf::from("tests/test_foo.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            frames: vec![],
+        }
+    }
+}
+
 /// Single traceback frame from a test failure or error.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
