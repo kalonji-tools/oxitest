@@ -272,6 +272,7 @@ pub(crate) mod doubles {
     }
 
     /// Build a [`TestItem`] with the `inprocess` marker set.
+    #[allow(dead_code)]
     pub(crate) fn make_inprocess_item(node_id_str: &str) -> TestItem {
         TestItem::builder_raw(node_id_str)
             .lineno(1)
