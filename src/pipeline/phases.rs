@@ -14,8 +14,7 @@ use super::{
 use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
 use crate::types::ExitCode;
 use crate::{
-    affected, bridge, collector, config, filter, marker, parallel, query, reporter, retry, strict,
-    types,
+    affected, bridge, collector, config, filter, parallel, query, reporter, retry, strict, types,
 };
 
 // ─── FileCollectionPhase ─────────────────────────────────────────────────────
@@ -410,7 +409,17 @@ impl PipelinePhase for StrictPhase {
 
 // ─── FilterPhase ─────────────────────────────────────────────────────────────
 
-/// Applies keyword (-k), marker (-m), and last-failed filters.
+/// Convert a [`TestItem`] into a [`QueryEntry`] for DSL evaluation.
+fn item_to_query_entry(item: &types::TestItem) -> query::resource::QueryEntry {
+    let mut fields = std::collections::HashMap::new();
+    fields.insert("name".to_string(), item.node_id.to_string());
+    fields.insert("source".to_string(), item.module_path.to_string());
+    fields.insert("mark".to_string(), item.markers.join(","));
+    fields.insert("async".to_string(), item.is_async.to_string());
+    query::resource::QueryEntry { fields }
+}
+
+/// Applies query DSL (-E) and last-failed filters.
 pub(crate) struct FilterPhase;
 
 impl PipelinePhase for FilterPhase {
@@ -445,34 +454,46 @@ impl PipelinePhase for FilterPhase {
                 }
             };
 
-        let (keyword, marker_expr) = match &ctx.command {
-            config::Command::Run(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
-            config::Command::Debug(a) => (a.filter.keyword.clone(), a.filter.marker.clone()),
-            _ => (None, None),
+        let expression = match &ctx.command {
+            config::Command::Run(a) => a.filter.expression.clone(),
+            config::Command::Debug(a) => a.filter.expression.clone(),
+            _ => None,
         };
 
-        // Keyword filter (-k).
-        let items = filter::filter_items(items, keyword.as_deref());
-
-        // Marker expression filter (-m).
-        let items = if let Some(expr) = marker_expr.as_deref() {
-            match marker::filter_by_marker_expr(items, expr) {
-                Ok(items) => items,
-                Err(e) => {
-                    let code = ctx
-                        .make_error_reporter()
-                        .finish(
-                            &[types::CollectError::PyError(format!(
-                                "invalid -m expression: {}",
-                                e
-                            ))],
-                            false,
-                            &reporter::RunStats::new(),
-                        )
-                        .code();
-                    return Ok(PhaseOutcome::EarlyExit(code));
-                }
+        // Query DSL filter (-E).
+        let early_exit =
+            |ctx: &mut PipelineContext, msg: String| -> Result<PhaseOutcome, ExitCode> {
+                let code = ctx
+                    .make_error_reporter()
+                    .finish(
+                        &[types::CollectError::PyError(msg)],
+                        false,
+                        &reporter::RunStats::new(),
+                    )
+                    .code();
+                Ok(PhaseOutcome::EarlyExit(code))
+            };
+        let items = if let Some(expr_str) = expression.as_deref() {
+            let tokens = match query::dsl::lex(expr_str) {
+                Ok(t) => t,
+                Err(e) => return early_exit(ctx, format!("invalid -E expression: {e}")),
+            };
+            let parsed = match query::dsl::parse(tokens) {
+                Ok(p) => p,
+                Err(e) => return early_exit(ctx, format!("invalid -E expression: {e}")),
+            };
+            if let Err(e) =
+                query::dsl::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
+            {
+                return early_exit(ctx, format!("invalid -E expression: {e}"));
             }
+            items
+                .into_iter()
+                .filter(|item| {
+                    let entry = item_to_query_entry(item);
+                    query::dsl::eval(&parsed, &entry)
+                })
+                .collect()
         } else {
             items
         };
