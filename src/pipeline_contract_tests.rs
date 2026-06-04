@@ -218,14 +218,16 @@ mod helper_tests {
     }
 
     #[test]
-    fn make_outcome_passed() {
-        let outcome = reporter::test_helpers::make_outcome("passed");
+    fn outcome_builder_passed() {
+        let outcome = types::TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
         assert!(matches!(outcome, types::TestOutcome::Passed { .. }));
     }
 
     #[test]
-    fn make_outcome_failed() {
-        let outcome = reporter::test_helpers::make_outcome("failed");
+    fn outcome_builder_failed() {
+        let outcome = types::TestOutcome::failed("").build();
         assert!(matches!(outcome, types::TestOutcome::Failed { .. }));
     }
 
