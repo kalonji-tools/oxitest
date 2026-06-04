@@ -539,8 +539,8 @@ mod tests {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    use crate::reporter::test_helpers::make_item;
     use crate::reporter::ReporterOptsBuilder;
+    use crate::types::TestItem;
 
     fn make_tty_reporter() -> TtyReporter {
         TtyReporter::new(ReporterOptsBuilder::new().build())
@@ -560,7 +560,7 @@ mod tests {
     #[test]
     fn test_format_test_line_passed_contains_fn_name_and_duration() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -578,7 +578,7 @@ mod tests {
     #[test]
     fn test_format_test_line_passed_no_double_ms_suffix() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn test_format_test_line_passed_bare_assert_uses_middot() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![5],
         };
@@ -606,7 +606,7 @@ mod tests {
     #[test]
     fn test_format_test_line_skipped_contains_skip_label_and_reason() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_cond");
+        let item = TestItem::builder("tests/test_foo.py", "test_cond").arc();
         let outcome = TestOutcome::Skipped {
             reason: "not ready".to_string(),
         };
@@ -621,7 +621,7 @@ mod tests {
     #[test]
     fn test_format_test_line_warned_contains_warn_label_and_reason() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_dep");
+        let item = TestItem::builder("tests/test_foo.py", "test_dep").arc();
         let outcome = TestOutcome::Warned {
             reason: "DeprecationWarning: use new_api".to_string(),
             no_message_lines: vec![],
@@ -637,7 +637,7 @@ mod tests {
     #[test]
     fn test_format_test_line_xfailed_contains_xfail_label_and_reason() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_known_bug");
+        let item = TestItem::builder("tests/test_foo.py", "test_known_bug").arc();
         let outcome = TestOutcome::XFailed {
             reason: "issue #42".to_string(),
         };
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn test_format_test_line_failed_contains_fail_label() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_math");
+        let item = TestItem::builder("tests/test_foo.py", "test_math").arc();
         let outcome = make_failed("wrong value", "tests/test_math.py", 10, "assert x == 1");
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(15.0));
         assert!(line.contains("FAIL"), "FAIL label must appear: {line:?}");
@@ -661,7 +661,7 @@ mod tests {
     #[test]
     fn test_format_test_line_timeout_contains_time_label() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_slow");
+        let item = TestItem::builder("tests/test_foo.py", "test_slow").arc();
         let outcome = TestOutcome::Timeout {
             message: "exceeded 30s".to_string(),
         };
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn test_flush_param_group_all_passed_duration_before_cases() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_math");
+        let item = TestItem::builder("tests/test_foo.py", "test_math").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -743,7 +743,7 @@ mod tests {
     #[test]
     fn test_flush_param_group_singular_case() {
         let reporter = make_tty_reporter();
-        let item = make_item("test_single");
+        let item = TestItem::builder("tests/test_foo.py", "test_single").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -777,7 +777,7 @@ mod tests {
             .verbosity(Verbosity::Normal)
             .build();
         let mut reporter = TtyReporter::new(opts);
-        let item = make_item("test_failing");
+        let item = TestItem::builder("tests/test_foo.py", "test_failing").arc();
         let outcome = make_failed("oops", "test.py", 5, "assert x");
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert_eq!(
@@ -793,7 +793,7 @@ mod tests {
             .verbosity(Verbosity::Normal)
             .build();
         let mut reporter = TtyReporter::new(opts);
-        let item = make_item("test_passing");
+        let item = TestItem::builder("tests/test_foo.py", "test_passing").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -810,7 +810,7 @@ mod tests {
             .verbosity(Verbosity::Detailed)
             .build();
         let mut reporter = TtyReporter::new(opts);
-        let item = make_item("test_failing");
+        let item = TestItem::builder("tests/test_foo.py", "test_failing").arc();
         let outcome = make_failed("oops", "test.py", 5, "assert x");
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert!(
@@ -826,8 +826,8 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = TtyReporter::new(opts);
 
-        let item_a = make_item("test_login");
-        let item_b = make_item("test_signup");
+        let item_a = TestItem::builder("tests/test_foo.py", "test_login").arc();
+        let item_b = TestItem::builder("tests/test_foo.py", "test_signup").arc();
 
         reporter.test_started(&item_a);
         reporter.test_started(&item_b);
@@ -846,7 +846,7 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let mut reporter = TtyReporter::new(opts);
 
-        let item = make_item("test_foo");
+        let item = TestItem::builder("tests/test_foo.py", "test_foo").arc();
         reporter.test_started(&item);
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
