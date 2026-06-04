@@ -1,5 +1,3 @@
-#[cfg(test)]
-use crate::types::LineNo;
 use crate::types::TestOutcome;
 
 /// Analyze a `Failed` or `Error` outcome and return a raw suggestion string
@@ -44,30 +42,25 @@ pub(crate) fn suggest_fix(outcome: &TestOutcome) -> Option<String> {
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
-    use camino::Utf8PathBuf;
 
     #[test]
     fn async_mismatch_suggestion() {
-        let outcome = TestOutcome::Error {
-            message: "TypeError: object X can't be used in 'await' expression".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "await fx".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("TypeError: object X can't be used in 'await' expression")
+            .file("test.py")
+            .lineno(5)
+            .source("await fx")
+            .build();
         let hint = suggest_fix(&outcome);
         insta::assert_snapshot!(hint.unwrap_or_default());
     }
 
     #[test]
     fn no_suggestion_for_normal_error() {
-        let outcome = TestOutcome::Error {
-            message: "ValueError: bad input".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(3),
-            source_line: "raise ValueError".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("ValueError: bad input")
+            .file("test.py")
+            .lineno(3)
+            .source("raise ValueError")
+            .build();
         let hint = suggest_fix(&outcome);
         insta::assert_snapshot!(hint.unwrap_or_default());
     }
@@ -76,17 +69,14 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::Utf8PathBuf;
 
     #[test]
     fn suggest_async_mismatch() {
-        let outcome = TestOutcome::Error {
-            message: "TypeError: object X can't be used in 'await' expression".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "await fx".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("TypeError: object X can't be used in 'await' expression")
+            .file("test.py")
+            .lineno(5)
+            .source("await fx")
+            .build();
         let hint = suggest_fix(&outcome);
         assert!(hint.is_some());
         assert!(hint.unwrap().contains("async"));
@@ -94,13 +84,11 @@ mod tests {
 
     #[test]
     fn suggest_shared_mutation() {
-        let outcome = TestOutcome::Error {
-            message: "SharedFixtureMutationError: cannot mutate".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "fx.val = 1".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("SharedFixtureMutationError: cannot mutate")
+            .file("test.py")
+            .lineno(5)
+            .source("fx.val = 1")
+            .build();
         let hint = suggest_fix(&outcome);
         assert!(hint.is_some());
         assert!(hint.unwrap().contains("shared=False"));
@@ -108,13 +96,11 @@ mod tests {
 
     #[test]
     fn suggest_fixture_not_found() {
-        let outcome = TestOutcome::Error {
-            message: "fixture 'db' not found".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "def test(db):".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("fixture 'db' not found")
+            .file("test.py")
+            .lineno(5)
+            .source("def test(db):")
+            .build();
         let hint = suggest_fix(&outcome);
         assert!(hint.is_some());
         assert!(hint.unwrap().contains("Fixture[T]"));
