@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from conftest import helpers
 from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
-from oxitest._bridge.fixtures import FixtureDef, FixtureRegistry, FixtureSession
+from oxitest._bridge.fixtures import FixtureRegistry, FixtureSession
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import _DataclassCases, _DictCases
 
@@ -213,15 +213,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param():
     def my_fixture():
         return 42
 
-    registry.register(
-        FixtureDef(
-            name="db",
-            func=my_fixture,
-            autouse=False,
-            params=None,
-            conftest_path="",
-        )
-    )
+    registry.register(helpers.common.make_fixture_def("db", my_fixture))
     session = FixtureSession(registry)
     session.begin_module("/fake/test_foo.py")
 
@@ -248,15 +240,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
     def x_fixture():
         return 99
 
-    registry.register(
-        FixtureDef(
-            name="x",
-            func=x_fixture,
-            autouse=False,
-            params=None,
-            conftest_path="",
-        )
-    )
+    registry.register(helpers.common.make_fixture_def("x", x_fixture))
     session = FixtureSession(registry)
     session.begin_module("/fake/test_foo.py")
 
