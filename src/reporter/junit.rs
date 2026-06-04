@@ -274,7 +274,6 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::TestOutcome;
     use tempfile::TempDir;
@@ -333,7 +332,10 @@ mod tests {
     fn test_error_produces_error_element() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_err").arc(),
-            make_error("ValueError: bad", "tests/t.py", 1, "x"),
+            TestOutcome::error("ValueError: bad")
+                .file("tests/t.py")
+                .source("x")
+                .build(),
         )]);
         assert!(xml.contains("<error"), "error test must have error element");
         assert!(

@@ -358,7 +358,6 @@ fn render_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::{LineNo, TestOutcome};
     use camino::Utf8PathBuf;
@@ -398,12 +397,10 @@ mod tests {
     #[test]
     fn test_diagnostic_error_shows_exception() {
         let item = TestItem::builder("tests/test_foo.py", "test_div").arc();
-        let outcome = make_error(
-            "ValueError: Cannot divide by zero",
-            "tests/test_foo.py",
-            22,
-            "result = divide(10, 0)",
-        );
+        let outcome = TestOutcome::error("ValueError: Cannot divide by zero")
+            .lineno(22)
+            .source("result = divide(10, 0)")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("ValueError: Cannot divide by zero"));
     }
