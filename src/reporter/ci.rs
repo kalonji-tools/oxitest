@@ -137,7 +137,8 @@ impl Reporter for CiReporter {
 mod tests {
     use super::*;
     use crate::config::TbStyle;
-    use crate::reporter::test_helpers::{make_error, make_failed, make_item};
+    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::types::TestItem;
     use crate::types::TestOutcome;
 
     fn make_ci_reporter(tb: TbStyle) -> CiReporter {
@@ -152,7 +153,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_all_pass_dots() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -166,7 +167,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_bare_assert_shows_middot() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![5],
         };
@@ -178,7 +179,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_fail_shows_f() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = make_failed("oops", "t.py", 1, "assert x");
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
@@ -188,7 +189,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_skip_shows_s() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         reporter.test_completed(
             &item,
             &TestOutcome::Skipped {
@@ -202,7 +203,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_error_shows_e() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = make_error("AttributeError: x", "t.py", 5, "obj.x");
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(reporter.dot_buf, "E");
@@ -216,7 +217,7 @@ mod tests {
                 .tb(TbStyle::No)
                 .build(),
         );
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -237,7 +238,7 @@ mod tests {
                 .tb(TbStyle::No)
                 .build(),
         );
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = make_failed("x", "f.py", 1, "assert");
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
@@ -256,7 +257,7 @@ mod tests {
                 .tb(TbStyle::No)
                 .build(),
         );
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = make_failed("x", "f.py", 1, "assert");
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
@@ -270,7 +271,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_xfail_shows_x() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         reporter.test_completed(
             &item,
             &TestOutcome::XFailed {
@@ -284,7 +285,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_xpassed_shows_capital_x() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         reporter.test_completed(
             &item,
             &TestOutcome::XPassed { strict: true },
@@ -296,7 +297,7 @@ mod tests {
     #[test]
     fn test_ci_reporter_xpassed_lenient_shows_capital_x() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         reporter.test_completed(
             &item,
             &TestOutcome::XPassed { strict: false },
@@ -354,7 +355,7 @@ mod tests {
     #[test]
     fn test_line_mode_emits_one_liner() {
         let mut reporter = make_ci_reporter(TbStyle::Line);
-        let item = make_item("test_bar");
+        let item = TestItem::builder("tests/test_foo.py", "test_bar").arc();
         let outcome = make_failed("values differ", "test_foo.py", 5, "assert x == y");
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert_eq!(reporter.deferred_diags.len(), 1);
@@ -371,7 +372,7 @@ mod tests {
     #[test]
     fn test_line_mode_error_emits_one_liner() {
         let mut reporter = make_ci_reporter(TbStyle::Line);
-        let item = make_item("test_deep");
+        let item = TestItem::builder("tests/test_foo.py", "test_deep").arc();
         let outcome = make_error("ValueError: something broke", "test_foo.py", 10, "obj.x");
         reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
         assert_eq!(reporter.deferred_diags.len(), 1);

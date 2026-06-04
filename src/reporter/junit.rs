@@ -214,9 +214,10 @@ impl JunitReporter {
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_item, make_outcome};
+    use crate::reporter::test_helpers::make_outcome;
     use crate::reporter::Reporter;
     use crate::types::DurationMs;
+    use crate::types::TestItem;
     use insta::assert_snapshot;
 
     /// Normalize all `time="..."` attribute values to `time="0.000"` for snapshot stability.
@@ -242,7 +243,7 @@ mod snapshot_tests {
         let path = camino::Utf8PathBuf::try_from(tmp.path().to_path_buf()).unwrap();
         let mut rep = JunitReporter::new(path.clone());
         for (name, status) in items {
-            let item = make_item(name);
+            let item = TestItem::builder("tests/test_foo.py", name).arc();
             let outcome = make_outcome(status);
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
@@ -273,7 +274,8 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed, make_item, make_item_in};
+    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::types::TestItem;
     use crate::types::TestOutcome;
     use tempfile::TempDir;
 
@@ -291,7 +293,7 @@ mod tests {
     #[test]
     fn test_passed_produces_empty_testcase() {
         let xml = run_reporter(vec![(
-            make_item("test_add"),
+            TestItem::builder("tests/test_foo.py", "test_add").arc(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -310,7 +312,7 @@ mod tests {
     #[test]
     fn test_failed_produces_failure_element() {
         let xml = run_reporter(vec![(
-            make_item("test_sub"),
+            TestItem::builder("tests/test_foo.py", "test_sub").arc(),
             make_failed("expected 42", "tests/t.py", 5, "assert x == 42"),
         )]);
         assert!(
@@ -326,7 +328,7 @@ mod tests {
     #[test]
     fn test_error_produces_error_element() {
         let xml = run_reporter(vec![(
-            make_item("test_err"),
+            TestItem::builder("tests/test_foo.py", "test_err").arc(),
             make_error("ValueError: bad", "tests/t.py", 1, "x"),
         )]);
         assert!(xml.contains("<error"), "error test must have error element");
@@ -339,7 +341,7 @@ mod tests {
     #[test]
     fn test_skipped_produces_skipped_element() {
         let xml = run_reporter(vec![(
-            make_item("test_skip"),
+            TestItem::builder("tests/test_foo.py", "test_skip").arc(),
             TestOutcome::Skipped {
                 reason: "not ready".to_string(),
             },
@@ -354,7 +356,7 @@ mod tests {
     #[test]
     fn test_classname_converts_path_separators() {
         let xml = run_reporter(vec![(
-            make_item_in("test_fn", "tests/unit/test_math.py"),
+            TestItem::builder("tests/unit/test_math.py", "test_fn").arc(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -368,7 +370,7 @@ mod tests {
     #[test]
     fn test_xml_has_declaration_and_root() {
         let xml = run_reporter(vec![(
-            make_item("test_a"),
+            TestItem::builder("tests/test_foo.py", "test_a").arc(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -384,7 +386,7 @@ mod tests {
     #[test]
     fn test_timeout_produces_error_element() {
         let xml = run_reporter(vec![(
-            make_item("test_slow"),
+            TestItem::builder("tests/test_foo.py", "test_slow").arc(),
             TestOutcome::Timeout {
                 message: "exceeded 5s".to_string(),
             },
@@ -396,7 +398,7 @@ mod tests {
     #[test]
     fn test_xfailed_produces_skipped_element() {
         let xml = run_reporter(vec![(
-            make_item("test_xf"),
+            TestItem::builder("tests/test_foo.py", "test_xf").arc(),
             TestOutcome::XFailed {
                 reason: "known bug".to_string(),
             },
@@ -410,7 +412,7 @@ mod tests {
     #[test]
     fn test_strict_xpass_produces_failure() {
         let xml = run_reporter(vec![(
-            make_item("test_xp"),
+            TestItem::builder("tests/test_foo.py", "test_xp").arc(),
             TestOutcome::XPassed { strict: true },
         )]);
         assert!(
@@ -424,7 +426,7 @@ mod tests {
         let path = camino::Utf8PathBuf::from("/nonexistent/dir/out.xml");
         let mut rep = JunitReporter::new(path);
         rep.test_completed(
-            &make_item("test_a"),
+            &TestItem::builder("tests/test_foo.py", "test_a").arc(),
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -441,7 +443,7 @@ mod tests {
     #[test]
     fn test_time_in_seconds() {
         let xml = run_reporter(vec![(
-            make_item("test_a"),
+            TestItem::builder("tests/test_foo.py", "test_a").arc(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
