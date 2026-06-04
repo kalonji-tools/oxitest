@@ -447,17 +447,11 @@ mod tests {
     #[test]
     fn test_diagnostic_shows_left_right_for_compare() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::from("tests/test_foo.py"),
-            lineno: LineNo::new(8),
-            source_line: "assert result == 42".to_string(),
-            left: "41".to_string(),
-            right: "42".to_string(),
-            op: "==".to_string(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert result == 42")
+            .comparison("41", "==", "42")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "missing left label");
         assert!(block.contains("41"), "missing left value");
@@ -468,17 +462,11 @@ mod tests {
     #[test]
     fn test_diagnostic_shows_value_for_bool_assert() {
         let item = TestItem::builder("tests/test_foo.py", "test_validate").arc();
-        let outcome = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::from("tests/test_foo.py"),
-            lineno: LineNo::new(5),
-            source_line: "assert is_valid".to_string(),
-            left: "False".to_string(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::failed("")
+            .lineno(5)
+            .source("assert is_valid")
+            .left("False")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("value:"), "missing value label");
         assert!(block.contains("False"), "missing value");
@@ -491,17 +479,11 @@ mod tests {
     #[test]
     fn test_diagnostic_shows_closing_message_when_present() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = TestOutcome::Failed {
-            message: "should be 42".to_string(),
-            file: Utf8PathBuf::from("tests/test_foo.py"),
-            lineno: LineNo::new(8),
-            source_line: "assert result == 42".to_string(),
-            left: "41".to_string(),
-            right: "42".to_string(),
-            op: "==".to_string(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::failed("should be 42")
+            .lineno(8)
+            .source("assert result == 42")
+            .comparison("41", "==", "42")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("should be 42"),
@@ -546,17 +528,12 @@ mod tests {
     #[test]
     fn test_diagnostic_op_set_but_right_empty_suppresses_right_label() {
         let item = TestItem::builder("tests/test_foo.py", "test_op_no_rhs").arc();
-        let outcome = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::from("tests/test_foo.py"),
-            lineno: LineNo::new(3),
-            source_line: "assert x".to_string(),
-            left: "42".to_string(),
-            right: String::new(),
-            op: "==".to_string(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::failed("")
+            .lineno(3)
+            .source("assert x")
+            .left("42")
+            .op("==")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("left:"), "left should appear");
         assert!(block.contains("42"), "left value should appear");
@@ -689,15 +666,11 @@ mod tests {
             fixture_names: vec![],
             fixref_names: vec![],
         };
-        let outcome = TestOutcome::Failed {
-            message: "assert failed".to_string(),
-            file: Utf8PathBuf::from("test_foo.py"),
-            lineno: LineNo::new(5),
-            source_line: "assert x > 0".to_string(),
-            left: "".to_string(),
-            right: "".to_string(),
-            op: "".to_string(),
-            frames: vec![
+        let outcome = TestOutcome::failed("assert failed")
+            .file("test_foo.py")
+            .lineno(5)
+            .source("assert x > 0")
+            .frames(vec![
                 Frame {
                     file: Utf8PathBuf::from("test_foo.py"),
                     lineno: LineNo::new(10),
@@ -712,9 +685,8 @@ mod tests {
                     line: "assert x > 0".to_string(),
                     locals: vec![],
                 },
-            ],
-            field_diffs: vec![],
-        };
+            ])
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // New format uses "trace" not "frames"
         assert!(block.contains("trace"), "must contain trace label");
@@ -743,23 +715,18 @@ mod tests {
             fixture_names: vec![],
             fixref_names: vec![],
         };
-        let outcome = TestOutcome::Failed {
-            message: "oops".to_string(),
-            file: Utf8PathBuf::from("t.py"),
-            lineno: LineNo::new(3),
-            source_line: "assert False".to_string(),
-            left: "".to_string(),
-            right: "".to_string(),
-            op: "".to_string(),
-            frames: vec![Frame {
+        let outcome = TestOutcome::failed("oops")
+            .file("t.py")
+            .lineno(3)
+            .source("assert False")
+            .frames(vec![Frame {
                 file: Utf8PathBuf::from("t.py"),
                 lineno: LineNo::new(3),
                 name: "test_direct".to_string(),
                 line: "assert False".to_string(),
                 locals: vec![],
-            }],
-            field_diffs: vec![],
-        };
+            }])
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Only the failure frame exists, so no trace section
         assert!(
@@ -808,23 +775,19 @@ mod tests {
         use crate::types::Frame;
 
         let item = TestItem::builder("test.py", "test_check").lineno(5).arc();
-        let outcome = TestOutcome::Failed {
-            message: "".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "assert result == 10".to_string(),
-            left: "7".to_string(),
-            right: "10".to_string(),
-            op: "==".to_string(),
-            frames: vec![Frame {
+        let outcome = TestOutcome::failed("")
+            .file("test.py")
+            .lineno(5)
+            .source("assert result == 10")
+            .comparison("7", "==", "10")
+            .frames(vec![Frame {
                 file: Utf8PathBuf::from("test.py"),
                 lineno: LineNo::new(5),
                 name: "test_check".to_string(),
                 line: "assert result == 10".to_string(),
                 locals: vec![("result".to_string(), "7".to_string())],
-            }],
-            field_diffs: vec![],
-        };
+            }])
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false);
         assert!(
             block.contains("result = 7"),
@@ -837,23 +800,18 @@ mod tests {
         use crate::types::Frame;
 
         let item = TestItem::builder("test.py", "test_check").lineno(5).arc();
-        let outcome = TestOutcome::Failed {
-            message: "".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "assert result == 10".to_string(),
-            left: "".to_string(),
-            right: "".to_string(),
-            op: "".to_string(),
-            frames: vec![Frame {
+        let outcome = TestOutcome::failed("")
+            .file("test.py")
+            .lineno(5)
+            .source("assert result == 10")
+            .frames(vec![Frame {
                 file: Utf8PathBuf::from("test.py"),
                 lineno: LineNo::new(5),
                 name: "test_check".to_string(),
                 line: "assert result == 10".to_string(),
                 locals: vec![("result".to_string(), "7".to_string())],
-            }],
-            field_diffs: vec![],
-        };
+            }])
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("result = 7"),
@@ -938,17 +896,12 @@ mod tests {
             let item = TestItem::builder("tests/test_values.py", "test_equality")
                 .lineno(7)
                 .arc();
-            let outcome = TestOutcome::Failed {
-                message: String::new(),
-                file: Utf8PathBuf::from("tests/test_values.py"),
-                lineno: LineNo::new(7),
-                source_line: "assert result == expected".to_string(),
-                left: "1".to_string(),
-                right: "2".to_string(),
-                op: "==".to_string(),
-                frames: vec![],
-                field_diffs: vec![],
-            };
+            let outcome = TestOutcome::failed("")
+                .file("tests/test_values.py")
+                .lineno(7)
+                .source("assert result == expected")
+                .comparison("1", "==", "2")
+                .build();
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
