@@ -99,8 +99,7 @@ pub fn make_reporter(
 #[cfg(test)]
 mod json_tests {
     use super::*;
-    use crate::types::{DurationMs, LineNo, TestItem, TestOutcome};
-    use camino::Utf8PathBuf;
+    use crate::types::{DurationMs, TestItem, TestOutcome};
 
     #[test]
     fn test_json_reporter_writes_ctrf_on_finish() {
@@ -149,17 +148,12 @@ mod json_tests {
         rep.test_started(&item);
         rep.test_completed(
             &item,
-            &TestOutcome::Failed {
-                message: "assert x == 1".to_string(),
-                file: Utf8PathBuf::from("tests/test_mod.py"),
-                lineno: LineNo::new(5),
-                source_line: "assert x == 1".to_string(),
-                left: "0".to_string(),
-                right: "1".to_string(),
-                op: "==".to_string(),
-                frames: vec![],
-                field_diffs: vec![],
-            },
+            &TestOutcome::failed("assert x == 1")
+                .file("tests/test_mod.py")
+                .lineno(5)
+                .source("assert x == 1")
+                .comparison("0", "==", "1")
+                .build(),
             DurationMs::new(8.0),
         );
         rep.finish(&[], false, &RunStats::new());
