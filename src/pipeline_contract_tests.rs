@@ -1,8 +1,6 @@
 use super::*;
 use crate::reporter::test_helpers::make_ctx;
-use crate::test_doubles::doubles::{
-    make_test_item, MockPhase, RecordingSession, StubCollector, StubRunner,
-};
+use crate::test_doubles::doubles::{MockPhase, RecordingSession, StubCollector, StubRunner};
 use crate::types::ExitCode;
 
 /// Helper: set the keyword in the command variant of a pipeline context.
@@ -41,7 +39,7 @@ mod double_tests {
         Python::initialize();
         Python::attach(|py| {
             let path = Utf8PathBuf::from("tests/test_foo.py");
-            let item = make_test_item("tests/test_foo.py::test_one");
+            let item = crate::types::TestItem::builder_raw("tests/test_foo.py::test_one").build();
             let mut results = HashMap::new();
             results.insert(path.clone(), Ok((vec![item], vec![])));
             let collector = StubCollector { results };
@@ -62,7 +60,8 @@ mod double_tests {
         Python::initialize();
         Python::attach(|py| {
             let runner = StubRunner::default();
-            let item = make_test_item("tests/test_foo.py::test_unknown");
+            let item =
+                crate::types::TestItem::builder_raw("tests/test_foo.py::test_unknown").build();
             let session = RecordingSession::new(py);
 
             let outcome = runner.run_test(py, &item, &session, None, None, None, false, false);

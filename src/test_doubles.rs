@@ -262,24 +262,6 @@ pub(crate) mod doubles {
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    /// Build a minimal [`TestItem`] with the given node-id string.
-    ///
-    /// All other fields are set to sensible empty defaults. Useful for
-    /// constructing [`StubRunner`] / [`StubCollector`] inputs without
-    /// repeating boilerplate in each test.
-    pub(crate) fn make_test_item(node_id_str: &str) -> TestItem {
-        TestItem::builder_raw(node_id_str).lineno(1).build()
-    }
-
-    /// Build a [`TestItem`] with the `inprocess` marker set.
-    #[allow(dead_code)]
-    pub(crate) fn make_inprocess_item(node_id_str: &str) -> TestItem {
-        TestItem::builder_raw(node_id_str)
-            .lineno(1)
-            .markers(vec!["inprocess".to_string()])
-            .build()
-    }
-
     /// Build a zero-duration [`TestTiming`] for a given node-id string.
     #[allow(dead_code)] // Used by later tasks (execution contract tests).
     pub(crate) fn make_timing(node_id_str: &str) -> TestTiming {
