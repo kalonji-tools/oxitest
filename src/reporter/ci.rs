@@ -137,7 +137,6 @@ impl Reporter for CiReporter {
 mod tests {
     use super::*;
     use crate::config::TbStyle;
-    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::TestOutcome;
 
@@ -207,7 +206,11 @@ mod tests {
     fn test_ci_reporter_error_shows_e() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = make_error("AttributeError: x", "t.py", 5, "obj.x");
+        let outcome = TestOutcome::error("AttributeError: x")
+            .file("t.py")
+            .lineno(5)
+            .source("obj.x")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(reporter.dot_buf, "E");
     }
@@ -389,7 +392,11 @@ mod tests {
     fn test_line_mode_error_emits_one_liner() {
         let mut reporter = make_ci_reporter(TbStyle::Line);
         let item = TestItem::builder("tests/test_foo.py", "test_deep").arc();
-        let outcome = make_error("ValueError: something broke", "test_foo.py", 10, "obj.x");
+        let outcome = TestOutcome::error("ValueError: something broke")
+            .file("test_foo.py")
+            .lineno(10)
+            .source("obj.x")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];

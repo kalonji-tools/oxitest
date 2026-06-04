@@ -20,6 +20,7 @@ pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> Te
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> TestOutcome {
     TestOutcome::Error {
         message: msg.to_string(),

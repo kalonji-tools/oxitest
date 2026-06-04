@@ -418,7 +418,6 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use super::*;
-    use crate::reporter::test_helpers::make_error;
     use crate::types::{DurationMs, TestOutcome};
 
     /// Serializes tests that mutate `console::set_colors_enabled` (global state).
@@ -439,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_outcome_label_error_contains_error() {
-        let o = make_error("msg", "f.py", 1, "x.y");
+        let o = TestOutcome::error("msg").file("f.py").source("x.y").build();
         let label = outcome_label(&o, false);
         assert!(label.contains("ERROR"), "label was: {label:?}");
     }
