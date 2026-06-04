@@ -30,6 +30,10 @@ pub enum PerTestViolation {
     DictParametrize {
         node_id: NodeId,
     },
+    InvalidModuleMark {
+        node_id: NodeId,
+        detail: String,
+    },
     MissingMarkReason {
         node_id: NodeId,
         mark_name: String,
@@ -52,6 +56,7 @@ impl PerTestViolation {
         match self {
             Self::BareAssert { node_id, .. }
             | Self::DictParametrize { node_id }
+            | Self::InvalidModuleMark { node_id, .. }
             | Self::MissingMarkReason { node_id, .. }
             | Self::MissingReturnAnnotation { node_id, .. }
             | Self::SingleCaseParametrize { node_id }
@@ -133,6 +138,12 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                 ViolationKind::DictParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::DictParametrize { node_id },
                 )),
+                ViolationKind::InvalidModuleMark => Some(StrictViolation::PerTest(
+                    PerTestViolation::InvalidModuleMark {
+                        node_id,
+                        detail: r.detail,
+                    },
+                )),
                 ViolationKind::MissingMarkReason => Some(StrictViolation::PerTest(
                     PerTestViolation::MissingMarkReason {
                         node_id,
@@ -198,6 +209,14 @@ impl std::fmt::Display for PerTestViolation {
             }
             Self::DictParametrize { node_id } => {
                 write!(f, "{:<60}  dict-parametrize", node_id.as_ref())
+            }
+            Self::InvalidModuleMark { node_id, detail } => {
+                write!(
+                    f,
+                    "{:<60}  invalid-module-mark   {}",
+                    node_id.as_ref(),
+                    detail
+                )
             }
             Self::MissingMarkReason { node_id, mark_name } => {
                 write!(
@@ -284,6 +303,9 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         }
         PerTestViolation::DictParametrize { .. } => {
             "strict: use a frozen dataclass instead of dict for parametrize cases".to_string()
+        }
+        PerTestViolation::InvalidModuleMark { detail, .. } => {
+            format!("strict: invalid module-level mark {}", detail)
         }
         PerTestViolation::MissingMarkReason { mark_name, .. } => {
             format!("strict: @mark.{} requires reason=", mark_name)
@@ -625,6 +647,22 @@ mod tests {
             StrictViolation::PerTest(PerTestViolation::UnusedFixture {
                 fixture_name, ..
             }) if fixture_name == "unused_db"
+        ));
+    }
+
+    #[test]
+    fn test_check_collected_invalid_module_mark() {
+        let raw = vec![RawViolation {
+            node_id: "tests/test_foo.py".to_string(),
+            kind: ViolationKind::InvalidModuleMark,
+            detail: "skip".to_string(),
+        }];
+        let violations = check_collected(raw);
+        assert_eq!(violations.len(), 1);
+        assert!(matches!(
+            &violations[0],
+            StrictViolation::PerTest(PerTestViolation::InvalidModuleMark { detail, .. })
+            if detail == "skip"
         ));
     }
 

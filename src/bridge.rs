@@ -245,6 +245,7 @@ struct CollectedItem {
 pub(crate) enum ViolationKind {
     BareAssert,
     DictParametrize,
+    InvalidModuleMark,
     MissingMarkReason,
     MissingReturnAnnotation,
     SingleCaseParametrize,
@@ -260,6 +261,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
         Ok(match s.as_str() {
             "bare_assert" => ViolationKind::BareAssert,
             "dict_parametrize" => ViolationKind::DictParametrize,
+            "invalid_module_mark" => ViolationKind::InvalidModuleMark,
             "missing_mark_reason" => ViolationKind::MissingMarkReason,
             "missing_return_annotation" => ViolationKind::MissingReturnAnnotation,
             "single_case_parametrize" => ViolationKind::SingleCaseParametrize,
