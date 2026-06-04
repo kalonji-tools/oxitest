@@ -23,6 +23,35 @@ def _env(*extra_paths: Path | str) -> dict[str, str]:
     return {**os.environ, "PYTHONPATH": ":".join(parts)}
 
 
+def _scaffold_plugin_project(
+    tmp: TempDir,
+    plugin_name: str,
+    plugin_code: str,
+    config: str = "",
+    test_code: str = "def test_ok(): pass\n",
+) -> Path:
+    """Create plugin dir, pyproject.toml, and test file. Return project root."""
+    project = Path(str(tmp))
+
+    # Plugin package
+    plugin_dir = project / plugin_name
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text(plugin_code)
+
+    # pyproject.toml — always declares the plugin; caller appends extra config
+    toml = f'[tool.oxitest]\ntestpaths = ["tests"]\nplugins = ["{plugin_name}"]\n'
+    if config:
+        toml += config
+    (project / "pyproject.toml").write_text(toml)
+
+    # Test file
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_pass.py").write_text(test_code)
+
+    return project
+
+
 def test_plugin_loads_and_entry_called(tmp: TempDir):
     """A declared plugin's oxitest_plugin() is called at startup."""
     project = Path(str(tmp))
