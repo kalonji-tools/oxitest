@@ -221,7 +221,6 @@ def test_create_session_populates_registry(tmp: TempDir):
     """)
     )
     session, _ = create_session([str(f)])
-    session.begin_module("t.py")
 
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -261,7 +260,6 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
     """)
     )
     session, _ = create_session([str(root_conf), str(sub_conf)])
-    session.begin_module(str(sub / "test_x.py"))
 
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass

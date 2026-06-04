@@ -281,7 +281,6 @@ def test_function_scope_new_instance_per_resolve():
     reg = FixtureRegistry()
     reg.register(FixtureDef("val", factory, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -310,7 +309,6 @@ def test_yield_fixture_function_scope_teardown():
     reg = FixtureRegistry()
     reg.register(FixtureDef("val", factory, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -344,7 +342,6 @@ def test_addfinalizer_runs_in_teardown():
     reg = FixtureRegistry()
     reg.register(FixtureDef("thing", factory, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -378,7 +375,6 @@ def test_dag_fixture_depending_on_fixture():
 
     reg.register(FixtureDef("derived", derived, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -402,7 +398,6 @@ def test_autouse_runs_side_effects_without_being_in_kwargs():
     reg = FixtureRegistry()
     reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn():
         pass  # does NOT request 'setup'
@@ -428,7 +423,6 @@ def test_autouse_teardown_still_runs():
     reg = FixtureRegistry()
     reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn():
         pass
@@ -448,7 +442,6 @@ def test_autouse_teardown_still_runs():
 def test_missing_fixture_raises_not_found():
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(nonexistent: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -473,7 +466,6 @@ def test_cycle_raises_fixture_cycle_error():
     reg.register(FixtureDef("a", a, False, None, "/c.py"))
     reg.register(FixtureDef("b", b, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(a: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -489,7 +481,6 @@ def test_setup_error_raises_fixture_setup_error():
     reg = FixtureRegistry()
     reg.register(FixtureDef("bad", bad, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(bad: Fixture[None]) -> None:  # type: ignore[type-arg]
         pass
@@ -520,7 +511,6 @@ def test_fixture_marker_param_resolved_by_name():
     reg = FixtureRegistry()
     reg.register(FixtureDef("val", factory, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -539,7 +529,6 @@ def test_fixture_marker_param_resolved_by_name():
 def test_non_fixture_param_ignored_by_resolver():
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(x: int) -> None:
         pass
@@ -554,7 +543,6 @@ def test_non_fixture_param_ignored_by_resolver():
 def test_fixture_test_context_injected_directly():
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(ctx: Fixture[OxiTestContext]) -> None:  # type: ignore[type-arg]
         pass
@@ -576,7 +564,6 @@ def test_fixture_dep_resolved_via_annotation():
 
     reg.register(FixtureDef("derived", derived, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -599,7 +586,6 @@ def test_autouse_not_double_invoked_when_explicitly_requested():
     reg = FixtureRegistry()
     reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(setup: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -788,7 +774,6 @@ def test_resolve_for_test_skip_names_prevents_resolution():
         )
     )
     session = FixtureSession(registry)
-    session.begin_module("/fake/test.py")
 
     def test_fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -809,7 +794,6 @@ def test_unannotated_param_matching_fixture_raises_helpful_error():
     reg = FixtureRegistry()
     reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     # param 'numbers' has no annotation — should raise a helpful error
     def test_fn(numbers) -> None:  # type: ignore[annotation-unchecked]
@@ -838,7 +822,6 @@ def test_wrong_annotation_matching_fixture_raises_helpful_error():
     reg = FixtureRegistry()
     reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     # param 'numbers' has wrong annotation (list[int] instead of Fixture[list[int]])
     def test_fn(numbers: list[int]) -> None:
@@ -906,7 +889,6 @@ def test_on_teardown_registers_cleanup():
     reg = FixtureRegistry()
     reg.register(FixtureDef("thing", factory, False, None, "/c.py"))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -973,7 +955,6 @@ def test_shared_fixture_is_called_once_across_tests():
     reg = FixtureRegistry()
     reg.register(FixtureDef("db", factory, False, None, "/c.py", shared=True))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -994,7 +975,6 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy():
     reg = FixtureRegistry()
     reg.register(FixtureDef("cfg", factory, False, None, "/c.py", shared=True))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
@@ -1015,7 +995,6 @@ def test_shared_fixture_proxy_raises_on_item_mutation():
     reg = FixtureRegistry()
     reg.register(FixtureDef("cfg", factory, False, None, "/c.py", shared=True))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
@@ -1035,7 +1014,6 @@ def test_shared_fixture_teardown_runs_on_end_session():
     reg = FixtureRegistry()
     reg.register(FixtureDef("res", factory, False, None, "/c.py", shared=True))
     session = FixtureSession(reg)
-    session.begin_module("t.py")
 
     def fn(res: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -1186,7 +1164,6 @@ def test_get_fixture_in_namespace_resolves_correct_fixture():
         FixtureDef("conn", lambda: "http-conn", False, None, "", namespace="http")
     )
     session = FixtureSession(reg)
-    session.begin_module("/fake/test.py")
 
     result = session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
     assert result == "db-conn", (
@@ -1204,7 +1181,6 @@ def test_get_fixture_in_namespace_resolves_correct_fixture():
 def test_get_fixture_in_namespace_raises_not_found_with_namespace():
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("/fake/test.py")
 
     with raises(FixtureNotFoundError) as exc_info:
         session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
@@ -1247,7 +1223,6 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("/fake/test.py")
 
     # Create the test function with Fixtures annotation
     # Use the actual Fixtures class directly (not string annotation)
@@ -1271,7 +1246,6 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session():
     """Verify that FixturesProxy holds reference to the correct session."""
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module("/fake/module.py")
 
     def test_fn(fx: Fixtures) -> None:
         pass

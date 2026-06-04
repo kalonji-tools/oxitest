@@ -65,12 +65,12 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir):
     helpers.integ.assert_contains(out, "test_one", "test_two")
 
 
-def test_keyword_filter(tmp: TempDir):
-    """Only tests matching the -k keyword should run."""
+def test_expression_filter(tmp: TempDir):
+    """Only tests matching the -E expression should run."""
     (tmp / "test_kw.py").write_text(
         "def test_alpha(): assert True\ndef test_beta(): assert False\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "-k", "alpha")
+    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "name(alpha)")
     helpers.integ.assert_passed(out, rc, count=1)
 
 
@@ -112,8 +112,8 @@ def test_junit_xml_output(tmp: TempDir):
     )
 
 
-def test_marker_filter(tmp: TempDir):
-    """Only tests matching the -m marker expression should run."""
+def test_expression_marker_filter(tmp: TempDir):
+    """Only tests matching the -E mark expression should run."""
     (tmp / "test_marked.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.slow\n"
@@ -122,7 +122,7 @@ def test_marker_filter(tmp: TempDir):
     )
     pyproject = Path(tmp) / "pyproject.toml"
     pyproject.write_text('[tool.oxitest]\nmarkers = ["slow: slow tests"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
+    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "mark(slow)")
     helpers.integ.assert_passed(out, rc, count=1)
 
 

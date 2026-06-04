@@ -51,7 +51,6 @@ fx = oxitest.Fixtures()
 def fixture_session(tmp: TempDir) -> Yields[FixtureSession]:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
-    session.begin_module(str(tmp / "test_auto.py"))
     yield session
     session.end_session()
 
