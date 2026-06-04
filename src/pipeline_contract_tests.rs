@@ -5,43 +5,12 @@ use crate::test_doubles::doubles::{
 };
 use crate::types::ExitCode;
 
-/// Helper: set the collection state to `Collected` with given items and raw violations.
-fn set_collected(
-    ctx: &mut PipelineContext,
-    items: Vec<std::sync::Arc<types::TestItem>>,
-    raw_violations: Vec<bridge::RawViolation>,
-) {
-    ctx.collection = CollectionState::Collected {
-        items,
-        raw_violations,
-    };
-}
-
-/// Helper: extract items from collection state (works for Collected, Partitioned, Ready, Executed).
-fn get_items(ctx: &PipelineContext) -> &[std::sync::Arc<types::TestItem>] {
-    match &ctx.collection {
-        CollectionState::Collected { items, .. } => items,
-        CollectionState::Partitioned { clean_items, .. } => clean_items,
-        CollectionState::Ready { clean_items, .. } => clean_items,
-        CollectionState::Executed { items } => items,
-        CollectionState::Empty => &[],
-    }
-}
-
-/// Helper: extract violated items from collection state.
-fn get_violated_items(ctx: &PipelineContext) -> &[std::sync::Arc<types::TestItem>] {
-    match &ctx.collection {
-        CollectionState::Partitioned { violated_items, .. }
-        | CollectionState::Ready { violated_items, .. } => violated_items,
-        _ => &[],
-    }
-}
-
 /// Helper: set the keyword in the command variant of a pipeline context.
 fn set_keyword(ctx: &mut PipelineContext, keyword: &str) {
     match &mut ctx.command {
         config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
         config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
+        config::Command::List(a) => a.filter.keyword = Some(keyword.to_string()),
         _ => {}
     }
 }
@@ -255,9 +224,9 @@ mod helper_tests {
     #[test]
     fn make_ctx_creates_empty_context() {
         let ctx = reporter::test_helpers::make_ctx();
-        assert!(matches!(ctx.collection, CollectionState::Empty));
+        assert!(ctx.items.is_empty());
         assert!(ctx.test_files.is_empty());
-        assert!(ctx.execution_results.is_none());
+        assert!(!ctx.interrupted);
         assert!(ctx.session.is_none());
     }
 }
@@ -266,7 +235,7 @@ mod strict_phase_contract_tests {
     use super::*;
     use crate::bridge::{RawViolation, ViolationKind};
     use crate::config::StrictMode;
-    use crate::reporter::test_helpers::make_item_raw;
+    use crate::types::TestItem;
 
     #[test]
     fn strict_enforce_partitions_items() {
@@ -274,29 +243,27 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_good"),
-                    make_item_raw("tests/test_a.py::test_bad"),
-                ],
-                vec![RawViolation {
-                    node_id: "tests/test_a.py::test_bad".to_string(),
-                    kind: ViolationKind::BareAssert,
-                    detail: "line 5".to_string(),
-                }],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_good").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_bad").arc());
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 5".to_string(),
+            });
 
             let result = phases::StrictPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
             assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert_eq!(items[0].node_id.as_ref(), "tests/test_a.py::test_good");
-            let violated = get_violated_items(&ctx);
-            assert_eq!(violated.len(), 1);
-            assert_eq!(violated[0].node_id.as_ref(), "tests/test_a.py::test_bad");
+            assert_eq!(ctx.items.len(), 1);
+            assert_eq!(ctx.items[0].node_id.as_ref(), "tests/test_a.py::test_good");
+            assert_eq!(ctx.violated_items.len(), 1);
+            assert_eq!(
+                ctx.violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad"
+            );
         });
     }
 
@@ -306,15 +273,13 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Abort);
-            set_collected(
-                &mut ctx,
-                vec![make_item_raw("tests/test_a.py::test_one")],
-                vec![RawViolation {
-                    node_id: "tests/test_a.py::test_one".to_string(),
-                    kind: ViolationKind::BareAssert,
-                    detail: "line 3".to_string(),
-                }],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_one").arc());
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_one".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 3".to_string(),
+            });
 
             let result = phases::StrictPhase.execute(py, &mut ctx);
 
@@ -332,49 +297,40 @@ mod strict_phase_contract_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
-                vec![make_item_raw("tests/test_a.py::test_clean")],
-                vec![],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_clean").arc());
 
             let result = phases::StrictPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
             assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert!(get_violated_items(&ctx).is_empty());
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.violated_items.is_empty());
         });
     }
 }
 
 mod filter_phase_contract_tests {
     use super::*;
-    use crate::reporter::test_helpers::make_item_raw;
+    use crate::types::TestItem;
 
     #[test]
     fn keyword_filter_reduces_items() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_alpha"),
-                    make_item_raw("tests/test_a.py::test_beta"),
-                ],
-                vec![],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_alpha").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_beta").arc());
             set_keyword(&mut ctx, "alpha");
 
             let result = phases::FilterPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
             assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert!(items[0].node_id.as_ref().contains("alpha"));
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.items[0].node_id.as_ref().contains("alpha"));
         });
     }
 
@@ -383,21 +339,55 @@ mod filter_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_one"),
-                    make_item_raw("tests/test_a.py::test_two"),
-                ],
-                vec![],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_one").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_two").arc());
 
             let result = phases::FilterPhase.execute(py, &mut ctx);
 
             assert!(result.is_ok());
             assert!(matches!(result.unwrap(), PhaseOutcome::Continue));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 2);
+            assert_eq!(ctx.items.len(), 2);
+        });
+    }
+}
+
+mod list_phase_contract_tests {
+    use super::*;
+    use crate::types::TestItem;
+
+    #[test]
+    fn list_phase_returns_early_exit_zero() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_one").arc());
+
+            let result = phases::ListPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(
+                result.unwrap(),
+                PhaseOutcome::EarlyExit(ExitCode::Success)
+            ));
+        });
+    }
+
+    #[test]
+    fn list_phase_empty_items_still_exits_zero() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = make_ctx();
+
+            let result = phases::ListPhase.execute(py, &mut ctx);
+
+            assert!(result.is_ok());
+            assert!(matches!(
+                result.unwrap(),
+                PhaseOutcome::EarlyExit(ExitCode::Success)
+            ));
         });
     }
 }
@@ -406,7 +396,7 @@ mod context_threading_tests {
     use super::*;
     use crate::bridge::{RawViolation, ViolationKind};
     use crate::config::StrictMode;
-    use crate::reporter::test_helpers::make_item_raw;
+    use crate::types::TestItem;
 
     #[test]
     fn strict_then_filter_threads_clean_items() {
@@ -414,32 +404,29 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_bad"),
-                    make_item_raw("tests/test_a.py::test_alpha"),
-                    make_item_raw("tests/test_a.py::test_beta"),
-                ],
-                vec![RawViolation {
-                    node_id: "tests/test_a.py::test_bad".to_string(),
-                    kind: ViolationKind::BareAssert,
-                    detail: "line 5".to_string(),
-                }],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_bad").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_alpha").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_beta").arc());
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 5".to_string(),
+            });
 
             let strict_result = phases::StrictPhase.execute(py, &mut ctx);
             assert!(matches!(strict_result, Ok(PhaseOutcome::Continue)));
-            assert_eq!(get_items(&ctx).len(), 2);
-            assert_eq!(get_violated_items(&ctx).len(), 1);
+            assert_eq!(ctx.items.len(), 2);
+            assert_eq!(ctx.violated_items.len(), 1);
 
             set_keyword(&mut ctx, "alpha");
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert!(items[0].node_id.as_ref().contains("alpha"));
-            assert_eq!(get_violated_items(&ctx).len(), 1);
+            assert_eq!(ctx.items.len(), 1);
+            assert!(ctx.items[0].node_id.as_ref().contains("alpha"));
+            assert_eq!(ctx.violated_items.len(), 1);
         });
     }
 
@@ -449,77 +436,77 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = None;
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_one"),
-                    make_item_raw("tests/test_a.py::test_two"),
-                ],
-                vec![],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_one").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_two").arc());
 
             assert!(!phases::StrictPhase.should_run(&ctx));
 
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
-            assert_eq!(get_items(&ctx).len(), 2);
+            assert_eq!(ctx.items.len(), 2);
         });
     }
 
     #[test]
-    fn filter_preserves_items_after_filtering() {
+    fn filter_then_list_threads_filtered_items() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_alpha"),
-                    make_item_raw("tests/test_a.py::test_beta"),
-                ],
-                vec![],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_alpha").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_beta").arc());
             set_keyword(&mut ctx, "alpha");
 
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert!(items[0].node_id.as_ref().contains("alpha"));
+            assert_eq!(ctx.items.len(), 1);
+
+            let list_result = phases::ListPhase.execute(py, &mut ctx);
+            assert!(matches!(
+                list_result,
+                Ok(PhaseOutcome::EarlyExit(ExitCode::Success))
+            ));
+            assert_eq!(ctx.items.len(), 1);
         });
     }
 
     #[test]
-    fn full_pure_rust_chain_strict_filter() {
+    fn full_pure_rust_chain_strict_filter_list() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
             set_keyword(&mut ctx, "good");
-            set_collected(
-                &mut ctx,
-                vec![
-                    make_item_raw("tests/test_a.py::test_good"),
-                    make_item_raw("tests/test_a.py::test_bad"),
-                    make_item_raw("tests/test_a.py::test_other"),
-                ],
-                vec![RawViolation {
-                    node_id: "tests/test_a.py::test_bad".to_string(),
-                    kind: ViolationKind::BareAssert,
-                    detail: "line 3".to_string(),
-                }],
-            );
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_good").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_bad").arc());
+            ctx.items
+                .push(TestItem::builder_raw("tests/test_a.py::test_other").arc());
+            ctx.raw_violations.push(RawViolation {
+                node_id: "tests/test_a.py::test_bad".to_string(),
+                kind: ViolationKind::BareAssert,
+                detail: "line 3".to_string(),
+            });
 
-            let pipeline: &[&dyn PipelinePhase] = &[&phases::StrictPhase, &phases::FilterPhase];
+            let pipeline: &[&dyn PipelinePhase] = &[
+                &phases::StrictPhase,
+                &phases::FilterPhase,
+                &phases::ListPhase,
+            ];
             let result = run_pipeline(py, pipeline, &mut ctx);
 
             assert_eq!(result, Ok(ExitCode::Success));
-            let items = get_items(&ctx);
-            assert_eq!(items.len(), 1);
-            assert_eq!(items[0].node_id.as_ref(), "tests/test_a.py::test_good");
-            let violated = get_violated_items(&ctx);
-            assert_eq!(violated.len(), 1);
-            assert_eq!(violated[0].node_id.as_ref(), "tests/test_a.py::test_bad");
+            assert_eq!(ctx.items.len(), 1);
+            assert_eq!(ctx.items[0].node_id.as_ref(), "tests/test_a.py::test_good");
+            assert_eq!(ctx.violated_items.len(), 1);
+            assert_eq!(
+                ctx.violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad"
+            );
         });
     }
 }
