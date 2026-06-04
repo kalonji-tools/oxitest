@@ -620,13 +620,10 @@ mod tests {
     #[test]
     fn test_diagnostic_error_with_empty_file_omits_location_line() {
         let item = TestItem::builder("tests/test_foo.py", "test_bridge").arc();
-        let outcome = TestOutcome::Error {
-            message: "PyImportError: No module named 'foo'".to_string(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("PyImportError: No module named 'foo'")
+            .file("")
+            .lineno(0)
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains(":0"),
@@ -822,13 +819,11 @@ mod tests {
     #[test]
     fn test_diagnostic_hint_appears_inside_box() {
         let item = TestItem::builder("tests/test_foo.py", "test_await").arc();
-        let outcome = TestOutcome::Error {
-            message: "TypeError: object X can't be used in 'await' expression".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "await fx".to_string(),
-            frames: vec![],
-        };
+        let outcome = TestOutcome::error("TypeError: object X can't be used in 'await' expression")
+            .file("test.py")
+            .lineno(5)
+            .source("await fx")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("hint:"),
@@ -865,12 +860,11 @@ mod tests {
             let item = TestItem::builder("tests/test_errors.py", "test_raises")
                 .lineno(10)
                 .arc();
-            let outcome = TestOutcome::Error {
-                message: "ValueError: invalid input".to_string(),
-                file: Utf8PathBuf::from("tests/test_errors.py"),
-                lineno: LineNo::new(10),
-                source_line: "result = process(data)".to_string(),
-                frames: vec![
+            let outcome = TestOutcome::error("ValueError: invalid input")
+                .file("tests/test_errors.py")
+                .lineno(10)
+                .source("result = process(data)")
+                .frames(vec![
                     Frame {
                         file: Utf8PathBuf::from("tests/test_errors.py"),
                         lineno: LineNo::new(10),
@@ -885,8 +879,8 @@ mod tests {
                         line: "raise ValueError(\"invalid input\")".to_string(),
                         locals: vec![],
                     },
-                ],
-            };
+                ])
+                .build();
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
