@@ -5,6 +5,7 @@ use camino::Utf8PathBuf;
 
 use crate::types::{DurationMs, LineNo, NodeId, OutcomeKind, RawOutcome, TestOutcome, TestTiming};
 
+#[allow(dead_code)]
 pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> TestOutcome {
     TestOutcome::Failed {
         message: msg.to_string(),
