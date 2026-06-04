@@ -137,7 +137,7 @@ impl Reporter for CiReporter {
 mod tests {
     use super::*;
     use crate::config::TbStyle;
-    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::TestOutcome;
 
@@ -180,7 +180,10 @@ mod tests {
     fn test_ci_reporter_fail_shows_f() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = make_failed("oops", "t.py", 1, "assert x");
+        let outcome = TestOutcome::failed("oops")
+            .file("t.py")
+            .source("assert x")
+            .build();
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert_eq!(reporter.dot_buf, "F");
@@ -239,7 +242,10 @@ mod tests {
                 .build(),
         );
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = make_failed("x", "f.py", 1, "assert");
+        let outcome = TestOutcome::failed("x")
+            .file("f.py")
+            .source("assert")
+            .build();
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
@@ -258,7 +264,10 @@ mod tests {
                 .build(),
         );
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = make_failed("x", "f.py", 1, "assert");
+        let outcome = TestOutcome::failed("x")
+            .file("f.py")
+            .source("assert")
+            .build();
         let mut stats = crate::reporter::RunStats::new();
         stats.record(&item, &outcome);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
@@ -338,7 +347,10 @@ mod tests {
             fixture_names: vec![],
             fixref_names: vec![],
         };
-        let outcome = make_failed("", "tests/test_foo.py", 5, "assert x > 0");
+        let outcome = TestOutcome::failed("")
+            .lineno(5)
+            .source("assert x > 0")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
         assert_eq!(reporter.dot_buf, "F");
         assert_eq!(reporter.deferred_diags.len(), 1);
@@ -356,7 +368,11 @@ mod tests {
     fn test_line_mode_emits_one_liner() {
         let mut reporter = make_ci_reporter(TbStyle::Line);
         let item = TestItem::builder("tests/test_foo.py", "test_bar").arc();
-        let outcome = make_failed("values differ", "test_foo.py", 5, "assert x == y");
+        let outcome = TestOutcome::failed("values differ")
+            .file("test_foo.py")
+            .lineno(5)
+            .source("assert x == y")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];

@@ -418,7 +418,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::reporter::test_helpers::make_error;
     use crate::types::{DurationMs, TestOutcome};
 
     /// Serializes tests that mutate `console::set_colors_enabled` (global state).
@@ -429,7 +429,10 @@ mod tests {
 
     #[test]
     fn test_outcome_label_failed_contains_fail() {
-        let o = make_failed("msg", "f.py", 1, "assert x");
+        let o = TestOutcome::failed("msg")
+            .file("f.py")
+            .source("assert x")
+            .build();
         let label = outcome_label(&o, false);
         assert!(label.contains("FAIL"), "label was: {label:?}");
     }
@@ -653,7 +656,11 @@ mod tests {
     fn test_format_test_line_failed_contains_fail_label() {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_math").arc();
-        let outcome = make_failed("wrong value", "tests/test_math.py", 10, "assert x == 1");
+        let outcome = TestOutcome::failed("wrong value")
+            .file("tests/test_math.py")
+            .lineno(10)
+            .source("assert x == 1")
+            .build();
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(15.0));
         assert!(line.contains("FAIL"), "FAIL label must appear: {line:?}");
     }
@@ -778,7 +785,11 @@ mod tests {
             .build();
         let mut reporter = TtyReporter::new(opts);
         let item = TestItem::builder("tests/test_foo.py", "test_failing").arc();
-        let outcome = make_failed("oops", "test.py", 5, "assert x");
+        let outcome = TestOutcome::failed("oops")
+            .file("test.py")
+            .lineno(5)
+            .source("assert x")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert_eq!(
             reporter.deferred_failures.len(),
@@ -811,7 +822,11 @@ mod tests {
             .build();
         let mut reporter = TtyReporter::new(opts);
         let item = TestItem::builder("tests/test_foo.py", "test_failing").arc();
-        let outcome = make_failed("oops", "test.py", 5, "assert x");
+        let outcome = TestOutcome::failed("oops")
+            .file("test.py")
+            .lineno(5)
+            .source("assert x")
+            .build();
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
         assert!(
             reporter.deferred_failures.is_empty(),
@@ -885,8 +900,8 @@ mod tests {
 
     #[test]
     fn test_parametrize_buffer_any_failed_true_when_failure_present() {
-        use crate::reporter::test_helpers::make_failed;
         use crate::types::TestItem;
+        use crate::types::TestOutcome;
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
@@ -898,7 +913,10 @@ mod tests {
         );
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            make_failed("oops", "t.py", 1, "assert x"),
+            TestOutcome::failed("oops")
+                .file("t.py")
+                .source("assert x")
+                .build(),
             DurationMs::new(1.0),
         );
         assert!(
@@ -934,8 +952,8 @@ mod tests {
 
     #[test]
     fn test_parametrize_buffer_passed_count_counts_only_passed_outcomes() {
-        use crate::reporter::test_helpers::make_failed;
         use crate::types::TestItem;
+        use crate::types::TestOutcome;
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
@@ -954,7 +972,10 @@ mod tests {
         );
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            make_failed("oops", "t.py", 1, "assert x"),
+            TestOutcome::failed("oops")
+                .file("t.py")
+                .source("assert x")
+                .build(),
             DurationMs::new(1.0),
         );
         buf.push(
