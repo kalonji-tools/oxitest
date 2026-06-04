@@ -280,6 +280,10 @@ impl TestItemBuilder {
             fixref_names: self.fixref_names,
         }
     }
+
+    pub(crate) fn arc(self) -> std::sync::Arc<TestItem> {
+        std::sync::Arc::new(self.build())
+    }
 }
 
 #[cfg(test)]
@@ -291,7 +295,7 @@ impl TestItem {
             node_id: None,
             module_path: Utf8PathBuf::from(module_path),
             fn_name: fn_name.to_string(),
-            lineno: LineNo::ZERO,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -308,7 +312,7 @@ impl TestItem {
             node_id: Some(NodeId::from_raw(node_id)),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: node_id.to_string(),
-            lineno: LineNo::ZERO,
+            lineno: LineNo::new(1),
             markers: vec![],
             param_id: None,
             param_values: vec![],
@@ -1132,7 +1136,7 @@ mod tests {
         assert_eq!(item.node_id.to_string(), "tests/test_foo.py::test_add");
         assert_eq!(item.module_path.as_str(), "tests/test_foo.py");
         assert_eq!(item.fn_name, "test_add");
-        assert_eq!(item.lineno, LineNo::ZERO);
+        assert_eq!(item.lineno, LineNo::new(1));
         assert!(item.markers.is_empty());
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
@@ -1173,6 +1177,25 @@ mod tests {
             "tests/test_foo.py::test_add[case0]"
         );
         assert_eq!(item.param_id, Some("case0".to_string()));
+    }
+
+    #[test]
+    fn builder_arc_returns_arc_wrapped_item() {
+        use std::sync::Arc;
+        let item: Arc<TestItem> = TestItem::builder("tests/test_foo.py", "test_add").arc();
+        assert_eq!(item.fn_name, "test_add");
+    }
+
+    #[test]
+    fn builder_defaults_lineno_to_one() {
+        let item = TestItem::builder("tests/test_foo.py", "test_add").build();
+        assert_eq!(item.lineno, LineNo::new(1));
+    }
+
+    #[test]
+    fn builder_raw_defaults_lineno_to_one() {
+        let item = TestItem::builder_raw("tests/test_foo.py::test_add").build();
+        assert_eq!(item.lineno, LineNo::new(1));
     }
 
     fn raw(status: &str) -> RawOutcome<'_> {
