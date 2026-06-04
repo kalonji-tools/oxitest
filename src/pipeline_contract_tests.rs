@@ -328,7 +328,7 @@ mod filter_phase_contract_tests {
     use crate::types::TestItem;
 
     #[test]
-    fn keyword_filter_reduces_items() {
+    fn expression_filter_reduces_items() {
         Python::initialize();
         Python::attach(|py| {
             let mut ctx = make_ctx();
@@ -339,7 +339,8 @@ mod filter_phase_contract_tests {
                 ],
                 vec![],
             );
-            ctx.with_keyword("alpha");
+            ctx.with_expression("alpha");
+            ctx.with_expression("name(alpha)");
 
             let result = phases::FilterPhase.execute(py, &mut ctx);
 
@@ -404,7 +405,8 @@ mod context_threading_tests {
             assert_eq!(get_items(&ctx).len(), 2);
             assert_eq!(get_violated_items(&ctx).len(), 1);
 
-            ctx.with_keyword("alpha");
+            ctx.with_expression("alpha");
+            ctx.with_expression("name(alpha)");
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
             let items = get_items(&ctx);
@@ -448,7 +450,8 @@ mod context_threading_tests {
                 ],
                 vec![],
             );
-            ctx.with_keyword("alpha");
+            ctx.with_expression("alpha");
+            ctx.with_expression("name(alpha)");
 
             let filter_result = phases::FilterPhase.execute(py, &mut ctx);
             assert!(matches!(filter_result, Ok(PhaseOutcome::Continue)));
@@ -464,7 +467,7 @@ mod context_threading_tests {
         Python::attach(|py| {
             let mut ctx = make_ctx();
             ctx.cfg.strict = Some(StrictMode::Enforce);
-            ctx.with_keyword("good");
+            ctx.with_expression("name(good)");
             ctx.with_collected(
                 vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),

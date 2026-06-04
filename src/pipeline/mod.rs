@@ -84,7 +84,7 @@ pub(crate) enum CollectionState {
         all_violations: Vec<strict::StrictViolation>,
         suite_lines: Vec<String>,
     },
-    /// Filters (-k, -m, --failed) have been applied; items are ready to run.
+    /// Filters (-E, --failed) have been applied; items are ready to run.
     Ready {
         clean_items: Vec<Arc<types::TestItem>>,
         violated_items: Vec<Arc<types::TestItem>>,
@@ -372,11 +372,11 @@ impl PipelineContext {
         self
     }
 
-    /// Set the keyword filter in the command variant.
-    pub(crate) fn with_keyword(&mut self, keyword: &str) -> &mut Self {
+    /// Set the `-E` query DSL expression in the command variant.
+    pub(crate) fn with_expression(&mut self, expr: &str) -> &mut Self {
         match &mut self.command {
-            config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
-            config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
+            config::Command::Run(a) => a.filter.expression = Some(expr.to_string()),
+            config::Command::Debug(a) => a.filter.expression = Some(expr.to_string()),
             _ => {}
         }
         self

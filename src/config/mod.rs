@@ -928,21 +928,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_marker_flag() {
-        let args = parse_run(&["-m", "slow"]);
-        assert_eq!(args.filter.marker, Some("slow".to_string()));
-    }
-
-    #[test]
-    fn test_cli_marker_flag_long() {
-        let args = parse_run(&["--marker", "slow and not integration"]);
-        assert_eq!(
-            args.filter.marker,
-            Some("slow and not integration".to_string())
-        );
-    }
-
-    #[test]
     fn test_cli_json_flag() {
         let args = parse_run(&["--json", "/tmp/results.json"]);
         assert_eq!(args.json, Some(Utf8PathBuf::from("/tmp/results.json")));

@@ -28,21 +28,12 @@ pub enum QueryFormat {
 
 // ── Shared flag groups ───────────────────────────────────────────────────────
 
-/// Keyword and marker filtering flags, shared by run/debug.
+/// Query DSL and filtering flags, shared by run/debug.
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct FilteringArgs {
-    /// Only run tests matching the keyword expression
-    #[arg(short = 'k', value_name = "EXPR", help_heading = "Filtering")]
-    pub keyword: Option<String>,
-
-    /// Only run tests matching the marker expression
-    #[arg(
-        short = 'm',
-        long = "marker",
-        value_name = "EXPR",
-        help_heading = "Filtering"
-    )]
-    pub marker: Option<String>,
+    /// Filter tests using the query DSL expression (e.g. "name(foo) & mark(slow)")
+    #[arg(short = 'E', value_name = "EXPR", help_heading = "Filtering")]
+    pub expression: Option<String>,
 
     /// Run only tests affected by git changes (default ref from affected_base config, or HEAD)
     #[arg(
@@ -463,7 +454,7 @@ impl OxitestCli {
     /// Returns `(Command, use_gitignore)` where `use_gitignore` is `true` unless
     /// `--no-use-gitignore` was passed.
     ///
-    /// Tries parsing with subcommands first. On failure (e.g. `oxitest tests/ -k foo`
+    /// Tries parsing with subcommands first. On failure (e.g. `oxitest tests/ -E "name(foo)"`
     /// without an explicit `run`), falls back to parsing all args as `RunArgs`.
     pub fn resolve(args: &[String]) -> Result<(Command, bool), clap::Error> {
         // First, try normal parsing with subcommands.
@@ -481,7 +472,7 @@ impl OxitestCli {
             }
             Err(e) => {
                 // If the initial parse failed, try inserting "run" to handle implicit default
-                // subcommand (e.g. `oxitest tests/ -k foo` or
+                // subcommand (e.g. `oxitest tests/ -E "name(foo)"` or
                 // `oxitest --no-use-gitignore tests/`).
                 //
                 // Top-level (global) flags like `--no-use-gitignore` can appear anywhere in
@@ -598,21 +589,21 @@ mod tests {
 
     #[test]
     fn implicit_run_with_flags() {
-        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "-k", "foo"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "-E", "name(foo)"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
-        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
+        assert_eq!(args.filter.expression.as_deref(), Some("name(foo)"));
     }
 
     #[test]
     fn implicit_run_with_path_and_flags() {
-        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "tests/", "-k", "foo"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "tests/", "-E", "name(foo)"])).unwrap();
         let Command::Run(args) = cmd else {
             panic!("expected Command::Run");
         };
         assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/")]);
-        assert_eq!(args.filter.keyword.as_deref(), Some("foo"));
+        assert_eq!(args.filter.expression.as_deref(), Some("name(foo)"));
     }
 
     #[test]
