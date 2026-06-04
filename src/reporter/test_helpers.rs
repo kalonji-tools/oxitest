@@ -1,47 +1,9 @@
 //! Shared test helpers for reporter unit tests.
 #![cfg(test)]
 
-use std::sync::Arc;
-
 use camino::Utf8PathBuf;
 
-use crate::types::{
-    DurationMs, LineNo, NodeId, OutcomeKind, RawOutcome, TestItem, TestOutcome, TestTiming,
-};
-
-/// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
-/// the canonical test module path `"tests/test_foo.py"`.
-#[allow(dead_code)]
-pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
-    Arc::new(TestItem::builder("tests/test_foo.py", name).build())
-}
-
-/// Build an `Arc<TestItem>` from an already-formatted `node_id` string (e.g.
-/// `"tests/test_foo.py::test_fn"`).  Used by modules that receive raw node
-/// IDs from workers or other external sources.
-#[allow(dead_code)]
-pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
-    Arc::new(TestItem::builder_raw(node_id).build())
-}
-
-/// Build an `Arc<TestItem>` with an explicit `module` path, constructing the
-/// `node_id` via `NodeId::new(module, name, None)`.
-#[allow(dead_code)]
-pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
-    Arc::new(TestItem::builder(module, name).build())
-}
-
-/// Build a `(Utf8PathBuf, Vec<Arc<TestItem>>)` group for `module`, one item per
-/// name in `names`.
-#[allow(dead_code)]
-pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
-    let path = Utf8PathBuf::from(module);
-    let items = names
-        .iter()
-        .map(|name| Arc::new(TestItem::builder(module, name).build()))
-        .collect();
-    (path, items)
-}
+use crate::types::{DurationMs, LineNo, NodeId, OutcomeKind, RawOutcome, TestOutcome, TestTiming};
 
 pub(crate) fn make_failed(msg: &str, file: &str, lineno: usize, src: &str) -> TestOutcome {
     TestOutcome::Failed {
@@ -65,12 +27,6 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
         source_line: src.to_string(),
         frames: vec![],
     }
-}
-
-/// Build an `Arc<TestItem>` with an explicit module path and line number.
-#[allow(dead_code)]
-pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestItem> {
-    Arc::new(TestItem::builder(module, name).lineno(lineno).build())
 }
 
 /// Build a zero-duration [`TestTiming`] for the given `node_id` string and `outcome`.
