@@ -358,6 +358,32 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 }
 
 #[cfg(test)]
+impl PipelineContext {
+    /// Set the collection state to `Collected` with the given items and raw violations.
+    pub(crate) fn with_collected(
+        &mut self,
+        items: Vec<std::sync::Arc<types::TestItem>>,
+        raw_violations: Vec<bridge::RawViolation>,
+    ) -> &mut Self {
+        self.collection = CollectionState::Collected {
+            items,
+            raw_violations,
+        };
+        self
+    }
+
+    /// Set the keyword filter in the command variant.
+    pub(crate) fn with_keyword(&mut self, keyword: &str) -> &mut Self {
+        match &mut self.command {
+            config::Command::Run(a) => a.filter.keyword = Some(keyword.to_string()),
+            config::Command::Debug(a) => a.filter.keyword = Some(keyword.to_string()),
+            _ => {}
+        }
+        self
+    }
+}
+
+#[cfg(test)]
 #[path = "../pipeline_tests.rs"]
 mod tests;
 
