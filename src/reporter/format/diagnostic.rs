@@ -358,7 +358,7 @@ fn render_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::{LineNo, TestOutcome};
     use camino::Utf8PathBuf;
@@ -373,12 +373,10 @@ mod tests {
     #[test]
     fn test_diagnostic_short_with_message() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed(
-            "expected 4",
-            "tests/test_foo.py",
-            8,
-            "assert add(1, 2) == 4",
-        );
+        let outcome = TestOutcome::failed("expected 4")
+            .lineno(8)
+            .source("assert add(1, 2) == 4")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(block.contains("tests/test_foo.py:8"));
         assert!(block.contains("assert add(1, 2) == 4"));
@@ -388,7 +386,10 @@ mod tests {
     #[test]
     fn test_diagnostic_short_no_message_no_nudge() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert add(1, 2) == 4")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(!block.contains("add an assertion message"));
         assert!(!block.contains("hint:"));
@@ -410,7 +411,10 @@ mod tests {
     #[test]
     fn test_diagnostic_line_style_returns_empty() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
+        let outcome = TestOutcome::failed("msg")
+            .lineno(8)
+            .source("assert add(1, 2) == 4")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false, false);
         assert!(
             block.is_empty(),
@@ -421,7 +425,10 @@ mod tests {
     #[test]
     fn test_diagnostic_no_style_is_empty() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert");
+        let outcome = TestOutcome::failed("msg")
+            .lineno(8)
+            .source("assert")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
         assert!(block.is_empty());
     }
@@ -429,7 +436,10 @@ mod tests {
     #[test]
     fn test_diagnostic_does_not_repeat_fn_name() {
         let item = TestItem::builder("tests/test_foo.py", "test_add_two_positives").arc();
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert result == 42")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("test_add_two_positives"),
@@ -507,7 +517,10 @@ mod tests {
     #[test]
     fn test_diagnostic_no_nudge_and_no_why_label() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert result == 42")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("add an assertion message"),
@@ -522,12 +535,10 @@ mod tests {
     #[test]
     fn test_diagnostic_closing_line_shows_message() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed(
-            "expected 4",
-            "tests/test_foo.py",
-            8,
-            "assert add(1, 2) == 4",
-        );
+        let outcome = TestOutcome::failed("expected 4")
+            .lineno(8)
+            .source("assert add(1, 2) == 4")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             block.contains("expected 4"),
@@ -576,7 +587,10 @@ mod tests {
             fixture_names: vec![],
             fixref_names: vec![],
         });
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert x + y == expected");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert x + y == expected")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Inline params format: "x = 1, y = 2, expected = 3"
         assert!(block.contains("x = 1"), "missing param x");
@@ -603,7 +617,10 @@ mod tests {
             fixture_names: vec![],
             fixref_names: vec![],
         });
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert x > 0")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         let path_pos = block.find("tests/test_foo.py:8").unwrap();
         let params_pos = block.find("x = 1").unwrap();
@@ -615,7 +632,10 @@ mod tests {
     #[test]
     fn test_diagnostic_no_params_block_when_param_values_empty() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
+        let outcome = TestOutcome::failed("")
+            .lineno(8)
+            .source("assert x > 0")
+            .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
             !block.contains("params"),
@@ -756,12 +776,12 @@ mod tests {
     #[test]
     fn test_diagnostic_multiline_closing_message_stays_inside_box() {
         let item = TestItem::builder("tests/test_foo.py", "test_sub").arc();
-        let outcome = make_failed(
+        let outcome = TestOutcome::failed(
             "missing value:\ncollected 1 item\n\nFAILURES\nFAILED test.py::test_x",
-            "tests/test_foo.py",
-            10,
-            "assert x in out",
-        );
+        )
+        .lineno(10)
+        .source("assert x in out")
+        .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         // Every non-empty continuation line must be prefixed with box chrome
         for line in block.lines().skip(1) {
@@ -874,7 +894,11 @@ mod tests {
             let item = TestItem::builder("tests/test_math.py", "test_compare")
                 .lineno(15)
                 .arc();
-            let outcome = make_failed("assert x == y", "tests/test_math.py", 15, "assert x == y");
+            let outcome = TestOutcome::failed("assert x == y")
+                .file("tests/test_math.py")
+                .lineno(15)
+                .source("assert x == y")
+                .build();
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
         }
@@ -937,7 +961,11 @@ mod tests {
             let item = TestItem::builder("tests/test_mod.py", "test_something")
                 .lineno(5)
                 .arc();
-            let outcome = make_failed("should pass", "tests/test_mod.py", 5, "assert x");
+            let outcome = TestOutcome::failed("should pass")
+                .file("tests/test_mod.py")
+                .lineno(5)
+                .source("assert x")
+                .build();
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
             assert_snapshot!(block);
         }

@@ -274,7 +274,7 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::TestOutcome;
     use tempfile::TempDir;
@@ -313,7 +313,11 @@ mod tests {
     fn test_failed_produces_failure_element() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_sub").arc(),
-            make_failed("expected 42", "tests/t.py", 5, "assert x == 42"),
+            TestOutcome::failed("expected 42")
+                .file("tests/t.py")
+                .lineno(5)
+                .source("assert x == 42")
+                .build(),
         )]);
         assert!(
             xml.contains("<failure"),
