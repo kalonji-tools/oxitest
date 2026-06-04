@@ -358,7 +358,8 @@ fn render_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed, make_item, make_item_at};
+    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::types::TestItem;
     use crate::types::{LineNo, TestOutcome};
     use camino::Utf8PathBuf;
 
@@ -371,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_short_with_message() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed(
             "expected 4",
             "tests/test_foo.py",
@@ -386,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_short_no_message_no_nudge() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(!block.contains("add an assertion message"));
@@ -395,7 +396,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_error_shows_exception() {
-        let item = make_item("test_div");
+        let item = TestItem::builder("tests/test_foo.py", "test_div").arc();
         let outcome = make_error(
             "ValueError: Cannot divide by zero",
             "tests/test_foo.py",
@@ -408,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_line_style_returns_empty() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert add(1, 2) == 4");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Line, false, false);
         assert!(
@@ -419,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_no_style_is_empty() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed("msg", "tests/test_foo.py", 8, "assert");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
         assert!(block.is_empty());
@@ -427,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_does_not_repeat_fn_name() {
-        let item = make_item("test_add_two_positives");
+        let item = TestItem::builder("tests/test_foo.py", "test_add_two_positives").arc();
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
@@ -438,7 +439,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_shows_left_right_for_compare() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: Utf8PathBuf::from("tests/test_foo.py"),
@@ -459,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_shows_value_for_bool_assert() {
-        let item = make_item("test_validate");
+        let item = TestItem::builder("tests/test_foo.py", "test_validate").arc();
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: Utf8PathBuf::from("tests/test_foo.py"),
@@ -482,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_shows_closing_message_when_present() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Failed {
             message: "should be 42".to_string(),
             file: Utf8PathBuf::from("tests/test_foo.py"),
@@ -505,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_no_nudge_and_no_why_label() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert result == 42");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
@@ -520,7 +521,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_closing_line_shows_message() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed(
             "expected 4",
             "tests/test_foo.py",
@@ -536,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_op_set_but_right_empty_suppresses_right_label() {
-        let item = make_item("test_op_no_rhs");
+        let item = TestItem::builder("tests/test_foo.py", "test_op_no_rhs").arc();
         let outcome = TestOutcome::Failed {
             message: String::new(),
             file: Utf8PathBuf::from("tests/test_foo.py"),
@@ -613,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_no_params_block_when_param_values_empty() {
-        let item = make_item("test_add");
+        let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = make_failed("", "tests/test_foo.py", 8, "assert x > 0");
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
         assert!(
@@ -624,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_error_with_empty_file_omits_location_line() {
-        let item = make_item("test_bridge");
+        let item = TestItem::builder("tests/test_foo.py", "test_bridge").arc();
         let outcome = TestOutcome::Error {
             message: "PyImportError: No module named 'foo'".to_string(),
             file: Utf8PathBuf::new(),
@@ -754,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_multiline_closing_message_stays_inside_box() {
-        let item = make_item("test_sub");
+        let item = TestItem::builder("tests/test_foo.py", "test_sub").arc();
         let outcome = make_failed(
             "missing value:\ncollected 1 item\n\nFAILURES\nFAILED test.py::test_x",
             "tests/test_foo.py",
@@ -789,7 +790,7 @@ mod tests {
     fn test_diagnostic_show_locals_renders_failure_frame_locals() {
         use crate::types::Frame;
 
-        let item = make_item_at("test_check", "test.py", 5);
+        let item = TestItem::builder("test.py", "test_check").lineno(5).arc();
         let outcome = TestOutcome::Failed {
             message: "".to_string(),
             file: Utf8PathBuf::from("test.py"),
@@ -818,7 +819,7 @@ mod tests {
     fn test_diagnostic_no_locals_without_show_locals() {
         use crate::types::Frame;
 
-        let item = make_item_at("test_check", "test.py", 5);
+        let item = TestItem::builder("test.py", "test_check").lineno(5).arc();
         let outcome = TestOutcome::Failed {
             message: "".to_string(),
             file: Utf8PathBuf::from("test.py"),
@@ -845,7 +846,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_hint_appears_inside_box() {
-        let item = make_item("test_await");
+        let item = TestItem::builder("tests/test_foo.py", "test_await").arc();
         let outcome = TestOutcome::Error {
             message: "TypeError: object X can't be used in 'await' expression".to_string(),
             file: Utf8PathBuf::from("test.py"),
@@ -870,7 +871,9 @@ mod tests {
 
         #[test]
         fn failed_assertion_with_diff() {
-            let item = make_item_at("test_compare", "tests/test_math.py", 15);
+            let item = TestItem::builder("tests/test_math.py", "test_compare")
+                .lineno(15)
+                .arc();
             let outcome = make_failed("assert x == y", "tests/test_math.py", 15, "assert x == y");
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
             assert_snapshot!(block);
@@ -880,7 +883,9 @@ mod tests {
         fn error_with_frames() {
             use crate::types::Frame;
 
-            let item = make_item_at("test_raises", "tests/test_errors.py", 10);
+            let item = TestItem::builder("tests/test_errors.py", "test_raises")
+                .lineno(10)
+                .arc();
             let outcome = TestOutcome::Error {
                 message: "ValueError: invalid input".to_string(),
                 file: Utf8PathBuf::from("tests/test_errors.py"),
@@ -909,7 +914,9 @@ mod tests {
 
         #[test]
         fn failed_with_left_right_op() {
-            let item = make_item_at("test_equality", "tests/test_values.py", 7);
+            let item = TestItem::builder("tests/test_values.py", "test_equality")
+                .lineno(7)
+                .arc();
             let outcome = TestOutcome::Failed {
                 message: String::new(),
                 file: Utf8PathBuf::from("tests/test_values.py"),
@@ -927,7 +934,9 @@ mod tests {
 
         #[test]
         fn tb_no_returns_empty() {
-            let item = make_item_at("test_something", "tests/test_mod.py", 5);
+            let item = TestItem::builder("tests/test_mod.py", "test_something")
+                .lineno(5)
+                .arc();
             let outcome = make_failed("should pass", "tests/test_mod.py", 5, "assert x");
             let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::No, false, false);
             assert_snapshot!(block);
