@@ -64,6 +64,34 @@ mod color_tests {
     }
 }
 
+mod fluent_setter_tests {
+    use crate::pipeline::CollectionState;
+    use crate::reporter::test_helpers::make_ctx;
+    use crate::types::TestItem;
+
+    #[test]
+    fn with_collected_sets_collection_state() {
+        let mut ctx = make_ctx();
+        let items = vec![TestItem::builder_raw("test::one").arc()];
+        ctx.with_collected(items, vec![]);
+
+        assert!(matches!(ctx.collection, CollectionState::Collected { .. }));
+    }
+
+    #[test]
+    fn with_keyword_sets_filter_keyword() {
+        let mut ctx = make_ctx();
+        ctx.with_keyword("alpha");
+
+        match &ctx.command {
+            crate::config::Command::Run(a) => {
+                assert_eq!(a.filter.keyword.as_deref(), Some("alpha"));
+            }
+            _ => panic!("expected Run command"),
+        }
+    }
+}
+
 mod strict_pipeline_tests {
     use crate::bridge;
     use crate::config::Config;
