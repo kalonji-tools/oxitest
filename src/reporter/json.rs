@@ -116,9 +116,10 @@ impl Reporter for JsonReporter {
 #[cfg(test)]
 mod snapshot_tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_item, make_outcome};
+    use crate::reporter::test_helpers::make_outcome;
     use crate::reporter::Reporter;
     use crate::types::DurationMs;
+    use crate::types::TestItem;
     use insta::assert_snapshot;
 
     fn run_and_read(items: &[(&str, &str)]) -> String {
@@ -126,7 +127,7 @@ mod snapshot_tests {
         let path = camino::Utf8PathBuf::try_from(tmp.path().to_path_buf()).unwrap();
         let mut rep = JsonReporter::new(path.clone());
         for (name, status) in items {
-            let item = make_item(name);
+            let item = TestItem::builder("tests/test_foo.py", name).arc();
             let outcome = make_outcome(status);
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
@@ -156,7 +157,8 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_error, make_failed, make_item};
+    use crate::reporter::test_helpers::{make_error, make_failed};
+    use crate::types::TestItem;
     use crate::types::{LineNo, TestOutcome};
     use tempfile::TempDir;
 
@@ -174,7 +176,7 @@ mod tests {
     #[test]
     fn test_json_includes_message_for_failed_outcome() {
         let json = run_reporter(vec![(
-            make_item("test_fails"),
+            TestItem::builder("tests/test_foo.py", "test_fails").arc(),
             make_failed("expected 42", "tests/t.py", 5, "assert x == 42"),
         )]);
         assert!(
@@ -190,7 +192,7 @@ mod tests {
     #[test]
     fn test_json_includes_message_for_error_outcome() {
         let json = run_reporter(vec![(
-            make_item("test_error"),
+            TestItem::builder("tests/test_foo.py", "test_error").arc(),
             make_error("PyImportError: No module named 'foo'", "tests/t.py", 1, "x"),
         )]);
         assert!(
@@ -202,7 +204,7 @@ mod tests {
     #[test]
     fn test_json_omits_message_for_passed_outcome() {
         let json = run_reporter(vec![(
-            make_item("test_pass"),
+            TestItem::builder("tests/test_foo.py", "test_pass").arc(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -216,7 +218,7 @@ mod tests {
     #[test]
     fn test_json_includes_message_for_timeout_outcome() {
         let json = run_reporter(vec![(
-            make_item("test_slow"),
+            TestItem::builder("tests/test_foo.py", "test_slow").arc(),
             TestOutcome::Timeout {
                 message: "test timed out after 5s".to_string(),
             },
@@ -230,7 +232,7 @@ mod tests {
     #[test]
     fn test_json_omits_message_for_failed_with_empty_message() {
         let json = run_reporter(vec![(
-            make_item("test_empty_msg"),
+            TestItem::builder("tests/test_foo.py", "test_empty_msg").arc(),
             TestOutcome::Failed {
                 message: String::new(),
                 file: Utf8PathBuf::from("tests/t.py"),
@@ -254,7 +256,7 @@ mod tests {
         let path = camino::Utf8PathBuf::from("/nonexistent/dir/out.json");
         let mut rep = JsonReporter::new(path);
         rep.test_completed(
-            &make_item("test_a"),
+            &TestItem::builder("tests/test_foo.py", "test_a").arc(),
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -274,7 +276,7 @@ mod tests {
         let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
         let mut rep = JsonReporter::new(path.clone());
         rep.test_completed(
-            &make_item("test_a"),
+            &TestItem::builder("tests/test_foo.py", "test_a").arc(),
             &TestOutcome::Passed {
                 no_message_lines: vec![],
             },
