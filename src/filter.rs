@@ -1,8 +1,8 @@
 //! Test filtering and grouping.
 //!
-//! Applies `-k` keyword filters, validates marker names against registered markers,
-//! handles `--lf`/`--ff` (last-failed / failed-first) logic, and groups items by
-//! source module for parallel dispatch.
+//! Validates marker names against registered markers, handles `--lf`/`--ff`
+//! (last-failed / failed-first) logic, and groups items by source module for
+//! parallel dispatch.
 //!
 //! Marker *names* are collected here; marker *conditions* (e.g. `skip(when=...)`) are
 //! evaluated at execution time by `python/oxitest/_bridge/_mark_registry.py`.
@@ -15,7 +15,7 @@ use indexmap::IndexMap;
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
-// The names populate TestItem::markers and are used for -m expression filtering.
+// The names populate TestItem::markers and are used for query DSL filtering.
 // Marker *conditions* — skip(when=condition), xfail — are evaluated at execution time
 // by the mark handler registry in python/oxitest/_bridge/_mark_registry.py (_MARK_REGISTRY).
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
@@ -44,23 +44,6 @@ pub fn validate_markers(
                     None
                 }
             })
-        })
-        .collect()
-}
-
-/// Filter `items` by the `-k` keyword, retaining those whose node ID contains the substring.
-///
-/// `keyword = None` is a no-op (returns all items). The check is against the full
-/// `node_id` string (`"path::fn_name[param]"`), which already includes `fn_name`,
-/// so a single `contains` call is sufficient.
-#[must_use = "returns filtered items; original is consumed"]
-pub fn filter_items(items: Vec<Arc<TestItem>>, keyword: Option<&str>) -> Vec<Arc<TestItem>> {
-    items
-        .into_iter()
-        .filter(|item| {
-            // fn_name is always a substring of node_id ("path::fn_name[param]"),
-            // so checking node_id alone is sufficient.
-            keyword.is_none_or(|kw| item.node_id.contains(kw))
         })
         .collect()
 }
@@ -115,50 +98,6 @@ mod tests {
     use crate::types::TestItem;
     use camino::Utf8PathBuf;
     use std::collections::HashSet;
-
-    #[test]
-    fn test_filter_items_no_keyword_returns_all() {
-        let items = vec![
-            TestItem::builder("tests/test_mod.py", "test_a").arc(),
-            TestItem::builder("tests/test_mod.py", "test_b").arc(),
-        ];
-        let filtered = filter_items(items, None);
-        assert_eq!(filtered.len(), 2);
-    }
-
-    #[test]
-    fn test_filter_items_with_keyword() {
-        let items = vec![
-            TestItem::builder("tests/test_mod.py", "test_foo").arc(),
-            TestItem::builder("tests/test_mod.py", "test_bar").arc(),
-        ];
-        let filtered = filter_items(items, Some("foo"));
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_foo");
-    }
-
-    #[test]
-    fn test_filter_items_no_match_returns_empty() {
-        let items = vec![TestItem::builder("tests/test_mod.py", "test_foo").arc()];
-        let filtered = filter_items(items, Some("xyz"));
-        assert!(filtered.is_empty());
-    }
-
-    #[test]
-    fn test_filter_items_by_path_component_in_node_id() {
-        // node_id = "tests/test_mod.py::test_a" — "test_mod" is in the path
-        // but NOT in fn_name ("test_a"). The filter must still match.
-        let items = vec![
-            TestItem::builder("tests/test_mod.py", "test_a").arc(),
-            TestItem::builder("tests/test_mod.py", "test_b").arc(),
-        ];
-        let filtered = filter_items(items, Some("test_mod"));
-        assert_eq!(
-            filtered.len(),
-            2,
-            "path component in node_id must match keyword filter"
-        );
-    }
 
     #[test]
     fn test_group_by_module_single_module() {

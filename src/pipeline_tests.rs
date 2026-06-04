@@ -79,13 +79,13 @@ mod fluent_setter_tests {
     }
 
     #[test]
-    fn with_keyword_sets_filter_keyword() {
+    fn with_expression_sets_filter_expression() {
         let mut ctx = make_ctx();
-        ctx.with_keyword("alpha");
+        ctx.with_expression("name(alpha)");
 
         match &ctx.command {
             crate::config::Command::Run(a) => {
-                assert_eq!(a.filter.keyword.as_deref(), Some("alpha"));
+                assert_eq!(a.filter.expression.as_deref(), Some("name(alpha)"));
             }
             _ => panic!("expected Run command"),
         }
