@@ -112,15 +112,15 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<Tes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::make_item_in;
+    use crate::types::TestItem;
     use camino::Utf8PathBuf;
     use std::collections::HashSet;
 
     #[test]
     fn test_filter_items_no_keyword_returns_all() {
         let items = vec![
-            make_item_in("test_a", "tests/test_mod.py"),
-            make_item_in("test_b", "tests/test_mod.py"),
+            TestItem::builder("tests/test_mod.py", "test_a").arc(),
+            TestItem::builder("tests/test_mod.py", "test_b").arc(),
         ];
         let filtered = filter_items(items, None);
         assert_eq!(filtered.len(), 2);
@@ -129,8 +129,8 @@ mod tests {
     #[test]
     fn test_filter_items_with_keyword() {
         let items = vec![
-            make_item_in("test_foo", "tests/test_mod.py"),
-            make_item_in("test_bar", "tests/test_mod.py"),
+            TestItem::builder("tests/test_mod.py", "test_foo").arc(),
+            TestItem::builder("tests/test_mod.py", "test_bar").arc(),
         ];
         let filtered = filter_items(items, Some("foo"));
         assert_eq!(filtered.len(), 1);
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_filter_items_no_match_returns_empty() {
-        let items = vec![make_item_in("test_foo", "tests/test_mod.py")];
+        let items = vec![TestItem::builder("tests/test_mod.py", "test_foo").arc()];
         let filtered = filter_items(items, Some("xyz"));
         assert!(filtered.is_empty());
     }
@@ -149,8 +149,8 @@ mod tests {
         // node_id = "tests/test_mod.py::test_a" — "test_mod" is in the path
         // but NOT in fn_name ("test_a"). The filter must still match.
         let items = vec![
-            make_item_in("test_a", "tests/test_mod.py"),
-            make_item_in("test_b", "tests/test_mod.py"),
+            TestItem::builder("tests/test_mod.py", "test_a").arc(),
+            TestItem::builder("tests/test_mod.py", "test_b").arc(),
         ];
         let filtered = filter_items(items, Some("test_mod"));
         assert_eq!(
@@ -163,8 +163,8 @@ mod tests {
     #[test]
     fn test_group_by_module_single_module() {
         let items = vec![
-            make_item_in("test_a", "tests/test_mod.py"),
-            make_item_in("test_b", "tests/test_mod.py"),
+            TestItem::builder("tests/test_mod.py", "test_a").arc(),
+            TestItem::builder("tests/test_mod.py", "test_b").arc(),
         ];
         let groups = group_by_module(&items);
         assert_eq!(groups.len(), 1);
@@ -174,9 +174,9 @@ mod tests {
     #[test]
     fn test_group_by_module_multiple_modules() {
         let items = vec![
-            make_item_in("test_a", "tests/test_x.py"),
-            make_item_in("test_b", "tests/test_y.py"),
-            make_item_in("test_c", "tests/test_x.py"),
+            TestItem::builder("tests/test_x.py", "test_a").arc(),
+            TestItem::builder("tests/test_y.py", "test_b").arc(),
+            TestItem::builder("tests/test_x.py", "test_c").arc(),
         ];
         let groups = group_by_module(&items);
         assert_eq!(groups.len(), 2);
@@ -189,8 +189,8 @@ mod tests {
     #[test]
     fn test_group_by_module_preserves_order() {
         let items = vec![
-            make_item_in("test_a", "tests/test_x.py"),
-            make_item_in("test_b", "tests/test_y.py"),
+            TestItem::builder("tests/test_x.py", "test_a").arc(),
+            TestItem::builder("tests/test_y.py", "test_b").arc(),
         ];
         let groups = group_by_module(&items);
         assert_eq!(groups[0].0, Utf8PathBuf::from("tests/test_x.py"));
@@ -248,9 +248,9 @@ mod tests {
     #[test]
     fn test_filter_last_failed_keeps_only_failed_items() {
         let items = vec![
-            make_item_in("test_a", "tests/test_x.py"),
-            make_item_in("test_b", "tests/test_x.py"),
-            make_item_in("test_c", "tests/test_y.py"),
+            TestItem::builder("tests/test_x.py", "test_a").arc(),
+            TestItem::builder("tests/test_x.py", "test_b").arc(),
+            TestItem::builder("tests/test_y.py", "test_c").arc(),
         ];
         let mut failed: HashSet<String> = HashSet::new();
         failed.insert("tests/test_x.py::test_a".to_string());
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_filter_last_failed_empty_set_returns_empty() {
-        let items = vec![make_item_in("test_a", "tests/test_mod.py")];
+        let items = vec![TestItem::builder("tests/test_mod.py", "test_a").arc()];
         let failed: HashSet<String> = HashSet::new();
         let filtered = filter_last_failed(items, &failed);
         assert!(filtered.is_empty());
@@ -270,9 +270,9 @@ mod tests {
     #[test]
     fn test_sort_failed_first_moves_failed_to_front() {
         let items = vec![
-            make_item_in("test_a", "tests/test_x.py"),
-            make_item_in("test_b", "tests/test_x.py"),
-            make_item_in("test_c", "tests/test_y.py"),
+            TestItem::builder("tests/test_x.py", "test_a").arc(),
+            TestItem::builder("tests/test_x.py", "test_b").arc(),
+            TestItem::builder("tests/test_y.py", "test_c").arc(),
         ];
         let mut failed: HashSet<String> = HashSet::new();
         failed.insert("tests/test_x.py::test_b".to_string());
@@ -283,8 +283,8 @@ mod tests {
     #[test]
     fn test_sort_failed_first_no_failures_preserves_order() {
         let items = vec![
-            make_item_in("test_a", "tests/test_x.py"),
-            make_item_in("test_b", "tests/test_y.py"),
+            TestItem::builder("tests/test_x.py", "test_a").arc(),
+            TestItem::builder("tests/test_y.py", "test_b").arc(),
         ];
         let failed: HashSet<String> = HashSet::new();
         let sorted = sort_failed_first(items, &failed);
@@ -296,7 +296,7 @@ mod tests {
     fn module_path_as_str_does_not_require_unwrap() {
         // Utf8PathBuf::as_str() returns &str directly — no Option, no unwrap.
         // This fails to compile if module_path is PathBuf (PathBuf has no as_str()).
-        let item: Arc<TestItem> = make_item_in("test_a", "tests/test_mod.py");
+        let item: Arc<TestItem> = TestItem::builder("tests/test_mod.py", "test_a").arc();
         let _s: &str = item.module_path.as_str();
     }
 }

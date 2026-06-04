@@ -25,12 +25,14 @@ pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
 
 /// Build an `Arc<TestItem>` with an explicit `module` path, constructing the
 /// `node_id` via `NodeId::new(module, name, None)`.
+#[allow(dead_code)]
 pub(crate) fn make_item_in(name: &str, module: &str) -> Arc<TestItem> {
     Arc::new(TestItem::builder(module, name).build())
 }
 
 /// Build a `(Utf8PathBuf, Vec<Arc<TestItem>>)` group for `module`, one item per
 /// name in `names`.
+#[allow(dead_code)]
 pub(crate) fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
     let path = Utf8PathBuf::from(module);
     let items = names
