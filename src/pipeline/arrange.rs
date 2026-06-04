@@ -143,14 +143,14 @@ pub(super) fn evaluate_arrange_threshold(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_doubles::doubles::{make_inprocess_item, make_test_item};
+    use crate::types::TestItem;
     use camino::Utf8PathBuf;
     use std::sync::Arc;
 
     #[test]
     fn test_partition_inprocess_groups_splits_mixed_module() {
-        let normal = Arc::new(make_test_item("test_a.py::test_normal"));
-        let inproc = Arc::new(make_inprocess_item("test_a.py::test_serial"));
+        let normal = TestItem::builder_raw("test_a.py::test_normal").arc();
+        let inproc = TestItem::builder_raw("test_a.py::test_serial").markers(vec!["inprocess".to_string()]).arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![normal, inproc])];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -164,8 +164,8 @@ mod tests {
 
     #[test]
     fn test_partition_inprocess_groups_no_inprocess() {
-        let a = Arc::new(make_test_item("test_a.py::test_a"));
-        let b = Arc::new(make_test_item("test_a.py::test_b"));
+        let a = TestItem::builder_raw("test_a.py::test_a").arc();
+        let b = TestItem::builder_raw("test_a.py::test_b").arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -176,8 +176,8 @@ mod tests {
 
     #[test]
     fn test_partition_inprocess_groups_all_inprocess() {
-        let a = Arc::new(make_inprocess_item("test_a.py::test_a"));
-        let b = Arc::new(make_inprocess_item("test_a.py::test_b"));
+        let a = TestItem::builder_raw("test_a.py::test_a").markers(vec!["inprocess".to_string()]).arc();
+        let b = TestItem::builder_raw("test_a.py::test_b").markers(vec!["inprocess".to_string()]).arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -188,9 +188,9 @@ mod tests {
 
     #[test]
     fn test_partition_inprocess_groups_multiple_modules() {
-        let a_normal = Arc::new(make_test_item("test_a.py::test_normal"));
-        let a_inproc = Arc::new(make_inprocess_item("test_a.py::test_serial"));
-        let b_normal = Arc::new(make_test_item("test_b.py::test_b"));
+        let a_normal = TestItem::builder_raw("test_a.py::test_normal").arc();
+        let a_inproc = TestItem::builder_raw("test_a.py::test_serial").markers(vec!["inprocess".to_string()]).arc();
+        let b_normal = TestItem::builder_raw("test_b.py::test_b").arc();
         let groups = vec![
             (Utf8PathBuf::from("test_a.py"), vec![a_normal, a_inproc]),
             (Utf8PathBuf::from("test_b.py"), vec![b_normal]),
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_partition_by_fixture_groups_no_groups() {
-        let a = Arc::new(make_test_item("test_a.py::test_a"));
+        let a = TestItem::builder_raw("test_a.py::test_a").arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a])];
         let fixture_groups: Vec<Vec<String>> = vec![];
 
@@ -214,9 +214,9 @@ mod tests {
 
     #[test]
     fn test_partition_by_fixture_groups_splits_by_fixture() {
-        let mut a = make_test_item("test_a.py::test_db");
+        let mut a = TestItem::builder_raw("test_a.py::test_db").build();
         a.fixture_names = vec!["db".to_string()];
-        let mut b = make_test_item("test_a.py::test_plain");
+        let mut b = TestItem::builder_raw("test_a.py::test_plain").build();
         b.fixture_names = vec![];
         let groups = vec![(
             Utf8PathBuf::from("test_a.py"),
@@ -236,11 +236,11 @@ mod tests {
 
     #[test]
     fn test_partition_by_fixture_groups_transitive() {
-        let mut a = make_test_item("test_a.py::test_repo");
+        let mut a = TestItem::builder_raw("test_a.py::test_repo").build();
         a.fixture_names = vec!["repo".to_string()];
-        let mut b = make_test_item("test_a.py::test_db");
+        let mut b = TestItem::builder_raw("test_a.py::test_db").build();
         b.fixture_names = vec!["db".to_string()];
-        let mut c = make_test_item("test_a.py::test_plain");
+        let mut c = TestItem::builder_raw("test_a.py::test_plain").build();
         c.fixture_names = vec![];
         let groups = vec![(
             Utf8PathBuf::from("test_a.py"),
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn test_threshold_below_allows_arrangement() {
         // 2 arranged + 8 remaining = 20% ratio, threshold 70% → Arrange
-        let mut item = make_test_item("test_a.py::test_db");
+        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
         let arranged = vec![vec![(
             Utf8PathBuf::from("test_a.py"),
@@ -271,7 +271,7 @@ mod tests {
             .map(|i| {
                 (
                     Utf8PathBuf::from(format!("test_{i}.py")),
-                    vec![Arc::new(make_test_item(&format!("test_{i}.py::test")))],
+                    vec![TestItem::builder_raw(&format!("test_{i}.py::test")).arc()],
                 )
             })
             .collect();
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_threshold_exceeded_falls_back_to_serial() {
         // 9 arranged + 1 remaining = 90% ratio, threshold 70% → FallbackSerial
-        let mut item = make_test_item("test_a.py::test_db");
+        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
         let arranged = vec![vec![(
             Utf8PathBuf::from("test_a.py"),
@@ -291,7 +291,7 @@ mod tests {
         )]];
         let remaining = vec![(
             Utf8PathBuf::from("test_b.py"),
-            vec![Arc::new(make_test_item("test_b.py::test_plain"))],
+            vec![TestItem::builder_raw("test_b.py::test_plain").arc()],
         )];
 
         let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn test_threshold_at_boundary_allows_arrangement() {
         // 7 arranged + 3 remaining = 70% ratio, threshold 70% → Arrange (not >)
-        let mut item = make_test_item("test_a.py::test_db");
+        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
         let arranged = vec![vec![(
             Utf8PathBuf::from("test_a.py"),
@@ -310,7 +310,7 @@ mod tests {
         let remaining = vec![(
             Utf8PathBuf::from("test_b.py"),
             (0..3)
-                .map(|i| Arc::new(make_test_item(&format!("test_b.py::test_{i}"))))
+                .map(|i| TestItem::builder_raw(&format!("test_b.py::test_{i}")).arc()))
                 .collect::<Vec<_>>(),
         )];
 
@@ -323,7 +323,7 @@ mod tests {
         let arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>> = vec![vec![]];
         let remaining = vec![(
             Utf8PathBuf::from("test_a.py"),
-            vec![Arc::new(make_test_item("test_a.py::test_a"))],
+            vec![TestItem::builder_raw("test_a.py::test_a").arc()],
         )];
 
         let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
