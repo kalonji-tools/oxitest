@@ -64,6 +64,7 @@ pub(crate) fn make_error(msg: &str, file: &str, lineno: usize, src: &str) -> Tes
 }
 
 /// Build an `Arc<TestItem>` with an explicit module path and line number.
+#[allow(dead_code)]
 pub(crate) fn make_item_at(name: &str, module: &str, lineno: usize) -> Arc<TestItem> {
     Arc::new(TestItem::builder(module, name).lineno(lineno).build())
 }
