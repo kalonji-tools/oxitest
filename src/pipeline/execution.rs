@@ -414,7 +414,11 @@ pub(super) fn execute(
 mod tests {
     use super::*;
     use crate::cache::TestCache;
-    use crate::reporter::test_helpers::make_item_raw as make_item;
+    use crate::types::TestItem;
+
+    fn make_item(node_id: &str) -> std::sync::Arc<TestItem> {
+        TestItem::builder_raw(node_id).arc()
+    }
 
     #[test]
     fn no_multiplier_returns_global() {
