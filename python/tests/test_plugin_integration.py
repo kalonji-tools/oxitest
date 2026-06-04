@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import textwrap
 from functools import partial
 from pathlib import Path
 
@@ -59,13 +60,14 @@ def test_plugin_loads_and_entry_called(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="my_plugin",
-        plugin_code=(
-            "from oxitest.plugin import Plugin\n"
-            "from pathlib import Path\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    Path(config['marker_file']).write_text('loaded')\n"
-            "    return Plugin()\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            from oxitest.plugin import Plugin
+            from pathlib import Path
+
+            def oxitest_plugin(config=None):
+                Path(config['marker_file']).write_text('loaded')
+                return Plugin()
+        """),
         config=(
             f"\n[tool.oxitest.plugin_settings.my_plugin]\n"
             f'marker_file = "{marker_file}"\n'
@@ -129,14 +131,15 @@ def test_plugin_receives_config(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="cfg_checker",
-        plugin_code=(
-            "import json\n"
-            "from pathlib import Path\n"
-            "from oxitest.plugin import Plugin\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    Path(config['output']).write_text(json.dumps(config))\n"
-            "    return Plugin()\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            import json
+            from pathlib import Path
+            from oxitest.plugin import Plugin
+
+            def oxitest_plugin(config=None):
+                Path(config['output']).write_text(json.dumps(config))
+                return Plugin()
+        """),
         config=(
             f"\n[tool.oxitest.plugin_settings.cfg_checker]\n"
             f'output = "{output_file}"\n'
@@ -174,33 +177,36 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="log_plugin",
-        plugin_code=(
-            "import logging\n"
-            "from pathlib import Path\n"
-            "from oxitest.plugin import Plugin\n\n"
-            "class MarkerBackend:\n"
-            "    def __init__(self, marker_file):\n"
-            "        self._marker = marker_file\n"
-            "        self._records = []\n"
-            "    def install(self):\n"
-            "        Path(self._marker).write_text('installed')\n"
-            "    def uninstall(self):\n"
-            "        Path(self._marker).write_text('uninstalled')\n"
-            "    @property\n"
-            "    def records(self):\n"
-            "        return self._records\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    return Plugin(log_backends=[MarkerBackend(config['marker'])])\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            import logging
+            from pathlib import Path
+            from oxitest.plugin import Plugin
+
+            class MarkerBackend:
+                def __init__(self, marker_file):
+                    self._marker = marker_file
+                    self._records = []
+                def install(self):
+                    Path(self._marker).write_text('installed')
+                def uninstall(self):
+                    Path(self._marker).write_text('uninstalled')
+                @property
+                def records(self):
+                    return self._records
+
+            def oxitest_plugin(config=None):
+                return Plugin(log_backends=[MarkerBackend(config['marker'])])
+        """),
         config=(
             f'\n[tool.oxitest.plugin_settings.log_plugin]\nmarker = "{marker_file}"\n'
         ),
-        test_code=(
-            "from oxitest import Fixture\n"
-            "from oxitest._bridge._builtins._logcapture import _LogCapture\n\n"
-            "def test_with_log(log: Fixture[_LogCapture]):\n"
-            "    assert log is not None\n"
-        ),
+        test_code=textwrap.dedent("""\
+            from oxitest import Fixture
+            from oxitest._bridge._builtins._logcapture import _LogCapture
+
+            def test_with_log(log: Fixture[_LogCapture]):
+                assert log is not None
+        """),
     )
 
     # Run oxitest — the test uses LogCapture which triggers backend install
@@ -232,35 +238,40 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="db_plugin",
-        plugin_code=(
-            "from pathlib import Path\n"
-            "from oxitest.plugin import Plugin\n\n"
-            "class Database:\n"
-            "    def __init__(self):\n"
-            "        self.connected = True\n\n"
-            "class DatabaseProvider:\n"
-            "    @property\n"
-            "    def name(self):\n"
-            "        return 'db'\n"
-            "    @property\n"
-            "    def fixture_type(self):\n"
-            "        return Database\n"
-            "    def create(self, ctx):\n"
-            "        return Database()\n"
-            "    def teardown(self, value):\n"
-            "        value.connected = False\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    return Plugin(fixture_providers=[DatabaseProvider()])\n"
-        ),
-        test_code=(
-            "from pathlib import Path\n"
-            "from oxitest import Fixture\n"
-            "from db_plugin import Database\n\n"
-            f"MARKER = Path('{marker_file}')\n\n"
-            "def test_uses_db(db: Fixture[Database]):\n"
-            "    assert db.connected, 'database should be connected'\n"
-            "    MARKER.write_text('injected')\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            from pathlib import Path
+            from oxitest.plugin import Plugin
+
+            class Database:
+                def __init__(self):
+                    self.connected = True
+
+            class DatabaseProvider:
+                @property
+                def name(self):
+                    return 'db'
+                @property
+                def fixture_type(self):
+                    return Database
+                def create(self, ctx):
+                    return Database()
+                def teardown(self, value):
+                    value.connected = False
+
+            def oxitest_plugin(config=None):
+                return Plugin(fixture_providers=[DatabaseProvider()])
+        """),
+        test_code=textwrap.dedent(f"""\
+            from pathlib import Path
+            from oxitest import Fixture
+            from db_plugin import Database
+
+            MARKER = Path('{marker_file}')
+
+            def test_uses_db(db: Fixture[Database]):
+                assert db.connected, 'database should be connected'
+                MARKER.write_text('injected')
+        """),
     )
 
     tests_dir = project / "tests"
@@ -292,34 +303,39 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="reporter_plugin",
-        plugin_code=(
-            "import json\n"
-            "from pathlib import Path\n"
-            "from oxitest.plugin import Plugin\n\n"
-            "class FileReporter:\n"
-            "    def __init__(self, output_path):\n"
-            "        self._path = Path(output_path)\n"
-            "        self._events = []\n"
-            "    def test_started(self, item):\n"
-            "        self._events.append({'event': 'started', 'item': str(item)})\n"
-            "    def test_completed(self, item, outcome, duration_ms):\n"
-            "        self._events.append({\n"
-            "            'event': 'completed',\n"
-            "            'item': str(item),\n"
-            "            'outcome': str(outcome),\n"
-            "            'duration_ms': duration_ms,\n"
-            "        })\n"
-            "    def finish(self, collect_errors, interrupted):\n"
-            "        self._events.append({'event': 'finish'})\n"
-            "        self._path.write_text(json.dumps(self._events))\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    return Plugin(reporters=[FileReporter(config['output'])])\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            import json
+            from pathlib import Path
+            from oxitest.plugin import Plugin
+
+            class FileReporter:
+                def __init__(self, output_path):
+                    self._path = Path(output_path)
+                    self._events = []
+                def test_started(self, item):
+                    self._events.append({'event': 'started', 'item': str(item)})
+                def test_completed(self, item, outcome, duration_ms):
+                    self._events.append({
+                        'event': 'completed',
+                        'item': str(item),
+                        'outcome': str(outcome),
+                        'duration_ms': duration_ms,
+                    })
+                def finish(self, collect_errors, interrupted):
+                    self._events.append({'event': 'finish'})
+                    self._path.write_text(json.dumps(self._events))
+
+            def oxitest_plugin(config=None):
+                return Plugin(reporters=[FileReporter(config['output'])])
+        """),
         config=(
             f"\n[tool.oxitest.plugin_settings.reporter_plugin]\n"
             f'output = "{output_file}"\n'
         ),
-        test_code="def test_one(): pass\ndef test_two(): assert True\n",
+        test_code=textwrap.dedent("""\
+            def test_one(): pass
+            def test_two(): assert True
+        """),
     )
 
     tests_dir = project / "tests"
@@ -357,35 +373,40 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="check_collector",
-        plugin_code=(
-            "import inspect\n"
-            "from oxitest.plugin import Plugin\n"
-            "from oxitest._bridge.result import CollectedItem\n\n"
-            "class CheckCollector:\n"
-            "    def collect(self, path, module):\n"
-            "        items = []\n"
-            "        for name, obj in inspect.getmembers(module, inspect.isfunction):\n"
-            "            if name.startswith('check_'):\n"
-            "                lineno = inspect.getsourcelines(obj)[1]\n"
-            "                items.append(CollectedItem(\n"
-            "                    fn_name=name,\n"
-            "                    lineno=lineno,\n"
-            "                    markers=(),\n"
-            "                    param_id=None,\n"
-            "                    param_values=(),\n"
-            "                ))\n"
-            "        return items\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    return Plugin(collectors=[CheckCollector()])\n"
-        ),
-        test_code=(
-            "from pathlib import Path\n\n"
-            f"MARKER = Path('{marker_file}')\n\n"
-            "def test_normal():\n"
-            "    pass\n\n"
-            "def check_extra():\n"
-            "    MARKER.write_text('collected')\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            import inspect
+            from oxitest.plugin import Plugin
+            from oxitest._bridge.result import CollectedItem
+
+            class CheckCollector:
+                def collect(self, path, module):
+                    items = []
+                    for name, obj in inspect.getmembers(module, inspect.isfunction):
+                        if name.startswith('check_'):
+                            lineno = inspect.getsourcelines(obj)[1]
+                            items.append(CollectedItem(
+                                fn_name=name,
+                                lineno=lineno,
+                                markers=(),
+                                param_id=None,
+                                param_values=(),
+                            ))
+                    return items
+
+            def oxitest_plugin(config=None):
+                return Plugin(collectors=[CheckCollector()])
+        """),
+        test_code=textwrap.dedent(f"""\
+            from pathlib import Path
+
+            MARKER = Path('{marker_file}')
+
+            def test_normal():
+                pass
+
+            def check_extra():
+                MARKER.write_text('collected')
+        """),
     )
 
     tests_dir = project / "tests"
@@ -418,36 +439,40 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir):
     project = _scaffold_plugin_project(
         tmp,
         plugin_name="retry_plugin",
-        plugin_code=(
-            "from pathlib import Path\n"
-            "from oxitest.plugin import Plugin\n\n"
-            "class RetryWrapper:\n"
-            "    @property\n"
-            "    def marker(self):\n"
-            "        return 'retry'\n"
-            "    def wrap(self, test_fn, marker_args):\n"
-            "        count = marker_args.get('count', 1)\n"
-            "        last_result = None\n"
-            "        for _ in range(count):\n"
-            "            last_result = test_fn()\n"
-            "            if last_result.status == 'passed':\n"
-            "                return last_result\n"
-            "        return last_result\n\n"
-            "def oxitest_plugin(config=None):\n"
-            "    return Plugin(execution_wrappers=[RetryWrapper()])\n"
-        ),
+        plugin_code=textwrap.dedent("""\
+            from pathlib import Path
+            from oxitest.plugin import Plugin
+
+            class RetryWrapper:
+                @property
+                def marker(self):
+                    return 'retry'
+                def wrap(self, test_fn, marker_args):
+                    count = marker_args.get('count', 1)
+                    last_result = None
+                    for _ in range(count):
+                        last_result = test_fn()
+                        if last_result.status == 'passed':
+                            return last_result
+                    return last_result
+
+            def oxitest_plugin(config=None):
+                return Plugin(execution_wrappers=[RetryWrapper()])
+        """),
         config='markers = ["retry: retry a test multiple times"]\n',
-        test_code=(
-            "from pathlib import Path\n"
-            "import oxitest\n\n"
-            f"COUNTER = Path('{marker_file}')\n\n"
-            "@oxitest.mark.retry(count=3)\n"
-            "def test_flaky():\n"
-            "    n = int(COUNTER.read_text()) if COUNTER.exists() else 0\n"
-            "    n += 1\n"
-            "    COUNTER.write_text(str(n))\n"
-            "    assert n >= 2, f'attempt {n} failed'\n"
-        ),
+        test_code=textwrap.dedent(f"""\
+            from pathlib import Path
+            import oxitest
+
+            COUNTER = Path('{marker_file}')
+
+            @oxitest.mark.retry(count=3)
+            def test_flaky():
+                n = int(COUNTER.read_text()) if COUNTER.exists() else 0
+                n += 1
+                COUNTER.write_text(str(n))
+                assert n >= 2, f'attempt {{n}} failed'
+        """),
     )
 
     tests_dir = project / "tests"
