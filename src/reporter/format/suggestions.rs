@@ -122,17 +122,12 @@ mod tests {
 
     #[test]
     fn no_suggestion_for_generic_failure() {
-        let outcome = TestOutcome::Failed {
-            message: "assert 1 == 2".to_string(),
-            file: Utf8PathBuf::from("test.py"),
-            lineno: LineNo::new(5),
-            source_line: "assert 1 == 2".to_string(),
-            left: "1".to_string(),
-            right: "2".to_string(),
-            op: "==".to_string(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::failed("assert 1 == 2")
+            .file("test.py")
+            .lineno(5)
+            .source("assert 1 == 2")
+            .comparison("1", "==", "2")
+            .build();
         assert!(suggest_fix(&outcome).is_none());
     }
 

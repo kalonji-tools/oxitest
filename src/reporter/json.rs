@@ -169,7 +169,7 @@ mod snapshot_tests {
 mod tests {
     use super::*;
     use crate::types::TestItem;
-    use crate::types::{LineNo, TestOutcome};
+    use crate::types::TestOutcome;
     use tempfile::TempDir;
 
     fn run_reporter(outcomes: Vec<(std::sync::Arc<TestItem>, TestOutcome)>) -> String {
@@ -250,17 +250,7 @@ mod tests {
     fn test_json_omits_message_for_failed_with_empty_message() {
         let json = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_empty_msg").arc(),
-            TestOutcome::Failed {
-                message: String::new(),
-                file: Utf8PathBuf::from("tests/t.py"),
-                lineno: LineNo::new(1),
-                source_line: String::new(),
-                left: String::new(),
-                right: String::new(),
-                op: String::new(),
-                frames: vec![],
-                field_diffs: vec![],
-            },
+            TestOutcome::failed("").file("tests/t.py").build(),
         )]);
         assert!(
             !json.contains("\"message\""),
