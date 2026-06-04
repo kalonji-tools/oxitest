@@ -44,6 +44,7 @@ pub(crate) fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
 ///
 /// All optional diagnostic fields are left empty. Useful for outcome-routing tests
 /// that do not care about failure messages or tracebacks.
+#[allow(dead_code)]
 pub(crate) fn make_outcome(status: &str) -> TestOutcome {
     TestOutcome::from_raw(RawOutcome {
         status,
