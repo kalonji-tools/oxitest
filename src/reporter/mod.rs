@@ -102,14 +102,6 @@ mod json_tests {
     use crate::types::{DurationMs, LineNo, TestItem, TestOutcome};
     use camino::Utf8PathBuf;
 
-    // Uses "tests/test_mod.py" (not the shared helper's "tests/test_foo.py") because
-    // CTRF output tests assert on the exact module path that appears in JSON output.
-    fn make_item(name: &str) -> TestItem {
-        TestItem::builder("tests/test_mod.py", name)
-            .lineno(1)
-            .build()
-    }
-
     #[test]
     fn test_json_reporter_writes_ctrf_on_finish() {
         use crate::reporter::json::JsonReporter;
@@ -120,7 +112,7 @@ mod json_tests {
 
         let mut rep = JsonReporter::new(path.clone());
 
-        let item = make_item("test_passes");
+        let item = TestItem::builder("tests/test_mod.py", "test_passes").build();
         rep.test_started(&item);
         rep.test_completed(
             &item,
@@ -153,7 +145,7 @@ mod json_tests {
 
         let mut rep = JsonReporter::new(path.clone());
 
-        let item = make_item("test_fails");
+        let item = TestItem::builder("tests/test_mod.py", "test_fails").build();
         rep.test_started(&item);
         rep.test_completed(
             &item,
@@ -188,8 +180,8 @@ mod json_tests {
         let mut rep = JsonReporter::new(path.clone());
 
         // Insert in reverse alphabetical order
-        let b = make_item("test_b");
-        let a = make_item("test_a");
+        let b = TestItem::builder("tests/test_mod.py", "test_b").build();
+        let a = TestItem::builder("tests/test_mod.py", "test_a").build();
         rep.test_started(&b);
         rep.test_completed(
             &b,
@@ -435,8 +427,7 @@ mod tests {
 
     #[test]
     fn test_make_reporter_wraps_in_composite_when_plugin_reporters_given() {
-        use crate::reporter::test_helpers::make_item;
-        use crate::types::TestOutcome;
+        use crate::types::{TestItem, TestOutcome};
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
 
@@ -461,7 +452,7 @@ mod tests {
         let opts = ReporterOptsBuilder::new().build();
         let plugins: Vec<Box<dyn Reporter>> = vec![Box::new(CountingStub(Arc::clone(&calls)))];
         let mut reporter = make_reporter(opts, true, None, None, plugins);
-        let item = make_item("test_x");
+        let item = TestItem::builder("tests/test_foo.py", "test_x").arc();
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -479,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_composite_reporter_dispatches_test_started_to_all_reporters() {
-        use crate::reporter::test_helpers::make_item;
+        use crate::types::TestItem;
         use std::sync::{Arc, Mutex};
 
         struct CountingReporter(Arc<Mutex<usize>>);
@@ -507,7 +498,7 @@ mod tests {
             ],
             0,
         );
-        composite.test_started(&make_item("test_foo"));
+        composite.test_started(&TestItem::builder("tests/test_foo.py", "test_foo").build());
         assert_eq!(
             *count.lock().unwrap(),
             2,
@@ -519,10 +510,9 @@ mod tests {
 
     #[test]
     fn test_remove_if_flaky_removes_matching_entry() {
-        use crate::reporter::test_helpers::make_item;
-        use crate::types::TestOutcome;
+        use crate::types::{TestItem, TestOutcome};
 
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let mut deferred = vec![
             "tests/test_foo.py::test_a".to_string(),
             "tests/test_foo.py::test_b".to_string(),
@@ -538,10 +528,9 @@ mod tests {
 
     #[test]
     fn test_remove_if_flaky_noop_for_non_flaky_outcome() {
-        use crate::reporter::test_helpers::make_item;
-        use crate::types::TestOutcome;
+        use crate::types::{TestItem, TestOutcome};
 
-        let item = make_item("test_a");
+        let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let mut deferred = vec!["tests/test_foo.py::test_a".to_string()];
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
@@ -558,12 +547,11 @@ mod tests {
 
     #[test]
     fn test_remove_if_flaky_works_with_tuple_vec() {
-        use crate::reporter::test_helpers::make_item;
         use crate::types::{TestItem, TestOutcome};
         use std::sync::Arc;
 
-        let item_a = make_item("test_a");
-        let item_b = make_item("test_b");
+        let item_a = TestItem::builder("tests/test_foo.py", "test_a").arc();
+        let item_b = TestItem::builder("tests/test_foo.py", "test_b").arc();
         let mut deferred: Vec<(Arc<TestItem>, TestOutcome, DurationMs)> = vec![
             (
                 Arc::clone(&item_a),

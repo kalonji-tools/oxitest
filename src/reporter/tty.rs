@@ -859,16 +859,18 @@ mod tests {
 
     #[test]
     fn test_parametrize_buffer_total_ms_sums_all_durations() {
+        use crate::types::TestItem;
+
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(10.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
@@ -884,17 +886,18 @@ mod tests {
     #[test]
     fn test_parametrize_buffer_any_failed_true_when_failure_present() {
         use crate::reporter::test_helpers::make_failed;
+        use crate::types::TestItem;
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             make_failed("oops", "t.py", 1, "assert x"),
             DurationMs::new(1.0),
         );
@@ -906,16 +909,18 @@ mod tests {
 
     #[test]
     fn test_parametrize_buffer_any_failed_false_when_all_pass_or_skip() {
+        use crate::types::TestItem;
+
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Skipped {
                 reason: "not ready".to_string(),
             },
@@ -930,29 +935,30 @@ mod tests {
     #[test]
     fn test_parametrize_buffer_passed_count_counts_only_passed_outcomes() {
         use crate::reporter::test_helpers::make_failed;
+        use crate::types::TestItem;
 
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             make_failed("oops", "t.py", 1, "assert x"),
             DurationMs::new(1.0),
         );
         buf.push(
-            (*make_item("test_add")).clone(),
+            TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Skipped {
                 reason: "skip".to_string(),
             },

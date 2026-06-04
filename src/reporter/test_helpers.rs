@@ -11,6 +11,7 @@ use crate::types::{
 
 /// Build an `Arc<TestItem>` whose `node_id` is constructed via `NodeId::new` using
 /// the canonical test module path `"tests/test_foo.py"`.
+#[allow(dead_code)]
 pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
     Arc::new(TestItem::builder("tests/test_foo.py", name).build())
 }
