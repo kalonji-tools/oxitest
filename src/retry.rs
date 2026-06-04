@@ -130,7 +130,8 @@ pub(crate) fn run_retries(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::{make_item_raw, make_timing};
+    use crate::reporter::test_helpers::make_timing;
+    use crate::types::TestItem;
 
     #[test]
     fn test_retry_result_default_empty() {
@@ -144,9 +145,9 @@ mod tests {
 
     #[test]
     fn identify_failed_items_returns_only_failures() {
-        let item_a = make_item_raw("tests/test_a.py::test_pass");
-        let item_b = make_item_raw("tests/test_a.py::test_fail");
-        let item_c = make_item_raw("tests/test_a.py::test_err");
+        let item_a = TestItem::builder_raw("tests/test_a.py::test_pass").arc();
+        let item_b = TestItem::builder_raw("tests/test_a.py::test_fail").arc();
+        let item_c = TestItem::builder_raw("tests/test_a.py::test_err").arc();
         let items = vec![item_a, item_b, item_c];
         let timings = vec![
             make_timing("tests/test_a.py::test_pass", OutcomeKind::Passed),
@@ -161,7 +162,7 @@ mod tests {
 
     #[test]
     fn identify_failed_items_empty_when_all_pass() {
-        let item = make_item_raw("tests/test_a.py::test_ok");
+        let item = TestItem::builder_raw("tests/test_a.py::test_ok").arc();
         let items = vec![item];
         let timings = vec![make_timing("tests/test_a.py::test_ok", OutcomeKind::Passed)];
         let failed = identify_failed_items(&items, &timings);
