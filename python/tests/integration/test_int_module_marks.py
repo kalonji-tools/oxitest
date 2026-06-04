@@ -17,8 +17,8 @@ def test_oxi_mark_applies_to_all_tests(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_oxi_mark_visible_to_marker_filter(tmp: TempDir):
-    """-m filtering sees module-level marks."""
+def test_oxi_mark_visible_to_expression_filter(tmp: TempDir):
+    """-E mark() filtering sees module-level marks."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow]\n"
@@ -27,7 +27,7 @@ def test_oxi_mark_visible_to_marker_filter(tmp: TempDir):
     )
     (tmp / "test_other.py").write_text("def test_c(): assert True\n")
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp, "-m", "slow")
+    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "mark(slow)")
     helpers.integ.assert_passed(out, rc, count=2)
 
 

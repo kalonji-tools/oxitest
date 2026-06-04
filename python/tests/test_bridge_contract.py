@@ -422,7 +422,6 @@ def test_get_fixture_timings_entry_has_required_keys():
     from conftest import helpers
 
     session = helpers.common.make_session_with("timed_fx", lambda: 1)
-    session.begin_module("mod.py")
     session.get_fixture("timed_fx", "mod.py", [])
     timings = session.get_fixture_timings()
 
@@ -455,7 +454,6 @@ def test_fixture_session_has_bridge_methods():
 
     session = FixtureSession(FixtureRegistry())
     bridge_methods = {
-        "begin_module",
         "end_module",
         "end_session",
         "get_fixture",
@@ -471,11 +469,10 @@ def test_fixture_session_has_bridge_methods():
         )
 
 
-def test_fixture_session_begin_end_module_roundtrip():
-    """begin_module / end_module accept a module path without raising."""
+def test_fixture_session_end_module_does_not_raise():
+    """end_module accepts a module path without raising."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
 
     session = FixtureSession(FixtureRegistry())
-    session.begin_module("mod.py")
     session.end_module("mod.py")

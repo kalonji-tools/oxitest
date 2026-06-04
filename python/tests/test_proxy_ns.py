@@ -22,7 +22,6 @@ def test_namespace_proxy_resolves_fixture():
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-val", namespace="db")
     )
-    session.begin_module("/fake/test.py")
     proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     assert proxy.conn == "db-val", (
         f"NamespaceProxy('db').conn should resolve to 'db-val', got {proxy.conn!r}"
@@ -39,7 +38,6 @@ def test_namespace_proxy_is_lazy():
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", make_conn, namespace="db")
     )
-    session.begin_module("/fake/test.py")
     proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     assert called == [], "fixture factory must not be called before attribute access"
     _ = proxy.conn
@@ -54,7 +52,6 @@ def test_namespace_proxy_isolates_namespaces():
         helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
         helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
-    session.begin_module("/fake/test.py")
     db_proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     http_proxy = NamespaceProxy("http", session, "/fake/test.py", [])
     assert db_proxy.conn == "db-conn", (
@@ -73,7 +70,6 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy():
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     )
-    session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     ns = proxy.db
     assert isinstance(ns, NamespaceProxy), (
@@ -83,7 +79,6 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy():
 
 def test_fixtures_proxy_getattr_returns_oxi_proxy():
     session = helpers.common.make_session()
-    session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     oxi = proxy.oxi
     assert isinstance(oxi, OxiNamespaceProxy), (
@@ -94,7 +89,6 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy():
 
 def test_fixtures_proxy_unknown_namespace_raises():
     session = helpers.common.make_session()
-    session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     try:
         _ = proxy.unknown_ns
@@ -114,7 +108,6 @@ def test_fixtures_proxy_unknown_namespace_raises():
 def test_oxi_proxy_tmp_injects_tempdir(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
-    fixture_session.begin_module(str(tmp / "test.py"))
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.tmp
     assert isinstance(result, _TempDir), (
@@ -126,7 +119,6 @@ def test_oxi_proxy_cap_injects_stdcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
     teardowns: list = []
-    fixture_session.begin_module(str(tmp / "test.py"))
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.cap
     assert isinstance(result, _StdCapture), (
@@ -139,7 +131,6 @@ def test_oxi_proxy_cap_injects_stdcapture(
 def test_oxi_proxy_patch_injects_patcher(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
-    fixture_session.begin_module(str(tmp / "test.py"))
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.patch
     assert isinstance(result, _Patcher), (
@@ -151,7 +142,6 @@ def test_oxi_proxy_log_injects_logcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
     teardowns: list = []
-    fixture_session.begin_module(str(tmp / "test.py"))
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.log
     assert isinstance(result, _LogCapture), (
@@ -164,7 +154,6 @@ def test_oxi_proxy_log_injects_logcapture(
 def test_oxi_proxy_unknown_raises_with_available_list(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
-    fixture_session.begin_module(str(tmp / "test.py"))
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     try:
         _ = proxy.unknown
@@ -192,7 +181,6 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
             namespace="db",
         )
     )
-    session.begin_module("/fake/test.py")
     proxy = FixturesProxy(session, "/fake/test.py", [])
     result = proxy.db.conn
     assert isinstance(result, FrozenProxy), (
@@ -206,7 +194,6 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
 
 def test_oxi_proxy_ctx_returns_test_context(fixture_session: Fixture[FixtureSession]):
     """fx.oxi.ctx should return a _TestContext instance."""
-    fixture_session.begin_module("/fake/test.py")
     proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", [])
     result = proxy.ctx
     assert isinstance(result, _TestContext), (
@@ -219,7 +206,6 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
 ):
     """FixturesProxy.oxi caches and returns same OxiNamespaceProxy on
     repeated access."""
-    fixture_session.begin_module("/fake/test.py")
     proxy = FixturesProxy(fixture_session, "/fake/test.py", [])
     oxi1 = proxy.oxi
     oxi2 = proxy.oxi
@@ -235,7 +221,6 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
     """OxiNamespaceProxy caches builtin instances; repeated access returns
     the same object."""
     teardowns: list = []
-    fixture_session.begin_module("/fake/test.py")
     proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", teardowns)
     tmp1 = proxy.tmp
     tmp2 = proxy.tmp
@@ -275,7 +260,6 @@ def test_full_pipeline_fx_namespace_access(tmp: TempDir):
     for d in defs:
         reg.register(d)
     session = FixtureSession(reg)
-    session.begin_module(str(test_file))
 
     result = helpers.common.run_test(str(test_file), "test_access", session)
     assert result.status == "passed", result.message
@@ -294,8 +278,6 @@ def test_full_pipeline_fx_oxi_tmp(
         "    p.write_text('hi')\n"
         "    assert p.read_text() == 'hi'\n"
     )
-
-    fixture_session.begin_module(str(test_file))
 
     result = helpers.common.run_test(str(test_file), "test_oxi_tmp", fixture_session)
     assert result.status == "passed", result.message
@@ -330,7 +312,6 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir):
     for d in defs:
         reg.register(d)
     session = FixtureSession(reg)
-    session.begin_module(str(test_file))
 
     result = helpers.common.run_test(str(test_file), "test_two_namespaces", session)
     assert result.status == "passed", result.message

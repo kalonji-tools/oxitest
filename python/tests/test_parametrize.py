@@ -192,7 +192,6 @@ def test_plain_typed_param_not_resolved_as_fixture():
     """Plain-typed params (no Fixture[T] annotation) must not be resolved."""
     registry = FixtureRegistry()
     session = FixtureSession(registry)
-    session.begin_module("/fake/test_foo.py")
 
     def test_fn(x: int, y: int):
         pass
@@ -215,7 +214,6 @@ def test_fixture_annotated_param_resolved_alongside_plain_param():
 
     registry.register(helpers.common.make_fixture_def("db", my_fixture))
     session = FixtureSession(registry)
-    session.begin_module("/fake/test_foo.py")
 
     def test_fn(x: int, db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -242,7 +240,6 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
 
     registry.register(helpers.common.make_fixture_def("x", x_fixture))
     session = FixtureSession(registry)
-    session.begin_module("/fake/test_foo.py")
 
     def test_fn(x: int):
         pass
@@ -327,7 +324,6 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir):
         "    assert x * multiplier == expected\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="double"
     )
@@ -382,7 +378,6 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
         "    assert db == expected\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result_pg = helpers.common.run_test(
         str(f), "test_db", session=session, param_id="pg"
     )
@@ -438,7 +433,6 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir):
         "    pass\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "error", (
         f"unregistered FixtureRef should produce status='error', got {result.status!r}"
@@ -639,7 +633,6 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir):
         "    assert x * multiplier == expected\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="double"
     )
@@ -779,7 +772,6 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "    assert store == 'db-conn'\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(
         str(f), "test_query", session=session, param_id="prod"
     )
@@ -826,7 +818,6 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
         "    assert db == 'flat-pg'\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "passed", result.message
 
@@ -1384,7 +1375,6 @@ def test_executor_composed_with_fixture(tmp: TempDir):
         "    assert x * multiplier == expected\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="a-c"
     )
@@ -1443,7 +1433,6 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir):
         "    assert db == expected\n"
     )
     session, _ = create_session([str(conftest)])
-    session.begin_module(str(f))
     result = helpers.common.run_test(
         str(f), "test_db", session=session, param_id="pg-check"
     )
