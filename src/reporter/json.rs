@@ -157,7 +157,6 @@ mod snapshot_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reporter::test_helpers::make_error;
     use crate::types::TestItem;
     use crate::types::{LineNo, TestOutcome};
     use tempfile::TempDir;
@@ -197,7 +196,10 @@ mod tests {
     fn test_json_includes_message_for_error_outcome() {
         let json = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_error").arc(),
-            make_error("PyImportError: No module named 'foo'", "tests/t.py", 1, "x"),
+            TestOutcome::error("PyImportError: No module named 'foo'")
+                .file("tests/t.py")
+                .source("x")
+                .build(),
         )]);
         assert!(
             json.contains("PyImportError"),
