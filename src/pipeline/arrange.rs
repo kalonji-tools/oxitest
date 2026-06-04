@@ -150,7 +150,9 @@ mod tests {
     #[test]
     fn test_partition_inprocess_groups_splits_mixed_module() {
         let normal = TestItem::builder_raw("test_a.py::test_normal").arc();
-        let inproc = TestItem::builder_raw("test_a.py::test_serial").markers(vec!["inprocess".to_string()]).arc();
+        let inproc = TestItem::builder_raw("test_a.py::test_serial")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![normal, inproc])];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -176,8 +178,12 @@ mod tests {
 
     #[test]
     fn test_partition_inprocess_groups_all_inprocess() {
-        let a = TestItem::builder_raw("test_a.py::test_a").markers(vec!["inprocess".to_string()]).arc();
-        let b = TestItem::builder_raw("test_a.py::test_b").markers(vec!["inprocess".to_string()]).arc();
+        let a = TestItem::builder_raw("test_a.py::test_a")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
+        let b = TestItem::builder_raw("test_a.py::test_b")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
         let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -189,7 +195,9 @@ mod tests {
     #[test]
     fn test_partition_inprocess_groups_multiple_modules() {
         let a_normal = TestItem::builder_raw("test_a.py::test_normal").arc();
-        let a_inproc = TestItem::builder_raw("test_a.py::test_serial").markers(vec!["inprocess".to_string()]).arc();
+        let a_inproc = TestItem::builder_raw("test_a.py::test_serial")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
         let b_normal = TestItem::builder_raw("test_b.py::test_b").arc();
         let groups = vec![
             (Utf8PathBuf::from("test_a.py"), vec![a_normal, a_inproc]),
@@ -310,7 +318,7 @@ mod tests {
         let remaining = vec![(
             Utf8PathBuf::from("test_b.py"),
             (0..3)
-                .map(|i| TestItem::builder_raw(&format!("test_b.py::test_{i}")).arc()))
+                .map(|i| TestItem::builder_raw(&format!("test_b.py::test_{i}")).arc())
                 .collect::<Vec<_>>(),
         )];
 
