@@ -19,6 +19,7 @@ pub(crate) fn make_item(name: &str) -> Arc<TestItem> {
 /// Build an `Arc<TestItem>` from an already-formatted `node_id` string (e.g.
 /// `"tests/test_foo.py::test_fn"`).  Used by modules that receive raw node
 /// IDs from workers or other external sources.
+#[allow(dead_code)]
 pub(crate) fn make_item_raw(node_id: &str) -> Arc<TestItem> {
     Arc::new(TestItem::builder_raw(node_id).build())
 }
