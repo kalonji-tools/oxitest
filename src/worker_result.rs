@@ -66,6 +66,109 @@ impl From<&FrameEntry> for Frame {
     }
 }
 
+/// Typed outcome from a test execution — either deserialized from worker JSON
+/// (via [`WireResult`]) or built from the serial PyO3 bridge path.
+///
+/// Each variant carries exactly the fields it needs. This replaces the old
+/// `RawOutcome` normalizer and eliminates implicit message routing.
+///
+/// Use `From<WorkerOutcome> for TestOutcome` to convert into the domain enum.
+#[derive(Debug)]
+pub(crate) enum WorkerOutcome {
+    Passed {
+        no_message_lines: Vec<usize>,
+    },
+    Failed {
+        message: String,
+        file: Utf8PathBuf,
+        lineno: LineNo,
+        source_line: String,
+        left: String,
+        right: String,
+        op: String,
+        frames: Vec<Frame>,
+        field_diffs: Vec<(String, String, String)>,
+    },
+    Error {
+        message: String,
+        file: Utf8PathBuf,
+        lineno: LineNo,
+        source_line: String,
+        frames: Vec<Frame>,
+    },
+    Skipped {
+        reason: String,
+    },
+    XFailed {
+        reason: String,
+    },
+    XPassed {
+        strict: bool,
+    },
+    Warned {
+        reason: String,
+        no_message_lines: Vec<usize>,
+    },
+    Timeout {
+        reason: String,
+    },
+}
+
+impl From<WorkerOutcome> for types::TestOutcome {
+    fn from(w: WorkerOutcome) -> Self {
+        match w {
+            WorkerOutcome::Passed { no_message_lines } => {
+                types::TestOutcome::Passed { no_message_lines }
+            }
+            WorkerOutcome::Failed {
+                message,
+                file,
+                lineno,
+                source_line,
+                left,
+                right,
+                op,
+                frames,
+                field_diffs,
+            } => types::TestOutcome::Failed {
+                message,
+                file,
+                lineno,
+                source_line,
+                left,
+                right,
+                op,
+                frames,
+                field_diffs,
+            },
+            WorkerOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+            } => types::TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+            },
+            WorkerOutcome::Skipped { reason } => types::TestOutcome::Skipped { reason },
+            WorkerOutcome::XFailed { reason } => types::TestOutcome::XFailed { reason },
+            WorkerOutcome::XPassed { strict } => types::TestOutcome::XPassed { strict },
+            WorkerOutcome::Warned {
+                reason,
+                no_message_lines,
+            } => types::TestOutcome::Warned {
+                reason,
+                no_message_lines,
+            },
+            WorkerOutcome::Timeout { reason } => types::TestOutcome::Timeout { message: reason },
+        }
+    }
+}
+
 /// Deserialized JSON result for a single test, written by a worker subprocess.
 ///
 /// Workers print one `WorkerResult` line per test to stdout. All optional
@@ -760,6 +863,144 @@ mod to_outcome_tests {
                 assert_eq!(frames[1].name, "setup");
             }
             other => panic!("expected Error, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod worker_outcome_tests {
+    use super::*;
+    use crate::types::{LineNo, TestOutcome};
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn passed_converts_to_test_outcome() {
+        let wo = WorkerOutcome::Passed {
+            no_message_lines: vec![3, 7],
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Passed { no_message_lines } => {
+                assert_eq!(no_message_lines, vec![3, 7]);
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_converts_to_test_outcome() {
+        let wo = WorkerOutcome::Failed {
+            message: "assert 1 == 2".into(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(10),
+            source_line: "assert x == 2".into(),
+            left: "1".into(),
+            right: "2".into(),
+            op: "==".into(),
+            frames: vec![],
+            field_diffs: vec![],
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Failed {
+                message,
+                file,
+                lineno,
+                left,
+                right,
+                op,
+                ..
+            } => {
+                assert_eq!(message, "assert 1 == 2");
+                assert_eq!(file, "t.py");
+                assert_eq!(lineno, LineNo::new(10));
+                assert_eq!(left, "1");
+                assert_eq!(right, "2");
+                assert_eq!(op, "==");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_converts_to_test_outcome() {
+        let wo = WorkerOutcome::Error {
+            message: "ImportError".into(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(3),
+            source_line: "import bad".into(),
+            frames: vec![],
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                ..
+            } => {
+                assert_eq!(message, "ImportError");
+                assert_eq!(file, "t.py");
+                assert_eq!(lineno, LineNo::new(3));
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn skipped_converts_to_test_outcome() {
+        let wo = WorkerOutcome::Skipped {
+            reason: "needs network".into(),
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Skipped { reason } => assert_eq!(reason, "needs network"),
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xfailed_converts_to_test_outcome() {
+        let wo = WorkerOutcome::XFailed {
+            reason: "known bug #42".into(),
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::XFailed { reason } => assert_eq!(reason, "known bug #42"),
+            other => panic!("expected XFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xpassed_converts_to_test_outcome() {
+        let wo = WorkerOutcome::XPassed { strict: true };
+        match TestOutcome::from(wo) {
+            TestOutcome::XPassed { strict } => assert!(strict),
+            other => panic!("expected XPassed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn warned_converts_to_test_outcome() {
+        let wo = WorkerOutcome::Warned {
+            reason: "DeprecationWarning".into(),
+            no_message_lines: vec![5],
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Warned {
+                reason,
+                no_message_lines,
+            } => {
+                assert_eq!(reason, "DeprecationWarning");
+                assert_eq!(no_message_lines, vec![5]);
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn timeout_reason_maps_to_test_outcome_message() {
+        let wo = WorkerOutcome::Timeout {
+            reason: "timed out after 5s".into(),
+        };
+        match TestOutcome::from(wo) {
+            TestOutcome::Timeout { message } => assert_eq!(message, "timed out after 5s"),
+            other => panic!("expected Timeout, got {other:?}"),
         }
     }
 }
