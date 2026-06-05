@@ -117,7 +117,8 @@ impl Reporter for JsonReporter {
 mod snapshot_tests {
     use super::*;
     use crate::reporter::Reporter;
-    use crate::types::{DurationMs, LineNo, RawOutcome, TestItem, TestOutcome};
+    use crate::types::{DurationMs, TestItem, TestOutcome};
+    use crate::worker_result::WorkerOutcome;
     use insta::assert_snapshot;
 
     fn run_and_read(items: &[(&str, &str)]) -> String {
@@ -126,19 +127,43 @@ mod snapshot_tests {
         let mut rep = JsonReporter::new(path.clone());
         for (name, status) in items {
             let item = TestItem::builder("tests/test_foo.py", name).arc();
-            let outcome = TestOutcome::from_raw(RawOutcome {
-                status,
-                message: "",
-                file: "",
-                lineno: LineNo::ZERO,
-                source_line: "",
-                no_message_lines: &[],
-                left: "",
-                right: "",
-                op: "",
-                strict: false,
-                frames: &[],
-                field_diffs: &[],
+            let outcome = TestOutcome::from(match *status {
+                "passed" => WorkerOutcome::Passed {
+                    no_message_lines: vec![],
+                },
+                "failed" => WorkerOutcome::Failed {
+                    message: String::new(),
+                    file: camino::Utf8PathBuf::new(),
+                    lineno: crate::types::LineNo::ZERO,
+                    source_line: String::new(),
+                    left: String::new(),
+                    right: String::new(),
+                    op: String::new(),
+                    frames: vec![],
+                    field_diffs: vec![],
+                },
+                "skipped" => WorkerOutcome::Skipped {
+                    reason: String::new(),
+                },
+                "error" => WorkerOutcome::Error {
+                    message: String::new(),
+                    file: camino::Utf8PathBuf::new(),
+                    lineno: crate::types::LineNo::ZERO,
+                    source_line: String::new(),
+                    frames: vec![],
+                },
+                "xfailed" => WorkerOutcome::XFailed {
+                    reason: String::new(),
+                },
+                "xpassed" => WorkerOutcome::XPassed { strict: false },
+                "warned" => WorkerOutcome::Warned {
+                    reason: String::new(),
+                    no_message_lines: vec![],
+                },
+                "timeout" => WorkerOutcome::Timeout {
+                    reason: String::new(),
+                },
+                other => panic!("unexpected status in test: {other}"),
             });
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
