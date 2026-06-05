@@ -85,13 +85,8 @@ def _parse_serde_struct_fields(text: str, struct_name: str) -> set[str]:
 
 
 def parse_worker_result_fields(path: Path) -> set[str]:
-    """Extract field names from the WireResult (formerly WorkerResult) serde struct."""
-    text = path.read_text()
-    # Try WireResult first (post-rename), fall back to WorkerResult for compat.
-    fields = _parse_serde_struct_fields(text, "WireResult")
-    if not fields:
-        fields = _parse_serde_struct_fields(text, "WorkerResult")
-    return fields
+    """Extract field names from the WireResult serde struct."""
+    return _parse_serde_struct_fields(path.read_text(), "WireResult")
 
 
 def parse_worker_task_item_fields(path: Path) -> set[str]:
@@ -167,7 +162,7 @@ def main() -> int:
     py_wire = parse_to_wire_fields(PYTHON_PATH)
 
     if not rust_wire:
-        print(f"ERROR: WireResult/WorkerResult not found in {WIRE_RUST_PATH}")
+        print(f"ERROR: WireResult not found in {WIRE_RUST_PATH}")
         errors += 1
     elif not py_wire:
         print(f"ERROR: to_wire() fields not found in {PYTHON_PATH}")
@@ -176,7 +171,7 @@ def main() -> int:
         rust_only = rust_wire - py_wire
         py_only = py_wire - rust_wire
         if rust_only or py_only:
-            print("MISMATCH: WorkerResult (Rust wire) vs to_wire() (Python wire)")
+            print("MISMATCH: WireResult (Rust wire) vs to_wire() (Python wire)")
             if rust_only:
                 print(f"  Rust-only wire fields: {sorted(rust_only)}")
             if py_only:
