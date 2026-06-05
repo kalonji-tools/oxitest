@@ -13,7 +13,8 @@ use std::sync::Arc;
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
-use crate::types::{CollectError, Frame, LineNo, NodeId, RawOutcome, TestItem, TestOutcome};
+use crate::types::{CollectError, Frame, LineNo, NodeId, TestItem, TestOutcome};
+use crate::worker_result::WorkerOutcome;
 
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
@@ -549,18 +550,40 @@ fn try_run_test_with_session_obj(
         })
         .collect();
 
-    Ok(TestOutcome::from_raw(RawOutcome {
-        status: r.status.as_str(),
-        message: &r.message,
-        file: &r.file,
-        lineno: LineNo::new(r.lineno),
-        source_line: &r.source_line,
-        no_message_lines: &r.no_message_lines,
-        left: &r.left,
-        right: &r.right,
-        op: &r.op,
-        strict: r.strict,
-        frames: &frames,
-        field_diffs: &r.field_diffs,
-    }))
+    let lineno = LineNo::new(r.lineno);
+    let file = Utf8PathBuf::from(r.file);
+
+    let outcome = match r.status.as_str() {
+        "passed" => WorkerOutcome::Passed {
+            no_message_lines: r.no_message_lines,
+        },
+        "warned" => WorkerOutcome::Warned {
+            reason: r.message,
+            no_message_lines: r.no_message_lines,
+        },
+        "failed" => WorkerOutcome::Failed {
+            message: r.message,
+            file,
+            lineno,
+            source_line: r.source_line,
+            left: r.left,
+            right: r.right,
+            op: r.op,
+            frames,
+            field_diffs: r.field_diffs,
+        },
+        "skipped" => WorkerOutcome::Skipped { reason: r.message },
+        "xfailed" => WorkerOutcome::XFailed { reason: r.message },
+        "xpassed" => WorkerOutcome::XPassed { strict: r.strict },
+        "timeout" => WorkerOutcome::Timeout { reason: r.message },
+        _ => WorkerOutcome::Error {
+            message: r.message,
+            file,
+            lineno,
+            source_line: r.source_line,
+            frames,
+        },
+    };
+
+    Ok(TestOutcome::from(outcome))
 }
