@@ -1,8 +1,11 @@
 //! Deserialization of JSON results from worker subprocesses.
 //!
 //! Each worker writes one JSON line per test to stdout. This module defines
-//! [`WorkerResult`] and converts it to [`TestOutcome`](types::TestOutcome).
-//! Also provides sentinel builders for worker crashes and timeouts.
+//! [`WireResult`] — a transient serde target — and [`WorkerOutcome`], the typed
+//! enum that downstream code consumes. Use [`WireResult::into_worker_outcome`]
+//! to convert from wire format to `(node_id, duration_ms, WorkerOutcome)`.
+//!
+//! Sentinel builders for crashes and timeouts live on [`WorkerOutcome`] itself.
 //!
 //! The send-side schema — the JSON task sent *to* worker subprocesses — is
 //! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
@@ -76,7 +79,7 @@ impl From<&FrameEntry> for Frame {
 #[derive(Debug)]
 #[allow(
     dead_code,
-    reason = "wired in Task 4–5; sentinel builders used from parallel.rs/bridge.rs"
+    reason = "consumed by into_worker_outcome() + tests; wired to parallel.rs in Task 4"
 )]
 pub(crate) enum WorkerOutcome {
     Passed {
@@ -175,7 +178,7 @@ impl From<WorkerOutcome> for types::TestOutcome {
 
 impl WorkerOutcome {
     /// Synthesise an error outcome for a test that could not be executed.
-    #[allow(dead_code, reason = "wired in Task 4–5")]
+    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn error_sentinel(message: String) -> Self {
         WorkerOutcome::Error {
             message,
@@ -189,7 +192,7 @@ impl WorkerOutcome {
     /// Synthesise an error outcome for a test whose subprocess never responded.
     ///
     /// Returns `(WorkerOutcome, duration_ms)` — the caller supplies the `node_id`.
-    #[allow(dead_code, reason = "wired in Task 4–5")]
+    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn timed_out(watchdog: std::time::Duration) -> (Self, f64) {
         let outcome = Self::error_sentinel(format!(
             "Worker subprocess unresponsive after {}s",
@@ -199,20 +202,25 @@ impl WorkerOutcome {
     }
 
     /// Synthesise an error outcome for a test whose subprocess exited unexpectedly.
-    #[allow(dead_code, reason = "wired in Task 4–5")]
+    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn crashed() -> Self {
         Self::error_sentinel("Worker subprocess exited unexpectedly".to_string())
     }
 }
 
+/// Temporary alias so `parallel.rs` / `worker_session.rs` keep compiling until
+/// Tasks 4–5 migrate them to `WireResult`. Remove after Task 5.
+pub(crate) type WorkerResult = WireResult;
+
 /// Deserialized JSON result for a single test, written by a worker subprocess.
 ///
-/// Workers print one `WorkerResult` line per test to stdout. All optional
+/// Workers print one `WireResult` line per test to stdout. All optional
 /// diagnostic fields use `#[serde(default)]` so compact wire messages (which
-/// omit falsy fields) deserialize without error. Use [`to_outcome`](WorkerResult::to_outcome)
-/// to convert into the richer [`TestOutcome`](crate::types::TestOutcome) enum.
+/// omit falsy fields) deserialize without error. Use
+/// [`into_worker_outcome`](WireResult::into_worker_outcome) to convert into a
+/// typed `(node_id, duration_ms, WorkerOutcome)` tuple.
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct WorkerResult {
+pub(crate) struct WireResult {
     pub node_id: String,
     pub outcome: types::OutcomeKind,
     pub duration_ms: f64,
@@ -245,19 +253,89 @@ pub(crate) struct WorkerResult {
     pub field_diffs: Vec<(String, String, String)>,
 }
 
-impl WorkerResult {
-    /// Convert the flat wire representation into a typed [`TestOutcome`](types::TestOutcome).
+impl WireResult {
+    /// Convert the flat wire representation into a typed [`WorkerOutcome`].
     ///
-    /// Message selection differs by outcome: `Skipped`, `XFailed`, and `Timeout` use
-    /// `failure_repr` (the human-readable reason string); everything else uses `message`
-    /// (the structured diagnostic field) so that `left`/`right`/`op` reach the reporter.
+    /// Consumes self — `WireResult` is a transient deserialization target.
+    /// Returns `(node_id, duration_ms, outcome)`.
+    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
+    pub(crate) fn into_worker_outcome(self) -> (String, f64, WorkerOutcome) {
+        let no_message_lines: Vec<usize> = self
+            .no_message_lines
+            .iter()
+            .filter(|&&n| n > 0)
+            .map(|&n| usize::try_from(n).unwrap_or(0))
+            .collect();
+
+        let frames: Vec<Frame> = self.frames.iter().map(Frame::from).collect();
+        let lineno = LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)));
+        let file = Utf8PathBuf::from(self.file.unwrap_or_default());
+        let source_line = self.source_line.unwrap_or_default();
+
+        let outcome = match self.outcome {
+            types::OutcomeKind::Passed => WorkerOutcome::Passed { no_message_lines },
+            types::OutcomeKind::Failed => WorkerOutcome::Failed {
+                message: self.message.unwrap_or_default(),
+                file,
+                lineno,
+                source_line,
+                left: self.left.unwrap_or_default(),
+                right: self.right.unwrap_or_default(),
+                op: self.op.unwrap_or_default(),
+                frames,
+                field_diffs: self.field_diffs,
+            },
+            types::OutcomeKind::Error => WorkerOutcome::Error {
+                message: self.message.unwrap_or_default(),
+                file,
+                lineno,
+                source_line,
+                frames,
+            },
+            types::OutcomeKind::Skipped => WorkerOutcome::Skipped {
+                reason: self.failure_repr.unwrap_or_default(),
+            },
+            types::OutcomeKind::XFailed => WorkerOutcome::XFailed {
+                reason: self.failure_repr.unwrap_or_default(),
+            },
+            types::OutcomeKind::XPassed => WorkerOutcome::XPassed {
+                strict: self.strict,
+            },
+            types::OutcomeKind::Warned => WorkerOutcome::Warned {
+                reason: self.message.unwrap_or_default(),
+                no_message_lines,
+            },
+            types::OutcomeKind::Timeout => WorkerOutcome::Timeout {
+                reason: self.failure_repr.unwrap_or_default(),
+            },
+            types::OutcomeKind::Flaky | types::OutcomeKind::Unknown => {
+                if self.outcome == types::OutcomeKind::Unknown {
+                    tracing::warn!(
+                        outcome = %self.outcome,
+                        "Unknown outcome string from worker — treating as error"
+                    );
+                }
+                WorkerOutcome::Error {
+                    message: self.message.unwrap_or_default(),
+                    file,
+                    lineno,
+                    source_line,
+                    frames,
+                }
+            }
+        };
+
+        (self.node_id, self.duration_ms, outcome)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Backward-compat shims — keeps `parallel.rs` / `worker_session.rs` compiling
+// until Tasks 4–5 migrate them. Delete after Task 5.
+// ---------------------------------------------------------------------------
+impl WireResult {
+    /// **Deprecated** — use `into_worker_outcome()` + `From<WorkerOutcome>`.
     pub fn to_outcome(&self) -> types::TestOutcome {
-        // skipped/xfailed/timeout carry their human-readable reason in
-        // failure_repr.  For failed/error/warned, use message — failure_repr is a
-        // legacy fallback that predates structured diagnostic fields; using it as
-        // a message masks the left/right/op display in the reporter.
-        // Warned uses message because failure_repr returns None for non-failure
-        // statuses (warned is in _NON_FAILURE_STATUSES on the Python side).
         let message: String = match self.outcome {
             types::OutcomeKind::Skipped
             | types::OutcomeKind::XFailed
@@ -274,7 +352,6 @@ impl WorkerResult {
             );
         }
 
-        // normalise no_message_lines into a Vec first so we can borrow it
         let no_message_lines: Vec<usize> = self
             .no_message_lines
             .iter()
@@ -299,12 +376,10 @@ impl WorkerResult {
             field_diffs: &self.field_diffs,
         })
     }
-}
 
-impl WorkerResult {
-    /// Synthesise an error result for a test that could not be executed.
+    /// **Deprecated** — use `WorkerOutcome::error_sentinel`.
     pub(crate) fn error_sentinel(node_id: String, message: String, duration_ms: f64) -> Self {
-        WorkerResult {
+        WireResult {
             node_id,
             outcome: types::OutcomeKind::Error,
             duration_ms,
@@ -324,7 +399,7 @@ impl WorkerResult {
         }
     }
 
-    /// Synthesise an error result for a test whose subprocess never responded.
+    /// **Deprecated** — use `WorkerOutcome::timed_out`.
     pub(crate) fn timed_out(node_id: String, watchdog: std::time::Duration) -> Self {
         Self::error_sentinel(
             node_id,
@@ -336,7 +411,7 @@ impl WorkerResult {
         )
     }
 
-    /// Synthesise an error result for a test whose subprocess exited unexpectedly.
+    /// **Deprecated** — use `WorkerOutcome::crashed`.
     pub(crate) fn crashed(node_id: String) -> Self {
         Self::error_sentinel(
             node_id,
@@ -366,7 +441,7 @@ mod frame_tests {
                 {"file": "t.py", "lineno": 2, "name": "helper", "line": "assert x > 0"}
             ]
         }"#;
-        let r: WorkerResult = serde_json::from_str(json).unwrap();
+        let r: WireResult = serde_json::from_str(json).unwrap();
         assert_eq!(r.frames.len(), 3);
         assert_eq!(r.frames[0].file, "t.py");
         assert_eq!(r.frames[0].lineno, 8);
@@ -389,8 +464,9 @@ mod frame_tests {
                 {"file": "t.py", "lineno": 3, "name": "do_thing", "line": "raise ValueError"}
             ]
         }"#;
-        let r: WorkerResult = serde_json::from_str(json).unwrap();
-        match r.to_outcome() {
+        let r: WireResult = serde_json::from_str(json).unwrap();
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Failed { frames, .. } => {
                 assert_eq!(frames.len(), 2);
                 assert_eq!(
@@ -421,9 +497,10 @@ mod frame_tests {
     #[test]
     fn missing_frames_defaults_to_empty() {
         let json = r#"{"node_id":"t","outcome":"failed","duration_ms":0.0}"#;
-        let r: WorkerResult = serde_json::from_str(json).unwrap();
+        let r: WireResult = serde_json::from_str(json).unwrap();
         assert!(r.frames.is_empty());
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Failed { frames, .. } => assert!(frames.is_empty()),
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -434,7 +511,7 @@ mod frame_tests {
 mod lineno_cast_tests {
     use super::*;
 
-    fn passed_result_with_lineno(lineno: Option<u64>) -> WorkerResult {
+    fn passed_result_with_lineno(lineno: Option<u64>) -> WireResult {
         serde_json::from_str(&format!(
             r#"{{"node_id":"t","outcome":"passed","duration_ms":0.0,"lineno":{}}}"#,
             match lineno {
@@ -449,18 +526,19 @@ mod lineno_cast_tests {
     fn lineno_none_maps_to_zero() {
         let result = passed_result_with_lineno(None);
         assert_eq!(result.lineno, None);
-        // to_outcome() must not panic
-        let _ = result.to_outcome();
+        // into_worker_outcome() must not panic
+        let _ = result.into_worker_outcome();
     }
 
     #[test]
     fn lineno_small_value_passes_through() {
-        let r: WorkerResult = serde_json::from_str(
+        let r: WireResult = serde_json::from_str(
             r#"{"node_id":"t","outcome":"failed","duration_ms":0.0,
                 "lineno":42,"file":"t.py","source_line":"assert x"}"#,
         )
         .unwrap();
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Failed { lineno, .. } => {
                 assert_eq!(lineno, LineNo::new(42));
             }
@@ -471,13 +549,13 @@ mod lineno_cast_tests {
     #[test]
     fn lineno_u32_max_does_not_panic() {
         let result = passed_result_with_lineno(Some(u32::MAX as u64));
-        let _ = result.to_outcome();
+        let _ = result.into_worker_outcome();
     }
 
     #[test]
     fn lineno_u64_max_does_not_panic() {
         let result = passed_result_with_lineno(Some(u64::MAX));
-        let _ = result.to_outcome();
+        let _ = result.into_worker_outcome();
     }
 }
 
@@ -485,7 +563,7 @@ mod lineno_cast_tests {
 mod wire_round_trip_tests {
     use super::*;
 
-    fn deser(json: &str) -> WorkerResult {
+    fn deser(json: &str) -> WireResult {
         serde_json::from_str(json).expect("valid JSON")
     }
 
@@ -656,7 +734,7 @@ mod compact_and_error_tests {
     #[test]
     fn compact_passed_only_required_fields() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
-        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        let r: WireResult = serde_json::from_str(json).expect("valid JSON");
         assert!(r.failure_repr.is_none());
         assert!(r.message.is_none());
         assert!(r.file.is_none());
@@ -678,38 +756,38 @@ mod compact_and_error_tests {
             "duration_ms": 0.0,
             "no_message_lines": [5, 10, 15]
         }"#;
-        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        let r: WireResult = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(r.no_message_lines, vec![5_i64, 10_i64, 15_i64]);
     }
 
     #[test]
     fn missing_node_id_is_error() {
         let json = r#"{"outcome":"passed","duration_ms":0.0}"#;
-        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
     fn missing_outcome_is_error() {
         let json = r#"{"node_id":"t","duration_ms":0.0}"#;
-        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
     fn missing_duration_ms_is_error() {
         let json = r#"{"node_id":"t","outcome":"passed"}"#;
-        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
     fn truncated_json_is_error() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":"#;
-        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
     fn wrong_type_for_duration_is_error() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":"slow"}"#;
-        assert!(serde_json::from_str::<WorkerResult>(json).is_err());
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
@@ -721,7 +799,7 @@ mod compact_and_error_tests {
             "future_field": "some_value",
             "another_extra": 42
         }"#;
-        let r: WorkerResult = serde_json::from_str(json).expect("extra fields should be ignored");
+        let r: WireResult = serde_json::from_str(json).expect("extra fields should be ignored");
         assert_eq!(r.outcome, types::OutcomeKind::Passed);
         assert!((r.duration_ms - 0.5).abs() < 1e-9);
     }
@@ -729,29 +807,23 @@ mod compact_and_error_tests {
     #[test]
     fn protocol_version_round_trips() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":1}"#;
-        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        let r: WireResult = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(r.protocol_version, PROTOCOL_VERSION);
     }
 
     #[test]
     fn missing_protocol_version_defaults_to_zero() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
-        let r: WorkerResult = serde_json::from_str(json).expect("valid JSON");
+        let r: WireResult = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(r.protocol_version, 0);
-    }
-
-    #[test]
-    fn error_sentinel_uses_current_protocol_version() {
-        let r = WorkerResult::error_sentinel("t".into(), "boom".into(), 0.0);
-        assert_eq!(r.protocol_version, PROTOCOL_VERSION);
     }
 }
 
 #[cfg(test)]
-mod to_outcome_tests {
+mod outcome_conversion_tests {
     use super::*;
 
-    fn make_result(json: &str) -> WorkerResult {
+    fn make_result(json: &str) -> WireResult {
         serde_json::from_str(json).expect("valid JSON")
     }
 
@@ -760,7 +832,8 @@ mod to_outcome_tests {
         let r = make_result(
             r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
         );
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Passed { no_message_lines } => {
                 assert_eq!(no_message_lines, vec![3usize, 7usize]);
             }
@@ -778,7 +851,8 @@ mod to_outcome_tests {
             "failure_repr": "fallback repr"
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Failed { message, .. } => {
                 assert_eq!(message, "structured message");
             }
@@ -796,7 +870,8 @@ mod to_outcome_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Skipped { reason } => {
                 assert_eq!(reason, "Skipped: no network");
             }
@@ -814,7 +889,8 @@ mod to_outcome_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::XFailed { reason } => {
                 assert_eq!(reason, "known bug #99");
             }
@@ -831,7 +907,8 @@ mod to_outcome_tests {
             "strict": true
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::XPassed { strict } => {
                 assert!(strict);
             }
@@ -849,7 +926,8 @@ mod to_outcome_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Timeout { message } => {
                 assert_eq!(message, "Test timed out after 5s");
             }
@@ -866,7 +944,8 @@ mod to_outcome_tests {
             "message": "DeprecationWarning: use new_api instead"
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Warned { reason, .. } => {
                 assert_eq!(reason, "DeprecationWarning: use new_api instead");
             }
@@ -887,7 +966,8 @@ mod to_outcome_tests {
             ]
         }"#;
         let r = make_result(json);
-        match r.to_outcome() {
+        let (_, _, outcome) = r.into_worker_outcome();
+        match types::TestOutcome::from(outcome) {
             types::TestOutcome::Error {
                 message, frames, ..
             } => {
@@ -1079,6 +1159,187 @@ mod worker_outcome_tests {
                 assert!(message.contains("unexpectedly"));
             }
             other => panic!("expected Error, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod wire_conversion_tests {
+    use super::*;
+    use crate::types::{LineNo, TestOutcome};
+
+    fn deser(json: &str) -> WireResult {
+        serde_json::from_str(json).expect("valid JSON")
+    }
+
+    #[test]
+    fn wire_failed_converts_to_worker_outcome() {
+        let wire = deser(
+            r#"{
+            "node_id": "t.py::test_b",
+            "outcome": "failed",
+            "duration_ms": 5.0,
+            "message": "assert 1 == 2",
+            "file": "t.py",
+            "lineno": 10,
+            "source_line": "assert x == 2",
+            "left": "1",
+            "right": "2",
+            "op": "=="
+        }"#,
+        );
+        let (node_id, duration_ms, outcome) = wire.into_worker_outcome();
+        assert_eq!(node_id, "t.py::test_b");
+        assert!((duration_ms - 5.0).abs() < 1e-9);
+        match TestOutcome::from(outcome) {
+            TestOutcome::Failed {
+                message,
+                file,
+                lineno,
+                left,
+                right,
+                op,
+                ..
+            } => {
+                assert_eq!(message, "assert 1 == 2");
+                assert_eq!(file, "t.py");
+                assert_eq!(lineno, LineNo::new(10));
+                assert_eq!(left, "1");
+                assert_eq!(right, "2");
+                assert_eq!(op, "==");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_passed_converts_with_no_message_lines() {
+        let wire = deser(
+            r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::Passed { no_message_lines } => {
+                assert_eq!(no_message_lines, vec![3, 7]);
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_skipped_uses_failure_repr() {
+        let wire = deser(
+            r#"{
+            "node_id": "t",
+            "outcome": "skipped",
+            "duration_ms": 0.0,
+            "failure_repr": "Skipped: needs network",
+            "message": "should not be used"
+        }"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::Skipped { reason } => assert_eq!(reason, "Skipped: needs network"),
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_xfailed_uses_failure_repr() {
+        let wire = deser(
+            r#"{
+            "node_id": "t",
+            "outcome": "xfailed",
+            "duration_ms": 0.0,
+            "failure_repr": "known bug #99"
+        }"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::XFailed { reason } => assert_eq!(reason, "known bug #99"),
+            other => panic!("expected XFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_timeout_uses_failure_repr() {
+        let wire = deser(
+            r#"{
+            "node_id": "t",
+            "outcome": "timeout",
+            "duration_ms": 5000.0,
+            "failure_repr": "Test timed out after 5s"
+        }"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::Timeout { message } => assert_eq!(message, "Test timed out after 5s"),
+            other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_warned_uses_message() {
+        let wire = deser(
+            r#"{
+            "node_id": "t",
+            "outcome": "warned",
+            "duration_ms": 0.5,
+            "message": "DeprecationWarning: use new_api"
+        }"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::Warned { reason, .. } => {
+                assert_eq!(reason, "DeprecationWarning: use new_api");
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_error_carries_frames() {
+        let wire = deser(
+            r#"{
+            "node_id": "t",
+            "outcome": "error",
+            "duration_ms": 0.5,
+            "message": "ImportError: no module",
+            "frames": [
+                {"file": "conftest.py", "lineno": 3, "name": "<module>", "line": "import missing"}
+            ]
+        }"#,
+        );
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::Error {
+                message, frames, ..
+            } => {
+                assert_eq!(message, "ImportError: no module");
+                assert_eq!(frames.len(), 1);
+                assert_eq!(frames[0].name, "<module>");
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wire_unknown_outcome_maps_to_error() {
+        let wire = deser(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.0}"#);
+        let (_, _, outcome) = wire.into_worker_outcome();
+        assert!(matches!(
+            TestOutcome::from(outcome),
+            TestOutcome::Error { .. }
+        ));
+    }
+
+    #[test]
+    fn wire_xpassed_strict() {
+        let wire = deser(r#"{"node_id":"t","outcome":"xpassed","duration_ms":0.0,"strict":true}"#);
+        let (_, _, outcome) = wire.into_worker_outcome();
+        match TestOutcome::from(outcome) {
+            TestOutcome::XPassed { strict } => assert!(strict),
+            other => panic!("expected XPassed, got {other:?}"),
         }
     }
 }
