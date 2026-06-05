@@ -7,7 +7,7 @@
 use crate::{
     parallel::{drain_worker_results, handle_drain_outcome, DrainOutcome},
     scheduler,
-    worker_result::{WorkerResult, WorkerTask, WorkerTaskItem},
+    worker_result::{WorkerOutcome, WorkerTask, WorkerTaskItem},
 };
 
 /// Takes stdin and stdout pipes from a child spawned with `Stdio::piped()`.
@@ -122,7 +122,7 @@ impl WorkerSession {
     fn drain_results(
         &self,
         expected: usize,
-        tx: &crossbeam_channel::Sender<WorkerResult>,
+        tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
     ) -> (DrainOutcome, usize) {
         drain_worker_results(&self.line_rx, expected, self.watchdog, tx)
     }
@@ -138,7 +138,7 @@ pub(crate) fn spawn_worker(
     keep_tmp: Option<std::sync::Arc<str>>,
     show_locals: bool,
     show_internals: bool,
-    tx: crossbeam_channel::Sender<WorkerResult>,
+    tx: crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -192,7 +192,7 @@ pub(crate) fn spawn_worker(
                     "failed to send task to worker — emitting error for all group items"
                 );
                 for item in &group.items {
-                    let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
+                    let _ = tx.send((item.node_id.to_string(), 0.0, WorkerOutcome::crashed()));
                 }
                 break;
             }
