@@ -74,6 +74,10 @@ impl From<&FrameEntry> for Frame {
 ///
 /// Use `From<WorkerOutcome> for TestOutcome` to convert into the domain enum.
 #[derive(Debug)]
+#[allow(
+    dead_code,
+    reason = "wired in Task 4–5; sentinel builders used from parallel.rs/bridge.rs"
+)]
 pub(crate) enum WorkerOutcome {
     Passed {
         no_message_lines: Vec<usize>,
@@ -166,6 +170,38 @@ impl From<WorkerOutcome> for types::TestOutcome {
             },
             WorkerOutcome::Timeout { reason } => types::TestOutcome::Timeout { message: reason },
         }
+    }
+}
+
+impl WorkerOutcome {
+    /// Synthesise an error outcome for a test that could not be executed.
+    #[allow(dead_code, reason = "wired in Task 4–5")]
+    pub(crate) fn error_sentinel(message: String) -> Self {
+        WorkerOutcome::Error {
+            message,
+            file: Utf8PathBuf::default(),
+            lineno: LineNo::ZERO,
+            source_line: String::new(),
+            frames: vec![],
+        }
+    }
+
+    /// Synthesise an error outcome for a test whose subprocess never responded.
+    ///
+    /// Returns `(WorkerOutcome, duration_ms)` — the caller supplies the `node_id`.
+    #[allow(dead_code, reason = "wired in Task 4–5")]
+    pub(crate) fn timed_out(watchdog: std::time::Duration) -> (Self, f64) {
+        let outcome = Self::error_sentinel(format!(
+            "Worker subprocess unresponsive after {}s",
+            watchdog.as_secs()
+        ));
+        (outcome, watchdog.as_millis() as f64)
+    }
+
+    /// Synthesise an error outcome for a test whose subprocess exited unexpectedly.
+    #[allow(dead_code, reason = "wired in Task 4–5")]
+    pub(crate) fn crashed() -> Self {
+        Self::error_sentinel("Worker subprocess exited unexpectedly".to_string())
     }
 }
 
@@ -1001,6 +1037,48 @@ mod worker_outcome_tests {
         match TestOutcome::from(wo) {
             TestOutcome::Timeout { message } => assert_eq!(message, "timed out after 5s"),
             other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_sentinel_builds_error_variant() {
+        let wo = WorkerOutcome::error_sentinel("boom".into());
+        match TestOutcome::from(wo) {
+            TestOutcome::Error {
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+            } => {
+                assert_eq!(message, "boom");
+                assert_eq!(file, "");
+                assert_eq!(lineno, LineNo::ZERO);
+                assert_eq!(source_line, "");
+                assert!(frames.is_empty());
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn timed_out_sentinel_contains_duration_message() {
+        let (wo, dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(30));
+        match TestOutcome::from(wo) {
+            TestOutcome::Error { message, .. } => assert!(message.contains("30")),
+            other => panic!("expected Error, got {other:?}"),
+        }
+        assert!((dur - 30_000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn crashed_sentinel_contains_crash_message() {
+        let wo = WorkerOutcome::crashed();
+        match TestOutcome::from(wo) {
+            TestOutcome::Error { message, .. } => {
+                assert!(message.contains("unexpectedly"));
+            }
+            other => panic!("expected Error, got {other:?}"),
         }
     }
 }
