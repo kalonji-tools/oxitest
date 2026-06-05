@@ -1,15 +1,14 @@
 //! Deserialization of JSON results from worker subprocesses.
 //!
 //! Each worker writes one JSON line per test to stdout. This module defines
-//! [`WireResult`] — a transient serde target — and [`WorkerOutcome`], the typed
-//! enum that downstream code consumes. Use [`WireResult::into_worker_outcome`]
-//! to convert from wire format to `(node_id, duration_ms, WorkerOutcome)`.
+//! [`WireResult`] (serde-only deserialization target) and [`WorkerOutcome`]
+//! (typed enum with per-variant diagnostic fields). Both the parallel path
+//! (worker JSON) and serial path (`bridge.rs` PyO3) convert through
+//! `WorkerOutcome` into [`TestOutcome`](types::TestOutcome).
 //!
-//! Sentinel builders for crashes and timeouts live on [`WorkerOutcome`] itself.
-//!
-//! The send-side schema — the JSON task sent *to* worker subprocesses — is
-//! defined here as [`WorkerTask`] / [`WorkerTaskItem`] so the protocol is
-//! type-checked at compile time rather than constructed with ad-hoc macros.
+//! Also provides sentinel builders ([`WorkerOutcome::error_sentinel`],
+//! [`WorkerOutcome::timed_out`], [`WorkerOutcome::crashed`]) for worker
+//! crashes and timeouts.
 
 use camino::Utf8PathBuf;
 
@@ -72,8 +71,8 @@ impl From<&FrameEntry> for Frame {
 /// Typed outcome from a test execution — either deserialized from worker JSON
 /// (via [`WireResult`]) or built from the serial PyO3 bridge path.
 ///
-/// Each variant carries exactly the fields it needs. This replaces the old
-/// `RawOutcome` normalizer and eliminates implicit message routing.
+/// Each variant carries exactly the fields it needs; there is no implicit
+/// message routing or string-based dispatch.
 ///
 /// Use `From<WorkerOutcome> for TestOutcome` to convert into the domain enum.
 #[derive(Debug)]

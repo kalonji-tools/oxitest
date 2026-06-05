@@ -215,7 +215,7 @@ fn drain_remaining_into_crashed(
     while let Some(group) = sched.pop() {
         for item in &group.items {
             handle_worker_result(
-                &item.node_id.to_string(),
+                item.node_id.as_ref(),
                 0.0,
                 WorkerOutcome::crashed(),
                 item_lookup,
