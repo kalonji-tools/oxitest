@@ -9,7 +9,9 @@
 //! error results so the pipeline never hangs.
 
 use crate::{
-    config, reporter, scheduler, types, worker_result::WorkerResult, worker_session::spawn_worker,
+    config, reporter, scheduler, types,
+    worker_result::{WireResult, WorkerOutcome},
+    worker_session::spawn_worker,
 };
 
 #[derive(Debug, PartialEq)]
@@ -32,7 +34,7 @@ pub(crate) fn drain_worker_results(
     line_rx: &crossbeam_channel::Receiver<String>,
     expected: usize,
     watchdog: std::time::Duration,
-    tx: &crossbeam_channel::Sender<WorkerResult>,
+    tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
 ) -> (DrainOutcome, usize) {
     use std::time::Instant;
 
@@ -60,7 +62,7 @@ pub(crate) fn drain_worker_results(
                     // Empty line: skip without resetting the deadline.
                     continue;
                 }
-                match serde_json::from_str::<WorkerResult>(trimmed) {
+                match serde_json::from_str::<WireResult>(trimmed) {
                     Ok(r) => {
                         received += 1;
                         if !version_warned
@@ -75,7 +77,7 @@ pub(crate) fn drain_worker_results(
                         }
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
-                        let _ = tx.send(r);
+                        let _ = tx.send(r.into_worker_outcome());
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, output = %trimmed, "bad worker output");
@@ -134,7 +136,7 @@ pub(crate) fn handle_drain_outcome(
     received: usize,
     watchdog: std::time::Duration,
     module_path: &camino::Utf8Path,
-    tx: &crossbeam_channel::Sender<WorkerResult>,
+    tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
 ) -> bool {
     match outcome {
         DrainOutcome::Complete => true,
@@ -146,13 +148,14 @@ pub(crate) fn handle_drain_outcome(
             );
             let _ = child.kill();
             for item in items.iter().skip(received) {
-                let _ = tx.send(WorkerResult::timed_out(item.node_id.to_string(), watchdog));
+                let (wo, dur) = WorkerOutcome::timed_out(watchdog);
+                let _ = tx.send((item.node_id.to_string(), dur, wo));
             }
             false
         }
         DrainOutcome::Disconnected => {
             for item in items.iter().skip(received) {
-                let _ = tx.send(WorkerResult::crashed(item.node_id.to_string()));
+                let _ = tx.send((item.node_id.to_string(), 0.0, WorkerOutcome::crashed()));
             }
             false
         }
@@ -166,27 +169,26 @@ pub(crate) fn handle_drain_outcome(
 /// recognised (worker bug or protocol mismatch); the caller should skip the
 /// result in that case.
 fn handle_worker_result(
-    result: &WorkerResult,
+    node_id_str: &str,
+    duration_ms: f64,
+    outcome: WorkerOutcome,
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
 ) -> Option<types::TestOutcome> {
-    let item = match item_lookup
-        .get(result.node_id.as_str())
-        .map(std::sync::Arc::clone)
-    {
+    let item = match item_lookup.get(node_id_str).map(std::sync::Arc::clone) {
         Some(item) => item,
         None => {
             tracing::warn!(
-                node_id = %result.node_id,
+                node_id = %node_id_str,
                 "worker sent unknown node_id — skipping result"
             );
             return None;
         }
     };
-    let node_id = types::NodeId::from_raw(&result.node_id);
-    let outcome = result.to_outcome();
-    let duration_ms = types::DurationMs::new(result.duration_ms);
+    let node_id = types::NodeId::from_raw(node_id_str);
+    let outcome = types::TestOutcome::from(outcome);
+    let duration_ms = types::DurationMs::new(duration_ms);
     rep.test_started(&item);
     rep.test_completed(&item, &outcome, duration_ms);
     timings.push(types::TestTiming {
@@ -198,7 +200,7 @@ fn handle_worker_result(
 }
 
 /// Drain any groups still queued in `sched` after all workers have exited and
-/// emit `WorkerResult::crashed` for each item via the reporter.
+/// emit `WorkerOutcome::crashed` for each item via the reporter.
 ///
 /// Called from `run_phase_parallel` after its result channel is exhausted — at
 /// that point every worker thread has already returned (they drop their `tx`
@@ -212,8 +214,14 @@ fn drain_remaining_into_crashed(
 ) {
     while let Some(group) = sched.pop() {
         for item in &group.items {
-            let result = WorkerResult::crashed(item.node_id.to_string());
-            handle_worker_result(&result, item_lookup, rep, timings);
+            handle_worker_result(
+                &item.node_id.to_string(),
+                0.0,
+                WorkerOutcome::crashed(),
+                item_lookup,
+                rep,
+                timings,
+            );
         }
     }
 }
@@ -261,7 +269,7 @@ pub(crate) fn run_phase_parallel(
     let show_internals = cfg.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
 
-    let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
+    let (tx, rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
     let handles: Vec<_> = (0..worker_count)
         .map(|_| {
@@ -285,8 +293,15 @@ pub(crate) fn run_phase_parallel(
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-    for result in rx {
-        let Some(outcome) = handle_worker_result(&result, &item_lookup, rep, &mut timings) else {
+    for (node_id_str, duration_ms, worker_outcome) in rx {
+        let Some(outcome) = handle_worker_result(
+            &node_id_str,
+            duration_ms,
+            worker_outcome,
+            &item_lookup,
+            rep,
+            &mut timings,
+        ) else {
             continue;
         };
         if acc.record(&outcome) {
@@ -447,7 +462,7 @@ mod worker_count_tests {
 
     #[test]
     fn worker_result_populates_failed_diagnostic_fields() {
-        // Construct WorkerResult as if deserialized from worker JSON
+        // Construct WireResult as if deserialized from worker JSON
         let json = r#"{
             "node_id": "test_mod::test_fn",
             "outcome": "failed",
@@ -463,8 +478,9 @@ mod worker_count_tests {
             "op": "==",
             "strict": false
         }"#;
-        let result: WorkerResult = serde_json::from_str(json).unwrap();
-        let outcome = result.to_outcome();
+        let result: WireResult = serde_json::from_str(json).unwrap();
+        let (_, _, worker_outcome) = result.into_worker_outcome();
+        let outcome = crate::types::TestOutcome::from(worker_outcome);
 
         match outcome {
             crate::types::TestOutcome::Failed {
@@ -497,8 +513,9 @@ mod worker_count_tests {
             "lineno": 5,
             "source_line": "import bad"
         }"#;
-        let result: WorkerResult = serde_json::from_str(json).unwrap();
-        match result.to_outcome() {
+        let result: WireResult = serde_json::from_str(json).unwrap();
+        let (_, _, worker_outcome) = result.into_worker_outcome();
+        match crate::types::TestOutcome::from(worker_outcome) {
             crate::types::TestOutcome::Error {
                 file,
                 lineno,
@@ -513,11 +530,12 @@ mod worker_count_tests {
         }
     }
 
-    fn make_worker_result(status: &str) -> WorkerResult {
-        serde_json::from_str(&format!(
+    fn make_wire_result(status: &str) -> (String, f64, WorkerOutcome) {
+        let wire: WireResult = serde_json::from_str(&format!(
             r#"{{"node_id":"t::f","outcome":"{status}","duration_ms":1.0,"failure_repr":"reason"}}"#
         ))
-        .expect("test JSON must be valid")
+        .expect("test JSON must be valid");
+        wire.into_worker_outcome()
     }
 
     #[test]
@@ -525,35 +543,35 @@ mod worker_count_tests {
         use crate::types::TestOutcome;
 
         assert!(matches!(
-            make_worker_result("passed").to_outcome(),
+            TestOutcome::from(make_wire_result("passed").2),
             TestOutcome::Passed { .. }
         ));
         assert!(matches!(
-            make_worker_result("failed").to_outcome(),
+            TestOutcome::from(make_wire_result("failed").2),
             TestOutcome::Failed { .. }
         ));
         assert!(matches!(
-            make_worker_result("error").to_outcome(),
+            TestOutcome::from(make_wire_result("error").2),
             TestOutcome::Error { .. }
         ));
         assert!(matches!(
-            make_worker_result("skipped").to_outcome(),
+            TestOutcome::from(make_wire_result("skipped").2),
             TestOutcome::Skipped { .. }
         ));
         assert!(matches!(
-            make_worker_result("xfailed").to_outcome(),
+            TestOutcome::from(make_wire_result("xfailed").2),
             TestOutcome::XFailed { .. }
         ));
         assert!(matches!(
-            make_worker_result("xpassed").to_outcome(),
+            TestOutcome::from(make_wire_result("xpassed").2),
             TestOutcome::XPassed { .. }
         ));
         assert!(matches!(
-            make_worker_result("warned").to_outcome(),
+            TestOutcome::from(make_wire_result("warned").2),
             TestOutcome::Warned { .. }
         ));
         assert!(matches!(
-            make_worker_result("timeout").to_outcome(),
+            TestOutcome::from(make_wire_result("timeout").2),
             TestOutcome::Timeout { .. }
         ));
     }
@@ -562,64 +580,61 @@ mod worker_count_tests {
     fn worker_result_unknown_status_falls_back_to_error() {
         use crate::types::TestOutcome;
         // Any unrecognised status string must become Error, not panic.
-        let result = make_worker_result("flaky");
+        let (_, _, outcome) = make_wire_result("flaky");
         assert!(
-            matches!(result.to_outcome(), TestOutcome::Error { .. }),
+            matches!(TestOutcome::from(outcome), TestOutcome::Error { .. }),
             "unknown status must map to Error"
         );
     }
 
     #[test]
-    fn worker_result_timed_out_has_error_outcome_and_preserves_node_id() {
-        let r = WorkerResult::timed_out(
-            "tests/test_foo.py::test_slow".to_string(),
-            std::time::Duration::from_secs(30),
-        );
-        assert_eq!(
-            r.outcome,
-            types::OutcomeKind::Error,
-            "timed_out must produce outcome=Error"
-        );
-        assert_eq!(r.node_id, "tests/test_foo.py::test_slow");
-        let msg = r.message.as_deref().unwrap_or("");
-        assert!(
-            msg.contains("30"),
-            "message should mention the watchdog duration"
-        );
+    fn worker_outcome_timed_out_has_error_outcome_and_preserves_duration() {
+        use crate::types::TestOutcome;
+        let (wo, dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(30));
+        assert!(dur > 0.0, "timed_out must produce a positive duration");
+        match TestOutcome::from(wo) {
+            TestOutcome::Error { message, .. } => {
+                assert!(
+                    message.contains("30"),
+                    "message should mention the watchdog duration"
+                );
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
     }
 
     #[test]
-    fn worker_result_crashed_has_error_outcome_and_preserves_node_id() {
-        let r = WorkerResult::crashed("tests/test_foo.py::test_gone".to_string());
-        assert_eq!(
-            r.outcome,
-            types::OutcomeKind::Error,
-            "crashed must produce outcome=Error"
-        );
-        assert_eq!(r.node_id, "tests/test_foo.py::test_gone");
-        assert!(
-            r.message.is_some(),
-            "crashed result must include a message explaining the failure"
-        );
+    fn worker_outcome_crashed_converts_to_error_outcome() {
+        use crate::types::TestOutcome;
+        let wo = WorkerOutcome::crashed();
+        match TestOutcome::from(wo) {
+            TestOutcome::Error { message, .. } => {
+                assert!(
+                    message.contains("unexpectedly"),
+                    "crashed result must include a message explaining the failure"
+                );
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
     }
 
     #[test]
     fn worker_result_timed_out_converts_to_error_outcome() {
         use crate::types::TestOutcome;
-        let r = WorkerResult::timed_out("t::f".to_string(), std::time::Duration::from_secs(60));
+        let (wo, _dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(60));
         assert!(
-            matches!(r.to_outcome(), TestOutcome::Error { .. }),
-            "timed_out WorkerResult must map to TestOutcome::Error"
+            matches!(TestOutcome::from(wo), TestOutcome::Error { .. }),
+            "timed_out WorkerOutcome must map to TestOutcome::Error"
         );
     }
 
     #[test]
     fn worker_result_crashed_converts_to_error_outcome() {
         use crate::types::TestOutcome;
-        let r = WorkerResult::crashed("t::f".to_string());
+        let wo = WorkerOutcome::crashed();
         assert!(
-            matches!(r.to_outcome(), TestOutcome::Error { .. }),
-            "crashed WorkerResult must map to TestOutcome::Error"
+            matches!(TestOutcome::from(wo), TestOutcome::Error { .. }),
+            "crashed WorkerOutcome must map to TestOutcome::Error"
         );
     }
 
@@ -627,12 +642,13 @@ mod worker_count_tests {
     fn worker_result_no_message_lines_filters_negatives_and_zero() {
         use crate::types::TestOutcome;
 
-        let wr: WorkerResult = serde_json::from_str(
+        let wr: WireResult = serde_json::from_str(
             r#"{"node_id":"t::f","outcome":"passed","duration_ms":1.0,"no_message_lines":[-1,0,5,10]}"#,
         )
         .expect("test JSON must be valid");
 
-        match wr.to_outcome() {
+        let (_, _, worker_outcome) = wr.into_worker_outcome();
+        match TestOutcome::from(worker_outcome) {
             TestOutcome::Passed { no_message_lines } => {
                 assert_eq!(
                     no_message_lines,
@@ -664,7 +680,8 @@ mod repro_tests {
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) =
+            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         // Thread that sends empty lines for 300ms — simulates a panicked
         // Python subprocess continuously flushing its stdout buffer.
@@ -717,7 +734,8 @@ mod drain_tests {
     #[test]
     fn empty_lines_do_not_reset_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) =
+            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         // Send 50 empty lines then close the channel.
         for _ in 0..50 {
@@ -747,7 +765,7 @@ mod drain_tests {
     #[test]
     fn valid_result_resets_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         let watchdog = Duration::from_millis(100);
 
@@ -772,7 +790,7 @@ mod drain_tests {
     #[test]
     fn empty_lines_before_valid_result_still_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         // 10 empty lines, then the real result.
         for _ in 0..10 {
@@ -794,7 +812,7 @@ mod drain_tests {
     #[test]
     fn disconnected_mid_group_returns_received_count() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         line_tx.send(valid_json("t::a")).unwrap();
         line_tx.send(valid_json("t::b")).unwrap();
@@ -816,7 +834,7 @@ mod drain_tests {
     #[test]
     fn exact_expected_results_returns_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         for i in 0..3 {
             line_tx.send(valid_json(&format!("t::{i}"))).unwrap();
@@ -836,7 +854,8 @@ mod drain_tests {
     #[test]
     fn silent_channel_triggers_timeout() {
         let (_line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) =
+            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
 
         let watchdog = Duration::from_millis(30);
         let start = std::time::Instant::now();
@@ -1010,8 +1029,7 @@ mod drain_tests {
         assert_eq!(outcome, DrainOutcome::Complete);
         assert_eq!(count, 1);
         // Result must still be forwarded despite version mismatch
-        let r = result_rx.try_recv().expect("result should be forwarded");
-        assert_eq!(r.protocol_version, 99);
+        let _r = result_rx.try_recv().expect("result should be forwarded");
     }
 }
 
@@ -1046,11 +1064,11 @@ mod result_handler_tests {
         }
     }
 
-    fn make_worker_result(node_id: &str) -> WorkerResult {
-        serde_json::from_str(&format!(
-            r#"{{"node_id": "{node_id}", "outcome": "passed", "duration_ms": 1.0}}"#
-        ))
-        .unwrap()
+    fn make_worker_result(node_id: &str) -> (String, f64, WorkerOutcome) {
+        let json = format!(r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":0.0}}"#);
+        serde_json::from_str::<WireResult>(&json)
+            .unwrap()
+            .into_worker_outcome()
     }
 
     fn make_item(node_id: &str) -> Arc<types::TestItem> {
@@ -1071,8 +1089,15 @@ mod result_handler_tests {
         };
         let mut timings: Vec<types::TestTiming> = vec![];
 
-        let result = make_worker_result("unknown::test_fn");
-        let outcome = handle_worker_result(&result, &lookup, &mut rep, &mut timings);
+        let (node_id, duration_ms, worker_outcome) = make_worker_result("unknown::test_fn");
+        let outcome = handle_worker_result(
+            &node_id,
+            duration_ms,
+            worker_outcome,
+            &lookup,
+            &mut rep,
+            &mut timings,
+        );
 
         assert!(outcome.is_none(), "should return None for unknown node_id");
         assert_eq!(rep.started, 0, "reporter.test_started must not be called");
@@ -1097,8 +1122,15 @@ mod result_handler_tests {
         };
         let mut timings: Vec<types::TestTiming> = vec![];
 
-        let result = make_worker_result("my_mod::test_fn");
-        let outcome = handle_worker_result(&result, &lookup, &mut rep, &mut timings);
+        let (node_id, duration_ms, worker_outcome) = make_worker_result("my_mod::test_fn");
+        let outcome = handle_worker_result(
+            &node_id,
+            duration_ms,
+            worker_outcome,
+            &lookup,
+            &mut rep,
+            &mut timings,
+        );
 
         assert!(outcome.is_some(), "should return Some for known node_id");
         assert_eq!(rep.started, 1, "reporter.test_started must be called once");

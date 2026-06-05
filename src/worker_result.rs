@@ -77,10 +77,6 @@ impl From<&FrameEntry> for Frame {
 ///
 /// Use `From<WorkerOutcome> for TestOutcome` to convert into the domain enum.
 #[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "consumed by into_worker_outcome() + tests; wired to parallel.rs in Task 4"
-)]
 pub(crate) enum WorkerOutcome {
     Passed {
         no_message_lines: Vec<usize>,
@@ -178,7 +174,6 @@ impl From<WorkerOutcome> for types::TestOutcome {
 
 impl WorkerOutcome {
     /// Synthesise an error outcome for a test that could not be executed.
-    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn error_sentinel(message: String) -> Self {
         WorkerOutcome::Error {
             message,
@@ -192,7 +187,6 @@ impl WorkerOutcome {
     /// Synthesise an error outcome for a test whose subprocess never responded.
     ///
     /// Returns `(WorkerOutcome, duration_ms)` — the caller supplies the `node_id`.
-    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn timed_out(watchdog: std::time::Duration) -> (Self, f64) {
         let outcome = Self::error_sentinel(format!(
             "Worker subprocess unresponsive after {}s",
@@ -202,15 +196,10 @@ impl WorkerOutcome {
     }
 
     /// Synthesise an error outcome for a test whose subprocess exited unexpectedly.
-    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn crashed() -> Self {
         Self::error_sentinel("Worker subprocess exited unexpectedly".to_string())
     }
 }
-
-/// Temporary alias so `parallel.rs` / `worker_session.rs` keep compiling until
-/// Tasks 4–5 migrate them to `WireResult`. Remove after Task 5.
-pub(crate) type WorkerResult = WireResult;
 
 /// Deserialized JSON result for a single test, written by a worker subprocess.
 ///
@@ -234,7 +223,7 @@ pub(crate) struct WireResult {
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
-    pub lineno: Option<u64>, // u64 because JSON integers are u64; convert to usize in to_outcome()
+    pub lineno: Option<u64>, // u64 because JSON integers are u64; convert to usize in into_worker_outcome()
     #[serde(default)]
     pub source_line: Option<String>,
     #[serde(default)]
@@ -258,7 +247,6 @@ impl WireResult {
     ///
     /// Consumes self — `WireResult` is a transient deserialization target.
     /// Returns `(node_id, duration_ms, outcome)`.
-    #[allow(dead_code, reason = "wired to parallel.rs in Task 4")]
     pub(crate) fn into_worker_outcome(self) -> (String, f64, WorkerOutcome) {
         let no_message_lines: Vec<usize> = self
             .no_message_lines
@@ -326,98 +314,6 @@ impl WireResult {
         };
 
         (self.node_id, self.duration_ms, outcome)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Backward-compat shims — keeps `parallel.rs` / `worker_session.rs` compiling
-// until Tasks 4–5 migrate them. Delete after Task 5.
-// ---------------------------------------------------------------------------
-impl WireResult {
-    /// **Deprecated** — use `into_worker_outcome()` + `From<WorkerOutcome>`.
-    pub fn to_outcome(&self) -> types::TestOutcome {
-        let message: String = match self.outcome {
-            types::OutcomeKind::Skipped
-            | types::OutcomeKind::XFailed
-            | types::OutcomeKind::Timeout => {
-                self.failure_repr.as_deref().unwrap_or_default().to_owned()
-            }
-            _ => self.message.as_deref().unwrap_or_default().to_owned(),
-        };
-
-        if self.outcome == types::OutcomeKind::Unknown {
-            tracing::warn!(
-                outcome = %self.outcome,
-                "Unknown outcome string from worker — treating as error"
-            );
-        }
-
-        let no_message_lines: Vec<usize> = self
-            .no_message_lines
-            .iter()
-            .filter(|&&n| n > 0)
-            .map(|&n| usize::try_from(n).unwrap_or(0))
-            .collect();
-
-        let frames: Vec<Frame> = self.frames.iter().map(Frame::from).collect();
-
-        types::TestOutcome::from_raw(types::RawOutcome {
-            status: self.outcome.as_str(),
-            message: &message,
-            file: self.file.as_deref().unwrap_or_default(),
-            lineno: LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0))),
-            source_line: self.source_line.as_deref().unwrap_or_default(),
-            no_message_lines: &no_message_lines,
-            left: self.left.as_deref().unwrap_or_default(),
-            right: self.right.as_deref().unwrap_or_default(),
-            op: self.op.as_deref().unwrap_or_default(),
-            strict: self.strict,
-            frames: &frames,
-            field_diffs: &self.field_diffs,
-        })
-    }
-
-    /// **Deprecated** — use `WorkerOutcome::error_sentinel`.
-    pub(crate) fn error_sentinel(node_id: String, message: String, duration_ms: f64) -> Self {
-        WireResult {
-            node_id,
-            outcome: types::OutcomeKind::Error,
-            duration_ms,
-            protocol_version: PROTOCOL_VERSION,
-            failure_repr: Some(message.clone()),
-            message: Some(message),
-            file: None,
-            lineno: None,
-            source_line: None,
-            no_message_lines: vec![],
-            left: None,
-            right: None,
-            op: None,
-            strict: false,
-            frames: vec![],
-            field_diffs: vec![],
-        }
-    }
-
-    /// **Deprecated** — use `WorkerOutcome::timed_out`.
-    pub(crate) fn timed_out(node_id: String, watchdog: std::time::Duration) -> Self {
-        Self::error_sentinel(
-            node_id,
-            format!(
-                "Worker subprocess unresponsive after {}s",
-                watchdog.as_secs()
-            ),
-            watchdog.as_millis() as f64,
-        )
-    }
-
-    /// **Deprecated** — use `WorkerOutcome::crashed`.
-    pub(crate) fn crashed(node_id: String) -> Self {
-        Self::error_sentinel(
-            node_id,
-            "Worker subprocess exited unexpectedly".to_string(),
-            0.0,
-        )
     }
 }
 
