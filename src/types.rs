@@ -773,6 +773,9 @@ impl FailureAccumulator {
 /// (`bridge.rs`) or parallel (`parallel.rs`) execution path.
 /// Each caller is responsible for mapping its own field types (Option<String>,
 /// i64, etc.) into this normalised form before calling `from_raw`.
+///
+/// FIXME(#717): Remove in Task 6 — `bridge.rs` no longer uses this; `from_raw` is dead.
+#[allow(dead_code)]
 pub struct RawOutcome<'a> {
     pub status: &'a str,
     pub message: &'a str,
@@ -793,6 +796,9 @@ impl TestOutcome {
     ///
     /// The `_` arm maps any unrecognised status to `Error`. Callers that want
     /// to log a warning for unknown statuses should do so before calling this.
+    ///
+    /// FIXME(#717): Remove in Task 6 — all callers now use `WorkerOutcome` + `From`.
+    #[allow(dead_code)]
     pub fn from_raw(r: RawOutcome<'_>) -> Self {
         match r.status {
             "passed" => TestOutcome::Passed {
