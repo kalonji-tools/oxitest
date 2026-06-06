@@ -181,10 +181,12 @@ class FixtureInstantiator:
         registry: FixtureRegistry,
         plugin_registry: PluginRegistry,
         async_mgr: Any = None,  # SharedAsyncManager, optional to avoid import
+        session_scope: _Scope | None = None,
     ) -> None:
         self._registry = registry
         self._plugin_registry = plugin_registry
         self._async_mgr = async_mgr
+        self._session_scope = session_scope
         self._setup_times: dict[str, list[float]] = defaultdict(list)
         self._teardown_times: dict[str, list[float]] = defaultdict(list)
 
@@ -425,14 +427,15 @@ class FixtureInstantiator:
         _keep_tmp = run_ctx.keep_tmp if run_ctx else None
         _result_cell = run_ctx.result_cell if run_ctx else None
 
-        if impl_cls.scope == "session" and session_scope is not None:
-            return session_scope.get_or_create(
+        effective_session_scope = session_scope or self._session_scope
+        if impl_cls.scope == "session" and effective_session_scope is not None:
+            return effective_session_scope.get_or_create(
                 f"__builtin_{impl_cls.__name__}",
                 lambda: impl_cls().create(
                     _BuiltinContext(
                         meta=meta,
                         inject_scope="session",
-                        teardown_stack=session_scope.teardowns,
+                        teardown_stack=effective_session_scope.teardowns,
                         plugin_registry=self._plugin_registry,
                         keep_tmp=_keep_tmp,
                         result_cell=_result_cell,
