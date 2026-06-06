@@ -27,9 +27,9 @@ pub(crate) fn run_fzf(
 ) -> Result<(), String> {
     // 1. Collect and filter entries (reuse existing logic)
     let expr = if let Some(ref expr_str) = args.expression {
-        let tokens = super::dsl::lex(expr_str).map_err(|e| e.to_string())?;
-        let parsed = super::dsl::parse(tokens).map_err(|e| e.to_string())?;
-        super::dsl::validate_predicates(&parsed, &args.resource).map_err(|e| e.to_string())?;
+        let tokens = super::compile::lex(expr_str).map_err(|e| e.to_string())?;
+        let parsed = super::compile::parse(tokens).map_err(|e| e.to_string())?;
+        super::eval::validate_predicates(&parsed, &args.resource).map_err(|e| e.to_string())?;
         Some(parsed)
     } else {
         None
@@ -41,7 +41,7 @@ pub(crate) fn run_fzf(
     let filtered: Vec<super::resource::QueryEntry> = if let Some(ref expr) = expr {
         entries
             .into_iter()
-            .filter(|e| super::dsl::eval(expr, e))
+            .filter(|e| super::eval::eval(expr, e))
             .collect()
     } else {
         entries
