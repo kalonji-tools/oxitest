@@ -15,6 +15,7 @@ use crate::config;
 /// then pipes the tab-delimited output to fzf with resource-appropriate
 /// preview and keybindings. Returns `Ok(())` when fzf exits (including
 /// user-cancelled), and `Err(msg)` on configuration or spawn errors.
+#[allow(unused_variables)] // use_color will be used in Task 3 (syntax highlighting)
 pub(crate) fn run_fzf(
     py: pyo3::Python<'_>,
     args: &config::QueryArgs,
@@ -22,7 +23,7 @@ pub(crate) fn run_fzf(
     conftest_files: &[camino::Utf8PathBuf],
     session: Option<&bridge::FixtureSession>,
     cfg: &config::Config,
-    _use_color: bool,
+    use_color: bool,
 ) -> Result<(), String> {
     // 1. Collect and filter entries (reuse existing logic)
     let expr = if let Some(ref expr_str) = args.expression {
@@ -56,7 +57,10 @@ pub(crate) fn run_fzf(
 
     // 3. Build fzf command with preview and keybindings
     let resource_str = args.resource.as_str();
-    let preview_cmd = format!("oxitest query {} --inspect {{1}}", resource_str);
+    let preview_cmd = format!(
+        "oxitest query {} --inspect {{1}} --color always",
+        resource_str
+    );
 
     let mut fzf = Command::new("fzf")
         .stdin(Stdio::piped())
