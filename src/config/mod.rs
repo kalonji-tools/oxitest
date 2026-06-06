@@ -638,6 +638,13 @@ impl Config {
                 let Some((file_part, rest)) = id_str.split_once("::") else {
                     return id.clone();
                 };
+
+                // Glob node IDs: prepend rootdir but skip fs::canonicalize.
+                if crate::filter::contains_glob_chars(file_part) {
+                    let abs_pattern = self.rootdir.join(file_part);
+                    return NodeId::from_raw(&format!("{abs_pattern}::{rest}"));
+                }
+
                 let file_path = Utf8PathBuf::from(file_part);
                 let abs_path = if file_path.is_absolute() {
                     file_path
@@ -654,9 +661,11 @@ impl Config {
             })
             .collect();
 
+        // Only populate source files from non-glob node IDs.
         self.node_id_source_files = self
             .node_ids
             .iter()
+            .filter(|id| !crate::filter::contains_glob_chars(id.as_ref()))
             .filter_map(|id| id.module_path())
             .map(Utf8PathBuf::from)
             .collect();
