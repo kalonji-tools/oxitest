@@ -23,7 +23,7 @@ from typing import Annotated
 # ── TestContext registration ──────────────────────────────────────────────────
 # _TestContextFixture registers TestContext with BuiltinFixture._registry so
 # the resolver in FixtureSession._inject_builtin() handles it alongside all
-# other built-ins — no special-case needed in fixtures.py.
+# other built-ins — no special-case needed in _fixture_session.py.
 from oxitest._bridge._builtin_context import _BuiltinContext, _TestContext
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (

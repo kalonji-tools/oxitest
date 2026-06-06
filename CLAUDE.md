@@ -63,7 +63,8 @@ just help
 
 **Python bridge** (`python/oxitest/_bridge/`): Pure-Python layer that does the actual test execution. Key modules:
 - `executor.py` — `run_test()`: loads module, resolves fixtures/parametrize, runs test, returns `TestResult`
-- `fixtures.py` — `Fixtures`, `FixtureDef`, `FixtureRegistry`, `FixtureSession`, `FixtureAccessor`; full fixture lifecycle (scope caching, yield teardown, autouse)
+- `_fixture_registry.py` — `FixtureDef`, `FixtureRegistry`, `_fixture_inner_type`; fixture definition and registry
+- `_fixture_session.py` — `FixtureSession`, `Fixtures`, `FixtureAccessor`; fixture lifecycle (scope caching, yield teardown, autouse)
 - `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
 - `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances, builds a `FixtureSession`
 - `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
