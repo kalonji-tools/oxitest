@@ -45,6 +45,7 @@ from oxitest._bridge._errors import (
     FixtureSetupError,
     UnannotatedFixtureParamError,
 )
+from oxitest._bridge._fixture_instantiator import ScopeRefs
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
@@ -509,6 +510,13 @@ class FixtureSession:
         )
         self._setup_times: dict[str, list[float]] = defaultdict(list)
         self._teardown_times: dict[str, list[float]] = defaultdict(list)
+
+    def _scope_for(self, defn: FixtureDef) -> ScopeRefs | None:
+        """Map a fixture def to its scope refs. None = function scope."""
+        if defn.shared:
+            s = self._shared_scope
+            return ScopeRefs(s.cache, s.teardowns, s._hits, s._misses)
+        return None
 
     # ── Async delegation properties (used by executor.py via getattr) ────────
 
