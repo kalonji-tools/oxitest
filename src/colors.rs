@@ -1,3 +1,5 @@
+//! Terminal color helper functions, shared across reporter and query subsystems.
+
 macro_rules! color_fn {
     ($name:ident, |$s:ident| $styled:expr) => {
         pub(crate) fn $name(s: &str, use_color: bool) -> String {
@@ -9,6 +11,7 @@ macro_rules! color_fn {
             }
         }
     };
+    // Second arm: for functions added before their call sites exist.
     (#[expect(dead_code)] $name:ident, |$s:ident| $styled:expr) => {
         #[expect(dead_code)]
         pub(crate) fn $name(s: &str, use_color: bool) -> String {

@@ -7,7 +7,7 @@ use crate::types::{TestItem, TestOutcome};
 
 use super::diff::fmt_field_diffs;
 use super::fmt_diff;
-use crate::reporter::colors::{color_blue, color_bold_white, color_dim, color_dim_cyan};
+use crate::colors::{color_blue, color_bold_white, color_dim, color_dim_cyan};
 
 struct BoxChars {
     open: &'static str,
