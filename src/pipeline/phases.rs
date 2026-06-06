@@ -128,7 +128,7 @@ impl PipelinePhase for QueryPhase {
             }
             let session = ctx.session.as_ref().expect("SessionPhase must run first");
             let verbosity = ctx.cfg.verbosity as i32;
-            match session.tree_fixtures(py, verbosity, None, ctx.use_color) {
+            match query::bridge::tree_fixtures(session, py, verbosity, None, ctx.use_color) {
                 Ok(output) => {
                     if output.starts_with("error:") {
                         eprintln!("{output}");
@@ -750,7 +750,7 @@ impl PipelinePhase for FinalizePhase {
 
         // Fetch fixture timings from the Python session before finalizing.
         if let Some(session) = ctx.session.as_ref() {
-            if let Ok(ft) = session.get_fixture_timings(py) {
+            if let Ok(ft) = reporter::bridge::get_fixture_timings(session, py) {
                 if !ft.is_empty() {
                     reporter.set_fixture_timings(ft);
                 }
@@ -765,7 +765,7 @@ impl PipelinePhase for FinalizePhase {
         );
         // Fetch fixture cache stats from Python session.
         if let Some(session) = ctx.session.as_ref() {
-            if let Ok(stats) = session.get_cache_stats(py) {
+            if let Ok(stats) = reporter::bridge::get_cache_stats(session, py) {
                 if stats.hits + stats.misses > 0 {
                     reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
                 }

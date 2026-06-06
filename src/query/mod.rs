@@ -1,3 +1,4 @@
+pub(crate) mod bridge;
 pub(crate) mod dsl;
 pub(crate) mod extract;
 pub(crate) mod format;
@@ -6,7 +7,6 @@ pub(crate) mod highlight;
 pub(crate) mod inspect;
 pub(crate) mod resource;
 
-use crate::bridge;
 use crate::config;
 use resource::{QueryEntry, ResourceKind};
 
@@ -65,7 +65,7 @@ pub(crate) fn collect_entries(
     resource: ResourceKind,
     test_files: &[camino::Utf8PathBuf],
     conftest_files: &[camino::Utf8PathBuf],
-    session: Option<&bridge::FixtureSession>,
+    session: Option<&crate::bridge::FixtureSession>,
     cfg: &config::Config,
 ) -> Result<Vec<QueryEntry>, String> {
     match resource {
@@ -88,9 +88,9 @@ pub(crate) fn collect_entries(
 
 fn extract_fixture_entries(
     py: pyo3::Python<'_>,
-    session: &bridge::FixtureSession,
+    session: &crate::bridge::FixtureSession,
 ) -> Result<Vec<QueryEntry>, String> {
-    let raw = session.fixture_entries(py).map_err(|e| e.to_string())?;
+    let raw = self::bridge::fixture_entries(session, py).map_err(|e| e.to_string())?;
     Ok(raw
         .into_iter()
         .map(|fields| QueryEntry { fields })
@@ -99,9 +99,9 @@ fn extract_fixture_entries(
 
 fn extract_plugin_entries(
     py: pyo3::Python<'_>,
-    session: &bridge::FixtureSession,
+    session: &crate::bridge::FixtureSession,
 ) -> Result<Vec<QueryEntry>, String> {
-    let raw = session.plugin_entries(py).map_err(|e| e.to_string())?;
+    let raw = self::bridge::plugin_entries(session, py).map_err(|e| e.to_string())?;
     Ok(raw
         .into_iter()
         .map(|fields| QueryEntry { fields })
@@ -118,7 +118,7 @@ pub(crate) fn run_query(
     args: &config::QueryArgs,
     test_files: &[camino::Utf8PathBuf],
     conftest_files: &[camino::Utf8PathBuf],
-    session: Option<&bridge::FixtureSession>,
+    session: Option<&crate::bridge::FixtureSession>,
     cfg: &config::Config,
     is_tty: bool,
     use_color: bool,
