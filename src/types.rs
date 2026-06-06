@@ -29,6 +29,14 @@ impl NodeId {
     pub fn from_raw(s: &str) -> Self {
         NodeId(Arc::from(s))
     }
+
+    /// Extract the module path (file path before the first `::`) from a node ID.
+    ///
+    /// Returns `None` if the node ID contains no `::` separator.
+    #[allow(dead_code)]
+    pub fn module_path(&self) -> Option<&str> {
+        self.0.split_once("::").map(|(path, _)| path)
+    }
 }
 
 impl std::fmt::Display for NodeId {
@@ -998,6 +1006,30 @@ mod tests {
     fn test_node_id_from_raw_preserves_string() {
         let id = NodeId::from_raw("tests/test_foo.py::test_bar[p0]");
         assert_eq!(id.to_string(), "tests/test_foo.py::test_bar[p0]");
+    }
+
+    #[test]
+    fn test_node_id_module_path_standalone() {
+        let id = NodeId::new("tests/test_foo.py", "test_add", None);
+        assert_eq!(id.module_path(), Some("tests/test_foo.py"));
+    }
+
+    #[test]
+    fn test_node_id_module_path_class_method() {
+        let id = NodeId::new("tests/test_foo.py", "TestSuite::test_add", None);
+        assert_eq!(id.module_path(), Some("tests/test_foo.py"));
+    }
+
+    #[test]
+    fn test_node_id_module_path_parametrized() {
+        let id = NodeId::new("tests/test_foo.py", "test_add", Some("case1"));
+        assert_eq!(id.module_path(), Some("tests/test_foo.py"));
+    }
+
+    #[test]
+    fn test_node_id_module_path_no_separator() {
+        let id = NodeId::from_raw("bare_name");
+        assert_eq!(id.module_path(), None);
     }
 
     #[test]

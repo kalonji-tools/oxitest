@@ -124,8 +124,12 @@ impl VerbosityArgs {
 /// Arguments for `oxitest run` (the default subcommand).
 #[derive(clap::Args, Debug, Clone)]
 pub struct RunArgs {
-    /// Paths to test files or directories (default: current directory)
+    /// Paths to test files/directories, or node IDs (path::test_name)
     pub paths: Vec<Utf8PathBuf>,
+
+    /// Node IDs extracted from positional args (populated by resolve, not by clap)
+    #[arg(skip)]
+    pub node_ids: Vec<crate::types::NodeId>,
 
     #[command(flatten)]
     pub filter: FilteringArgs,
@@ -288,8 +292,12 @@ impl RunArgs {
 /// Arguments for `oxitest debug`.
 #[derive(clap::Args, Debug, Clone)]
 pub struct DebugArgs {
-    /// Paths to test files or directories (default: current directory)
+    /// Paths to test files/directories, or node IDs (path::test_name)
     pub paths: Vec<Utf8PathBuf>,
+
+    /// Node IDs extracted from positional args (populated by resolve, not by clap)
+    #[arg(skip)]
+    pub node_ids: Vec<crate::types::NodeId>,
 
     /// Start the debugger before every test (not just on failure)
     #[arg(long)]
@@ -434,6 +442,37 @@ pub enum Command {
     Env,
 }
 
+// ── partition_positionals ─────────────────────────────────────────────────────
+
+/// Split raw positional args into plain paths and node IDs.
+///
+/// An arg containing `::` is a node ID. The file path is extracted by splitting
+/// on the first `::`. Each node ID's parent file path is added to the returned
+/// paths vector (deduped).
+///
+/// An arg without `::` is a plain path.
+pub(crate) fn partition_positionals(
+    raw: Vec<Utf8PathBuf>,
+) -> (Vec<Utf8PathBuf>, Vec<crate::types::NodeId>) {
+    let mut paths: Vec<Utf8PathBuf> = Vec::new();
+    let mut node_ids = Vec::new();
+
+    for arg in raw {
+        let arg_str = arg.as_str();
+        if let Some((file_part, _)) = arg_str.split_once("::") {
+            node_ids.push(crate::types::NodeId::from_raw(arg_str));
+            let file_path = Utf8PathBuf::from(file_part);
+            if !paths.contains(&file_path) {
+                paths.push(file_path);
+            }
+        } else if !paths.contains(&arg) {
+            paths.push(arg);
+        }
+    }
+
+    (paths, node_ids)
+}
+
 // ── Top-level parser ─────────────────────────────────────────────────────────
 
 /// oxitest — a fast Python test runner.
@@ -446,6 +485,23 @@ pub struct OxitestCli {
 
     #[command(subcommand)]
     pub command: Option<Command>,
+}
+
+/// Partition positional args into paths and node IDs for Run and Debug commands.
+fn partition_command(cmd: &mut Command) {
+    match cmd {
+        Command::Run(ref mut args) => {
+            let (paths, node_ids) = partition_positionals(std::mem::take(&mut args.paths));
+            args.paths = paths;
+            args.node_ids = node_ids;
+        }
+        Command::Debug(ref mut args) => {
+            let (paths, node_ids) = partition_positionals(std::mem::take(&mut args.paths));
+            args.paths = paths;
+            args.node_ids = node_ids;
+        }
+        _ => {}
+    }
 }
 
 impl OxitestCli {
@@ -461,14 +517,17 @@ impl OxitestCli {
         match OxitestCli::try_parse_from(args) {
             Ok(cli) => {
                 let use_gitignore = !cli.no_use_gitignore;
-                if let Some(cmd) = cli.command {
+                if let Some(mut cmd) = cli.command {
+                    partition_command(&mut cmd);
                     return Ok((cmd, use_gitignore));
                 }
                 // No subcommand given (bare `oxitest`) — treat as `run` with no args.
                 let run_args = vec![args[0].clone(), "run".to_string()];
                 // (no extra args to forward)
                 let cli = OxitestCli::try_parse_from(&run_args)?;
-                Ok((cli.command.unwrap(), use_gitignore))
+                let mut cmd = cli.command.unwrap();
+                partition_command(&mut cmd);
+                Ok((cmd, use_gitignore))
             }
             Err(e) => {
                 // If the initial parse failed, try inserting "run" to handle implicit default
@@ -496,7 +555,11 @@ impl OxitestCli {
                         }
                     }
                     match OxitestCli::try_parse_from(&run_args) {
-                        Ok(cli) => Ok((cli.command.unwrap(), !cli.no_use_gitignore)),
+                        Ok(cli) => {
+                            let mut cmd = cli.command.unwrap();
+                            partition_command(&mut cmd);
+                            Ok((cmd, !cli.no_use_gitignore))
+                        }
                         Err(_) => Err(e), // Return the original error for better UX
                     }
                 } else {
@@ -902,5 +965,111 @@ mod tests {
             OxitestCli::resolve(&s(["oxitest", "tests/", "--no-use-gitignore"])).unwrap();
         assert!(matches!(cmd, Command::Run(_)));
         assert!(!use_gi);
+    }
+
+    // ── partition_positionals ───────────────────────────────────────────────
+
+    #[test]
+    fn partition_plain_paths_only() {
+        let (paths, ids) = super::partition_positionals(vec![
+            Utf8PathBuf::from("tests/test_a.py"),
+            Utf8PathBuf::from("tests/test_b.py"),
+        ]);
+        assert_eq!(paths.len(), 2);
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn partition_node_ids_only() {
+        let (paths, ids) = super::partition_positionals(vec![
+            Utf8PathBuf::from("tests/test_a.py::test_foo"),
+            Utf8PathBuf::from("tests/test_b.py::test_bar"),
+        ]);
+        assert_eq!(paths.len(), 2);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids[0].as_ref(), "tests/test_a.py::test_foo");
+        assert!(paths.contains(&Utf8PathBuf::from("tests/test_a.py")));
+        assert!(paths.contains(&Utf8PathBuf::from("tests/test_b.py")));
+    }
+
+    #[test]
+    fn partition_mixed_paths_and_node_ids() {
+        let (paths, ids) = super::partition_positionals(vec![
+            Utf8PathBuf::from("tests/test_a.py::test_foo"),
+            Utf8PathBuf::from("tests/test_b.py"),
+        ]);
+        assert_eq!(paths.len(), 2);
+        assert_eq!(ids.len(), 1);
+        assert!(paths.contains(&Utf8PathBuf::from("tests/test_a.py")));
+        assert!(paths.contains(&Utf8PathBuf::from("tests/test_b.py")));
+    }
+
+    #[test]
+    fn partition_deduplicates_extracted_paths() {
+        let (paths, ids) = super::partition_positionals(vec![
+            Utf8PathBuf::from("tests/test_a.py::test_foo"),
+            Utf8PathBuf::from("tests/test_a.py::test_bar"),
+        ]);
+        assert_eq!(
+            paths,
+            vec![Utf8PathBuf::from("tests/test_a.py")],
+            "parent path should appear once"
+        );
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn partition_class_node_id_splits_on_first_separator() {
+        let (paths, ids) = super::partition_positionals(vec![Utf8PathBuf::from(
+            "tests/test_cls.py::TestSuite::test_foo",
+        )]);
+        assert_eq!(
+            paths,
+            vec![Utf8PathBuf::from("tests/test_cls.py")],
+            "must split on first :: to get file path"
+        );
+        assert_eq!(ids[0].as_ref(), "tests/test_cls.py::TestSuite::test_foo");
+    }
+
+    #[test]
+    fn partition_empty_input() {
+        let (paths, ids) = super::partition_positionals(vec![]);
+        assert!(paths.is_empty());
+        assert!(ids.is_empty());
+    }
+
+    // ── node_id integration tests ───────────────────────────────────────────
+
+    #[test]
+    fn run_with_node_id_positional() {
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "run", "tests/test_a.py::test_foo"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert_eq!(args.node_ids.len(), 1);
+        assert_eq!(args.node_ids[0].as_ref(), "tests/test_a.py::test_foo");
+        assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/test_a.py")]);
+    }
+
+    #[test]
+    fn implicit_run_with_node_id() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "tests/test_a.py::test_foo"])).unwrap();
+        let Command::Run(args) = cmd else {
+            panic!("expected Command::Run");
+        };
+        assert_eq!(args.node_ids.len(), 1);
+        assert_eq!(args.node_ids[0].as_ref(), "tests/test_a.py::test_foo");
+    }
+
+    #[test]
+    fn debug_with_node_id_positional() {
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "debug", "tests/test_a.py::test_foo"])).unwrap();
+        let Command::Debug(args) = cmd else {
+            panic!("expected Command::Debug");
+        };
+        assert_eq!(args.node_ids.len(), 1);
+        assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/test_a.py")]);
     }
 }
