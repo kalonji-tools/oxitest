@@ -2,6 +2,7 @@ pub(crate) mod dsl;
 pub(crate) mod extract;
 pub(crate) mod format;
 pub(crate) mod fzf;
+pub(crate) mod highlight;
 pub(crate) mod inspect;
 pub(crate) mod resource;
 

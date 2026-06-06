@@ -1,0 +1,10 @@
+---
+source: src/query/highlight.rs
+assertion_line: 194
+expression: result
+---
+[36m[2m@[0m[36m[2mmark[0m.parametrize([32m"x"[0m, [[34m1[0m, [34m2[0m, [34m3[0m])
+[36m[1mdef[0m test_add(x):
+    # basic addition
+    result = x + [34m1[0m
+    [36m[1massert[0m result > [34m0[0m
