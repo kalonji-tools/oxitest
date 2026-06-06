@@ -947,7 +947,7 @@ mod drain_tests {
                 &mut self,
                 _: &[CollectError],
                 _: bool,
-                _: &crate::reporter::RunStats,
+                _: &crate::reporter::ReporterSession,
             ) -> crate::reporter::ExitVote {
                 crate::reporter::ExitVote::Abstain
             }
@@ -996,7 +996,7 @@ mod drain_tests {
                 &mut self,
                 _: &[CollectError],
                 _: bool,
-                _: &crate::reporter::RunStats,
+                _: &crate::reporter::ReporterSession,
             ) -> crate::reporter::ExitVote {
                 crate::reporter::ExitVote::Abstain
             }
@@ -1058,7 +1058,7 @@ mod result_handler_tests {
             &mut self,
             _: &[types::CollectError],
             _: bool,
-            _: &reporter::RunStats,
+            _: &reporter::ReporterSession,
         ) -> reporter::ExitVote {
             reporter::ExitVote::Abstain
         }

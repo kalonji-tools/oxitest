@@ -480,7 +480,7 @@ impl PipelinePhase for FilterPhase {
                     .finish(
                         &[types::CollectError::PyError(msg)],
                         false,
-                        &reporter::RunStats::new(),
+                        &reporter::ReporterSession::new(0),
                     )
                     .code();
                 Ok(PhaseOutcome::EarlyExit(code))
@@ -772,7 +772,7 @@ impl PipelinePhase for FinalizePhase {
             }
         }
         let code = reporter
-            .finish(&[], interrupted, &reporter::RunStats::new())
+            .finish(&[], interrupted, &reporter::ReporterSession::new(0))
             .code();
         Ok(PhaseOutcome::EarlyExit(code))
     }

@@ -2,27 +2,26 @@
 
 use crate::types::{CollectError, DurationMs, ExitCode};
 
-use super::stats::{self, RunStats};
+use super::session::ReporterSession;
+use super::stats;
 use super::traits::{ExitVote, Reporter};
 
 /// Fans all reporter events to a list of inner reporters.
 ///
-/// Owns the single [`RunStats`] for the run: records stats once in
-/// `test_completed` and passes them to sub-reporters via `finish`.
+/// Owns the [`ReporterSession`] for the run: records stats once in
+/// `test_completed` and passes the session to sub-reporters via `finish`.
 /// `finish` collects [`ExitVote`]s from every inner reporter and returns the
 /// maximum code voted (treating `Abstain` as 0).
 pub struct CompositeReporter {
     reporters: Vec<Box<dyn Reporter>>,
-    stats: RunStats,
-    strict_suite_count: usize,
+    session: ReporterSession,
 }
 
 impl CompositeReporter {
     pub fn new(reporters: Vec<Box<dyn Reporter>>, strict_suite_count: usize) -> Self {
         Self {
             reporters,
-            stats: RunStats::new(),
-            strict_suite_count,
+            session: ReporterSession::new(strict_suite_count),
         }
     }
 }
@@ -40,8 +39,7 @@ impl Reporter for CompositeReporter {
         outcome: &crate::types::TestOutcome,
         duration_ms: DurationMs,
     ) {
-        self.stats.record(item, outcome);
-        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
+        self.session.record_outcome(item, outcome, duration_ms);
         for r in &mut self.reporters {
             r.test_completed(item, outcome, duration_ms);
         }
@@ -51,12 +49,12 @@ impl Reporter for CompositeReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        _stats: &RunStats,
+        _session: &ReporterSession,
     ) -> ExitVote {
-        self.stats.record_strict_suite(self.strict_suite_count);
+        self.session.record_strict_suite();
         self.reporters
             .iter_mut()
-            .map(|r| r.finish(collect_errors, interrupted, &self.stats))
+            .map(|r| r.finish(collect_errors, interrupted, &self.session))
             .filter_map(|v| match v {
                 ExitVote::Code(c) => Some(c),
                 ExitVote::Abstain => None,
@@ -66,9 +64,7 @@ impl Reporter for CompositeReporter {
     }
 
     fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .warning_msgs
-            .push((context.to_string(), error.to_string()));
+        self.session.record_teardown_warning(context, error);
         for r in &mut self.reporters {
             r.record_teardown_warning(context, error);
         }
@@ -80,12 +76,11 @@ impl Reporter for CompositeReporter {
         misses: usize,
         breakdown: Vec<stats::FixtureCacheEntry>,
     ) {
-        self.stats.fixture_cache_hits = hits;
-        self.stats.fixture_cache_misses = misses;
-        self.stats.fixture_cache_breakdown = breakdown;
+        self.session
+            .set_fixture_cache_stats(hits, misses, breakdown);
     }
 
     fn set_fixture_timings(&mut self, timings: Vec<stats::FixtureTimingEntry>) {
-        self.stats.fixture_timings = timings;
+        self.session.set_fixture_timings(timings);
     }
 }
