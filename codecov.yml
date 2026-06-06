@@ -27,6 +27,8 @@ ignore:
   # Rust: PyO3 entry points — only testable through Python integration tests
   - "src/assert_rewriter.rs"
   - "src/bridge.rs"
+  - "src/query/bridge.rs"
+  - "src/reporter/bridge.rs"
   - "src/lib.rs"
   - "src/pipeline/traits.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
