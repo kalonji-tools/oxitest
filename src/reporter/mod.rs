@@ -6,6 +6,7 @@
 //! [`JsonReporter`](json::JsonReporter) (CTRF format), and
 //! [`PyPluginReporter`](plugin::PyPluginReporter) (user-supplied Python plugins).
 
+pub(crate) mod bridge;
 mod ci;
 pub(crate) use crate::colors;
 mod composite;
@@ -31,7 +32,7 @@ pub use ci::CiReporter;
 pub(crate) use composite::CompositeReporter;
 pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub(crate) use print::{print_collected, print_strict_abort, print_strict_suite_section};
-pub(crate) use stats::{FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry, RunStats};
+pub(crate) use stats::RunStats;
 pub(crate) use traits::{standard_finish, StandardReporter};
 pub use traits::{ExitVote, Reporter};
 pub use tty::TtyReporter;
