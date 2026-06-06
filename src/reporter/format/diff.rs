@@ -1,6 +1,6 @@
 use similar::{ChangeTag, TextDiff};
 
-use crate::reporter::colors::{color_dim, color_fail, color_pass};
+use crate::colors::{color_dim, color_fail, color_pass};
 
 /// Returns a character-level diff marker string (carets at the first differing position).
 /// Only produced for `==` comparisons on single-line values.
