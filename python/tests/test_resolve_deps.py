@@ -4,7 +4,7 @@ import asyncio
 
 from oxitest import raises
 from oxitest._bridge._errors import FixtureSetupError
-from oxitest._bridge._fixture_session import (
+from oxitest._bridge._fixture_instantiator import (
     _reject_async_in_sync,
     _reject_nonshared_async,
 )

@@ -45,7 +45,15 @@ from oxitest._bridge._errors import (
     FixtureSetupError,
     UnannotatedFixtureParamError,
 )
-from oxitest._bridge._fixture_instantiator import ScopeRefs
+from oxitest._bridge._fixture_instantiator import (
+    AsyncPolicy,
+    ScopeRefs,
+    _FixtureOutcome,
+    _reject_async_in_sync,
+    _reject_nonshared_async,
+    _resolve_deps,
+    _unpack_sync,
+)
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
@@ -107,101 +115,6 @@ def _fixture_scope(
         yield
     finally:
         _fixture_context.reset(token)
-
-
-def _check_async_dep(dep_name: str, dep_val: Any, fixture_name: str, msg: str) -> None:
-    """Reject an async dependency value with a descriptive error message."""
-    if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
-        if inspect.iscoroutine(dep_val):
-            dep_val.close()
-        raise FixtureSetupError(fixture_name, RuntimeError(msg))
-
-
-def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Sync fixtures cannot depend on async fixtures."""
-    _check_async_dep(
-        dep_name,
-        dep_val,
-        fixture_name,
-        f"sync fixture '{fixture_name}' cannot depend on async fixture '{dep_name}'",
-    )
-
-
-def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Shared fixtures cannot depend on non-shared async fixtures."""
-    _check_async_dep(
-        dep_name,
-        dep_val,
-        fixture_name,
-        f"shared fixture '{fixture_name}' cannot depend on "
-        f"non-shared async fixture '{dep_name}' \u2014 "
-        f"lifetime mismatch",
-    )
-
-
-AsyncPolicy = Callable[[str, Any, str], None]
-
-
-def _resolve_deps(
-    session: FixtureSession,
-    fn: Callable[..., Any],
-    module_path: str,
-    fn_teardowns: list[Callable[[], None]],
-    fn_name: str,
-    resolve_user: Callable[[str], Any],
-    async_policy: AsyncPolicy | None = None,
-) -> dict[str, Any]:
-    """Resolve fixture dependencies from type hints.
-
-    async_policy: if provided, called as policy(dep_name, dep_val, fn_name)
-    for each resolved dependency. Raises on invalid async dependency patterns.
-    """
-    # Build a minimal TestMeta for fixture-to-fixture resolution (builtins
-    # only need module_path and fn_name; node_id/markers are test-level).
-    dep_meta = TestMeta(module_path=module_path, fn_name=fn_name, node_id="")
-    hints = _get_hints(fn)
-    deps: dict[str, Any] = {}
-    for param_name, hint in hints.items():
-        if param_name == "return":
-            continue
-        resolved, value = session._resolve_param(
-            param_name,
-            hint,
-            dep_meta,
-            fn_teardowns=fn_teardowns,
-            resolve_user_fixture=resolve_user,
-        )
-        if resolved:
-            deps[param_name] = value
-    if async_policy is not None:
-        for dep_name, dep_val in deps.items():
-            async_policy(dep_name, dep_val, fn_name)
-    return deps
-
-
-@dataclass
-class _FixtureOutcome:
-    """Result of unpacking a fixture function call."""
-
-    value: Any
-    teardown: Callable[[], None] | None = None
-
-
-def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
-    """Unpack a sync fixture call: plain value or generator."""
-    if inspect.isgenerator(result):
-        value = next(result)
-
-        def teardown(gen: Any = result, n: str = name) -> None:
-            try:
-                next(gen)
-            except StopIteration:
-                pass
-            except Exception as exc:
-                _warn_teardown(n, exc)
-
-        return _FixtureOutcome(value, teardown)
-    return _FixtureOutcome(result)
 
 
 class _SessionProtocol(Protocol):
