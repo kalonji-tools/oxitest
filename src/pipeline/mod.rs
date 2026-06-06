@@ -7,7 +7,7 @@
 
 mod arrange;
 mod collection;
-mod execution;
+pub(crate) mod execution;
 mod helpers;
 pub(crate) mod phases;
 pub(crate) mod traits;
@@ -291,43 +291,27 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 
     let mut ctx = PipelineContext::from_setup(setup_ctx);
 
-    let collector_impl = traits::BridgeCollector;
-    let runner_impl = traits::BridgeRunner;
-    let parallel_impl = traits::DefaultParallelRunner;
-
     let pipeline: &[&dyn PipelinePhase] = match &ctx.command {
         config::Command::Run(_) => &[
             &phases::FileCollectionPhase,
             &phases::AffectedPhase,
             &phases::SessionPhase,
-            &phases::CollectionPhase {
-                collector: &collector_impl,
-            },
+            &phases::CollectionPhase,
             &phases::FixtureValidationPhase,
             &phases::StrictPhase,
             &phases::FilterPhase,
-            &phases::ExecutionPhase {
-                runner: &runner_impl,
-                parallel: &parallel_impl,
-            },
-            &phases::RetryPhase {
-                runner: &runner_impl,
-            },
+            &phases::ExecutionPhase,
+            &phases::RetryPhase,
             &phases::FinalizePhase,
         ],
         config::Command::Debug(_) => &[
             &phases::FileCollectionPhase,
             &phases::AffectedPhase,
             &phases::SessionPhase,
-            &phases::CollectionPhase {
-                collector: &collector_impl,
-            },
+            &phases::CollectionPhase,
             &phases::FixtureValidationPhase,
             &phases::FilterPhase,
-            &phases::ExecutionPhase {
-                runner: &runner_impl,
-                parallel: &parallel_impl,
-            },
+            &phases::ExecutionPhase,
             // No RetryPhase in debug mode
             &phases::FinalizePhase,
         ],

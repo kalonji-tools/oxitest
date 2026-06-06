@@ -7,7 +7,8 @@
 
 use std::sync::Arc;
 
-use crate::pipeline::traits::{Session, TestRunner};
+use crate::bridge;
+use crate::pipeline::execution;
 use crate::reporter::Reporter;
 use crate::types::{NodeId, OutcomeKind, TestItem, TestOutcome, TestTiming};
 
@@ -24,8 +25,7 @@ pub(crate) struct RetryContext<'a> {
     pub py: pyo3::Python<'a>,
     pub max_retries: usize,
     pub delay_secs: u64,
-    pub session: &'a dyn Session,
-    pub runner: &'a dyn TestRunner,
+    pub session: &'a bridge::FixtureSession,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: Option<&'a str>,
     pub show_locals: bool,
@@ -86,7 +86,7 @@ pub(crate) fn run_retries(
                 std::thread::sleep(std::time::Duration::from_secs(ctx.delay_secs));
             }
 
-            let (outcome, duration_ms) = ctx.runner.run_timed(
+            let (outcome, duration_ms) = execution::run_timed(
                 ctx.py,
                 item,
                 ctx.session,

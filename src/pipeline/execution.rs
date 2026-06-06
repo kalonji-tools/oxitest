@@ -9,18 +9,16 @@ use super::arrange::{
     evaluate_arrange_threshold, partition_by_fixture_groups, partition_inprocess_groups,
     ArrangeDecision,
 };
-use super::traits::{ExecutionHarness, ParallelRunner, Session, TestRunner};
+use super::traits::ExecutionHarness;
 use crate::cache::{OutcomeCache, TimingCache};
-use crate::{cache, config, filter, parallel, reporter, scheduler, strict, types};
+use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
 
 pub(super) struct ExecutionContext<'a> {
     pub(super) cfg: &'a config::Config,
     pub(super) cache: &'a cache::TestCache,
-    pub(super) session: &'a dyn Session,
+    pub(super) session: &'a bridge::FixtureSession,
     pub(super) conftest_files: &'a [Utf8PathBuf],
     pub(super) python_bin: &'a str,
-    pub(super) runner: &'a dyn TestRunner,
-    pub(super) parallel: &'a dyn ParallelRunner,
 }
 
 fn resolve_timeout(
@@ -38,11 +36,36 @@ fn resolve_timeout(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_timed(
+    py: Python<'_>,
+    item: &types::TestItem,
+    session: &bridge::FixtureSession,
+    timeout: Option<u64>,
+    debug_mode: Option<&str>,
+    keep_tmp: Option<&str>,
+    show_locals: bool,
+    show_internals: bool,
+) -> (types::TestOutcome, types::DurationMs) {
+    let start = std::time::Instant::now();
+    let outcome = bridge::run_test_with_session_obj(
+        py,
+        item,
+        session.as_py_object(py),
+        timeout,
+        debug_mode,
+        keep_tmp,
+        show_locals,
+        show_internals,
+    );
+    let duration_ms = types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
+    (outcome, duration_ms)
+}
+
 /// Serial execution harness — runs tests in-process, one at a time.
 pub(super) struct SerialHarness<'a> {
     pub py: Python<'a>,
-    pub runner: &'a dyn super::traits::TestRunner,
-    pub session: &'a dyn super::traits::Session,
+    pub session: &'a bridge::FixtureSession,
     pub cache: &'a dyn cache::TimingCache,
     pub timeout_secs: Option<u64>,
     pub timeout_multiplier: Option<f64>,
@@ -57,7 +80,6 @@ impl<'a> SerialHarness<'a> {
     fn from_ctx(py: Python<'a>, ctx: &'a ExecutionContext<'a>) -> Self {
         Self {
             py,
-            runner: ctx.runner,
             session: ctx.session,
             cache: ctx.cache,
             timeout_secs: ctx.cfg.timeout_secs,
@@ -71,7 +93,7 @@ impl<'a> SerialHarness<'a> {
     }
 }
 
-impl super::traits::ExecutionHarness for SerialHarness<'_> {
+impl ExecutionHarness for SerialHarness<'_> {
     fn execute_groups(
         &self,
         groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
@@ -87,7 +109,7 @@ impl super::traits::ExecutionHarness for SerialHarness<'_> {
                 rep.test_started(item);
                 let timeout =
                     resolve_timeout(self.cache, item, self.timeout_secs, self.timeout_multiplier);
-                let (outcome, duration_ms) = self.runner.run_timed(
+                let (outcome, duration_ms) = run_timed(
                     self.py,
                     item,
                     self.session,
@@ -137,20 +159,19 @@ impl super::traits::ExecutionHarness for SerialHarness<'_> {
 
 /// Parallel execution harness — delegates to worker subprocesses.
 pub(super) struct ParallelHarness<'a> {
-    pub parallel: &'a dyn super::traits::ParallelRunner,
     pub cfg: &'a config::Config,
     pub workers: usize,
     pub conftest_files: &'a [Utf8PathBuf],
     pub python_bin: &'a str,
 }
 
-impl super::traits::ExecutionHarness for ParallelHarness<'_> {
+impl ExecutionHarness for ParallelHarness<'_> {
     fn execute_groups(
         &self,
         groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
-        self.parallel.run_parallel(
+        parallel::run_phase_parallel(
             groups,
             self.cfg,
             self.workers,
@@ -393,7 +414,6 @@ pub(super) fn execute(
         }
 
         let harness = ParallelHarness {
-            parallel: ctx.parallel,
             cfg: ctx.cfg,
             workers: optimal_worker_count,
             conftest_files: ctx.conftest_files,
