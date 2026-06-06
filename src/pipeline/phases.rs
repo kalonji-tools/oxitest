@@ -6,7 +6,6 @@
 
 use pyo3::prelude::*;
 
-use super::traits::{ModuleCollector, ParallelRunner, TestRunner};
 use super::{
     collection, execution, helpers, CollectionState, ExecutionResults, PhaseOutcome,
     PipelineContext, PipelinePhase,
@@ -193,11 +192,9 @@ impl PipelinePhase for QueryPhase {
 // ─── CollectionPhase ─────────────────────────────────────────────────────────
 
 /// Imports test modules and collects test items + violations.
-pub(crate) struct CollectionPhase<'a> {
-    pub collector: &'a dyn ModuleCollector,
-}
+pub(crate) struct CollectionPhase;
 
-impl PipelinePhase for CollectionPhase<'_> {
+impl PipelinePhase for CollectionPhase {
     fn name(&self) -> &'static str {
         "collection"
     }
@@ -209,14 +206,8 @@ impl PipelinePhase for CollectionPhase<'_> {
     fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode> {
         let session = ctx.session.as_ref().expect("SessionPhase must run first");
         ctx.cache.invalidate_modules();
-        let (items, errors, raw_violations, profile) = collection::collect_items(
-            py,
-            &ctx.test_files,
-            &ctx.cfg,
-            session,
-            self.collector,
-            &mut ctx.cache,
-        );
+        let (items, errors, raw_violations, profile) =
+            collection::collect_items(py, &ctx.test_files, &ctx.cfg, session, &mut ctx.cache);
         ctx.collection_profile = profile;
         if !errors.is_empty() {
             return Ok(PhaseOutcome::EarlyExit(helpers::early_exit_with_error(
@@ -552,12 +543,9 @@ impl PipelinePhase for FilterPhase {
 
 /// Creates the reporter, dispatches serial or parallel execution, and stores
 /// timings + interrupted flag on the context.
-pub(crate) struct ExecutionPhase<'a> {
-    pub runner: &'a dyn TestRunner,
-    pub parallel: &'a dyn ParallelRunner,
-}
+pub(crate) struct ExecutionPhase;
 
-impl PipelinePhase for ExecutionPhase<'_> {
+impl PipelinePhase for ExecutionPhase {
     fn name(&self) -> &'static str {
         "execution"
     }
@@ -637,8 +625,6 @@ impl PipelinePhase for ExecutionPhase<'_> {
             session,
             conftest_files: &ctx.conftest_files,
             python_bin: &ctx.python_bin,
-            runner: self.runner,
-            parallel: self.parallel,
         };
 
         let parallel::PhaseResult {
@@ -666,11 +652,9 @@ impl PipelinePhase for ExecutionPhase<'_> {
 // ─── RetryPhase ──────────────────────────────────────────────────────────────
 
 /// Re-runs failed tests serially when `--retries > 0`.
-pub(crate) struct RetryPhase<'a> {
-    pub runner: &'a dyn TestRunner,
-}
+pub(crate) struct RetryPhase;
 
-impl PipelinePhase for RetryPhase<'_> {
+impl PipelinePhase for RetryPhase {
     fn name(&self) -> &'static str {
         "retry"
     }
@@ -705,7 +689,6 @@ impl PipelinePhase for RetryPhase<'_> {
             max_retries: ctx.cfg.retries,
             delay_secs: ctx.cfg.retries_delay_secs,
             session,
-            runner: self.runner,
             timeout_secs: ctx.cfg.timeout_secs,
             keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
             show_locals: ctx.cfg.show_locals,
