@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 __all__ = [
-    "AsyncPolicy",
     "FixtureContext",
     "FixtureSession",
     "FixtureTeardownWarning",
     "SharedAsyncManager",
     "TestRunContext",
-    "_FixtureOutcome",
     "_NullFixtureSession",
     "_SessionProtocol",
     "_Scope",
     "_fixture_context",
     "_fixture_scope",
-    "_reject_async_in_sync",
-    "_reject_nonshared_async",
-    "_resolve_deps",
     "_test_run_context",
-    "_unpack_sync",
     "_current_teardown_node_id",
     "_warn_teardown",
 ]
@@ -43,13 +37,7 @@ from oxitest._bridge._errors import (
     UnannotatedFixtureParamError,
 )
 from oxitest._bridge._fixture_instantiator import (
-    AsyncPolicy,
     ScopeRefs,
-    _FixtureOutcome,
-    _reject_async_in_sync,
-    _reject_nonshared_async,
-    _resolve_deps,
-    _unpack_sync,
 )
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
