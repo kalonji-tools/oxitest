@@ -5,7 +5,6 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
-use super::traits::{ModuleCollector, Session};
 use crate::{bare_asserts, bridge, cache, config, filter, python_ast, types};
 
 fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
@@ -111,8 +110,7 @@ pub(super) fn collect_items(
     py: Python<'_>,
     test_files: &[Utf8PathBuf],
     cfg: &config::Config,
-    session: &dyn Session,
-    collector: &dyn ModuleCollector,
+    session: &bridge::FixtureSession,
     cache: &mut impl cache::ModuleCache,
 ) -> (
     Vec<Arc<types::TestItem>>,
@@ -177,7 +175,12 @@ pub(super) fn collect_items(
             continue;
         }
         let collection_start = std::time::Instant::now();
-        match collector.collect_module(py, file, session, collect_violations) {
+        match bridge::collect_module_with_session_obj(
+            py,
+            file,
+            session.as_py_object(py),
+            collect_violations,
+        ) {
             Ok((file_items, file_violations)) => {
                 let arc_items: Vec<Arc<types::TestItem>> =
                     file_items.into_iter().map(Arc::new).collect();

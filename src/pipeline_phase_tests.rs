@@ -102,9 +102,7 @@ mod collection_phase_tests {
     #[test]
     fn always_runs() {
         let ctx = make_ctx();
-        let phase = phases::CollectionPhase {
-            collector: &crate::pipeline::traits::BridgeCollector,
-        };
+        let phase = phases::CollectionPhase;
         assert!(phase.should_run(&ctx));
     }
 }
@@ -154,10 +152,7 @@ mod execution_phase_tests {
     #[test]
     fn always_runs() {
         let ctx = make_ctx();
-        let phase = phases::ExecutionPhase {
-            runner: &crate::pipeline::traits::BridgeRunner,
-            parallel: &crate::pipeline::traits::DefaultParallelRunner,
-        };
+        let phase = phases::ExecutionPhase;
         assert!(phase.should_run(&ctx));
     }
 }
@@ -168,9 +163,7 @@ mod retry_phase_tests {
     #[test]
     fn skips_when_retries_zero() {
         let ctx = make_ctx();
-        let phase = phases::RetryPhase {
-            runner: &crate::pipeline::traits::BridgeRunner,
-        };
+        let phase = phases::RetryPhase;
         assert!(!phase.should_run(&ctx));
     }
 
@@ -183,9 +176,7 @@ mod retry_phase_tests {
             interrupted: true,
             reporter: ctx.make_error_reporter(),
         });
-        let phase = phases::RetryPhase {
-            runner: &crate::pipeline::traits::BridgeRunner,
-        };
+        let phase = phases::RetryPhase;
         assert!(!phase.should_run(&ctx));
     }
 
@@ -198,9 +189,7 @@ mod retry_phase_tests {
             interrupted: false,
             reporter: ctx.make_error_reporter(),
         });
-        let phase = phases::RetryPhase {
-            runner: &crate::pipeline::traits::BridgeRunner,
-        };
+        let phase = phases::RetryPhase;
         assert!(phase.should_run(&ctx));
     }
 }
