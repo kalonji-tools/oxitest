@@ -4,20 +4,7 @@ macro_rules! color_fn {
     ($name:ident, |$s:ident| $styled:expr) => {
         pub(crate) fn $name(s: &str, use_color: bool) -> String {
             if use_color {
-                let $s = console::style(s);
-                $styled.to_string()
-            } else {
-                s.to_string()
-            }
-        }
-    };
-    // Second arm: for functions added before their call sites exist.
-    // Suppresses dead_code only in non-test builds (where call sites may not yet exist).
-    (#[expect(dead_code)] $name:ident, |$s:ident| $styled:expr) => {
-        #[cfg_attr(not(test), allow(dead_code))]
-        pub(crate) fn $name(s: &str, use_color: bool) -> String {
-            if use_color {
-                let $s = console::style(s);
+                let $s = console::style(s).force_styling(true);
                 $styled.to_string()
             } else {
                 s.to_string()
