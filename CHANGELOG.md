@@ -1,6 +1,48 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.12.0] - 2026-06-06
+
+### Bug Fixes
+
+
+- Update docs reference for _TestContext after module move
+- Add InvalidModuleMark to Rust ViolationKind enum (#721)
+- Resolve rebase conflicts — migrate new make_item_raw call sites
+- Migrate make_session_with to make_fixture_def #725
+- Migrate test_executor.py FixtureDef calls to make_fixture_def #725
+- Migrate test_proxy_ns.py FixtureDef calls to make_fixture_def #725
+- Migrate remaining FixtureDef calls to make_fixture_def
+- Include class name in node IDs for class-based tests (#737, #720)
+- Redirect _fixture_instantiator.py import missed during rebase
+- Make coverage upload best-effort and avoid redundant test run (#745)
+- Surface invalid glob errors, test bracket escaping (#736)
+- Use force_styling(true) to avoid global console race (#687)
+
+### Features
+
+
+- Track fixture setup and teardown timing on FixtureSession (#622)
+- Add fixture timing to reporter and bridge (#622)
+- Enrich TestItemBuilder with .arc() and default lineno=1
+- Add #[cfg(test)] fluent setters on PipelineContext
+- Add _scaffold_plugin_project() helper #724
+- Add TestOutcome builder methods for Failed/Error (#726)
+- Canonicalize rootdir on load for node ID consistency (#720)
+- Partition positional args into paths and node IDs (#720)
+- Add node ID prefix matching in FilterPhase (#720)
+- Enable multi-select with resource headers (#720)
+- Add TestRunContext ContextVar for per-test transient state (#715)
+- Add ScopeRefs dataclass and _scope_for callback (#715)
+- Add FixtureInstantiator class with resolution + creation chain (#715)
+- Add glob matching in filter_by_node_ids (#736)
+- Skip path extraction for glob node IDs (#736)
+- Prepend rootdir for glob node IDs, skip canonicalize (#736)
+- Add card chrome colors to inspect output (#687)
+- Add AST-driven Python source highlighter (#687)
+- Integrate source highlighting into inspect cards (#687)
+- Add --color flag to query subcommand (#687)
+
 ## [0.11.0] - 2026-06-02
 
 ### Bug Fixes
