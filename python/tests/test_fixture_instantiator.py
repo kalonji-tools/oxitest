@@ -91,7 +91,7 @@ def test_timing_recorded():
 
     timings = inst.get_fixture_timings()
     assert len(timings) == 1, f"expected 1 timing entry, got {len(timings)}"
-    assert timings[0]["name"] == "fast", f"expected 'fast', got {timings[0]['name']!r}"
-    assert timings[0]["setup_count"] == 1, (
-        f"expected 1 setup, got {timings[0]['setup_count']}"
+    assert timings[0].name == "fast", f"expected 'fast', got {timings[0].name!r}"
+    assert timings[0].setup_count == 1, (
+        f"expected 1 setup, got {timings[0].setup_count}"
     )
