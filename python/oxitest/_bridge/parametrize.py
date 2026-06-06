@@ -21,9 +21,9 @@ from functools import cached_property
 from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
+from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
-from oxitest._bridge.fixtures import _fixture_inner_type
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
