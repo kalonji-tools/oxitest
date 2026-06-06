@@ -96,13 +96,13 @@ from oxitest._bridge._fixture_context import (
 from oxitest._bridge._fixture_registry import (
     FixtureShadowWarning as FixtureShadowWarning,
 )
-from oxitest._bridge._fixture_session import (
-    Fixtures as Fixtures,
-)
 from oxitest._bridge._fixture_type import (
     Fixture as Fixture,
     FixtureRef as FixtureRef,
     Yields as Yields,
+)
+from oxitest._bridge._fixtures import (
+    Fixtures as Fixtures,
 )
 from oxitest._bridge._importorskip import importorskip as importorskip
 from oxitest._bridge._mark_api import (

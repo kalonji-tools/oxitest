@@ -12,7 +12,7 @@ from typing import Any, cast, get_type_hints
 
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_registry import _fixture_inner_type
-from oxitest._bridge._fixture_session import Fixtures
+from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
