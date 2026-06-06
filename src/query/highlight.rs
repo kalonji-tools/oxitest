@@ -12,7 +12,6 @@ use rustpython_parser::Tok;
 /// Highlight Python source code with ANSI colors.
 ///
 /// Returns the source unchanged when `use_color` is false.
-#[cfg_attr(not(test), allow(dead_code))] // Task 5 will wire this into format_inspect
 pub(crate) fn highlight_python(source: &str, use_color: bool) -> String {
     if !use_color {
         return source.to_string();
