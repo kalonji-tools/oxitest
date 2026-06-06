@@ -6,6 +6,7 @@ __all__ = [
     "FixtureSession",
     "FixtureTeardownWarning",
     "SharedAsyncManager",
+    "TestRunContext",
     "_FixtureOutcome",
     "_NullFixtureSession",
     "_SessionProtocol",
@@ -15,6 +16,7 @@ __all__ = [
     "_reject_async_in_sync",
     "_reject_nonshared_async",
     "_resolve_deps",
+    "_test_run_context",
     "_unpack_sync",
     "_current_teardown_node_id",
     "_warn_teardown",
@@ -55,6 +57,19 @@ from oxitest._bridge.plugin_loader import PluginRegistry
 
 _current_teardown_node_id: ContextVar[str] = ContextVar(
     "_current_teardown_node_id", default=""
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TestRunContext:
+    """Per-test transient state, set by executor around run_test."""
+
+    keep_tmp: str | None = None
+    result_cell: list[Any] | None = None
+
+
+_test_run_context: ContextVar[TestRunContext | None] = ContextVar(
+    "_test_run_context", default=None
 )
 
 
