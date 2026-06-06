@@ -1155,6 +1155,57 @@ def test_registry_has_namespace_empty_registry():
     )
 
 
+# ── FixtureRegistry: __contains__, __iter__, all_defs ─────────────────────────
+
+
+def test_registry_contains_registered_name():
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("db", lambda: None, False, None, "conftest.py"))
+    assert "db" in reg, "__contains__ should return True for a registered fixture name"
+
+
+def test_registry_contains_returns_false_for_unknown():
+    reg = FixtureRegistry()
+    assert "missing" not in reg, (
+        "__contains__ should return False for an unregistered fixture name"
+    )
+
+
+def test_registry_iter_yields_registered_names():
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("a", lambda: None, False, None, "conftest.py"))
+    reg.register(FixtureDef("b", lambda: None, False, None, "conftest.py"))
+    assert set(reg) == {"a", "b"}, "__iter__ should yield all registered fixture names"
+
+
+def test_registry_iter_empty():
+    reg = FixtureRegistry()
+    assert list(reg) == [], "__iter__ on an empty registry should yield nothing"
+
+
+def test_registry_all_defs_returns_all_entries():
+    reg = FixtureRegistry()
+    reg.register(FixtureDef("db", lambda: "root", False, None, "root/conftest.py"))
+    reg.register(FixtureDef("db", lambda: "leaf", False, None, "root/sub/conftest.py"))
+    defs = reg.all_defs("db")
+    assert len(defs) == 2, (
+        "all_defs should return all registered FixtureDefs for a name"
+    )
+    assert defs[0].conftest_path == "root/conftest.py", (
+        "first entry should be the root conftest definition"
+    )
+    assert defs[1].conftest_path == "root/sub/conftest.py", (
+        "second entry should be the leaf conftest definition"
+    )
+
+
+def test_registry_all_defs_returns_empty_for_unknown():
+    reg = FixtureRegistry()
+    assert reg.all_defs("missing") == [], (
+        "all_defs for an unregistered name should return an empty list"
+    )
+
+
 # ── FixtureSession.get_fixture_in_namespace ──────────────────────────────────
 
 
