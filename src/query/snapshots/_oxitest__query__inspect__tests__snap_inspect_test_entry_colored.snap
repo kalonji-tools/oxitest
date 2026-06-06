@@ -1,0 +1,11 @@
+---
+source: src/query/inspect.rs
+expression: result
+---
+[2m───[0m [36m[1mtest_network_call[0m [2m───[0m
+
+  [2msource:[0m[34mtests/test_api.py[0m
+  [2mmark:[0m
+    [2m-[0m slow
+    [2m-[0m network
+  [2masync:[0m[32m[2mtrue[0m
