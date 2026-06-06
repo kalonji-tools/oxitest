@@ -35,8 +35,10 @@ from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
 from oxitest._bridge._fixture_session import (
     FixtureSession,
+    TestRunContext,
     _current_teardown_node_id,
     _SessionProtocol,
+    _test_run_context,
 )
 from oxitest._bridge._loader import (
     _load_module,
@@ -260,8 +262,15 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
-    effective_session._keep_tmp = keep_tmp  # ty: ignore[unresolved-attribute]
-    effective_session._result_cell = [None] if keep_tmp else None  # ty: ignore[unresolved-attribute]
+    _run_ctx = (
+        TestRunContext(
+            keep_tmp=keep_tmp,
+            result_cell=[None] if keep_tmp else None,
+        )
+        if keep_tmp is not None
+        else None
+    )
+    _run_ctx_token = _test_run_context.set(_run_ctx)
     backend = _resolve_debugger_backend(effective_session, debug_mode)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
@@ -320,8 +329,9 @@ def run_test(
             show_internals=show_internals,
         )
         result = execute()
-        if effective_session._result_cell is not None:  # ty: ignore[unresolved-attribute]
-            effective_session._result_cell[0] = result  # ty: ignore[unresolved-attribute]
+        _active_ctx = _test_run_context.get()
+        if _active_ctx is not None and _active_ctx.result_cell is not None:
+            _active_ctx.result_cell[0] = result
         return result
     finally:
         sys.modules.pop(unique_name, None)
@@ -333,5 +343,4 @@ def run_test(
                     td()
         finally:
             _current_teardown_node_id.reset(token)
-        effective_session._keep_tmp = None  # ty: ignore[unresolved-attribute]
-        effective_session._result_cell = None  # ty: ignore[unresolved-attribute]
+        _test_run_context.reset(_run_ctx_token)
