@@ -11,6 +11,17 @@ use std::collections::HashSet;
 
 use crate::config::Config;
 
+/// Canonicalize a path to produce a stable absolute form.
+///
+/// Resolves `.`, `..`, and symlinks via `std::fs::canonicalize`.
+/// Falls back to the original path if canonicalization fails.
+fn normalize_path(path: &Utf8Path, _canonical_rootdir: &Utf8Path) -> Utf8PathBuf {
+    match std::fs::canonicalize(path.as_std_path()) {
+        Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| path.to_owned()),
+        Err(_) => path.to_owned(),
+    }
+}
+
 fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
@@ -32,7 +43,7 @@ pub fn collect_files(
     // testpaths point to a subdirectory and conftest.py lives at the project root).
     let rootdir_conftest = config.rootdir.join("conftest.py");
     if rootdir_conftest.exists() {
-        conftest_set.insert(rootdir_conftest);
+        conftest_set.insert(normalize_path(&rootdir_conftest, &config.rootdir));
     }
 
     for testpath in &config.testpaths {
@@ -57,15 +68,22 @@ fn collect_from(
     if path.is_file() {
         if let Some(filename) = path.file_name() {
             if glob_set.is_match(filename) {
-                out.push(path.to_owned());
+                out.push(normalize_path(path, &config.rootdir));
             }
         }
-        // Check for conftest.py in the same directory as a directly specified file
-        if let Some(parent) = path.parent() {
-            let conftest = parent.join("conftest.py");
+        // Walk from the file's directory up to rootdir, collecting conftest.py at each level.
+        // This ensures intermediate conftests (e.g. tests/conftest.py between rootdir and
+        // tests/integration/test_foo.py) are discovered when targeting a single file.
+        let mut dir = path.parent();
+        while let Some(d) = dir {
+            let conftest = d.join("conftest.py");
             if conftest.exists() {
-                conftests.insert(conftest);
+                conftests.insert(normalize_path(&conftest, &config.rootdir));
             }
+            if d == config.rootdir {
+                break;
+            }
+            dir = d.parent();
         }
         return;
     }
@@ -95,7 +113,7 @@ fn collect_from(
             if conftest_std.exists() {
                 match Utf8PathBuf::from_path_buf(conftest_std) {
                     Ok(utf8) => {
-                        conftests.insert(utf8);
+                        conftests.insert(normalize_path(&utf8, &config.rootdir));
                     }
                     Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 conftest path"),
                 }
@@ -104,7 +122,7 @@ fn collect_from(
             let filename = entry.file_name();
             if glob_set.is_match(filename) {
                 match Utf8PathBuf::from_path_buf(entry.into_path()) {
-                    Ok(utf8) => out.push(utf8),
+                    Ok(utf8) => out.push(normalize_path(&utf8, &config.rootdir)),
                     Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 test file path"),
                 }
             }
@@ -118,9 +136,13 @@ mod tests {
     use assert_fs::prelude::*;
 
     fn make_config(dir: &camino::Utf8Path) -> Config {
+        let canonical_root = match std::fs::canonicalize(dir.as_std_path()) {
+            Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| dir.to_owned()),
+            Err(_) => dir.to_owned(),
+        };
         Config {
-            rootdir: dir.to_owned(),
-            testpaths: vec![dir.to_owned()],
+            rootdir: canonical_root.clone(),
+            testpaths: vec![canonical_root],
             python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
             norecursedirs: vec![".git".to_string(), "__pycache__".to_string()],
             maxfail: 0,
@@ -211,9 +233,11 @@ mod tests {
             ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config).unwrap();
-        assert_eq!(
-            files,
-            vec![camino::Utf8Path::from_path(f.path()).unwrap().to_owned()]
+        assert_eq!(files.len(), 1);
+        assert!(
+            files[0].as_str().ends_with("test_specific.py"),
+            "collected path should end with test_specific.py, got: {}",
+            files[0]
         );
     }
 
@@ -367,6 +391,58 @@ mod tests {
         let (files, conftests) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert!(conftests.is_empty());
+    }
+
+    #[test]
+    fn test_collect_paths_are_canonical_absolute() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("test_foo.py").touch().unwrap();
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
+        let config = make_config(utf8_dir);
+        let (files, _) = collect_files(&config).unwrap();
+        assert_eq!(files.len(), 1);
+        let path_str = files[0].as_str();
+        assert!(
+            path_str.starts_with('/'),
+            "collected path should be absolute, got: {path_str}"
+        );
+        assert!(
+            !path_str.contains("/./"),
+            "collected path should have no ./ components, got: {path_str}"
+        );
+    }
+
+    #[test]
+    fn test_collect_normalizes_dotslash_paths() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("sub/test_foo.py").touch().unwrap();
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
+        let canonical_root = match std::fs::canonicalize(utf8_dir.as_std_path()) {
+            Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap(),
+            Err(_) => utf8_dir.to_owned(),
+        };
+
+        let config_dot = Config {
+            rootdir: canonical_root.clone(),
+            testpaths: vec![canonical_root.join("./sub/test_foo.py")],
+            ..make_config(utf8_dir)
+        };
+        let (files_dot, _) = collect_files(&config_dot).unwrap();
+
+        let config_plain = Config {
+            rootdir: canonical_root.clone(),
+            testpaths: vec![canonical_root.join("sub/test_foo.py")],
+            ..make_config(utf8_dir)
+        };
+        let (files_plain, _) = collect_files(&config_plain).unwrap();
+
+        assert_eq!(files_dot.len(), 1);
+        assert_eq!(files_plain.len(), 1);
+        assert_eq!(
+            files_dot[0].as_str(),
+            files_plain[0].as_str(),
+            "different input forms must produce identical collected paths"
+        );
     }
 
     #[test]
