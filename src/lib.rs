@@ -10,6 +10,7 @@ mod bare_asserts;
 mod bridge;
 mod cache;
 mod collector;
+mod colors;
 mod config;
 mod edit_distance;
 mod filter;

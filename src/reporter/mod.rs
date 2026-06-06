@@ -7,7 +7,7 @@
 //! [`PyPluginReporter`](plugin::PyPluginReporter) (user-supplied Python plugins).
 
 mod ci;
-mod colors;
+pub(crate) use crate::colors;
 mod composite;
 mod exit;
 mod format;
