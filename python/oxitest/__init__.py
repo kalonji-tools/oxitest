@@ -90,12 +90,14 @@ from oxitest._bridge._debugger import (
 from oxitest._bridge._errors import (
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
+from oxitest._bridge._fixture_context import (
+    FixtureTeardownWarning as FixtureTeardownWarning,
+)
 from oxitest._bridge._fixture_registry import (
     FixtureShadowWarning as FixtureShadowWarning,
 )
 from oxitest._bridge._fixture_session import (
     Fixtures as Fixtures,
-    FixtureTeardownWarning as FixtureTeardownWarning,
 )
 from oxitest._bridge._fixture_type import (
     Fixture as Fixture,

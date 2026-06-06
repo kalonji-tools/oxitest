@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from oxitest._bridge._fixture_session import TestRunContext, _test_run_context
+from oxitest._bridge._fixture_context import TestRunContext, _test_run_context
 
 
 def test_default_is_none():
