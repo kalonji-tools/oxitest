@@ -84,6 +84,23 @@ pub(crate) fn contains_glob_chars(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[')
 }
 
+/// Escape `[` and `]` in a node ID so globset treats them as literals.
+///
+/// Node IDs use `[param_id]` brackets as structural delimiters, not glob
+/// character classes. Replacing `[` → `[[]` and `]` → `[]]` in a single pass
+/// preserves `*` and `?` as wildcards while making brackets literal.
+fn escape_node_id_brackets(id: &str) -> String {
+    let mut out = String::with_capacity(id.len() + 4);
+    for c in id.chars() {
+        match c {
+            '[' => out.push_str("[[]"),
+            ']' => out.push_str("[]]"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Keep only items matching the provided node IDs.
 ///
 /// Uses prefix matching for literal IDs: a node ID without `[` matches itself
@@ -114,8 +131,8 @@ pub fn filter_by_node_ids(
 
     // Pre-compile glob matchers.
     // Node IDs use `[param_id]` brackets as structural delimiters, not glob character
-    // classes. Escape `[` → `[[]` and `]` → `[]]` in a single pass so globset treats
-    // them as literals while preserving `*` and `?` as wildcards.
+    // classes. `escape_node_id_brackets` converts `[` → `[[]` and `]` → `[]]` so
+    // globset treats them as literals while preserving `*` and `?` as wildcards.
     let glob_matchers: Vec<globset::GlobMatcher> = glob_ids
         .iter()
         .filter_map(|id| {
@@ -533,5 +550,26 @@ mod tests {
             filtered[0].module_path,
             Utf8PathBuf::from("tests/test_math.py")
         );
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_exact_param_with_brackets() {
+        // Exercises both `[` and `]` escaping — the pattern contains literal brackets
+        // that must not be interpreted as glob character classes.
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_add")
+                .param_id("case_basic".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_add")
+                .param_id("case_edge".to_string())
+                .arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw(
+            "tests/test_a.py::test_add[case_basic]",
+        )];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].param_id.as_deref(), Some("case_basic"));
     }
 }
