@@ -14,8 +14,29 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'python/**'
+              - 'Cargo.*'
+              - 'pyproject.toml'
+              - '.github/**'
+
   rust-tests:
     name: Rust Tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -36,6 +57,8 @@ jobs:
 
   python-tests:
     name: Test (Python ${{ matrix.python-version }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -86,7 +109,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: coverage
+          shared-key: test
+          save-if: false
 
       - uses: ./.github/actions/setup-python
 
@@ -170,3 +194,19 @@ jobs:
           flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: ${{ github.actor != 'dependabot[bot]' }}
+
+  required:
+    name: Tests (required)
+    needs: [rust-tests, python-tests, rust-coverage, python-coverage]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check results
+        shell: bash
+        run: |
+          if [[ "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" || "${{ needs.rust-coverage.result }}" == "failure" || "${{ needs.python-coverage.result }}" == "failure" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+          echo "All jobs passed or were skipped"
