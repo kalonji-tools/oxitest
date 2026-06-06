@@ -95,15 +95,21 @@ fn keybindings(resource: super::resource::ResourceKind) -> Vec<String> {
     ];
     match resource {
         ResourceKind::Tests => {
-            // become() replaces fzf with the command — no flicker, clean handoff
-            // {1} = node_id (e.g. tests/test_a.py::test_foo)
-            binds.push(r#"--bind=enter:become(oxitest run -E "name(={1})")"#.to_string());
-            binds.push(r#"--bind=ctrl-r:become(oxitest debug -E "name(={1})")"#.to_string());
+            binds.push("--multi".to_string());
+            binds.push("--bind=enter:become(oxitest run {+1})".to_string());
+            binds.push("--bind=ctrl-r:become(oxitest debug {1})".to_string());
+            binds.push(
+                "--header=TAB select \u{2502} ENTER run \u{2502} ^R debug \u{2502} ^Y copy \u{2502} ^E edit"
+                    .to_string(),
+            );
         }
         ResourceKind::Fixtures => {
             binds.push("--bind=enter:execute(oxitest query fixtures --tree)".to_string());
+            binds.push("--header=ENTER tree \u{2502} ^Y copy \u{2502} ^E edit".to_string());
         }
-        _ => {}
+        _ => {
+            binds.push("--header=^Y copy \u{2502} ^E edit".to_string());
+        }
     }
     binds
 }
@@ -129,5 +135,71 @@ mod tests {
     fn keybindings_fixtures_has_tree() {
         let binds = keybindings(super::super::resource::ResourceKind::Fixtures);
         assert!(binds.iter().any(|b| b.contains("--tree")));
+    }
+
+    #[test]
+    fn keybindings_tests_includes_multi() {
+        let binds = keybindings(super::super::resource::ResourceKind::Tests);
+        assert!(
+            binds.iter().any(|b| b == "--multi"),
+            "Tests resource must enable fzf multi-select"
+        );
+    }
+
+    #[test]
+    fn keybindings_fixtures_no_multi() {
+        let binds = keybindings(super::super::resource::ResourceKind::Fixtures);
+        assert!(
+            !binds.iter().any(|b| b == "--multi"),
+            "Fixtures resource must not enable multi-select"
+        );
+    }
+
+    #[test]
+    fn keybindings_tests_enter_uses_multi_placeholder() {
+        let binds = keybindings(super::super::resource::ResourceKind::Tests);
+        let enter = binds.iter().find(|b| b.contains("enter:become"));
+        assert!(enter.is_some(), "Tests must have enter:become binding");
+        let e = enter.unwrap();
+        assert!(
+            e.contains("{+1}"),
+            "Enter binding must use {{+1}} multi-select placeholder, got: {e}"
+        );
+        assert!(
+            e.contains("oxitest run"),
+            "Enter binding must run oxitest run"
+        );
+    }
+
+    #[test]
+    fn keybindings_tests_debug_uses_single_placeholder() {
+        let binds = keybindings(super::super::resource::ResourceKind::Tests);
+        let debug = binds.iter().find(|b| b.contains("ctrl-r:become"));
+        assert!(debug.is_some(), "Tests must have ctrl-r:become binding");
+        let d = debug.unwrap();
+        assert!(
+            d.contains("{1}") && !d.contains("{+1}"),
+            "Debug binding must use single {{1}} placeholder, got: {d}"
+        );
+    }
+
+    #[test]
+    fn keybindings_tests_has_header() {
+        let binds = keybindings(super::super::resource::ResourceKind::Tests);
+        let header = binds.iter().find(|b| b.starts_with("--header="));
+        assert!(header.is_some(), "Tests resource must have a --header");
+        let h = header.unwrap();
+        assert!(h.contains("TAB"), "header must mention TAB");
+        assert!(h.contains("ENTER"), "header must mention ENTER");
+    }
+
+    #[test]
+    fn keybindings_fixtures_has_header() {
+        let binds = keybindings(super::super::resource::ResourceKind::Fixtures);
+        let header = binds.iter().find(|b| b.starts_with("--header="));
+        assert!(header.is_some(), "Fixtures resource must have a --header");
+        let h = header.unwrap();
+        assert!(!h.contains("TAB"), "Fixtures header must not mention TAB");
+        assert!(h.contains("ENTER"), "header must mention ENTER");
     }
 }
