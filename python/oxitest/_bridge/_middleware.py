@@ -147,7 +147,7 @@ class AsyncBridgeMiddleware:
 
         from oxitest._bridge._async_backend import AsyncioBackend
         from oxitest._bridge._errors import FixtureSetupError
-        from oxitest._bridge._fixture_session import FixtureTeardownWarning
+        from oxitest._bridge._fixture_context import FixtureTeardownWarning
         from oxitest._bridge._runners import run_base_async
 
         backend = plan.backend or AsyncioBackend()
