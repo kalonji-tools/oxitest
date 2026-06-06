@@ -35,7 +35,7 @@ from oxitest._bridge._test_meta import TestMeta
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_registry import FixtureRegistry
-    from oxitest._bridge._fixture_session import FixtureSession, _Scope
+    from oxitest._bridge._fixture_session import _Scope
     from oxitest._bridge.plugin_loader import PluginRegistry
 
 
@@ -99,7 +99,7 @@ AsyncPolicy = Callable[[str, Any, str], None]
 
 
 def _resolve_deps(
-    session: FixtureInstantiator | FixtureSession,
+    instantiator: FixtureInstantiator,
     fn: Callable[..., Any],
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
@@ -117,15 +117,10 @@ def _resolve_deps(
     dep_meta = TestMeta(module_path=module_path, fn_name=fn_name, node_id="")
     hints = _get_hints(fn)
     deps: dict[str, Any] = {}
-    # Duck-type: FixtureInstantiator exposes resolve_param (public),
-    # FixtureSession still uses _resolve_param (private) until Task 7 wires it.
-    _resolve: Callable[..., tuple[bool, Any]] = getattr(  # ty: ignore[invalid-assignment]
-        session, "resolve_param", getattr(session, "_resolve_param", None)
-    )
     for param_name, hint in hints.items():
         if param_name == "return":
             continue
-        resolved, value = _resolve(
+        resolved, value = instantiator.resolve_param(
             param_name,
             hint,
             dep_meta,
