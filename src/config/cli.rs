@@ -461,9 +461,13 @@ pub(crate) fn partition_positionals(
         let arg_str = arg.as_str();
         if let Some((file_part, _)) = arg_str.split_once("::") {
             node_ids.push(crate::types::NodeId::from_raw(arg_str));
-            let file_path = Utf8PathBuf::from(file_part);
-            if !paths.contains(&file_path) {
-                paths.push(file_path);
+            // Only extract the path for file collection if it has no glob chars.
+            // Glob paths (e.g. "tests/test_*.py") are not real files.
+            if !crate::filter::contains_glob_chars(file_part) {
+                let file_path = Utf8PathBuf::from(file_part);
+                if !paths.contains(&file_path) {
+                    paths.push(file_path);
+                }
             }
         } else if !paths.contains(&arg) {
             paths.push(arg);
@@ -568,6 +572,45 @@ impl OxitestCli {
             }
         }
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Split raw positional arguments into plain paths and node IDs.
+///
+/// For node IDs like `tests/test_a.py::test_foo`, the file path before `::` is
+/// added to `paths` so the collector can scope file discovery. For glob node IDs
+/// like `tests/test_*.py::test_foo`, the path segment contains glob characters
+/// and is **not** a real file path, so it is omitted from `paths`.
+///
+/// The glob check is applied only to the `file_part` (before `::`); glob chars
+/// in the test-name segment (e.g. `tests/test_a.py::test_f*`) are ignored for
+/// this check, so the path is still extracted normally.
+#[allow(dead_code)] // Wired into the pipeline by a later task (#736).
+pub(crate) fn partition_positionals(
+    raw: Vec<Utf8PathBuf>,
+) -> (Vec<Utf8PathBuf>, Vec<crate::types::NodeId>) {
+    let mut paths: Vec<Utf8PathBuf> = Vec::new();
+    let mut node_ids = Vec::new();
+
+    for arg in raw {
+        let arg_str = arg.as_str();
+        if let Some((file_part, _)) = arg_str.split_once("::") {
+            node_ids.push(crate::types::NodeId::from_raw(arg_str));
+            // Only extract the path for file collection if it has no glob chars.
+            // Glob paths (e.g. "tests/test_*.py") are not real files.
+            if !crate::filter::contains_glob_chars(file_part) {
+                let file_path = Utf8PathBuf::from(file_part);
+                if !paths.contains(&file_path) {
+                    paths.push(file_path);
+                }
+            }
+        } else if !paths.contains(&arg) {
+            paths.push(arg);
+        }
+    }
+
+    (paths, node_ids)
 }
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
@@ -1036,6 +1079,38 @@ mod tests {
         let (paths, ids) = super::partition_positionals(vec![]);
         assert!(paths.is_empty());
         assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn partition_glob_node_id_does_not_extract_path() {
+        let (paths, ids) =
+            super::partition_positionals(vec![Utf8PathBuf::from("tests/test_*.py::test_foo")]);
+        assert!(
+            paths.is_empty(),
+            "glob path should not be extracted: {paths:?}"
+        );
+        assert_eq!(ids.len(), 1);
+        assert_eq!(ids[0].as_ref(), "tests/test_*.py::test_foo");
+    }
+
+    #[test]
+    fn partition_mixed_glob_and_literal_node_ids() {
+        let (paths, ids) = super::partition_positionals(vec![
+            Utf8PathBuf::from("tests/test_a.py::test_foo"),
+            Utf8PathBuf::from("tests/test_*.py::test_bar"),
+        ]);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0], Utf8PathBuf::from("tests/test_a.py"));
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn partition_glob_in_test_name_still_extracts_path() {
+        let (paths, ids) =
+            super::partition_positionals(vec![Utf8PathBuf::from("tests/test_a.py::test_f*")]);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(paths[0], Utf8PathBuf::from("tests/test_a.py"));
+        assert_eq!(ids.len(), 1);
     }
 
     // ── node_id integration tests ───────────────────────────────────────────
