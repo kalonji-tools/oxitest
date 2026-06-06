@@ -120,7 +120,7 @@ pub(crate) fn run_query(
     session: Option<&bridge::FixtureSession>,
     cfg: &config::Config,
     is_tty: bool,
-    _use_color: bool,
+    use_color: bool,
 ) -> Result<String, String> {
     // 1. Collect entries
     let mut entries = collect_entries(py, args.resource, test_files, conftest_files, session, cfg)?;
@@ -145,7 +145,7 @@ pub(crate) fn run_query(
             .iter()
             .find(|e| e.get("name").is_some_and(|n| n.contains(id.as_str())));
         return match found {
-            Some(entry) => Ok(inspect::format_inspect(entry, args.resource)),
+            Some(entry) => Ok(inspect::format_inspect(entry, args.resource, use_color)),
             None => Err(format!("no {} matching '{id}'", args.resource.as_str())),
         };
     }
