@@ -251,8 +251,6 @@ class _NullFixtureSession:
 
     _plugin_registry: PluginRegistry = PluginRegistry()
     _async_backend: AsyncBackend = AsyncioBackend()
-    _keep_tmp: str | None = None
-    _result_cell: list[Any] | None = None
 
     def resolve_for_test(
         self,
@@ -501,8 +499,6 @@ class FixtureSession:
                 is_async=True,
             )
         )
-        self._keep_tmp: str | None = None
-        self._result_cell: list[Any] | None = None
         self._setup_times: dict[str, list[float]] = defaultdict(list)
         self._teardown_times: dict[str, list[float]] = defaultdict(list)
 
@@ -724,6 +720,9 @@ class FixtureSession:
         teardown_stack: list[Callable[[], None]],
     ) -> Any:
         """Create and return a built-in fixture value, respecting its declared scope."""
+        run_ctx = _test_run_context.get()
+        _keep_tmp = run_ctx.keep_tmp if run_ctx else None
+        _result_cell = run_ctx.result_cell if run_ctx else None
         if impl_cls.scope == "session":
             return self._session_scope.get_or_create(
                 f"__builtin_{impl_cls.__name__}",
@@ -733,8 +732,8 @@ class FixtureSession:
                         inject_scope="session",
                         teardown_stack=self._session_scope.teardowns,
                         plugin_registry=self._plugin_registry,
-                        keep_tmp=self._keep_tmp,
-                        result_cell=self._result_cell,
+                        keep_tmp=_keep_tmp,
+                        result_cell=_result_cell,
                     )
                 ),
             )
@@ -744,8 +743,8 @@ class FixtureSession:
                 inject_scope=inject_scope,
                 teardown_stack=teardown_stack,
                 plugin_registry=self._plugin_registry,
-                keep_tmp=self._keep_tmp,
-                result_cell=self._result_cell,
+                keep_tmp=_keep_tmp,
+                result_cell=_result_cell,
             )
         )
 
