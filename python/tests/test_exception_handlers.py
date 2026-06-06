@@ -11,7 +11,7 @@ from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
 )
-from oxitest._bridge._fixture_session import FixtureTeardownWarning
+from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge.result import StatusKind
 
 # ---------------------------------------------------------------------------

@@ -32,13 +32,15 @@ if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
+from oxitest._bridge._fixture_context import (
+    TestRunContext,
+    _current_teardown_node_id,
+    _test_run_context,
+)
 from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
 from oxitest._bridge._fixture_session import (
     FixtureSession,
-    TestRunContext,
-    _current_teardown_node_id,
     _SessionProtocol,
-    _test_run_context,
 )
 from oxitest._bridge._loader import (
     _load_module,

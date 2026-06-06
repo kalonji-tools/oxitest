@@ -9,7 +9,7 @@ from oxitest._bridge._fixture_session import FixtureSession
 
 
 def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None:
-    from oxitest._bridge._fixture_session import FixtureTeardownWarning, _warn_teardown
+    from oxitest._bridge._fixture_context import FixtureTeardownWarning, _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
 
@@ -24,7 +24,7 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
 
 
 def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
-    from oxitest._bridge._fixture_session import _warn_teardown
+    from oxitest._bridge._fixture_context import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
@@ -35,7 +35,7 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
-    from oxitest._bridge._fixture_session import _warn_teardown
+    from oxitest._bridge._fixture_context import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
 
@@ -45,7 +45,7 @@ def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
-    from oxitest._bridge._fixture_session import (
+    from oxitest._bridge._fixture_context import (
         _current_teardown_node_id,
         _warn_teardown,
     )
