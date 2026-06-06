@@ -176,6 +176,9 @@ mod tests {
             auto_arrange_threshold: Some(70),
             collection_profile: false,
             use_gitignore: true,
+            node_ids: vec![],
+            node_id_source_files: std::collections::HashSet::new(),
+            has_explicit_paths: false,
         }
     }
 
