@@ -489,6 +489,14 @@ class FixtureSession:
             _Scope()
         )  # shared=True fixtures — init once, drain at end_session
         self._module_cache = ModuleCache()
+
+        from oxitest._bridge._fixture_validator import (
+            FixtureValidator as _FixtureValidator,
+        )
+
+        self._validator = _FixtureValidator(
+            self._registry, self._plugin_registry, self._module_cache
+        )
         self._registry.register(
             FixtureDef(
                 name="task_group",
@@ -576,29 +584,9 @@ class FixtureSession:
         Called by the Rust ``FixtureValidationPhase`` after collection to catch
         typos and missing fixtures before any test executes.
         """
-        # Build set of types that plugin fixture providers can inject.
-        plugin_types: set[type] = set()
-        if hasattr(self, "_plugin_registry"):
-            for provider in self._plugin_registry.fixture_providers:
-                plugin_types.add(provider.fixture_type)
-
-        errors: list[tuple[str, str]] = []
-        for item in items:
-            node_id: str = item["node_id"]
-            fixref = set(item.get("fixref_names", ()))
-            for name in item["fixture_names"]:
-                if name in fixref:
-                    continue
-                if self._registry.get(name) is not None:
-                    continue
-                # Check if the name resolves to a plugin-provided fixture by
-                # looking up the cached module and examining the type hint.
-                if plugin_types and self._can_plugin_resolve(
-                    node_id, name, plugin_types
-                ):
-                    continue
-                errors.append((node_id, name))
-        return errors
+        # Pass current _plugin_registry explicitly: Rust may have replaced it
+        # via setattr after the validator was constructed.
+        return self._validator.validate_fixture_names(items, self._plugin_registry)
 
     def find_unused_fixtures(
         self,
@@ -611,54 +599,7 @@ class FixtureSession:
         - It is not referenced by any collected test's fixture_names
         - It is not a dependency of any referenced fixture (transitive)
         """
-        # 1. Collect all directly-referenced fixture names from items
-        referenced: set[str] = set()
-        for item in items:
-            referenced.update(item.get("fixture_names", ()))
-
-        # 2. Expand transitively -- walk fixture function signatures
-        def _expand_deps(name: str, visited: set[str]) -> None:
-            if name in visited:
-                return
-            visited.add(name)
-            defn = self._registry.get(name)
-            if defn is None:
-                return
-            try:
-                sig = inspect.signature(defn.func)
-            except (ValueError, TypeError):
-                return
-            for param_name in sig.parameters:
-                if param_name in self._registry._defs:
-                    _expand_deps(param_name, visited)
-
-        all_used: set[str] = set()
-        for name in referenced:
-            _expand_deps(name, all_used)
-
-        # 3. Also expand autouse fixtures and their deps
-        for defn in self._registry.get_autouse():
-            _expand_deps(defn.name, all_used)
-
-        # 4. Find unused (skip builtins, autouse, and non-conftest fixtures)
-        unused: list[tuple[str, str]] = []
-        for name, defs in self._registry._defs.items():
-            if not defs:
-                continue
-            defn = defs[-1]  # most-local
-            if defn.autouse:
-                continue
-            # Skip builtins (conftest_path starts with "<")
-            if defn.conftest_path.startswith("<"):
-                continue
-            # Only flag fixtures from conftest files; module-level Fixtures()
-            # instances may be used solely via FixtureRef in parametrize.
-            if not defn.conftest_path.endswith("conftest.py"):
-                continue
-            if name in all_used:
-                continue
-            unused.append((defn.conftest_path, name))
-        return sorted(unused)
+        return self._validator.find_unused_fixtures(items)
 
     def get_fixture_timings(self) -> list[dict[str, Any]]:
         """Return per-fixture setup and teardown timing aggregates."""
@@ -673,44 +614,6 @@ class FixtureSession:
             }
             for n in names
         ]
-
-    def _can_plugin_resolve(
-        self,
-        node_id: str,
-        param_name: str,
-        plugin_types: set[type],
-    ) -> bool:
-        """Check if a parameter resolves to a plugin-provided fixture type."""
-        # node_id format: "path/to/test.py::test_fn" or "path/to/test.py::test_fn[case]"
-        parts = node_id.split("::", 1)
-        if len(parts) < 2:
-            return False
-        module_path = parts[0]
-        fn_part = parts[1].split("[", 1)[0]  # strip param_id
-        # Look up the cached module (already loaded during collection)
-        mod = self._module_cache.get(module_path)
-        if mod is None:
-            return False
-        # Handle class::method syntax
-        if "::" in fn_part:
-            cls_name, method_name = fn_part.split("::", 1)
-            cls = getattr(mod, cls_name, None)
-            fn = getattr(cls, method_name, None) if cls else None
-        else:
-            fn = getattr(mod, fn_part, None)
-        if fn is None:
-            return False
-        try:
-            from typing import get_type_hints
-
-            hints = get_type_hints(fn, include_extras=True)
-        except Exception:  # noqa: BLE001
-            return False
-        hint = hints.get(param_name)
-        if hint is None:
-            return False
-        is_fx, inner = _fixture_inner_type(hint)
-        return is_fx and inner in plugin_types
 
     def _inject_builtin(
         self,
