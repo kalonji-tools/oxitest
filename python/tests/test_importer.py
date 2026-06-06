@@ -261,7 +261,7 @@ def test_collect_module_registers_fixtures_from_test_module(tmp: TempDir) -> Non
         "    return 42\n"
         "def test_foo(my_val): pass\n"
     )
-    from oxitest._bridge.fixtures import FixtureRegistry
+    from oxitest._bridge._fixture_registry import FixtureRegistry
 
     registry = FixtureRegistry()
 
@@ -446,7 +446,7 @@ def test_async_fixture_flagged_during_registration(tmp: TempDir):
         "    return 1\n"
         "async def test_foo(async_val, sync_val): pass\n"
     )
-    from oxitest._bridge.fixtures import FixtureRegistry
+    from oxitest._bridge._fixture_registry import FixtureRegistry
 
     registry = FixtureRegistry()
 

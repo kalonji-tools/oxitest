@@ -6,17 +6,18 @@ import unittest
 import oxitest
 from conftest import helpers
 from oxitest import Fixture, WarnCapture, raises
-from oxitest._bridge._fixture_registry import FixtureShadowWarning
-from oxitest._bridge.fixtures import (
+from oxitest._bridge._builtin_context import _TestContext as OxiTestContext
+from oxitest._bridge._errors import (
     FixtureCycleError,
-    FixtureDef,
     FixtureNotFoundError,
-    FixtureRegistry,
-    Fixtures,
-    FixtureSession,
     FixtureSetupError,
-    _TestContext as OxiTestContext,
 )
+from oxitest._bridge._fixture_registry import (
+    FixtureDef,
+    FixtureRegistry,
+    FixtureShadowWarning,
+)
+from oxitest._bridge._fixture_session import Fixtures, FixtureSession
 from oxitest._bridge.result import ViolationKind
 
 # ── skip / mark ───────────────────────────────────────────────────────────────
@@ -723,7 +724,7 @@ def test_fixtures_multiple_registrations():
 
 def test_fixture_ref_inner_type_helper_detects_fixture_ref():
     from oxitest import FixtureRef
-    from oxitest._bridge.fixtures import _fixture_ref_inner_type
+    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
 
     is_ref, inner = _fixture_ref_inner_type(FixtureRef[int])
     assert is_ref is True, (
@@ -733,7 +734,7 @@ def test_fixture_ref_inner_type_helper_detects_fixture_ref():
 
 
 def test_fixture_ref_inner_type_rejects_plain_type():
-    from oxitest._bridge.fixtures import _fixture_ref_inner_type
+    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
 
     is_ref, inner = _fixture_ref_inner_type(int)
     assert is_ref is False, (
@@ -746,7 +747,7 @@ def test_fixture_ref_inner_type_rejects_plain_type():
 
 def test_fixture_ref_inner_type_rejects_fixture_type():
     from oxitest import Fixture
-    from oxitest._bridge.fixtures import _fixture_ref_inner_type
+    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
 
     is_ref, inner = _fixture_ref_inner_type(Fixture[int])
     assert is_ref is False, (
@@ -914,7 +915,7 @@ def test_on_teardown_registers_cleanup():
 
 
 def test_fixture_decorator_accepts_shared_kwarg():
-    from oxitest._bridge.fixtures import Fixtures
+    from oxitest._bridge._fixture_session import Fixtures
 
     reg_obj = Fixtures()
 
@@ -930,7 +931,7 @@ def test_fixture_decorator_accepts_shared_kwarg():
 
 
 def test_fixture_decorator_default_shared_is_false():
-    from oxitest._bridge.fixtures import Fixtures
+    from oxitest._bridge._fixture_session import Fixtures
 
     reg_obj = Fixtures()
 
@@ -1594,8 +1595,11 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
     """FixtureAccessor.__getattr__ must raise AttributeError when
     _fixture_context is not set (no active instantiation context).
     """
-    from oxitest._bridge._fixture_session import _fixture_context
-    from oxitest._bridge.fixtures import FixtureAccessor, Fixtures
+    from oxitest._bridge._fixture_session import (
+        FixtureAccessor,
+        Fixtures,
+        _fixture_context,
+    )
 
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)

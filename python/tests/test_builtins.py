@@ -728,8 +728,8 @@ def test_type_aliases_are_annotated_with_fixture_marker():
 
 def test_testcontext_registered_as_builtin():
     import oxitest._bridge._builtins  # noqa: F401 — trigger registrations
+    from oxitest._bridge._builtin_context import _TestContext
     from oxitest._bridge._builtins._base import BuiltinFixture
-    from oxitest._bridge.fixtures import _TestContext
 
     assert BuiltinFixture.for_type(_TestContext) is not None, (
         "_TestContext should be registered as a BuiltinFixture (registration triggered "
@@ -743,7 +743,8 @@ def test_testcontext_registered_as_builtin():
 def _make_session():
     """Import oxitest (triggers _builtins registration) and return session classes."""
     import oxitest  # noqa: F401 — triggers _builtins registration
-    from oxitest._bridge.fixtures import FixtureRegistry, FixtureSession
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge._fixture_session import FixtureSession
 
     return FixtureRegistry, FixtureSession
 
@@ -840,7 +841,8 @@ def test_patcher_injected_via_session():
 
 
 def test_testcontext_still_works_via_builtin_dispatch():
-    from oxitest._bridge.fixtures import FixtureRegistry, FixtureSession
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge._fixture_session import FixtureSession
 
     def factory(ctx: Fixture[TestContext]) -> str:
         return "ok"
