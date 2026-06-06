@@ -6,13 +6,13 @@ import textwrap
 import oxitest
 from conftest import helpers
 from oxitest import Fixture, TempDir, raises, warns
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_namespace import HelperNamespace
 from oxitest._bridge.conftest_loader import (
     create_session,
     find_conftest_paths,
     load_fixtures_from_conftest,
 )
-from oxitest._bridge.fixtures import FixtureSession
 
 # ── find_conftest_paths ───────────────────────────────────────────────────────
 

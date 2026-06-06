@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 from conftest import helpers
 from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
-from oxitest._bridge.fixtures import FixtureRegistry, FixtureSession
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import _DataclassCases, _DictCases
 

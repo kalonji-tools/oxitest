@@ -4,8 +4,8 @@ import types
 from pathlib import Path
 
 import oxitest as oxi
+from oxitest._bridge._fixture_session import Fixtures
 from oxitest._bridge._helper_namespace import HelperNamespace, build_helpers
-from oxitest._bridge.fixtures import Fixtures
 
 
 def _make_module(attrs: dict, name: str = "mod") -> types.ModuleType:

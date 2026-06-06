@@ -5,6 +5,8 @@ import dataclasses
 import oxitest
 from conftest import helpers
 from oxitest import TempDir, parametrize
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
@@ -16,10 +18,6 @@ from oxitest._bridge._mark_registry import (
     _UsefixturesHandler,
     _XFailHandler,
     evaluate_marks,
-)
-from oxitest._bridge.fixtures import (
-    FixtureRegistry,
-    FixtureSession,
 )
 from oxitest._bridge.result import StatusKind, TestResult
 
