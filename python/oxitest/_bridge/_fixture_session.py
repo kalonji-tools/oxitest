@@ -499,7 +499,7 @@ class FixtureSession:
 
     def registered_fixture_names(self) -> list[str]:
         """Return all fixture names known to the registry."""
-        return list(self._registry._defs.keys())
+        return list(self._registry)
 
     def validate_fixture_names(
         self,

@@ -48,7 +48,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
         )
 
     # User-defined conftest fixtures
-    for defs in registry._defs.values():
+    for name in registry:
         entries.extend(
             {
                 "name": fd.name,
@@ -57,7 +57,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "autouse": str(fd.autouse).lower(),
                 "async": str(fd.is_async).lower(),
             }
-            for fd in defs
+            for fd in registry.all_defs(name)
         )
     return entries
 

@@ -101,8 +101,8 @@ def tree_fixtures_from_registry(
     # Build dependency graph from signatures
     all_defs: dict[str, FixtureDef[Any]] = {}
     seen_names: set[str] = set()
-    for name in sorted(registry._defs):
-        defs = registry._defs[name]
+    for name in sorted(registry):
+        defs = registry.all_defs(name)
         if defs:
             all_defs[name] = defs[-1]
             seen_names.add(name)
