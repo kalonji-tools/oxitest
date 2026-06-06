@@ -406,10 +406,10 @@ impl Reporter for TtyReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        stats: &super::RunStats,
+        session: &super::ReporterSession,
     ) -> super::ExitVote {
         self.pre_finish();
-        super::standard_finish(self, stats, collect_errors, interrupted)
+        super::standard_finish(self, session, collect_errors, interrupted)
     }
 }
 

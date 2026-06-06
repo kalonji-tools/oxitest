@@ -3,7 +3,8 @@
 use crate::types::{CollectError, DurationMs, ExitCode};
 
 use super::print::{print_collect_errors, print_summary_section};
-use super::stats::{self, RunStats};
+use super::session::ReporterSession;
+use super::stats;
 use super::ReporterOpts;
 
 // ─── ExitVote ────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ pub trait Reporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        stats: &RunStats,
+        session: &ReporterSession,
     ) -> ExitVote;
 
     /// Record a teardown warning (default: no-op).
@@ -82,13 +83,13 @@ pub(crate) trait StandardReporter {
 
 pub(crate) fn standard_finish(
     r: &mut impl StandardReporter,
-    stats: &RunStats,
+    session: &ReporterSession,
     collect_errors: &[CollectError],
     interrupted: bool,
 ) -> ExitVote {
     print_collect_errors(collect_errors, r.run_opts().use_color);
     ExitVote::Code(print_summary_section(
-        stats,
+        session.stats(),
         r.run_opts(),
         collect_errors,
         interrupted,
