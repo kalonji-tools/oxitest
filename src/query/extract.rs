@@ -32,22 +32,34 @@ pub(crate) fn extract_test_entries(test_files: &[Utf8PathBuf]) -> Vec<QueryEntry
             match stmt {
                 ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
                     let marks = collect_fn_marks(&f.decorator_list);
-                    entries.push(make_test_entry(file, &f.name, false, &marks));
+                    entries.push(make_test_entry(file, &f.name, None, false, &marks));
                 }
                 ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
                     let marks = collect_fn_marks(&f.decorator_list);
-                    entries.push(make_test_entry(file, &f.name, true, &marks));
+                    entries.push(make_test_entry(file, &f.name, None, true, &marks));
                 }
                 ast::Stmt::ClassDef(cls) if python_ast::is_test_class(&cls.name) => {
                     for method in &cls.body {
                         match method {
                             ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
                                 let marks = collect_fn_marks(&f.decorator_list);
-                                entries.push(make_test_entry(file, &f.name, false, &marks));
+                                entries.push(make_test_entry(
+                                    file,
+                                    &f.name,
+                                    Some(&cls.name),
+                                    false,
+                                    &marks,
+                                ));
                             }
                             ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
                                 let marks = collect_fn_marks(&f.decorator_list);
-                                entries.push(make_test_entry(file, &f.name, true, &marks));
+                                entries.push(make_test_entry(
+                                    file,
+                                    &f.name,
+                                    Some(&cls.name),
+                                    true,
+                                    &marks,
+                                ));
                             }
                             _ => {}
                         }
@@ -68,9 +80,19 @@ fn collect_fn_marks(decorator_list: &[ast::Expr]) -> Vec<String> {
         .collect()
 }
 
-fn make_test_entry(file: &Utf8PathBuf, name: &str, is_async: bool, marks: &[String]) -> QueryEntry {
+fn make_test_entry(
+    file: &Utf8PathBuf,
+    fn_name: &str,
+    class_name: Option<&str>,
+    is_async: bool,
+    marks: &[String],
+) -> QueryEntry {
     let mut fields = HashMap::new();
-    fields.insert("name".to_string(), format!("{}::{}", file, name));
+    let name = match class_name {
+        Some(cls) => format!("{}::{}::{}", file, cls, fn_name),
+        None => format!("{}::{}", file, fn_name),
+    };
+    fields.insert("name".to_string(), name);
     fields.insert("source".to_string(), file.to_string());
     fields.insert("async".to_string(), is_async.to_string());
     fields.insert("mark".to_string(), marks.join(","));
@@ -200,8 +222,28 @@ mod tests {
         let entries = extract_test_entries(&[path.clone()]);
         assert_eq!(entries.len(), 2);
         let names: Vec<_> = entries.iter().filter_map(|e| e.get("name")).collect();
-        assert!(names.iter().any(|n| n.contains("test_a")));
-        assert!(names.iter().any(|n| n.contains("test_b")));
+        assert!(
+            names.iter().any(|n| n.ends_with("::TestGroup::test_a")),
+            "expected '::TestGroup::test_a' in names, got: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.ends_with("::TestGroup::test_b")),
+            "expected '::TestGroup::test_b' in names, got: {names:?}"
+        );
+    }
+
+    #[test]
+    fn test_entries_async_class_method_includes_class_name() {
+        let f = write_temp_py("class TestGroup:\n    async def test_async(self): pass\n");
+        let path = temp_path(&f);
+        let entries = extract_test_entries(&[path.clone()]);
+        assert_eq!(entries.len(), 1);
+        let name = entries[0].get("name").unwrap();
+        assert!(
+            name.ends_with("::TestGroup::test_async"),
+            "expected '::TestGroup::test_async', got: {name}"
+        );
+        assert_eq!(entries[0].get("async"), Some("true"));
     }
 
     #[test]
