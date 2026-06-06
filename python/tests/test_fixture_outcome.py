@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from oxitest import WarnCapture
-from oxitest._bridge._fixture_session import _FixtureOutcome, _unpack_sync
+from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _unpack_sync
 
 
 def test_unpack_sync_plain_value():
