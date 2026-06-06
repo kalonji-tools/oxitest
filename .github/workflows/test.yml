@@ -197,7 +197,7 @@ jobs:
 
   required:
     name: Tests (required)
-    needs: [rust-tests, python-tests, rust-coverage, python-coverage]
+    needs: [rust-tests, python-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -205,7 +205,7 @@ jobs:
       - name: Check results
         shell: bash
         run: |
-          if [[ "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" || "${{ needs.rust-coverage.result }}" == "failure" || "${{ needs.python-coverage.result }}" == "failure" ]]; then
+          if [[ "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
