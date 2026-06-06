@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::RunStats;
+use super::ReporterSession;
 use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 /// Wraps a Python plugin reporter object and forwards `Reporter` trait calls
@@ -43,7 +43,7 @@ impl super::Reporter for PyPluginReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        _stats: &RunStats,
+        _session: &ReporterSession,
     ) -> super::ExitVote {
         Python::attach(|py| {
             let err_count = collect_errors.len();

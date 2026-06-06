@@ -56,7 +56,7 @@ pub(in crate::pipeline) fn early_exit_with_error(
     make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
 ) -> ExitCode {
     make_rep()
-        .finish(errors, false, &reporter::RunStats::new())
+        .finish(errors, false, &reporter::ReporterSession::new(0))
         .code()
 }
 

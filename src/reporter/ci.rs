@@ -126,10 +126,10 @@ impl Reporter for CiReporter {
         &mut self,
         collect_errors: &[CollectError],
         interrupted: bool,
-        stats: &super::RunStats,
+        session: &super::ReporterSession,
     ) -> super::ExitVote {
         self.pre_finish();
-        super::standard_finish(self, stats, collect_errors, interrupted)
+        super::standard_finish(self, session, collect_errors, interrupted)
     }
 }
 
@@ -227,11 +227,11 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
-        let mut stats = crate::reporter::RunStats::new();
-        stats.record(&item, &outcome);
+        let mut session = crate::reporter::ReporterSession::new(0);
+        session.record_outcome(&item, &outcome, DurationMs::ZERO);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(
-            reporter.finish(&[], false, &stats).code(),
+            reporter.finish(&[], false, &session).code(),
             crate::types::ExitCode::Success
         );
     }
@@ -249,11 +249,11 @@ mod tests {
             .file("f.py")
             .source("assert")
             .build();
-        let mut stats = crate::reporter::RunStats::new();
-        stats.record(&item, &outcome);
+        let mut session = crate::reporter::ReporterSession::new(0);
+        session.record_outcome(&item, &outcome, DurationMs::ZERO);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(
-            reporter.finish(&[], false, &stats).code(),
+            reporter.finish(&[], false, &session).code(),
             crate::types::ExitCode::Failure
         );
     }
@@ -271,11 +271,11 @@ mod tests {
             .file("f.py")
             .source("assert")
             .build();
-        let mut stats = crate::reporter::RunStats::new();
-        stats.record(&item, &outcome);
+        let mut session = crate::reporter::ReporterSession::new(0);
+        session.record_outcome(&item, &outcome, DurationMs::ZERO);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO);
         assert_eq!(
-            reporter.finish(&[], true, &stats).code(),
+            reporter.finish(&[], true, &session).code(),
             crate::types::ExitCode::Interrupted
         );
     }
@@ -329,7 +329,7 @@ mod tests {
         let errors = vec![CollectError::PyError("import failed".to_string())];
         assert_eq!(
             reporter
-                .finish(&errors, false, &crate::reporter::RunStats::new())
+                .finish(&errors, false, &crate::reporter::ReporterSession::new(0))
                 .code(),
             crate::types::ExitCode::CollectError
         );
