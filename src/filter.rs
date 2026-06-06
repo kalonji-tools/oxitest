@@ -79,6 +79,44 @@ pub fn sort_failed_first(
     failed
 }
 
+/// Keep only items matching the provided node IDs.
+///
+/// Uses prefix matching: a node ID without `[` matches itself and any
+/// parametrized variants. A node ID like `path::ClassName` matches all methods
+/// in that class (since `path::ClassName` is a prefix of `path::ClassName::method`).
+///
+/// Items from files NOT in `node_id_source_files` pass through unfiltered
+/// (they came from bare paths, not node IDs).
+///
+/// Returns all items unchanged if `node_ids` is empty.
+#[must_use = "returns filtered items; original is consumed"]
+pub fn filter_by_node_ids(
+    items: Vec<Arc<TestItem>>,
+    node_ids: &[crate::types::NodeId],
+    node_id_source_files: &std::collections::HashSet<Utf8PathBuf>,
+) -> Vec<Arc<TestItem>> {
+    if node_ids.is_empty() {
+        return items;
+    }
+    items
+        .into_iter()
+        .filter(|item| {
+            // Items from bare-path files (not node ID sources) pass through.
+            if !node_id_source_files.is_empty() && !node_id_source_files.contains(&item.module_path)
+            {
+                return true;
+            }
+            let item_id: &str = item.node_id.as_ref();
+            node_ids.iter().any(|target| {
+                let t: &str = target.as_ref();
+                item_id == t
+                    || item_id.starts_with(&format!("{}[", t))
+                    || item_id.starts_with(&format!("{}::", t))
+            })
+        })
+        .collect()
+}
+
 /// Group items by module path, preserving insertion order within each group.
 #[must_use = "returns grouped items; original is consumed"]
 pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> {
@@ -229,6 +267,105 @@ mod tests {
         let sorted = sort_failed_first(items, &failed);
         assert_eq!(sorted[0].fn_name, "test_a");
         assert_eq!(sorted[1].fn_name, "test_b");
+    }
+
+    #[test]
+    fn filter_by_node_ids_exact_match() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo").arc(),
+            TestItem::builder("tests/test_a.py", "test_bar").arc(),
+            TestItem::builder("tests/test_b.py", "test_baz").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = std::collections::HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_foo");
+    }
+
+    #[test]
+    fn filter_by_node_ids_prefix_matches_parametrized() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case1".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case2".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_bar").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = std::collections::HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|i| i.fn_name == "test_foo"));
+    }
+
+    #[test]
+    fn filter_by_node_ids_exact_parametrized() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case1".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case2".to_string())
+                .arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw(
+            "tests/test_a.py::test_foo[case1]",
+        )];
+        let source_files = std::collections::HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].param_id, Some("case1".to_string()));
+    }
+
+    #[test]
+    fn filter_by_node_ids_empty_returns_all() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo").arc(),
+            TestItem::builder("tests/test_b.py", "test_bar").arc(),
+        ];
+        let ids: Vec<crate::types::NodeId> = vec![];
+        let source_files = std::collections::HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn filter_by_node_ids_bare_path_items_pass_through() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo").arc(),
+            TestItem::builder("tests/test_a.py", "test_bar").arc(),
+            TestItem::builder("tests/test_b.py", "test_baz").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let mut source_files = std::collections::HashSet::new();
+        source_files.insert(Utf8PathBuf::from("tests/test_a.py"));
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        assert!(names.contains(&"test_foo"));
+        assert!(names.contains(&"test_baz"));
+        assert!(!names.contains(&"test_bar"));
+    }
+
+    #[test]
+    fn filter_by_node_ids_class_prefix_selects_all_methods() {
+        let items = vec![
+            TestItem::builder("tests/test_cls.py", "TestSuite::test_a").arc(),
+            TestItem::builder("tests/test_cls.py", "TestSuite::test_b").arc(),
+            TestItem::builder("tests/test_cls.py", "test_standalone").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw(
+            "tests/test_cls.py::TestSuite",
+        )];
+        let source_files = std::collections::HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|i| i.fn_name.starts_with("TestSuite::")));
     }
 
     #[test]
