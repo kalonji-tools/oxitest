@@ -423,6 +423,10 @@ pub struct QueryArgs {
     #[arg(long)]
     pub tree: bool,
 
+    /// Color output mode: auto, always, never
+    #[arg(long, value_enum, help_heading = "Output")]
+    pub color: Option<ColorMode>,
+
     /// Paths to test files or directories
     pub paths: Vec<Utf8PathBuf>,
 }

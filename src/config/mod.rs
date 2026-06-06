@@ -603,6 +603,9 @@ impl Config {
 
     pub fn merge_query_args(mut self, args: &cli::QueryArgs) -> Self {
         self.merge_paths(&args.paths);
+        if let Some(c) = args.color {
+            self.color = c;
+        }
         self
     }
 
