@@ -380,13 +380,13 @@ impl Config {
         let rootdir = rootdir
             .canonicalize_utf8()
             .unwrap_or_else(|_| rootdir.to_owned());
+        let pyproject_path = rootdir.join("pyproject.toml");
         let config = Config {
-            rootdir: rootdir.clone(),
             testpaths: vec![rootdir.clone()],
+            rootdir,
             ..Config::default()
         };
 
-        let pyproject_path = rootdir.join("pyproject.toml");
         let content = match std::fs::read_to_string(&pyproject_path) {
             Ok(c) => c,
             Err(_) => return config,
@@ -404,7 +404,9 @@ impl Config {
         };
 
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
-        config.merge_toml(tc, Some(&rootdir))
+        // rootdir was moved into config; re-derive from pyproject_path
+        let rootdir = pyproject_path.parent().expect("pyproject_path has parent");
+        config.merge_toml(tc, Some(rootdir))
     }
 
     /// Apply shared overrides from either TOML or CLI source.
