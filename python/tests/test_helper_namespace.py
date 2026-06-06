@@ -4,7 +4,7 @@ import types
 from pathlib import Path
 
 import oxitest as oxi
-from oxitest._bridge._fixture_session import Fixtures
+from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_namespace import HelperNamespace, build_helpers
 
 
