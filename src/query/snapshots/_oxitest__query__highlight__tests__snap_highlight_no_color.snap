@@ -1,0 +1,6 @@
+---
+source: src/query/highlight.rs
+expression: "highlight_python(source, false)"
+---
+def test_foo():
+    assert True
