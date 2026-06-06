@@ -112,23 +112,6 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Render fixture dependency tree as a formatted string for `--tree`.
-    pub fn tree_fixtures(
-        &self,
-        py: Python<'_>,
-        verbosity: i32,
-        pattern: Option<&str>,
-        use_color: bool,
-    ) -> PyResult<String> {
-        let lister = py.import("oxitest._bridge.fixture_lister")?;
-        let registry = self.0.bind(py).getattr("_registry")?;
-        let result = lister.call_method1(
-            "tree_fixtures_from_registry",
-            (registry, verbosity, pattern, use_color),
-        )?;
-        result.extract::<String>()
-    }
-
     /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
     /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
     /// Unlike `end_module`/`end_session`, errors are absorbed here because this
@@ -150,74 +133,6 @@ impl FixtureSession {
             .call_method0("shared_fixture_groups")
             .and_then(|v| v.extract::<Vec<Vec<String>>>())
             .unwrap_or_default()
-    }
-
-    /// Fetch shared fixture cache hit/miss statistics.
-    pub fn get_cache_stats(&self, py: Python<'_>) -> PyResult<crate::reporter::FixtureCacheStats> {
-        let result = self.0.bind(py).call_method0("get_cache_stats")?;
-        let total_hits: usize = result.get_item("total_hits")?.extract()?;
-        let total_misses: usize = result.get_item("total_misses")?.extract()?;
-        let breakdown_list = result.get_item("breakdown")?;
-        let mut breakdown = Vec::new();
-        for entry in breakdown_list.try_iter()? {
-            let entry: Bound<'_, PyAny> = entry?;
-            let name: String = entry.get_item("name")?.extract()?;
-            let hits: usize = entry.get_item("hits")?.extract()?;
-            let misses: usize = entry.get_item("misses")?.extract()?;
-            breakdown.push(crate::reporter::FixtureCacheEntry { name, hits, misses });
-        }
-        Ok(crate::reporter::FixtureCacheStats {
-            hits: total_hits,
-            misses: total_misses,
-            breakdown,
-        })
-    }
-
-    /// Fetch per-fixture setup/teardown timing aggregates.
-    pub fn get_fixture_timings(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Vec<crate::reporter::FixtureTimingEntry>> {
-        let result = self.0.bind(py).call_method0("get_fixture_timings")?;
-        let mut timings = Vec::new();
-        for entry in result.try_iter()? {
-            let entry: Bound<'_, PyAny> = entry?;
-            let name: String = entry.get_item("name")?.extract()?;
-            let total_setup_ms: f64 = entry.get_item("total_setup_ms")?.extract()?;
-            let setup_count: usize = entry.get_item("setup_count")?.extract()?;
-            let total_teardown_ms: f64 = entry.get_item("total_teardown_ms")?.extract()?;
-            let teardown_count: usize = entry.get_item("teardown_count")?.extract()?;
-            timings.push(crate::reporter::FixtureTimingEntry {
-                name,
-                total_setup_ms,
-                setup_count,
-                total_teardown_ms,
-                teardown_count,
-            });
-        }
-        Ok(timings)
-    }
-
-    /// Return fixture definitions as a list of field maps for the query engine.
-    pub(crate) fn fixture_entries(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Vec<std::collections::HashMap<String, String>>> {
-        let module = py.import("oxitest._bridge.query_bridge")?;
-        let registry = self.0.bind(py).getattr("_registry")?;
-        let result = module.call_method1("fixture_entries", (registry,))?;
-        result.extract()
-    }
-
-    /// Return plugin entries as a list of field maps for the query engine.
-    pub(crate) fn plugin_entries(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<Vec<std::collections::HashMap<String, String>>> {
-        let module = py.import("oxitest._bridge.query_bridge")?;
-        let registry = self.0.bind(py).getattr("_plugin_registry")?;
-        let result = module.call_method1("plugin_entries", (registry,))?;
-        result.extract()
     }
 
     /// Returns this session as a bound Python object for passing to bridge calls.
