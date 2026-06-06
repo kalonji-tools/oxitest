@@ -33,7 +33,6 @@ impl NodeId {
     /// Extract the module path (file path before the first `::`) from a node ID.
     ///
     /// Returns `None` if the node ID contains no `::` separator.
-    #[allow(dead_code)]
     pub fn module_path(&self) -> Option<&str> {
         self.0.split_once("::").map(|(path, _)| path)
     }

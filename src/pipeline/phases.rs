@@ -240,11 +240,19 @@ impl PipelinePhase for CollectionPhase<'_> {
         merged_violations.extend(raw_violations);
 
         // Detect unused fixtures when strict mode is enabled.
-        if ctx.cfg.strict.is_some() {
+        // Skip when targeting a subset (explicit paths or node IDs) —
+        // unused-fixture detection requires the full suite to be meaningful.
+        if ctx.cfg.strict.is_some() && !ctx.cfg.has_explicit_paths {
             if let Ok(unused) = bridge::find_unused_fixtures(py, session, &items) {
                 merged_violations.extend(unused);
             }
         }
+
+        // Apply node ID filter early so StrictPhase only sees targeted
+        // items — prevents false positives for violations in non-selected
+        // tests (#738).
+        let items =
+            filter::filter_by_node_ids(items, &ctx.cfg.node_ids, &ctx.cfg.node_id_source_files);
 
         ctx.collection = CollectionState::Collected {
             items,
@@ -453,6 +461,10 @@ impl PipelinePhase for FilterPhase {
                     panic!("expected Collected or Partitioned before FilterPhase, got {other:?}")
                 }
             };
+
+        // Node ID filter (positional node IDs) — applied first.
+        let items =
+            filter::filter_by_node_ids(items, &ctx.cfg.node_ids, &ctx.cfg.node_id_source_files);
 
         let expression = match &ctx.command {
             config::Command::Run(a) => a.filter.expression.clone(),
