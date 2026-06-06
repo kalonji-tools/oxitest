@@ -32,25 +32,24 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: |
+            3.11
+            3.12
+            3.13
 
       - uses: PyO3/maturin-action@v1
         with:
           target: universal2-apple-darwin
-          args: --release --out dist
+          args: --release --out dist -i python3.11 python3.12 python3.13
 
       - uses: actions/upload-artifact@v7
         with:
-          name: wheels-macos-${{ matrix.python-version }}
+          name: wheels-macos
           path: dist
 
   sdist:
