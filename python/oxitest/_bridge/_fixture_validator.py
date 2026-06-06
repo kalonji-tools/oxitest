@@ -97,7 +97,7 @@ class FixtureValidator:
             except (ValueError, TypeError):
                 return
             for param_name in sig.parameters:
-                if param_name in self._registry._defs:
+                if param_name in self._registry:
                     _expand_deps(param_name, visited)
 
         all_used: set[str] = set()
@@ -110,7 +110,8 @@ class FixtureValidator:
 
         # 4. Find unused (skip builtins, autouse, and non-conftest fixtures)
         unused: list[tuple[str, str]] = []
-        for name, defs in self._registry._defs.items():
+        for name in self._registry:
+            defs = self._registry.all_defs(name)
             if not defs:
                 continue
             defn = defs[-1]  # most-local

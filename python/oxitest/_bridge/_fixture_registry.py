@@ -92,6 +92,16 @@ class FixtureRegistry:
             )
         return violations
 
+    def __contains__(self, name: object) -> bool:
+        return name in self._defs
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._defs)
+
+    def all_defs(self, name: str) -> list[FixtureDef[Any]]:
+        defs = self._defs.get(name)
+        return list(defs) if defs else []
+
     def get(self, name: str) -> FixtureDef[Any] | None:
         """Return the most-local (last-registered) FixtureDef for name."""
         defs = self._defs.get(name)
