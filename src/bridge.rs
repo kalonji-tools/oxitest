@@ -16,6 +16,10 @@ use pyo3::prelude::*;
 use crate::types::{CollectError, Frame, LineNo, NodeId, TestItem, TestOutcome};
 use crate::worker_result::WorkerOutcome;
 
+fn py_collect_err(e: PyErr) -> CollectError {
+    CollectError::PyError(e.to_string())
+}
+
 /// Single traceback frame extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `Frame`.
 #[derive(FromPyObject)]
@@ -219,7 +223,7 @@ pub(crate) fn collect_module_with_session_obj(
 ) -> Result<(Vec<TestItem>, Vec<RawViolation>), CollectError> {
     let importer = py
         .import("oxitest._bridge.importer")
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+        .map_err(py_collect_err)?;
 
     let path_str = path.as_str();
     let result = importer
@@ -241,9 +245,8 @@ pub(crate) fn collect_module_with_session_obj(
             }
         })?;
 
-    let (raw_items, raw_violations): (Vec<CollectedItem>, Vec<RawViolation>) = result
-        .extract()
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+    let (raw_items, raw_violations): (Vec<CollectedItem>, Vec<RawViolation>) =
+        result.extract().map_err(py_collect_err)?;
 
     let items_vec = raw_items
         .into_iter()
@@ -287,16 +290,13 @@ pub(crate) fn validate_fixture_names(
         })
         .collect();
 
-    let items_list = pyo3::types::PyList::new(py, &dicts)
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+    let items_list = pyo3::types::PyList::new(py, &dicts).map_err(py_collect_err)?;
 
     let result = session_obj
         .call_method1("validate_fixture_names", (items_list,))
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+        .map_err(py_collect_err)?;
 
-    let pairs: Vec<(String, String)> = result
-        .extract()
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
+    let pairs: Vec<(String, String)> = result.extract().map_err(py_collect_err)?;
 
     Ok(pairs
         .into_iter()
@@ -312,10 +312,8 @@ pub(crate) fn registered_fixture_names(
     let session_obj = session.as_py_object(py);
     let result = session_obj
         .call_method0("registered_fixture_names")
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))?;
-    result
-        .extract()
-        .map_err(|e: PyErr| CollectError::PyError(e.to_string()))
+        .map_err(py_collect_err)?;
+    result.extract().map_err(py_collect_err)
 }
 
 /// Variant of `run_test` that accepts a raw Python session object.
