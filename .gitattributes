@@ -1,0 +1,31 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto
+
+# Source code — explicit LF, language-aware diffs
+*.rs text eol=lf diff=rust
+*.py text eol=lf diff=python
+*.pyi text eol=lf diff=python
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.nix text eol=lf
+
+# Shell scripts — always LF
+*.sh text eol=lf
+
+# Lock files — track but collapse in PR diffs
+Cargo.lock text eol=lf linguist-generated
+uv.lock text eol=lf linguist-generated
+devenv.lock text eol=lf linguist-generated
+
+# Insta snapshots — collapse in PR diffs
+*.snap text eol=lf linguist-generated
+
+# Binary artifacts — never diff, never normalize
+*.so binary
+*.pyd binary
+*.rlib binary
+*.whl binary
+*.egg binary
