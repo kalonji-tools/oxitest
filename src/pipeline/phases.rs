@@ -486,16 +486,16 @@ impl PipelinePhase for FilterPhase {
                 Ok(PhaseOutcome::EarlyExit(code))
             };
         let items = if let Some(expr_str) = expression.as_deref() {
-            let tokens = match query::dsl::lex(expr_str) {
+            let tokens = match query::compile::lex(expr_str) {
                 Ok(t) => t,
                 Err(e) => return early_exit(ctx, format!("invalid -E expression: {e}")),
             };
-            let parsed = match query::dsl::parse(tokens) {
+            let parsed = match query::compile::parse(tokens) {
                 Ok(p) => p,
                 Err(e) => return early_exit(ctx, format!("invalid -E expression: {e}")),
             };
             if let Err(e) =
-                query::dsl::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
+                query::eval::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
             {
                 return early_exit(ctx, format!("invalid -E expression: {e}"));
             }
@@ -503,7 +503,7 @@ impl PipelinePhase for FilterPhase {
                 .into_iter()
                 .filter(|item| {
                     let entry = item_to_query_entry(item);
-                    query::dsl::eval(&parsed, &entry)
+                    query::eval::eval(&parsed, &entry)
                 })
                 .collect()
         } else {
