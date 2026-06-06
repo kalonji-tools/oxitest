@@ -407,7 +407,7 @@ def test_protocol_version_matches_rust_constant():
 
 
 def test_get_fixture_timings_returns_expected_shape():
-    """get_fixture_timings() returns list of dicts with required keys."""
+    """get_fixture_timings() returns list of FixtureTiming dataclasses."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
 
@@ -417,9 +417,10 @@ def test_get_fixture_timings_returns_expected_shape():
     assert timings == [], "empty session should produce empty timings"
 
 
-def test_get_fixture_timings_entry_has_required_keys():
-    """Each timing entry has the 5 required keys with correct types."""
+def test_get_fixture_timings_entry_has_required_attrs():
+    """Each timing entry has the 5 required attributes with correct types."""
     from conftest import helpers
+    from oxitest._bridge.result import FixtureTiming
 
     session = helpers.common.make_session_with("timed_fx", lambda: 1)
     session.get_fixture("timed_fx", "mod.py", [])
@@ -427,21 +428,14 @@ def test_get_fixture_timings_entry_has_required_keys():
 
     assert len(timings) == 1, "expected exactly one timing entry"
     entry = timings[0]
-    required_keys = {
-        "name",
-        "total_setup_ms",
-        "setup_count",
-        "total_teardown_ms",
-        "teardown_count",
-    }
-    assert set(entry.keys()) == required_keys, f"wrong keys: {set(entry.keys())}"
-    assert isinstance(entry["name"], str), "name must be str"
-    assert isinstance(entry["total_setup_ms"], float), "total_setup_ms must be float"
-    assert isinstance(entry["setup_count"], int), "setup_count must be int"
-    assert isinstance(entry["total_teardown_ms"], float), (
-        "total_teardown_ms must be float"
+    assert isinstance(entry, FixtureTiming), (
+        f"expected FixtureTiming, got {type(entry)}"
     )
-    assert isinstance(entry["teardown_count"], int), "teardown_count must be int"
+    assert isinstance(entry.name, str), "name must be str"
+    assert isinstance(entry.total_setup_ms, float), "total_setup_ms must be float"
+    assert isinstance(entry.setup_count, int), "setup_count must be int"
+    assert isinstance(entry.total_teardown_ms, float), "total_teardown_ms must be float"
+    assert isinstance(entry.teardown_count, int), "teardown_count must be int"
 
 
 # ── FixtureSession bridge contract ────────────────────────────────────────────

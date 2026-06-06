@@ -9,28 +9,48 @@ use pyo3::prelude::*;
 use super::stats::{FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry};
 use crate::bridge::FixtureSession;
 
+#[derive(FromPyObject)]
+struct BridgeCacheEntry {
+    name: String,
+    hits: usize,
+    misses: usize,
+}
+
+#[derive(FromPyObject)]
+struct BridgeCacheStats {
+    total_hits: usize,
+    total_misses: usize,
+    breakdown: Vec<BridgeCacheEntry>,
+}
+
+#[derive(FromPyObject)]
+struct BridgeFixtureTiming {
+    name: String,
+    total_setup_ms: f64,
+    setup_count: usize,
+    total_teardown_ms: f64,
+    teardown_count: usize,
+}
+
 /// Fetch shared fixture cache hit/miss statistics.
 pub(crate) fn get_cache_stats(
     session: &FixtureSession,
     py: Python<'_>,
 ) -> PyResult<FixtureCacheStats> {
     let obj = session.as_py_object(py);
-    let result = obj.call_method0("get_cache_stats")?;
-    let total_hits: usize = result.get_item("total_hits")?.extract()?;
-    let total_misses: usize = result.get_item("total_misses")?.extract()?;
-    let breakdown_list = result.get_item("breakdown")?;
-    let mut breakdown = Vec::new();
-    for entry in breakdown_list.try_iter()? {
-        let entry: Bound<'_, PyAny> = entry?;
-        let name: String = entry.get_item("name")?.extract()?;
-        let hits: usize = entry.get_item("hits")?.extract()?;
-        let misses: usize = entry.get_item("misses")?.extract()?;
-        breakdown.push(FixtureCacheEntry { name, hits, misses });
-    }
+    let raw: BridgeCacheStats = obj.call_method0("get_cache_stats")?.extract()?;
     Ok(FixtureCacheStats {
-        hits: total_hits,
-        misses: total_misses,
-        breakdown,
+        hits: raw.total_hits,
+        misses: raw.total_misses,
+        breakdown: raw
+            .breakdown
+            .into_iter()
+            .map(|e| FixtureCacheEntry {
+                name: e.name,
+                hits: e.hits,
+                misses: e.misses,
+            })
+            .collect(),
     })
 }
 
@@ -40,22 +60,15 @@ pub(crate) fn get_fixture_timings(
     py: Python<'_>,
 ) -> PyResult<Vec<FixtureTimingEntry>> {
     let obj = session.as_py_object(py);
-    let result = obj.call_method0("get_fixture_timings")?;
-    let mut timings = Vec::new();
-    for entry in result.try_iter()? {
-        let entry: Bound<'_, PyAny> = entry?;
-        let name: String = entry.get_item("name")?.extract()?;
-        let total_setup_ms: f64 = entry.get_item("total_setup_ms")?.extract()?;
-        let setup_count: usize = entry.get_item("setup_count")?.extract()?;
-        let total_teardown_ms: f64 = entry.get_item("total_teardown_ms")?.extract()?;
-        let teardown_count: usize = entry.get_item("teardown_count")?.extract()?;
-        timings.push(FixtureTimingEntry {
-            name,
-            total_setup_ms,
-            setup_count,
-            total_teardown_ms,
-            teardown_count,
-        });
-    }
-    Ok(timings)
+    let raw: Vec<BridgeFixtureTiming> = obj.call_method0("get_fixture_timings")?.extract()?;
+    Ok(raw
+        .into_iter()
+        .map(|e| FixtureTimingEntry {
+            name: e.name,
+            total_setup_ms: e.total_setup_ms,
+            setup_count: e.setup_count,
+            total_teardown_ms: e.total_teardown_ms,
+            teardown_count: e.teardown_count,
+        })
+        .collect())
 }

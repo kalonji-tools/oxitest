@@ -67,6 +67,14 @@ def parse_python_classes(path: Path) -> dict[str, set[str]]:
     return classes
 
 
+REPORTER_RUST_PATH = ROOT / "src" / "reporter" / "bridge.rs"
+
+REPORTER_PAIRS = {
+    "BridgeCacheEntry": "CacheEntry",
+    "BridgeCacheStats": "CacheStats",
+    "BridgeFixtureTiming": "FixtureTiming",
+}
+
 WIRE_RUST_PATH = ROOT / "src" / "worker_result.rs"
 WORKER_PY_PATH = ROOT / "python" / "oxitest" / "_bridge" / "worker.py"
 
@@ -157,6 +165,29 @@ def main() -> int:
                 print(f"  Python-only fields: {sorted(py_only)}")
             errors += 1
 
+    # ── Reporter bridge check ──────────────────────────────────────────
+    reporter_rust = parse_rust_structs(REPORTER_RUST_PATH)
+    for rust_name, py_name in REPORTER_PAIRS.items():
+        rust_fields = reporter_rust.get(rust_name)
+        py_fields = python.get(py_name)
+        if rust_fields is None:
+            print(f"ERROR: Rust struct '{rust_name}' not found in {REPORTER_RUST_PATH}")
+            errors += 1
+            continue
+        if py_fields is None:
+            print(f"ERROR: Python class '{py_name}' not found in {PYTHON_PATH}")
+            errors += 1
+            continue
+        rust_only = rust_fields - py_fields
+        py_only = py_fields - rust_fields
+        if rust_only or py_only:
+            print(f"MISMATCH: {rust_name} (Rust) vs {py_name} (Python)")
+            if rust_only:
+                print(f"  Rust-only fields: {sorted(rust_only)}")
+            if py_only:
+                print(f"  Python-only fields: {sorted(py_only)}")
+            errors += 1
+
     # ── Wire format check ─────────────────────────────────────────────
     rust_wire = parse_worker_result_fields(WIRE_RUST_PATH)
     py_wire = parse_to_wire_fields(PYTHON_PATH)
@@ -200,9 +231,8 @@ def main() -> int:
             errors += 1
 
     if errors == 0:
-        print(
-            f"OK: all {len(PAIRS)} bridge contracts + wire format + task format in sync"
-        )
+        total = len(PAIRS) + len(REPORTER_PAIRS)
+        print(f"OK: all {total} bridge contracts + wire format + task format in sync")
     return 1 if errors else 0
 
 
