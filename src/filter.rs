@@ -79,11 +79,19 @@ pub fn sort_failed_first(
     failed
 }
 
+/// Returns true if the string contains glob metacharacters (`*`, `?`, `[`).
+pub(crate) fn contains_glob_chars(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[')
+}
+
 /// Keep only items matching the provided node IDs.
 ///
-/// Uses prefix matching: a node ID without `[` matches itself and any
-/// parametrized variants. A node ID like `path::ClassName` matches all methods
-/// in that class (since `path::ClassName` is a prefix of `path::ClassName::method`).
+/// Uses prefix matching for literal IDs: a node ID without `[` matches itself
+/// and any parametrized variants. A node ID like `path::ClassName` matches all
+/// methods in that class.
+///
+/// For glob IDs (containing `*`, `?`, or `[`), uses `globset::GlobMatcher`
+/// with `literal_separator(false)` so `*` matches across `::` and `/`.
 ///
 /// Items from files NOT in `node_id_source_files` pass through unfiltered
 /// (they came from bare paths, not node IDs).
@@ -98,6 +106,33 @@ pub fn filter_by_node_ids(
     if node_ids.is_empty() {
         return items;
     }
+
+    // Partition into literal and glob node IDs.
+    let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids
+        .iter()
+        .partition(|id| contains_glob_chars(id.as_ref()));
+
+    // Pre-compile glob matchers.
+    // Node IDs use `[param_id]` brackets as structural delimiters, not glob character
+    // classes. Escape `[` → `[[]` and `]` → `[]]` in a single pass so globset treats
+    // them as literals while preserving `*` and `?` as wildcards.
+    let glob_matchers: Vec<globset::GlobMatcher> = glob_ids
+        .iter()
+        .filter_map(|id| {
+            let escaped = escape_node_id_brackets(id.as_ref());
+            match globset::GlobBuilder::new(&escaped)
+                .literal_separator(false)
+                .build()
+            {
+                Ok(glob) => Some(glob.compile_matcher()),
+                Err(e) => {
+                    eprintln!("warning: invalid glob pattern '{}': {e}", id.as_ref());
+                    None
+                }
+            }
+        })
+        .collect();
+
     items
         .into_iter()
         .filter(|item| {
@@ -107,12 +142,20 @@ pub fn filter_by_node_ids(
                 return true;
             }
             let item_id: &str = item.node_id.as_ref();
-            node_ids.iter().any(|target| {
+
+            // Check literal IDs (existing prefix logic).
+            let literal_match = literal_ids.iter().any(|target| {
                 let t: &str = target.as_ref();
                 item_id == t
                     || item_id.starts_with(&format!("{}[", t))
                     || item_id.starts_with(&format!("{}::", t))
-            })
+            });
+            if literal_match {
+                return true;
+            }
+
+            // Check glob IDs.
+            glob_matchers.iter().any(|m| m.is_match(item_id))
         })
         .collect()
 }
@@ -374,5 +417,121 @@ mod tests {
         // This fails to compile if module_path is PathBuf (PathBuf has no as_str()).
         let item: Arc<TestItem> = TestItem::builder("tests/test_mod.py", "test_a").arc();
         let _s: &str = item.module_path.as_str();
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_function_name() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_add").arc(),
+            TestItem::builder("tests/test_a.py", "test_sub").arc(),
+            TestItem::builder("tests/test_a.py", "test_mul").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_a*")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_add");
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_param_id() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_add")
+                .param_id("case_basic".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_add")
+                .param_id("case_edge".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_add")
+                .param_id("other".to_string())
+                .arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw(
+            "tests/test_a.py::test_add[case*]",
+        )];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|i| i.param_id.as_ref().unwrap().starts_with("case")));
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_star_selects_all_in_file() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo").arc(),
+            TestItem::builder("tests/test_a.py", "test_bar").arc(),
+            TestItem::builder("tests/test_b.py", "test_baz").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::*")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|i| i.module_path == Utf8PathBuf::from("tests/test_a.py")));
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_no_match_returns_empty() {
+        let items = vec![TestItem::builder("tests/test_a.py", "test_foo").arc()];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_zzz*")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn filter_by_node_ids_non_glob_unchanged() {
+        // Verify existing prefix behavior is preserved when no glob chars present
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case1".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case2".to_string())
+                .arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn filter_by_node_ids_mixed_glob_and_literal() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_add").arc(),
+            TestItem::builder("tests/test_a.py", "test_sub").arc(),
+            TestItem::builder("tests/test_b.py", "test_mul").arc(),
+        ];
+        let ids = vec![
+            crate::types::NodeId::from_raw("tests/test_a.py::test_a*"),
+            crate::types::NodeId::from_raw("tests/test_b.py::test_mul"),
+        ];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 2);
+        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        assert!(names.contains(&"test_add"));
+        assert!(names.contains(&"test_mul"));
+    }
+
+    #[test]
+    fn filter_by_node_ids_glob_path_segment() {
+        let items = vec![
+            TestItem::builder("tests/test_math.py", "test_foo").arc(),
+            TestItem::builder("tests/test_string.py", "test_foo").arc(),
+            TestItem::builder("tests/test_string.py", "test_bar").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_m*::test_foo")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(
+            filtered[0].module_path,
+            Utf8PathBuf::from("tests/test_math.py")
+        );
     }
 }
