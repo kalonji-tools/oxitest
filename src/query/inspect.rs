@@ -79,7 +79,7 @@ pub(crate) fn format_inspect(
     // Extract source code from file if we have source path and a node_id
     if let Some(snippet) = extract_source_snippet(entry) {
         out.push('\n');
-        out.push_str(&snippet);
+        out.push_str(&super::highlight::highlight_python(&snippet, use_color));
     }
 
     out
