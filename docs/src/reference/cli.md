@@ -8,7 +8,7 @@ Most flags have a `pyproject.toml` equivalent. See [Configuration](configuration
 ## Invocation
 
 ```text
-oxitest [SUBCOMMAND] [OPTIONS] [PATHS...]
+oxitest [SUBCOMMAND] [OPTIONS] [PATHS_OR_NODE_IDS...]
 ```
 
 oxitest organises its features into subcommands. Running `oxitest` with no
@@ -21,8 +21,14 @@ subcommand is equivalent to `oxitest run`.
 | `query` | Inspect tests, fixtures, marks, helpers, or plugins without running them |
 | `env` | Print environment information and exit |
 
-`PATHS` is one or more files or directories to collect tests from. Defaults to
-the current working directory when omitted (applies to `run`, `debug`, and
+Positional arguments accept **file paths**, **directories**, or **node IDs**:
+
+- A plain path (`tests/test_math.py` or `tests/`) limits file discovery to that path.
+- A **node ID** (`tests/test_math.py::test_add`) targets a specific test. The `::` separator tells oxitest this is a node ID, not a path. The file portion is extracted automatically for collection scoping.
+- Class-based node IDs use double separators: `tests/test_math.py::TestSuite::test_add`.
+- Mixing is allowed: `oxitest run tests/test_a.py::test_foo tests/test_b.py` runs one specific test from file A and all tests from file B.
+
+Defaults to the current working directory when omitted (applies to `run`, `debug`, and
 `query tests`/`query fixtures`).
 
 ---
@@ -32,8 +38,8 @@ the current working directory when omitted (applies to `run`, `debug`, and
 Run the test suite. This is the default subcommand.
 
 ```text
-oxitest run [OPTIONS] [PATHS...]
-oxitest [OPTIONS] [PATHS...]        # equivalent
+oxitest run [OPTIONS] [PATHS_OR_NODE_IDS...]
+oxitest [OPTIONS] [PATHS_OR_NODE_IDS...]        # equivalent
 ```
 
 ### Filtering
@@ -91,7 +97,7 @@ Run tests under an interactive debugger. Implies `--serial`, `--show-internals`,
 and no timeout. Post-mortem mode (default) also implies `--maxfail 1`.
 
 ```text
-oxitest debug [OPTIONS] [PATHS...]
+oxitest debug [OPTIONS] [PATHS_OR_NODE_IDS...]
 ```
 
 | Flag | Short | Type | Default | Description |
@@ -143,7 +149,7 @@ These flags apply to all resources:
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `-E` | — | `EXPR` | — | DSL filter expression. See [Query DSL](#query-dsl). |
-| `--fzf` | — | flag | `false` | Open results in an interactive fuzzy-finder. |
+| `--fzf` | — | flag | `false` | Open results in an interactive fuzzy-finder. For tests: Tab to multi-select, Enter to run selected, Ctrl-R to debug focused item. |
 | `--inspect` | — | `ID` | — | Show a single-item detail card for the given identifier. |
 | `--format` | — | `jsonl` | — | Output as JSON Lines (one JSON object per result). |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
