@@ -377,9 +377,12 @@ pub(crate) fn cpu_count() -> usize {
 
 impl Config {
     pub fn load(rootdir: &Utf8Path) -> Self {
+        let rootdir = rootdir
+            .canonicalize_utf8()
+            .unwrap_or_else(|_| rootdir.to_owned());
         let config = Config {
-            rootdir: rootdir.to_owned(),
-            testpaths: vec![rootdir.to_owned()],
+            rootdir: rootdir.clone(),
+            testpaths: vec![rootdir.clone()],
             ..Config::default()
         };
 
@@ -401,7 +404,7 @@ impl Config {
         };
 
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
-        config.merge_toml(tc, Some(rootdir))
+        config.merge_toml(tc, Some(&rootdir))
     }
 
     /// Apply shared overrides from either TOML or CLI source.
@@ -637,6 +640,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_fs::prelude::*;
     use camino::{Utf8Path, Utf8PathBuf};
     use std::fs;
     use tempfile::TempDir;
@@ -669,6 +673,26 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(config.python_files, Config::default().python_files);
+    }
+
+    #[test]
+    fn load_canonicalizes_rootdir() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("pyproject.toml").write_str("").unwrap();
+        let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
+        let cfg = Config::load(utf8_dir);
+        assert!(
+            cfg.rootdir.as_str().starts_with('/'),
+            "rootdir should be absolute after canonicalization, got: {}",
+            cfg.rootdir
+        );
+        assert!(
+            !cfg.rootdir.components().any(
+                |c| c == camino::Utf8Component::CurDir || c == camino::Utf8Component::ParentDir
+            ),
+            "rootdir should have no . or .. components, got: {}",
+            cfg.rootdir
+        );
     }
 
     #[test]
