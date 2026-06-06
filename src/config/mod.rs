@@ -224,6 +224,11 @@ pub struct Config {
     pub auto_arrange_threshold: Option<u8>,
     pub collection_profile: bool,
     pub use_gitignore: bool,
+    pub node_ids: Vec<crate::types::NodeId>,
+    pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
+    /// True when the user specified explicit paths or node IDs on the CLI.
+    /// Used to skip unused-fixture detection (which requires the full suite).
+    pub has_explicit_paths: bool,
 }
 
 impl Default for Config {
@@ -273,6 +278,9 @@ impl Default for Config {
             auto_arrange_threshold: Some(70),
             collection_profile: false,
             use_gitignore: true,
+            node_ids: vec![],
+            node_id_source_files: std::collections::HashSet::new(),
+            has_explicit_paths: false,
         }
     }
 }
@@ -502,6 +510,10 @@ impl Config {
         // ── Paths ────────────────────────────────────────────────────────
         self.merge_paths(&args.paths);
 
+        if !args.node_ids.is_empty() {
+            self.canonicalize_node_ids(&args.node_ids);
+        }
+
         // ── Execution (unique to CLI) ───────────────────────────────────
         // validate() guarantees -x and --maxfail are mutually exclusive.
         if args.exitfirst {
@@ -554,6 +566,10 @@ impl Config {
         // ── Paths ────────────────────────────────────────────────────────
         self.merge_paths(&args.paths);
 
+        if !args.node_ids.is_empty() {
+            self.canonicalize_node_ids(&args.node_ids);
+        }
+
         // ── Debug mode ──────────────────────────────────────────────────
         args.mode().apply_to(&mut self, args.tb.as_ref());
 
@@ -593,6 +609,7 @@ impl Config {
     /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
     fn merge_paths(&mut self, paths: &[Utf8PathBuf]) {
         if !paths.is_empty() {
+            self.has_explicit_paths = true;
             self.testpaths = paths
                 .iter()
                 .map(|p| {
@@ -604,6 +621,45 @@ impl Config {
                 })
                 .collect();
         }
+    }
+
+    /// Canonicalize node IDs so their file paths match the canonical form used by collected items.
+    ///
+    /// Resolves relative paths in node IDs against rootdir, then canonicalizes via
+    /// `std::fs::canonicalize`. Also populates `node_id_source_files` with the
+    /// canonical file paths.
+    fn canonicalize_node_ids(&mut self, raw_ids: &[crate::types::NodeId]) {
+        use crate::types::NodeId;
+
+        self.node_ids = raw_ids
+            .iter()
+            .map(|id| {
+                let id_str: &str = id.as_ref();
+                let Some((file_part, rest)) = id_str.split_once("::") else {
+                    return id.clone();
+                };
+                let file_path = Utf8PathBuf::from(file_part);
+                let abs_path = if file_path.is_absolute() {
+                    file_path
+                } else {
+                    self.rootdir.join(&file_path)
+                };
+                match std::fs::canonicalize(abs_path.as_std_path()) {
+                    Ok(canonical) => match Utf8PathBuf::from_path_buf(canonical) {
+                        Ok(utf8) => NodeId::from_raw(&format!("{utf8}::{rest}")),
+                        Err(_) => id.clone(),
+                    },
+                    Err(_) => id.clone(),
+                }
+            })
+            .collect();
+
+        self.node_id_source_files = self
+            .node_ids
+            .iter()
+            .filter_map(|id| id.module_path())
+            .map(Utf8PathBuf::from)
+            .collect();
     }
 
     /// Merge the `--affected` flag into config, resolving empty sentinel to `affected_base`.

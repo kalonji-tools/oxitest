@@ -60,7 +60,7 @@ pub(crate) fn run_fzf(
 
     let mut fzf = Command::new("fzf")
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
+        .stdout(Stdio::inherit())
         .arg("--ansi")
         .arg("--delimiter=\t")
         .arg("--with-nth=1..")
