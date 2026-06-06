@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 __all__ = [
+    "CacheEntry",
+    "CacheStats",
     "Frame",
+    "FixtureTiming",
     "TestResult",
     "CollectedItem",
     "ViolationKind",
@@ -233,3 +236,26 @@ class CollectedViolation:
     node_id: str
     kind: ViolationKind
     detail: str  # kind-specific payload; empty string when unused
+
+
+@dataclass
+class CacheEntry:
+    name: str
+    hits: int
+    misses: int
+
+
+@dataclass
+class CacheStats:
+    total_hits: int
+    total_misses: int
+    breakdown: tuple[CacheEntry, ...]
+
+
+@dataclass
+class FixtureTiming:
+    name: str
+    total_setup_ms: float
+    setup_count: int
+    total_teardown_ms: float
+    teardown_count: int

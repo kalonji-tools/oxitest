@@ -22,17 +22,15 @@ def test_setup_timing_recorded_for_function_scoped_fixture():
     timings = session.get_fixture_timings()
     assert len(timings) == 1, f"expected exactly 1 timing entry, got {len(timings)}"
     entry = timings[0]
-    assert entry["name"] == "slow_fixture", (
-        f"expected fixture name 'slow_fixture', got {entry['name']!r}"
+    assert entry.name == "slow_fixture", (
+        f"expected fixture name 'slow_fixture', got {entry.name!r}"
     )
-    assert entry["setup_count"] == 1, (
-        f"expected setup_count 1, got {entry['setup_count']}"
+    assert entry.setup_count == 1, f"expected setup_count 1, got {entry.setup_count}"
+    assert entry.total_setup_ms >= 10.0, (
+        f"expected at least 10ms setup time, got {entry.total_setup_ms}"
     )
-    assert entry["total_setup_ms"] >= 10.0, (
-        f"expected at least 10ms setup time, got {entry['total_setup_ms']}"
-    )
-    assert entry["total_teardown_ms"] == 0.0, (
-        f"expected 0.0 teardown time, got {entry['total_teardown_ms']}"
+    assert entry.total_teardown_ms == 0.0, (
+        f"expected 0.0 teardown time, got {entry.total_teardown_ms}"
     )
 
 
@@ -63,11 +61,11 @@ def test_teardown_timing_recorded_for_yield_fixture():
     timings = session.get_fixture_timings()
     assert len(timings) == 1, f"expected 1 timing entry, got {len(timings)}"
     entry = timings[0]
-    assert entry["teardown_count"] == 1, (
-        f"expected teardown_count 1, got {entry['teardown_count']}"
+    assert entry.teardown_count == 1, (
+        f"expected teardown_count 1, got {entry.teardown_count}"
     )
-    assert entry["total_teardown_ms"] >= 10.0, (
-        f"expected at least 10ms teardown time, got {entry['total_teardown_ms']}"
+    assert entry.total_teardown_ms >= 10.0, (
+        f"expected at least 10ms teardown time, got {entry.total_teardown_ms}"
     )
 
 
@@ -91,8 +89,8 @@ def test_shared_fixture_setup_timed_once():
     timings = session.get_fixture_timings()
     assert len(timings) == 1, f"expected 1 timing entry, got {len(timings)}"
     entry = timings[0]
-    assert entry["setup_count"] == 1, (
-        f"expected setup_count 1 (cached on second call), got {entry['setup_count']}"
+    assert entry.setup_count == 1, (
+        f"expected setup_count 1 (cached on second call), got {entry.setup_count}"
     )
 
 
@@ -111,10 +109,10 @@ def test_multiple_fixtures_each_tracked_separately():
     session.get_fixture("fast_b", "test_mod.py", teardowns)
 
     timings = session.get_fixture_timings()
-    names = [t["name"] for t in timings]
+    names = [t.name for t in timings]
     assert "fast_a" in names, f"expected 'fast_a' in timing names, got {names}"
     assert "fast_b" in names, f"expected 'fast_b' in timing names, got {names}"
     assert len(timings) == 2, f"expected 2 timing entries, got {len(timings)}"
-    assert all(t["setup_count"] == 1 for t in timings), (
-        f"expected all setup_count to be 1, got {[t['setup_count'] for t in timings]}"
+    assert all(t.setup_count == 1 for t in timings), (
+        f"expected all setup_count to be 1, got {[t.setup_count for t in timings]}"
     )
