@@ -35,7 +35,11 @@ fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
 ///
 /// Fields that are absent or empty in the entry are skipped.
 /// If a `_source_code` field is present it is appended after a blank line.
-pub(crate) fn format_inspect(entry: &QueryEntry, resource: ResourceKind) -> String {
+pub(crate) fn format_inspect(
+    entry: &QueryEntry,
+    resource: ResourceKind,
+    _use_color: bool,
+) -> String {
     let name = entry.get("name").unwrap_or("<unknown>");
     let mut out = format!("─── {name} ───\n\n");
 
@@ -189,7 +193,7 @@ mod tests {
             ("mark", "slow"),
             ("async", "false"),
         ]);
-        let out = format_inspect(&e, ResourceKind::Tests);
+        let out = format_inspect(&e, ResourceKind::Tests, false);
         assert!(out.contains("─── test_foo ───"), "header missing: {out:?}");
         assert!(out.contains("source:"), "source field missing: {out:?}");
         assert!(
@@ -209,7 +213,7 @@ mod tests {
             ("autouse", "true"),
             ("async", "false"),
         ]);
-        let out = format_inspect(&e, ResourceKind::Fixtures);
+        let out = format_inspect(&e, ResourceKind::Fixtures, false);
         assert!(out.contains("shared:"), "shared field missing: {out:?}");
         assert!(out.contains("true"), "shared value missing: {out:?}");
         assert!(out.contains("autouse:"), "autouse field missing: {out:?}");
@@ -220,7 +224,7 @@ mod tests {
     fn inspect_missing_fields_skipped() {
         // Entry with only a name — no other fields should appear
         let e = entry(&[("name", "test_bare")]);
-        let out = format_inspect(&e, ResourceKind::Tests);
+        let out = format_inspect(&e, ResourceKind::Tests, false);
         assert!(
             out.starts_with("─── test_bare ───"),
             "header wrong: {out:?}"
@@ -241,7 +245,7 @@ mod tests {
             ("mark", "slow,network"),
             ("async", "true"),
         ]);
-        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Tests));
+        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Tests, false));
     }
 
     #[test]
@@ -253,6 +257,6 @@ mod tests {
             ("autouse", "true"),
             ("async", "false"),
         ]);
-        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Fixtures));
+        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Fixtures, false));
     }
 }
