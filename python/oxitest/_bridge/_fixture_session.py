@@ -61,6 +61,7 @@ from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge.result import CacheEntry, CacheStats, FixtureTiming
 
 
 class _SessionProtocol(Protocol):
@@ -100,7 +101,7 @@ class _SessionProtocol(Protocol):
         func: Callable[..., Any],
     ) -> str | None: ...
 
-    def get_fixture_timings(self) -> list[dict[str, Any]]: ...
+    def get_fixture_timings(self) -> list[FixtureTiming]: ...
 
 
 class _NullFixtureSession:
@@ -142,11 +143,11 @@ class _NullFixtureSession:
     ) -> str | None:
         return None
 
-    def get_cache_stats(self) -> dict[str, Any]:
+    def get_cache_stats(self) -> CacheStats:
         """Return empty cache stats (null session has no shared fixtures)."""
-        return {"total_hits": 0, "total_misses": 0, "breakdown": []}
+        return CacheStats(total_hits=0, total_misses=0, breakdown=())
 
-    def get_fixture_timings(self) -> list[dict[str, Any]]:
+    def get_fixture_timings(self) -> list[FixtureTiming]:
         """Return empty fixture timings (null session has no fixtures)."""
         return []
 
@@ -406,22 +407,22 @@ class FixtureSession:
         self._shared_scope.drain()
         self._session_scope.drain()
 
-    def get_cache_stats(self) -> dict[str, Any]:
+    def get_cache_stats(self) -> CacheStats:
         """Return shared fixture cache hit/miss statistics."""
         s = self._shared_scope
         names = sorted(set(s._hits.keys()) | set(s._misses.keys()))
-        return {
-            "total_hits": sum(s._hits.values()),
-            "total_misses": sum(s._misses.values()),
-            "breakdown": [
-                {
-                    "name": n,
-                    "hits": s._hits.get(n, 0),
-                    "misses": s._misses.get(n, 0),
-                }
+        return CacheStats(
+            total_hits=sum(s._hits.values()),
+            total_misses=sum(s._misses.values()),
+            breakdown=tuple(
+                CacheEntry(
+                    name=n,
+                    hits=s._hits.get(n, 0),
+                    misses=s._misses.get(n, 0),
+                )
                 for n in names
-            ],
-        }
+            ),
+        )
 
     def has_shared_fixtures(self) -> bool:
         """Return True if the effective (most-local) definition has shared=True."""
@@ -465,7 +466,7 @@ class FixtureSession:
         """
         return self._validator.find_unused_fixtures(items)
 
-    def get_fixture_timings(self) -> list[dict[str, Any]]:
+    def get_fixture_timings(self) -> list[FixtureTiming]:
         """Return per-fixture setup and teardown timing aggregates."""
         return self._instantiator.get_fixture_timings()
 

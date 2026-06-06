@@ -34,6 +34,7 @@ from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.proxy_ns import FixturesProxy
+from oxitest._bridge.result import FixtureTiming
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_registry import FixtureRegistry
@@ -465,16 +466,16 @@ class FixtureInstantiator:
 
     # ── Timing ───────────────────────────────────────────────────────────
 
-    def get_fixture_timings(self) -> list[dict[str, Any]]:
+    def get_fixture_timings(self) -> list[FixtureTiming]:
         """Return per-fixture setup and teardown timing aggregates."""
         names = sorted(set(self._setup_times.keys()) | set(self._teardown_times.keys()))
         return [
-            {
-                "name": n,
-                "total_setup_ms": float(sum(self._setup_times.get(n, []))),
-                "setup_count": len(self._setup_times.get(n, [])),
-                "total_teardown_ms": float(sum(self._teardown_times.get(n, []))),
-                "teardown_count": len(self._teardown_times.get(n, [])),
-            }
+            FixtureTiming(
+                name=n,
+                total_setup_ms=float(sum(self._setup_times.get(n, []))),
+                setup_count=len(self._setup_times.get(n, [])),
+                total_teardown_ms=float(sum(self._teardown_times.get(n, []))),
+                teardown_count=len(self._teardown_times.get(n, [])),
+            )
             for n in names
         ]
