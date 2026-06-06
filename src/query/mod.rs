@@ -1,5 +1,7 @@
+pub(crate) mod ast;
 pub(crate) mod bridge;
-pub(crate) mod dsl;
+pub(crate) mod compile;
+pub(crate) mod eval;
 pub(crate) mod extract;
 pub(crate) mod format;
 pub(crate) mod fzf;
@@ -21,8 +23,8 @@ pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bo
         ResourceKind::Tests | ResourceKind::Marks | ResourceKind::Helpers => {
             // Check if the expression references predicates that need Python
             if let Some(s) = expr_str {
-                if let Ok(tokens) = dsl::lex(s) {
-                    if let Ok(expr) = dsl::parse(tokens) {
+                if let Ok(tokens) = compile::lex(s) {
+                    if let Ok(expr) = compile::parse(tokens) {
                         return expr_needs_python(&expr);
                     }
                 }
@@ -33,11 +35,11 @@ pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bo
 }
 
 /// Walk the expression AST checking for predicates that need Python.
-fn expr_needs_python(expr: &dsl::Expr) -> bool {
+fn expr_needs_python(expr: &ast::Expr) -> bool {
     match expr {
-        dsl::Expr::And(a, b) | dsl::Expr::Or(a, b) => expr_needs_python(a) || expr_needs_python(b),
-        dsl::Expr::Not(inner) => expr_needs_python(inner),
-        dsl::Expr::Predicate { name, .. } => {
+        ast::Expr::And(a, b) | ast::Expr::Or(a, b) => expr_needs_python(a) || expr_needs_python(b),
+        ast::Expr::Not(inner) => expr_needs_python(inner),
+        ast::Expr::Predicate { name, .. } => {
             matches!(name.as_str(), "shared" | "autouse" | "protocol")
         }
     }
@@ -128,16 +130,16 @@ pub(crate) fn run_query(
 
     // 2. Parse and apply DSL expression filter
     let parsed_expr = if let Some(ref expr_str) = args.expression {
-        let tokens = dsl::lex(expr_str).map_err(|e| e.to_string())?;
-        let expr = dsl::parse(tokens).map_err(|e| e.to_string())?;
-        dsl::validate_predicates(&expr, &args.resource).map_err(|e| e.to_string())?;
+        let tokens = compile::lex(expr_str).map_err(|e| e.to_string())?;
+        let expr = compile::parse(tokens).map_err(|e| e.to_string())?;
+        eval::validate_predicates(&expr, &args.resource).map_err(|e| e.to_string())?;
         Some(expr)
     } else {
         None
     };
 
     if let Some(ref expr) = parsed_expr {
-        entries.retain(|e| dsl::eval(expr, e));
+        entries.retain(|e| eval::eval(expr, e));
     }
 
     // 3. Handle --inspect
