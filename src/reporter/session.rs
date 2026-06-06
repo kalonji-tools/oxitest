@@ -54,3 +54,61 @@ impl ReporterSession {
             .push((context.to_string(), error.to_string()));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{DurationMs, TestItem, TestOutcome};
+
+    #[test]
+    fn record_outcome_updates_stats_and_timing() {
+        let mut session = ReporterSession::new(0);
+        let item = TestItem::builder("tests/test_foo.py", "test_a").build();
+        let outcome = TestOutcome::Passed {
+            no_message_lines: vec![],
+        };
+        session.record_outcome(&item, &outcome, DurationMs::new(42.5));
+
+        assert_eq!(session.stats().passed, 1);
+        assert_eq!(session.stats().timings.len(), 1);
+    }
+
+    #[test]
+    fn record_strict_suite_delegates_to_stats() {
+        let mut session = ReporterSession::new(3);
+        session.record_strict_suite();
+        assert_eq!(session.stats().strict_suite, 3);
+    }
+
+    #[test]
+    fn set_fixture_cache_stats_stores_values() {
+        let mut session = ReporterSession::new(0);
+        session.set_fixture_cache_stats(5, 2, vec![]);
+        assert_eq!(session.stats().fixture_cache_hits, 5);
+        assert_eq!(session.stats().fixture_cache_misses, 2);
+    }
+
+    #[test]
+    fn set_fixture_timings_stores_values() {
+        let mut session = ReporterSession::new(0);
+        let entry = stats::FixtureTimingEntry {
+            name: "db".into(),
+            total_setup_ms: 100.0,
+            setup_count: 1,
+            total_teardown_ms: 10.0,
+            teardown_count: 1,
+        };
+        session.set_fixture_timings(vec![entry]);
+        assert_eq!(session.stats().fixture_timings.len(), 1);
+        assert_eq!(session.stats().fixture_timings[0].name, "db");
+    }
+
+    #[test]
+    fn record_teardown_warning_appends_to_stats() {
+        let mut session = ReporterSession::new(0);
+        session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
+        assert_eq!(session.stats().warning_msgs.len(), 1);
+        assert_eq!(session.stats().warning_msgs[0].0, "end_module(test.py)");
+        assert_eq!(session.stats().warning_msgs[0].1, "RuntimeError: boom");
+    }
+}
