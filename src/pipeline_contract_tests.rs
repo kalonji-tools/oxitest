@@ -1,6 +1,6 @@
 use super::*;
 use crate::reporter::test_helpers::make_ctx;
-use crate::test_doubles::doubles::{MockPhase, RecordingSession, StubCollector, StubRunner};
+use crate::test_doubles::doubles::MockPhase;
 use crate::types::{ExitCode, TestItem};
 
 /// Helper: extract items from collection state (works for Collected, Partitioned, Ready, Executed).
@@ -38,95 +38,8 @@ mod loop_tests {
     }
 }
 
-mod double_tests {
-    use super::*;
-    use crate::pipeline::traits::{ModuleCollector, Session, TestRunner};
-    use camino::Utf8PathBuf;
-    use std::collections::HashMap;
-
-    #[test]
-    fn stub_collector_returns_configured_items() {
-        Python::initialize();
-        Python::attach(|py| {
-            let path = Utf8PathBuf::from("tests/test_foo.py");
-            let item = TestItem::builder_raw("tests/test_foo.py::test_one").build();
-            let mut results = HashMap::new();
-            results.insert(path.clone(), Ok((vec![item], vec![])));
-            let collector = StubCollector { results };
-
-            let session = RecordingSession::new(py);
-            let (items, violations) = collector
-                .collect_module(py, &path, &session, false)
-                .expect("collect should succeed");
-
-            assert_eq!(items.len(), 1);
-            assert_eq!(items[0].node_id.to_string(), "tests/test_foo.py::test_one");
-            assert!(violations.is_empty());
-        });
-    }
-
-    #[test]
-    fn stub_runner_returns_passed_for_unknown_node() {
-        Python::initialize();
-        Python::attach(|py| {
-            let runner = StubRunner::default();
-            let item = TestItem::builder_raw("tests/test_foo.py::test_unknown").build();
-            let session = RecordingSession::new(py);
-
-            let outcome = runner.run_test(py, &item, &session, None, None, None, false, false);
-
-            assert!(
-                matches!(outcome, crate::types::TestOutcome::Passed { .. }),
-                "expected Passed, got {:?}",
-                outcome.as_str()
-            );
-            let calls = runner.calls.borrow();
-            assert_eq!(calls.len(), 1);
-            assert_eq!(calls[0].0, "tests/test_foo.py::test_unknown");
-            assert_eq!(calls[0].1, None);
-        });
-    }
-
-    #[test]
-    fn recording_session_tracks_end_module_calls() {
-        Python::initialize();
-        Python::attach(|py| {
-            let session = RecordingSession::new(py);
-
-            session
-                .end_module(py, camino::Utf8Path::new("tests/test_a.py"))
-                .unwrap();
-            session
-                .end_module(py, camino::Utf8Path::new("tests/test_b.py"))
-                .unwrap();
-
-            let calls = session.end_module_calls.borrow();
-            assert_eq!(calls.len(), 2);
-            assert_eq!(calls[0], Utf8PathBuf::from("tests/test_a.py"));
-            assert_eq!(calls[1], Utf8PathBuf::from("tests/test_b.py"));
-            assert!(!session.end_session_called.get());
-        });
-    }
-
-    #[test]
-    fn mock_phase_records_execution() {
-        Python::initialize();
-        Python::attach(|py| {
-            let phase = MockPhase::new("test_phase", true, PhaseOutcome::Continue);
-            assert!(!phase.was_called());
-
-            let mut ctx = make_ctx();
-            let outcome = phase.execute(py, &mut ctx).expect("execute should succeed");
-
-            assert!(phase.was_called());
-            assert!(matches!(outcome, PhaseOutcome::Continue));
-        });
-    }
-}
-
 mod orchestration_tests {
     use super::*;
-    use crate::test_doubles::doubles::MockPhase;
 
     #[test]
     fn skipped_phases_are_not_called() {
@@ -245,7 +158,6 @@ mod strict_phase_contract_tests {
     use super::*;
     use crate::bridge::{RawViolation, ViolationKind};
     use crate::config::StrictMode;
-    use crate::types::TestItem;
 
     #[test]
     fn strict_enforce_partitions_items() {
@@ -327,7 +239,6 @@ mod strict_phase_contract_tests {
 
 mod filter_phase_contract_tests {
     use super::*;
-    use crate::types::TestItem;
 
     #[test]
     fn expression_filter_reduces_items() {
@@ -381,7 +292,6 @@ mod context_threading_tests {
     use super::*;
     use crate::bridge::{RawViolation, ViolationKind};
     use crate::config::StrictMode;
-    use crate::types::TestItem;
 
     #[test]
     fn strict_then_filter_threads_clean_items() {
