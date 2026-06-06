@@ -82,7 +82,7 @@ impl Reporter for JsonReporter {
         &mut self,
         _collect_errors: &[CollectError],
         _interrupted: bool,
-        _stats: &super::RunStats,
+        _session: &super::ReporterSession,
     ) -> super::ExitVote {
         let passed = self.tests.iter().filter(|t| t.status == "passed").count();
         let failed = self.tests.iter().filter(|t| t.status == "failed").count();
@@ -168,7 +168,7 @@ mod snapshot_tests {
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO);
         }
-        rep.finish(&[], false, &crate::reporter::RunStats::new());
+        rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -204,7 +204,7 @@ mod tests {
         for (item, outcome) in &outcomes {
             rep.test_completed(item, outcome, DurationMs::new(1.0));
         }
-        rep.finish(&[], false, &crate::reporter::RunStats::new());
+        rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         std::fs::read_to_string(&path).unwrap()
     }
 
@@ -294,7 +294,7 @@ mod tests {
             },
             DurationMs::new(1.0),
         );
-        let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
+        let vote = rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         assert_eq!(
             vote.code(),
             crate::types::ExitCode::UsageError,
@@ -314,7 +314,7 @@ mod tests {
             },
             DurationMs::new(1.0),
         );
-        let vote = rep.finish(&[], false, &crate::reporter::RunStats::new());
+        let vote = rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         assert!(
             matches!(vote, crate::reporter::ExitVote::Abstain),
             "must return Abstain on successful write"
