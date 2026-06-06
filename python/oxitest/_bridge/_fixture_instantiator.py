@@ -30,8 +30,10 @@ from oxitest._bridge._errors import (
     FixtureSetupError,
 )
 from oxitest._bridge._fixture_registry import FixtureDef, _fixture_inner_type
+from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
+from oxitest._bridge.proxy_ns import FixturesProxy
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_registry import FixtureRegistry
@@ -206,9 +208,6 @@ class FixtureInstantiator:
         (the caller — typically FixtureSession — passes itself so that the proxy
         can call back into it for namespace/builtin resolution).
         """
-        from oxitest._bridge._fixture_session import Fixtures
-        from oxitest._bridge.proxy_ns import FixturesProxy
-
         if hint is Fixtures:
             session: Any = proxy_session or self
             return True, FixturesProxy(

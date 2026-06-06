@@ -17,7 +17,8 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     FixtureShadowWarning,
 )
-from oxitest._bridge._fixture_session import Fixtures, FixtureSession
+from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge.result import ViolationKind
 
 # ── skip / mark ───────────────────────────────────────────────────────────────
@@ -915,7 +916,7 @@ def test_on_teardown_registers_cleanup():
 
 
 def test_fixture_decorator_accepts_shared_kwarg():
-    from oxitest._bridge._fixture_session import Fixtures
+    from oxitest._bridge._fixtures import Fixtures
 
     reg_obj = Fixtures()
 
@@ -931,7 +932,7 @@ def test_fixture_decorator_accepts_shared_kwarg():
 
 
 def test_fixture_decorator_default_shared_is_false():
-    from oxitest._bridge._fixture_session import Fixtures
+    from oxitest._bridge._fixtures import Fixtures
 
     reg_obj = Fixtures()
 
@@ -1666,6 +1667,97 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
         )
     finally:
         _fixture_context.reset(token)
+
+
+def test_fixture_accessor_underscore_attr_raises_attribute_error():
+    """FixtureAccessor.__getattr__ raises AttributeError for _-prefixed attrs
+    without checking the fixture context (fast path)."""
+    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
+
+    fx_obj = Fixtures()
+    accessor = FixtureAccessor("value", fx_obj, lambda: 42)
+    with raises(AttributeError):
+        _ = accessor._private
+
+
+def test_fixture_accessor_call_delegates_to_func():
+    """FixtureAccessor.__call__ delegates to the wrapped function."""
+    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
+
+    fx_obj = Fixtures()
+    accessor = FixtureAccessor("greet", fx_obj, lambda x: f"hi {x}")
+    assert accessor("world") == "hi world", "should delegate to wrapped func"
+
+
+def test_fixture_accessor_has_oxitest_fixture_name():
+    """FixtureAccessor carries _oxitest_fixture_name for executor resolution."""
+    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
+
+    fx_obj = Fixtures()
+    accessor = FixtureAccessor("db", fx_obj, lambda: None)
+    assert accessor._oxitest_fixture_name == "db", "should carry fixture name"
+
+
+def test_fixtures_getattr_returns_accessor():
+    """Fixtures.__getattr__ returns a FixtureAccessor for registered fixtures."""
+    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
+
+    fx_obj = Fixtures()
+
+    @fx_obj.fixture
+    def db() -> str:
+        return "conn"
+
+    accessor = fx_obj.db
+    assert isinstance(accessor, FixtureAccessor), "should return FixtureAccessor"
+    assert accessor._oxitest_fixture_name == "db", "accessor should carry fixture name"
+
+
+def test_fixtures_getattr_raises_for_unknown():
+    """Fixtures.__getattr__ raises AttributeError for unregistered names."""
+    from oxitest._bridge._fixtures import Fixtures
+
+    fx_obj = Fixtures()
+    with raises(AttributeError) as exc_info:
+        _ = fx_obj.nonexistent
+    assert "nonexistent" in str(exc_info.value), "should mention missing name"
+    assert "Available" in str(exc_info.value), "should list available fixtures"
+
+
+def test_fixtures_getattr_raises_for_underscore():
+    """Fixtures.__getattr__ raises AttributeError for _-prefixed names."""
+    from oxitest._bridge._fixtures import Fixtures
+
+    fx_obj = Fixtures()
+    with raises(AttributeError):
+        _ = fx_obj._internal
+
+
+def test_fixtures_fixture_with_options():
+    """@fixtures.fixture(name=..., shared=...) registers with custom options."""
+    from oxitest._bridge._fixtures import Fixtures
+
+    fx_obj = Fixtures()
+
+    @fx_obj.fixture(name="custom_name", shared=True)
+    def my_func() -> str:
+        return "val"
+
+    assert len(fx_obj._defs) == 1, "should register one fixture"
+    defn = fx_obj._defs[0]
+    assert defn.name == "custom_name", "should use custom name"
+    assert defn.shared is True, "should be shared"
+
+
+def test_fixtures_namespace_name():
+    """Fixtures stores the namespace name passed at construction."""
+    from oxitest._bridge._fixtures import Fixtures
+
+    fx_obj = Fixtures("myns")
+    assert fx_obj._namespace_name == "myns", "should store namespace name"
+
+    fx_default = Fixtures()
+    assert fx_default._namespace_name == "", "default namespace should be empty"
 
 
 @oxitest.mark.inprocess
