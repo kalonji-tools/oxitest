@@ -12,7 +12,7 @@ from oxitest._bridge._builtins._patch import _Patcher
 from oxitest._bridge._builtins._tempdir import _TempDir, _TempDirFactory
 
 if TYPE_CHECKING:
-    from oxitest._bridge.fixtures import FixtureSession
+    from oxitest._bridge._fixture_session import FixtureSession
 
 _OXI_NAMES: dict[str, type] = {
     "tmp": _TempDir,
@@ -28,7 +28,7 @@ _CTX_NAME = "ctx"
 
 
 def _get_ctx_type() -> type:
-    from oxitest._bridge.fixtures import _TestContext
+    from oxitest._bridge._builtin_context import _TestContext
 
     return _TestContext
 

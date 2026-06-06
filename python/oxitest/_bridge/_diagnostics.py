@@ -24,7 +24,7 @@ from oxitest._bridge._assert_error import (
     _OxitestAssertionError,
 )
 from oxitest._bridge._builtins._warncapture import _WarnCapture
-from oxitest._bridge.fixtures import FixtureTeardownWarning
+from oxitest._bridge._fixture_session import FixtureTeardownWarning
 from oxitest._bridge.result import Frame, StatusKind, TestResult
 
 _REPR_MAX = 80

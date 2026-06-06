@@ -6,8 +6,8 @@ import types
 from pathlib import Path
 from typing import Any
 
+from oxitest._bridge._fixture_session import Fixtures
 from oxitest._bridge._namespace_validation import validate_namespace_name
-from oxitest._bridge.fixtures import Fixtures
 
 
 class HelperNamespace:
