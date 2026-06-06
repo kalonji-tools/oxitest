@@ -206,7 +206,7 @@ class FixtureInstantiator:
         (the caller — typically FixtureSession — passes itself so that the proxy
         can call back into it for namespace/builtin resolution).
         """
-        from oxitest._bridge.fixtures import Fixtures
+        from oxitest._bridge._fixture_session import Fixtures
         from oxitest._bridge.proxy_ns import FixturesProxy
 
         if hint is Fixtures:
