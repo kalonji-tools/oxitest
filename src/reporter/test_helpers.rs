@@ -12,25 +12,25 @@ pub(crate) fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
     }
 }
 
-/// Build a minimal [`crate::pipeline::PipelineContext`] suitable for unit tests.
+/// Build a minimal [`Pipeline<S>`] suitable for unit tests.
 ///
 /// Uses default config, no-op CLI flags, a missing-path cache (loads empty), and
-/// `is_tty = false` / `use_color = false`. All incremental fields start empty.
-pub(crate) fn make_ctx() -> crate::pipeline::PipelineContext {
+/// `is_tty = false` / `use_color = false`.
+pub(crate) fn make_pipeline<S>(state: S) -> crate::pipeline::Pipeline<S> {
     let cfg = crate::config::Config::default();
     let command = crate::config::Command::Run(crate::config::RunArgs::default_for_test());
     let cache = crate::cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));
-    let rootdir = camino::Utf8PathBuf::from(".");
     let use_color = false;
     let base = super::ReporterOptsBuilder::from_config(&cfg, use_color);
-    crate::pipeline::PipelineContext::from_setup(crate::pipeline::SetupContext {
+    crate::pipeline::Pipeline {
         cfg,
-        cache,
         command,
-        rootdir,
+        rootdir: camino::Utf8PathBuf::from("."),
         is_tty: false,
         use_color,
-        python_bin: "python3".to_string(),
         base,
-    })
+        cache,
+        python_bin: "python3".to_string(),
+        state,
+    }
 }

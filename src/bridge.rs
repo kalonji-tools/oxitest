@@ -141,6 +141,15 @@ impl FixtureSession {
     }
 }
 
+#[cfg(test)]
+impl FixtureSession {
+    /// Create a dummy session wrapping `None` for unit tests that never call
+    /// Python methods on the session.
+    pub(crate) fn stub(py: Python<'_>) -> Self {
+        Self(py.None().into())
+    }
+}
+
 /// Collected test item extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `CollectedItem`.
 #[derive(FromPyObject)]

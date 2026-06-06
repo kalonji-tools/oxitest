@@ -1,7 +1,6 @@
 mod ahash_tests {
     #[test]
     fn ahash_map_is_available() {
-        // Fails to compile without the ahash dep.
         let mut m: ahash::AHashMap<String, usize> = ahash::AHashMap::new();
         m.insert("key".to_string(), 42);
         assert_eq!(m.get("key"), Some(&42));
@@ -11,7 +10,6 @@ mod ahash_tests {
 mod channel_tests {
     #[test]
     fn crossbeam_channel_drains_when_all_senders_dropped() {
-        // Fails to compile without crossbeam-channel dep.
         let (tx, rx) = crossbeam_channel::unbounded::<u32>();
         let tx2 = tx.clone();
         tx.send(1).unwrap();
@@ -26,15 +24,12 @@ mod channel_tests {
 mod tracing_tests {
     #[test]
     fn tracing_macros_compile_without_subscriber() {
-        // tracing macros are no-ops when no subscriber is active.
-        // This test fails to compile without the tracing dep.
         tracing::warn!("no-op warning");
         tracing::error!("no-op error");
     }
 
     #[test]
     fn tracing_structured_fields_compile() {
-        // Verify the structured field syntax used in parallel::spawn_worker compiles.
         let e = serde_json::from_str::<serde_json::Value>("bad").unwrap_err();
         let trimmed = "some output";
         tracing::warn!(error = %e, output = %trimmed, "bad worker output");
@@ -64,34 +59,6 @@ mod color_tests {
     }
 }
 
-mod fluent_setter_tests {
-    use crate::pipeline::CollectionState;
-    use crate::reporter::test_helpers::make_ctx;
-    use crate::types::TestItem;
-
-    #[test]
-    fn with_collected_sets_collection_state() {
-        let mut ctx = make_ctx();
-        let items = vec![TestItem::builder_raw("test::one").arc()];
-        ctx.with_collected(items, vec![]);
-
-        assert!(matches!(ctx.collection, CollectionState::Collected { .. }));
-    }
-
-    #[test]
-    fn with_expression_sets_filter_expression() {
-        let mut ctx = make_ctx();
-        ctx.with_expression("name(alpha)");
-
-        match &ctx.command {
-            crate::config::Command::Run(a) => {
-                assert_eq!(a.filter.expression.as_deref(), Some("name(alpha)"));
-            }
-            _ => panic!("expected Run command"),
-        }
-    }
-}
-
 mod strict_pipeline_tests {
     use crate::bridge;
     use crate::config::Config;
@@ -100,7 +67,7 @@ mod strict_pipeline_tests {
 
     #[test]
     fn all_violations_empty_when_strict_none() {
-        let cfg = Config::default(); // strict = None
+        let cfg = Config::default();
         let raw: Vec<bridge::RawViolation> = vec![];
         let violations: Vec<StrictViolation> = if cfg.strict.is_some() {
             let mut v = strict::check_config(&cfg);

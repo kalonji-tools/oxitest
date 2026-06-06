@@ -4,6 +4,10 @@
 //! config → collect files → import tests → filter → schedule → execute → report → cache.
 //!
 //! Both serial and parallel execution paths converge through this module.
+//!
+//! Phase ordering is enforced at compile time via the typestate pattern:
+//! each pipeline stage is a distinct type, and transitions consume one type
+//! to produce the next. Illegal ordering is a compile error.
 
 mod arrange;
 mod collection;
@@ -14,138 +18,158 @@ pub(crate) mod traits;
 
 use std::sync::Arc;
 
+use camino::Utf8PathBuf;
+
 use crate::types::ExitCode;
 use crate::{bridge, cache, config, query, reporter, strict, types};
 use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
 
-/// The outcome of a single pipeline phase execution.
-#[derive(Debug)]
-pub(crate) enum PhaseOutcome {
-    /// The phase completed normally; continue to the next phase.
-    Continue,
-    /// The phase requests an early exit with the given exit code.
-    EarlyExit(ExitCode),
+// ─── State types ─────────────────────────────────────────────────────────────
+
+pub(crate) struct Empty;
+
+pub(crate) struct FilesCollected {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
 }
 
-/// A discrete stage of the test pipeline.
-///
-/// Implementers should be unit-testable: each phase reads from and writes to
-/// [`PipelineContext`], with side effects limited to the phase's own scope.
-pub(crate) trait PipelinePhase {
-    /// Human-readable name used in diagnostics and tracing spans.
-    #[allow(dead_code)] // Reserved for future tracing/diagnostic output.
-    fn name(&self) -> &'static str;
-
-    /// Whether this phase should run given the current context.
-    ///
-    /// Return `false` to skip the phase entirely (e.g. `ListPhase` when
-    /// `--list` was not passed).
-    fn should_run(&self, ctx: &PipelineContext) -> bool;
-
-    /// Execute the phase, mutating `ctx` as needed.
-    ///
-    /// Returns [`PhaseOutcome::Continue`] to proceed, or
-    /// [`PhaseOutcome::EarlyExit(code)`] to stop the pipeline and return
-    /// `code` as the process exit code.
-    fn execute(&self, py: Python<'_>, ctx: &mut PipelineContext) -> Result<PhaseOutcome, ExitCode>;
+pub(crate) struct SessionReady {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: bridge::FixtureSession,
+    pub(crate) session_violations: Vec<bridge::RawViolation>,
 }
 
-/// Results from the execution phase: timings, interrupt status, and the
-/// reporter instance.  Bundled into a single struct so downstream phases
-/// (retry, finalize) can access them via one `Option` instead of three
-/// independent fields.
+pub(crate) struct Collected {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: bridge::FixtureSession,
+    pub(crate) items: Vec<Arc<types::TestItem>>,
+    pub(crate) raw_violations: Vec<bridge::RawViolation>,
+    #[allow(dead_code)]
+    pub(crate) collection_profile: Option<collection::CollectionProfile>,
+}
+
+pub(crate) struct PreFilter {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: bridge::FixtureSession,
+    pub(crate) clean_items: Vec<Arc<types::TestItem>>,
+    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
+    pub(crate) all_violations: Vec<strict::StrictViolation>,
+    pub(crate) suite_lines: Vec<String>,
+}
+
+pub(crate) struct Ready {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: bridge::FixtureSession,
+    pub(crate) clean_items: Vec<Arc<types::TestItem>>,
+    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
+    pub(crate) all_violations: Vec<strict::StrictViolation>,
+    pub(crate) suite_lines: Vec<String>,
+}
+
+pub(crate) struct Executed {
+    #[allow(dead_code)]
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    #[allow(dead_code)]
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: bridge::FixtureSession,
+    pub(crate) items: Vec<Arc<types::TestItem>>,
+    pub(crate) execution_results: ExecutionResults,
+}
+
+// ─── ExecutionResults ────────────────────────────────────────────────────────
+
 pub(crate) struct ExecutionResults {
     pub(crate) timings: Vec<types::TestTiming>,
     pub(crate) interrupted: bool,
     pub(crate) reporter: Box<dyn reporter::Reporter>,
 }
 
-/// Tracks the lifecycle of collected test items through the pipeline.
-///
-/// Each variant represents a well-defined stage.  Phases `match` on the
-/// current variant and transition to the next, making illegal states
-/// unrepresentable.
-#[derive(Debug)]
-pub(crate) enum CollectionState {
-    /// No items collected yet (initial state).
-    Empty,
-    /// Items have been collected from test files but not yet partitioned
-    /// by strict-mode checks.
-    Collected {
-        items: Vec<Arc<types::TestItem>>,
-        raw_violations: Vec<bridge::RawViolation>,
-    },
-    /// Strict-mode checks have partitioned items into clean vs violated.
-    Partitioned {
-        clean_items: Vec<Arc<types::TestItem>>,
-        violated_items: Vec<Arc<types::TestItem>>,
-        all_violations: Vec<strict::StrictViolation>,
-        suite_lines: Vec<String>,
-    },
-    /// Filters (-E, --failed) have been applied; items are ready to run.
-    Ready {
-        clean_items: Vec<Arc<types::TestItem>>,
-        violated_items: Vec<Arc<types::TestItem>>,
-        all_violations: Vec<strict::StrictViolation>,
-        suite_lines: Vec<String>,
-    },
-    /// Execution has completed; only the original items are kept for retry.
-    Executed { items: Vec<Arc<types::TestItem>> },
-}
+// ─── Pipeline<S> ─────────────────────────────────────────────────────────────
 
-/// Shared mutable state that flows through every pipeline phase.
-///
-/// Populated incrementally: early phases (file collection, session setup)
-/// fill the inputs; later phases (collection, execution, reporting) consume
-/// and augment the results.
-pub(crate) struct PipelineContext {
+pub(crate) struct Pipeline<S> {
     pub(crate) cfg: config::Config,
     pub(crate) command: config::Command,
-    pub(crate) rootdir: camino::Utf8PathBuf,
+    pub(crate) rootdir: Utf8PathBuf,
     pub(crate) is_tty: bool,
     pub(crate) use_color: bool,
     pub(crate) base: reporter::ReporterOptsBuilder,
     pub(crate) cache: cache::TestCache,
-    pub(crate) test_files: Vec<camino::Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<camino::Utf8PathBuf>,
-    pub(crate) session: Option<bridge::FixtureSession>,
-    pub(crate) collection: CollectionState,
-    pub(crate) execution_results: Option<ExecutionResults>,
     pub(crate) python_bin: String,
-    pub(crate) collection_profile: Option<collection::CollectionProfile>,
+    pub(crate) state: S,
 }
 
-impl PipelineContext {
-    /// Construct a context from the result of the setup phase.
-    ///
-    /// All incremental fields (files, items, timings, etc.) start empty or
-    /// `None`; they are populated by subsequent phases.
-    pub(crate) fn from_setup(s: SetupContext) -> Self {
-        Self {
-            cfg: s.cfg,
-            command: s.command,
-            rootdir: s.rootdir,
-            is_tty: s.is_tty,
-            use_color: s.use_color,
-            base: s.base,
-            python_bin: s.python_bin,
-            cache: s.cache,
-            test_files: Vec::new(),
-            conftest_files: Vec::new(),
-            session: None,
-            collection: CollectionState::Empty,
-            execution_results: None,
-            collection_profile: None,
+impl<S> std::fmt::Debug for Pipeline<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pipeline")
+            .field("rootdir", &self.rootdir)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<S> Pipeline<S> {
+    fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
+        reporter::make_reporter(
+            self.base
+                .clone()
+                .verbosity(config::Verbosity::Normal)
+                .build(),
+            self.is_tty,
+            None,
+            None,
+            vec![],
+        )
+    }
+
+    fn into_parts(self) -> (PipelineShared, S) {
+        (
+            PipelineShared {
+                cfg: self.cfg,
+                command: self.command,
+                rootdir: self.rootdir,
+                is_tty: self.is_tty,
+                use_color: self.use_color,
+                base: self.base,
+                cache: self.cache,
+                python_bin: self.python_bin,
+            },
+            self.state,
+        )
+    }
+}
+
+pub(crate) struct PipelineShared {
+    pub(crate) cfg: config::Config,
+    pub(crate) command: config::Command,
+    pub(crate) rootdir: Utf8PathBuf,
+    pub(crate) is_tty: bool,
+    pub(crate) use_color: bool,
+    pub(crate) base: reporter::ReporterOptsBuilder,
+    pub(crate) cache: cache::TestCache,
+    pub(crate) python_bin: String,
+}
+
+impl PipelineShared {
+    fn into_pipeline<T>(self, state: T) -> Pipeline<T> {
+        Pipeline {
+            cfg: self.cfg,
+            command: self.command,
+            rootdir: self.rootdir,
+            is_tty: self.is_tty,
+            use_color: self.use_color,
+            base: self.base,
+            cache: self.cache,
+            python_bin: self.python_bin,
+            state,
         }
     }
 
-    /// Build a minimal error reporter suitable for pre-execution failures.
-    ///
-    /// Uses the base options with verbose disabled, no JSON/JUnit output, and
-    /// no plugin reporters.
-    pub(crate) fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
+    fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
         reporter::make_reporter(
             self.base
                 .clone()
@@ -159,12 +183,14 @@ impl PipelineContext {
     }
 }
 
+// ─── SetupContext ────────────────────────────────────────────────────────────
+
 #[derive(Debug)]
 pub(crate) struct SetupContext {
     pub(crate) cfg: config::Config,
     pub(crate) cache: cache::TestCache,
     pub(crate) command: config::Command,
-    pub(crate) rootdir: camino::Utf8PathBuf,
+    pub(crate) rootdir: Utf8PathBuf,
     pub(crate) is_tty: bool,
     pub(crate) use_color: bool,
     pub(crate) python_bin: String,
@@ -179,13 +205,11 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
         Ok(pair) => pair,
         Err(e) => {
-            // Clap formats this for the user; subscriber may not be initialised yet.
             eprintln!("{}", e);
             return Ok(Err(ExitCode::UsageError));
         }
     };
 
-    // Per-command validation.
     match &command {
         config::Command::Run(a) => {
             if let Err(msg) = a.validate() {
@@ -202,13 +226,11 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         _ => {}
     }
 
-    // Early-exit: `oxitest env` prints environment info and exits.
     if matches!(command, config::Command::Env) {
         println!("{}", env_string(py));
         return Ok(Err(ExitCode::Success));
     }
 
-    // Resolve rootdir from first path argument (varies per command).
     let first_path = match &command {
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
@@ -217,7 +239,6 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     };
     let rootdir = config::find_rootdir(first_path);
 
-    // Build Config from pyproject.toml, then merge CLI-specific args.
     let cfg = match &command {
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
@@ -225,7 +246,6 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         config::Command::Env => unreachable!("handled above"),
     };
 
-    // Apply top-level flags that override config values regardless of subcommand.
     let mut cfg = cfg;
     if !use_gitignore {
         cfg.use_gitignore = false;
@@ -233,7 +253,6 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 
     let cache = cache::TestCache::load(&rootdir);
 
-    // Debug mode disables the TTY progress bar — pdb needs a clean terminal.
     let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
     let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
 
@@ -244,7 +263,6 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 
     let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.tb.clone());
 
-    // Only set tips/warnings for `run` command.
     let base = if let config::Command::Run(args) = &command {
         base.show_tips(args.tips).show_warnings(args.warnings)
     } else {
@@ -263,25 +281,51 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     })))
 }
 
-/// Execute a sequence of pipeline phases against a context.
-///
-/// Returns the exit code: 0 if all phases complete, or the code from the
-/// first phase that returns [`PhaseOutcome::EarlyExit`].
-pub(crate) fn run_pipeline(
-    py: Python<'_>,
-    pipeline: &[&dyn PipelinePhase],
-    ctx: &mut PipelineContext,
-) -> Result<ExitCode, ExitCode> {
-    for phase in pipeline {
-        if phase.should_run(ctx) {
-            match phase.execute(py, ctx)? {
-                PhaseOutcome::Continue => {}
-                PhaseOutcome::EarlyExit(code) => return Ok(code),
-            }
-        }
-    }
-    Ok(ExitCode::Success)
+// ─── Command entry points ────────────────────────────────────────────────────
+
+fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+    let p = pipeline.collect_files()?;
+    let p = p.affected()?;
+    let p = p.session(py)?;
+    let p = p.collect(py)?;
+    let p = p.validate(py)?;
+    let p = p.strict_or_skip(py)?;
+    let p = p.filter(py)?;
+    let p = p.execute(py)?;
+    let p = p.retry(py)?;
+    p.finalize(py)
 }
+
+fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+    let p = pipeline.collect_files()?;
+    let p = p.affected()?;
+    let p = p.session(py)?;
+    let p = p.collect(py)?;
+    let p = p.validate(py)?;
+    // Debug mode skips strict, goes straight to filter
+    let p = p.strict_or_skip(py)?;
+    let p = p.filter(py)?;
+    let p = p.execute(py)?;
+    // No retry in debug mode
+    p.finalize(py)
+}
+
+fn query_command(
+    py: Python<'_>,
+    pipeline: Pipeline<Empty>,
+    needs_session: bool,
+) -> Result<ExitCode, ExitCode> {
+    let p = pipeline.collect_files()?;
+    let p = p.affected()?;
+    if needs_session {
+        let p = p.session(py)?;
+        p.query(py)
+    } else {
+        p.query_without_session(py)
+    }
+}
+
+// ─── run() ───────────────────────────────────────────────────────────────────
 
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let setup_ctx = match setup(py, &args)? {
@@ -289,82 +333,54 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         Ok(ctx) => *ctx,
     };
 
-    let mut ctx = PipelineContext::from_setup(setup_ctx);
+    let pipeline = Pipeline {
+        cfg: setup_ctx.cfg,
+        command: setup_ctx.command,
+        rootdir: setup_ctx.rootdir,
+        is_tty: setup_ctx.is_tty,
+        use_color: setup_ctx.use_color,
+        base: setup_ctx.base,
+        cache: setup_ctx.cache,
+        python_bin: setup_ctx.python_bin,
+        state: Empty,
+    };
 
-    let pipeline: &[&dyn PipelinePhase] = match &ctx.command {
-        config::Command::Run(_) => &[
-            &phases::FileCollectionPhase,
-            &phases::AffectedPhase,
-            &phases::SessionPhase,
-            &phases::CollectionPhase,
-            &phases::FixtureValidationPhase,
-            &phases::StrictPhase,
-            &phases::FilterPhase,
-            &phases::ExecutionPhase,
-            &phases::RetryPhase,
-            &phases::FinalizePhase,
-        ],
-        config::Command::Debug(_) => &[
-            &phases::FileCollectionPhase,
-            &phases::AffectedPhase,
-            &phases::SessionPhase,
-            &phases::CollectionPhase,
-            &phases::FixtureValidationPhase,
-            &phases::FilterPhase,
-            &phases::ExecutionPhase,
-            // No RetryPhase in debug mode
-            &phases::FinalizePhase,
-        ],
+    let result = match &pipeline.command {
+        config::Command::Run(_) => run_command(py, pipeline),
+        config::Command::Debug(_) => debug_command(py, pipeline),
         config::Command::Query(ref args) => {
-            if query::needs_python(args.resource, args.expression.as_deref()) || args.tree {
-                // Full tier: need SessionPhase
-                &[
-                    &phases::FileCollectionPhase,
-                    &phases::AffectedPhase,
-                    &phases::SessionPhase,
-                    &phases::QueryPhase,
-                ]
-            } else {
-                // Instant tier: no Python needed
-                &[
-                    &phases::FileCollectionPhase,
-                    &phases::AffectedPhase,
-                    &phases::QueryPhase,
-                ]
-            }
+            let needs_session =
+                query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
+            query_command(py, pipeline, needs_session)
         }
         config::Command::Env => unreachable!("handled in setup"),
     };
 
-    match run_pipeline(py, pipeline, &mut ctx) {
+    match result {
         Ok(code) | Err(code) => Ok(code.as_i32()),
     }
 }
 
-#[cfg(test)]
-impl PipelineContext {
-    /// Set the collection state to `Collected` with the given items and raw violations.
-    pub(crate) fn with_collected(
-        &mut self,
-        items: Vec<std::sync::Arc<types::TestItem>>,
-        raw_violations: Vec<bridge::RawViolation>,
-    ) -> &mut Self {
-        self.collection = CollectionState::Collected {
-            items,
-            raw_violations,
-        };
-        self
-    }
+// ─── format_fixture_errors (kept public for tests) ──────────────────────────
 
-    /// Set the `-E` query DSL expression in the command variant.
-    pub(crate) fn with_expression(&mut self, expr: &str) -> &mut Self {
-        match &mut self.command {
-            config::Command::Run(a) => a.filter.expression = Some(expr.to_string()),
-            config::Command::Debug(a) => a.filter.expression = Some(expr.to_string()),
-            _ => {}
-        }
-        self
+pub(crate) fn format_fixture_errors(
+    errors: &[(types::NodeId, String)],
+    registered: &[String],
+) -> String {
+    let mut messages = Vec::with_capacity(errors.len());
+    for (node_id, bad_name) in errors {
+        let suggestion =
+            crate::edit_distance::closest_match(bad_name, registered.iter().map(|s| s.as_str()), 2);
+        let msg = match suggestion {
+            Some(s) => format!(
+                "  {} - fixture '{}' not found (did you mean '{}'?)",
+                node_id, bad_name, s
+            ),
+            None => format!("  {} - fixture '{}' not found", node_id, bad_name),
+        };
+        messages.push(msg);
     }
+    format!("ERROR collecting tests\n{}", messages.join("\n"))
 }
 
 #[cfg(test)]
