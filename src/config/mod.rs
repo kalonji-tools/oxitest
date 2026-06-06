@@ -665,6 +665,7 @@ impl Config {
     /// Merge the `--affected` flag into config, resolving empty sentinel to `affected_base`.
     fn merge_affected(&mut self, affected: &Option<String>) {
         if let Some(ref val) = affected {
+            self.has_explicit_paths = true;
             if val.is_empty() {
                 self.affected = Some(self.affected_base.clone());
             } else {
