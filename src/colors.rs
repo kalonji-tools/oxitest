@@ -39,8 +39,4 @@ color_fn!(color_dim_green, |s| s.dim().green());
 color_fn!(color_dim_cyan, |s| s.dim().cyan());
 color_fn!(color_blue, |s| s.blue());
 color_fn!(color_bold_cyan, |s| s.bold().cyan());
-color_fn!(
-    #[expect(dead_code)]
-    color_green,
-    |s| s.green()
-);
+color_fn!(color_green, |s| s.green());
