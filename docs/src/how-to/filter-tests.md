@@ -39,15 +39,55 @@ Pass a file path as a positional argument to restrict discovery to that file:
 $ oxitest tests/test_math.py
 ```
 
-## Combine a file path with `-k`
+## Run a specific test by node ID
 
-Narrow further by adding a keyword filter on top of a specific file:
+Use the `path::test_name` syntax to run a single test:
 
 ```console
-$ oxitest tests/test_math.py -k add
+$ oxitest tests/test_math.py::test_add
 ```
 
-This runs only tests inside `tests/test_math.py` whose name contains `add`.
+For class-based tests, include the class name:
+
+```console
+$ oxitest tests/test_math.py::TestArithmetic::test_add
+```
+
+A node ID without brackets matches all parametrized variants. To target a
+specific case, include the parameter ID:
+
+```console
+$ oxitest tests/test_math.py::test_add[negative]
+```
+
+## Run multiple specific tests
+
+Pass several node IDs as positional arguments:
+
+```console
+$ oxitest tests/test_math.py::test_add tests/test_math.py::test_subtract
+```
+
+You can mix file paths and node IDs. File paths run all tests in that file;
+node IDs run only the named test:
+
+```console
+$ oxitest tests/test_math.py::test_add tests/test_strings.py
+```
+
+This runs `test_add` from `test_math.py` and **all** tests from `test_strings.py`.
+
+## Use the interactive fuzzy finder
+
+Use `--fzf` to browse and select tests interactively:
+
+```console
+$ oxitest query tests --fzf
+```
+
+Press **Tab** to select multiple tests, then **Enter** to run them all.
+Press **Ctrl-R** to debug the focused test. The header bar shows all
+available keybindings.
 
 ## See also
 
