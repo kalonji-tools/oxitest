@@ -50,7 +50,7 @@ class ScopeRefs:
 
 
 def _warn_teardown(name: str, exc: Exception, *, node_id: str = "") -> None:
-    from oxitest._bridge._fixture_session import (
+    from oxitest._bridge._fixture_context import (
         FixtureTeardownWarning,
         _current_teardown_node_id,
     )
@@ -328,7 +328,7 @@ class FixtureInstantiator:
         scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
     ) -> Any:
         """Eagerly resolve a shared async fixture on the session event loop."""
-        from oxitest._bridge._fixture_session import _fixture_scope
+        from oxitest._bridge._fixture_context import _fixture_scope
 
         deps = _resolve_deps(
             self,
@@ -363,7 +363,7 @@ class FixtureInstantiator:
         scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
     ) -> Any:
         """Instantiate a fixture: resolve deps, call factory, track timing."""
-        from oxitest._bridge._fixture_session import _fixture_scope
+        from oxitest._bridge._fixture_context import _fixture_scope
 
         deps = _resolve_deps(
             self,
@@ -416,7 +416,7 @@ class FixtureInstantiator:
         session_scope: _Scope | None = None,
     ) -> Any:
         """Create and return a built-in fixture value, respecting its declared scope."""
-        from oxitest._bridge._fixture_session import _test_run_context
+        from oxitest._bridge._fixture_context import _test_run_context
 
         run_ctx = _test_run_context.get()
         _keep_tmp = run_ctx.keep_tmp if run_ctx else None

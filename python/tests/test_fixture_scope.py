@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from oxitest._bridge._fixture_session import (
+from oxitest._bridge._fixture_context import (
     _fixture_context,
     _fixture_scope,
 )
