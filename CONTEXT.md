@@ -4,7 +4,7 @@
 
 **Test Item** — A single runnable test. Identified by a node ID. May be a standalone function or a parametrized variant of one.
 
-**Node ID** — Unique identifier for a test item. Format: `module_path::fn_name` or `module_path::fn_name[param_id]` for parametrized tests.
+**Node ID** — Unique identifier for a test item. Format: `module_path::fn_name` or `module_path::ClassName::method_name` for class methods. Parametrized variants append `[param_id]` (e.g., `module_path::fn_name[case1]`, `module_path::ClassName::method_name[case1]`).
 
 **Collection** — The phase where oxitest discovers test files, imports them, and produces test items.
 
