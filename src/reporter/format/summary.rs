@@ -1,6 +1,6 @@
 use crate::reporter::stats::RunStats;
 
-use crate::reporter::colors::{
+use crate::colors::{
     color_cyan, color_dim, color_error_token, color_fail, color_pass, color_skip, color_timeout,
     color_warn,
 };
