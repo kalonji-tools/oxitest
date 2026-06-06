@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from conftest import helpers
 from oxitest import Fixture, TempDir
+from oxitest._bridge._builtin_context import _TestContext
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._builtins._logcapture import _LogCapture
 from oxitest._bridge._builtins._patch import _Patcher
 from oxitest._bridge._builtins._tempdir import _TempDir
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
-from oxitest._bridge.fixtures import (
-    FixtureRegistry,
-    FixtureSession,
-    _TestContext,
-)
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
 

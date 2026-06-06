@@ -161,7 +161,7 @@ def test_yields_produces_generator_annotation():
 def test_yields_does_not_carry_fixture_marker():
     """Yields[T] is a return-type annotation, not an injection signal."""
     from oxitest import Yields
-    from oxitest._bridge.fixtures import _fixture_inner_type
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
 
     is_fx, _ = _fixture_inner_type(Yields[_Database])
     assert not is_fx, (

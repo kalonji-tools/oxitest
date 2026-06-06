@@ -4,14 +4,12 @@ from dataclasses import dataclass
 
 from conftest import helpers
 from oxitest import Fixture, FixtureTeardownWarning, TempDir, WarnCapture, parametrize
-from oxitest._bridge.fixtures import (
-    FixtureRegistry,
-    FixtureSession,
-)
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 
 
 def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None:
-    from oxitest._bridge.fixtures import FixtureTeardownWarning, _warn_teardown
+    from oxitest._bridge._fixture_session import FixtureTeardownWarning, _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
 
@@ -26,7 +24,7 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
 
 
 def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
-    from oxitest._bridge.fixtures import _warn_teardown
+    from oxitest._bridge._fixture_session import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
@@ -37,7 +35,7 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
-    from oxitest._bridge.fixtures import _warn_teardown
+    from oxitest._bridge._fixture_session import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
 
@@ -47,8 +45,10 @@ def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
-    from oxitest._bridge._fixture_session import _current_teardown_node_id
-    from oxitest._bridge.fixtures import _warn_teardown
+    from oxitest._bridge._fixture_session import (
+        _current_teardown_node_id,
+        _warn_teardown,
+    )
 
     token = _current_teardown_node_id.set("tests/test_b.py::test_bar")
     try:
