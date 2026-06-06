@@ -3,6 +3,7 @@
 //! [`format_inspect`] renders a detailed card for one [`QueryEntry`],
 //! showing resource-specific fields in a human-readable layout.
 
+use crate::colors::{color_blue, color_bold_cyan, color_dim, color_dim_green};
 use crate::python_ast;
 use crate::query::resource::{QueryEntry, ResourceKind};
 use camino::Utf8Path;
@@ -38,10 +39,15 @@ fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
 pub(crate) fn format_inspect(
     entry: &QueryEntry,
     resource: ResourceKind,
-    _use_color: bool,
+    use_color: bool,
 ) -> String {
     let name = entry.get("name").unwrap_or("<unknown>");
-    let mut out = format!("─── {name} ───\n\n");
+    let mut out = format!(
+        "{} {} {}\n\n",
+        color_dim("───", use_color),
+        color_bold_cyan(name, use_color),
+        color_dim("───", use_color),
+    );
 
     for field in fields_for(resource) {
         let Some(val) = entry.get(field) else {
@@ -50,14 +56,23 @@ pub(crate) fn format_inspect(
         if val.is_empty() {
             continue;
         }
+        let label = format!("{field}:");
         // Multi-value fields with commas render as a bulleted list
         if val.contains(',') {
-            out.push_str(&format!("  {}:\n", field));
+            out.push_str(&format!("  {}\n", color_dim(&label, use_color)));
             for item in val.split(',') {
-                out.push_str(&format!("    - {}\n", item.trim()));
+                out.push_str(&format!(
+                    "    {} {}\n",
+                    color_dim("-", use_color),
+                    item.trim(),
+                ));
             }
         } else {
-            out.push_str(&format!("  {:<14}{val}\n", format!("{field}:")));
+            let colored_val = colorize_field_value(field, val, use_color);
+            out.push_str(&format!(
+                "  {:<14}{colored_val}\n",
+                color_dim(&label, use_color),
+            ));
         }
     }
 
@@ -68,6 +83,19 @@ pub(crate) fn format_inspect(
     }
 
     out
+}
+
+/// Apply semantic coloring to field values based on field name and content.
+fn colorize_field_value(field: &str, val: &str, use_color: bool) -> String {
+    if !use_color {
+        return val.to_string();
+    }
+    match field {
+        "source" => color_blue(val, true),
+        _ if val == "true" => color_dim_green(val, true),
+        _ if val == "false" => color_dim(val, true),
+        _ => val.to_string(),
+    }
 }
 
 /// Extract the source code of a function from its file, given a query entry
@@ -258,5 +286,34 @@ mod tests {
             ("async", "false"),
         ]);
         insta::assert_snapshot!(format_inspect(&e, ResourceKind::Fixtures, false));
+    }
+
+    #[test]
+    fn snap_inspect_test_entry_colored() {
+        let e = entry(&[
+            ("name", "test_network_call"),
+            ("source", "tests/test_api.py"),
+            ("mark", "slow,network"),
+            ("async", "true"),
+        ]);
+        console::set_colors_enabled(true);
+        let result = format_inspect(&e, ResourceKind::Tests, true);
+        console::set_colors_enabled(false);
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    fn snap_inspect_fixture_entry_colored() {
+        let e = entry(&[
+            ("name", "db_session"),
+            ("source", "conftest.py"),
+            ("shared", "true"),
+            ("autouse", "true"),
+            ("async", "false"),
+        ]);
+        console::set_colors_enabled(true);
+        let result = format_inspect(&e, ResourceKind::Fixtures, true);
+        console::set_colors_enabled(false);
+        insta::assert_snapshot!(result);
     }
 }
