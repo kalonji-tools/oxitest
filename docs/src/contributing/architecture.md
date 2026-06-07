@@ -26,7 +26,7 @@ graph TD
         end
 
         subgraph Filtering
-            FILTER["filter.rs<br/>-k / -m / --failed=only / --failed=first"]
+            FILTER["filter.rs<br/>-E / --failed=only / --failed=first"]
             MARKER["marker.rs<br/>boolean expression parser"]
             STRICT["strict.rs<br/>violation checking"]
         end
@@ -113,7 +113,7 @@ flowchart TD
     CO["5. Collection<br/>import modules → TestItem list"]
     ST{"6. Strict<br/>strict mode?"}
     ST_Y["check violations → abort if any"]
-    FI["7. Filter<br/>apply -k / -m / --failed=only / --failed=first"]
+    FI["7. Filter<br/>apply -E / --failed=only / --failed=first"]
     LI{"8. List<br/>--list?"}
     LI_Y["print items → exit"]
 

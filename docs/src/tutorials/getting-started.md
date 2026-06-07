@@ -139,13 +139,11 @@ def test_multiplication():
 
 ## Step 6 — Run a single test by name
 
-When you have many tests it is useful to run only one. The `-k` flag accepts a
-substring expression and runs only the tests whose names contain a match.
-
-Run just the addition test:
+When you have many tests it is useful to run only one. Pass a **node ID** to
+target a specific test — separate the file path and test name with `::`:
 
 ```console
-$ oxitest -k addition
+$ oxitest tests/test_math.py::test_addition
 ```
 
 ```text
@@ -160,9 +158,12 @@ collected 1 item
 ════════════════════════════════════════════════════════════════════════════════
 ```
 
-You can also match multiple tests by combining terms with `and`, `or`, and
-`not`. For example, `-k "addition or repeat"` would run `test_addition` and
-`test_string_repeat`.
+You can also filter with the `-E` flag and the query DSL. For example,
+`-E 'name(addition)'` runs every test whose name contains `addition`:
+
+```console
+$ oxitest -E 'name(addition)'
+```
 
 ## Step 7 — Add a pyproject.toml for configuration
 
@@ -185,11 +186,11 @@ values in `pyproject.toml`.
 - How to install oxitest
 - How to write a test file that oxitest can discover
 - How to read both passing and failing output
-- How to run a single test with `-k`
+- How to run a single test with a node ID or `-E` filter
 - How to set persistent defaults in `pyproject.toml`
 
 !!! tip "Next steps"
-    - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.xfail`, custom marks, `-m` filter
+    - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.xfail`, custom marks, `-E` filter
     - [Use parametrize](../how-to/use-parametrize.md) — run one test against multiple named cases
     - [Use fixtures](../how-to/use-fixtures.md) — the `Fixtures()` registry, `shared=True`, yield teardown
     - [Use built-in fixtures](../how-to/use-builtin-fixtures.md) — `TempDir`, `StdCapture`, `Patcher`, `LogCapture`

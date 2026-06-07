@@ -32,10 +32,10 @@ tests/test_stack.py::TestStack::test_push
 tests/test_stack.py::TestStack::test_pop
 ```
 
-You can filter by class name with `-k`:
+You can filter by class name with `-E`:
 
 ```bash
-oxitest tests/ -k TestStack
+oxitest tests/ -E 'name(TestStack)'
 ```
 
 ## Using fixtures

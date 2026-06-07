@@ -110,7 +110,7 @@ the call stack.
 Add `breakpoint()` at the line you want to inspect, then run:
 
 ```console
-$ oxitest debug tests/test_specific.py -k test_name
+$ oxitest debug tests/test_specific.py -E 'name(test_name)'
 ```
 
 **"I want to see all variables at the failure point"**

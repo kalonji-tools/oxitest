@@ -1,32 +1,36 @@
 # Filter Tests
 
 !!! abstract "How-to"
-    Run a targeted subset of your test suite using keyword substring matching,
-    marker expressions, or file paths.
+    Run a targeted subset of your test suite using the query DSL,
+    file paths, or node IDs.
 
-## Filter by keyword substring
+## Filter by name
 
-Run only tests whose node ID contains a substring:
+Use `-E` with the `name()` predicate to run tests whose name contains a
+substring:
 
 ```console
-$ oxitest -k add
+$ oxitest -E 'name(add)'
 ```
 
-This matches any test whose full node ID (`path/to/test_file.py::test_function_name`)
-contains `add`, e.g. `test_add`, `test_add_negative`.
+This matches any test whose function name contains `add`, e.g. `test_add`,
+`test_add_negative`.
 
-The match is a plain substring check — there are no boolean operators.
-To run tests matching multiple keywords, run oxitest once per keyword or
-use marker-based filtering instead.
-
-## Filter by marker expression
-
-Use `-m` with `and`, `or`, and `not` to build compound expressions over markers:
+Combine predicates with `&` (and), `|` (or), and `!` (not):
 
 ```console
-$ oxitest -m "slow or integration"
-$ oxitest -m "not slow"
-$ oxitest -m "database and not slow"
+$ oxitest -E 'name(add) | name(repeat)'
+$ oxitest -E '!name(slow)'
+```
+
+## Filter by marker
+
+Use `-E` with the `mark()` predicate to run tests by marker:
+
+```console
+$ oxitest -E 'mark(slow)'
+$ oxitest -E 'mark(slow) & !mark(integration)'
+$ oxitest -E 'mark(database) | mark(integration)'
 ```
 
 Markers must be registered in `pyproject.toml` (see [Use markers](use-markers.md)).
@@ -91,6 +95,6 @@ available keybindings.
 
 ## See also
 
-- [Use markers](use-markers.md) — filter by marker with `-m`
+- [Use markers](use-markers.md) — register and apply custom markers
 - [Run affected tests](run-affected-tests.md) — run only tests affected by git changes
 - [CLI reference](../reference/cli.md) — full list of command-line options

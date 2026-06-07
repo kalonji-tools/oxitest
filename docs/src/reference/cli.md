@@ -46,8 +46,7 @@ oxitest [OPTIONS] [PATHS_OR_NODE_IDS...]        # equivalent
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. Only tests whose node ID contains the substring are run. |
-| `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression (`and`/`or`/`not` supported). |
+| `-E` | — | `EXPR` | — | Filter tests using the query DSL (e.g. `name(foo)`, `mark(slow) & !mark(integration)`). See [Query DSL](#query-dsl). |
 | `--failed` | — | `only\|first` | — | Failed-test mode. `only` runs just previously-failed tests. `first` runs failures before the rest. |
 | `--lf` | — | flag | — | Alias for `--failed only`. Run only previously-failed tests. |
 | `--ff` | — | flag | — | Alias for `--failed first`. Run previously-failed tests first. |
@@ -103,8 +102,7 @@ oxitest debug [OPTIONS] [PATHS_OR_NODE_IDS...]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--always` | — | flag | `false` | Pause the debugger before every test (trace mode). Without `--always`, the debugger only activates on test failure (post-mortem mode). |
-| `-k` | — | `SUBSTRING` | — | Filter tests by keyword substring. |
-| `--marker` | `-m` | `EXPR` | — | Filter tests by marker expression. |
+| `-E` | — | `EXPR` | — | Filter tests using the query DSL. |
 | `--failed` | — | `only\|first` | — | Failed-test mode. |
 | `--lf` | — | flag | — | Alias for `--failed only`. |
 | `--ff` | — | flag | — | Alias for `--failed first`. |
