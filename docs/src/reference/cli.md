@@ -87,6 +87,8 @@ oxitest [OPTIONS] [PATHS_OR_NODE_IDS...]        # equivalent
 |------|-------|------|---------|-------------|
 | `--json` | — | `PATH` | — | Write CTRF-format JSON results to `PATH`. |
 | `--junit-xml` | — | `PATH` | — | Write JUnit XML results to `PATH`. |
+| `--cov` | — | flag | `false` | Enable coverage collection via coverage.py. Requires the `coverage` package. |
+| `--cov-report` | — | `term\|html\|xml\|json\|none` | `term` | Coverage report format. Requires `--cov`. |
 
 ---
 
