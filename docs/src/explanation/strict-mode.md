@@ -144,6 +144,13 @@ Conftest fixtures that are never injected into any collected test are flagged as
 unused. Autouse fixtures, built-in fixtures, and transitive dependencies of used
 fixtures are excluded from this check.
 
+!!! warning "Known limitation: `Fixture[TempDir]` and unused-fixture check"
+    The unused-fixture check does not recognise `Fixture[TempDir]` as a usage
+    because the strict checker inspects annotation names and excludes built-in
+    inner types. If strict mode flags a `TempDir` fixture as unused, annotate
+    the test parameter as `Fixture[Path]` instead — both inject the same
+    temporary directory.
+
 ## Two modes
 
 === "Abort mode"
