@@ -69,7 +69,13 @@ impl JsonReporter {
 impl Reporter for JsonReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+    fn test_completed(
+        &mut self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        duration_ms: DurationMs,
+        _parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
+    ) {
         self.tests.push(CtrfTest {
             name: item.node_id.to_string(),
             status: outcome.ctrf_status(),
@@ -166,7 +172,7 @@ mod snapshot_tests {
                 other => panic!("unexpected status in test: {other}"),
             });
             rep.test_started(&item);
-            rep.test_completed(&item, &outcome, DurationMs::ZERO);
+            rep.test_completed(&item, &outcome, DurationMs::ZERO, None);
         }
         rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         std::fs::read_to_string(&path).unwrap()
@@ -202,7 +208,7 @@ mod tests {
         let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
         let mut rep = JsonReporter::new(path.clone());
         for (item, outcome) in &outcomes {
-            rep.test_completed(item, outcome, DurationMs::new(1.0));
+            rep.test_completed(item, outcome, DurationMs::new(1.0), None);
         }
         rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         std::fs::read_to_string(&path).unwrap()
@@ -293,6 +299,7 @@ mod tests {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
+            None,
         );
         let vote = rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         assert_eq!(
@@ -313,6 +320,7 @@ mod tests {
                 no_message_lines: vec![],
             },
             DurationMs::new(1.0),
+            None,
         );
         let vote = rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
         assert!(

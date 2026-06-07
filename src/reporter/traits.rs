@@ -48,6 +48,7 @@ pub trait Reporter {
         item: &crate::types::TestItem,
         outcome: &crate::types::TestOutcome,
         duration_ms: DurationMs,
+        parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
     );
     fn finish(
         &mut self,

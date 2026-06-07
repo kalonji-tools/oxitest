@@ -121,6 +121,7 @@ mod json_tests {
                 no_message_lines: vec![],
             },
             DurationMs::new(12.5),
+            None,
         );
         rep.finish(&[], false, &ReporterSession::new(0));
 
@@ -157,6 +158,7 @@ mod json_tests {
                 .comparison("0", "==", "1")
                 .build(),
             DurationMs::new(8.0),
+            None,
         );
         rep.finish(&[], false, &ReporterSession::new(0));
 
@@ -185,6 +187,7 @@ mod json_tests {
                 no_message_lines: vec![],
             },
             DurationMs::new(5.0),
+            None,
         );
         rep.test_started(&a);
         rep.test_completed(
@@ -193,6 +196,7 @@ mod json_tests {
                 no_message_lines: vec![],
             },
             DurationMs::new(5.0),
+            None,
         );
         rep.finish(&[], false, &ReporterSession::new(0));
 
@@ -291,6 +295,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool, _: &ReporterSession) -> ExitVote {
@@ -337,6 +342,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool, _: &ReporterSession) -> ExitVote {
@@ -371,6 +377,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool, _: &ReporterSession) -> ExitVote {
@@ -444,6 +451,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
                 self.0.fetch_add(1, Ordering::Relaxed);
             }
@@ -460,7 +468,7 @@ mod tests {
             no_message_lines: vec![],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0), None);
         assert!(
             calls.load(Ordering::Relaxed) >= 2,
             "plugin reporter should receive test_started and test_completed events"
@@ -486,6 +494,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool, _: &ReporterSession) -> ExitVote {
@@ -593,6 +602,7 @@ mod tests {
                 _: &crate::types::TestItem,
                 _: &crate::types::TestOutcome,
                 _: DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
             }
             fn finish(&mut self, _: &[CollectError], _: bool, _: &ReporterSession) -> ExitVote {

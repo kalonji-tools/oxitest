@@ -38,10 +38,11 @@ impl Reporter for CompositeReporter {
         item: &crate::types::TestItem,
         outcome: &crate::types::TestOutcome,
         duration_ms: DurationMs,
+        parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
     ) {
         self.session.record_outcome(item, outcome, duration_ms);
         for r in &mut self.reporters {
-            r.test_completed(item, outcome, duration_ms);
+            r.test_completed(item, outcome, duration_ms, parallel_ctx);
         }
     }
 
