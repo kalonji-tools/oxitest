@@ -15,7 +15,7 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The six checks
+## The seven checks
 
 ### Bare assert
 
