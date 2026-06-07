@@ -22,6 +22,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._async_orchestrator import (
+    AsyncPolicy as AsyncPolicy,
+    _check_async_dep as _check_async_dep,
+    _reject_async_in_sync as _reject_async_in_sync,
+    _reject_nonshared_async as _reject_nonshared_async,
+)
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._errors import (
@@ -66,39 +72,6 @@ def _warn_teardown(name: str, exc: Exception, *, node_id: str = "") -> None:
     else:
         msg = f"error during teardown: {exc}"
     warnings.warn(FixtureTeardownWarning(msg), stacklevel=2)
-
-
-def _check_async_dep(dep_name: str, dep_val: Any, fixture_name: str, msg: str) -> None:
-    """Reject an async dependency value with a descriptive error message."""
-    if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
-        if inspect.iscoroutine(dep_val):
-            dep_val.close()
-        raise FixtureSetupError(fixture_name, RuntimeError(msg))
-
-
-def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Sync fixtures cannot depend on async fixtures."""
-    _check_async_dep(
-        dep_name,
-        dep_val,
-        fixture_name,
-        f"sync fixture '{fixture_name}' cannot depend on async fixture '{dep_name}'",
-    )
-
-
-def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Shared fixtures cannot depend on non-shared async fixtures."""
-    _check_async_dep(
-        dep_name,
-        dep_val,
-        fixture_name,
-        f"shared fixture '{fixture_name}' cannot depend on "
-        f"non-shared async fixture '{dep_name}' \u2014 "
-        f"lifetime mismatch",
-    )
-
-
-AsyncPolicy = Callable[[str, Any, str], None]
 
 
 def _resolve_deps(
