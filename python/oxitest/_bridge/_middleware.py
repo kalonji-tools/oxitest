@@ -17,20 +17,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from oxitest._bridge._diagnostics import (
-    check_warnings,
-    dispatch_exception,
-    is_debuggable,
-)
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import MarkWrapper
 from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
 from oxitest._bridge.result import TestResult
-
-# Backward-compatible aliases for the renamed public functions
-_check_warnings = check_warnings
-_is_debuggable = is_debuggable
-_dispatch_exception = dispatch_exception
 
 
 def _compose(
