@@ -284,11 +284,12 @@ vary by resource but the syntax is consistent:
 | Predicate | Resources | Matches when… |
 |-----------|-----------|---------------|
 | `name(pat)` | all | name contains `pat` (substring, case-insensitive) |
-| `source(pat)` | tests | node ID or file path contains `pat` |
+| `source(pat)` | tests, fixtures, helpers | file path or node ID contains `pat` |
 | `mark(name)` | tests | test has the given mark |
-| `scope(s)` | fixtures | fixture has scope `s` (`function`, `module`, `session`) |
+| `async()` | tests, fixtures | test or fixture is an async function |
+| `shared()` | fixtures | fixture is declared `shared=True` |
 | `autouse()` | fixtures | fixture is declared `autouse=True` |
-| `async()` | fixtures | fixture is an async function |
+| `used_in(id)` | marks | mark is applied to a test matching `id` |
 | `protocol(p)` | plugins | plugin implements protocol `p` |
 
 Expressions can be combined with `and`, `or`, `not`, and parentheses:
@@ -309,8 +310,7 @@ with code 0. Useful for bug reports.
 oxitest env
 ```
 
-No flags. Version information is available here rather than via a `--version`
-flag.
+No flags.
 
 ---
 
