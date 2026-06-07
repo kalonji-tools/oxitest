@@ -29,10 +29,10 @@ from oxitest._bridge._async_backend import (
     AsyncioBackend,
     SharedAsyncSession,
 )
+from oxitest._bridge._async_orchestrator import SharedAsyncManager
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
-    FixtureSetupError,
     UnannotatedFixtureParamError,
 )
 from oxitest._bridge._fixture_context import (
@@ -210,91 +210,6 @@ async def _task_group_factory():  # type: ignore[return-value]
         for t in tasks:
             if not t.done():
                 t.cancel()
-
-
-class SharedAsyncManager:
-    """Manages shared async fixture lifecycle: session creation, resolution, teardown.
-
-    Extracted from FixtureSession to isolate the async fixture management concern.
-    The manager lazily creates a SharedAsyncSession on the first resolve() call,
-    tracks async generator teardowns, and drains them in LIFO order on cleanup().
-    """
-
-    def __init__(self, async_backend: AsyncBackend) -> None:
-        self._backend = async_backend
-        self._session: SharedAsyncSession | None = None
-        self._teardowns: list[tuple[str, Any]] = []
-        self._used = False
-
-    @property
-    def backend(self) -> AsyncBackend:
-        """The async backend used by this manager."""
-        return self._backend
-
-    @property
-    def was_used(self) -> bool:
-        """Whether a shared async fixture was resolved for the current test."""
-        return self._used
-
-    @was_used.setter
-    def was_used(self, value: bool) -> None:
-        self._used = value
-
-    @property
-    def session(self) -> SharedAsyncSession | None:
-        """The underlying shared async session, or None if not yet created."""
-        return self._session
-
-    def resolve(self, func: Callable[..., Any], deps: dict[str, Any]) -> Any:
-        """Run an async fixture, track teardowns, return the resolved value.
-
-        Creates the shared session lazily on first call. Handles plain coroutines,
-        async generators (with teardown tracking), and sync passthrough.
-
-        Args:
-            func: The fixture function to call.
-            deps: Already-resolved dependency kwargs.
-
-        Returns:
-            The fixture value (awaited if async).
-
-        Raises:
-            FixtureSetupError: If the fixture raises during setup.
-        """
-        if self._session is None:
-            self._session = self._backend.create_shared_session()
-
-        self._used = True
-
-        try:
-            result = func(**deps)
-            if inspect.isasyncgen(result):
-                value = self._session.run(anext(result))
-                self._teardowns.append((getattr(func, "__name__", ""), result))
-            elif inspect.iscoroutine(result):
-                value = self._session.run(result)
-            else:
-                value = result
-        except Exception as exc:
-            name = getattr(func, "__name__", "")
-            raise FixtureSetupError(name, exc) from exc
-
-        return value
-
-    def cleanup(self) -> None:
-        """Drain async teardowns in LIFO order, then close the session."""
-        if self._session is None:
-            return
-        for name, gen in reversed(self._teardowns):
-            try:
-                self._session.run(anext(gen))
-            except StopAsyncIteration:
-                pass
-            except Exception as exc:
-                _warn_teardown(name, exc)
-        self._session.close()
-        self._session = None
-        self._teardowns.clear()
 
 
 class FixtureSession:
