@@ -360,8 +360,11 @@ pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
     } else {
         start
     };
+    let start = start
+        .canonicalize_utf8()
+        .unwrap_or_else(|_| start.to_owned());
 
-    let mut current = start.to_owned();
+    let mut current = start.clone();
     loop {
         if current.join("pyproject.toml").exists()
             || current.join("setup.cfg").exists()
@@ -371,7 +374,7 @@ pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
         }
         match current.parent() {
             Some(parent) if parent != current.as_path() => current = parent.to_owned(),
-            _ => return start.to_owned(),
+            _ => return start,
         }
     }
 }
@@ -385,13 +388,10 @@ pub(crate) fn cpu_count() -> usize {
 
 impl Config {
     pub fn load(rootdir: &Utf8Path) -> Self {
-        let rootdir = rootdir
-            .canonicalize_utf8()
-            .unwrap_or_else(|_| rootdir.to_owned());
         let pyproject_path = rootdir.join("pyproject.toml");
         let config = Config {
-            testpaths: vec![rootdir.clone()],
-            rootdir,
+            testpaths: vec![rootdir.to_owned()],
+            rootdir: rootdir.to_owned(),
             ..Config::default()
         };
 
@@ -747,21 +747,16 @@ mod tests {
     }
 
     #[test]
-    fn load_canonicalizes_rootdir() {
+    fn load_preserves_rootdir_as_given() {
+        // load stores what it receives unchanged; the caller is responsible for
+        // providing a canonical path.
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("pyproject.toml").write_str("").unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let cfg = Config::load(utf8_dir);
-        assert!(
-            cfg.rootdir.as_str().starts_with('/'),
-            "rootdir should be absolute after canonicalization, got: {}",
-            cfg.rootdir
-        );
-        assert!(
-            !cfg.rootdir.components().any(
-                |c| c == camino::Utf8Component::CurDir || c == camino::Utf8Component::ParentDir
-            ),
-            "rootdir should have no . or .. components, got: {}",
+        assert_eq!(
+            cfg.rootdir, utf8_dir,
+            "load should store rootdir exactly as given, got: {}",
             cfg.rootdir
         );
     }
@@ -822,6 +817,22 @@ mod tests {
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let rootdir = find_rootdir(Some(utf8_dir));
         assert_eq!(rootdir, utf8_dir);
+    }
+
+    #[test]
+    fn test_find_rootdir_relative_subdir_returns_absolute() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        fs::write(dir.path().join("pyproject.toml"), "").unwrap();
+        let subdir = utf8_dir.join("a").join("b");
+        fs::create_dir_all(&subdir).unwrap();
+        let rootdir = find_rootdir(Some(&subdir));
+        assert!(
+            rootdir.is_absolute(),
+            "rootdir should be absolute, got: {rootdir}"
+        );
+        assert!(!rootdir.as_str().is_empty(), "rootdir must not be empty");
+        assert!(rootdir.join("pyproject.toml").exists());
     }
 
     #[test]
