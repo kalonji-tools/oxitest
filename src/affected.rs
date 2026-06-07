@@ -40,20 +40,36 @@ fn parse_diff_output(stdout: &str) -> Vec<String> {
         .collect()
 }
 
+/// Canonicalize a path, returning the original on failure.
+fn try_canonicalize(path: &Utf8Path) -> Utf8PathBuf {
+    path.canonicalize_utf8().unwrap_or_else(|_| path.to_owned())
+}
+
 /// Run `git rev-parse --show-toplevel` to get the git repository root.
+///
+/// The returned path is canonicalized so that symlinks (common in git
+/// worktrees created via `git worktree add`) are resolved and the path
+/// is guaranteed to exist on the filesystem.
 fn git_root(dir: &Utf8Path) -> Result<Utf8PathBuf, AffectedError> {
+    let canonical_dir = try_canonicalize(dir);
     let output = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .current_dir(dir.as_std_path())
+        .args(["--no-optional-locks", "rev-parse", "--show-toplevel"])
+        .current_dir(canonical_dir.as_std_path())
         .output()
-        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))?;
+        .map_err(|e| {
+            AffectedError::GitCommandFailed(format!(
+                "failed to run `git rev-parse` in {canonical_dir}: {e}"
+            ))
+        })?;
 
     check_git_output(&output)?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let path = stdout.trim();
-    Utf8PathBuf::try_from(std::path::PathBuf::from(path))
-        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))
+    let raw = Utf8PathBuf::try_from(std::path::PathBuf::from(stdout.trim()))
+        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))?;
+    // Canonicalize the toplevel path: in worktrees, git may return a
+    // symlinked path that differs from the canonical filesystem path.
+    Ok(try_canonicalize(&raw))
 }
 
 /// Run `git diff --name-only <base>` and return changed file paths (relative to git root).
@@ -64,10 +80,12 @@ pub(crate) fn git_changed_files(
     let repo_root = git_root(rootdir)?;
 
     let output = std::process::Command::new("git")
-        .args(["diff", "--name-only", base])
+        .args(["--no-optional-locks", "diff", "--name-only", base])
         .current_dir(repo_root.as_std_path())
         .output()
-        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))?;
+        .map_err(|e| {
+            AffectedError::GitCommandFailed(format!("failed to run `git diff` in {repo_root}: {e}"))
+        })?;
 
     check_git_output(&output)?;
 
