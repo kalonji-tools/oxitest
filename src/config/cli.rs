@@ -119,6 +119,35 @@ impl VerbosityArgs {
     }
 }
 
+// ── CovReportFormat ──────────────────────────────────────────────────────────
+
+/// Coverage report format.
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum CovReportFormat {
+    /// Print coverage table to terminal
+    Term,
+    /// Generate HTML report (htmlcov/)
+    Html,
+    /// Generate Cobertura XML (coverage.xml)
+    Xml,
+    /// Generate JSON report (coverage.json)
+    Json,
+    /// No report output (just collect .coverage data)
+    None,
+}
+
+impl CovReportFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Term => "term",
+            Self::Html => "html",
+            Self::Xml => "xml",
+            Self::Json => "json",
+            Self::None => "none",
+        }
+    }
+}
+
 // ── Subcommand argument structs ──────────────────────────────────────────────
 
 /// Arguments for `oxitest run` (the default subcommand).
@@ -248,6 +277,14 @@ pub struct RunArgs {
     /// Write JUnit XML results to PATH
     #[arg(long, value_name = "PATH", help_heading = "Reports")]
     pub junit_xml: Option<Utf8PathBuf>,
+
+    /// Enable coverage collection via coverage.py
+    #[arg(long, help_heading = "Reports")]
+    pub cov: bool,
+
+    /// Coverage report format (requires --cov)
+    #[arg(long, value_enum, value_name = "FORMAT", help_heading = "Reports")]
+    pub cov_report: Option<CovReportFormat>,
 }
 
 impl RunArgs {
@@ -283,6 +320,10 @@ impl RunArgs {
                     return Err("--show-internals requires --tb=detail.".to_string());
                 }
             }
+        }
+
+        if self.cov_report.is_some() && !self.cov {
+            return Err("--cov-report requires --cov.".to_string());
         }
 
         self.verbosity.validate()
@@ -1152,5 +1193,43 @@ mod tests {
             err.to_string().contains("oxitest"),
             "output should contain the program name"
         );
+    }
+
+    // ── Coverage flags ───────────────────────────────────────────────────────
+
+    #[test]
+    fn cov_flag_accepted() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--cov"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.cov);
+    }
+
+    #[test]
+    fn cov_report_accepted() {
+        let (cmd, _) =
+            OxitestCli::resolve(&s(["oxitest", "run", "--cov", "--cov-report", "html"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.cov);
+        assert_eq!(args.cov_report, Some(CovReportFormat::Html));
+    }
+
+    #[test]
+    fn cov_report_without_cov_rejected() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "run", "--cov-report", "html"])).unwrap();
+        let Command::Run(args) = cmd else { panic!() };
+        assert!(args.validate().is_err());
+    }
+
+    #[test]
+    fn cov_report_invalid_value_rejected() {
+        let result = OxitestCli::resolve(&s(["oxitest", "run", "--cov-report", "pdf"]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn cov_report_as_str() {
+        assert_eq!(CovReportFormat::Term.as_str(), "term");
+        assert_eq!(CovReportFormat::Html.as_str(), "html");
+        assert_eq!(CovReportFormat::None.as_str(), "none");
     }
 }

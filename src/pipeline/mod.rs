@@ -292,6 +292,23 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
 // ─── Command entry points ────────────────────────────────────────────────────
 
 fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+    // Extract coverage config before pipeline consumes it
+    let cov_enabled = pipeline.cfg.cov;
+    let cov_report_format = pipeline.cfg.cov_report.clone();
+
+    // Start coverage before any test execution
+    let cov_provider = if cov_enabled {
+        match bridge::start_coverage(py) {
+            Ok(provider) => Some(provider),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return Err(ExitCode::UsageError);
+            }
+        }
+    } else {
+        None
+    };
+
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
     let p = p.session(py)?;
@@ -301,7 +318,20 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
     let p = p.filter(py)?;
     let p = p.execute(py)?;
     let p = p.retry(py)?;
-    p.finalize(py)
+    let result = p.finalize(py);
+
+    // Stop coverage and generate report after all tests
+    if let Some(ref provider) = cov_provider {
+        let format = cov_report_format
+            .as_ref()
+            .map(|f| f.as_str())
+            .unwrap_or("term");
+        if let Err(e) = bridge::stop_and_report_coverage(py, provider, format) {
+            eprintln!("warning: coverage report failed: {e}");
+        }
+    }
+
+    result
 }
 
 fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
