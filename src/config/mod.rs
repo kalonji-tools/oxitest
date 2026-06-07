@@ -226,6 +226,8 @@ pub struct Config {
     pub use_gitignore: bool,
     pub node_ids: Vec<crate::types::NodeId>,
     pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
+    pub cov: bool,
+    pub cov_report: Option<cli::CovReportFormat>,
     /// True when the user specified explicit paths or node IDs on the CLI.
     /// Used to skip unused-fixture detection (which requires the full suite).
     pub has_explicit_paths: bool,
@@ -278,6 +280,8 @@ impl Default for Config {
             auto_arrange_threshold: Some(70),
             collection_profile: false,
             use_gitignore: true,
+            cov: false,
+            cov_report: None,
             node_ids: vec![],
             node_id_source_files: std::collections::HashSet::new(),
             has_explicit_paths: false,
@@ -531,6 +535,12 @@ impl Config {
 
         // ── Filtering (unique to CLI) ───────────────────────────────────
         self.merge_affected(&args.filter.affected);
+
+        // ── Coverage ──────────────────────────────────────────────────
+        self.cov = args.cov;
+        if args.cov_report.is_some() {
+            self.cov_report = args.cov_report.clone();
+        }
 
         // ── Output (unique to CLI) ──────────────────────────────────
         if let Some(level) = args.verbosity.resolve() {
