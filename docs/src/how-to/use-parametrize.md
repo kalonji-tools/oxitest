@@ -168,11 +168,11 @@ test_query[mock-users]
 test_query[mock-empty]
 ```
 
-Filter with `-k` as usual:
+Filter with `-E` as usual:
 
 ```console
-$ oxitest -k "real"        # all real-db variants
-$ oxitest -k "real-users"  # one specific combination
+$ oxitest -E 'name(real)'        # all real-db variants
+$ oxitest -E 'name(real-users)'  # one specific combination
 ```
 
 ## Understand test IDs
@@ -185,14 +185,14 @@ test_add[negative]
 test_add[zero]
 ```
 
-Use `-k` to run a specific variant:
+Use `-E` to run a specific variant:
 
 ```console
-$ oxitest -k "test_add[basic]"
+$ oxitest -E 'name(test_add[basic])'
 ```
 
 ## See also
 
 - [Use fixtures](use-fixtures.md) — fixture injection and `FixtureRef[T]` for parametrize cases
-- [Filter tests](filter-tests.md) — run a specific parametrized variant with `-k`
+- [Filter tests](filter-tests.md) — run a specific parametrized variant with `-E`
 - [Strict mode](../explanation/strict-mode.md) — why strict mode requires dataclasses over dicts

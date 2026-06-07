@@ -141,8 +141,8 @@ the key becomes the test ID (e.g. `test_add[basic]`).
 
    | pytest flag            | oxitest equivalent              |
    |------------------------|---------------------------------|
-   | `-k EXPR`              | `-k EXPR`                       |
-   | `-m EXPR`              | `-m EXPR`                       |
+   | `-k EXPR`              | `-E 'name(EXPR)'`              |
+   | `-m EXPR`              | `-E 'mark(EXPR)'`              |
    | `-v`                   | `-v`                            |
    | `-x`                   | `-x`                            |
    | `--maxfail N`          | `--maxfail N`                   |
