@@ -4,9 +4,10 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✓         |
+| latest  | ✓         |
+| < latest| ✗         |
 
-Older versions are not supported. Please upgrade to the latest release before reporting.
+Only the latest release is supported. Please upgrade before reporting.
 
 ## Reporting a Vulnerability
 
