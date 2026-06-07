@@ -3,6 +3,7 @@ from __future__ import annotations
 import textwrap
 from types import ModuleType
 
+import oxitest
 from oxitest import TempDir, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
@@ -76,19 +77,17 @@ def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir):
     """collect_module error: plain traceback, no TestResult repr, real newlines."""
     f = tmp / "test_bad_import.py"
     f.write_text("import _oxitest_nonexistent_module_xyz\n")
-    try:
+    with oxitest.raises(ImportError) as exc_info:
         collect_module(str(f))
-        assert False, "expected ImportError"  # noqa: PT015
-    except ImportError as e:
-        msg = str(e)
-        assert "TestResult(" not in msg, (
-            f"message must not be TestResult repr, got: {msg!r}"
-        )
-        assert "\n" in msg, f"traceback must contain real newlines, got: {msg!r}"
-        assert "Traceback" in msg, f"traceback header missing, got: {msg!r}"
-        assert "ModuleNotFoundError" in msg or "ImportError" in msg, (
-            f"actual error type missing from message, got: {msg!r}"
-        )
+    msg = str(exc_info.value)
+    assert "TestResult(" not in msg, (
+        f"message must not be TestResult repr, got: {msg!r}"
+    )
+    assert "\n" in msg, f"traceback must contain real newlines, got: {msg!r}"
+    assert "Traceback" in msg, f"traceback header missing, got: {msg!r}"
+    assert "ModuleNotFoundError" in msg or "ImportError" in msg, (
+        f"actual error type missing from message, got: {msg!r}"
+    )
 
 
 def test_collect_extracts_marker_names(tmp: TempDir):
