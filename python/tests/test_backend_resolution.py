@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import oxitest
 from oxitest._bridge._async_backend import (
     AsyncioBackend,
     resolve_backend,
@@ -57,11 +58,8 @@ def test_plugin_backend_resolves_by_name():
 
 
 def test_backend_not_found_error():
-    try:
+    with oxitest.raises(BackendNotFoundError, match="trio"):
         resolve_backend("trio", PluginRegistry())
-        assert False, "expected BackendNotFoundError"  # noqa: PT015
-    except BackendNotFoundError as exc:
-        assert "trio" in str(exc), f"expected 'trio' in error, got {exc!r}"
 
 
 def test_conflicting_backend_error():
@@ -71,20 +69,12 @@ def test_conflicting_backend_error():
         ("plugin_a", Plugin(async_backend=fake1)),
         ("plugin_b", Plugin(async_backend=fake2)),
     )
-    try:
+    with oxitest.raises(ConflictingBackendError, match="plugin_a"):
         resolve_backend("fake", reg)
-        assert False, "expected ConflictingBackendError"  # noqa: PT015
-    except ConflictingBackendError as exc:
-        msg = str(exc)
-        assert "plugin_a" in msg, f"expected 'plugin_a' in error, got {msg!r}"
-        assert "plugin_b" in msg, f"expected 'plugin_b' in error, got {msg!r}"
 
 
 def test_plugin_asyncio_name_conflicts_with_builtin():
     collider = _AsyncioNamedBackend()
     reg = _registry_with(("bad_plugin", Plugin(async_backend=collider)))
-    try:
+    with oxitest.raises(ConflictingBackendError, match="bad_plugin"):
         resolve_backend("asyncio", reg)
-        assert False, "expected ConflictingBackendError"  # noqa: PT015
-    except ConflictingBackendError as exc:
-        assert "bad_plugin" in str(exc), f"expected 'bad_plugin' in error, got {exc!r}"
