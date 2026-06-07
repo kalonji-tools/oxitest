@@ -116,6 +116,7 @@ pub struct TtyReporter {
         crate::types::TestItem,
         crate::types::TestOutcome,
         DurationMs,
+        Option<crate::parallel_context::ParallelContext>,
     )>,
     running_tests: Vec<String>,
 }
@@ -244,7 +245,8 @@ impl TtyReporter {
         } else {
             for (item, outcome, duration_ms) in group.results {
                 if outcome.is_hard_failure() {
-                    self.deferred_failures.push((item, outcome, duration_ms));
+                    self.deferred_failures
+                        .push((item, outcome, duration_ms, None));
                 }
             }
         }
@@ -316,9 +318,12 @@ impl StandardReporter for TtyReporter {
         }
         // Flush deferred failures before clearing the progress bar
         let deferred = std::mem::take(&mut self.deferred_failures);
-        for (item, outcome, duration_ms) in deferred {
+        for (item, outcome, duration_ms, parallel_ctx) in deferred {
             self.pb
                 .println(self.format_test_line(&item, &outcome, duration_ms));
+            if let Some(ctx) = &parallel_ctx {
+                self.pb.println(ctx.fmt_line(self.opts.use_color));
+            }
             let diag = fmt_diagnostic_block(
                 &item,
                 &outcome,
@@ -346,7 +351,13 @@ impl Reporter for TtyReporter {
         self.update_running_message();
     }
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+    fn test_completed(
+        &mut self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        duration_ms: DurationMs,
+        parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
+    ) {
         if let Some(pos) = self.running_tests.iter().position(|n| n == &item.fn_name) {
             self.running_tests.remove(pos);
         }
@@ -356,7 +367,7 @@ impl Reporter for TtyReporter {
             &mut self.deferred_failures,
             outcome,
             item,
-            |(i, _, _), target| i.node_id.as_ref() == target,
+            |(i, _, _, _), target| i.node_id.as_ref() == target,
         );
 
         if item.param_id.is_some() && self.opts.verbosity < Verbosity::Detailed {
@@ -393,8 +404,12 @@ impl Reporter for TtyReporter {
                 self.dispatch_param_group(group);
             }
             if outcome.is_hard_failure() {
-                self.deferred_failures
-                    .push(((*item).clone(), outcome.clone(), duration_ms));
+                self.deferred_failures.push((
+                    (*item).clone(),
+                    outcome.clone(),
+                    duration_ms,
+                    parallel_ctx.cloned(),
+                ));
             }
         }
 
@@ -789,7 +804,7 @@ mod tests {
             .lineno(5)
             .source("assert x")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0), None);
         assert_eq!(
             reporter.deferred_failures.len(),
             1,
@@ -807,7 +822,7 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
-        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0), None);
         assert!(
             reporter.deferred_failures.is_empty(),
             "passing test should not be deferred"
@@ -826,7 +841,7 @@ mod tests {
             .lineno(5)
             .source("assert x")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0), None);
         assert!(
             reporter.deferred_failures.is_empty(),
             "verbose mode should print immediately, not defer"
@@ -850,7 +865,7 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
-        reporter.test_completed(&item_a, &outcome, DurationMs::new(10.0));
+        reporter.test_completed(&item_a, &outcome, DurationMs::new(10.0), None);
         assert_eq!(reporter.running_tests.len(), 1);
         assert_eq!(reporter.running_tests[0], "test_signup");
     }
@@ -865,7 +880,7 @@ mod tests {
         let outcome = TestOutcome::Passed {
             no_message_lines: vec![],
         };
-        reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(5.0), None);
         assert!(reporter.running_tests.is_empty());
     }
 
@@ -947,6 +962,34 @@ mod tests {
             !buf.any_failed(),
             "any_failed should be false when no hard failures are present"
         );
+    }
+
+    #[test]
+    fn test_deferred_failure_shows_parallel_context() {
+        let item = TestItem::builder("tests/test_db.py", "test_write_user").arc();
+        let outcome = TestOutcome::failed("assert False")
+            .file("tests/test_db.py")
+            .lineno(10)
+            .source("assert False")
+            .build();
+        let ctx = crate::parallel_context::ParallelContext {
+            worker_id: 2,
+            concurrent_tests: vec![
+                "tests/test_db.py::test_read_user".into(),
+                "tests/test_db.py::test_delete_session".into(),
+            ],
+        };
+        let opts = ReporterOptsBuilder::new()
+            .verbosity(Verbosity::Normal)
+            .build();
+        let mut reporter = TtyReporter::new(opts);
+        reporter.test_started(&item);
+        reporter.test_completed(&item, &outcome, DurationMs::new(42.3), Some(&ctx));
+
+        assert_eq!(reporter.deferred_failures.len(), 1);
+        let (_, _, _, stored_ctx) = &reporter.deferred_failures[0];
+        assert!(stored_ctx.is_some());
+        assert_eq!(stored_ctx.as_ref().unwrap().worker_id, 2);
     }
 
     #[test]

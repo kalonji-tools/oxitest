@@ -20,7 +20,12 @@ impl CiReporter {
         }
     }
 
-    fn push_deferred_diag(&mut self, item: &TestItem, outcome: &TestOutcome) {
+    fn push_deferred_diag(
+        &mut self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
+    ) {
         let c = self.opts.use_color;
 
         // --tb=line: compact one-liner per failure
@@ -35,7 +40,10 @@ impl CiReporter {
                 TestOutcome::Timeout { message } => ("TIMEOUT", message.as_str(), LineNo::ZERO),
                 _ => return,
             };
-            let line = format!("{:<7} {}   :{}   {}", label, item.node_id, lineno, message);
+            let mut line = format!("{:<7} {}   :{}   {}", label, item.node_id, lineno, message);
+            if let Some(ctx) = parallel_ctx {
+                line.push_str(&format!("  {}", ctx.fmt_line(self.opts.use_color).trim()));
+            }
             self.deferred_diags.push(line);
             return;
         }
@@ -74,7 +82,12 @@ impl CiReporter {
                 _ => color_error_token(&format!("ERROR   {}", item.node_id), c),
             }
         };
-        self.deferred_diags.push(format!("{}\n{}", header, diag));
+        let mut entry = format!("{}\n{}", header, diag);
+        if let Some(ctx) = parallel_ctx {
+            entry.push('\n');
+            entry.push_str(&ctx.fmt_line(self.opts.use_color));
+        }
+        self.deferred_diags.push(entry);
     }
 }
 
@@ -107,12 +120,18 @@ impl StandardReporter for CiReporter {
 impl Reporter for CiReporter {
     fn test_started(&mut self, _item: &TestItem) {}
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, _duration_ms: DurationMs) {
+    fn test_completed(
+        &mut self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        _duration_ms: DurationMs,
+        parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
+    ) {
         self.dot_buf.push(outcome.dot_char());
         match outcome {
             TestOutcome::Failed { .. }
             | TestOutcome::Error { .. }
-            | TestOutcome::Timeout { .. } => self.push_deferred_diag(item, outcome),
+            | TestOutcome::Timeout { .. } => self.push_deferred_diag(item, outcome, parallel_ctx),
             TestOutcome::Flaky { .. } => {
                 super::remove_if_flaky(&mut self.deferred_diags, outcome, item, |d, target| {
                     d.contains(target)
@@ -157,9 +176,9 @@ mod tests {
             no_message_lines: vec![],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1), None);
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1), None);
         assert_eq!(reporter.dot_buf, "..");
     }
 
@@ -171,7 +190,7 @@ mod tests {
             no_message_lines: vec![5],
         };
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, DurationMs::new(0.1));
+        reporter.test_completed(&item, &outcome, DurationMs::new(0.1), None);
         assert_eq!(reporter.dot_buf, "\u{00B7}");
     }
 
@@ -184,7 +203,7 @@ mod tests {
             .source("assert x")
             .build();
         reporter.test_started(&item);
-        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0), None);
         assert_eq!(reporter.dot_buf, "F");
     }
 
@@ -198,6 +217,7 @@ mod tests {
                 reason: "reason".to_string(),
             },
             DurationMs::ZERO,
+            None,
         );
         assert_eq!(reporter.dot_buf, "s");
     }
@@ -211,7 +231,7 @@ mod tests {
             .lineno(5)
             .source("obj.x")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO, None);
         assert_eq!(reporter.dot_buf, "E");
     }
 
@@ -229,7 +249,7 @@ mod tests {
         };
         let mut session = crate::reporter::ReporterSession::new(0);
         session.record_outcome(&item, &outcome, DurationMs::ZERO);
-        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO, None);
         assert_eq!(
             reporter.finish(&[], false, &session).code(),
             crate::types::ExitCode::Success
@@ -251,7 +271,7 @@ mod tests {
             .build();
         let mut session = crate::reporter::ReporterSession::new(0);
         session.record_outcome(&item, &outcome, DurationMs::ZERO);
-        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO, None);
         assert_eq!(
             reporter.finish(&[], false, &session).code(),
             crate::types::ExitCode::Failure
@@ -273,7 +293,7 @@ mod tests {
             .build();
         let mut session = crate::reporter::ReporterSession::new(0);
         session.record_outcome(&item, &outcome, DurationMs::ZERO);
-        reporter.test_completed(&item, &outcome, DurationMs::ZERO);
+        reporter.test_completed(&item, &outcome, DurationMs::ZERO, None);
         assert_eq!(
             reporter.finish(&[], true, &session).code(),
             crate::types::ExitCode::Interrupted
@@ -290,6 +310,7 @@ mod tests {
                 reason: "known bug".to_string(),
             },
             DurationMs::ZERO,
+            None,
         );
         assert_eq!(reporter.dot_buf, "x");
     }
@@ -302,6 +323,7 @@ mod tests {
             &item,
             &TestOutcome::XPassed { strict: true },
             DurationMs::ZERO,
+            None,
         );
         assert_eq!(reporter.dot_buf, "X");
     }
@@ -314,6 +336,7 @@ mod tests {
             &item,
             &TestOutcome::XPassed { strict: false },
             DurationMs::ZERO,
+            None,
         );
         assert_eq!(reporter.dot_buf, "X");
     }
@@ -354,7 +377,7 @@ mod tests {
             .lineno(5)
             .source("assert x > 0")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::new(1.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0), None);
         assert_eq!(reporter.dot_buf, "F");
         assert_eq!(reporter.deferred_diags.len(), 1);
         assert!(
@@ -376,7 +399,7 @@ mod tests {
             .lineno(5)
             .source("assert x == y")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::new(10.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(10.0), None);
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];
         assert!(line.contains("FAILED"), "must contain FAILED label");
@@ -397,7 +420,7 @@ mod tests {
             .lineno(10)
             .source("obj.x")
             .build();
-        reporter.test_completed(&item, &outcome, DurationMs::new(5.0));
+        reporter.test_completed(&item, &outcome, DurationMs::new(5.0), None);
         assert_eq!(reporter.deferred_diags.len(), 1);
         let line = &reporter.deferred_diags[0];
         assert!(line.contains("ERROR"), "must contain ERROR label");
@@ -405,6 +428,32 @@ mod tests {
         assert!(
             line.contains("ValueError: something broke"),
             "must contain message"
+        );
+    }
+
+    #[test]
+    fn test_deferred_diag_includes_parallel_context() {
+        let mut reporter = make_ci_reporter(TbStyle::Detail);
+        let item = TestItem::builder("tests/test_db.py", "test_write_user").arc();
+        let outcome = TestOutcome::failed("assert False")
+            .file("tests/test_db.py")
+            .lineno(10)
+            .source("assert False")
+            .build();
+        let ctx = crate::parallel_context::ParallelContext {
+            worker_id: 2,
+            concurrent_tests: vec!["tests/test_db.py::test_read_user".into()],
+        };
+        reporter.test_completed(&item, &outcome, DurationMs::new(1.0), Some(&ctx));
+        assert_eq!(reporter.deferred_diags.len(), 1);
+        let diag = &reporter.deferred_diags[0];
+        assert!(
+            diag.contains("worker #2"),
+            "deferred diag must contain 'worker #2', got: {diag:?}"
+        );
+        assert!(
+            diag.contains("test_read_user"),
+            "deferred diag must contain concurrent test short name, got: {diag:?}"
         );
     }
 }

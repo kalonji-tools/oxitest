@@ -147,6 +147,24 @@ struct would be populated by a direct in-process call rather than a deserialized
 
 Progress on the redesign is tracked in [issue #74](https://github.com/kalonji-tools/oxitest/issues/74).
 
+## Parallel failure context
+
+When a test fails during parallel execution, oxitest shows which worker ran
+the test and which other tests were running concurrently. This context
+appears as a single line after the failure diagnostic:
+
+```text
+FAILED  tests/test_db.py::test_write_user  42.3ms
+  worker #2 | concurrent: test_read_user, test_delete_session, test_login (+5 more)
+```
+
+Workers are numbered starting from 1. Up to three concurrent test names are
+shown; if more were in flight, the count is appended as `(+N more)`. When no
+other tests were running, the line reads `concurrent: (none)`.
+
+This context is only present for parallel runs — serial mode does not produce
+it.
+
 ## See also
 
 - [Run in parallel](../how-to/run-in-parallel.md) — practical guide to parallel configuration

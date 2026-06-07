@@ -58,10 +58,18 @@ def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
             f"{label!r} ({field!r}) missing from parallel diagnostics:\n{parallel_diag}"
         )
 
-    assert serial_diag == parallel_diag, (
+    # Strip the parallel-only context line (worker #N | concurrent: ...)
+    # before comparing diagnostic blocks.
+    parallel_diag_stripped = "\n".join(
+        line
+        for line in parallel_diag.splitlines()
+        if not line.strip().startswith("worker #")
+    ).strip()
+
+    assert serial_diag == parallel_diag_stripped, (
         f"Diagnostic output differs between serial and parallel modes.\n"
         f"--- serial ---\n{serial_diag}\n"
-        f"--- parallel ---\n{parallel_diag}"
+        f"--- parallel ---\n{parallel_diag_stripped}"
     )
 
 

@@ -102,7 +102,7 @@ pub(crate) fn run_retries(
                     message: format!("passed on retry {} of {}", attempt, ctx.max_retries),
                 };
                 rep.test_started(item);
-                rep.test_completed(item, &flaky_outcome, duration_ms);
+                rep.test_completed(item, &flaky_outcome, duration_ms, None);
 
                 retry_timings.push(TestTiming {
                     node_id: item.node_id.clone(),

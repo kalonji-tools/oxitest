@@ -80,6 +80,18 @@ $ oxitest -vv
 
 Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --show-internals -vv`.
 
+When a test fails in **parallel mode**, the failure output includes a context
+line showing which worker ran the test and what other tests were running at
+the same time:
+
+```text
+FAILED  tests/test_db.py::test_write_user  42.3ms
+  worker #2 | concurrent: test_read_user, test_delete_session
+```
+
+This helps diagnose shared-state bugs where two tests interfere with each
+other (e.g. writing to the same database row or file).
+
 See [Debug tests](debug-tests.md) for the full `oxitest debug` workflow.
 
 ## Why is test collection slow?

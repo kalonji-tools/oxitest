@@ -7,7 +7,6 @@ from typing import Any
 
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._metadata import get_marks
-from oxitest._bridge.parametrize import ResolvedCases
 from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 
