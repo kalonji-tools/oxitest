@@ -389,6 +389,37 @@ pub(crate) fn find_unused_fixtures(
         .collect())
 }
 
+/// Start coverage collection via the Python bridge.
+///
+/// Calls `resolve_provider_standalone()` to get the default provider,
+/// then calls `provider.start({})`.
+/// Returns the Python provider object for later stop/report calls.
+pub fn start_coverage(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let module = py.import("oxitest._bridge._coverage")?;
+    let provider = module.call_method0("resolve_provider_standalone")?;
+    provider.call_method1("start", (py.None(),))?;
+    Ok(provider.into())
+}
+
+/// Stop coverage and generate report.
+///
+/// Calls `provider.stop()` then `provider.report(format)`.
+/// Errors are printed as warnings, never fatal.
+pub fn stop_and_report_coverage(
+    py: Python<'_>,
+    provider: &Py<PyAny>,
+    format: &str,
+) -> PyResult<()> {
+    let provider = provider.bind(py);
+    provider.call_method0("stop")?;
+
+    let cov_module = py.import("oxitest._bridge._coverage")?;
+    let fmt_cls = cov_module.getattr("CovReportFormat")?;
+    let fmt = fmt_cls.call1((format,))?;
+    provider.call_method1("report", (&fmt,))?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn try_run_test_with_session_obj(
     py: Python<'_>,
