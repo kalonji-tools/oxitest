@@ -173,7 +173,7 @@ impl RunStats {
             return vec![];
         }
         let mut sorted = self.timings.clone();
-        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         sorted.truncate(n);
         sorted
     }
@@ -204,7 +204,7 @@ impl RunStats {
             return vec![];
         }
         let mut sorted = self.fixture_timings.clone();
-        sorted.sort_by(|a, b| {
+        sorted.sort_unstable_by(|a, b| {
             b.total_ms()
                 .partial_cmp(&a.total_ms())
                 .unwrap_or(std::cmp::Ordering::Equal)
