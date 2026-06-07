@@ -5,10 +5,13 @@ Helper functions are accessible via ``helpers.integ.<function>()``.
 
 from __future__ import annotations
 
+import subprocess
 import textwrap
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import oxitest
+from oxitest import TempDir, Yields
 
 if TYPE_CHECKING:
     from oxitest._bridge._helper_namespace import HelperNamespace
@@ -84,3 +87,25 @@ def assert_excludes(out: str, *terms: str):
     """Assert none of the terms are present in output."""
     for term in terms:
         assert term not in out, f"unexpected {term!r} in:\n{out}"
+
+
+# ── Shared fixtures ──────────────────────────────────────────────────────────
+
+
+@fx.fixture
+def git_repo(tmp: TempDir) -> Yields[Path]:
+    """Tmp dir initialized as a git repo with an initial commit."""
+    git = ["git", "-C", str(tmp)]
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
+    )
+    run(*git, "init")
+    run(*git, "config", "user.email", "test@test.com")
+    run(*git, "config", "user.name", "Test")
+    (tmp / ".gitkeep").write_text("")
+    run(*git, "add", ".")
+    run(*git, "commit", "-m", "init")
+    yield tmp

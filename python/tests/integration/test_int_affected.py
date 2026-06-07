@@ -36,25 +36,6 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir):
 
 
 @fx.fixture
-def git_repo(tmp: TempDir) -> Yields[Path]:
-    """Tmp dir initialized as a git repo with an initial commit."""
-    git = ["git", "-C", str(tmp)]
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
-    run = lambda *cmd: subprocess.run(  # noqa: E731
-        cmd, check=True, capture_output=True, env=clean_env
-    )
-    run(*git, "init")
-    run(*git, "config", "user.email", "test@test.com")
-    run(*git, "config", "user.name", "Test")
-    (tmp / ".gitkeep").write_text("")
-    run(*git, "add", ".")
-    run(*git, "commit", "-m", "init")
-    yield tmp
-
-
-@fx.fixture
 def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     """Git worktree created from git_repo, placed inside a second TempDir."""
     main_repo = git_repo
