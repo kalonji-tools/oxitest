@@ -18,10 +18,7 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._violation_checkers import check_fn_violations
-from oxitest._bridge.parametrize import (
-    _DataclassCases,
-    _PartialCases,
-)
+from oxitest._bridge.parametrize import ResolvedCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
 
@@ -145,8 +142,8 @@ def _apply_module_marks(
                 _append_mark(cast(Any, fn), mark)
 
 
-def _validate_composition(layers: tuple) -> None:
-    """Validate composition rules for _PartialCases layers.
+def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
+    """Validate composition rules for composed ResolvedCases layers.
 
     Raises TypeError if:
     - Only 1 partial layer (needs 2+)
@@ -159,6 +156,7 @@ def _validate_composition(layers: tuple) -> None:
             " Use a full dataclass instance for single-layer parametrize."
         )
     target_type = layers[0].param_type
+    assert target_type is not None  # composed layers always have param_type
     all_provided = frozenset().union(*(layer.provided_fields for layer in layers))
     all_fields = {f.name for f in dataclasses.fields(target_type)}
     missing = all_fields - all_provided
@@ -171,7 +169,7 @@ def _validate_composition(layers: tuple) -> None:
 
 
 def _expand_composed(
-    layers: tuple,
+    layers: tuple[ResolvedCases, ...],
     fn_name: str,
     lineno: int,
     marker_names: list[str],
@@ -179,7 +177,7 @@ def _expand_composed(
     fixture_names: tuple[str, ...],
     fixref_names: tuple[str, ...] = (),
 ) -> list[CollectedItem]:
-    """Expand composed _PartialCases layers via cartesian product."""
+    """Expand composed ResolvedCases layers via cartesian product."""
     _validate_composition(layers)
     layer_items = [layer.items() for layer in layers]
     items: list[CollectedItem] = []
@@ -203,11 +201,9 @@ def _expand_composed(
     return items
 
 
-def _get_fixref_names(layer: object) -> tuple[str, ...]:
+def _get_fixref_names(layer: ResolvedCases) -> tuple[str, ...]:
     """Extract fixture-ref field names from a parametrize layer."""
-    if isinstance(layer, (_DataclassCases, _PartialCases)):
-        return layer.fixref_fields
-    return ()
+    return layer.fixref_fields
 
 
 def _expand_item(
@@ -233,8 +229,8 @@ def _expand_item(
             )
         ]
     layers = cast(tuple, raw)
-    # Composition: all layers are _PartialCases
-    if len(layers) > 1 or isinstance(layers[0], _PartialCases):
+    # Composition: all layers are composed (partial) ResolvedCases
+    if len(layers) > 1 or layers[0].is_composed:
         # Merge fixref_fields from all composition layers
         all_fixrefs: set[str] = set()
         for layer in layers:
