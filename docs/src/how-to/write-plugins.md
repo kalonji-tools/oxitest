@@ -6,8 +6,8 @@
 
 ## Overview
 
-Plugins extend oxitest through six protocols: **Reporter**, **LogBackend**,
-**FixtureProvider**, **Collector**, **ExecutionWrapper**, and **DebuggerBackend**. Each plugin is a
+Plugins extend oxitest through seven protocols: **Reporter**, **LogBackend**,
+**FixtureProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, and **DebuggerBackend**. Each plugin is a
 Python package declared in `pyproject.toml` and loaded at startup. Per-plugin
 configuration is passed via `plugin_settings` as a dictionary to the plugin's
 entry point function.
