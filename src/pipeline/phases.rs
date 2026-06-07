@@ -58,9 +58,7 @@ impl Pipeline<FilesCollected> {
                     tracing::info!("pyproject.toml changed — running all tests");
                 }
                 Err(e) => {
-                    return Err(helpers::early_exit_with_error(&[e.into()], &|| {
-                        self.make_error_reporter()
-                    }));
+                    tracing::warn!("--affected filtering failed ({e}), running all tests");
                 }
             }
         }
