@@ -6,8 +6,8 @@
 
 ## Overview
 
-Plugins extend oxitest through seven protocols: **Reporter**, **LogBackend**,
-**FixtureProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, and **DebuggerBackend**. Each plugin is a
+Plugins extend oxitest through eight protocols: **Reporter**, **LogBackend**,
+**FixtureProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, **DebuggerBackend**, and **CoverageProvider**. Each plugin is a
 Python package declared in `pyproject.toml` and loaded at startup. Per-plugin
 configuration is passed via `plugin_settings` as a dictionary to the plugin's
 entry point function.
@@ -546,6 +546,39 @@ any `oxitest debug` mode.
   backend, oxitest raises `ConflictingDebuggerError` at startup.
 - The default backend wraps stdlib `pdb`. It is used when no plugin provides
   a backend.
+
+## Coverage provider
+
+### CoverageProvider
+
+Override the built-in coverage.py integration with an alternative coverage
+tool.
+
+```python
+from oxitest.plugin import Plugin, CoverageProvider
+from oxitest._bridge._coverage import CovReportFormat
+
+
+class SlipCoverProvider:
+    def start(self, config: dict) -> None:
+        # Initialize alternative coverage tool
+        ...
+
+    def stop(self) -> None:
+        # Stop collection, save data
+        ...
+
+    def report(self, fmt: CovReportFormat) -> int:
+        # Generate report in requested format
+        ...
+
+
+def oxitest_plugin(config=None):
+    return Plugin(coverage_provider=SlipCoverProvider())
+```
+
+At most one plugin may provide a `CoverageProvider`. If two plugins both
+declare one, oxitest raises `ConflictingCoverageError` at startup.
 
 ## See also
 
