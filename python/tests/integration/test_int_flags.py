@@ -346,6 +346,53 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]):
     helpers.integ.assert_excludes(out, "2 passed")
 
 
+@oxitest.mark.timeout(120)
+def test_affected_with_subdirectory_path(git_repo: Fixture[Path]):
+    """--affected works when a subdirectory is passed as the path argument."""
+    tmp = git_repo
+    git = ["git", "-C", str(tmp)]
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
+    )
+
+    # Create a subdirectory with a test file and commit
+    subdir = tmp / "tests"
+    subdir.mkdir()
+    (subdir / "test_one.py").write_text("def test_one(): assert True\n")
+    run(*git, "add", ".")
+    run(*git, "commit", "-m", "baseline")
+
+    # Add a second test file and stage it
+    (subdir / "test_two.py").write_text("def test_two(): assert True\n")
+    run(*git, "add", "tests/test_two.py")
+
+    # Act — pass the subdirectory as the path (this triggered the bug)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "oxitest",
+            str(subdir),
+            "--color",
+            "never",
+            "--affected=HEAD",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(tmp),
+        env=clean_env,
+    )
+    out, _, rc = result.stdout, result.stderr, result.returncode
+
+    # Assert — only the new file should be collected (1 test, not 2)
+    helpers.integ.assert_passed(out, rc, count=1)
+    helpers.integ.assert_excludes(out, "2 passed")
+
+
 def test_tb_line_shows_compact_failure(tmp: TempDir):
     """--tb line shows file:line but no full diagnostic block."""
     (tmp / "test_fail.py").write_text(
