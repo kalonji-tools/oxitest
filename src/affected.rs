@@ -15,8 +15,20 @@ pub enum AffectedError {
     #[error("--affected requires a git repository")]
     NotAGitRepo,
     /// `git diff` returned a non-zero exit code.
-    #[error("git diff failed: {0}")]
+    #[error("git command failed: {0}")]
     GitCommandFailed(String),
+}
+
+/// Check the result of a git command: map non-zero exit to an appropriate error.
+fn check_git_output(output: &std::process::Output) -> Result<(), AffectedError> {
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.to_ascii_lowercase().contains("not a git repository") {
+        return Err(AffectedError::NotAGitRepo);
+    }
+    Err(AffectedError::GitCommandFailed(stderr.into_owned()))
 }
 
 /// Parse the raw output of `git diff --name-only` into relative path strings.
@@ -28,27 +40,39 @@ fn parse_diff_output(stdout: &str) -> Vec<String> {
         .collect()
 }
 
-/// Run `git diff --name-only <base>` and return changed file paths (relative to rootdir).
-pub(crate) fn git_changed_files(
-    rootdir: &Utf8Path,
-    base: &str,
-) -> Result<Vec<String>, AffectedError> {
+/// Run `git rev-parse --show-toplevel` to get the git repository root.
+fn git_root(dir: &Utf8Path) -> Result<Utf8PathBuf, AffectedError> {
     let output = std::process::Command::new("git")
-        .args(["diff", "--name-only", base])
-        .current_dir(rootdir.as_std_path())
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(dir.as_std_path())
         .output()
         .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.to_ascii_lowercase().contains("not a git repository") {
-            return Err(AffectedError::NotAGitRepo);
-        }
-        return Err(AffectedError::GitCommandFailed(stderr.into_owned()));
-    }
+    check_git_output(&output)?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_diff_output(&stdout))
+    let path = stdout.trim();
+    Utf8PathBuf::try_from(std::path::PathBuf::from(path))
+        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))
+}
+
+/// Run `git diff --name-only <base>` and return changed file paths (relative to git root).
+pub(crate) fn git_changed_files(
+    rootdir: &Utf8Path,
+    base: &str,
+) -> Result<(Utf8PathBuf, Vec<String>), AffectedError> {
+    let repo_root = git_root(rootdir)?;
+
+    let output = std::process::Command::new("git")
+        .args(["diff", "--name-only", base])
+        .current_dir(repo_root.as_std_path())
+        .output()
+        .map_err(|e| AffectedError::GitCommandFailed(e.to_string()))?;
+
+    check_git_output(&output)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok((repo_root, parse_diff_output(&stdout)))
 }
 
 /// Result of classifying git-changed files.
@@ -63,7 +87,7 @@ pub(crate) struct ChangedFiles {
 }
 
 /// Classify changed file paths into categories relevant for affected-test filtering.
-pub(crate) fn classify_changed_files(changed: &[String]) -> ChangedFiles {
+pub(crate) fn classify_changed_files(changed: Vec<String>) -> ChangedFiles {
     let mut result = ChangedFiles {
         run_all: false,
         conftest_files: Vec::new(),
@@ -79,21 +103,22 @@ pub(crate) fn classify_changed_files(changed: &[String]) -> ChangedFiles {
             continue;
         }
         if path.ends_with("conftest.py") {
-            result.conftest_files.push(path.clone());
+            result.conftest_files.push(path);
         } else {
-            result.source_files.push(path.clone());
+            result.source_files.push(path);
         }
     }
 
     result
 }
 
-/// Return test files that live in the directory subtree of any changed conftest.
+/// Insert into `affected` test files that live in the directory subtree of any changed conftest.
 fn conftest_affected_tests(
     test_files: &[Utf8PathBuf],
     changed_conftests: &[String],
     rootdir: &Utf8Path,
-) -> Vec<Utf8PathBuf> {
+    affected: &mut std::collections::HashSet<Utf8PathBuf>,
+) {
     let mut conftest_dirs: Vec<Utf8PathBuf> = changed_conftests
         .iter()
         .filter_map(|c| {
@@ -104,27 +129,28 @@ fn conftest_affected_tests(
     conftest_dirs.sort_unstable();
     conftest_dirs.dedup();
 
-    test_files
-        .iter()
-        .filter(|tf| conftest_dirs.iter().any(|dir| tf.starts_with(dir)))
-        .cloned()
-        .collect()
+    for tf in test_files {
+        if conftest_dirs.iter().any(|dir| tf.starts_with(dir)) {
+            affected.insert(tf.clone());
+        }
+    }
 }
 
-/// Return test files that are themselves in the changed set.
+/// Insert into `affected` test files that are themselves in the changed set.
 fn directly_changed_tests(
     test_files: &[Utf8PathBuf],
     changed_sources: &[String],
     rootdir: &Utf8Path,
-) -> Vec<Utf8PathBuf> {
+    affected: &mut std::collections::HashSet<Utf8PathBuf>,
+) {
     let changed_abs: std::collections::HashSet<Utf8PathBuf> =
         changed_sources.iter().map(|s| rootdir.join(s)).collect();
 
-    test_files
-        .iter()
-        .filter(|tf| changed_abs.contains(*tf))
-        .cloned()
-        .collect()
+    for tf in test_files {
+        if changed_abs.contains(tf) {
+            affected.insert(tf.clone());
+        }
+    }
 }
 
 /// Filter `test_files` to only those affected by git changes.
@@ -138,13 +164,13 @@ pub(crate) fn filter_affected_test_files(
     rootdir: &Utf8Path,
     base_ref: &str,
 ) -> Result<Option<Vec<Utf8PathBuf>>, AffectedError> {
-    let changed = git_changed_files(rootdir, base_ref)?;
+    let (repo_root, changed) = git_changed_files(rootdir, base_ref)?;
 
     if changed.is_empty() {
         return Ok(Some(vec![]));
     }
 
-    let classified = classify_changed_files(&changed);
+    let classified = classify_changed_files(changed);
 
     if classified.run_all {
         return Ok(None);
@@ -153,18 +179,21 @@ pub(crate) fn filter_affected_test_files(
     let mut affected: std::collections::HashSet<Utf8PathBuf> = std::collections::HashSet::new();
 
     // 1. Test files that were directly changed.
-    affected.extend(directly_changed_tests(
+    // Use repo_root (git root) as the base since git diff paths are relative to it.
+    directly_changed_tests(
         test_files,
         &classified.source_files,
-        rootdir,
-    ));
+        &repo_root,
+        &mut affected,
+    );
 
     // 2. Test files in conftest subtrees.
-    affected.extend(conftest_affected_tests(
+    conftest_affected_tests(
         test_files,
         &classified.conftest_files,
-        rootdir,
-    ));
+        &repo_root,
+        &mut affected,
+    );
 
     // 3. Test files that import changed source files (via Rust AST analysis).
     //    Only analyze files not already marked affected.
@@ -182,13 +211,13 @@ pub(crate) fn filter_affected_test_files(
     }
 
     // Preserve original ordering from test_files.
-    let result: Vec<Utf8PathBuf> = test_files
-        .iter()
-        .filter(|f| affected.contains(*f))
-        .cloned()
-        .collect();
-
-    Ok(Some(result))
+    Ok(Some(
+        test_files
+            .iter()
+            .filter(|f| affected.contains(*f))
+            .cloned()
+            .collect(),
+    ))
 }
 
 #[cfg(test)]
@@ -226,21 +255,21 @@ mod tests {
     #[test]
     fn classify_pyproject_triggers_run_all() {
         let changed = vec!["pyproject.toml".to_string(), "src/foo.py".to_string()];
-        let result = classify_changed_files(&changed);
+        let result = classify_changed_files(changed);
         assert!(result.run_all);
     }
 
     #[test]
     fn classify_no_pyproject_does_not_run_all() {
         let changed = vec!["src/foo.py".to_string()];
-        let result = classify_changed_files(&changed);
+        let result = classify_changed_files(changed);
         assert!(!result.run_all);
     }
 
     #[test]
     fn classify_conftest_detected() {
         let changed = vec!["tests/conftest.py".to_string(), "src/foo.py".to_string()];
-        let result = classify_changed_files(&changed);
+        let result = classify_changed_files(changed);
         assert_eq!(result.conftest_files, vec!["tests/conftest.py"]);
         assert_eq!(result.source_files, vec!["src/foo.py"]);
     }
@@ -248,7 +277,7 @@ mod tests {
     #[test]
     fn classify_non_python_ignored() {
         let changed = vec!["README.md".to_string(), "Cargo.toml".to_string()];
-        let result = classify_changed_files(&changed);
+        let result = classify_changed_files(changed);
         assert!(!result.run_all);
         assert!(result.conftest_files.is_empty());
         assert!(result.source_files.is_empty());
@@ -256,7 +285,7 @@ mod tests {
 
     #[test]
     fn classify_empty_input() {
-        let result = classify_changed_files(&[]);
+        let result = classify_changed_files(vec![]);
         assert!(!result.run_all);
         assert!(result.conftest_files.is_empty());
         assert!(result.source_files.is_empty());
@@ -273,7 +302,8 @@ mod tests {
         ];
         let changed_conftests = vec!["tests/conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
-        let affected = conftest_affected_tests(&test_files, &changed_conftests, rootdir);
+        let mut affected = std::collections::HashSet::new();
+        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
         assert_eq!(affected.len(), 2);
         assert!(affected.contains(&Utf8PathBuf::from("/project/tests/test_a.py")));
         assert!(affected.contains(&Utf8PathBuf::from("/project/tests/sub/test_b.py")));
@@ -287,7 +317,8 @@ mod tests {
         ];
         let changed_conftests = vec!["conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
-        let affected = conftest_affected_tests(&test_files, &changed_conftests, rootdir);
+        let mut affected = std::collections::HashSet::new();
+        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
         assert_eq!(affected.len(), 2);
     }
 
@@ -296,7 +327,8 @@ mod tests {
         let test_files = vec![Utf8PathBuf::from("/project/other/test_a.py")];
         let changed_conftests = vec!["tests/conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
-        let affected = conftest_affected_tests(&test_files, &changed_conftests, rootdir);
+        let mut affected = std::collections::HashSet::new();
+        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
         assert!(affected.is_empty());
     }
 
@@ -310,11 +342,10 @@ mod tests {
         ];
         let changed_sources = vec!["tests/test_a.py".to_string()];
         let rootdir = Utf8Path::new("/project");
-        let affected = directly_changed_tests(&test_files, &changed_sources, rootdir);
-        assert_eq!(
-            affected,
-            vec![Utf8PathBuf::from("/project/tests/test_a.py")]
-        );
+        let mut affected = std::collections::HashSet::new();
+        directly_changed_tests(&test_files, &changed_sources, rootdir, &mut affected);
+        assert_eq!(affected.len(), 1);
+        assert!(affected.contains(&Utf8PathBuf::from("/project/tests/test_a.py")));
     }
 
     #[test]
@@ -322,7 +353,8 @@ mod tests {
         let test_files = vec![Utf8PathBuf::from("/project/tests/test_a.py")];
         let changed_sources = vec!["src/utils.py".to_string()];
         let rootdir = Utf8Path::new("/project");
-        let affected = directly_changed_tests(&test_files, &changed_sources, rootdir);
+        let mut affected = std::collections::HashSet::new();
+        directly_changed_tests(&test_files, &changed_sources, rootdir, &mut affected);
         assert!(affected.is_empty());
     }
 }
