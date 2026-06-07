@@ -35,15 +35,15 @@ def test_large_sort():
 Run only tests tagged `slow`:
 
 ```console
-$ oxitest -m slow
+$ oxitest -E 'mark(slow)'
 ```
 
-Combine expressions with `and`, `or`, `not`:
+Combine expressions with `&`, `|`, `!`:
 
 ```console
-$ oxitest -m "slow and not integration"
-$ oxitest -m "slow or integration"
-$ oxitest -m "not slow"
+$ oxitest -E 'mark(slow) & !mark(integration)'
+$ oxitest -E 'mark(slow) | mark(integration)'
+$ oxitest -E '!mark(slow)'
 ```
 
 Expressions are matched against the full set of marks on each test.
@@ -164,6 +164,6 @@ resources that cannot be serialized to a subprocess.
 
 ## See also
 
-- [Filter tests](filter-tests.md) — filter by keyword with `-k` or by marker with `-m`
+- [Filter tests](filter-tests.md) — filter by name with `-E 'name(...)'` or by marker with `-E 'mark(...)'`
 - [Run in parallel](run-in-parallel.md) — how `@oxi.mark.inprocess` interacts with parallel execution
 - [Strict mode](../explanation/strict-mode.md) — how strict mode enforces marker descriptions and other conventions

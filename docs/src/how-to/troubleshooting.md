@@ -69,7 +69,7 @@ $ oxitest --show-internals
 $ oxitest --tb=line
 
 # Run a single test by keyword
-$ oxitest -k test_my_function
+$ oxitest -E 'name(test_my_function)'
 
 # Run a single file
 $ oxitest tests/test_foo.py
@@ -78,7 +78,7 @@ $ oxitest tests/test_foo.py
 $ oxitest -vv
 ```
 
-Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -k my_test --show-internals -vv`.
+Combine flags to isolate a specific failure: `oxitest tests/test_foo.py -E 'name(my_test)' --show-internals -vv`.
 
 When a test fails in **parallel mode**, the failure output includes a context
 line showing which worker ran the test and what other tests were running at
