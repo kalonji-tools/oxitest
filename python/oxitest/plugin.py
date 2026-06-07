@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from oxitest._bridge._coverage import CovReportFormat
+
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import AsyncBackend
     from oxitest._bridge._debugger import DebuggerBackend
@@ -182,6 +184,28 @@ class Reporter(Protocol):
         ...
 
 
+@runtime_checkable
+class CoverageProvider(Protocol):
+    """Protocol for coverage collection backends.
+
+    The built-in provider uses coverage.py. Plugins can override this
+    to use alternative coverage tools (e.g. slipcover).
+    At most one provider is allowed across all plugins.
+    """
+
+    def start(self, config: dict[str, Any]) -> None:
+        """Begin coverage collection. Called before any test execution."""
+        ...
+
+    def stop(self) -> None:
+        """Stop collection, save data, combine parallel data files."""
+        ...
+
+    def report(self, fmt: CovReportFormat) -> int:
+        """Generate report in the given format. Returns 0 on success."""
+        ...
+
+
 @dataclass
 class Plugin:
     """Typed declaration of what a plugin provides.
@@ -203,3 +227,6 @@ class Plugin:
 
     # Debugger backend (at most one across all plugins)
     debugger_backend: DebuggerBackend | None = None
+
+    # Coverage backend (at most one across all plugins)
+    coverage_provider: CoverageProvider | None = None
