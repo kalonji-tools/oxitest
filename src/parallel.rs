@@ -14,6 +14,9 @@ use crate::{
     worker_session::spawn_worker,
 };
 
+/// Channel item: (node_id, duration_ms, outcome, worker_id).
+pub(crate) type WorkerResult = (String, f64, WorkerOutcome, usize);
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum DrainOutcome {
     /// All `expected` results received successfully.
@@ -34,7 +37,8 @@ pub(crate) fn drain_worker_results(
     line_rx: &crossbeam_channel::Receiver<String>,
     expected: usize,
     watchdog: std::time::Duration,
-    tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
+    tx: &crossbeam_channel::Sender<WorkerResult>,
+    worker_id: usize,
 ) -> (DrainOutcome, usize) {
     use std::time::Instant;
 
@@ -77,7 +81,8 @@ pub(crate) fn drain_worker_results(
                         }
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
-                        let _ = tx.send(r.into_worker_outcome());
+                        let (node_id, dur, outcome) = r.into_worker_outcome();
+                        let _ = tx.send((node_id, dur, outcome, worker_id));
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, output = %trimmed, "bad worker output");
@@ -129,6 +134,7 @@ pub(crate) fn compute_optimal_workers(
 
 /// Handles the result of draining worker output for one group.
 /// Returns `false` if the subprocess died and should not receive more tasks.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_drain_outcome(
     outcome: DrainOutcome,
     child: &mut std::process::Child,
@@ -136,7 +142,8 @@ pub(crate) fn handle_drain_outcome(
     received: usize,
     watchdog: std::time::Duration,
     module_path: &camino::Utf8Path,
-    tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
+    tx: &crossbeam_channel::Sender<WorkerResult>,
+    worker_id: usize,
 ) -> bool {
     match outcome {
         DrainOutcome::Complete => true,
@@ -149,13 +156,18 @@ pub(crate) fn handle_drain_outcome(
             let _ = child.kill();
             for item in items.iter().skip(received) {
                 let (wo, dur) = WorkerOutcome::timed_out(watchdog);
-                let _ = tx.send((item.node_id.to_string(), dur, wo));
+                let _ = tx.send((item.node_id.to_string(), dur, wo, worker_id));
             }
             false
         }
         DrainOutcome::Disconnected => {
             for item in items.iter().skip(received) {
-                let _ = tx.send((item.node_id.to_string(), 0.0, WorkerOutcome::crashed()));
+                let _ = tx.send((
+                    item.node_id.to_string(),
+                    0.0,
+                    WorkerOutcome::crashed(),
+                    worker_id,
+                ));
             }
             false
         }
@@ -175,6 +187,7 @@ fn handle_worker_result(
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
+    parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
 ) -> Option<types::TestOutcome> {
     let item = match item_lookup.get(node_id_str).map(std::sync::Arc::clone) {
         Some(item) => item,
@@ -190,7 +203,7 @@ fn handle_worker_result(
     let outcome = types::TestOutcome::from(outcome);
     let duration_ms = types::DurationMs::new(duration_ms);
     rep.test_started(&item);
-    rep.test_completed(&item, &outcome, duration_ms);
+    rep.test_completed(&item, &outcome, duration_ms, parallel_ctx);
     timings.push(types::TestTiming {
         node_id,
         duration_ms,
@@ -221,6 +234,7 @@ fn drain_remaining_into_crashed(
                 item_lookup,
                 rep,
                 timings,
+                None,
             );
         }
     }
@@ -254,6 +268,8 @@ pub(crate) fn run_phase_parallel(
         .flat_map(|(_, items)| items.iter())
         .map(|item| (item.node_id.clone(), Arc::clone(item)))
         .collect();
+    let in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(ahash::AHashSet::new()));
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
     let conftest_raw: std::sync::Arc<serde_json::value::RawValue> = {
@@ -269,12 +285,13 @@ pub(crate) fn run_phase_parallel(
     let show_internals = cfg.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
 
-    let (tx, rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+    let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
     let handles: Vec<_> = (0..worker_count)
-        .map(|_| {
+        .map(|i| {
             spawn_worker(
                 Arc::clone(&python_bin),
+                i,
                 Arc::clone(&sched),
                 Arc::clone(&cancelled),
                 std::sync::Arc::clone(&conftest_raw),
@@ -283,6 +300,7 @@ pub(crate) fn run_phase_parallel(
                 show_locals,
                 show_internals,
                 tx.clone(),
+                std::sync::Arc::clone(&in_flight),
             )
         })
         .collect();
@@ -293,7 +311,19 @@ pub(crate) fn run_phase_parallel(
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-    for (node_id_str, duration_ms, worker_outcome) in rx {
+    for (node_id_str, duration_ms, worker_outcome, worker_id) in rx {
+        // Snapshot concurrent tests (excluding the one that just completed)
+        let concurrent_tests: Vec<String> = {
+            let mut set = in_flight.lock().unwrap();
+            set.remove(&node_id_str);
+            set.iter().cloned().collect()
+        };
+
+        let parallel_ctx = crate::parallel_context::ParallelContext {
+            worker_id: worker_id + 1, // 1-indexed for display
+            concurrent_tests,
+        };
+
         let Some(outcome) = handle_worker_result(
             &node_id_str,
             duration_ms,
@@ -301,6 +331,7 @@ pub(crate) fn run_phase_parallel(
             &item_lookup,
             rep,
             &mut timings,
+            Some(&parallel_ctx),
         ) else {
             continue;
         };
@@ -680,8 +711,7 @@ mod repro_tests {
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) =
-            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         // Thread that sends empty lines for 300ms — simulates a panicked
         // Python subprocess continuously flushing its stdout buffer.
@@ -697,7 +727,7 @@ mod repro_tests {
         let watchdog = Duration::from_millis(50);
         let start = Instant::now();
 
-        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
 
         let elapsed = start.elapsed();
         assert_eq!(received, 0, "no real results were sent");
@@ -734,8 +764,7 @@ mod drain_tests {
     #[test]
     fn empty_lines_do_not_reset_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) =
-            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         // Send 50 empty lines then close the channel.
         for _ in 0..50 {
@@ -745,7 +774,7 @@ mod drain_tests {
 
         let watchdog = Duration::from_millis(50);
         let start = std::time::Instant::now();
-        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
         let elapsed = start.elapsed();
 
         // Should disconnect quickly (50 sends are instant), not hang for 50 × 50ms.
@@ -765,7 +794,7 @@ mod drain_tests {
     #[test]
     fn valid_result_resets_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         let watchdog = Duration::from_millis(100);
 
@@ -777,7 +806,7 @@ mod drain_tests {
             line_tx.send(valid_json("t::b")).unwrap();
         });
 
-        let (outcome, received) = drain_worker_results(&line_rx, 2, watchdog, &result_tx);
+        let (outcome, received) = drain_worker_results(&line_rx, 2, watchdog, &result_tx, 0);
         handle.join().unwrap();
 
         assert_eq!(outcome, DrainOutcome::Complete, "expected Complete");
@@ -790,7 +819,7 @@ mod drain_tests {
     #[test]
     fn empty_lines_before_valid_result_still_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         // 10 empty lines, then the real result.
         for _ in 0..10 {
@@ -800,7 +829,7 @@ mod drain_tests {
         drop(line_tx);
 
         let (outcome, received) =
-            drain_worker_results(&line_rx, 1, Duration::from_millis(500), &result_tx);
+            drain_worker_results(&line_rx, 1, Duration::from_millis(500), &result_tx, 0);
 
         assert_eq!(outcome, DrainOutcome::Complete);
         assert_eq!(received, 1);
@@ -812,14 +841,14 @@ mod drain_tests {
     #[test]
     fn disconnected_mid_group_returns_received_count() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         line_tx.send(valid_json("t::a")).unwrap();
         line_tx.send(valid_json("t::b")).unwrap();
         drop(line_tx); // disconnect before all 4 expected
 
         let (outcome, received) =
-            drain_worker_results(&line_rx, 4, Duration::from_millis(500), &result_tx);
+            drain_worker_results(&line_rx, 4, Duration::from_millis(500), &result_tx, 0);
 
         assert!(
             matches!(outcome, DrainOutcome::Disconnected),
@@ -834,7 +863,7 @@ mod drain_tests {
     #[test]
     fn exact_expected_results_returns_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         for i in 0..3 {
             line_tx.send(valid_json(&format!("t::{i}"))).unwrap();
@@ -842,7 +871,7 @@ mod drain_tests {
         drop(line_tx);
 
         let (outcome, received) =
-            drain_worker_results(&line_rx, 3, Duration::from_millis(500), &result_tx);
+            drain_worker_results(&line_rx, 3, Duration::from_millis(500), &result_tx, 0);
 
         assert_eq!(outcome, DrainOutcome::Complete);
         assert_eq!(received, 3);
@@ -854,12 +883,11 @@ mod drain_tests {
     #[test]
     fn silent_channel_triggers_timeout() {
         let (_line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) =
-            crossbeam_channel::unbounded::<(String, f64, WorkerOutcome)>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
 
         let watchdog = Duration::from_millis(30);
         let start = std::time::Instant::now();
-        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx);
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
         let elapsed = start.elapsed();
 
         assert!(
@@ -939,6 +967,7 @@ mod drain_tests {
                 item: &TestItem,
                 outcome: &TestOutcome,
                 _ms: types::DurationMs,
+                _parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
             ) {
                 self.completed
                     .push((item.node_id.to_string(), outcome.as_str().to_string()));
@@ -989,6 +1018,7 @@ mod drain_tests {
                 _: &TestItem,
                 _: &crate::types::TestOutcome,
                 _: types::DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
             ) {
                 panic!("must not be called on empty scheduler");
             }
@@ -1025,7 +1055,7 @@ mod drain_tests {
         drop(line_tx);
 
         let (outcome, count) =
-            drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx);
+            drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx, 0);
         assert_eq!(outcome, DrainOutcome::Complete);
         assert_eq!(count, 1);
         // Result must still be forwarded despite version mismatch
@@ -1051,6 +1081,7 @@ mod result_handler_tests {
             _: &types::TestItem,
             _: &types::TestOutcome,
             _: types::DurationMs,
+            _: Option<&crate::parallel_context::ParallelContext>,
         ) {
             self.completed += 1;
         }
@@ -1097,6 +1128,7 @@ mod result_handler_tests {
             &lookup,
             &mut rep,
             &mut timings,
+            None,
         );
 
         assert!(outcome.is_none(), "should return None for unknown node_id");
@@ -1130,6 +1162,7 @@ mod result_handler_tests {
             &lookup,
             &mut rep,
             &mut timings,
+            None,
         );
 
         assert!(outcome.is_some(), "should return Some for known node_id");

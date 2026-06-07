@@ -124,7 +124,7 @@ impl ExecutionHarness for SerialHarness<'_> {
                     duration_ms,
                     outcome: types::OutcomeKind::from(&outcome),
                 });
-                rep.test_completed(item, &outcome, duration_ms);
+                rep.test_completed(item, &outcome, duration_ms, None);
                 if acc.record(&outcome) {
                     interrupted = true;
                     if let Err(e) = self.session.end_module(self.py, module_path) {
@@ -205,7 +205,7 @@ pub(super) fn execute(
         }) {
             let outcome = strict::per_test_error(pv);
             rep.test_started(item);
-            rep.test_completed(item, &outcome, types::DurationMs::ZERO);
+            rep.test_completed(item, &outcome, types::DurationMs::ZERO, None);
         }
     }
 

@@ -16,6 +16,7 @@ mod edit_distance;
 mod filter;
 mod import_graph;
 mod parallel;
+mod parallel_context;
 mod pipeline;
 mod python_ast;
 mod query;

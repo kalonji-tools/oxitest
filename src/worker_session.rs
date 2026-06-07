@@ -122,15 +122,17 @@ impl WorkerSession {
     fn drain_results(
         &self,
         expected: usize,
-        tx: &crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
+        tx: &crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+        worker_id: usize,
     ) -> (DrainOutcome, usize) {
-        drain_worker_results(&self.line_rx, expected, self.watchdog, tx)
+        drain_worker_results(&self.line_rx, expected, self.watchdog, tx, worker_id)
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_worker(
     python_bin: std::sync::Arc<str>,
+    worker_id: usize,
     sched: std::sync::Arc<scheduler::Scheduler>,
     cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     conftest_json: std::sync::Arc<serde_json::value::RawValue>,
@@ -138,7 +140,8 @@ pub(crate) fn spawn_worker(
     keep_tmp: Option<std::sync::Arc<str>>,
     show_locals: bool,
     show_internals: bool,
-    tx: crossbeam_channel::Sender<(String, f64, WorkerOutcome)>,
+    tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+    in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -192,13 +195,25 @@ pub(crate) fn spawn_worker(
                     "failed to send task to worker — emitting error for all group items"
                 );
                 for item in &group.items {
-                    let _ = tx.send((item.node_id.to_string(), 0.0, WorkerOutcome::crashed()));
+                    let _ = tx.send((
+                        item.node_id.to_string(),
+                        0.0,
+                        WorkerOutcome::crashed(),
+                        worker_id,
+                    ));
                 }
                 break;
             }
 
+            {
+                let mut set = in_flight.lock().unwrap();
+                for item in &group.items {
+                    set.insert(item.node_id.to_string());
+                }
+            }
+
             let expected = group.items.len();
-            let (drain_outcome, received) = session.drain_results(expected, &tx);
+            let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
 
             subprocess_alive = handle_drain_outcome(
                 drain_outcome,
@@ -208,6 +223,7 @@ pub(crate) fn spawn_worker(
                 watchdog,
                 &group.module_path,
                 &tx,
+                worker_id,
             );
         }
 

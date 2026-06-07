@@ -25,7 +25,13 @@ impl super::Reporter for PyPluginReporter {
         });
     }
 
-    fn test_completed(&mut self, item: &TestItem, outcome: &TestOutcome, duration_ms: DurationMs) {
+    fn test_completed(
+        &mut self,
+        item: &TestItem,
+        outcome: &TestOutcome,
+        duration_ms: DurationMs,
+        _parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
+    ) {
         Python::attach(|py| {
             let node_id = item.node_id.to_string();
             let status = outcome.as_str();
