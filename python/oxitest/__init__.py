@@ -84,6 +84,9 @@ from oxitest._bridge._builtins import (
     TestContext as TestContext,
     WarnCapture as WarnCapture,
 )
+from oxitest._bridge._coverage import (
+    CovReportFormat as CovReportFormat,
+)
 from oxitest._bridge._debugger import (
     DebuggerBackend as DebuggerBackend,
 )
@@ -116,13 +119,15 @@ from oxitest._bridge.parametrize import (
     partial as partial,
 )
 from oxitest._exit_code import ExitCode as ExitCode
-from oxitest.plugin import Plugin as Plugin
+from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugin
 
 __all__ = [
     "ApproxBase",
     "approx",
     "AsyncBackend",
     "CaptureResult",
+    "CovReportFormat",
+    "CoverageProvider",
     "DebuggerBackend",
     "ExitCode",
     "FdCapture",

@@ -15,6 +15,7 @@ __all__ = [
     "BackendNotFoundError",
     "ConflictingBackendError",
     "ConflictingDebuggerError",
+    "ConflictingCoverageError",
     "ParametrizeError",
     "LoadError",
 ]
@@ -122,6 +123,15 @@ class ConflictingDebuggerError(OxitestError):
     def __init__(self, providers: list[str]) -> None:
         joined = ", ".join(providers)
         super().__init__(f"multiple plugins provide a debugger backend: {joined}")
+        self.providers = providers
+
+
+class ConflictingCoverageError(OxitestError):
+    """Multiple plugins provide a CoverageProvider."""
+
+    def __init__(self, providers: list[str]) -> None:
+        joined = ", ".join(providers)
+        super().__init__(f"multiple plugins provide a coverage provider: {joined}")
         self.providers = providers
 
 
