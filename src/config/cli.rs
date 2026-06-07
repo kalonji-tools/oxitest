@@ -530,7 +530,7 @@ impl OxitestCli {
                     return Ok((cmd, use_gitignore));
                 }
                 // No subcommand given (bare `oxitest`) — treat as `run` with no args.
-                let run_args = vec![args[0].clone(), "run".to_string()];
+                let run_args: Vec<&str> = vec![&args[0], "run"];
                 // (no extra args to forward)
                 let cli = OxitestCli::try_parse_from(&run_args)?;
                 let mut cmd = cli.command.unwrap();
@@ -556,19 +556,19 @@ impl OxitestCli {
                 // and pass the rest as subcommand args.
                 if args.len() > 1 {
                     let global_flags: &[&str] = &["--no-use-gitignore"];
-                    let mut run_args = Vec::with_capacity(args.len() + 1);
-                    run_args.push(args[0].clone());
+                    let mut run_args: Vec<&str> = Vec::with_capacity(args.len() + 1);
+                    run_args.push(&args[0]);
                     // Extract global flags from anywhere in args[1..]
                     for arg in &args[1..] {
                         if global_flags.contains(&arg.as_str()) {
-                            run_args.push(arg.clone());
+                            run_args.push(arg);
                         }
                     }
-                    run_args.push("run".to_string());
+                    run_args.push("run");
                     // Then the rest (non-global args) in original order
                     for arg in &args[1..] {
                         if !global_flags.contains(&arg.as_str()) {
-                            run_args.push(arg.clone());
+                            run_args.push(arg);
                         }
                     }
                     match OxitestCli::try_parse_from(&run_args) {

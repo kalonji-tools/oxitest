@@ -72,7 +72,7 @@ pub(super) fn partition_by_fixture_groups(
             let mut assigned = false;
             for (gi, fg) in fixture_groups.iter().enumerate() {
                 if item.fixture_names.iter().any(|f| fg.contains(f)) {
-                    group_buckets[gi].push(item.clone());
+                    group_buckets[gi].push(Arc::clone(&item));
                     assigned = true;
                     break;
                 }
