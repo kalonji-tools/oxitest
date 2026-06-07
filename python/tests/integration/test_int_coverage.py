@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import unittest
 from pathlib import Path
+
+try:
+    import coverage  # noqa: F401
+except ImportError:
+    raise unittest.SkipTest("coverage package not installed") from None
 
 from conftest import helpers
 from oxitest import TempDir
