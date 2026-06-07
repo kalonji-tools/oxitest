@@ -103,17 +103,34 @@ class PluginRegistry:
             if entry.plugin.debugger_backend is not None
         ]
 
+    @functools.cached_property
+    def coverage_providers(self) -> list[tuple[str, object]]:
+        """All coverage providers from all plugins, as (module_name, provider) pairs."""
+        return [
+            (entry.module_name, entry.plugin.coverage_provider)
+            for entry in self.entries
+            if entry.plugin.coverage_provider is not None
+        ]
+
     def validate(self) -> None:
         """Check for conflicting plugin declarations.
 
         Raises:
             ConflictingDebuggerError: if multiple plugins provide a debugger backend.
+            ConflictingCoverageError: if multiple plugins provide a coverage provider.
         """
-        from oxitest._bridge._errors import ConflictingDebuggerError
+        from oxitest._bridge._errors import (
+            ConflictingCoverageError,
+            ConflictingDebuggerError,
+        )
 
         if len(self.debugger_backends) > 1:
             providers = [name for name, _ in self.debugger_backends]
             raise ConflictingDebuggerError(providers)
+
+        if len(self.coverage_providers) > 1:
+            providers = [name for name, _ in self.coverage_providers]
+            raise ConflictingCoverageError(providers)
 
 
 def load_plugins(

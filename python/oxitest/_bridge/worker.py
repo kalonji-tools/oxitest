@@ -41,9 +41,18 @@ from __future__ import annotations
 __all__ = ["main", "run"]
 
 import json
+import os
 import sys
 import time
 from typing import Any
+
+
+def _maybe_start_coverage() -> None:
+    """Activate coverage collection if the parent process requested it."""
+    if os.environ.get("COVERAGE_PROCESS_START"):
+        import coverage  # ty: ignore[unresolved-import]
+
+        coverage.process_startup()
 
 
 def run(task: dict) -> None:
@@ -92,6 +101,7 @@ def run(task: dict) -> None:
 
 def main() -> None:
     """Persistent worker: read newline-delimited JSON tasks from stdin until EOF."""
+    _maybe_start_coverage()
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the
     # Rust watchdog — it expects one result line per test.
