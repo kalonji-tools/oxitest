@@ -6,7 +6,7 @@ import dataclasses
 import hashlib
 import inspect
 import itertools
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable
 from types import ModuleType
 from typing import Any, cast, get_type_hints
 
@@ -17,9 +17,9 @@ from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
+from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import (
     _DataclassCases,
-    _DictCases,
     _PartialCases,
 )
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
@@ -265,89 +265,6 @@ def _expand_item(
     ]
 
 
-def _check_dict_parametrize(
-    path: str,
-    fn_name: str,
-    fn: object,
-) -> list[CollectedViolation]:
-    """Return a DICT_PARAMETRIZE violation if the function uses dict-mode parametrize.
-
-    Dict-parametrize: _oxitest_param_cases is a _DictCases instance.
-    """
-    layers = get_metadata(fn).param_cases
-    if isinstance(layers, tuple) and any(
-        isinstance(layer, _DictCases) for layer in layers
-    ):
-        return [
-            CollectedViolation(
-                node_id=f"{path}::{fn_name}",
-                kind=ViolationKind.DICT_PARAMETRIZE,
-                detail="",
-            )
-        ]
-    return []
-
-
-def _check_missing_mark_reason(
-    path: str,
-    fn_name: str,
-    fn: object,
-) -> list[CollectedViolation]:
-    """Return MISSING_MARK_REASON violations for marks without reason=.
-
-    Applies to skip and xfail marks.
-    """
-    node_id = f"{path}::{fn_name}"
-    return [
-        CollectedViolation(
-            node_id=node_id,
-            kind=ViolationKind.MISSING_MARK_REASON,
-            detail=mark.name,
-        )
-        for mark in get_marks(fn)
-        if mark.name in ("skip", "xfail") and not mark.kwargs.get("reason")
-    ]
-
-
-def _check_single_case_parametrize(
-    path: str,
-    fn_name: str,
-    fn: object,
-) -> list[CollectedViolation]:
-    """Return a SINGLE_CASE_PARAMETRIZE violation if only one case is defined."""
-    layers = get_metadata(fn).param_cases
-    if layers is not None and len(layers) == 1 and len(layers[0].cases) == 1:
-        return [
-            CollectedViolation(
-                node_id=f"{path}::{fn_name}",
-                kind=ViolationKind.SINGLE_CASE_PARAMETRIZE,
-                detail="",
-            )
-        ]
-    return []
-
-
-_FN_VIOLATION_CHECKERS: list[Callable[[str, str, Any], list[CollectedViolation]]] = [
-    _check_dict_parametrize,
-    _check_missing_mark_reason,
-    _check_single_case_parametrize,
-]
-
-
-def _check_fn_violations(
-    path: str,
-    fn_name: str,
-    fn: object,
-) -> Iterator[CollectedViolation]:
-    """Yield strict violations for a single test function.
-
-    Checks dict-parametrize and missing-mark-reason violations.
-    Bare-assert violations are detected separately via AST (_collect_bare_asserts).
-    """
-    for checker in _FN_VIOLATION_CHECKERS:
-        yield from checker(path, fn_name, fn)
-
-
 def _import_test_module(
     path: str,
     unique_name: str,
@@ -407,7 +324,7 @@ def _collect_items(
         marker_names = [m.name for m in get_marks(fn)]
         items.extend(_expand_item(fn_name, lineno, marker_names, fn))
         if collect_violations:
-            violations.extend(_check_fn_violations(path, fn_name, fn))
+            violations.extend(check_fn_violations(path, fn_name, fn))
     return items, violations
 
 

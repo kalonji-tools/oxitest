@@ -6,9 +6,9 @@ from types import ModuleType
 from oxitest import TempDir, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
     _apply_module_marks,
-    _check_fn_violations,
     _collect_items,
     _extract_module_marks,
     _module_members,
@@ -363,7 +363,7 @@ def test_check_fn_violations_class_method_dict_parametrize():
 
     path = "tests/test_cls.py"
     fn_name = "TestSuite::test_method"
-    violations = list(_check_fn_violations(path, fn_name, test_method))
+    violations = list(check_fn_violations(path, fn_name, test_method))
 
     assert len(violations) == 1, (
         f"expected 1 DICT_PARAMETRIZE violation, got {len(violations)}: {violations}"
@@ -387,7 +387,7 @@ def test_check_fn_violations_class_method_missing_mark_reason():
 
     path = "tests/test_cls.py"
     fn_name = "TestSuite::test_method"
-    violations = list(_check_fn_violations(path, fn_name, test_method))
+    violations = list(check_fn_violations(path, fn_name, test_method))
 
     assert len(violations) == 1, (
         f"expected 1 MISSING_MARK_REASON violation, got {len(violations)}: {violations}"
