@@ -485,7 +485,7 @@ pub(crate) fn partition_positionals(
 
 /// oxitest — a fast Python test runner.
 #[derive(Parser, Debug)]
-#[command(name = "oxitest", about = "A fast Python test runner")]
+#[command(name = "oxitest", version, about = "A fast Python test runner")]
 pub struct OxitestCli {
     /// Disable .gitignore-aware file filtering
     #[arg(long)]
@@ -538,6 +538,15 @@ impl OxitestCli {
                 Ok((cmd, use_gitignore))
             }
             Err(e) => {
+                // Display-only requests (--version, --help) should propagate immediately
+                // so the caller can print them and exit 0.
+                if e.kind() == clap::error::ErrorKind::DisplayVersion
+                    || e.kind() == clap::error::ErrorKind::DisplayHelp
+                    || e.kind() == clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                {
+                    return Err(e);
+                }
+
                 // If the initial parse failed, try inserting "run" to handle implicit default
                 // subcommand (e.g. `oxitest tests/ -E "name(foo)"` or
                 // `oxitest --no-use-gitignore tests/`).
@@ -1111,5 +1120,37 @@ mod tests {
         };
         assert_eq!(args.node_ids.len(), 1);
         assert_eq!(args.paths, vec![Utf8PathBuf::from("tests/test_a.py")]);
+    }
+
+    // ── Display requests (--version, --help) ─────────────────────────────────
+
+    #[test]
+    fn version_flag_returns_display_version_error() {
+        let err = OxitestCli::resolve(&s(["oxitest", "--version"])).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn short_version_flag_returns_display_version_error() {
+        let err = OxitestCli::resolve(&s(["oxitest", "-V"])).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn help_flag_returns_display_help_error() {
+        let err = OxitestCli::resolve(&s(["oxitest", "--help"])).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn version_flag_not_swallowed_by_implicit_run() {
+        // --version must propagate as DisplayVersion, not be re-parsed as
+        // an implicit "run" subcommand argument.
+        let err = OxitestCli::resolve(&s(["oxitest", "--version"])).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+        assert!(
+            err.to_string().contains("oxitest"),
+            "output should contain the program name"
+        );
     }
 }

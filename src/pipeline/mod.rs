@@ -205,6 +205,14 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
     let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
         Ok(pair) => pair,
         Err(e) => {
+            // --version and --help are display requests, not errors.
+            if e.kind() == clap::error::ErrorKind::DisplayVersion
+                || e.kind() == clap::error::ErrorKind::DisplayHelp
+                || e.kind() == clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            {
+                print!("{}", e);
+                return Ok(Err(ExitCode::Success));
+            }
             eprintln!("{}", e);
             return Ok(Err(ExitCode::UsageError));
         }
