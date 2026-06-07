@@ -2,7 +2,9 @@
 
 import io
 import sys
+from dataclasses import dataclass
 
+import oxitest
 from conftest import helpers
 from oxitest._bridge._builtins._capture import _StdCapture
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
@@ -148,102 +150,67 @@ def test_recording_debugger_records_post_mortem():
     )
 
 
-def test_run_base_always_mode_passing_calls_trace_only():
-    """always mode + passing test: trace called, post_mortem not called."""
-    rec = helpers.common.RecordingDebugger()
-    result = _run_base(
-        lambda: None,
-        {},
-        (),
-        debug_mode="always",
-        node_id="t.py::test_ok",
-        backend=rec,
-        file=io.StringIO(),
-    )
-    assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
-    assert rec.trace_count == 1, f"expected 1 trace call, got {rec.trace_count}"
-    assert len(rec.post_mortem_tracebacks) == 0, (
-        f"expected 0 post_mortem calls, got {len(rec.post_mortem_tracebacks)}"
-    )
-
-
-def test_run_base_always_mode_failing_calls_both():
-    """always mode + failure: trace before, post_mortem after."""
-    rec = helpers.common.RecordingDebugger()
-
+def _make_failing_fn():
     def failing():
         raise AssertionError("boom")
 
-    result = _run_base(
-        failing,
-        {},
-        (),
-        debug_mode="always",
-        node_id="t.py::test_fail",
-        backend=rec,
-        file=io.StringIO(),
-    )
-    assert result.status == StatusKind.FAILED, f"expected failed, got {result.status}"
-    assert rec.trace_count == 1, f"expected 1 trace call, got {rec.trace_count}"
-    assert len(rec.post_mortem_tracebacks) == 1, (
-        f"expected 1 post_mortem call, got {len(rec.post_mortem_tracebacks)}"
-    )
+    return failing
 
 
-def test_run_base_post_mortem_mode_failing_calls_post_mortem_only():
-    """post-mortem mode + failure: only post_mortem called, no trace."""
+@dataclass(frozen=True)
+class DebugModeCase:
+    mode: str | None
+    passing: bool
+    expect_trace: int
+    expect_post_mortem: int
+
+
+@oxitest.parametrize(
+    always_pass=DebugModeCase(
+        "always", passing=True, expect_trace=1, expect_post_mortem=0
+    ),
+    always_fail=DebugModeCase(
+        "always", passing=False, expect_trace=1, expect_post_mortem=1
+    ),
+    post_mortem_fail=DebugModeCase(
+        "post-mortem", passing=False, expect_trace=0, expect_post_mortem=1
+    ),
+    post_mortem_pass=DebugModeCase(
+        "post-mortem", passing=True, expect_trace=0, expect_post_mortem=0
+    ),
+    no_debug=DebugModeCase(None, passing=True, expect_trace=0, expect_post_mortem=0),
+)
+def test_run_base_debug_mode(
+    mode: str | None,
+    passing: bool,
+    expect_trace: int,
+    expect_post_mortem: int,
+) -> None:
+    """Debug mode matrix: verify trace/post_mortem calls for each mode × outcome."""
     rec = helpers.common.RecordingDebugger()
 
-    def failing():
-        raise AssertionError("crash")
-
+    fn = (lambda: None) if passing else _make_failing_fn()
     result = _run_base(
-        failing,
+        fn,
         {},
         (),
-        debug_mode="post-mortem",
-        node_id="t.py::test_crash",
-        backend=rec,
+        debug_mode=mode,
+        node_id="t.py::test_x",
+        backend=rec if mode else None,
         file=io.StringIO(),
     )
-    assert result.status == StatusKind.FAILED, f"expected failed, got {result.status}"
-    assert rec.trace_count == 0, f"expected 0 trace calls, got {rec.trace_count}"
-    assert len(rec.post_mortem_tracebacks) == 1, (
-        f"expected 1 post_mortem call, got {len(rec.post_mortem_tracebacks)}"
-    )
 
-
-def test_run_base_post_mortem_mode_passing_calls_neither():
-    """post-mortem mode + passing test: neither called."""
-    rec = helpers.common.RecordingDebugger()
-    result = _run_base(
-        lambda: None,
-        {},
-        (),
-        debug_mode="post-mortem",
-        node_id="t.py::test_ok",
-        backend=rec,
-        file=io.StringIO(),
+    expected_status = StatusKind.PASSED if passing else StatusKind.FAILED
+    assert result.status == expected_status, (
+        f"expected {expected_status}, got {result.status}"
     )
-    assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
-    assert rec.trace_count == 0, f"expected 0 trace calls, got {rec.trace_count}"
-    assert len(rec.post_mortem_tracebacks) == 0, (
-        f"expected 0 post_mortem calls, got {len(rec.post_mortem_tracebacks)}"
+    assert rec.trace_count == expect_trace, (
+        f"expected {expect_trace} trace calls, got {rec.trace_count}"
     )
-
-
-def test_run_base_no_debug_mode_calls_neither():
-    """No debug mode: neither trace nor post_mortem called."""
-    result = _run_base(
-        lambda: None,
-        {},
-        (),
-        debug_mode=None,
-        node_id="t.py::test_ok",
-        backend=None,
-        file=io.StringIO(),
+    assert len(rec.post_mortem_tracebacks) == expect_post_mortem, (
+        f"expected {expect_post_mortem} post_mortem calls, "
+        f"got {len(rec.post_mortem_tracebacks)}"
     )
-    assert result.status == StatusKind.PASSED, f"expected passed, got {result.status}"
 
 
 def test_run_base_non_debuggable_exception_skips_post_mortem():
