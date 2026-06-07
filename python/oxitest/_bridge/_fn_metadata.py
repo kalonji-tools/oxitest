@@ -24,7 +24,7 @@ _ATTR = "_oxitest_meta"
 @dataclass
 class FunctionMetadata:
     marks: list[MarkInfo] = field(default_factory=list)
-    # tuple[_DictCases | _DataclassCases | _PartialCases, ...] | None
+    # tuple[ResolvedCases, ...] | None
     param_cases: Any = None
     fixture_name: str | None = None
 
