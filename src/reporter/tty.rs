@@ -370,7 +370,14 @@ impl Reporter for TtyReporter {
             |(i, _, _, _), target| i.node_id.as_ref() == target,
         );
 
-        if item.param_id.is_some() && self.opts.verbosity < Verbosity::Detailed {
+        let is_parametrized = item.param_id.is_some();
+        let is_verbose = self.opts.verbosity >= Verbosity::Detailed;
+
+        // Three display modes:
+        // 1. Parametrized + non-verbose → buffer results, display as group
+        // 2. Verbose → flush any pending group, print immediately
+        // 3. Non-parametrized + non-verbose → defer hard failures only
+        if is_parametrized && !is_verbose {
             // Flush pending group if fn_name changed
             let flush = matches!(&self.pending_group, Some(g) if g.fn_name != item.fn_name);
             if flush {
@@ -381,7 +388,7 @@ impl Reporter for TtyReporter {
                 .pending_group
                 .get_or_insert_with(|| ParametrizeBuffer::new(item.fn_name.clone()));
             group.push(item.clone(), outcome.clone(), duration_ms);
-        } else if self.opts.verbosity >= Verbosity::Detailed {
+        } else if is_verbose {
             // Verbose mode: flush pending group and print every result immediately
             if let Some(group) = self.pending_group.take() {
                 self.flush_param_group(group);

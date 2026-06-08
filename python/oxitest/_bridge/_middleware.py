@@ -151,6 +151,8 @@ class AsyncBridgeMiddleware:
             _timeout_secs = plan.default_timeout
 
         async def _async_core() -> TestResult:
+            # Phase 1: Unpack async fixtures — await coroutines and advance
+            # async generators to their first yielded value.
             resolved: dict[str, Any] = {}
             async_teardowns: list[tuple[str, Any]] = []
             for k, v in plan.kwargs.items():
@@ -171,6 +173,7 @@ class AsyncBridgeMiddleware:
                         return _error_result(str(FixtureSetupError(k, exc)))
                 else:
                     resolved[k] = v
+            # Phase 2: Run the test body, applying optional timeout.
             try:
                 if _timeout_secs is not None:
                     import asyncio
@@ -183,6 +186,7 @@ class AsyncBridgeMiddleware:
                     except TimeoutError:
                         raise OxitestTimeoutError() from None
                 return await run_base_async(plan.fn, resolved, plan.no_message_lines)
+            # Phase 3: Teardown async generators in reverse order.
             finally:
                 for name, gen in reversed(async_teardowns):
                     try:

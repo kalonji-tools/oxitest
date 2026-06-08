@@ -642,6 +642,63 @@ impl Pipeline<Collected> {
 
 // ─── Pipeline<PreFilter> ─────────────────────────────────────────────────────
 
+fn apply_query_dsl_filter(
+    items: Vec<std::sync::Arc<types::TestItem>>,
+    expression: &str,
+    shared: &super::PipelineShared,
+) -> Result<Vec<std::sync::Arc<types::TestItem>>, ExitCode> {
+    let tokens = match query::compile::lex(expression) {
+        Ok(t) => t,
+        Err(e) => {
+            return Err(shared
+                .make_error_reporter()
+                .finish(
+                    &[types::CollectError::PyError(format!(
+                        "invalid -E expression: {e}"
+                    ))],
+                    false,
+                    &reporter::ReporterSession::new(0),
+                )
+                .code());
+        }
+    };
+    let parsed = match query::compile::parse(tokens) {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(shared
+                .make_error_reporter()
+                .finish(
+                    &[types::CollectError::PyError(format!(
+                        "invalid -E expression: {e}"
+                    ))],
+                    false,
+                    &reporter::ReporterSession::new(0),
+                )
+                .code());
+        }
+    };
+    if let Err(e) = query::eval::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
+    {
+        return Err(shared
+            .make_error_reporter()
+            .finish(
+                &[types::CollectError::PyError(format!(
+                    "invalid -E expression: {e}"
+                ))],
+                false,
+                &reporter::ReporterSession::new(0),
+            )
+            .code());
+    }
+    Ok(items
+        .into_iter()
+        .filter(|item| {
+            let entry = item_to_query_entry(item);
+            query::eval::eval(&parsed, &entry)
+        })
+        .collect())
+}
+
 fn item_to_query_entry(item: &types::TestItem) -> query::resource::QueryEntry {
     let mut fields = std::collections::HashMap::new();
     fields.insert("name".to_string(), item.node_id.to_string());
@@ -681,57 +738,7 @@ impl Pipeline<PreFilter> {
 
         // Query DSL filter (-E).
         let items = if let Some(expr_str) = expression.as_deref() {
-            let tokens = match query::compile::lex(expr_str) {
-                Ok(t) => t,
-                Err(e) => {
-                    return Err(shared
-                        .make_error_reporter()
-                        .finish(
-                            &[types::CollectError::PyError(format!(
-                                "invalid -E expression: {e}"
-                            ))],
-                            false,
-                            &reporter::ReporterSession::new(0),
-                        )
-                        .code());
-                }
-            };
-            let parsed = match query::compile::parse(tokens) {
-                Ok(p) => p,
-                Err(e) => {
-                    return Err(shared
-                        .make_error_reporter()
-                        .finish(
-                            &[types::CollectError::PyError(format!(
-                                "invalid -E expression: {e}"
-                            ))],
-                            false,
-                            &reporter::ReporterSession::new(0),
-                        )
-                        .code());
-                }
-            };
-            if let Err(e) =
-                query::eval::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
-            {
-                return Err(shared
-                    .make_error_reporter()
-                    .finish(
-                        &[types::CollectError::PyError(format!(
-                            "invalid -E expression: {e}"
-                        ))],
-                        false,
-                        &reporter::ReporterSession::new(0),
-                    )
-                    .code());
-            }
-            items
-                .into_iter()
-                .filter(|item| {
-                    let entry = item_to_query_entry(item);
-                    query::eval::eval(&parsed, &entry)
-                })
-                .collect()
+            apply_query_dsl_filter(items, expr_str, &shared)?
         } else {
             items
         };
