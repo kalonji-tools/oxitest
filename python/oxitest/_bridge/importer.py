@@ -45,15 +45,13 @@ def _get_fixture_names(fn: object) -> tuple[str, ...]:
 
 
 def _propagate_class_marks(fn: object, cls: object) -> None:
-    """Copy usefixtures marks from a class onto a test method.
+    """Copy marks from a class onto a test method.
 
-    Called at collection time when a test method is collected from a class
-    that carries @oxitest.mark.usefixtures. skip/xfail are NOT
-    propagated — those are function-level concerns only.
+    Called at collection time when a test method is collected from a class.
+    All marks on the class are propagated to each method.
     """
     for m in get_marks(cls):
-        if m.name == "usefixtures":
-            _append_mark(cast(Any, fn), m)
+        _append_mark(cast(Any, fn), m)
 
 
 def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
