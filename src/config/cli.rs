@@ -489,6 +489,13 @@ pub enum Command {
     Query(QueryArgs),
     /// Print environment information (version, Python, rustc, OS)
     Env,
+    /// Generate shell completions
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 // ── partition_positionals ─────────────────────────────────────────────────────
