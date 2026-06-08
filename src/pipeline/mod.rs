@@ -21,7 +21,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 
 use crate::types::ExitCode;
-use crate::{bridge, cache, config, query, reporter, strict, types};
+use crate::{bridge, cache, config, python_ast, query, reporter, strict, types};
 use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
@@ -33,6 +33,29 @@ pub(crate) struct Empty;
 pub(crate) struct FilesCollected {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
+}
+
+pub(crate) struct Prescanned {
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    /// Per-file prescan results: (path, items, has_dynamic).
+    pub(crate) prescan_data: Vec<(Utf8PathBuf, Vec<python_ast::PrescanItem>, bool)>,
+    /// Module-level markers per file.
+    #[allow(dead_code)]
+    pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
+}
+
+pub(crate) struct MetadataFiltered {
+    /// All test files (for fallback reference).
+    #[allow(dead_code)]
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    /// Only conftest files in the ancestor chain of matched modules.
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    /// Modules that need Python import (matched + dynamic fallback).
+    pub(crate) modules_to_import: Vec<Utf8PathBuf>,
+    /// Whether any filter was active.
+    #[allow(dead_code)]
+    pub(crate) is_filtered: bool,
 }
 
 pub(crate) struct SessionReady {
@@ -311,6 +334,8 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
 
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
+    let p = p.prescan()?;
+    let p = p.filter_metadata()?;
     let p = p.session(py)?;
     let p = p.collect(py)?;
     let p = p.validate(py)?;
@@ -337,6 +362,8 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
 fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
+    let p = p.prescan()?;
+    let p = p.filter_metadata()?;
     let p = p.session(py)?;
     let p = p.collect(py)?;
     let p = p.validate(py)?;
