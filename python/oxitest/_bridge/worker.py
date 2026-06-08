@@ -40,6 +40,7 @@ from __future__ import annotations
 
 __all__ = ["main", "run"]
 
+import contextlib
 import json
 import os
 import sys
@@ -75,7 +76,9 @@ def run(task: dict) -> None:
     # instance at module level). This mirrors what the serial runner does via
     # collect_module during collection, so self-contained test files that define
     # their own fixtures work correctly in parallel mode too.
-    collect_module(module_path, session)
+    # Register fixtures — skip for pure doctest modules that aren't test files.
+    with contextlib.suppress(Exception):
+        collect_module(module_path, session)
 
     for item in items:
         meta = TestMeta(

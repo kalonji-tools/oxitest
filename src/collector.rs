@@ -58,6 +58,30 @@ pub fn collect_files(
     Ok((files, conftests))
 }
 
+/// Collect all `.py` files for doctest scanning.
+///
+/// Unlike `collect_files` which uses `python_files` glob patterns (e.g. `test_*.py`),
+/// this collects every `.py` file in `testpaths` (and rootdir) since any source module
+/// can contain doctests.
+pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
+    let glob_set = build_glob_set(&["*.py".to_string()]).expect("*.py is a valid glob");
+    let mut files = Vec::new();
+    let mut dummy_conftests = HashSet::new();
+
+    for testpath in &config.testpaths {
+        collect_from(
+            testpath,
+            config,
+            &glob_set,
+            &mut files,
+            &mut dummy_conftests,
+        );
+    }
+
+    files.sort();
+    files
+}
+
 fn collect_from(
     path: &Utf8Path,
     config: &Config,
@@ -178,6 +202,7 @@ mod tests {
             use_gitignore: true,
             cov: false,
             cov_report: None,
+            doctest_modules: false,
             node_ids: vec![],
             node_id_source_files: std::collections::HashSet::new(),
             has_explicit_paths: false,

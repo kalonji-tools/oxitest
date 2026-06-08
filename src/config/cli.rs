@@ -182,6 +182,10 @@ pub struct RunArgs {
     #[arg(long, help_heading = "Execution")]
     pub serial: bool,
 
+    /// Collect and run doctests from all Python source modules
+    #[arg(long, help_heading = "Execution")]
+    pub doctest_modules: bool,
+
     /// Number of parallel worker processes ("auto" or a positive integer)
     #[arg(
         short = 'n',

@@ -224,6 +224,7 @@ pub struct Config {
     pub auto_arrange_threshold: Option<u8>,
     pub collection_profile: bool,
     pub use_gitignore: bool,
+    pub doctest_modules: bool,
     pub node_ids: Vec<crate::types::NodeId>,
     pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
     pub cov: bool,
@@ -282,6 +283,7 @@ impl Default for Config {
             use_gitignore: true,
             cov: false,
             cov_report: None,
+            doctest_modules: false,
             node_ids: vec![],
             node_id_source_files: std::collections::HashSet::new(),
             has_explicit_paths: false,
@@ -461,6 +463,7 @@ impl Config {
         apply_if_some!(self, python_files, tc.python_files);
         apply_if_some!(self, norecursedirs, tc.norecursedirs);
         apply_if_some!(self, use_gitignore, tc.use_gitignore);
+        apply_if_some!(self, doctest_modules, tc.doctest_modules);
 
         // ── Execution (unique to TOML) ──────────────────────────────────
         apply_if_some!(self, maxfail, tc.maxfail);
@@ -532,6 +535,9 @@ impl Config {
             self.serial = true;
         }
         apply_if_some!(self, timeout_secs, args.timeout, wrap);
+        if args.doctest_modules {
+            self.doctest_modules = true;
+        }
 
         // ── Filtering (unique to CLI) ───────────────────────────────────
         self.merge_affected(&args.filter.affected);

@@ -1,0 +1,352 @@
+//! Doctest discovery: extract `>>>` interactive examples from Python docstrings.
+
+use camino::Utf8Path;
+use rustpython_parser::ast;
+
+/// A single doctest found in a docstring.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DoctestExample {
+    /// Source code (all `>>>` and `...` lines joined).
+    pub source: String,
+    /// Expected output (lines following source, before next `>>>` or blank line).
+    pub want: String,
+    /// 0-based line offset within the docstring where this example starts.
+    pub lineno: usize,
+}
+
+/// Parse a docstring for `>>>` interactive examples.
+pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
+    let mut examples = Vec::new();
+    let mut source = String::new();
+    let mut want = String::new();
+    let mut example_start: Option<usize> = None;
+
+    for (i, line) in docstring.lines().enumerate() {
+        let trimmed = line.trim();
+
+        if let Some(rest) =
+            trimmed
+                .strip_prefix(">>> ")
+                .or_else(|| if trimmed == ">>>" { Some("") } else { None })
+        {
+            if !source.is_empty() && !want.is_empty() {
+                examples.push(DoctestExample {
+                    source: std::mem::take(&mut source),
+                    want: std::mem::take(&mut want),
+                    lineno: example_start.unwrap(),
+                });
+            }
+            if source.is_empty() {
+                example_start = Some(i);
+            }
+            if !source.is_empty() && want.is_empty() {
+                examples.push(DoctestExample {
+                    source: std::mem::take(&mut source),
+                    want: String::new(),
+                    lineno: example_start.unwrap(),
+                });
+                example_start = Some(i);
+            }
+            source.push_str(rest);
+            source.push('\n');
+            want.clear();
+        } else if let Some(rest) =
+            trimmed
+                .strip_prefix("... ")
+                .or_else(|| if trimmed == "..." { Some("") } else { None })
+        {
+            if !source.is_empty() {
+                source.push_str(rest);
+                source.push('\n');
+            }
+        } else if !source.is_empty() && !trimmed.is_empty() {
+            want.push_str(line.trim());
+            want.push('\n');
+        } else if !source.is_empty() {
+            examples.push(DoctestExample {
+                source: std::mem::take(&mut source),
+                want: std::mem::take(&mut want),
+                lineno: example_start.unwrap(),
+            });
+            example_start = None;
+        }
+    }
+
+    if !source.is_empty() {
+        examples.push(DoctestExample {
+            source: std::mem::take(&mut source),
+            want: std::mem::take(&mut want),
+            lineno: example_start.unwrap(),
+        });
+    }
+
+    examples
+}
+
+/// Quick check: does a docstring contain any `>>>` examples?
+#[allow(dead_code)]
+pub(crate) fn has_doctest_examples(docstring: &str) -> bool {
+    docstring.lines().any(|l| {
+        let t = l.trim();
+        t.starts_with(">>> ") || t == ">>>"
+    })
+}
+
+/// A location in a Python file where a docstring with `>>>` examples was found.
+#[derive(Debug, Clone)]
+pub(crate) struct DoctestLocation {
+    pub name: String,
+    pub lineno: usize,
+    #[allow(dead_code)] // Used by later tasks (doctest execution).
+    pub example_count: usize,
+}
+
+/// Extract a docstring (first statement is a string literal) from a body.
+fn extract_docstring(body: &[ast::Stmt]) -> Option<&str> {
+    if let Some(ast::Stmt::Expr(expr)) = body.first() {
+        if let ast::Expr::Constant(ast::ExprConstant {
+            value: ast::Constant::Str(s),
+            ..
+        }) = &*expr.value
+        {
+            return Some(s.as_str());
+        }
+    }
+    None
+}
+
+/// Scan a Python file's AST for all docstrings containing `>>>` examples.
+///
+/// Returns a `DoctestLocation` per docstring that has at least one example.
+/// Walks module-level, function, class, and class method docstrings.
+pub(crate) fn scan_doctests(path: &Utf8Path) -> Vec<DoctestLocation> {
+    let parsed = match crate::python_ast::parse_file(path) {
+        Some(p) => p,
+        None => return vec![],
+    };
+    let (source, stmts) = parsed;
+    let module_name = path.file_stem().unwrap_or(path.as_str());
+    let line_index = crate::python_ast::build_line_index(&source);
+    let mut locations = Vec::new();
+
+    // Module-level docstring
+    if let Some(doc) = extract_docstring(&stmts) {
+        let count = parse_docstring_examples(doc).len();
+        if count > 0 {
+            locations.push(DoctestLocation {
+                name: module_name.to_string(),
+                lineno: 1,
+                example_count: count,
+            });
+        }
+    }
+
+    for stmt in &stmts {
+        match stmt {
+            ast::Stmt::FunctionDef(f) => {
+                if let Some(doc) = extract_docstring(&f.body) {
+                    let count = parse_docstring_examples(doc).len();
+                    if count > 0 {
+                        let lineno =
+                            crate::python_ast::offset_to_line(&line_index, f.range.start().into())
+                                as usize;
+                        locations.push(DoctestLocation {
+                            name: format!("{}.{}", module_name, f.name),
+                            lineno,
+                            example_count: count,
+                        });
+                    }
+                }
+            }
+            ast::Stmt::AsyncFunctionDef(f) => {
+                if let Some(doc) = extract_docstring(&f.body) {
+                    let count = parse_docstring_examples(doc).len();
+                    if count > 0 {
+                        let lineno =
+                            crate::python_ast::offset_to_line(&line_index, f.range.start().into())
+                                as usize;
+                        locations.push(DoctestLocation {
+                            name: format!("{}.{}", module_name, f.name),
+                            lineno,
+                            example_count: count,
+                        });
+                    }
+                }
+            }
+            ast::Stmt::ClassDef(cls) => {
+                if let Some(doc) = extract_docstring(&cls.body) {
+                    let count = parse_docstring_examples(doc).len();
+                    if count > 0 {
+                        let lineno = crate::python_ast::offset_to_line(
+                            &line_index,
+                            cls.range.start().into(),
+                        ) as usize;
+                        locations.push(DoctestLocation {
+                            name: format!("{}.{}", module_name, cls.name),
+                            lineno,
+                            example_count: count,
+                        });
+                    }
+                }
+                for method in &cls.body {
+                    match method {
+                        ast::Stmt::FunctionDef(m) => {
+                            if let Some(doc) = extract_docstring(&m.body) {
+                                let count = parse_docstring_examples(doc).len();
+                                if count > 0 {
+                                    let lineno = crate::python_ast::offset_to_line(
+                                        &line_index,
+                                        m.range.start().into(),
+                                    ) as usize;
+                                    locations.push(DoctestLocation {
+                                        name: format!("{}.{}.{}", module_name, cls.name, m.name),
+                                        lineno,
+                                        example_count: count,
+                                    });
+                                }
+                            }
+                        }
+                        ast::Stmt::AsyncFunctionDef(m) => {
+                            if let Some(doc) = extract_docstring(&m.body) {
+                                let count = parse_docstring_examples(doc).len();
+                                if count > 0 {
+                                    let lineno = crate::python_ast::offset_to_line(
+                                        &line_index,
+                                        m.range.start().into(),
+                                    ) as usize;
+                                    locations.push(DoctestLocation {
+                                        name: format!("{}.{}.{}", module_name, cls.name, m.name),
+                                        lineno,
+                                        example_count: count,
+                                    });
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    locations
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_docstring() {
+        assert!(parse_docstring_examples("").is_empty());
+    }
+
+    #[test]
+    fn no_examples() {
+        assert!(parse_docstring_examples("Just a description.\n\nNo code here.").is_empty());
+    }
+
+    #[test]
+    fn single_example_with_output() {
+        let doc = "Example:\n\n    >>> 1 + 1\n    2\n";
+        let examples = parse_docstring_examples(doc);
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].source, "1 + 1\n");
+        assert_eq!(examples[0].want, "2\n");
+        assert_eq!(examples[0].lineno, 2);
+    }
+
+    #[test]
+    fn example_without_output() {
+        let doc = "    >>> x = 42\n";
+        let examples = parse_docstring_examples(doc);
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].source, "x = 42\n");
+        assert!(examples[0].want.is_empty());
+    }
+
+    #[test]
+    fn continuation_lines() {
+        let doc = "    >>> for i in range(3):\n    ...     print(i)\n    0\n    1\n    2\n";
+        let examples = parse_docstring_examples(doc);
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].source, "for i in range(3):\n    print(i)\n");
+        assert_eq!(examples[0].want, "0\n1\n2\n");
+    }
+
+    #[test]
+    fn multiple_examples() {
+        let doc = "    >>> 1 + 1\n    2\n\n    >>> 2 + 2\n    4\n";
+        let examples = parse_docstring_examples(doc);
+        assert_eq!(examples.len(), 2);
+        assert_eq!(examples[0].source, "1 + 1\n");
+        assert_eq!(examples[1].source, "2 + 2\n");
+    }
+
+    #[test]
+    fn has_doctest_examples_true() {
+        assert!(has_doctest_examples("    >>> 1 + 1\n    2\n"));
+    }
+
+    #[test]
+    fn has_doctest_examples_false() {
+        assert!(!has_doctest_examples("No examples here.\n"));
+    }
+
+    #[test]
+    fn bare_prompt_no_space() {
+        let doc = "    >>>\n";
+        let examples = parse_docstring_examples(doc);
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].source, "\n");
+    }
+
+    // ── scan_doctests ──────────────────────────────────────────────────
+
+    #[test]
+    fn scan_doctests_finds_function_docstrings() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("example.py");
+        std::fs::write(
+            &path,
+            "def add(a, b):\n    \"\"\"Add two numbers.\n\n    >>> add(1, 2)\n    3\n    \"\"\"\n    return a + b\n",
+        )
+        .unwrap();
+        let utf8_path = camino::Utf8Path::from_path(&path).unwrap();
+        let locs = scan_doctests(utf8_path);
+        assert_eq!(locs.len(), 1);
+        assert_eq!(locs[0].name, "example.add");
+        assert_eq!(locs[0].example_count, 1);
+    }
+
+    #[test]
+    fn scan_doctests_finds_class_and_method() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("calc.py");
+        std::fs::write(
+            &path,
+            "class Calculator:\n    \"\"\"A calculator.\n\n    >>> Calculator\n    <class 'calc.Calculator'>\n    \"\"\"\n    def add(self, a, b):\n        \"\"\"Add.\n\n        >>> Calculator().add(1, 2)\n        3\n        \"\"\"\n        return a + b\n",
+        )
+        .unwrap();
+        let utf8_path = camino::Utf8Path::from_path(&path).unwrap();
+        let locs = scan_doctests(utf8_path);
+        assert_eq!(locs.len(), 2);
+        assert_eq!(locs[0].name, "calc.Calculator");
+        assert_eq!(locs[1].name, "calc.Calculator.add");
+    }
+
+    #[test]
+    fn scan_doctests_skips_no_examples() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("empty.py");
+        std::fs::write(
+            &path,
+            "def foo():\n    \"\"\"No examples here.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        let utf8_path = camino::Utf8Path::from_path(&path).unwrap();
+        let locs = scan_doctests(utf8_path);
+        assert!(locs.is_empty());
+    }
+}
