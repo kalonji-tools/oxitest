@@ -31,6 +31,7 @@ def _get_fixture_names(fn: object) -> tuple[str, ...]:
     try:
         hints = get_type_hints(fn, include_extras=True)
     except Exception:  # noqa: BLE001
+        # Swallow type hint errors — user code may have unresolvable forward references
         return ()
     names: list[str] = []
     for param_name, hint in hints.items():

@@ -277,8 +277,8 @@ class FixtureSession:
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
-        # Rust bridge replaces _plugin_registry via setattr after construction;
-        # propagate so the Instantiator always uses the current registry.
+        # Propagate plugin registry to instantiator so it can
+        # resolve plugin-provided fixtures
         if name == "_plugin_registry" and hasattr(self, "_instantiator"):
             self._instantiator._plugin_registry = value
 

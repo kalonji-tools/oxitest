@@ -347,6 +347,7 @@ class FixtureInstantiator:
             resolve_user=lambda n: self.resolve_fixture(
                 n, module_path, fn_teardowns, resolving, scope_callback
             ),
+            # async_policy=None allows async fixtures to depend on other async fixtures
             async_policy=_reject_async_in_sync if not defn.is_async else None,
         )
 
