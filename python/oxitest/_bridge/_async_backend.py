@@ -125,7 +125,7 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)
         for entry in registry.entries
-        if entry.plugin.async_backend is not None
+        if entry.plugin is not None and entry.plugin.async_backend is not None
     ]
 
     if name == "asyncio":

@@ -13,7 +13,7 @@ __all__ = ["load_plugins", "PluginRegistry"]
 import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from oxitest.plugin import Plugin
 
@@ -28,6 +28,27 @@ if TYPE_CHECKING:
     )
 
 
+# Protocols that must be available before test execution starts.
+EAGER_PROTOCOLS = frozenset(
+    {
+        "reporter",
+        "collector",
+        "async_backend",
+        "coverage_provider",
+    }
+)
+
+# Protocols that can be deferred until first use.
+LAZY_PROTOCOLS = frozenset(
+    {
+        "log_backend",
+        "fixture_provider",
+        "execution_wrapper",
+        "debugger_backend",
+    }
+)
+
+
 class PluginLoadError(Exception):
     """Raised when a plugin cannot be loaded or is invalid."""
 
@@ -37,7 +58,42 @@ class PluginEntry:
     """A loaded plugin with its metadata."""
 
     module_name: str
-    plugin: Plugin
+    plugin: Plugin | None = None
+    is_loaded: bool = True
+    declared_protocols: list[str] | None = None
+
+    @classmethod
+    def deferred(cls, module_name: str, declared_protocols: list[str]) -> PluginEntry:
+        """Create an entry that is not yet imported."""
+        return cls(
+            module_name=module_name,
+            plugin=None,
+            is_loaded=False,
+            declared_protocols=declared_protocols,
+        )
+
+    @staticmethod
+    def needs_eager_import(declared_protocols: list[str] | None) -> bool:
+        """Return True if this plugin must be imported at session start."""
+        if not declared_protocols:
+            return True
+        return bool(set(declared_protocols) & EAGER_PROTOCOLS)
+
+    def ensure_loaded(self) -> Plugin:
+        """Import and initialise the plugin if it has not been loaded yet."""
+        if self.is_loaded:
+            assert self.plugin is not None, (
+                f"plugin {self.module_name!r} marked loaded but plugin is None"
+            )
+            return self.plugin
+        module = importlib.import_module(self.module_name)
+        entry_fn = getattr(module, "oxitest_plugin")
+        self.plugin = entry_fn()
+        self.is_loaded = True
+        assert self.plugin is not None, (
+            f"oxitest_plugin() in {self.module_name!r} returned None"
+        )
+        return self.plugin
 
 
 @dataclass
@@ -50,7 +106,9 @@ class PluginRegistry:
     def log_backends(self) -> list[LogBackend]:
         """All log backends from all plugins."""
         return list(
-            itertools.chain.from_iterable(e.plugin.log_backends for e in self.entries)
+            itertools.chain.from_iterable(
+                e.plugin.log_backends for e in self.entries if e.plugin is not None
+            )
         )
 
     @functools.cached_property
@@ -58,7 +116,7 @@ class PluginRegistry:
         """All fixture providers from all plugins."""
         return list(
             itertools.chain.from_iterable(
-                e.plugin.fixture_providers for e in self.entries
+                e.plugin.fixture_providers for e in self.entries if e.plugin is not None
             )
         )
 
@@ -67,7 +125,9 @@ class PluginRegistry:
         """All execution wrappers from all plugins."""
         return list(
             itertools.chain.from_iterable(
-                e.plugin.execution_wrappers for e in self.entries
+                e.plugin.execution_wrappers
+                for e in self.entries
+                if e.plugin is not None
             )
         )
 
@@ -75,14 +135,18 @@ class PluginRegistry:
     def collectors(self) -> list[Collector]:
         """All collectors from all plugins."""
         return list(
-            itertools.chain.from_iterable(e.plugin.collectors for e in self.entries)
+            itertools.chain.from_iterable(
+                e.plugin.collectors for e in self.entries if e.plugin is not None
+            )
         )
 
     @functools.cached_property
     def reporters(self) -> list[Reporter]:
         """All reporters from all plugins."""
         return list(
-            itertools.chain.from_iterable(e.plugin.reporters for e in self.entries)
+            itertools.chain.from_iterable(
+                e.plugin.reporters for e in self.entries if e.plugin is not None
+            )
         )
 
     @functools.cached_property
@@ -91,7 +155,7 @@ class PluginRegistry:
         return [
             (entry.module_name, entry.plugin.async_backend)
             for entry in self.entries
-            if entry.plugin.async_backend is not None
+            if entry.plugin is not None and entry.plugin.async_backend is not None
         ]
 
     @functools.cached_property
@@ -100,7 +164,7 @@ class PluginRegistry:
         return [
             (entry.module_name, entry.plugin.debugger_backend)
             for entry in self.entries
-            if entry.plugin.debugger_backend is not None
+            if entry.plugin is not None and entry.plugin.debugger_backend is not None
         ]
 
     @functools.cached_property
@@ -109,8 +173,26 @@ class PluginRegistry:
         return [
             (entry.module_name, entry.plugin.coverage_provider)
             for entry in self.entries
-            if entry.plugin.coverage_provider is not None
+            if entry.plugin is not None and entry.plugin.coverage_provider is not None
         ]
+
+    def register_deferred(self, entry: PluginEntry) -> None:
+        """Append a deferred (not yet imported) plugin entry."""
+        self.entries.append(entry)
+
+    def resolve_fixture_providers(self) -> list:
+        """Return all fixture providers, loading deferred fixture_provider plugins."""
+        providers = []
+        for entry in self.entries:
+            if (
+                not entry.is_loaded
+                and entry.declared_protocols
+                and "fixture_provider" in entry.declared_protocols
+            ):
+                entry.ensure_loaded()
+            if entry.is_loaded and entry.plugin:
+                providers.extend(entry.plugin.fixture_providers)
+        return providers
 
     def validate(self) -> None:
         """Check for conflicting plugin declarations.
@@ -154,6 +236,22 @@ def load_plugins(
     registry = PluginRegistry()
 
     for module_name in plugin_modules:
+        # Check if this plugin declares only lazy protocols and can be deferred.
+        mod_settings = plugin_configs.get(module_name, {})
+        _raw_protocols = mod_settings.get("protocols")
+        declared_protocols: list[str] | None = (
+            cast("list[str]", list(_raw_protocols))
+            if isinstance(_raw_protocols, (list, tuple))
+            else None
+        )
+
+        if declared_protocols and not PluginEntry.needs_eager_import(
+            declared_protocols
+        ):
+            entry = PluginEntry.deferred(module_name, list(declared_protocols))
+            registry.register_deferred(entry)
+            continue
+
         # Import the module
         try:
             module = importlib.import_module(module_name)
