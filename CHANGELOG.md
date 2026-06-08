@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.14.0] - 2026-06-08
+
+### Features
+
+
+- Extract per-item metadata from AST prescan (#805, #808)
+- Add prescan-level filtering for lazy collection (#806)
+- Add conftests_for_modules for ancestor-chain filtering (#807)
+- Add Prescanned and MetadataFiltered typestate states (#806)
+- Add lazy_skipped field to FileProfile and show lazy/eager split in profile (#809)
+- Add lazy plugin module import (#810)
+
 ## [0.13.0] - 2026-06-08
 
 ### Bug Fixes
