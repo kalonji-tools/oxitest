@@ -67,6 +67,7 @@ build = [
 ]
 test = [
     { include-group = "build" },
+    "coverage>=7",
 ]
 lint = [
     "ruff>=0.4",
@@ -80,10 +81,6 @@ docs = [
     "mkdocs-git-revision-date-localized-plugin>=1",
     "mkdocs-minify-plugin>=0.7",
     "mkdocstrings[python]>=0.24",
-]
-coverage = [
-    "coverage>=7",
-    { include-group = "test" },
 ]
 dev = [
     { include-group = "test" },

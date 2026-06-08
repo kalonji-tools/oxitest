@@ -92,7 +92,7 @@ jobs:
       - uses: ./.github/actions/setup-python
         with:
           python-version: ${{ matrix.python-version }}
-          uv-sync-args: ${{ matrix.python-version == '3.12' && '--group coverage' || '--group test' }}
+          uv-sync-args: --group test
 
       - name: Build extension
         run: uv run maturin develop
@@ -103,7 +103,7 @@ jobs:
 
       - name: Python tests (with coverage)
         if: matrix.python-version == '3.12'
-        run: COVERAGE_PROCESS_START=pyproject.toml PYTHONPATH=python:python/tests uv run coverage run -m oxitest python/tests/
+        run: PYTHONPATH=python uv run python -m oxitest python/tests/ --cov --cov-report xml
 
       - name: Upload extension artifact
         if: matrix.python-version == '3.12'
@@ -113,14 +113,14 @@ jobs:
           path: python/oxitest/_oxitest.cpython-312-*.so
           retention-days: 1
 
-      - name: Upload coverage data
+      - name: Upload Python coverage to Codecov
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v7
+        uses: codecov/codecov-action@v6
         with:
-          name: python-coverage-data
-          path: .coverage.*
-          retention-days: 1
-          include-hidden-files: true
+          files: coverage.xml
+          flags: python
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   rust-coverage:
     name: Rust Coverage
@@ -154,36 +154,6 @@ jobs:
         with:
           files: cobertura.xml
           flags: rust
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-
-  python-coverage:
-    name: Python Coverage
-    needs: python-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/setup-python
-        with:
-          uv-sync-args: --only-group coverage
-
-      - name: Download coverage data
-        uses: actions/download-artifact@v8
-        with:
-          name: python-coverage-data
-
-      - name: Generate coverage report
-        run: |
-          uv run coverage combine
-          uv run coverage xml
-
-      - name: Upload Python coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          files: coverage.xml
-          flags: python
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
