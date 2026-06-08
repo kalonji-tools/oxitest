@@ -78,6 +78,7 @@ nav:
     - Run affected tests: how-to/run-affected-tests.md
     - Use async tests: how-to/use-async-tests.md
     - Use the test cache: how-to/use-test-cache.md
+    - Use doctests: how-to/use-doctests.md
     - Use coverage: how-to/use-coverage.md
     - Use class-based tests: how-to/use-class-based-tests.md
     - Use raises, warns, and importorskip: how-to/use-raises-warns.md
