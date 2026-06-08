@@ -86,6 +86,9 @@ def user(db: Fixture[Connection]) -> User:
 
 ## Share a fixture across all tests with shared
 
+!!! note
+    "Shared" means session-scoped: the fixture runs once per session and its return value is frozen (immutable) to prevent cross-test interference.
+
 A fixture with `shared=True` is created once for the entire session and shared
 across all tests. The value is immutable — any attribute or item write raises
 `SharedFixtureMutationError` at runtime.

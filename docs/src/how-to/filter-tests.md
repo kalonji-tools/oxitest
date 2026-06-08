@@ -4,6 +4,8 @@
     Run a targeted subset of your test suite using the query DSL,
     file paths, or node IDs.
 
+A **node ID** is a test's unique address: `path/to/file.py::test_name`. For class methods: `path/to/file.py::ClassName::test_method`. For parametrized cases: `path/to/file.py::test_name[case_id]`.
+
 ## Filter by name
 
 Use `-E` with the `name()` predicate to run tests whose name contains a

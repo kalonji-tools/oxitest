@@ -3,6 +3,8 @@
 !!! abstract "Reference"
     Type annotations used to declare fixture injection in test and fixture parameters.
 
+When you define a test with parameters, oxitest needs to know which parameters are fixtures and which are regular arguments. Type annotations solve this — each annotation type tells oxitest exactly how to handle that parameter.
+
 oxitest uses type annotations to control fixture injection. There are four types,
 each for a different purpose:
 
