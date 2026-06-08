@@ -12,6 +12,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
+use crate::python_ast::PrescanItem;
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
@@ -188,6 +189,116 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<Tes
             .push(Arc::clone(item));
     }
     groups.into_iter().collect()
+}
+
+// ── Prescan-level filtering ───────────────────────────────────────────────────
+
+/// Build a node ID string from prescan data.
+///
+/// With a class: `"{file_path}::{class}::{fn_name}"`,
+/// without:      `"{file_path}::{fn_name}"`.
+#[allow(dead_code)] // Wired in Task 4 (pipeline states)
+fn prescan_node_id(file_path: &str, item: &PrescanItem) -> String {
+    if let Some(ref class) = item.class_name {
+        format!("{file_path}::{class}::{}", item.fn_name)
+    } else {
+        format!("{file_path}::{}", item.fn_name)
+    }
+}
+
+/// Filter prescan items by node ID prefixes.
+///
+/// A node ID like `path::test_name` matches items with that fn_name.
+/// A node ID like `path::ClassName` matches all methods in that class.
+/// A node ID like `path::ClassName::test_name` matches a specific class method.
+#[allow(dead_code)] // Wired in Task 4 (pipeline states)
+pub(crate) fn filter_prescan_by_node_ids<'a>(
+    items: &'a [PrescanItem],
+    file_path: &str,
+    node_ids: &[String],
+) -> Vec<&'a PrescanItem> {
+    if node_ids.is_empty() {
+        return items.iter().collect();
+    }
+    items
+        .iter()
+        .filter(|item| {
+            let id = prescan_node_id(file_path, item);
+            node_ids.iter().any(|target| {
+                id == *target
+                    || id.starts_with(&format!("{target}["))
+                    || id.starts_with(&format!("{target}::"))
+            })
+        })
+        .collect()
+}
+
+/// Convert a [`PrescanItem`] to a [`QueryEntry`] for DSL evaluation.
+#[allow(dead_code)] // Wired in Task 4 (pipeline states)
+fn prescan_item_to_query_entry(
+    item: &PrescanItem,
+    file_path: &str,
+) -> crate::query::resource::QueryEntry {
+    let mut fields = std::collections::HashMap::new();
+    fields.insert("name".to_string(), prescan_node_id(file_path, item));
+    fields.insert("source".to_string(), file_path.to_string());
+    fields.insert(
+        "mark".to_string(),
+        item.markers
+            .iter()
+            .map(|m| m.name.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    fields.insert("async".to_string(), item.is_async.to_string());
+    crate::query::resource::QueryEntry { fields }
+}
+
+/// Filter prescan items by a query DSL expression.
+///
+/// Supports: `name(pattern)`, `mark(name)`, `source(pattern)`, `async()`.
+/// On parse error, returns all items (fall through to eager).
+#[allow(dead_code)] // Wired in Task 4 (pipeline states)
+pub(crate) fn filter_prescan_by_expression<'a>(
+    items: &'a [PrescanItem],
+    file_path: &str,
+    expression: &str,
+) -> Vec<&'a PrescanItem> {
+    let tokens = match crate::query::compile::lex(expression) {
+        Ok(t) => t,
+        Err(_) => return items.iter().collect(),
+    };
+    let parsed = match crate::query::compile::parse(tokens) {
+        Ok(p) => p,
+        Err(_) => return items.iter().collect(),
+    };
+    items
+        .iter()
+        .filter(|item| {
+            let entry = prescan_item_to_query_entry(item, file_path);
+            crate::query::eval::eval(&parsed, &entry)
+        })
+        .collect()
+}
+
+/// Filter prescan items by last-failed node IDs.
+///
+/// Checks exact match and parametrize prefix match.
+#[allow(dead_code)] // Wired in Task 4 (pipeline states)
+pub(crate) fn filter_prescan_last_failed<'a>(
+    items: &'a [PrescanItem],
+    file_path: &str,
+    failed_ids: &std::collections::HashSet<String>,
+) -> Vec<&'a PrescanItem> {
+    items
+        .iter()
+        .filter(|item| {
+            let id = prescan_node_id(file_path, item);
+            failed_ids
+                .iter()
+                .any(|fid| fid == &id || fid.starts_with(&format!("{id}[")))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -571,5 +682,124 @@ mod tests {
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].param_id.as_deref(), Some("case_basic"));
+    }
+
+    // ── Prescan filter helpers ───────────────────────────────────────────────
+
+    use crate::python_ast::{PrescanItem, PrescanMarker};
+
+    fn make_item(fn_name: &str) -> PrescanItem {
+        PrescanItem {
+            fn_name: fn_name.to_string(),
+            lineno: 1,
+            is_async: false,
+            markers: vec![],
+            param_ids: vec![],
+            fixture_params: vec![],
+            is_class_method: false,
+            class_name: None,
+        }
+    }
+
+    fn make_item_with_marker(fn_name: &str, marker: &str) -> PrescanItem {
+        PrescanItem {
+            markers: vec![PrescanMarker {
+                name: marker.to_string(),
+                has_dynamic_args: false,
+            }],
+            ..make_item(fn_name)
+        }
+    }
+
+    fn make_item_in_class(fn_name: &str, class: &str) -> PrescanItem {
+        PrescanItem {
+            is_class_method: true,
+            class_name: Some(class.to_string()),
+            ..make_item(fn_name)
+        }
+    }
+
+    #[test]
+    fn prescan_node_id_matches_exact_function() {
+        let items = vec![make_item("test_foo"), make_item("test_bar")];
+        let ids = vec!["tests/test_a.py::test_foo".to_string()];
+        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_foo");
+    }
+
+    #[test]
+    fn prescan_node_id_matches_class_method() {
+        let items = vec![
+            make_item_in_class("test_one", "TestSuite"),
+            make_item_in_class("test_two", "TestSuite"),
+            make_item("test_standalone"),
+        ];
+        let ids = vec!["tests/test_a.py::TestSuite::test_one".to_string()];
+        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_one");
+    }
+
+    #[test]
+    fn prescan_node_id_matches_all_class_methods() {
+        let items = vec![
+            make_item_in_class("test_one", "TestSuite"),
+            make_item_in_class("test_two", "TestSuite"),
+            make_item("test_standalone"),
+        ];
+        let ids = vec!["tests/test_a.py::TestSuite".to_string()];
+        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|i| i.class_name.as_deref() == Some("TestSuite")));
+    }
+
+    #[test]
+    fn prescan_expression_filter_by_name() {
+        let items = vec![make_item("test_foo"), make_item("test_bar")];
+        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "name(test_foo)");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_foo");
+    }
+
+    #[test]
+    fn prescan_expression_filter_by_mark() {
+        let items = vec![
+            make_item_with_marker("test_slow", "slow"),
+            make_item("test_fast"),
+        ];
+        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "mark(slow)");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_slow");
+    }
+
+    #[test]
+    fn prescan_expression_filter_by_async() {
+        let mut async_item = make_item("test_async_fn");
+        async_item.is_async = true;
+        let items = vec![async_item, make_item("test_sync_fn")];
+        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "async()");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].fn_name, "test_async_fn");
+    }
+
+    #[test]
+    fn prescan_last_failed_filters_by_cached_ids() {
+        let items = vec![
+            make_item("test_pass"),
+            make_item("test_fail"),
+            make_item("test_param"),
+        ];
+        let mut failed = HashSet::new();
+        failed.insert("tests/test_a.py::test_fail".to_string());
+        // Also test parametrize prefix matching
+        failed.insert("tests/test_a.py::test_param[case1]".to_string());
+        let filtered = filter_prescan_last_failed(&items, "tests/test_a.py", &failed);
+        assert_eq!(filtered.len(), 2);
+        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        assert!(names.contains(&"test_fail"));
+        assert!(names.contains(&"test_param"));
     }
 }
