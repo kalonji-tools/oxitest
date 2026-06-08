@@ -466,3 +466,200 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir):
     (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
     out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
     helpers.integ.assert_passed(out, rc, count=2)
+
+
+# ── Dogfood: cross-feature integration tests (#788) ─────────────────────────
+
+
+def test_parametrize_with_fixtures_in_parallel(tmp: TempDir):
+    """Parametrized tests using fixtures run correctly across parallel workers."""
+    helpers.integ.write_project(
+        tmp,
+        conftest="""\
+            import oxitest as oxi
+            fx = oxi.Fixtures()
+
+            @fx.fixture
+            def store() -> dict:
+                return {}
+        """,
+        tests={
+            "test_param_fx.py": """\
+                from dataclasses import dataclass
+                import oxitest as oxi
+                from oxitest import Fixture
+
+                @dataclass(frozen=True)
+                class Case:
+                    key: str
+                    value: int
+
+                @oxi.parametrize(
+                    a=Case(key="x", value=1),
+                    b=Case(key="y", value=2),
+                    c=Case(key="z", value=3),
+                )
+                def test_store_round_trip(
+                    key: str, value: int, store: Fixture[dict]
+                ) -> None:
+                    store[key] = value
+                    assert store[key] == value, f"round-trip failed for {key}"
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    helpers.integ.assert_passed(out, rc, count=3)
+
+
+def test_single_parametrize_case(tmp: TempDir):
+    """@oxi.parametrize with a single case (only=Case(...)) runs one test."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_single.py": """\
+                from dataclasses import dataclass
+                import oxitest as oxi
+
+                @dataclass(frozen=True)
+                class AddCase:
+                    x: int
+                    y: int
+                    expected: int
+
+                @oxi.parametrize(only=AddCase(x=1, y=2, expected=3))
+                def test_add(x: int, y: int, expected: int) -> None:
+                    assert x + y == expected, "addition failed"
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=1)
+
+
+def test_class_based_tests_with_fixtures(tmp: TempDir):
+    """Class-based tests receive fixtures via method parameters."""
+    helpers.integ.write_project(
+        tmp,
+        conftest="""\
+            import oxitest as oxi
+            fx = oxi.Fixtures()
+
+            @fx.fixture
+            def store() -> dict:
+                return {"seed": "value"}
+        """,
+        tests={
+            "test_class_fx.py": """\
+                from oxitest import Fixture
+
+                class TestWithFixtures:
+                    def test_read_seed(self, store: Fixture[dict]) -> None:
+                        assert store["seed"] == "value", "seed should be present"
+
+                    def test_write_and_read(self, store: Fixture[dict]) -> None:
+                        store["new"] = 42
+                        assert store["new"] == 42, "should read back written value"
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=2)
+
+
+def test_nested_conftest_reexport(tmp: TempDir):
+    """Child conftest can re-export parent conftest fixtures."""
+    root = Path(tmp)
+    root_conftest = (
+        "import oxitest as oxi\n"
+        "fx = oxi.Fixtures()\n\n"
+        "@fx.fixture\n"
+        "def db() -> str:\n"
+        "    return 'root_db'\n"
+    )
+    (root / "conftest.py").write_text(root_conftest)
+
+    sub = root / "sub"
+    sub.mkdir()
+    (sub / "conftest.py").write_text(
+        "from conftest import fx  # noqa: F401 — re-export parent fixtures\n"
+    )
+    (sub / "test_reexport.py").write_text(
+        "from oxitest import Fixture\n\n"
+        "def test_uses_parent_fixture(db: Fixture[str]) -> None:\n"
+        "    assert db == 'root_db', 'should resolve parent fixture'\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=1)
+
+
+def test_importorskip_skips_missing_module(tmp: TempDir):
+    """importorskip skips the test when the module is not installed."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_skip_import.py": """\
+                import oxitest as oxi
+
+                def test_needs_nonexistent():
+                    oxi.importorskip("nonexistent_module_xyz_999",
+                                     reason="not installed")
+                    assert False, "should not reach here"
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "1 skipped")
+
+
+def test_warns_captures_deprecation_warning(tmp: TempDir):
+    """oxi.warns() captures expected warnings through the CLI pipeline."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_warns.py": """\
+                import warnings
+                import oxitest as oxi
+
+                def test_catches_deprecation() -> None:
+                    with oxi.warns(DeprecationWarning):
+                        warnings.warn("old API", DeprecationWarning, stacklevel=1)
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=1)
+
+
+def test_autouse_yield_fixture_teardown(tmp: TempDir):
+    """Autouse yield fixture runs teardown after each test."""
+    helpers.integ.write_project(
+        tmp,
+        conftest="""\
+            import oxitest as oxi
+            from oxitest import Yields
+            fx = oxi.Fixtures()
+            log = []
+
+            @fx.fixture(autouse=True)
+            def cleanup() -> Yields[None]:
+                yield
+                log.append("torn_down")
+        """,
+        tests={
+            "test_autouse.py": """\
+                import conftest
+
+                def test_first() -> None:
+                    assert True
+
+                def test_second_sees_teardown() -> None:
+                    # After test_first, cleanup fixture should have torn down
+                    assert "torn_down" in conftest.log, (
+                        f"expected teardown to have run: {conftest.log}"
+                    )
+            """,
+        },
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
+    helpers.integ.assert_passed(out, rc, count=2)
