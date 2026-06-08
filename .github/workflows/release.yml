@@ -22,6 +22,19 @@ jobs:
         with:
           tool: git-cliff
 
+      - name: Verify latest tag is reachable
+        run: |
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          TAG="v${CURRENT}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor "$TAG" HEAD; then
+              echo "::error::Tag $TAG exists but is not an ancestor of HEAD."
+              echo "::error::This happens when rebase merges rewrite commit SHAs."
+              echo "::error::Fix: git tag -f -a $TAG <correct-sha> -m $TAG && git push origin --force $TAG"
+              exit 1
+            fi
+          fi
+
       - name: Compute next version
         id: version
         run: |
