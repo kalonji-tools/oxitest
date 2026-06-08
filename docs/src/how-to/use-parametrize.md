@@ -65,6 +65,9 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
         assert sum(items) == expected
     ```
 
+!!! tip "Which mode should I use?"
+    Start with **Dataclass mode** — it gives you named fields, type safety, and IDE completion. Use **Compact mode** when you have a single parameter with simple values. Use **Dict mode** only for backward compatibility.
+
 ## Inject fixtures into parametrize cases
 
 A dataclass field annotated `FixtureRef[T]` tells oxitest to inject a

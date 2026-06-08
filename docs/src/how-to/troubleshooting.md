@@ -33,6 +33,10 @@ runs everything in-process to avoid the cost of spawning workers.
 
 ## Why does my test hang or timeout?
 
+!!! warning "No default timeout"
+    By default oxitest does **not** enforce a timeout — tests run until they
+    finish. A single hanging test blocks the entire worker indefinitely.
+
 By default oxitest does **not** enforce a timeout — tests run until they
 finish. If a test hangs, it blocks the entire worker.
 
@@ -46,6 +50,10 @@ $ oxitest --timeout 30
 [tool.oxitest]
 timeout = 30
 ```
+
+!!! tip "Derive timeouts from history"
+    For suites with cached timing data, `timeout_multiplier` derives a per-test
+    timeout from the cached duration automatically — no need to guess a fixed value.
 
 For suites with cached timing data, `timeout_multiplier` derives a per-test
 timeout from the cached duration (e.g. 3x the historical average), clamped to
@@ -96,6 +104,10 @@ See [Debug tests](debug-tests.md) for the full `oxitest debug` workflow.
 
 ## Why is test collection slow?
 
+!!! tip "Narrow down collection paths"
+    Setting `testpaths` and `norecursedirs` is the fastest way to cut collection
+    time — oxitest skips entire directory trees it never needs to scan.
+
 oxitest walks directories recursively during collection. If it scans large
 non-test trees, collection time increases.
 
@@ -119,6 +131,10 @@ If collection is still slow, verify you are not scanning into virtual
 environments, `node_modules`, or large data directories.
 
 ## How do I diagnose per-file collection time?
+
+!!! tip "Profile before optimising"
+    Run `--collection-profile` first to identify which files are slow before
+    restructuring imports or splitting modules.
 
 Use `--collection-profile` to see a timing breakdown for each file:
 
@@ -154,6 +170,10 @@ A missing or corrupt cache file is silently ignored — oxitest always writes a
 fresh cache at the end of a run.
 
 ## Why does `--failed=only` show no tests?
+
+!!! note
+    `--failed=only` requires a warm cache from a previous run. On a fresh checkout
+    or after `rm -rf .oxitest_cache/`, there are no recorded failures to replay.
 
 `--failed=only` re-runs only tests that **failed, errored, or timed out** on
 the previous run. If no cache exists or every test passed last time, there are
