@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 
 use super::{
     collection, execution, helpers, Collected, Empty, Executed, ExecutionResults, FilesCollected,
-    Pipeline, PreFilter, Ready, SessionReady,
+    MetadataFiltered, Pipeline, PreFilter, Prescanned, Ready, SessionReady,
 };
 use crate::cache::{ModuleCache, OutcomeCache, TimingCache};
 use crate::types::ExitCode;
@@ -63,6 +63,48 @@ impl Pipeline<FilesCollected> {
             }
         }
         Ok(self)
+    }
+
+    pub(crate) fn prescan(self) -> Result<Pipeline<Prescanned>, ExitCode> {
+        let mut prescan_data = Vec::with_capacity(self.state.test_files.len());
+        let mut module_markers = std::collections::HashMap::new();
+
+        for file in &self.state.test_files {
+            let result = crate::python_ast::prescan_with_ast(file, false);
+            match result {
+                crate::python_ast::PrescanResult::HasTests {
+                    items,
+                    has_dynamic_collection,
+                    module_markers: file_marks,
+                    ..
+                } => {
+                    prescan_data.push((file.clone(), items, has_dynamic_collection));
+                    if !file_marks.is_empty() {
+                        module_markers.insert(file.clone(), file_marks);
+                    }
+                }
+                crate::python_ast::PrescanResult::NoTests => {
+                    tracing::debug!(path = file.as_str(), "prescan: no tests, skipping");
+                }
+                crate::python_ast::PrescanResult::Unavailable => {
+                    prescan_data.push((file.clone(), vec![], true));
+                }
+            }
+        }
+
+        let (
+            shared,
+            FilesCollected {
+                test_files,
+                conftest_files,
+            },
+        ) = self.into_parts();
+        Ok(shared.into_pipeline(Prescanned {
+            test_files,
+            conftest_files,
+            prescan_data,
+            module_markers,
+        }))
     }
 
     pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
@@ -155,6 +197,200 @@ impl Pipeline<FilesCollected> {
                 Ok(ExitCode::UsageError)
             }
         }
+    }
+}
+
+// ─── Pipeline<Prescanned> ───────────────────────────────────────────────────
+
+impl Pipeline<Prescanned> {
+    pub(crate) fn filter_metadata(self) -> Result<Pipeline<MetadataFiltered>, ExitCode> {
+        let has_node_ids = !self.cfg.node_ids.is_empty();
+        let has_expression = match &self.command {
+            config::Command::Run(a) => a.filter.expression.is_some(),
+            config::Command::Debug(a) => a.filter.expression.is_some(),
+            _ => false,
+        };
+        let has_failed_filter = matches!(self.cfg.failed, Some(config::FailedMode::Only));
+        let has_affected = self.cfg.affected.is_some();
+        let is_filtered = has_node_ids || has_expression || has_failed_filter || has_affected;
+
+        if !is_filtered {
+            let all_modules: Vec<camino::Utf8PathBuf> = self
+                .state
+                .prescan_data
+                .iter()
+                .map(|(path, _, _)| path.clone())
+                .collect();
+            let (
+                shared,
+                Prescanned {
+                    test_files,
+                    conftest_files,
+                    ..
+                },
+            ) = self.into_parts();
+            return Ok(shared.into_pipeline(MetadataFiltered {
+                test_files,
+                conftest_files,
+                modules_to_import: all_modules,
+                is_filtered: false,
+            }));
+        }
+
+        let mut modules_to_import = Vec::new();
+        let expression = match &self.command {
+            config::Command::Run(a) => a.filter.expression.clone(),
+            config::Command::Debug(a) => a.filter.expression.clone(),
+            _ => None,
+        };
+        let failed_ids = if has_failed_filter {
+            self.cache.last_failed_ids()
+        } else {
+            std::collections::HashSet::new()
+        };
+        let node_ids: Vec<String> = self.cfg.node_ids.iter().map(|n| n.to_string()).collect();
+
+        for (path, items, has_dynamic) in &self.state.prescan_data {
+            if *has_dynamic {
+                modules_to_import.push(path.clone());
+                continue;
+            }
+
+            // For each active filter type, check if any item in the file matches.
+            // All active filters must have at least one match for the file to be included.
+            let mut dominated = true;
+
+            if has_node_ids {
+                // Only apply node ID filtering to files that came from node ID args,
+                // not bare path args. Files from bare paths pass through unconditionally.
+                let is_node_id_source = self.cfg.node_id_source_files.is_empty()
+                    || self.cfg.node_id_source_files.contains(path);
+                if is_node_id_source {
+                    let matched =
+                        filter::filter_prescan_by_node_ids(items, path.as_str(), &node_ids);
+                    if matched.is_empty() {
+                        dominated = false;
+                    }
+                }
+            }
+
+            if dominated {
+                if let Some(ref expr) = expression {
+                    // If the file has module-level marks, augment items with them
+                    // so expression filtering sees module marks on every item.
+                    let file_marks = self.state.module_markers.get(path);
+                    if let Some(marks) = file_marks {
+                        let augmented: Vec<crate::python_ast::PrescanItem> = items
+                            .iter()
+                            .map(|item| {
+                                let mut aug = item.clone();
+                                for m in marks {
+                                    if !aug.markers.iter().any(|em| em.name == *m) {
+                                        aug.markers.push(crate::python_ast::PrescanMarker {
+                                            name: m.clone(),
+                                            has_dynamic_args: false,
+                                        });
+                                    }
+                                }
+                                aug
+                            })
+                            .collect();
+                        let matched =
+                            filter::filter_prescan_by_expression(&augmented, path.as_str(), expr);
+                        if matched.is_empty() {
+                            dominated = false;
+                        }
+                    } else {
+                        let matched =
+                            filter::filter_prescan_by_expression(items, path.as_str(), expr);
+                        if matched.is_empty() {
+                            dominated = false;
+                        }
+                    }
+                }
+            }
+
+            if dominated && has_failed_filter && !failed_ids.is_empty() {
+                let matched = filter::filter_prescan_last_failed(items, path.as_str(), &failed_ids);
+                if matched.is_empty() {
+                    dominated = false;
+                }
+            }
+
+            if dominated {
+                modules_to_import.push(path.clone());
+            }
+        }
+
+        let filtered_conftests =
+            collector::conftests_for_modules(&self.state.conftest_files, &modules_to_import);
+
+        tracing::info!(
+            total_files = self.state.prescan_data.len(),
+            matched_files = modules_to_import.len(),
+            conftests = filtered_conftests.len(),
+            "lazy collection: filtered by prescan metadata"
+        );
+
+        let (shared, Prescanned { test_files, .. }) = self.into_parts();
+        Ok(shared.into_pipeline(MetadataFiltered {
+            test_files,
+            conftest_files: filtered_conftests,
+            modules_to_import,
+            is_filtered: true,
+        }))
+    }
+}
+
+// ─── Pipeline<MetadataFiltered> ─────────────────────────────────────────────
+
+impl Pipeline<MetadataFiltered> {
+    pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
+        let (session, fixture_violations) =
+            match bridge::FixtureSession::new(py, &self.state.conftest_files) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    let err = types::CollectError::PyError(format!(
+                        "Failed to load conftest fixtures: {}",
+                        e
+                    ));
+                    return Err(helpers::early_exit_with_error(&[err], &|| {
+                        self.make_error_reporter()
+                    }));
+                }
+            };
+
+        if !self.cfg.plugins.is_empty() {
+            if let Err(e) = session.load_plugins(py, &self.cfg.plugins, &self.cfg.plugin_settings) {
+                let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+                return Err(helpers::early_exit_with_error(&[err], &|| {
+                    self.make_error_reporter()
+                }));
+            }
+        }
+
+        if let Err(e) = session.init_async_backend(py, &self.cfg.async_backend) {
+            let err = types::CollectError::PyError(format!("Async backend init failed: {}", e));
+            return Err(helpers::early_exit_with_error(&[err], &|| {
+                self.make_error_reporter()
+            }));
+        }
+
+        let (
+            shared,
+            MetadataFiltered {
+                test_files: _,
+                conftest_files,
+                modules_to_import,
+                is_filtered: _,
+            },
+        ) = self.into_parts();
+        Ok(shared.into_pipeline(SessionReady {
+            test_files: modules_to_import,
+            conftest_files,
+            session,
+            session_violations: fixture_violations,
+        }))
     }
 }
 
