@@ -61,6 +61,41 @@ approx          — Approximate floating-point comparison:
 Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture and
       TempDirFactory already carry the injection marker — annotate parameters
       directly (`tmp: TempDir`) without wrapping in `Fixture[T]`.
+
+Examples:
+--------
+``raises`` asserts that a block raises the expected exception:
+
+>>> import oxitest
+>>> with oxitest.raises(ValueError):
+...     int("not a number")
+
+Use the ``match`` parameter to check the exception message:
+
+>>> with oxitest.raises(ValueError, match="invalid literal"):
+...     int("nope")
+
+Access the caught exception via ``as``:
+
+>>> with oxitest.raises(KeyError) as exc_info:
+...     {"a": 1}["b"]
+>>> exc_info.value.args[0]
+'b'
+
+``warns`` asserts that a block emits a warning:
+
+>>> import warnings
+>>> with oxitest.warns(UserWarning, match="deprecated"):
+...     warnings.warn("deprecated feature", UserWarning)
+
+``approx`` enables approximate floating-point comparison:
+
+>>> 0.1 + 0.2 == oxitest.approx(0.3)
+True
+>>> [0.1, 0.2] == oxitest.approx([0.1, 0.2])
+True
+>>> {"x": 0.1 + 0.2} == oxitest.approx({"x": 0.3})
+True
 """
 
 from __future__ import annotations
