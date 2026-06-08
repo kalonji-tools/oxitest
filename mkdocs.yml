@@ -89,6 +89,7 @@ nav:
     - Configuration: reference/configuration.md
     - Exit codes: reference/exit-codes.md
     - Errors: reference/errors.md
+    - API stability: reference/stability.md
     - JSON output format: reference/json-output.md
     - JUnit XML output: reference/junit-output.md
     - Python API:
