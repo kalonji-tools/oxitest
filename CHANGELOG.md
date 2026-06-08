@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.13.0] - 2026-06-08
+
+### Bug Fixes
+
+
+- Add query/bridge.rs and reporter/bridge.rs to codecov ignore
+- Resolve --affected with relative subdirectory paths
+- --affected works in git worktrees (#778)
+- Strip GIT_* env vars in gitignore integration tests (#814)
+- Propagate all class-level marks to test methods (#818)
+- Oxi_mark skip(when=False) treated as no-op, not violation (#819)
+
+### Features
+
+
+- Parallel failure context — worker ID and concurrent tests (#631)
+- Add --version / -V flag to CLI (#784)
+- Add CovReportFormat enum and CoverageProvider protocol (#803)
+- Add --cov and --cov-report CLI flags (#803)
+- Doctest collection and execution support
+- Dogfood doctest support on oxitest public API
+
 ## [0.12.0] - 2026-06-06
 
 ### Bug Fixes
