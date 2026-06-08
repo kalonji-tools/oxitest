@@ -34,3 +34,23 @@ def test_flaky_test_exits_0(tmp: TempDir):
     out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1", "--serial")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "flaky")
+
+
+def test_flaky_test_retries_in_parallel(tmp: TempDir):
+    """A flaky test retried in parallel mode still exits 0 and reports flaky."""
+    marker_path = str(tmp / "_flaky_marker_par")
+    (tmp / "test_flaky_par.py").write_text(
+        "from pathlib import Path\n\n"
+        "def test_flaky_parallel():\n"
+        f"    marker = Path({marker_path!r})\n"
+        "    if not marker.exists():\n"
+        "        marker.write_text('seen')\n"
+        "        assert False, 'first attempt'\n"
+        "    marker.unlink()\n"
+    )
+    (tmp / "test_stable.py").write_text(
+        "def test_stable_a(): assert True\ndef test_stable_b(): assert True\n"
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1", "--workers", "2")
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "flaky")
