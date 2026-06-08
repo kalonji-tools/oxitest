@@ -1,5 +1,5 @@
-# bench/test_compare.py
-"""Tests for bench/compare.py helper functions."""
+# benchmarks/test_compare.py
+"""Tests for benchmarks/compare.py helper functions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from bench.compare import (
+from benchmarks.compare import (
     check_regression,
     find_commands,
     net_overhead,
@@ -37,14 +37,18 @@ def test_check_regression_exceeds_threshold() -> None:
 def test_find_commands_filters_by_tier() -> None:
     results = [
         {
-            "command": "oxitest --serial bench/generated/s/oxitest/",
+            "command": "oxitest --serial benchmarks/generated/s/oxitest/",
             "mean": 0.1,
             "tier": "s",
         },
-        {"command": "oxitest bench/generated/s/oxitest/", "mean": 0.08, "tier": "s"},
-        {"command": "pytest bench/generated/s/pytest/", "mean": 0.2, "tier": "s"},
         {
-            "command": "oxitest --serial bench/generated/m/oxitest/",
+            "command": "oxitest benchmarks/generated/s/oxitest/",
+            "mean": 0.08,
+            "tier": "s",
+        },
+        {"command": "pytest benchmarks/generated/s/pytest/", "mean": 0.2, "tier": "s"},
+        {
+            "command": "oxitest --serial benchmarks/generated/m/oxitest/",
             "mean": 0.5,
             "tier": "m",
         },
@@ -71,9 +75,9 @@ def test_net_overhead_clamps_to_zero() -> None:
 
 def test_tier_summary_serial_parallel() -> None:
     tier_results = [
-        {"command": "oxitest --serial bench/generated/s/oxitest/", "mean": 0.15},
-        {"command": "oxitest bench/generated/s/oxitest/", "mean": 0.08},
-        {"command": "pytest bench/generated/s/pytest/", "mean": 0.30},
+        {"command": "oxitest --serial benchmarks/generated/s/oxitest/", "mean": 0.15},
+        {"command": "oxitest benchmarks/generated/s/oxitest/", "mean": 0.08},
+        {"command": "pytest benchmarks/generated/s/pytest/", "mean": 0.30},
     ]
     summary = tier_summary("s", tier_results)
     assert summary["tier"] == "s", ""
@@ -87,10 +91,13 @@ def test_tier_summary_serial_parallel() -> None:
 def test_tier_summary_serial_only() -> None:
     tier_results = [
         {
-            "command": "oxitest --serial bench/generated/below_threshold/oxitest/",
+            "command": "oxitest --serial benchmarks/generated/below_threshold/oxitest/",
             "mean": 0.07,
         },
-        {"command": "pytest bench/generated/below_threshold/pytest/", "mean": 0.16},
+        {
+            "command": "pytest benchmarks/generated/below_threshold/pytest/",
+            "mean": 0.16,
+        },
     ]
     summary = tier_summary("below_threshold", tier_results)
     assert summary["oxitest_serial"] is not None, ""

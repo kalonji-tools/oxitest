@@ -63,3 +63,17 @@ protocols = ["fixture_provider"]
 ```
 
 Without this declaration, plugins are imported eagerly (backward compatible).
+
+## Performance
+
+Measured on a synthetic project with 500 test files (2,500 tests total):
+
+| Scenario | Time |
+|----------|------|
+| Full run (no filter) | 0.510s |
+| Single node ID | 0.121s |
+| `-E 'name(...)'` | 0.170s |
+| `-E 'mark(slow)'` | 0.190s |
+
+Filtered runs skip Python import for non-matching modules, cutting wall-clock
+time by 63--76% compared to the unfiltered baseline on this workload.

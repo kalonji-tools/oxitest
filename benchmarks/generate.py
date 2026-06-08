@@ -1,6 +1,6 @@
 """Generate bench test files for all tiers.
 
-Creates test files in bench/generated/ with oxitest and pytest variants.
+Creates test files in benchmarks/generated/ with oxitest and pytest variants.
 Each file has ~12 tests: ~50% trivial, ~30% fixture, ~20% parametrize.
 All tests use only stdlib operations — no external dependencies.
 """
