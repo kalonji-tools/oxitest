@@ -227,9 +227,11 @@ For parametrized tests, `ctx.param_id` and `ctx.param` provide the current
 case identifier and value:
 
 ```python
-@oxi.parametrize("n", [1, 2, 3])
+import oxitest
+
+@oxitest.parametrize(one={"n": 1}, two={"n": 2}, three={"n": 3})
 def test_positive(n: int, ctx: TestContext):
-    print(ctx.param_id)  # "1", "2", or "3"
+    print(ctx.param_id)  # "one", "two", or "three"
 ```
 
 ## Access built-in fixtures via `fx.oxi`
