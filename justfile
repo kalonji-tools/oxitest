@@ -79,11 +79,11 @@ docs-serve: (_log _blue "Serving docs at localhost:8000...")
 
 # Run hyperfine benchmarks
 bench: (_log _blue "Running benchmarks...")
-    bash bench/run.sh
+    bash benchmarks/run.sh
 
 # Print speedup summary against baseline
 bench-compare: (_log _blue "Comparing benchmarks...")
-    python bench/compare.py
+    python benchmarks/compare.py
 
 # Remove build artifacts
 clean: (_log _red "Removing build artifacts...")

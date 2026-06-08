@@ -198,10 +198,10 @@ result
 .pytest_cache/
 
 # Benchmarks (generated)
-bench/generated/
-bench/baseline.json
-bench/results.json
-bench/results_*.json
+benchmarks/generated/
+benchmarks/baseline.json
+benchmarks/results.json
+benchmarks/results_*.json
 
 # Test output
 junit.xml

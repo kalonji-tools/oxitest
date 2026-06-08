@@ -74,7 +74,7 @@ def tier_summary(tier: str, tier_results: list[dict]) -> dict:
 
 
 def main() -> int:
-    results = load_results("bench/results.json")
+    results = load_results("benchmarks/results.json")
 
     # Startup
     startup = find_commands(results, tier="startup")
@@ -124,7 +124,7 @@ def main() -> int:
         print()
 
     # Regression check against baseline
-    baseline_path = Path("bench/baseline.json")
+    baseline_path = Path("benchmarks/baseline.json")
     if baseline_path.exists():
         baseline = load_results(str(baseline_path))
         print("REGRESSION CHECK")

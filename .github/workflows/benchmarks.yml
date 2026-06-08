@@ -66,7 +66,7 @@ jobs:
             --limit 1)
           if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
             gh run download "$RUN_ID" --name bench-results --dir /tmp/prev-bench
-            cp /tmp/prev-bench/results.json bench/baseline.json
+            cp /tmp/prev-bench/results.json benchmarks/baseline.json
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "Baseline downloaded from run $RUN_ID"
           else
@@ -84,7 +84,7 @@ jobs:
           fi
 
       - name: Run benchmarks
-        run: bash bench/run.sh
+        run: bash benchmarks/run.sh
         env:
           BENCH_RUNS: ${{ inputs.runs || '10' }}
 
@@ -97,7 +97,7 @@ jobs:
             echo '## Benchmark Results'
             echo ''
             echo '```'
-            python bench/compare.py 2>&1
+            python benchmarks/compare.py 2>&1
             echo '```'
             echo ''
             if [ "$BASELINE_FOUND" = "true" ]; then
@@ -113,5 +113,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: bench-results
-          path: bench/results.json
+          path: benchmarks/results.json
           retention-days: 90
