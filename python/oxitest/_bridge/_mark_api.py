@@ -140,6 +140,7 @@ class _SkipMark:
             def identity(f: _F) -> _F:
                 return f
 
+            identity._oxitest_noop_mark = True  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             return identity
 
         info = MarkInfo("skip", (), {"reason": str(reason)})
