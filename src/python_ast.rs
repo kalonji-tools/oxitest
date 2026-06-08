@@ -363,13 +363,10 @@ pub(crate) enum PrescanResult {
         #[allow(dead_code)]
         adjusted_test_count: usize,
         /// Per-item metadata extracted from the AST.
-        #[allow(dead_code)]
         items: Vec<PrescanItem>,
         /// Whether the module uses dynamic patterns that prevent lazy collection.
-        #[allow(dead_code)]
         has_dynamic_collection: bool,
         /// Module-level marks from `oxi_mark = mark.NAME` assignments.
-        #[allow(dead_code)]
         module_markers: Vec<String>,
     },
     /// File has no test functions.
@@ -644,7 +641,8 @@ fn is_stdlib_module(module: &str) -> bool {
     )
 }
 
-/// Extract module-level marks from `oxi_mark = mark.NAME` assignments.
+/// Extract module-level marks from `oxi_mark = mark.NAME` or `oxi_mark = [mark.NAME, ...]`
+/// assignments.
 fn extract_module_marks(stmts: &[ast::Stmt]) -> Vec<String> {
     let mut marks = Vec::new();
     for stmt in stmts {
@@ -653,8 +651,25 @@ fn extract_module_marks(stmts: &[ast::Stmt]) -> Vec<String> {
             if assign.targets.len() == 1 {
                 if let ast::Expr::Name(n) = &assign.targets[0] {
                     if n.id.as_str() == "oxi_mark" {
+                        // Handle single mark: oxi_mark = mark.slow
                         if let Some(name) = extract_mark_from_value(&assign.value) {
                             marks.push(name);
+                        }
+                        // Handle list form: oxi_mark = [mark.slow, mark.fast]
+                        if let ast::Expr::List(list) = &*assign.value {
+                            for elt in &list.elts {
+                                if let Some(name) = extract_mark_from_value(elt) {
+                                    marks.push(name);
+                                }
+                            }
+                        }
+                        // Handle tuple form: oxi_mark = (mark.slow, mark.fast)
+                        if let ast::Expr::Tuple(tuple) = &*assign.value {
+                            for elt in &tuple.elts {
+                                if let Some(name) = extract_mark_from_value(elt) {
+                                    marks.push(name);
+                                }
+                            }
                         }
                     }
                 }

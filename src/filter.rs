@@ -211,7 +211,6 @@ fn prescan_node_id(file_path: &str, item: &PrescanItem) -> String {
 /// A node ID like `path::test_name` matches items with that fn_name.
 /// A node ID like `path::ClassName` matches all methods in that class.
 /// A node ID like `path::ClassName::test_name` matches a specific class method.
-#[allow(dead_code)] // Wired in Task 4 (pipeline states)
 pub(crate) fn filter_prescan_by_node_ids<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
@@ -220,21 +219,51 @@ pub(crate) fn filter_prescan_by_node_ids<'a>(
     if node_ids.is_empty() {
         return items.iter().collect();
     }
+
+    // For prescan filtering, only `*` and `?` trigger glob mode.
+    // Brackets in node IDs are structural (parametrize case IDs), not glob chars.
+    let has_glob = |s: &str| s.contains('*') || s.contains('?');
+    let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids.iter().partition(|id| has_glob(id));
+
+    // Pre-compile glob matchers for wildcard node IDs.
+    let glob_matchers: Vec<globset::GlobMatcher> = glob_ids
+        .iter()
+        .filter_map(|id| {
+            let escaped = escape_node_id_brackets(id);
+            match globset::GlobBuilder::new(&escaped)
+                .literal_separator(false)
+                .build()
+            {
+                Ok(glob) => Some(glob.compile_matcher()),
+                Err(_) => None,
+            }
+        })
+        .collect();
+
     items
         .iter()
         .filter(|item| {
             let id = prescan_node_id(file_path, item);
-            node_ids.iter().any(|target| {
-                id == *target
+            // Check literal node IDs with prefix matching in both directions.
+            let literal_match = literal_ids.iter().any(|target| {
+                id == **target
                     || id.starts_with(&format!("{target}["))
                     || id.starts_with(&format!("{target}::"))
-            })
+                    // Target is a parametrized case of this item (e.g., target
+                    // is "path::test_mul[case]" and prescan id is "path::test_mul")
+                    || target.starts_with(&format!("{id}["))
+                    || target.starts_with(&format!("{id}::"))
+            });
+            if literal_match {
+                return true;
+            }
+            // Check glob node IDs against the prescan ID.
+            glob_matchers.iter().any(|m| m.is_match(&id))
         })
         .collect()
 }
 
 /// Convert a [`PrescanItem`] to a [`QueryEntry`] for DSL evaluation.
-#[allow(dead_code)] // Wired in Task 4 (pipeline states)
 fn prescan_item_to_query_entry(
     item: &PrescanItem,
     file_path: &str,
@@ -258,7 +287,6 @@ fn prescan_item_to_query_entry(
 ///
 /// Supports: `name(pattern)`, `mark(name)`, `source(pattern)`, `async()`.
 /// On parse error, returns all items (fall through to eager).
-#[allow(dead_code)] // Wired in Task 4 (pipeline states)
 pub(crate) fn filter_prescan_by_expression<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
@@ -284,7 +312,6 @@ pub(crate) fn filter_prescan_by_expression<'a>(
 /// Filter prescan items by last-failed node IDs.
 ///
 /// Checks exact match and parametrize prefix match.
-#[allow(dead_code)] // Wired in Task 4 (pipeline states)
 pub(crate) fn filter_prescan_last_failed<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
