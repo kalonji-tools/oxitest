@@ -261,6 +261,13 @@ def run_test(
         ``"error"``, ``"skipped"``, ``"warned"``, ``"xfailed"``, or
         ``"xpassed"``.
     """
+    # Doctest dispatch — bypass normal fixture/mark pipeline
+    if meta.fn_name.startswith("<doctest>"):
+        from oxitest._bridge._doctest_runner import run_doctest
+
+        doctest_name = meta.fn_name.removeprefix("<doctest>")
+        return run_doctest(meta.module_path, doctest_name)
+
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )

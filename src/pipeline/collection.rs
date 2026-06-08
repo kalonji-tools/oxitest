@@ -232,6 +232,33 @@ pub(super) fn collect_items(
     (items, errors, raw_violations, profile)
 }
 
+/// Scan files for docstrings with `>>>` examples and create doctest `TestItem`s.
+pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<types::TestItem>> {
+    let mut items = Vec::new();
+
+    for file in doctest_files {
+        let locations = crate::doctest::scan_doctests(file);
+        for loc in locations {
+            let fn_name = format!("<doctest>{}", loc.name);
+            let node_id = types::NodeId::new(file.as_str(), &fn_name, None);
+            items.push(Arc::new(types::TestItem {
+                node_id,
+                module_path: file.clone(),
+                fn_name,
+                lineno: types::LineNo::new(loc.lineno),
+                markers: vec!["doctest".to_string()],
+                param_id: None,
+                param_values: vec![],
+                is_async: false,
+                fixture_names: vec![],
+                fixref_names: vec![],
+            }));
+        }
+    }
+
+    items
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

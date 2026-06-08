@@ -12,6 +12,7 @@ mod cache;
 mod collector;
 mod colors;
 mod config;
+mod doctest;
 mod edit_distance;
 mod filter;
 mod import_graph;

@@ -163,13 +163,25 @@ impl Pipeline<FilesCollected> {
 impl Pipeline<SessionReady> {
     pub(crate) fn collect(mut self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
         self.cache.invalidate_modules();
-        let (items, errors, raw_violations, profile) = collection::collect_items(
+        let (mut items, errors, raw_violations, profile) = collection::collect_items(
             py,
             &self.state.test_files,
             &self.cfg,
             &self.state.session,
             &mut self.cache,
         );
+
+        // Collect doctest items if --doctest-modules is enabled.
+        if self.cfg.doctest_modules {
+            let doctest_files = collector::collect_doctest_files(&self.cfg);
+            let doctest_items = collection::collect_doctest_items(&doctest_files);
+            tracing::info!(
+                doctest_files = doctest_files.len(),
+                doctest_items = doctest_items.len(),
+                "collected doctest items"
+            );
+            items.extend(doctest_items);
+        }
 
         if !errors.is_empty() {
             return Err(helpers::early_exit_with_error(&errors, &|| {
