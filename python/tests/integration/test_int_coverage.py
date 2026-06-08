@@ -4,8 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import oxitest
 from conftest import helpers
 from oxitest import TempDir
+
+
+def _has_coverage() -> bool:
+    try:
+        __import__("coverage")
+    except ImportError:
+        return False
+    return True
+
+
+oxi_mark = oxitest.mark.skip(
+    when=not _has_coverage(), reason="coverage package not installed"
+)
 
 # Coverage artifacts land in the process CWD (project root), not in the
 # tmp directory passed as a positional argument.
