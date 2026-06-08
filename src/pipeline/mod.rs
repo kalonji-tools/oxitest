@@ -262,11 +262,18 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         return Ok(Err(ExitCode::Success));
     }
 
+    if let config::Command::Completions { shell } = &command {
+        use clap::CommandFactory;
+        let mut cmd = config::OxitestCli::command();
+        clap_complete::generate(*shell, &mut cmd, "oxitest", &mut std::io::stdout());
+        return Ok(Err(ExitCode::Success));
+    }
+
     let first_path = match &command {
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
-        _ => None,
+        config::Command::Env | config::Command::Completions { .. } => None,
     };
     let rootdir = config::find_rootdir(first_path);
 
@@ -274,7 +281,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
-        config::Command::Env => unreachable!("handled above"),
+        config::Command::Env | config::Command::Completions { .. } => {
+            unreachable!("handled above")
+        }
     };
 
     let mut cfg = cfg;
@@ -418,7 +427,9 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
             query_command(py, pipeline, needs_session)
         }
-        config::Command::Env => unreachable!("handled in setup"),
+        config::Command::Env | config::Command::Completions { .. } => {
+            unreachable!("handled in setup")
+        }
     };
 
     match result {
