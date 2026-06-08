@@ -94,6 +94,8 @@ def _extract_module_marks(
         return [], []
     # Single entry (not a list/tuple)
     if not isinstance(raw, (list, tuple)):
+        if getattr(raw, "_oxitest_noop_mark", False):
+            return [], []  # when=False skip — intentional no-op
         mark_info = _coerce_to_mark_info(raw)
         if mark_info is not None:
             return [mark_info], []
@@ -107,6 +109,8 @@ def _extract_module_marks(
     marks: list[MarkInfo] = []
     violations: list[CollectedViolation] = []
     for entry in raw:
+        if getattr(entry, "_oxitest_noop_mark", False):
+            continue  # when=False skip — intentional no-op
         mark_info = _coerce_to_mark_info(entry)
         if mark_info is not None:
             marks.append(mark_info)
