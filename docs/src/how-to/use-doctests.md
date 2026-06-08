@@ -56,8 +56,8 @@ The automatic `doctest` marker is applied to all doctest items. Use it
 to filter:
 
 ```console
-$ oxitest -E "m:doctest"           # run only doctests
-$ oxitest -E "not m:doctest"       # exclude doctests
+$ oxitest -E "mark(doctest)"       # run only doctests
+$ oxitest -E "!mark(doctest)"      # exclude doctests
 ```
 
 ## Combining with regular tests

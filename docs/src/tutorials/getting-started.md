@@ -137,7 +137,23 @@ def test_multiplication():
     assert 3 * 4 == 12
 ```
 
-## Step 6 — Run a single test by name
+## Step 6 — Add a pyproject.toml for configuration
+
+For options you want applied on every run, add an `[tool.oxitest]` section to
+`pyproject.toml` in your project root. Create the file now:
+
+```toml
+# pyproject.toml
+
+[tool.oxitest]
+testpaths = ["tests"]
+```
+
+With `testpaths` set, oxitest will search `tests/` instead of the current
+directory on every run. Command-line flags always take precedence over the
+values in `pyproject.toml`.
+
+## Step 7 — Run a single test by name
 
 When you have many tests it is useful to run only one. Pass a **node ID** to
 target a specific test — separate the file path and test name with `::`:
@@ -165,29 +181,13 @@ You can also filter with the `-E` flag and the query DSL. For example,
 $ oxitest -E 'name(addition)'
 ```
 
-## Step 7 — Add a pyproject.toml for configuration
-
-For options you want applied on every run, add an `[tool.oxitest]` section to
-`pyproject.toml` in your project root. Create the file now:
-
-```toml
-# pyproject.toml
-
-[tool.oxitest]
-testpaths = ["tests"]
-```
-
-With `testpaths` set, oxitest will search `tests/` instead of the current
-directory on every run. Command-line flags always take precedence over the
-values in `pyproject.toml`.
-
 ## What you have learned
 
 - How to install oxitest
 - How to write a test file that oxitest can discover
 - How to read both passing and failing output
-- How to run a single test with a node ID or `-E` filter
 - How to set persistent defaults in `pyproject.toml`
+- How to run a single test with a node ID or `-E` filter
 
 !!! tip "Next steps"
     - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.xfail`, custom marks, `-E` filter
