@@ -10,6 +10,16 @@ use super::resource::ResourceKind;
 
 // ── Evaluator ─────────────────────────────────────────────────────────────────
 
+/// Check whether any comma-separated value in `field_value` matches `pattern`.
+///
+/// A value matches if it equals `pattern` exactly or contains it as a substring.
+fn match_field_value(field_value: &str, pattern: &str) -> bool {
+    field_value.split(',').any(|v| {
+        let v = v.trim();
+        v == pattern || v.contains(pattern)
+    })
+}
+
 /// Evaluate an [`Expr`] against a [`crate::query::resource::QueryEntry`].
 ///
 /// Returns `true` if the entry matches the expression.
@@ -24,7 +34,7 @@ pub(crate) fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> b
             };
             match matcher {
                 Matcher::Any => !field_val.is_empty() && field_val != "false",
-                Matcher::Contains(s) => field_val.split(',').any(|v| v.trim().contains(s.as_str())),
+                Matcher::Contains(s) => match_field_value(field_val, s),
                 Matcher::Exact(s) => field_val.split(',').any(|v| v.trim() == s.as_str()),
                 Matcher::Regex(pattern) => {
                     // Compile at eval time; errors are surfaced via validate_predicates
@@ -218,5 +228,32 @@ mod tests {
     fn validate_protocol_valid_for_plugins() {
         let expr = lex_and_parse("protocol(reporter)").unwrap();
         assert!(validate_predicates(&expr, &ResourceKind::Plugins).is_ok());
+    }
+
+    // ── match_field_value tests ───────────────────────────────────────────────
+
+    #[test]
+    fn match_field_value_exact() {
+        assert!(match_field_value("slow", "slow"));
+    }
+
+    #[test]
+    fn match_field_value_in_comma_list() {
+        assert!(match_field_value("slow,fast,unit", "fast"));
+    }
+
+    #[test]
+    fn match_field_value_no_match() {
+        assert!(!match_field_value("slow,fast", "integration"));
+    }
+
+    #[test]
+    fn match_field_value_substring() {
+        assert!(match_field_value("slow_test", "slow"));
+    }
+
+    #[test]
+    fn match_field_value_trims_whitespace() {
+        assert!(match_field_value("slow, fast , unit", "fast"));
     }
 }

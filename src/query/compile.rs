@@ -4,6 +4,11 @@
 
 use super::ast::{DslError, Expr, Matcher, Token};
 
+/// Return `true` if `c` is a valid bare-word character in the DSL.
+fn is_bare_word_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '-')
+}
+
 // ── Lexer ─────────────────────────────────────────────────────────────────────
 
 /// Tokenize a DSL expression string.
@@ -134,11 +139,11 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
             }
 
             // Bare word: alphanumeric, _, ., :, -
-            c if c.is_alphanumeric() || matches!(c, '_' | '.' | ':' | '-') => {
+            c if is_bare_word_char(c) => {
                 let start = pos;
                 while pos < len {
                     let ch = chars[pos];
-                    if ch.is_alphanumeric() || matches!(ch, '_' | '.' | ':' | '-') {
+                    if is_bare_word_char(ch) {
                         pos += 1;
                     } else {
                         break;
@@ -622,5 +627,43 @@ mod tests {
             matches!(result, Err(DslError::MissingParens(_))),
             "expected MissingParens, got {result:?}"
         );
+    }
+
+    // ── is_bare_word_char tests ───────────────────────────────────────────────
+
+    #[test]
+    fn bare_word_char_accepts_ascii_letters() {
+        assert!(is_bare_word_char('a'));
+        assert!(is_bare_word_char('z'));
+        assert!(is_bare_word_char('A'));
+        assert!(is_bare_word_char('Z'));
+    }
+
+    #[test]
+    fn bare_word_char_accepts_digits() {
+        assert!(is_bare_word_char('0'));
+        assert!(is_bare_word_char('9'));
+    }
+
+    #[test]
+    fn bare_word_char_accepts_special_chars() {
+        assert!(is_bare_word_char('_'));
+        assert!(is_bare_word_char('.'));
+        assert!(is_bare_word_char(':'));
+        assert!(is_bare_word_char('-'));
+    }
+
+    #[test]
+    fn bare_word_char_rejects_operators() {
+        assert!(!is_bare_word_char('('));
+        assert!(!is_bare_word_char(')'));
+        assert!(!is_bare_word_char('&'));
+        assert!(!is_bare_word_char('!'));
+    }
+
+    #[test]
+    fn bare_word_char_rejects_whitespace() {
+        assert!(!is_bare_word_char(' '));
+        assert!(!is_bare_word_char('\t'));
     }
 }
