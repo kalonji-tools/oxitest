@@ -254,6 +254,11 @@ def test_tempdir_keep_tmp_failed_preserves_on_error():
 
 
 def test_tempdir_keep_tmp_prints_path_to_stderr():
+    # NOTE: This test uses stdlib redirect_stderr instead of dogfooding StdCapture
+    # because the stderr output is produced inside teardowns[0](), which runs
+    # outside the normal test flow. StdCapture/FdCapture would need to be set up
+    # around the teardown invocation and would interfere with the teardown's own
+    # stream writes. The stdlib approach is the correct choice here.
     import io
     from contextlib import redirect_stderr
 
