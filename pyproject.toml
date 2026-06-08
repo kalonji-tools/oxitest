@@ -44,11 +44,12 @@ python = ".venv"
 extra-paths = ["python/tests"]
 
 [tool.oxitest]
-testpaths = ["python/tests"]
+testpaths = ["python/tests", "python/oxitest"]
 python_files = ["test_*.py"]
 strict = "abort"
 timeout = 30
 affected_base = "main"
+doctest_modules = true
 
 [tool.coverage.run]
 source = ["python/oxitest"]
