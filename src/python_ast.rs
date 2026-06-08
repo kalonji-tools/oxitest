@@ -329,6 +329,26 @@ pub(crate) fn extract_helpers(stmts: &[ast::Stmt]) -> Vec<String> {
     names.into_iter().collect()
 }
 
+/// Marker metadata extracted from a decorator without Python import.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PrescanMarker {
+    pub(crate) name: String,
+    pub(crate) has_dynamic_args: bool,
+}
+
+/// Per-test-function metadata extracted from AST without Python import.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PrescanItem {
+    pub(crate) fn_name: String,
+    pub(crate) lineno: u32,
+    pub(crate) is_async: bool,
+    pub(crate) markers: Vec<PrescanMarker>,
+    pub(crate) param_ids: Vec<String>,
+    pub(crate) fixture_params: Vec<String>,
+    pub(crate) is_class_method: bool,
+    pub(crate) class_name: Option<String>,
+}
+
 /// Result of pre-scanning a Python file for test functions.
 #[derive(Debug)]
 pub(crate) enum PrescanResult {
@@ -342,11 +362,362 @@ pub(crate) enum PrescanResult {
         /// Test count adjusted for static parametrize multipliers.
         #[allow(dead_code)]
         adjusted_test_count: usize,
+        /// Per-item metadata extracted from the AST.
+        #[allow(dead_code)]
+        items: Vec<PrescanItem>,
+        /// Whether the module uses dynamic patterns that prevent lazy collection.
+        #[allow(dead_code)]
+        has_dynamic_collection: bool,
+        /// Module-level marks from `oxi_mark = mark.NAME` assignments.
+        #[allow(dead_code)]
+        module_markers: Vec<String>,
     },
     /// File has no test functions.
     NoTests,
     /// File could not be read or parsed (caller should fall through to Python).
     Unavailable,
+}
+
+/// Extract a `PrescanMarker` from a single decorator expression.
+///
+/// Reuses [`extract_mark_name`] to identify the mark, then checks whether any
+/// arguments are non-literal (dynamic).
+fn extract_prescan_marker(dec: &ast::Expr) -> Option<PrescanMarker> {
+    let name = extract_mark_name(dec)?;
+    let has_dynamic_args = match dec {
+        ast::Expr::Call(call) => {
+            call.args.iter().any(|a| !is_literal_expr(a))
+                || call.keywords.iter().any(|kw| !is_literal_expr(&kw.value))
+        }
+        _ => false,
+    };
+    Some(PrescanMarker {
+        name,
+        has_dynamic_args,
+    })
+}
+
+/// Check whether an expression is a literal (constant) value.
+fn is_literal_expr(expr: &ast::Expr) -> bool {
+    matches!(expr, ast::Expr::Constant(_))
+}
+
+/// Extract keyword argument names from `@oxi.parametrize(case1=..., case2=...)`.
+fn extract_parametrize_kwarg_names(decorators: &[ast::Expr]) -> Vec<String> {
+    let mut ids = Vec::new();
+    for dec in decorators {
+        if let ast::Expr::Call(call) = dec {
+            if is_parametrize_call(&call.func) {
+                for kw in &call.keywords {
+                    if let Some(ref arg) = kw.arg {
+                        ids.push(arg.to_string());
+                    }
+                }
+            }
+        }
+    }
+    ids
+}
+
+/// Extract parameter names that have a `Fixture[T]` annotation.
+fn extract_fixture_param_names(args: &ast::Arguments) -> Vec<String> {
+    let mut names = Vec::new();
+    for arg_with_default in args.args.iter().chain(args.kwonlyargs.iter()) {
+        if let Some(ref annotation) = arg_with_default.def.annotation {
+            if is_fixture_annotation(annotation) {
+                names.push(arg_with_default.def.arg.to_string());
+            }
+        }
+    }
+    names
+}
+
+/// Check whether an annotation expression is `Fixture[T]` or `oxitest.Fixture[T]`.
+fn is_fixture_annotation(expr: &ast::Expr) -> bool {
+    match expr {
+        ast::Expr::Subscript(sub) => {
+            match &*sub.value {
+                // Fixture[T]
+                ast::Expr::Name(n) => n.id.as_str() == "Fixture",
+                // oxitest.Fixture[T]
+                ast::Expr::Attribute(attr) => {
+                    attr.attr.as_str() == "Fixture"
+                        && matches!(&*attr.value, ast::Expr::Name(n) if n.id.as_str() == "oxitest")
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Detect dynamic patterns that prevent lazy collection.
+///
+/// Scans top-level statements for:
+/// - `exec()`, `eval()`, `globals()[]` calls
+/// - `__getattr__` definitions
+/// - star imports from non-stdlib modules
+/// - `type()` metaclass creation
+fn detect_dynamic_collection(stmts: &[ast::Stmt]) -> bool {
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::Expr(expr) => {
+                if is_dynamic_call(&expr.value) || is_globals_subscript(&expr.value) {
+                    return true;
+                }
+            }
+            ast::Stmt::Assign(assign) => {
+                if is_dynamic_call(&assign.value)
+                    || is_globals_subscript(&assign.value)
+                    || is_type_metaclass_call(&assign.value)
+                {
+                    return true;
+                }
+                // Check if any target is globals()[...]
+                for target in &assign.targets {
+                    if is_globals_subscript(target) {
+                        return true;
+                    }
+                }
+            }
+            ast::Stmt::FunctionDef(f) if f.name.as_str() == "__getattr__" => {
+                return true;
+            }
+            ast::Stmt::AsyncFunctionDef(f) if f.name.as_str() == "__getattr__" => {
+                return true;
+            }
+            ast::Stmt::ImportFrom(imp)
+                if imp.names.len() == 1 && imp.names[0].name.as_str() == "*" =>
+            {
+                // Star import: from foo import *
+                let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
+                if !is_stdlib_module(module) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Check if an expression is a call to `exec()` or `eval()`.
+fn is_dynamic_call(expr: &ast::Expr) -> bool {
+    if let ast::Expr::Call(call) = expr {
+        if let ast::Expr::Name(n) = &*call.func {
+            let s = n.id.as_str();
+            return s == "exec" || s == "eval";
+        }
+    }
+    false
+}
+
+/// Check if an expression is `globals()[...]`.
+fn is_globals_subscript(expr: &ast::Expr) -> bool {
+    if let ast::Expr::Subscript(sub) = expr {
+        if let ast::Expr::Call(call) = &*sub.value {
+            if let ast::Expr::Name(n) = &*call.func {
+                return n.id.as_str() == "globals";
+            }
+        }
+    }
+    false
+}
+
+/// Check if an expression is `type("Name", (bases,), {...})` — metaclass creation.
+fn is_type_metaclass_call(expr: &ast::Expr) -> bool {
+    if let ast::Expr::Call(call) = expr {
+        if let ast::Expr::Name(n) = &*call.func {
+            if n.id.as_str() == "type" && call.args.len() >= 3 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Quick check whether a module name belongs to the Python standard library.
+fn is_stdlib_module(module: &str) -> bool {
+    // Top-level module name only
+    let top = module.split('.').next().unwrap_or(module);
+    matches!(
+        top,
+        "os" | "sys"
+            | "io"
+            | "re"
+            | "json"
+            | "math"
+            | "time"
+            | "datetime"
+            | "pathlib"
+            | "collections"
+            | "functools"
+            | "itertools"
+            | "typing"
+            | "abc"
+            | "copy"
+            | "enum"
+            | "dataclasses"
+            | "contextlib"
+            | "subprocess"
+            | "threading"
+            | "multiprocessing"
+            | "unittest"
+            | "logging"
+            | "warnings"
+            | "traceback"
+            | "inspect"
+            | "textwrap"
+            | "string"
+            | "struct"
+            | "hashlib"
+            | "hmac"
+            | "secrets"
+            | "tempfile"
+            | "shutil"
+            | "glob"
+            | "fnmatch"
+            | "stat"
+            | "fileinput"
+            | "csv"
+            | "configparser"
+            | "argparse"
+            | "getopt"
+            | "socket"
+            | "http"
+            | "urllib"
+            | "email"
+            | "html"
+            | "xml"
+            | "pdb"
+            | "profile"
+            | "timeit"
+            | "dis"
+            | "ast"
+            | "types"
+            | "weakref"
+            | "array"
+            | "bisect"
+            | "heapq"
+            | "queue"
+            | "pprint"
+            | "decimal"
+            | "fractions"
+            | "random"
+            | "statistics"
+            | "operator"
+            | "pickle"
+            | "shelve"
+            | "sqlite3"
+            | "zlib"
+            | "gzip"
+            | "bz2"
+            | "lzma"
+            | "zipfile"
+            | "tarfile"
+            | "signal"
+            | "mmap"
+            | "ctypes"
+            | "concurrent"
+            | "asyncio"
+            | "token"
+            | "tokenize"
+            | "keyword"
+            | "difflib"
+            | "uuid"
+            | "base64"
+            | "binascii"
+            | "codecs"
+            | "locale"
+            | "gettext"
+            | "unicodedata"
+            | "stringprep"
+            | "readline"
+            | "rlcompleter"
+            | "platform"
+            | "errno"
+            | "faulthandler"
+            | "atexit"
+            | "builtins"
+            | "_thread"
+            | "__future__"
+    )
+}
+
+/// Extract module-level marks from `oxi_mark = mark.NAME` assignments.
+fn extract_module_marks(stmts: &[ast::Stmt]) -> Vec<String> {
+    let mut marks = Vec::new();
+    for stmt in stmts {
+        if let ast::Stmt::Assign(assign) = stmt {
+            // Check target is `oxi_mark`
+            if assign.targets.len() == 1 {
+                if let ast::Expr::Name(n) = &assign.targets[0] {
+                    if n.id.as_str() == "oxi_mark" {
+                        if let Some(name) = extract_mark_from_value(&assign.value) {
+                            marks.push(name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    marks
+}
+
+/// Extract a mark name from `mark.NAME`, `oxi.mark.NAME`, or call forms thereof.
+fn extract_mark_from_value(expr: &ast::Expr) -> Option<String> {
+    // Handle call form: mark.slow() -> unwrap to mark.slow
+    let attr_expr = match expr {
+        ast::Expr::Call(call) => &*call.func,
+        other => other,
+    };
+    if let ast::Expr::Attribute(attr) = attr_expr {
+        let mark_name = attr.attr.as_str();
+        match &*attr.value {
+            // mark.NAME
+            ast::Expr::Name(n) if n.id.as_str() == "mark" => {
+                return Some(mark_name.to_string());
+            }
+            // oxi.mark.NAME or oxitest.mark.NAME
+            ast::Expr::Attribute(inner) if inner.attr.as_str() == "mark" => {
+                if let ast::Expr::Name(n) = &*inner.value {
+                    let ns = n.id.as_str();
+                    if ns == "oxi" || ns == "oxitest" {
+                        return Some(mark_name.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Build a [`PrescanItem`] from any function-def node (sync or async).
+///
+/// `$f` must be either `ast::StmtFunctionDef` or `ast::StmtAsyncFunctionDef` — both
+/// expose `.name`, `.decorator_list`, `.args`, and `.range`.
+macro_rules! build_prescan_item {
+    ($f:expr, $is_async:expr, $is_class_method:expr, $class_name:expr, $line_index:expr) => {{
+        let markers: Vec<PrescanMarker> = $f
+            .decorator_list
+            .iter()
+            .filter_map(extract_prescan_marker)
+            .collect();
+        let param_ids = extract_parametrize_kwarg_names(&$f.decorator_list);
+        let fixture_params = extract_fixture_param_names(&$f.args);
+        let lineno = offset_to_line($line_index, $f.range.start().to_u32());
+        PrescanItem {
+            fn_name: $f.name.to_string(),
+            lineno,
+            is_async: $is_async,
+            markers,
+            param_ids,
+            fixture_params,
+            is_class_method: $is_class_method,
+            class_name: $class_name,
+        }
+    }};
 }
 
 /// Pre-scan a Python file and optionally retain the parsed AST for reuse.
@@ -361,19 +732,52 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
         None => return PrescanResult::Unavailable,
     };
 
+    let line_index = build_line_index(&parsed.0);
     let mut test_count = 0;
     let mut adjusted_test_count = 0;
+    let mut items = Vec::new();
 
     for stmt in &parsed.1 {
         if is_test_function(stmt) {
             test_count += 1;
             adjusted_test_count += count_parametrize_cases(stmt);
+            match stmt {
+                ast::Stmt::FunctionDef(f) => {
+                    items.push(build_prescan_item!(f, false, false, None, &line_index));
+                }
+                ast::Stmt::AsyncFunctionDef(f) => {
+                    items.push(build_prescan_item!(f, true, false, None, &line_index));
+                }
+                _ => {}
+            }
         } else if let ast::Stmt::ClassDef(cls) = stmt {
             if is_test_class(&cls.name) {
+                let class_name = cls.name.to_string();
                 for method in &cls.body {
                     if is_test_function(method) {
                         test_count += 1;
                         adjusted_test_count += count_parametrize_cases(method);
+                        match method {
+                            ast::Stmt::FunctionDef(f) => {
+                                items.push(build_prescan_item!(
+                                    f,
+                                    false,
+                                    true,
+                                    Some(class_name.clone()),
+                                    &line_index
+                                ));
+                            }
+                            ast::Stmt::AsyncFunctionDef(f) => {
+                                items.push(build_prescan_item!(
+                                    f,
+                                    true,
+                                    true,
+                                    Some(class_name.clone()),
+                                    &line_index
+                                ));
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -384,12 +788,18 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
         return PrescanResult::NoTests;
     }
 
+    let has_dynamic_collection = detect_dynamic_collection(&parsed.1);
+    let module_markers = extract_module_marks(&parsed.1);
+
     if keep_ast {
         PrescanResult::HasTests {
             source: parsed.0,
             stmts: parsed.1,
             test_count,
             adjusted_test_count,
+            items,
+            has_dynamic_collection,
+            module_markers,
         }
     } else {
         PrescanResult::HasTests {
@@ -397,6 +807,9 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             stmts: Vec::new(),
             test_count,
             adjusted_test_count,
+            items,
+            has_dynamic_collection,
+            module_markers,
         }
     }
 }
@@ -905,5 +1318,231 @@ pub(crate) mod tests {
         let helpers = extract_helpers(&stmts);
         assert!(!helpers.contains(&"__helpers_namespace__".to_string()));
         assert!(helpers.contains(&"public_fn".to_string()));
+    }
+
+    // ── prescan items ──────────────────────────────────────────────────────
+
+    #[test]
+    fn prescan_items_extracts_function_metadata() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.slow\ndef test_sync(): pass\n\n@oxi.mark.xfail(reason=\"wip\")\nasync def test_async(): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert_eq!(items.len(), 2);
+                // sync function
+                assert_eq!(items[0].fn_name, "test_sync");
+                assert!(!items[0].is_async);
+                assert!(!items[0].is_class_method);
+                assert_eq!(items[0].markers.len(), 1);
+                assert_eq!(items[0].markers[0].name, "slow");
+                assert!(!items[0].markers[0].has_dynamic_args);
+                // async function
+                assert_eq!(items[1].fn_name, "test_async");
+                assert!(items[1].is_async);
+                assert_eq!(items[1].markers.len(), 1);
+                assert_eq!(items[1].markers[0].name, "xfail");
+                // reason="wip" is a literal string constant
+                assert!(!items[1].markers[0].has_dynamic_args);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_items_extracts_class_methods() {
+        let f = write_temp_py(
+            "class TestGroup:\n    def test_a(self): pass\n    async def test_b(self): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert_eq!(items.len(), 2);
+                assert_eq!(items[0].fn_name, "test_a");
+                assert!(items[0].is_class_method);
+                assert_eq!(items[0].class_name, Some("TestGroup".to_string()));
+                assert!(!items[0].is_async);
+
+                assert_eq!(items[1].fn_name, "test_b");
+                assert!(items[1].is_class_method);
+                assert_eq!(items[1].class_name, Some("TestGroup".to_string()));
+                assert!(items[1].is_async);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_items_extracts_parametrize_case_ids() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.parametrize(positive=1, negative=-1)\ndef test_it(x): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(items[0].param_ids, vec!["positive", "negative"]);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_items_extracts_fixture_param_annotations() {
+        let f = write_temp_py(
+            "from oxitest import Fixture\n\ndef test_it(db: Fixture[str], name: str): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(items[0].fixture_params, vec!["db"]);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_items_detects_dynamic_marker_args() {
+        let f = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.mark.skip(when=SOME_VAR)\ndef test_it(): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(items[0].markers.len(), 1);
+                assert_eq!(items[0].markers[0].name, "skip");
+                assert!(items[0].markers[0].has_dynamic_args);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_detects_dynamic_collection_exec() {
+        let f = write_temp_py("exec('x = 1')\ndef test_it(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_detects_dynamic_collection_getattr() {
+        let f = write_temp_py("def __getattr__(name): ...\ndef test_it(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_detects_dynamic_collection_star_import() {
+        let f = write_temp_py("from mylib import *\ndef test_it(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_no_dynamic_flag_for_clean_file() {
+        let f = write_temp_py("import os\nfrom typing import *\ndef test_it(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(!has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_detects_dynamic_collection_globals_assignment() {
+        let f = write_temp_py("globals()['test_dynamic'] = lambda: None\ndef test_it(): pass\n");
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_detects_type_metaclass_creation() {
+        let f = write_temp_py(
+            "TestDynamic = type('TestDynamic', (), {'test_it': lambda self: None})\ndef test_anchor(): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests {
+                has_dynamic_collection,
+                ..
+            } => assert!(has_dynamic_collection),
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_extracts_module_level_marks() {
+        let f = write_temp_py(
+            "import oxitest as oxi\nfrom oxitest import mark\n\noxi_mark = mark.slow\noxi_mark = oxi.mark.integration\n\ndef test_it(): pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { module_markers, .. } => {
+                assert_eq!(module_markers, vec!["slow", "integration"]);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_extracts_module_level_marks_call_form() {
+        let f = write_temp_py(
+            "import oxitest as oxi\nfrom oxitest import mark\n\noxi_mark = mark.slow()\n\ndef test_something():\n    pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), true);
+        let PrescanResult::HasTests { module_markers, .. } = result else {
+            panic!("expected HasTests");
+        };
+        assert_eq!(module_markers, vec!["slow"]);
+    }
+
+    #[test]
+    fn prescan_detects_dynamic_collection_eval() {
+        let content = r#"
+result = eval("1 + 1")
+
+def test_it():
+    pass
+"#;
+        let f = write_temp_py(content);
+        let result = prescan_with_ast(&temp_path(&f), true);
+        let PrescanResult::HasTests {
+            has_dynamic_collection,
+            ..
+        } = result
+        else {
+            panic!("expected HasTests");
+        };
+        assert!(has_dynamic_collection);
     }
 }
