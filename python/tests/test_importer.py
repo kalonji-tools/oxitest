@@ -816,3 +816,70 @@ def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
     items, _ = collect_module(str(f))
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert "slow" in items[0].markers, f"expected slow marker, got {items[0].markers}"
+
+
+# ── oxi_mark skip(when=False) no-op tests ──────────────────────────────────
+
+
+def test_module_mark_skip_when_false_no_violation(tmp: TempDir):
+    """oxi_mark = mark.skip(when=False) is a no-op, not a violation."""
+    f = tmp / "test_skip_false.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "oxi_mark = oxitest.mark.skip(when=False, reason='not skipped')\n"
+        "\n"
+        "def test_ok(): pass\n"
+    )
+    items, violations = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
+        f"skip(when=False) should not be a violation: {violations}"
+    )
+    # Test should NOT have a skip marker
+    assert "skip" not in items[0].markers, (
+        f"skip(when=False) should not apply skip marker, got {items[0].markers}"
+    )
+
+
+def test_module_mark_skip_when_true_applies(tmp: TempDir):
+    """oxi_mark = mark.skip(when=True) applies skip to all tests."""
+    f = tmp / "test_skip_true.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "oxi_mark = oxitest.mark.skip(when=True, reason='always skip')\n"
+        "\n"
+        "def test_ok(): pass\n"
+    )
+    items, violations = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert "skip" in items[0].markers, (
+        f"skip(when=True) should apply skip marker, got {items[0].markers}"
+    )
+    assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
+        f"skip(when=True) should not be a violation: {violations}"
+    )
+
+
+def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir):
+    """oxi_mark list with skip(when=False) silently skips the no-op entry."""
+    f = tmp / "test_skip_false_list.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "oxi_mark = [oxitest.mark.skip(when=False), oxitest.mark.slow]\n"
+        "\n"
+        "def test_ok(): pass\n"
+    )
+    items, violations = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert "slow" in items[0].markers, (
+        f"slow mark should still apply, got {items[0].markers}"
+    )
+    assert "skip" not in items[0].markers, (
+        f"skip(when=False) should not apply, got {items[0].markers}"
+    )
+    assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
+        f"skip(when=False) in list should not be a violation: {violations}"
+    )
