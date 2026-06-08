@@ -609,6 +609,28 @@ def test_plugin_mark_handler_wraps_correctly():
     )
 
 
+def test_marker_composition_skip_takes_precedence_over_others():
+    """When skip + xfail + timeout are all present, skip takes precedence."""
+    marks = [
+        MarkInfo("skip", (), {"reason": "not ready"}),
+        MarkInfo("xfail", (), {"reason": "known bug"}),
+        MarkInfo("timeout", (), {"seconds": 5}),
+    ]
+    ctx = _make_ctx()
+    sc, wrappers = evaluate_marks(marks, ctx)
+
+    assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
+    assert sc.status == "skipped", (
+        f"skip should take precedence; expected status='skipped', got {sc.status!r}"
+    )
+    assert sc.message == "not ready", (
+        f"skip message should be 'not ready', got {sc.message!r}"
+    )
+    assert wrappers == [], (
+        f"skip short-circuits before xfail/timeout wrappers are added, got {wrappers!r}"
+    )
+
+
 def test_evaluate_marks_dispatches_plugin_handlers():
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)

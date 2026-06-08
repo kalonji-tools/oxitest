@@ -272,3 +272,25 @@ def test_resolve_raises_fixture_setup_error_on_exception():
 
     with oxi.raises(FixtureSetupError):
         mgr.resolve(bad_fixture, {})
+
+
+def test_async_generator_fixture_teardown_exception_reported():
+    """Async fixture raising during teardown should report the error."""
+    import oxitest as oxi
+    from oxitest._bridge._fixture_context import FixtureTeardownWarning
+
+    backend = AsyncioBackend()
+    mgr = SharedAsyncManager(backend)
+
+    async def bad_teardown():
+        yield 42
+        msg = "teardown exploded"
+        raise RuntimeError(msg)
+
+    value = mgr.resolve(bad_teardown, {})
+
+    assert value == 42, f"should yield the value before teardown, got {value!r}"
+    assert len(mgr._teardowns) == 1, "should track one teardown"
+
+    with oxi.warns(FixtureTeardownWarning, match="teardown exploded"):
+        mgr.cleanup()
