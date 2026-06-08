@@ -137,8 +137,8 @@ def test_propagate_class_marks_copies_usefixtures():
     )
 
 
-def test_propagate_class_marks_ignores_non_usefixtures():
-    """_propagate_class_marks does NOT copy skip/xfail from class to function."""
+def test_propagate_class_marks_copies_all_marks():
+    """_propagate_class_marks copies ALL marks from class to function."""
     import oxitest
 
     @oxitest.mark.skip(reason="class skip")
@@ -151,8 +151,8 @@ def test_propagate_class_marks_ignores_non_usefixtures():
     _propagate_class_marks(test_fn, FakeClass)
     from oxitest._bridge._fn_metadata import get_metadata
 
-    assert all(m.name != "skip" for m in get_metadata(test_fn).marks), (
-        "skip mark from class with skip_class=False should not propagate to test_fn"
+    assert any(m.name == "skip" for m in get_metadata(test_fn).marks), (
+        "skip mark from class should propagate to test_fn"
     )
 
 
@@ -193,8 +193,8 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir):
         )
 
 
-def test_collect_class_skip_not_propagated(tmp: TempDir):
-    """skip on a class is NOT propagated to test methods."""
+def test_collect_class_skip_propagated(tmp: TempDir):
+    """skip on a class IS propagated to test methods."""
     f = tmp / "test_cls_skip.py"
     f.write_text(
         "import oxitest\n"
@@ -203,10 +203,9 @@ def test_collect_class_skip_not_propagated(tmp: TempDir):
         "    def test_foo(self): pass\n"
     )
     items, _ = collect_module(str(f))
-    # method collected but skip mark not propagated
     assert len(items) == 1, f"expected 1 method to be collected, got {len(items)}"
-    assert "skip" not in items[0].markers, (
-        f"skip mark should NOT propagate from class to method, got markers: "
+    assert "skip" in items[0].markers, (
+        f"skip mark should propagate from class to method, got markers: "
         f"{items[0].markers}"
     )
 
@@ -763,3 +762,57 @@ def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
     assert violations[0].kind == ViolationKind.INVALID_MODULE_MARK, (
         f"expected INVALID_MODULE_MARK, got {violations[0].kind}"
     )
+
+
+# ── class-level mark propagation tests ─────────────────────────────────────
+
+
+def test_propagate_class_marks_copies_skip(tmp: TempDir):
+    """Class-level @mark.skip propagates to all methods."""
+    f = tmp / "test_class_skip.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "@oxitest.mark.skip(reason='class skip')\n"
+        "class TestSkipped:\n"
+        "    def test_a(self): pass\n"
+        "    def test_b(self): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    for item in items:
+        assert "skip" in item.markers, (
+            f"expected skip marker on {item.fn_name}, got {item.markers}"
+        )
+
+
+def test_propagate_class_marks_copies_timeout(tmp: TempDir):
+    """Class-level @mark.timeout propagates to all methods."""
+    f = tmp / "test_class_timeout.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "@oxitest.mark.timeout(10)\n"
+        "class TestTimed:\n"
+        "    def test_a(self): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert "timeout" in items[0].markers, (
+        f"expected timeout marker, got {items[0].markers}"
+    )
+
+
+def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
+    """Class-level custom mark propagates to methods."""
+    f = tmp / "test_class_custom.py"
+    f.write_text(
+        "import oxitest\n"
+        "\n"
+        "@oxitest.mark.slow\n"
+        "class TestSlow:\n"
+        "    def test_a(self): pass\n"
+    )
+    items, _ = collect_module(str(f))
+    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert "slow" in items[0].markers, f"expected slow marker, got {items[0].markers}"
