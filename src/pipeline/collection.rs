@@ -5,7 +5,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
-use crate::{bare_asserts, bridge, cache, config, filter, python_ast, types};
+use crate::{bare_asserts, bridge, cache, config, filter, types};
 
 fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
     std::fs::metadata(path)
@@ -144,11 +144,11 @@ pub(super) fn collect_items(
         // When collecting violations (strict mode), keep the parsed AST
         // for bare-assert detection to avoid double-parsing.
         let prescan_start = std::time::Instant::now();
-        let prescan = python_ast::prescan_with_ast(file, collect_violations);
+        let prescan = crate::prescan::prescan_with_ast(file, collect_violations);
         let prescan_us = prescan_start.elapsed().as_micros() as u64;
 
         let cached_ast = match prescan {
-            python_ast::PrescanResult::NoTests => {
+            crate::prescan::PrescanResult::NoTests => {
                 tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
                 if profile_enabled {
                     file_profiles.push(FileProfile {
@@ -160,8 +160,8 @@ pub(super) fn collect_items(
                 }
                 continue;
             }
-            python_ast::PrescanResult::Unavailable => None,
-            python_ast::PrescanResult::HasTests { source, stmts, .. } => {
+            crate::prescan::PrescanResult::Unavailable => None,
+            crate::prescan::PrescanResult::HasTests { source, stmts, .. } => {
                 if collect_violations && !source.is_empty() {
                     Some((source, stmts))
                 } else {

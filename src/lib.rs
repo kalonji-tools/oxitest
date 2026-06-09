@@ -19,6 +19,7 @@ mod import_graph;
 mod parallel;
 mod parallel_context;
 mod pipeline;
+mod prescan;
 mod python_ast;
 mod query;
 mod reporter;
