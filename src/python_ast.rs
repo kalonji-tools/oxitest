@@ -371,7 +371,9 @@ pub(crate) enum PrescanResult {
         /// Module-level marks from `oxi_mark = mark.NAME` assignments.
         module_markers: Vec<String>,
         /// Sum of heavy-import weight for this module (20.0 per heavy package detected).
-        #[allow(dead_code)]
+        /// Propagated into each test's `body_weight_ms` during prescan; retained here
+        /// for diagnostic inspection in tests and future per-module heuristics.
+        #[expect(dead_code)]
         heavy_import_weight_ms: f64,
     },
     /// File has no test functions.
@@ -727,31 +729,39 @@ const HEAVY_IMPORT_PACKAGES: &[&str] = &[
     "playwright",
 ];
 
-/// Detect `time.sleep(N)` calls in a statement body.
+/// Detect `time.sleep(N)` or `asyncio.sleep(N)` calls from an expression.
+///
+/// Accepts a bare `Expr` (the call expression itself, already unwrapped from any
+/// surrounding `Await` or `Stmt::Expr` by the caller).
 ///
 /// Returns the sleep weight in milliseconds:
 /// - Literal float/int N → N × 1000 ms
 /// - Dynamic arg → 50 ms
 /// - No sleep call → 0 ms
-fn detect_sleep_call(stmt: &ast::Stmt) -> f64 {
-    let call = match stmt {
-        ast::Stmt::Expr(e) => match &*e.value {
-            ast::Expr::Call(c) => c,
-            _ => return 0.0,
-        },
+fn detect_sleep_call(expr: &ast::Expr) -> f64 {
+    let call = match expr {
+        ast::Expr::Call(c) => c,
         _ => return 0.0,
     };
 
-    // Match `time.sleep(...)`
-    let is_time_sleep = match &*call.func {
+    // Match `time.sleep(...)` or `asyncio.sleep(...)`
+    let is_known_sleep = match &*call.func {
         ast::Expr::Attribute(attr) => {
             attr.attr.as_str() == "sleep"
-                && matches!(&*attr.value, ast::Expr::Name(n) if n.id.as_str() == "time")
+                && match &*attr.value {
+                    ast::Expr::Name(name) => {
+                        if name.id.as_str() != "time" && name.id.as_str() != "asyncio" {
+                            return 0.0;
+                        }
+                        true
+                    }
+                    _ => false,
+                }
         }
         _ => false,
     };
 
-    if !is_time_sleep {
+    if !is_known_sleep {
         return 0.0;
     }
 
@@ -801,7 +811,14 @@ fn compute_body_weight(
             _ => {}
         }
         stmt_count += 1;
-        sleep_weight += detect_sleep_call(stmt);
+        // Detect sleep in both `time.sleep(N)` and `await asyncio.sleep(N)`
+        if let ast::Stmt::Expr(expr_stmt) = stmt {
+            let call_expr = match &*expr_stmt.value {
+                ast::Expr::Await(aw) => &*aw.value,
+                other => other,
+            };
+            sleep_weight += detect_sleep_call(call_expr);
+        }
         queue.extend(compound_children(stmt));
     }
 
@@ -1819,5 +1836,21 @@ def test_it():
         // 2.0 + 0.0 + 0.0 + 0.0 + 1/10 + 20.0 = 22.1
         let w = get_item_weight("import requests\ndef test_it():\n    pass\n");
         assert!((w - 22.1).abs() < 0.01, "expected ~22.1, got {w}");
+    }
+
+    #[test]
+    fn body_weight_asyncio_sleep() {
+        let f = write_temp_py(
+            "import asyncio\nasync def test_async_sleep():\n    await asyncio.sleep(0.5)\n    assert True\n",
+        );
+        let path = temp_path(&f);
+        let result = prescan_with_ast(&path, false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                // base(2) + async(10) + sleep(500) + 2 stmts / 10 = 512.2
+                assert!((items[0].body_weight_ms - 512.2).abs() < 0.01);
+            }
+            _ => panic!("expected HasTests"),
+        }
     }
 }
