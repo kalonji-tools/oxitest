@@ -5,10 +5,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
-use super::arrange::{
-    evaluate_arrange_threshold, partition_by_fixture_groups, partition_inprocess_groups,
-    ArrangeDecision,
-};
+use super::arrange::{self, ExecutionStrategy};
 use super::traits::ExecutionHarness;
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
@@ -188,6 +185,115 @@ impl ExecutionHarness for ParallelHarness<'_> {
     }
 }
 
+/// Emit verbose scheduling diagnostics to stderr.
+fn emit_scheduling_diagnostics(
+    ctx: &ExecutionContext<'_>,
+    plan: &arrange::ExecutionPlan,
+    estimated: Option<std::time::Duration>,
+    cpu_count: usize,
+    shared_fixture_groups: &[Vec<String>],
+) {
+    let total_tests: usize = plan
+        .inprocess_groups
+        .iter()
+        .chain(plan.parallel_groups.iter())
+        .map(|(_, items)| items.len())
+        .sum::<usize>()
+        + plan
+            .arranged_groups
+            .iter()
+            .flat_map(|g| g.iter())
+            .map(|(_, items)| items.len())
+            .sum::<usize>();
+
+    match &plan.strategy {
+        ExecutionStrategy::Serial => {
+            if ctx.cfg.serial {
+                eprintln!("scheduling: serial (--serial flag)");
+            } else if let Some(est) = estimated {
+                eprintln!(
+                    "scheduling: serial (est. {}ms <= spawn overhead {}ms x {} workers)",
+                    est.as_millis(),
+                    ctx.cfg.spawn_overhead_ms as u64,
+                    ctx.cfg.worker_count(),
+                );
+            } else {
+                eprintln!(
+                    "scheduling: serial (cold cache, {} tests < min_parallel_tests {})",
+                    total_tests, ctx.cfg.min_parallel_tests,
+                );
+            }
+            // Check if this was an auto-arrange fallback.
+            if !plan.inprocess_groups.is_empty() && ctx.cfg.auto_arrange_threshold.is_some() {
+                if let Some(threshold) = ctx.cfg.auto_arrange_threshold {
+                    let arranged_count: usize = plan
+                        .arranged_groups
+                        .iter()
+                        .flat_map(|g| g.iter())
+                        .map(|(_, items)| items.len())
+                        .sum();
+                    // If there are inprocess groups but no arranged groups, this was a
+                    // threshold fallback. Recalculate ratio for diagnostic.
+                    if arranged_count == 0 && !plan.parallel_groups.is_empty() {
+                        // This is a fallback-to-serial case from arrange threshold.
+                        // The parallel_groups contain the collapsed groups.
+                    }
+                    let _ = threshold; // suppress unused
+                }
+            }
+        }
+        ExecutionStrategy::Parallel { worker_count } => {
+            let force_parallel = ctx.cfg.workers.is_some() && !ctx.cfg.serial;
+            if force_parallel {
+                eprintln!("scheduling: parallel (explicit --workers)");
+            } else if let Some(est) = estimated {
+                eprintln!(
+                    "scheduling: parallel (est. {}ms > spawn overhead {}ms x {} workers)",
+                    est.as_millis(),
+                    ctx.cfg.spawn_overhead_ms as u64,
+                    ctx.cfg.worker_count(),
+                );
+            } else {
+                eprintln!(
+                    "scheduling: parallel (cold cache, {} tests >= min_parallel_tests {})",
+                    total_tests, ctx.cfg.min_parallel_tests,
+                );
+            }
+
+            if let Some(config::WorkerCount::Fixed(n)) = ctx.cfg.workers {
+                eprintln!("scheduling: {n} workers (explicit --workers {n})");
+            } else if let Some(est) = estimated {
+                eprintln!(
+                    "scheduling: {worker_count} workers (est. {}ms / {}ms overhead, capped to {cpu_count} CPUs)",
+                    est.as_millis(),
+                    ctx.cfg.spawn_overhead_ms as u64,
+                );
+            } else {
+                eprintln!(
+                    "scheduling: {worker_count} workers (cold cache, using {cpu_count} CPUs)",
+                );
+            }
+
+            // Auto-arrange diagnostics.
+            if !plan.arranged_groups.is_empty() {
+                let fixture_names: Vec<String> = shared_fixture_groups
+                    .iter()
+                    .flat_map(|g| g.iter().cloned())
+                    .collect();
+                let list = fixture_names.join(", ");
+                let arranged_count: usize = plan
+                    .arranged_groups
+                    .iter()
+                    .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
+                    .sum();
+                eprintln!(
+                    "scheduling: auto-arranged {arranged_count} tests by shared fixtures ({list})",
+                );
+            }
+        }
+    }
+}
+
 /// Report violated items, group and schedule the clean items, decide
 /// serial vs. parallel, dispatch, and return `(interrupted, timings)`.
 ///
@@ -225,232 +331,152 @@ pub(super) fn execute(
         eprintln!("scheduling: strategy {:?}", ctx.cfg.schedule);
     }
 
-    let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
     let cpu_count = config::cpu_count();
 
-    let force_parallel = ctx.cfg.workers.is_some() && !ctx.cfg.serial;
-    let use_parallel = !ctx.cfg.serial
-        && ctx.cfg.worker_count() > 1
-        && (force_parallel
-            || match estimated {
-                Some(est) => {
-                    est.as_millis() as f64
-                        > ctx.cfg.spawn_overhead_ms * ctx.cfg.worker_count() as f64
-                }
-                None => total_tests >= ctx.cfg.min_parallel_tests, // cold cache: fall back to configured threshold
-            });
+    // Resolve shared fixture groups before plan (requires PyO3).
+    let shared_fixture_groups = if ctx.cfg.auto_arrange_threshold.is_some() {
+        ctx.session.shared_fixture_groups(py)
+    } else {
+        vec![]
+    };
+
+    // Build a pure execution plan — no I/O, no PyO3.
+    let plan = arrange::plan_execution(
+        groups,
+        ctx.cfg.serial,
+        ctx.cfg.workers,
+        ctx.cfg.worker_count(),
+        ctx.cfg.spawn_overhead_ms,
+        ctx.cfg.min_parallel_tests,
+        ctx.cfg.auto_arrange_threshold,
+        &shared_fixture_groups,
+        estimated,
+        cpu_count,
+    );
+
+    // ── Verbose scheduling diagnostics ─────────────────────────────────
 
     if ctx.cfg.verbosity >= config::Verbosity::Detailed {
-        if ctx.cfg.serial {
-            eprintln!("scheduling: serial (--serial flag)");
-        } else if !use_parallel {
-            if let Some(est) = estimated {
-                eprintln!(
-                    "scheduling: serial (est. {}ms <= spawn overhead {}ms x {} workers)",
-                    est.as_millis(),
-                    ctx.cfg.spawn_overhead_ms as u64,
-                    ctx.cfg.worker_count(),
-                );
-            } else {
-                eprintln!(
-                    "scheduling: serial (cold cache, {} tests < min_parallel_tests {})",
-                    total_tests, ctx.cfg.min_parallel_tests,
-                );
-            }
-        } else if force_parallel {
-            eprintln!("scheduling: parallel (explicit --workers)");
-        } else if let Some(est) = estimated {
-            eprintln!(
-                "scheduling: parallel (est. {}ms > spawn overhead {}ms x {} workers)",
-                est.as_millis(),
-                ctx.cfg.spawn_overhead_ms as u64,
-                ctx.cfg.worker_count(),
-            );
-        } else {
-            eprintln!(
-                "scheduling: parallel (cold cache, {} tests >= min_parallel_tests {})",
-                total_tests, ctx.cfg.min_parallel_tests,
-            );
-        }
+        emit_scheduling_diagnostics(ctx, &plan, estimated, cpu_count, &shared_fixture_groups);
     }
 
-    if use_parallel {
-        debug_assert!(
-            !ctx.cfg.serial,
-            "compute_optimal_workers is unreachable in serial mode"
-        );
+    // ── Dispatch based on plan ─────────────────────────────────────────
 
-        // Partition inprocess-marked tests: run on main process before parallel dispatch.
-        let (inprocess_groups, parallel_groups) = partition_inprocess_groups(groups);
-
+    // Run inprocess tests first (always serial, main process).
+    let mut result = if plan.inprocess_groups.is_empty() {
+        parallel::PhaseResult {
+            interrupted: false,
+            timings: Vec::new(),
+        }
+    } else {
         if ctx.cfg.verbosity >= config::Verbosity::Detailed {
-            let inprocess_count: usize =
-                inprocess_groups.iter().map(|(_, items)| items.len()).sum();
-            let parallel_count: usize = parallel_groups.iter().map(|(_, items)| items.len()).sum();
+            let inprocess_count: usize = plan
+                .inprocess_groups
+                .iter()
+                .map(|(_, items)| items.len())
+                .sum();
+            let parallel_count: usize = plan
+                .parallel_groups
+                .iter()
+                .map(|(_, items)| items.len())
+                .sum();
             if inprocess_count > 0 {
                 eprintln!(
                     "scheduling: {inprocess_count} inprocess tests (main), {parallel_count} parallel",
                 );
             }
         }
-        let mut inprocess_result = if inprocess_groups.is_empty() {
-            parallel::PhaseResult {
-                interrupted: false,
-                timings: Vec::new(),
+        let harness = SerialHarness::from_ctx(py, ctx);
+        harness.execute_groups(plan.inprocess_groups, rep)
+    };
+
+    if result.interrupted {
+        return result;
+    }
+
+    match plan.strategy {
+        ExecutionStrategy::Serial => {
+            // Serial path: run all remaining groups (arranged + parallel) serially.
+            let mut all_groups = Vec::new();
+            for group_modules in plan.arranged_groups {
+                all_groups.extend(group_modules);
             }
-        } else {
+            all_groups.extend(plan.parallel_groups);
+
+            if all_groups.is_empty() {
+                return result;
+            }
+
             let harness = SerialHarness::from_ctx(py, ctx);
-            harness.execute_groups(inprocess_groups, rep)
-        };
-
-        // If inprocess phase was interrupted (maxfail), skip parallel.
-        if inprocess_result.interrupted {
-            return inprocess_result;
+            let serial_result = harness.execute_groups(all_groups, rep);
+            result.timings.extend(serial_result.timings);
+            result.interrupted |= serial_result.interrupted;
+            result
         }
+        ExecutionStrategy::Parallel { worker_count } => {
+            // Pre-warm workers NOW — decision is final.
+            let mut pool = Some(parallel::prewarm_workers(ctx.python_bin, worker_count));
 
-        let optimal_worker_count = config::compute_optimal_workers(
-            ctx.cfg.workers,
-            ctx.cfg.serial,
-            cpu_count,
-            estimated,
-            ctx.cfg.spawn_overhead_ms,
-        );
-
-        // Approach B: spawn workers immediately after parallel decision.
-        // Workers start their Python interpreter while we arrange fixtures
-        // and run inprocess tests, hiding subprocess startup latency.
-        let mut pool = Some(parallel::prewarm_workers(
-            ctx.python_bin,
-            optimal_worker_count,
-        ));
-
-        if ctx.cfg.verbosity >= config::Verbosity::Detailed {
-            if let Some(config::WorkerCount::Fixed(n)) = ctx.cfg.workers {
-                eprintln!("scheduling: {n} workers (explicit --workers {n})");
-            } else if let Some(est) = estimated {
-                eprintln!(
-                    "scheduling: {optimal_worker_count} workers (est. {}ms / {}ms overhead, capped to {cpu_count} CPUs)",
-                    est.as_millis(),
-                    ctx.cfg.spawn_overhead_ms as u64,
-                );
-            } else {
-                eprintln!("scheduling: {optimal_worker_count} workers (cold cache, using {cpu_count} CPUs)");
-            }
-        }
-
-        // Auto-arrange: group tests by shared fixture dependencies.
-        let (parallel_groups, mut inprocess_result) = if let Some(threshold) =
-            ctx.cfg.auto_arrange_threshold
-        {
-            let fixture_groups = ctx.session.shared_fixture_groups(py);
-            if fixture_groups.is_empty() {
-                (parallel_groups, inprocess_result)
-            } else {
-                let (arranged, remaining) =
-                    partition_by_fixture_groups(parallel_groups, &fixture_groups);
-
-                let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
-
-                if let ArrangeDecision::FallbackSerial { ratio } = decision {
-                    // Threshold exceeded — fall back to serial; kill pre-warmed workers.
-                    if let Some(p) = pool.take() {
-                        parallel::kill_pool(p);
-                    }
-                    if ctx.cfg.verbosity >= config::Verbosity::Detailed {
-                        eprintln!(
-                            "scheduling: auto-arrange fallback to serial \
-                                 (largest fixture group {ratio}% > threshold {threshold}%)",
-                        );
-                    }
-                    let mut all_groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)> = Vec::new();
-                    for group_modules in arranged {
-                        all_groups.extend(group_modules);
-                    }
-                    all_groups.extend(remaining);
-
-                    let harness = SerialHarness::from_ctx(py, ctx);
-                    let serial_result = harness.execute_groups(all_groups, rep);
-                    inprocess_result.timings.extend(serial_result.timings);
-                    inprocess_result.interrupted |= serial_result.interrupted;
-                    return inprocess_result;
-                }
-
-                // Run each arranged fixture group serially on main process.
-                let fixture_names: Vec<String> = fixture_groups
-                    .iter()
-                    .flat_map(|g| g.iter().cloned())
-                    .collect();
-                let list = fixture_names.join(", ");
-                let arranged_count: usize = arranged
-                    .iter()
-                    .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
-                    .sum();
-                if ctx.cfg.verbosity >= config::Verbosity::Detailed {
-                    eprintln!(
-                            "scheduling: auto-arranged {arranged_count} tests by shared fixtures ({list})",
-                        );
-                }
-
+            // Run arranged fixture groups serially on main process.
+            if !plan.arranged_groups.is_empty() {
+                // Auto-arrange disabled warning is not needed here because
+                // arranged_groups is only populated when auto_arrange is active.
                 let harness = SerialHarness::from_ctx(py, ctx);
-                for group_modules in arranged {
-                    if inprocess_result.interrupted {
+                for group_modules in plan.arranged_groups {
+                    if result.interrupted {
                         if let Some(p) = pool.take() {
                             parallel::kill_pool(p);
                         }
-                        return inprocess_result;
+                        return result;
                     }
-                    let result = harness.execute_groups(group_modules, rep);
-                    inprocess_result.timings.extend(result.timings);
-                    inprocess_result.interrupted |= result.interrupted;
+                    let phase = harness.execute_groups(group_modules, rep);
+                    result.timings.extend(phase.timings);
+                    result.interrupted |= phase.interrupted;
                 }
+            }
 
-                (remaining, inprocess_result)
+            // Emit shared-fixture warning when auto-arrange is disabled.
+            if ctx.cfg.auto_arrange_threshold.is_none() {
+                let shared_names = ctx.session.shared_fixture_names(py);
+                if !shared_names.is_empty() {
+                    let list = shared_names.join(", ");
+                    let noun = if shared_names.len() == 1 {
+                        "fixture"
+                    } else {
+                        "fixtures"
+                    };
+                    tracing::warn!(
+                        fixtures = %list,
+                        fixture_count = shared_names.len(),
+                        workers = worker_count,
+                        "shared {noun} will run once per worker; \
+                         session-scoped fixtures are not shared across parallel worker processes — \
+                         use --serial to run them once, or remove shared=True from fixtures \
+                         that can be function-scoped"
+                    );
+                }
             }
-        } else {
-            // Auto-arrange disabled — emit the existing warning.
-            let shared_names = ctx.session.shared_fixture_names(py);
-            if !shared_names.is_empty() {
-                let list = shared_names.join(", ");
-                let noun = if shared_names.len() == 1 {
-                    "fixture"
-                } else {
-                    "fixtures"
-                };
-                tracing::warn!(
-                    fixtures = %list,
-                    fixture_count = shared_names.len(),
-                    workers = optimal_worker_count,
-                    "shared {noun} will run once per worker; \
-                     session-scoped fixtures are not shared across parallel worker processes — \
-                     use --serial to run them once, or remove shared=True from fixtures \
-                     that can be function-scoped"
-                );
-            }
-            (parallel_groups, inprocess_result)
-        };
 
-        if parallel_groups.is_empty() {
-            if let Some(p) = pool.take() {
-                parallel::kill_pool(p);
+            if plan.parallel_groups.is_empty() || result.interrupted {
+                if let Some(p) = pool.take() {
+                    parallel::kill_pool(p);
+                }
+                return result;
             }
-            return inprocess_result;
+
+            let harness = ParallelHarness {
+                cfg: ctx.cfg,
+                workers: worker_count,
+                conftest_files: ctx.conftest_files,
+                python_bin: ctx.python_bin,
+                pool: std::cell::RefCell::new(pool.take()),
+            };
+            let parallel_result = harness.execute_groups(plan.parallel_groups, rep);
+
+            result.timings.extend(parallel_result.timings);
+            result.interrupted |= parallel_result.interrupted;
+            result
         }
-
-        let harness = ParallelHarness {
-            cfg: ctx.cfg,
-            workers: optimal_worker_count,
-            conftest_files: ctx.conftest_files,
-            python_bin: ctx.python_bin,
-            pool: std::cell::RefCell::new(pool.take()),
-        };
-        let parallel_result = harness.execute_groups(parallel_groups, rep);
-
-        inprocess_result.timings.extend(parallel_result.timings);
-        inprocess_result.interrupted |= parallel_result.interrupted;
-        inprocess_result
-    } else {
-        let harness = SerialHarness::from_ctx(py, ctx);
-        harness.execute_groups(groups, rep)
     }
 }
 
