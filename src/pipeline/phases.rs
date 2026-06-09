@@ -68,6 +68,7 @@ impl Pipeline<FilesCollected> {
     pub(crate) fn prescan(self) -> Result<Pipeline<Prescanned>, ExitCode> {
         let mut prescan_data = Vec::with_capacity(self.state.test_files.len());
         let mut module_markers = std::collections::HashMap::new();
+        let mut ast_weight_sum = 0.0f64;
 
         for file in &self.state.test_files {
             let result = crate::python_ast::prescan_with_ast(file, false);
@@ -78,6 +79,7 @@ impl Pipeline<FilesCollected> {
                     module_markers: file_marks,
                     ..
                 } => {
+                    ast_weight_sum += items.iter().map(|i| i.body_weight_ms).sum::<f64>();
                     prescan_data.push((file.clone(), items, has_dynamic_collection));
                     if !file_marks.is_empty() {
                         module_markers.insert(file.clone(), file_marks);
@@ -93,12 +95,19 @@ impl Pipeline<FilesCollected> {
         }
 
         let (
-            shared,
+            mut shared,
             FilesCollected {
                 test_files,
                 conftest_files,
             },
         ) = self.into_parts();
+
+        shared.ast_weight_ms = if ast_weight_sum > 0.0 {
+            Some(ast_weight_sum)
+        } else {
+            None
+        };
+
         Ok(shared.into_pipeline(Prescanned {
             test_files,
             conftest_files,
