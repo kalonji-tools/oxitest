@@ -715,6 +715,35 @@ impl Config {
     }
 }
 
+/// Choose the number of worker subprocesses for this run.
+///
+/// Priority: serial flag → explicit `--workers N` → heuristic.
+/// The heuristic caps at `cpu_count` and, when a timing estimate is available,
+/// avoids spawning more workers than the estimated total runtime warrants given
+/// the subprocess spawn overhead (`spawn_overhead_ms` per worker).
+pub(crate) fn compute_optimal_workers(
+    explicit_workers: Option<WorkerCount>,
+    serial: bool,
+    cpu_count: usize,
+    estimated: Option<std::time::Duration>,
+    spawn_overhead_ms: f64,
+) -> usize {
+    if serial {
+        return 1;
+    }
+    match explicit_workers {
+        Some(WorkerCount::Fixed(n)) => return n,
+        Some(WorkerCount::Auto) | None => {}
+    }
+    if let Some(est) = estimated {
+        let est_ms = est.as_millis() as f64;
+        let needed = (est_ms / spawn_overhead_ms).ceil() as usize;
+        cpu_count.min(needed).max(1)
+    } else {
+        cpu_count
+    }
+}
+
 #[cfg(test)]
 impl Config {
     pub fn from_str(s: &str) -> Result<Self, toml::de::Error> {

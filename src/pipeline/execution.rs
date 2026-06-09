@@ -308,7 +308,7 @@ pub(super) fn execute(
             return inprocess_result;
         }
 
-        let optimal_worker_count = parallel::compute_optimal_workers(
+        let optimal_worker_count = config::compute_optimal_workers(
             ctx.cfg.workers,
             ctx.cfg.serial,
             cpu_count,
