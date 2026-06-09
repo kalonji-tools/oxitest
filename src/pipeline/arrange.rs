@@ -140,6 +140,125 @@ pub(super) fn evaluate_arrange_threshold(
     }
 }
 
+// ── ExecutionPlan value object ──────────────────────────────────────────────
+
+/// How remaining (non-inprocess) tests should be dispatched.
+#[derive(Debug)]
+pub(super) enum ExecutionStrategy {
+    Serial,
+    Parallel { worker_count: usize },
+}
+
+/// A fully computed, pure execution plan.
+///
+/// Produced by [`plan_execution`] — no I/O, no PyO3.  The caller in
+/// `execution.rs` dispatches based on this plan, spawning workers only
+/// after the plan is finalised.
+#[allow(clippy::type_complexity)]
+#[derive(Debug)]
+pub(super) struct ExecutionPlan {
+    pub strategy: ExecutionStrategy,
+    /// Tests marked `inprocess` — always run on the main process.
+    pub inprocess_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    /// Fixture-arranged groups that must run serially on the main process.
+    pub arranged_groups: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>>,
+    /// Remaining groups dispatched according to `strategy`.
+    pub parallel_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+}
+
+/// Build an [`ExecutionPlan`] from pre-computed inputs.
+///
+/// Pure function: no I/O, no PyO3.  All PyO3-dependent data (fixture groups,
+/// estimated duration) must be resolved by the caller.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub(super) fn plan_execution(
+    groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    serial: bool,
+    workers: Option<crate::config::WorkerCount>,
+    worker_count_cfg: usize,
+    spawn_overhead_ms: f64,
+    min_parallel_tests: usize,
+    auto_arrange_threshold: Option<u8>,
+    shared_fixture_groups: &[Vec<String>],
+    estimated: Option<std::time::Duration>,
+    cpu_count: usize,
+) -> ExecutionPlan {
+    let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
+
+    let force_parallel = workers.is_some() && !serial;
+    let use_parallel = !serial
+        && worker_count_cfg > 1
+        && (force_parallel
+            || match estimated {
+                Some(est) => est.as_millis() as f64 > spawn_overhead_ms * worker_count_cfg as f64,
+                None => total_tests >= min_parallel_tests,
+            });
+
+    if !use_parallel {
+        return ExecutionPlan {
+            strategy: ExecutionStrategy::Serial,
+            inprocess_groups: vec![],
+            arranged_groups: vec![],
+            parallel_groups: groups,
+        };
+    }
+
+    // Partition inprocess-marked tests.
+    let (inprocess_groups, parallel_groups) = partition_inprocess_groups(groups);
+
+    let optimal_worker_count = crate::config::compute_optimal_workers(
+        workers,
+        serial,
+        cpu_count,
+        estimated,
+        spawn_overhead_ms,
+    );
+
+    // Auto-arrange by shared fixture groups.
+    if let Some(threshold) = auto_arrange_threshold {
+        if !shared_fixture_groups.is_empty() {
+            let (arranged, remaining) =
+                partition_by_fixture_groups(parallel_groups, shared_fixture_groups);
+
+            let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
+
+            if let ArrangeDecision::FallbackSerial { .. } = decision {
+                // Threshold exceeded — collapse everything back to serial.
+                let mut all_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = Vec::new();
+                for group_modules in arranged {
+                    all_groups.extend(group_modules);
+                }
+                all_groups.extend(remaining);
+
+                return ExecutionPlan {
+                    strategy: ExecutionStrategy::Serial,
+                    inprocess_groups,
+                    arranged_groups: vec![],
+                    parallel_groups: all_groups,
+                };
+            }
+
+            return ExecutionPlan {
+                strategy: ExecutionStrategy::Parallel {
+                    worker_count: optimal_worker_count,
+                },
+                inprocess_groups,
+                arranged_groups: arranged,
+                parallel_groups: remaining,
+            };
+        }
+    }
+
+    ExecutionPlan {
+        strategy: ExecutionStrategy::Parallel {
+            worker_count: optimal_worker_count,
+        },
+        inprocess_groups,
+        arranged_groups: vec![],
+        parallel_groups,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
