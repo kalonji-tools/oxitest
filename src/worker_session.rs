@@ -28,7 +28,7 @@ fn take_child_pipes(
 
 /// Spawns a worker subprocess and returns its stdin, a line receiver for stdout,
 /// and the child handle. Returns `None` on spawn or pipe failure.
-fn setup_worker_process(
+pub(crate) fn setup_worker_process(
     python_bin: &str,
 ) -> Option<(
     std::process::Child,
@@ -162,6 +162,106 @@ pub(crate) fn spawn_worker(
             Some(v) => v,
             None => return,
         };
+
+        let mut session = WorkerSession::new(worker_stdin, line_rx, watchdog);
+        let mut subprocess_alive = true;
+
+        while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
+            let Some(group) = sched.pop() else { break };
+
+            let task = WorkerTask {
+                module_path: group.module_path.as_str(),
+                items: group
+                    .items
+                    .iter()
+                    .map(|item| WorkerTaskItem {
+                        fn_name: &item.fn_name,
+                        param_id: item.param_id.as_deref(),
+                        node_id: &item.node_id,
+                        markers: &item.markers,
+                    })
+                    .collect(),
+                conftest_paths: &conftest_json,
+                timeout_secs,
+                keep_tmp: keep_tmp.as_deref(),
+                show_locals: if show_locals { Some(true) } else { None },
+                show_internals: if show_internals { Some(true) } else { None },
+            };
+
+            if let Err(e) = session.send_task(&task) {
+                tracing::warn!(
+                    module = %group.module_path,
+                    error = %e,
+                    "failed to send task to worker — emitting error for all group items"
+                );
+                for item in &group.items {
+                    let _ = tx.send((
+                        item.node_id.to_string(),
+                        0.0,
+                        WorkerOutcome::crashed(),
+                        worker_id,
+                    ));
+                }
+                break;
+            }
+
+            {
+                let mut set = in_flight.lock().unwrap();
+                for item in &group.items {
+                    set.insert(item.node_id.to_string());
+                }
+            }
+
+            let expected = group.items.len();
+            let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
+
+            subprocess_alive = handle_drain_outcome(
+                drain_outcome,
+                &mut child,
+                &group.items,
+                received,
+                watchdog,
+                &group.module_path,
+                &tx,
+                worker_id,
+            );
+        }
+
+        drop(session);
+        let _ = child.wait();
+    })
+}
+
+/// Like [`spawn_worker`] but accepts a pre-spawned `(Child, BufWriter, Receiver)` tuple
+/// instead of calling `setup_worker_process` internally. Used by the pre-warming pool
+/// so that subprocess startup overlaps with earlier pipeline stages.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_worker_with_process(
+    prewarmed: (
+        std::process::Child,
+        std::io::BufWriter<std::process::ChildStdin>,
+        crossbeam_channel::Receiver<String>,
+    ),
+    worker_id: usize,
+    sched: std::sync::Arc<scheduler::Scheduler>,
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    conftest_json: std::sync::Arc<serde_json::value::RawValue>,
+    timeout_secs: Option<u64>,
+    keep_tmp: Option<std::sync::Arc<str>>,
+    show_locals: bool,
+    show_internals: bool,
+    tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+    in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
+) -> std::thread::JoinHandle<()> {
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    let watchdog: Duration = timeout_secs
+        .map(|t| Duration::from_secs(t.saturating_add(30)))
+        .unwrap_or(Duration::from_secs(600));
+
+    std::thread::spawn(move || {
+        let (mut child, worker_stdin, line_rx) = prewarmed;
 
         let mut session = WorkerSession::new(worker_stdin, line_rx, watchdog);
         let mut subprocess_alive = true;
