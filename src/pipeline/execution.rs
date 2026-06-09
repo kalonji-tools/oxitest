@@ -165,6 +165,9 @@ pub(super) struct ParallelHarness<'a> {
     pub workers: usize,
     pub conftest_files: &'a [Utf8PathBuf],
     pub python_bin: &'a str,
+    /// Pre-warmed worker pool; wrapped in `RefCell` so `execute_groups(&self)`
+    /// can move it out without requiring `&mut self`.
+    pub pool: std::cell::RefCell<Option<Vec<parallel::PrewarmedWorker>>>,
 }
 
 impl ExecutionHarness for ParallelHarness<'_> {
@@ -180,6 +183,7 @@ impl ExecutionHarness for ParallelHarness<'_> {
             self.conftest_files,
             self.python_bin,
             rep,
+            self.pool.borrow_mut().take(),
         )
     }
 }
@@ -312,6 +316,14 @@ pub(super) fn execute(
             ctx.cfg.spawn_overhead_ms,
         );
 
+        // Approach B: spawn workers immediately after parallel decision.
+        // Workers start their Python interpreter while we arrange fixtures
+        // and run inprocess tests, hiding subprocess startup latency.
+        let mut pool = Some(parallel::prewarm_workers(
+            ctx.python_bin,
+            optimal_worker_count,
+        ));
+
         if ctx.cfg.verbosity >= config::Verbosity::Detailed {
             if let Some(config::WorkerCount::Fixed(n)) = ctx.cfg.workers {
                 eprintln!("scheduling: {n} workers (explicit --workers {n})");
@@ -340,7 +352,10 @@ pub(super) fn execute(
                 let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
 
                 if let ArrangeDecision::FallbackSerial { ratio } = decision {
-                    // Threshold exceeded — fall back to serial.
+                    // Threshold exceeded — fall back to serial; kill pre-warmed workers.
+                    if let Some(p) = pool.take() {
+                        parallel::kill_pool(p);
+                    }
                     if ctx.cfg.verbosity >= config::Verbosity::Detailed {
                         eprintln!(
                             "scheduling: auto-arrange fallback to serial \
@@ -379,6 +394,9 @@ pub(super) fn execute(
                 let harness = SerialHarness::from_ctx(py, ctx);
                 for group_modules in arranged {
                     if inprocess_result.interrupted {
+                        if let Some(p) = pool.take() {
+                            parallel::kill_pool(p);
+                        }
                         return inprocess_result;
                     }
                     let result = harness.execute_groups(group_modules, rep);
@@ -412,6 +430,9 @@ pub(super) fn execute(
         };
 
         if parallel_groups.is_empty() {
+            if let Some(p) = pool.take() {
+                parallel::kill_pool(p);
+            }
             return inprocess_result;
         }
 
@@ -420,6 +441,7 @@ pub(super) fn execute(
             workers: optimal_worker_count,
             conftest_files: ctx.conftest_files,
             python_bin: ctx.python_bin,
+            pool: std::cell::RefCell::new(pool.take()),
         };
         let parallel_result = harness.execute_groups(parallel_groups, rep);
 
