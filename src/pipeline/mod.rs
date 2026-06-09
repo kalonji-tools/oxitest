@@ -124,6 +124,8 @@ pub(crate) struct Pipeline<S> {
     pub(crate) base: reporter::ReporterOptsBuilder,
     pub(crate) cache: cache::TestCache,
     pub(crate) python_bin: String,
+    /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
+    pub(crate) ast_weight_ms: Option<f64>,
     pub(crate) state: S,
 }
 
@@ -160,6 +162,7 @@ impl<S> Pipeline<S> {
                 base: self.base,
                 cache: self.cache,
                 python_bin: self.python_bin,
+                ast_weight_ms: self.ast_weight_ms,
             },
             self.state,
         )
@@ -175,6 +178,8 @@ pub(crate) struct PipelineShared {
     pub(crate) base: reporter::ReporterOptsBuilder,
     pub(crate) cache: cache::TestCache,
     pub(crate) python_bin: String,
+    /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
+    pub(crate) ast_weight_ms: Option<f64>,
 }
 
 impl PipelineShared {
@@ -188,6 +193,7 @@ impl PipelineShared {
             base: self.base,
             cache: self.cache,
             python_bin: self.python_bin,
+            ast_weight_ms: self.ast_weight_ms,
             state,
         }
     }
@@ -416,6 +422,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         base: setup_ctx.base,
         cache: setup_ctx.cache,
         python_bin: setup_ctx.python_bin,
+        ast_weight_ms: None,
         state: Empty,
     };
 
