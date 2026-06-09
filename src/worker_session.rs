@@ -129,22 +129,43 @@ impl WorkerSession {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Shared parameters for spawning a worker thread.
+///
+/// Bundles the 10 fields that are common to both [`spawn_worker`] and
+/// [`spawn_worker_with_process`] so call sites build a struct instead of
+/// passing a long positional argument list.
+pub(crate) struct WorkerParams {
+    pub worker_id: usize,
+    pub sched: std::sync::Arc<scheduler::Scheduler>,
+    pub cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub conftest_json: std::sync::Arc<serde_json::value::RawValue>,
+    pub timeout_secs: Option<u64>,
+    pub keep_tmp: Option<std::sync::Arc<str>>,
+    pub show_locals: bool,
+    pub show_internals: bool,
+    pub tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+    pub in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
+}
+
 pub(crate) fn spawn_worker(
     python_bin: std::sync::Arc<str>,
-    worker_id: usize,
-    sched: std::sync::Arc<scheduler::Scheduler>,
-    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    conftest_json: std::sync::Arc<serde_json::value::RawValue>,
-    timeout_secs: Option<u64>,
-    keep_tmp: Option<std::sync::Arc<str>>,
-    show_locals: bool,
-    show_internals: bool,
-    tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
-    in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
+    params: WorkerParams,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
+
+    let WorkerParams {
+        worker_id,
+        sched,
+        cancelled,
+        conftest_json,
+        timeout_secs,
+        keep_tmp,
+        show_locals,
+        show_internals,
+        tx,
+        in_flight,
+    } = params;
 
     // Per-result watchdog: how long to wait for one test result line before
     // declaring the subprocess unresponsive and killing it.
@@ -235,26 +256,29 @@ pub(crate) fn spawn_worker(
 /// Like [`spawn_worker`] but accepts a pre-spawned `(Child, BufWriter, Receiver)` tuple
 /// instead of calling `setup_worker_process` internally. Used by the pre-warming pool
 /// so that subprocess startup overlaps with earlier pipeline stages.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_worker_with_process(
     prewarmed: (
         std::process::Child,
         std::io::BufWriter<std::process::ChildStdin>,
         crossbeam_channel::Receiver<String>,
     ),
-    worker_id: usize,
-    sched: std::sync::Arc<scheduler::Scheduler>,
-    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    conftest_json: std::sync::Arc<serde_json::value::RawValue>,
-    timeout_secs: Option<u64>,
-    keep_tmp: Option<std::sync::Arc<str>>,
-    show_locals: bool,
-    show_internals: bool,
-    tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
-    in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
+    params: WorkerParams,
 ) -> std::thread::JoinHandle<()> {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
+
+    let WorkerParams {
+        worker_id,
+        sched,
+        cancelled,
+        conftest_json,
+        timeout_secs,
+        keep_tmp,
+        show_locals,
+        show_internals,
+        tx,
+        in_flight,
+    } = params;
 
     let watchdog: Duration = timeout_secs
         .map(|t| Duration::from_secs(t.saturating_add(30)))
