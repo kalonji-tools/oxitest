@@ -201,6 +201,7 @@ result
 benchmarks/generated/
 benchmarks/baseline.json
 benchmarks/results.json
+benchmarks/profile_results.txt
 benchmarks/results_*.json
 
 # Test output

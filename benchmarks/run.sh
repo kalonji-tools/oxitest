@@ -100,6 +100,34 @@ if [ -n "$FIRST_FILE" ]; then
 fi
 
 echo ""
+echo "=== Tier: realistic (serial + parallel + worker sweep) ==="
+REALISTIC_CMDS=(
+    "oxitest --serial benchmarks/generated/realistic/oxitest/"
+    "oxitest benchmarks/generated/realistic/oxitest/"
+    "oxitest --workers 1 benchmarks/generated/realistic/oxitest/"
+    "oxitest --workers 2 benchmarks/generated/realistic/oxitest/"
+    "oxitest --workers 4 benchmarks/generated/realistic/oxitest/"
+)
+hyperfine \
+    --warmup "$WARMUP" \
+    --runs "$RUNS" \
+    --export-json "$RESULTS_DIR/results_realistic.json" \
+    "${REALISTIC_CMDS[@]}"
+
+echo ""
+echo "=== Dogfood: oxitest test suite ==="
+DOGFOOD_CMDS=(
+    "oxitest --serial python/tests/"
+    "oxitest python/tests/"
+)
+hyperfine \
+    --ignore-failure \
+    --warmup "$WARMUP" \
+    --runs "$RUNS" \
+    --export-json "$RESULTS_DIR/results_dogfood.json" \
+    "${DOGFOOD_CMDS[@]}"
+
+echo ""
 echo "=== Merging results ==="
 python -c "
 import json
