@@ -9,8 +9,20 @@ use crate::types::TestItem;
 
 /// Cache for test timing data (scheduling, timeout suggestions, duration estimates).
 pub trait TimingCache {
+    /// Estimate total duration for the given items.
+    ///
+    /// `ast_fallback_ms` is the sum of AST-derived body weights for the same item list.
+    /// When the cache has >= 50% coverage, the cached sum is used directly.
+    /// When coverage < 50% and `ast_fallback_ms` is provided, a blend is returned:
+    ///   `cached_ms + ast_total * uncovered_fraction`.
+    /// When fully cold (0 covered) and `ast_fallback_ms` is provided, `ast_total` is used.
+    /// Otherwise returns `None`.
     #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
-    fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration>;
+    fn estimated_duration(
+        &self,
+        items: &[Arc<TestItem>],
+        ast_fallback_ms: Option<f64>,
+    ) -> Option<Duration>;
     fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64>;
     fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>);
     fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32);
@@ -42,15 +54,35 @@ impl TestCache {
 }
 
 impl TimingCache for TestCache {
-    fn estimated_duration(&self, items: &[Arc<TestItem>]) -> Option<Duration> {
+    fn estimated_duration(
+        &self,
+        items: &[Arc<TestItem>],
+        ast_fallback_ms: Option<f64>,
+    ) -> Option<Duration> {
         if items.is_empty() {
             return None;
         }
-        let (total_ms, covered) = self.sum_and_count(items);
-        if covered * 2 < items.len() {
-            return None;
+        let (cached_ms, covered) = self.sum_and_count(items);
+        let total = items.len();
+
+        // >= 50% coverage: use the cached sum directly (existing behaviour).
+        if covered * 2 >= total {
+            return Some(Duration::from_millis(cached_ms as u64));
         }
-        Some(Duration::from_millis(total_ms as u64))
+
+        // < 50% coverage — try AST fallback.
+        if let Some(ast_total) = ast_fallback_ms {
+            if covered == 0 {
+                // Fully cold: use AST estimate directly.
+                return Some(Duration::from_millis(ast_total as u64));
+            }
+            // Partial cache: blend cached + AST estimate for uncovered fraction.
+            let uncovered_fraction = (total - covered) as f64 / total as f64;
+            let blended = cached_ms + ast_total * uncovered_fraction;
+            return Some(Duration::from_millis(blended as u64));
+        }
+
+        None
     }
 
     /// Returns a suggested timeout in whole seconds for `item`, scaled by `multiplier`.
@@ -267,7 +299,7 @@ mod tests {
     #[test]
     fn estimated_duration_returns_none_on_empty_items() {
         let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 10.0)]);
-        assert!(cache.estimated_duration(&[]).is_none());
+        assert!(cache.estimated_duration(&[], None).is_none());
     }
 
     #[test]
@@ -278,7 +310,7 @@ mod tests {
             TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
             TestItem::builder_raw("tests/test_foo.py::test_c").arc(),
         ];
-        assert!(cache.estimated_duration(&items).is_none());
+        assert!(cache.estimated_duration(&items, None).is_none());
     }
 
     #[test]
@@ -288,7 +320,7 @@ mod tests {
             TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
             TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
         ];
-        assert!(cache.estimated_duration(&items).is_some());
+        assert!(cache.estimated_duration(&items, None).is_some());
     }
 
     #[test]
@@ -301,7 +333,7 @@ mod tests {
             TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
             TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
         ];
-        let est = cache.estimated_duration(&items).unwrap();
+        let est = cache.estimated_duration(&items, None).unwrap();
         assert_eq!(est.as_millis(), 300);
     }
 
@@ -451,5 +483,58 @@ mod tests {
             .timings
             .contains_key("tests/test_foo.py::test_old"));
         assert!(cache.dirty);
+    }
+
+    // ── estimated_duration with AST fallback ──────────────────────────
+
+    #[test]
+    fn estimated_duration_cold_cache_with_ast_fallback() {
+        // Cold cache (0 covered), 2 items — AST fallback used directly.
+        let cache = TestCache::empty();
+        let items = vec![
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
+        ];
+        let est = cache.estimated_duration(&items, Some(400.0)).unwrap();
+        assert_eq!(est.as_millis(), 400);
+    }
+
+    #[test]
+    fn estimated_duration_partial_cache_blends_with_ast() {
+        // 1 of 4 items cached (25% < 50%). AST total = 200ms.
+        // uncovered_fraction = 3/4 = 0.75. blend = 50.0 + 200.0 * 0.75 = 200ms.
+        let cache = cache_with_entries(&[("tests/test_foo.py::test_a", 50.0)]);
+        let items = vec![
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_c").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_d").arc(),
+        ];
+        let est = cache.estimated_duration(&items, Some(200.0)).unwrap();
+        assert_eq!(est.as_millis(), 200); // 50 + 200*0.75 = 200
+    }
+
+    #[test]
+    fn estimated_duration_warm_cache_ignores_ast_fallback() {
+        // 2 of 2 items cached (100% >= 50%) — cached sum used, AST ignored.
+        let cache = cache_with_entries(&[
+            ("tests/test_foo.py::test_a", 100.0),
+            ("tests/test_foo.py::test_b", 200.0),
+        ]);
+        let items = vec![
+            TestItem::builder_raw("tests/test_foo.py::test_a").arc(),
+            TestItem::builder_raw("tests/test_foo.py::test_b").arc(),
+        ];
+        // AST says 999ms, but warm cache returns 300ms.
+        let est = cache.estimated_duration(&items, Some(999.0)).unwrap();
+        assert_eq!(est.as_millis(), 300);
+    }
+
+    #[test]
+    fn estimated_duration_no_ast_no_cache_returns_none() {
+        // Cold cache, no AST fallback — returns None.
+        let cache = TestCache::empty();
+        let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
+        assert!(cache.estimated_duration(&items, None).is_none());
     }
 }
