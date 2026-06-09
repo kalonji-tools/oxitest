@@ -56,10 +56,13 @@ finish.
 Subprocess workers solve the GIL problem but introduce two costs that threads would not have.
 
 **Spawn overhead.** Starting a Python process takes time — importing the interpreter, loading
-`site-packages`, and initializing the worker module. On a typical machine this is around 250ms
-per worker. For a suite with 50 fast tests, the spawn cost exceeds any parallelism benefit.
-oxitest decides automatically: if the estimated total test duration (from the timing cache) is
-less than the spawn overhead multiplied by the worker count, it runs serially in a single process.
+`site-packages`, and initializing the worker module. On a typical machine this is around 100-200ms
+per worker. To hide this cost, oxitest pre-warms workers: as soon as it decides to use parallel
+mode, it spawns all worker subprocesses immediately — before fixture arrangement and scheduling.
+By the time the first task is ready, workers have already completed their Python startup and are
+waiting for input. For suites where the spawn cost would exceed any parallelism benefit, oxitest
+runs serially instead: if the estimated total test duration (from the timing cache) is less than
+the spawn overhead multiplied by the worker count, it uses a single in-process runner.
 
 **Serialization overhead.** Every task sent to a worker and every result received from one passes
 through JSON encoding and decoding. For a test that runs in 1ms, the serialization round-trip is
