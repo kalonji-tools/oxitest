@@ -19,6 +19,8 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) session: &'a bridge::FixtureSession,
     pub(super) conftest_files: &'a [Utf8PathBuf],
     pub(super) python_bin: &'a str,
+    /// Sum of AST-derived body weights from prescan; used as fallback for cold-cache estimation.
+    pub(super) ast_weight_ms: Option<f64>,
 }
 
 fn resolve_timeout(
@@ -209,7 +211,7 @@ pub(super) fn execute(
         }
     }
 
-    let estimated = ctx.cache.estimated_duration(clean_items);
+    let estimated = ctx.cache.estimated_duration(clean_items, ctx.ast_weight_ms);
 
     let mut groups = filter::group_by_module(clean_items);
     let failed_ids = ctx.cache.last_failed_ids();

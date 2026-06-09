@@ -867,6 +867,7 @@ impl Pipeline<Ready> {
             session: &session,
             conftest_files: &conftest_files,
             python_bin: &shared.python_bin,
+            ast_weight_ms: shared.ast_weight_ms,
         };
 
         let parallel::PhaseResult {
