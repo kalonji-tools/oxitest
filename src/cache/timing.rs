@@ -78,6 +78,10 @@ impl TimingCache for TestCache {
             }
             // Partial cache: blend cached + AST estimate for uncovered fraction.
             let uncovered_fraction = (total - covered) as f64 / total as f64;
+            // NOTE: ast_total is the sum across ALL prescan items, not just uncovered ones.
+            // The proportional blend is an approximation — it assumes per-test AST weights
+            // are roughly uniform. This is acceptable for a heuristic that only applies
+            // to partial cache scenarios (new tests added between runs).
             let blended = cached_ms + ast_total * uncovered_fraction;
             return Some(Duration::from_millis(blended as u64));
         }
