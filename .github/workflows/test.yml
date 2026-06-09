@@ -66,8 +66,23 @@ jobs:
         with:
           uv-sync-args: --group test
 
-      - name: Rust tests
-        run: cargo test
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-insta
+
+      - name: Check for unreferenced snapshots
+        run: cargo insta test --unreferenced=reject
+
+      - name: Rust tests with coverage
+        run: cargo llvm-cov --cobertura --output-path cobertura.xml
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: cobertura.xml
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   python-tests:
     name: Test (Python ${{ matrix.python-version }})
@@ -119,41 +134,6 @@ jobs:
         with:
           files: coverage.xml
           flags: python
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
-
-  rust-coverage:
-    name: Rust Coverage
-    needs: rust-tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test
-          save-if: false
-
-      - uses: ./.github/actions/setup-python
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov,cargo-insta
-
-      - name: Check for unreferenced snapshots
-        run: cargo insta test --unreferenced=reject
-
-      - name: Run Rust coverage
-        run: cargo llvm-cov --cobertura --output-path cobertura.xml
-
-      - name: Upload Rust coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          files: cobertura.xml
-          flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
