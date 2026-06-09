@@ -39,6 +39,11 @@ fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 }
 
 #[pyfunction]
+fn builtin_markers() -> Vec<&'static str> {
+    crate::filter::BUILTIN_MARKERS.to_vec()
+}
+
+#[pyfunction]
 fn rewrite_asserts(
     py: Python<'_>,
     source: &str,
@@ -61,5 +66,6 @@ fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .try_init();
     m.add_function(wrap_pyfunction!(run, m)?)?;
     m.add_function(wrap_pyfunction!(rewrite_asserts, m)?)?;
+    m.add_function(wrap_pyfunction!(builtin_markers, m)?)?;
     Ok(())
 }

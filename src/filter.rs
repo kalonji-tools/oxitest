@@ -20,7 +20,8 @@ use crate::types::{CollectError, TestItem};
 // Marker *conditions* — skip(when=condition), xfail — are evaluated at execution time
 // by the mark handler registry in python/oxitest/_bridge/_mark_registry.py (_MARK_REGISTRY).
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
-const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
+pub(crate) const BUILTIN_MARKERS: &[&str] =
+    &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
 
 /// Check that every marker name on every item is either a built-in or registered.
 ///

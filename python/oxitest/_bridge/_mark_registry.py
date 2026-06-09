@@ -154,6 +154,8 @@ _MARK_REGISTRY: dict[str, MarkHandler] = {
     ]
 }
 
+_BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
+
 
 def evaluate_marks(
     marks: list[MarkInfo],
