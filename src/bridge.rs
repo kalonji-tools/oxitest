@@ -20,15 +20,18 @@ fn py_collect_err(e: PyErr) -> CollectError {
     CollectError::PyError(e.to_string())
 }
 
-/// Single traceback frame extracted from Python. Field names MUST stay in sync with
-/// `python/oxitest/_bridge/result.py` `Frame`.
-#[derive(FromPyObject)]
-struct BridgeFrame {
-    file: String,
-    lineno: usize,
-    name: String,
-    line: String,
-    locals: Vec<(String, String)>,
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::worker_result::RawFrame {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        Ok(Self {
+            file: ob.getattr("file")?.extract()?,
+            lineno: ob.getattr("lineno")?.extract()?,
+            name: ob.getattr("name")?.extract()?,
+            line: ob.getattr("line")?.extract()?,
+            locals: ob.getattr("locals")?.extract()?,
+        })
+    }
 }
 
 /// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
@@ -46,7 +49,7 @@ struct TestResult {
     strict: bool,
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
-    frames: Vec<BridgeFrame>,
+    frames: Vec<crate::worker_result::RawFrame>,
     field_diffs: Vec<(String, String, String)>,
 }
 
@@ -491,17 +494,7 @@ fn try_run_test_with_session_obj(
         )?
         .extract()?;
 
-    let frames: Vec<Frame> = r
-        .frames
-        .into_iter()
-        .map(|f| Frame {
-            file: Utf8PathBuf::from(f.file),
-            lineno: LineNo::new(f.lineno),
-            name: f.name,
-            line: f.line,
-            locals: f.locals,
-        })
-        .collect();
+    let frames: Vec<Frame> = r.frames.into_iter().map(Into::into).collect();
 
     let lineno = LineNo::new(r.lineno);
     let file = Utf8PathBuf::from(r.file);

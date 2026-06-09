@@ -46,8 +46,10 @@ pub(crate) struct WorkerTaskItem<'a> {
     pub markers: &'a [String],
 }
 
-#[derive(Debug, serde::Deserialize)]
-pub(crate) struct FrameEntry {
+/// Unified intermediate frame type used by both the JSON worker path
+/// (serde deserialize) and the PyO3 bridge path (FromPyObject impl in bridge.rs).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct RawFrame {
     pub file: String,
     pub lineno: u64,
     pub name: String,
@@ -56,14 +58,14 @@ pub(crate) struct FrameEntry {
     pub locals: Vec<(String, String)>,
 }
 
-impl From<&FrameEntry> for Frame {
-    fn from(f: &FrameEntry) -> Self {
+impl From<RawFrame> for Frame {
+    fn from(f: RawFrame) -> Self {
         Frame {
-            file: Utf8PathBuf::from(f.file.as_str()),
+            file: Utf8PathBuf::from(f.file),
             lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
-            name: f.name.clone(),
-            line: f.line.clone(),
-            locals: f.locals.clone(),
+            name: f.name,
+            line: f.line,
+            locals: f.locals,
         }
     }
 }
@@ -236,7 +238,7 @@ pub(crate) struct WireResult {
     #[serde(default)]
     pub strict: bool,
     #[serde(default)]
-    pub frames: Vec<FrameEntry>,
+    pub frames: Vec<RawFrame>,
     #[serde(default)]
     pub field_diffs: Vec<(String, String, String)>,
 }
@@ -254,7 +256,7 @@ impl WireResult {
             .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
 
-        let frames: Vec<Frame> = self.frames.iter().map(Frame::from).collect();
+        let frames: Vec<Frame> = self.frames.into_iter().map(Into::into).collect();
         let lineno = LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)));
         let file = Utf8PathBuf::from(self.file.unwrap_or_default());
         let source_line = self.source_line.unwrap_or_default();
