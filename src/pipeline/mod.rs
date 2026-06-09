@@ -21,7 +21,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 
 use crate::types::ExitCode;
-use crate::{bridge, cache, config, python_ast, query, reporter, strict, types};
+use crate::{bridge, cache, config, query, reporter, strict, types};
 use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
@@ -39,7 +39,7 @@ pub(crate) struct Prescanned {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
     /// Per-file prescan results: (path, items, has_dynamic).
-    pub(crate) prescan_data: Vec<(Utf8PathBuf, Vec<python_ast::PrescanItem>, bool)>,
+    pub(crate) prescan_data: Vec<(Utf8PathBuf, Vec<crate::prescan::PrescanItem>, bool)>,
     /// Module-level markers per file.
     #[allow(dead_code)]
     pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,

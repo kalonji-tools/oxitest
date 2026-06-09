@@ -12,7 +12,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
-use crate::python_ast::PrescanItem;
+use crate::prescan::PrescanItem;
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
@@ -713,7 +713,7 @@ mod tests {
 
     // ── Prescan filter helpers ───────────────────────────────────────────────
 
-    use crate::python_ast::{PrescanItem, PrescanMarker};
+    use crate::prescan::{PrescanItem, PrescanMarker};
 
     fn make_item(fn_name: &str) -> PrescanItem {
         PrescanItem {
