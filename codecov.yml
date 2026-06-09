@@ -31,6 +31,9 @@ ignore:
   - "src/reporter/bridge.rs"
   - "src/lib.rs"
   - "src/pipeline/traits.rs"
+  # Pipeline orchestration: only exercised through Python integration tests (subprocess)
+  - "src/pipeline/mod.rs"
+  - "src/pipeline/phases.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
