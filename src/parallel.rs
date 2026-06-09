@@ -37,8 +37,13 @@ pub(crate) fn kill_pool(mut pool: Vec<PrewarmedWorker>) {
     }
 }
 
-/// Channel item: (node_id, duration_ms, outcome, worker_id).
-pub(crate) type WorkerResult = (String, f64, WorkerOutcome, usize);
+/// Channel item carrying the result of one test execution from a worker thread.
+pub(crate) struct WorkerResult {
+    pub node_id: String,
+    pub duration_ms: f64,
+    pub outcome: WorkerOutcome,
+    pub worker_id: usize,
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum DrainOutcome {
@@ -105,7 +110,12 @@ pub(crate) fn drain_worker_results(
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
                         let (node_id, dur, outcome) = r.into_worker_outcome();
-                        let _ = tx.send((node_id, dur, outcome, worker_id));
+                        let _ = tx.send(WorkerResult {
+                            node_id,
+                            duration_ms: dur,
+                            outcome,
+                            worker_id,
+                        });
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, output = %trimmed, "bad worker output");
@@ -179,18 +189,23 @@ pub(crate) fn handle_drain_outcome(
             let _ = child.kill();
             for item in items.iter().skip(received) {
                 let (wo, dur) = WorkerOutcome::timed_out(watchdog);
-                let _ = tx.send((item.node_id.to_string(), dur, wo, worker_id));
+                let _ = tx.send(WorkerResult {
+                    node_id: item.node_id.to_string(),
+                    duration_ms: dur,
+                    outcome: wo,
+                    worker_id,
+                });
             }
             false
         }
         DrainOutcome::Disconnected => {
             for item in items.iter().skip(received) {
-                let _ = tx.send((
-                    item.node_id.to_string(),
-                    0.0,
-                    WorkerOutcome::crashed(),
+                let _ = tx.send(WorkerResult {
+                    node_id: item.node_id.to_string(),
+                    duration_ms: 0.0,
+                    outcome: WorkerOutcome::crashed(),
                     worker_id,
-                ));
+                });
             }
             false
         }
@@ -346,7 +361,13 @@ pub(crate) fn run_phase_parallel(
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-    for (node_id_str, duration_ms, worker_outcome, worker_id) in rx {
+    for result in rx {
+        let WorkerResult {
+            node_id: node_id_str,
+            duration_ms,
+            outcome: worker_outcome,
+            worker_id,
+        } = result;
         // Snapshot concurrent tests (excluding the one that just completed)
         let concurrent_tests: Vec<String> = {
             let mut set = in_flight.lock().unwrap();
