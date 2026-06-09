@@ -1,6 +1,29 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.0.0-alpha.1] - 2026-06-09
+
+### Bug Fixes
+
+
+- Address code review feedback
+
+### Features
+
+
+- Add shell completion generation via hidden `completions` subcommand (#786)
+- Add realistic benchmark tier and dogfood benchmarks (#831)
+- Add body weight computation to PrescanItem
+- Carry AST weight sum through pipeline
+- Blend AST fallback into estimated_duration for cold cache
+- Enforce BUILTIN_MARKERS cross-language sync with integration test (#841)
+
+### Performance
+
+
+- Add lazy collection benchmarks and document results (#825)
+- Pre-warm parallel workers to hide startup latency (#832)
+
 ## [0.14.0] - 2026-06-08
 
 ### Features
