@@ -725,6 +725,7 @@ mod tests {
             fixture_params: vec![],
             is_class_method: false,
             class_name: None,
+            body_weight_ms: 0.0,
         }
     }
 
