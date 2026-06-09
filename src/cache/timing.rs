@@ -537,4 +537,24 @@ mod tests {
         let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         assert!(cache.estimated_duration(&items, None).is_none());
     }
+
+    #[test]
+    fn ast_estimate_enables_parallel_decision() {
+        // Simulate: 30 heavy tests (below min_parallel_tests=100),
+        // each estimated at 50ms by AST → total 1500ms.
+        // With 4 workers and 250ms overhead: 1500 > 1000 → parallel.
+        let cache = TestCache::empty();
+        let items: Vec<Arc<TestItem>> = (0..30)
+            .map(|i| TestItem::builder_raw(&format!("tests/test_heavy.py::test_{i}")).arc())
+            .collect();
+
+        // Without AST fallback: None (would trigger count-based fallback)
+        assert!(cache.estimated_duration(&items, None).is_none());
+
+        // With AST fallback: 1500ms total
+        let est = cache.estimated_duration(&items, Some(1500.0)).unwrap();
+        assert_eq!(est.as_millis(), 1500);
+        // 1500ms > 250ms × 4 workers (1000ms) → parallel decision
+        assert!(est.as_millis() as f64 > 250.0 * 4.0);
+    }
 }
