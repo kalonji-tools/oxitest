@@ -147,10 +147,21 @@ pub(crate) struct WorkerParams {
     pub in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
 }
 
-pub(crate) fn spawn_worker(
-    python_bin: std::sync::Arc<str>,
+/// Runs the task-dispatch loop for a single worker.
+///
+/// Consumes the already-established subprocess handles (`child`, `stdin`, `line_rx`)
+/// together with `params` and drives the worker until the scheduler is drained,
+/// cancellation is requested, or the subprocess becomes unresponsive.
+///
+/// Extracted from the formerly-duplicated bodies of [`spawn_worker`] and
+/// [`spawn_worker_with_process`]; both public functions are now thin wrappers
+/// that supply the handles and delegate here.
+fn run_worker_loop(
+    mut child: std::process::Child,
+    stdin: std::io::BufWriter<std::process::ChildStdin>,
+    line_rx: crossbeam_channel::Receiver<String>,
     params: WorkerParams,
-) -> std::thread::JoinHandle<()> {
+) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
@@ -178,78 +189,84 @@ pub(crate) fn spawn_worker(
         .map(|t| Duration::from_secs(t.saturating_add(30)))
         .unwrap_or(Duration::from_secs(600));
 
+    let mut session = WorkerSession::new(stdin, line_rx, watchdog);
+    let mut subprocess_alive = true;
+
+    while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
+        let Some(group) = sched.pop() else { break };
+
+        let task = WorkerTask {
+            module_path: group.module_path.as_str(),
+            items: group
+                .items
+                .iter()
+                .map(|item| WorkerTaskItem {
+                    fn_name: &item.fn_name,
+                    param_id: item.param_id.as_deref(),
+                    node_id: &item.node_id,
+                    markers: &item.markers,
+                })
+                .collect(),
+            conftest_paths: &conftest_json,
+            timeout_secs,
+            keep_tmp: keep_tmp.as_deref(),
+            show_locals: if show_locals { Some(true) } else { None },
+            show_internals: if show_internals { Some(true) } else { None },
+        };
+
+        if let Err(e) = session.send_task(&task) {
+            tracing::warn!(
+                module = %group.module_path,
+                error = %e,
+                "failed to send task to worker — emitting error for all group items"
+            );
+            for item in &group.items {
+                let _ = tx.send((
+                    item.node_id.to_string(),
+                    0.0,
+                    WorkerOutcome::crashed(),
+                    worker_id,
+                ));
+            }
+            break;
+        }
+
+        {
+            let mut set = in_flight.lock().unwrap();
+            for item in &group.items {
+                set.insert(item.node_id.to_string());
+            }
+        }
+
+        let expected = group.items.len();
+        let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
+
+        subprocess_alive = handle_drain_outcome(
+            drain_outcome,
+            &mut child,
+            &group.items,
+            received,
+            watchdog,
+            &group.module_path,
+            &tx,
+            worker_id,
+        );
+    }
+
+    drop(session);
+    let _ = child.wait();
+}
+
+pub(crate) fn spawn_worker(
+    python_bin: std::sync::Arc<str>,
+    params: WorkerParams,
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
-        let (mut child, worker_stdin, line_rx) = match setup_worker_process(&python_bin) {
+        let (child, stdin, line_rx) = match setup_worker_process(&python_bin) {
             Some(v) => v,
             None => return,
         };
-
-        let mut session = WorkerSession::new(worker_stdin, line_rx, watchdog);
-        let mut subprocess_alive = true;
-
-        while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
-            let Some(group) = sched.pop() else { break };
-
-            let task = WorkerTask {
-                module_path: group.module_path.as_str(),
-                items: group
-                    .items
-                    .iter()
-                    .map(|item| WorkerTaskItem {
-                        fn_name: &item.fn_name,
-                        param_id: item.param_id.as_deref(),
-                        node_id: &item.node_id,
-                        markers: &item.markers,
-                    })
-                    .collect(),
-                conftest_paths: &conftest_json,
-                timeout_secs,
-                keep_tmp: keep_tmp.as_deref(),
-                show_locals: if show_locals { Some(true) } else { None },
-                show_internals: if show_internals { Some(true) } else { None },
-            };
-
-            if let Err(e) = session.send_task(&task) {
-                tracing::warn!(
-                    module = %group.module_path,
-                    error = %e,
-                    "failed to send task to worker — emitting error for all group items"
-                );
-                for item in &group.items {
-                    let _ = tx.send((
-                        item.node_id.to_string(),
-                        0.0,
-                        WorkerOutcome::crashed(),
-                        worker_id,
-                    ));
-                }
-                break;
-            }
-
-            {
-                let mut set = in_flight.lock().unwrap();
-                for item in &group.items {
-                    set.insert(item.node_id.to_string());
-                }
-            }
-
-            let expected = group.items.len();
-            let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
-
-            subprocess_alive = handle_drain_outcome(
-                drain_outcome,
-                &mut child,
-                &group.items,
-                received,
-                watchdog,
-                &group.module_path,
-                &tx,
-                worker_id,
-            );
-        }
-
-        drop(session);
-        let _ = child.wait();
+        run_worker_loop(child, stdin, line_rx, params);
     })
 }
 
@@ -264,95 +281,9 @@ pub(crate) fn spawn_worker_with_process(
     ),
     params: WorkerParams,
 ) -> std::thread::JoinHandle<()> {
-    use std::sync::atomic::Ordering;
-    use std::time::Duration;
-
-    let WorkerParams {
-        worker_id,
-        sched,
-        cancelled,
-        conftest_json,
-        timeout_secs,
-        keep_tmp,
-        show_locals,
-        show_internals,
-        tx,
-        in_flight,
-    } = params;
-
-    let watchdog: Duration = timeout_secs
-        .map(|t| Duration::from_secs(t.saturating_add(30)))
-        .unwrap_or(Duration::from_secs(600));
-
     std::thread::spawn(move || {
-        let (mut child, worker_stdin, line_rx) = prewarmed;
-
-        let mut session = WorkerSession::new(worker_stdin, line_rx, watchdog);
-        let mut subprocess_alive = true;
-
-        while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
-            let Some(group) = sched.pop() else { break };
-
-            let task = WorkerTask {
-                module_path: group.module_path.as_str(),
-                items: group
-                    .items
-                    .iter()
-                    .map(|item| WorkerTaskItem {
-                        fn_name: &item.fn_name,
-                        param_id: item.param_id.as_deref(),
-                        node_id: &item.node_id,
-                        markers: &item.markers,
-                    })
-                    .collect(),
-                conftest_paths: &conftest_json,
-                timeout_secs,
-                keep_tmp: keep_tmp.as_deref(),
-                show_locals: if show_locals { Some(true) } else { None },
-                show_internals: if show_internals { Some(true) } else { None },
-            };
-
-            if let Err(e) = session.send_task(&task) {
-                tracing::warn!(
-                    module = %group.module_path,
-                    error = %e,
-                    "failed to send task to worker — emitting error for all group items"
-                );
-                for item in &group.items {
-                    let _ = tx.send((
-                        item.node_id.to_string(),
-                        0.0,
-                        WorkerOutcome::crashed(),
-                        worker_id,
-                    ));
-                }
-                break;
-            }
-
-            {
-                let mut set = in_flight.lock().unwrap();
-                for item in &group.items {
-                    set.insert(item.node_id.to_string());
-                }
-            }
-
-            let expected = group.items.len();
-            let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
-
-            subprocess_alive = handle_drain_outcome(
-                drain_outcome,
-                &mut child,
-                &group.items,
-                received,
-                watchdog,
-                &group.module_path,
-                &tx,
-                worker_id,
-            );
-        }
-
-        drop(session);
-        let _ = child.wait();
+        let (child, stdin, line_rx) = prewarmed;
+        run_worker_loop(child, stdin, line_rx, params);
     })
 }
 
