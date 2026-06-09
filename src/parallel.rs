@@ -11,7 +11,7 @@
 use crate::{
     config, reporter, scheduler, types,
     worker_result::{WireResult, WorkerOutcome},
-    worker_session::{spawn_worker, spawn_worker_with_process},
+    worker_session::{spawn_worker, spawn_worker_with_process, WorkerParams},
 };
 
 /// A pre-spawned worker subprocess ready for task dispatch.
@@ -315,34 +315,22 @@ pub(crate) fn run_phase_parallel(
     let mut prewarmed = pool.unwrap_or_default();
     let handles: Vec<_> = (0..worker_count)
         .map(|i| {
+            let worker_params = WorkerParams {
+                worker_id: i,
+                sched: Arc::clone(&sched),
+                cancelled: Arc::clone(&cancelled),
+                conftest_json: std::sync::Arc::clone(&conftest_raw),
+                timeout_secs,
+                keep_tmp: keep_tmp.clone(),
+                show_locals,
+                show_internals,
+                tx: tx.clone(),
+                in_flight: std::sync::Arc::clone(&in_flight),
+            };
             if let Some(pw) = prewarmed.pop() {
-                spawn_worker_with_process(
-                    pw,
-                    i,
-                    Arc::clone(&sched),
-                    Arc::clone(&cancelled),
-                    std::sync::Arc::clone(&conftest_raw),
-                    timeout_secs,
-                    keep_tmp.clone(),
-                    show_locals,
-                    show_internals,
-                    tx.clone(),
-                    std::sync::Arc::clone(&in_flight),
-                )
+                spawn_worker_with_process(pw, worker_params)
             } else {
-                spawn_worker(
-                    Arc::clone(&python_bin),
-                    i,
-                    Arc::clone(&sched),
-                    Arc::clone(&cancelled),
-                    std::sync::Arc::clone(&conftest_raw),
-                    timeout_secs,
-                    keep_tmp.clone(),
-                    show_locals,
-                    show_internals,
-                    tx.clone(),
-                    std::sync::Arc::clone(&in_flight),
-                )
+                spawn_worker(Arc::clone(&python_bin), worker_params)
             }
         })
         .collect();
