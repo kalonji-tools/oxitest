@@ -347,6 +347,8 @@ pub(crate) struct PrescanItem {
     pub(crate) fixture_params: Vec<String>,
     pub(crate) is_class_method: bool,
     pub(crate) class_name: Option<String>,
+    /// Estimated execution time in milliseconds, derived from AST analysis.
+    pub(crate) body_weight_ms: f64,
 }
 
 /// Result of pre-scanning a Python file for test functions.
@@ -368,6 +370,9 @@ pub(crate) enum PrescanResult {
         has_dynamic_collection: bool,
         /// Module-level marks from `oxi_mark = mark.NAME` assignments.
         module_markers: Vec<String>,
+        /// Sum of heavy-import weight for this module (20.0 per heavy package detected).
+        #[allow(dead_code)]
+        heavy_import_weight_ms: f64,
     },
     /// File has no test functions.
     NoTests,
@@ -708,12 +713,138 @@ fn extract_mark_from_value(expr: &ast::Expr) -> Option<String> {
     None
 }
 
+/// Heavy-import packages whose presence in a module adds weight to every test.
+const HEAVY_IMPORT_PACKAGES: &[&str] = &[
+    "requests",
+    "httpx",
+    "aiohttp",
+    "sqlalchemy",
+    "django",
+    "boto3",
+    "psycopg2",
+    "pymongo",
+    "selenium",
+    "playwright",
+];
+
+/// Detect `time.sleep(N)` calls in a statement body.
+///
+/// Returns the sleep weight in milliseconds:
+/// - Literal float/int N → N × 1000 ms
+/// - Dynamic arg → 50 ms
+/// - No sleep call → 0 ms
+fn detect_sleep_call(stmt: &ast::Stmt) -> f64 {
+    let call = match stmt {
+        ast::Stmt::Expr(e) => match &*e.value {
+            ast::Expr::Call(c) => c,
+            _ => return 0.0,
+        },
+        _ => return 0.0,
+    };
+
+    // Match `time.sleep(...)`
+    let is_time_sleep = match &*call.func {
+        ast::Expr::Attribute(attr) => {
+            attr.attr.as_str() == "sleep"
+                && matches!(&*attr.value, ast::Expr::Name(n) if n.id.as_str() == "time")
+        }
+        _ => false,
+    };
+
+    if !is_time_sleep {
+        return 0.0;
+    }
+
+    // Evaluate the argument
+    if let Some(arg) = call.args.first() {
+        match arg {
+            ast::Expr::Constant(c) => match &c.value {
+                ast::Constant::Float(f) => return f * 1000.0,
+                ast::Constant::Int(i) => {
+                    // Convert BigInt to f64
+                    let n: f64 = i.to_string().parse().unwrap_or(0.0);
+                    return n * 1000.0;
+                }
+                _ => return 50.0,
+            },
+            _ => return 50.0,
+        }
+    }
+    50.0
+}
+
+/// Compute the body weight for a single test function body.
+///
+/// Formula per test:
+/// ```text
+/// body_weight_ms = 2.0 (base)
+///     + sleep_weight (from body walk)
+///     + if is_async { 10.0 } else { 0.0 }
+///     + fixture_params.len() * 3.0
+///     + stmt_count / 10.0
+///     + heavy_import_weight (20.0 if module imports a heavy package)
+/// ```
+fn compute_body_weight(
+    body: &[ast::Stmt],
+    is_async: bool,
+    fixture_count: usize,
+    heavy_import_weight: f64,
+) -> f64 {
+    let mut sleep_weight = 0.0;
+    let mut stmt_count = 0usize;
+
+    let mut queue: Vec<&ast::Stmt> = body.iter().collect();
+    while let Some(stmt) = queue.pop() {
+        // Prune nested functions
+        match stmt {
+            ast::Stmt::FunctionDef(_) | ast::Stmt::AsyncFunctionDef(_) => continue,
+            _ => {}
+        }
+        stmt_count += 1;
+        sleep_weight += detect_sleep_call(stmt);
+        queue.extend(compound_children(stmt));
+    }
+
+    2.0 + sleep_weight
+        + if is_async { 10.0 } else { 0.0 }
+        + fixture_count as f64 * 3.0
+        + stmt_count as f64 / 10.0
+        + heavy_import_weight
+}
+
+/// Detect heavy third-party imports in the top-level module statements.
+///
+/// Returns 20.0 if any heavy package is found, 0.0 otherwise.
+pub(crate) fn detect_heavy_imports(stmts: &[ast::Stmt]) -> f64 {
+    for stmt in stmts {
+        match stmt {
+            ast::Stmt::Import(imp) => {
+                for alias in &imp.names {
+                    let top = alias.name.as_str().split('.').next().unwrap_or("");
+                    if HEAVY_IMPORT_PACKAGES.contains(&top) {
+                        return 20.0;
+                    }
+                }
+            }
+            ast::Stmt::ImportFrom(imp) => {
+                let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
+                let top = module.split('.').next().unwrap_or("");
+                if HEAVY_IMPORT_PACKAGES.contains(&top) {
+                    return 20.0;
+                }
+            }
+            _ => {}
+        }
+    }
+    0.0
+}
+
 /// Build a [`PrescanItem`] from any function-def node (sync or async).
 ///
 /// `$f` must be either `ast::StmtFunctionDef` or `ast::StmtAsyncFunctionDef` — both
 /// expose `.name`, `.decorator_list`, `.args`, and `.range`.
 macro_rules! build_prescan_item {
-    ($f:expr, $is_async:expr, $is_class_method:expr, $class_name:expr, $line_index:expr) => {{
+    ($f:expr, $is_async:expr, $is_class_method:expr, $class_name:expr, $line_index:expr, $heavy_import_weight:expr) => {{
         let markers: Vec<PrescanMarker> = $f
             .decorator_list
             .iter()
@@ -722,6 +853,12 @@ macro_rules! build_prescan_item {
         let param_ids = extract_parametrize_kwarg_names(&$f.decorator_list);
         let fixture_params = extract_fixture_param_names(&$f.args);
         let lineno = offset_to_line($line_index, $f.range.start().to_u32());
+        let body_weight_ms = compute_body_weight(
+            &$f.body,
+            $is_async,
+            fixture_params.len(),
+            $heavy_import_weight,
+        );
         PrescanItem {
             fn_name: $f.name.to_string(),
             lineno,
@@ -731,6 +868,7 @@ macro_rules! build_prescan_item {
             fixture_params,
             is_class_method: $is_class_method,
             class_name: $class_name,
+            body_weight_ms,
         }
     }};
 }
@@ -752,16 +890,32 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     let mut adjusted_test_count = 0;
     let mut items = Vec::new();
 
+    let heavy_import_weight = detect_heavy_imports(&parsed.1);
+
     for stmt in &parsed.1 {
         if is_test_function(stmt) {
             test_count += 1;
             adjusted_test_count += count_parametrize_cases(stmt);
             match stmt {
                 ast::Stmt::FunctionDef(f) => {
-                    items.push(build_prescan_item!(f, false, false, None, &line_index));
+                    items.push(build_prescan_item!(
+                        f,
+                        false,
+                        false,
+                        None,
+                        &line_index,
+                        heavy_import_weight
+                    ));
                 }
                 ast::Stmt::AsyncFunctionDef(f) => {
-                    items.push(build_prescan_item!(f, true, false, None, &line_index));
+                    items.push(build_prescan_item!(
+                        f,
+                        true,
+                        false,
+                        None,
+                        &line_index,
+                        heavy_import_weight
+                    ));
                 }
                 _ => {}
             }
@@ -779,7 +933,8 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
                                     false,
                                     true,
                                     Some(class_name.clone()),
-                                    &line_index
+                                    &line_index,
+                                    heavy_import_weight
                                 ));
                             }
                             ast::Stmt::AsyncFunctionDef(f) => {
@@ -788,7 +943,8 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
                                     true,
                                     true,
                                     Some(class_name.clone()),
-                                    &line_index
+                                    &line_index,
+                                    heavy_import_weight
                                 ));
                             }
                             _ => {}
@@ -815,6 +971,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             items,
             has_dynamic_collection,
             module_markers,
+            heavy_import_weight_ms: heavy_import_weight,
         }
     } else {
         PrescanResult::HasTests {
@@ -825,6 +982,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             items,
             has_dynamic_collection,
             module_markers,
+            heavy_import_weight_ms: heavy_import_weight,
         }
     }
 }
@@ -1559,5 +1717,107 @@ def test_it():
             panic!("expected HasTests");
         };
         assert!(has_dynamic_collection);
+    }
+
+    // ── body_weight_ms ──────────────────────────────────────────────
+
+    fn get_item_weight(content: &str) -> f64 {
+        let f = write_temp_py(content);
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests { items, .. } => {
+                assert!(!items.is_empty(), "expected at least one test item");
+                items[0].body_weight_ms
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn body_weight_base_only() {
+        // Minimal test: base = 2.0, no async, no fixtures, 1 stmt (pass), no heavy imports
+        // 2.0 + 0.0 + 0.0 + 0.0 + 1/10 = 2.1
+        let w = get_item_weight("def test_it():\n    pass\n");
+        assert!((w - 2.1).abs() < 0.01, "expected ~2.1, got {w}");
+    }
+
+    #[test]
+    fn body_weight_sleep_literal_int() {
+        // time.sleep(2) -> 2000ms sleep weight; pass is 1 stmt
+        // 2.0 + 2000.0 + 0.0 + 0.0 + 2/10 = 2002.2
+        let w = get_item_weight("import time\ndef test_it():\n    time.sleep(2)\n    pass\n");
+        assert!((w - 2002.2).abs() < 0.1, "expected ~2002.2, got {w}");
+    }
+
+    #[test]
+    fn body_weight_sleep_literal_float() {
+        // time.sleep(0.5) -> 500ms sleep weight; pass is 1 stmt
+        // 2.0 + 500.0 + 0.0 + 0.0 + 2/10 = 502.2
+        let w = get_item_weight("import time\ndef test_it():\n    time.sleep(0.5)\n    pass\n");
+        assert!((w - 502.2).abs() < 0.1, "expected ~502.2, got {w}");
+    }
+
+    #[test]
+    fn body_weight_sleep_dynamic_arg() {
+        // time.sleep(DELAY) -> 50ms dynamic sleep weight; pass is 1 stmt
+        // 2.0 + 50.0 + 0.0 + 0.0 + 2/10 = 52.2
+        let w = get_item_weight("import time\ndef test_it():\n    time.sleep(DELAY)\n    pass\n");
+        assert!((w - 52.2).abs() < 0.1, "expected ~52.2, got {w}");
+    }
+
+    #[test]
+    fn body_weight_async_bonus() {
+        // async test: base + async bonus + pass stmt
+        // 2.0 + 10.0 + 0.0 + 0.0 + 1/10 = 12.1
+        let w = get_item_weight("async def test_it():\n    pass\n");
+        assert!((w - 12.1).abs() < 0.01, "expected ~12.1, got {w}");
+    }
+
+    #[test]
+    fn body_weight_fixture_params() {
+        // 2 fixtures: 2.0 + 0.0 + 0.0 + 2*3.0 + 1/10 = 8.1
+        let w = get_item_weight(
+            "from oxitest import Fixture\ndef test_it(a: Fixture[str], b: Fixture[int]):\n    pass\n",
+        );
+        assert!((w - 8.1).abs() < 0.01, "expected ~8.1, got {w}");
+    }
+
+    #[test]
+    fn body_weight_many_statements() {
+        // 10 statements in body: base + 10/10 = 2.0 + 1.0 = 3.0
+        let content = "def test_it():\n".to_string() + &"    x = 1\n".repeat(10);
+        let w = get_item_weight(&content);
+        assert!((w - 3.0).abs() < 0.01, "expected ~3.0, got {w}");
+    }
+
+    // ── detect_heavy_imports ─────────────────────────────────────────
+
+    #[test]
+    fn heavy_imports_requests() {
+        let f = write_temp_py("import requests\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(detect_heavy_imports(&stmts), 20.0);
+    }
+
+    #[test]
+    fn heavy_imports_sqlalchemy_from_import() {
+        let f = write_temp_py("from sqlalchemy import create_engine\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(detect_heavy_imports(&stmts), 20.0);
+    }
+
+    #[test]
+    fn heavy_imports_no_heavy() {
+        let f = write_temp_py("import os\nimport sys\ndef test_it(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert_eq!(detect_heavy_imports(&stmts), 0.0);
+    }
+
+    #[test]
+    fn body_weight_heavy_import_adds_20() {
+        // requests import adds 20.0 to each test's weight
+        // 2.0 + 0.0 + 0.0 + 0.0 + 1/10 + 20.0 = 22.1
+        let w = get_item_weight("import requests\ndef test_it():\n    pass\n");
+        assert!((w - 22.1).abs() < 0.01, "expected ~22.1, got {w}");
     }
 }
