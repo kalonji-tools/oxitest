@@ -20,7 +20,6 @@ PYTHON_PATH = ROOT / "python" / "oxitest" / "_bridge" / "result.py"
 # Rust struct name -> Python class name
 PAIRS = {
     "TestResult": "TestResult",
-    "BridgeFrame": "Frame",
     "CollectedItem": "CollectedItem",
     "RawViolation": "CollectedViolation",
 }
@@ -188,6 +187,28 @@ def main() -> int:
                 print(f"  Python-only fields: {sorted(py_only)}")
             errors += 1
 
+    # ── RawFrame check (manual FromPyObject impl, lives in worker_result.rs) ──
+    raw_frame_fields = _parse_serde_struct_fields(
+        WIRE_RUST_PATH.read_text(), "RawFrame"
+    )
+    py_frame_fields = python.get("Frame")
+    if not raw_frame_fields:
+        print(f"ERROR: RawFrame not found in {WIRE_RUST_PATH}")
+        errors += 1
+    elif py_frame_fields is None:
+        print(f"ERROR: Python class 'Frame' not found in {PYTHON_PATH}")
+        errors += 1
+    else:
+        rust_only = raw_frame_fields - py_frame_fields
+        py_only = py_frame_fields - raw_frame_fields
+        if rust_only or py_only:
+            print("MISMATCH: RawFrame (Rust) vs Frame (Python)")
+            if rust_only:
+                print(f"  Rust-only fields: {sorted(rust_only)}")
+            if py_only:
+                print(f"  Python-only fields: {sorted(py_only)}")
+            errors += 1
+
     # ── Wire format check ─────────────────────────────────────────────
     rust_wire = parse_worker_result_fields(WIRE_RUST_PATH)
     py_wire = parse_to_wire_fields(PYTHON_PATH)
@@ -231,7 +252,7 @@ def main() -> int:
             errors += 1
 
     if errors == 0:
-        total = len(PAIRS) + len(REPORTER_PAIRS)
+        total = len(PAIRS) + len(REPORTER_PAIRS) + 1  # +1 for RawFrame
         print(f"OK: all {total} bridge contracts + wire format + task format in sync")
     return 1 if errors else 0
 
