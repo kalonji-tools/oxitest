@@ -19,6 +19,7 @@ TIERS: dict[str, int] = {
     "s": 150,
     "m": 500,
     "l": 1000,
+    "realistic": 500,
 }
 
 TESTS_PER_FILE = 12
@@ -105,6 +106,67 @@ def _oxitest_file(file_idx: int, test_offset: int) -> str:
     return "\n".join(lines)
 
 
+def _oxitest_realistic_file(file_idx: int, test_offset: int) -> str:
+    """Like _oxitest_file but every test body includes time.sleep(0.01)."""
+    lines = [
+        "from __future__ import annotations",
+        "",
+        "import time",
+        "from dataclasses import dataclass",
+        "",
+        "import oxitest as oxi",
+        "",
+    ]
+    idx = test_offset
+
+    # Trivial tests with sleep (~50%)
+    for _ in range(TRIVIAL_PER_FILE):
+        lines.append("")
+        lines.append(f"def test_trivial_{idx}() -> None:")
+        lines.append("    time.sleep(0.01)")
+        lines.append(f"    d = {{}}; d['k{idx}'] = {idx}")
+        lines.append(f"    assert d['k{idx}'] == {idx}, ''")
+        idx += 1
+
+    # Fixture tests with sleep (~30%)
+    for i in range(FIXTURE_PER_FILE):
+        lines.append("")
+        if i == 0:
+            lines.append(
+                f"def test_fixture_{idx}(seed_data: oxi.Fixture[dict]) -> None:"
+            )
+            lines.append("    time.sleep(0.01)")
+            lines.append("    assert 'key_0' in seed_data, ''")
+        else:
+            lines.append(f"def test_fixture_{idx}(data: oxi.Fixture[dict]) -> None:")
+            lines.append("    time.sleep(0.01)")
+            lines.append(f"    data['k{idx}'] = {idx}")
+            lines.append(f"    assert data['k{idx}'] == {idx}, ''")
+        idx += 1
+
+    # Parametrize tests with sleep (~20%)
+    for _ in range(PARAMETRIZE_PER_FILE):
+        lines.append("")
+        lines.append("@dataclass(frozen=True)")
+        lines.append(f"class Case{idx}:")
+        lines.append("    value: int")
+        lines.append("")
+        cases = ", ".join(
+            f"c{c}=Case{idx}(value={c})" for c in range(PARAMETRIZE_CASES)
+        )
+        lines.append(f"@oxi.parametrize({cases})")
+        lines.append(
+            f"def test_param_{idx}(case: Case{idx}, data: oxi.Fixture[dict]) -> None:"
+        )
+        lines.append("    time.sleep(0.01)")
+        lines.append(f"    data['k{idx}'] = case.value")
+        lines.append(f"    assert data['k{idx}'] == case.value, ''")
+        idx += 1
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _pytest_file(file_idx: int, test_offset: int) -> str:
     lines = [
         "from __future__ import annotations",
@@ -176,7 +238,11 @@ def generate() -> None:
         file_count = max(1, total_tests // TESTS_PER_FILE)
 
         for variant, writer, needs_conftest in [
-            ("oxitest", _oxitest_file, True),
+            (
+                "oxitest",
+                _oxitest_realistic_file if tier_name == "realistic" else _oxitest_file,
+                True,
+            ),
             ("pytest", _pytest_file, False),
         ]:
             tier_dir = GENERATED / tier_name / variant
