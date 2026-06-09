@@ -2,6 +2,10 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override version (e.g. 1.0.0). Leave empty for auto-bump.'
+        required: false
 
 permissions: {}
 
@@ -39,7 +43,11 @@ jobs:
         id: version
         run: |
           CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          NEXT=$(git-cliff --bumped-version | sed 's/^v//')
+          if [ -n "${{ inputs.version_override }}" ]; then
+            NEXT="${{ inputs.version_override }}"
+          else
+            NEXT=$(git-cliff --bumped-version | sed 's/^v//')
+          fi
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           if [ "$CURRENT" = "$NEXT" ]; then
@@ -50,7 +58,7 @@ jobs:
 
       - name: Update changelog
         run: |
-          git-cliff --bump -o CHANGELOG.md
+          git-cliff --tag "v${{ steps.version.outputs.next }}" -o CHANGELOG.md
           sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' CHANGELOG.md
 
       - name: Update Cargo.toml version
