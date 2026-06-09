@@ -221,12 +221,12 @@ fn run_worker_loop(
                 "failed to send task to worker — emitting error for all group items"
             );
             for item in &group.items {
-                let _ = tx.send((
-                    item.node_id.to_string(),
-                    0.0,
-                    WorkerOutcome::crashed(),
+                let _ = tx.send(crate::parallel::WorkerResult {
+                    node_id: item.node_id.to_string(),
+                    duration_ms: 0.0,
+                    outcome: WorkerOutcome::crashed(),
                     worker_id,
-                ));
+                });
             }
             break;
         }
