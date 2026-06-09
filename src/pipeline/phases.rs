@@ -71,9 +71,9 @@ impl Pipeline<FilesCollected> {
         let mut ast_weight_sum = 0.0f64;
 
         for file in &self.state.test_files {
-            let result = crate::python_ast::prescan_with_ast(file, false);
+            let result = crate::prescan::prescan_with_ast(file, false);
             match result {
-                crate::python_ast::PrescanResult::HasTests {
+                crate::prescan::PrescanResult::HasTests {
                     items,
                     has_dynamic_collection,
                     module_markers: file_marks,
@@ -85,10 +85,10 @@ impl Pipeline<FilesCollected> {
                         module_markers.insert(file.clone(), file_marks);
                     }
                 }
-                crate::python_ast::PrescanResult::NoTests => {
+                crate::prescan::PrescanResult::NoTests => {
                     tracing::debug!(path = file.as_str(), "prescan: no tests, skipping");
                 }
-                crate::python_ast::PrescanResult::Unavailable => {
+                crate::prescan::PrescanResult::Unavailable => {
                     prescan_data.push((file.clone(), vec![], true));
                 }
             }
@@ -289,13 +289,13 @@ impl Pipeline<Prescanned> {
                     // so expression filtering sees module marks on every item.
                     let file_marks = self.state.module_markers.get(path);
                     if let Some(marks) = file_marks {
-                        let augmented: Vec<crate::python_ast::PrescanItem> = items
+                        let augmented: Vec<crate::prescan::PrescanItem> = items
                             .iter()
                             .map(|item| {
                                 let mut aug = item.clone();
                                 for m in marks {
                                     if !aug.markers.iter().any(|em| em.name == *m) {
-                                        aug.markers.push(crate::python_ast::PrescanMarker {
+                                        aug.markers.push(crate::prescan::PrescanMarker {
                                             name: m.clone(),
                                             has_dynamic_args: false,
                                         });
