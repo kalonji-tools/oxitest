@@ -220,7 +220,7 @@ impl Pipeline<Prescanned> {
             }));
         }
 
-        let mut modules_to_import = Vec::new();
+        // Prepare filter inputs once before the loop.
         let expression = match &self.command {
             config::Command::Run(a) => a.filter.expression.clone(),
             config::Command::Debug(a) => a.filter.expression.clone(),
@@ -233,74 +233,21 @@ impl Pipeline<Prescanned> {
         };
         let node_ids: Vec<String> = self.cfg.node_ids.iter().map(|n| n.to_string()).collect();
 
+        let mut modules_to_import = Vec::new();
         for (path, items, has_dynamic) in &self.state.prescan_data {
             if *has_dynamic {
                 modules_to_import.push(path.clone());
                 continue;
             }
-
-            // For each active filter type, check if any item in the file matches.
-            // All active filters must have at least one match for the file to be included.
-            let mut dominated = true;
-
-            if has_node_ids {
-                // Only apply node ID filtering to files that came from node ID args,
-                // not bare path args. Files from bare paths pass through unconditionally.
-                let is_node_id_source = self.cfg.node_id_source_files.is_empty()
-                    || self.cfg.node_id_source_files.contains(path);
-                if is_node_id_source {
-                    let matched =
-                        filter::filter_prescan_by_node_ids(items, path.as_str(), &node_ids);
-                    if matched.is_empty() {
-                        dominated = false;
-                    }
-                }
-            }
-
-            if dominated {
-                if let Some(ref expr) = expression {
-                    // If the file has module-level marks, augment items with them
-                    // so expression filtering sees module marks on every item.
-                    let file_marks = self.state.module_markers.get(path);
-                    if let Some(marks) = file_marks {
-                        let augmented: Vec<crate::prescan::PrescanItem> = items
-                            .iter()
-                            .map(|item| {
-                                let mut aug = item.clone();
-                                for m in marks {
-                                    if !aug.markers.iter().any(|em| em.name == *m) {
-                                        aug.markers.push(crate::prescan::PrescanMarker {
-                                            name: m.clone(),
-                                            has_dynamic_args: false,
-                                        });
-                                    }
-                                }
-                                aug
-                            })
-                            .collect();
-                        let matched =
-                            filter::filter_prescan_by_expression(&augmented, path.as_str(), expr);
-                        if matched.is_empty() {
-                            dominated = false;
-                        }
-                    } else {
-                        let matched =
-                            filter::filter_prescan_by_expression(items, path.as_str(), expr);
-                        if matched.is_empty() {
-                            dominated = false;
-                        }
-                    }
-                }
-            }
-
-            if dominated && has_failed_filter && !failed_ids.is_empty() {
-                let matched = filter::filter_prescan_last_failed(items, path.as_str(), &failed_ids);
-                if matched.is_empty() {
-                    dominated = false;
-                }
-            }
-
-            if dominated {
+            if self.file_passes_all_filters(
+                path,
+                items,
+                has_node_ids,
+                has_failed_filter,
+                &node_ids,
+                expression.as_deref(),
+                &failed_ids,
+            ) {
                 modules_to_import.push(path.clone());
             }
         }
@@ -322,6 +269,46 @@ impl Pipeline<Prescanned> {
             modules_to_import,
             is_filtered: true,
         }))
+    }
+
+    /// Returns true if the file should be imported given the active filters.
+    ///
+    /// Uses early-return false for each failing filter (AND semantics, short-circuit).
+    #[allow(clippy::too_many_arguments)]
+    fn file_passes_all_filters(
+        &self,
+        path: &camino::Utf8Path,
+        items: &[crate::prescan::PrescanItem],
+        has_node_ids: bool,
+        has_failed_filter: bool,
+        node_ids: &[String],
+        expression: Option<&str>,
+        failed_ids: &std::collections::HashSet<String>,
+    ) -> bool {
+        if has_node_ids {
+            // Only apply node ID filtering to files that came from node ID args,
+            // not bare path args. Files from bare paths pass through unconditionally.
+            let is_node_id_source = self.cfg.node_id_source_files.is_empty()
+                || self.cfg.node_id_source_files.contains(path);
+            if is_node_id_source && !filter::file_matches_node_ids(items, path.as_str(), node_ids) {
+                return false;
+            }
+        }
+
+        if let Some(expr) = expression {
+            let module_marks = self.state.module_markers.get(path).map(|v| v.as_slice());
+            if !filter::file_matches_expression(items, path.as_str(), expr, module_marks) {
+                return false;
+            }
+        }
+
+        if has_failed_filter && !failed_ids.is_empty() {
+            if !filter::file_matches_last_failed(items, path.as_str(), failed_ids) {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
