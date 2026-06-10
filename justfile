@@ -31,7 +31,7 @@ _log color msg:
 # ── Recipes ──────────────────────────────────────────────────────────────────
 
 # Show available recipes
-help:
+default:
     @just --list
 
 # Build the Rust extension
@@ -39,59 +39,41 @@ build *args: (_log _green "Building extension...")
     {{fix_env}} uv sync --group build
     {{maturin_env}} maturin develop {{args}}
 
-# Build extension and run Python tests
-test *args: build
-    @just _log {{_blue}} "Running Python tests..."
+# Run Python tests (no rebuild — use `just build` first if Rust changed)
+test *args: (_log _blue "Running tests...")
     PYTHONPATH=python uv run python -m oxitest {{args}}
-
-# Run Python tests without rebuilding
-test-py *args: (_log _blue "Running Python tests (skip build)...")
-    PYTHONPATH=python uv run python -m oxitest {{args}}
-
-# Run tests affected by uncommitted changes
-test-affected *args: (_log _blue "Running affected tests...")
-    just test --affected {{args}}
 
 # Run Rust unit tests
 test-rust *args: (_log _blue "Running Rust tests...")
     cargo test {{args}}
 
-# Clean, run Rust tests, build, run Python tests
-dev: clean test-rust test
-
-# Lint Python (ruff) and check types (ty)
-lint: (_log _blue "Linting Python...")
+# Run all static checks (format, lint, clippy, spelling)
+check: (_log _blue "Running static checks...")
+    ruff format --check python/
+    cargo fmt --check
     ruff check python/
     ty check
+    cargo clippy -- -D warnings
+    codespell --toml pyproject.toml
 
-# Format Python (ruff) and Rust (cargo fmt)
-fmt *args: (_log _yellow "Formatting code...")
+# Full pre-push gate: clean, check, test everything
+preflight: clean check test-rust build test
+    @just _log {{_green}} "Preflight passed"
+
+# Format code and fix typos
+fmt *args: (_log _yellow "Formatting...")
     ruff format {{args}} python/
     cargo fmt {{args}}
+    codespell --toml pyproject.toml --write-changes
 
-# Build the documentation site
-docs: (_log _green "Building docs...")
+# Build all documentation sites
+docs-build: (_log _green "Building all docs...")
     mkdocs build
-
-# Serve docs locally with live reload
-docs-serve: (_log _blue "Serving docs at localhost:8000...")
-    mkdocs serve --dev-addr localhost:8000
-
-# Build the internals book
-docs-internals: (_log _green "Building internals book...")
     mdbook build docs/internals
-
-# Serve internals book locally with live reload
-docs-internals-serve: (_log _blue "Serving internals book at localhost:3000...")
-    mdbook serve docs/internals --port 3000
-
-# Build and serve Rust API docs (including private items)
-docs-rust: (_log _blue "Building Rust API docs...")
     cargo doc --no-deps --document-private-items
-    python3 -m http.server 3001 --directory target/doc
 
 # Serve all docs in the background (user :8000, internals :3000, Rust API :3001)
-docs-serve-all: (_log _green "Starting all doc servers...")
+docs-serve: (_log _green "Starting doc servers...")
     cargo doc --no-deps --document-private-items
     mkdocs serve --dev-addr localhost:8000 &
     mdbook serve docs/internals --port 3000 &
@@ -107,6 +89,11 @@ docs-stop: (_log _red "Stopping doc servers...")
     -pkill -f "mdbook serve"
     -pkill -f "http.server 3001"
 
+# Remove build artifacts
+clean: (_log _red "Removing build artifacts...")
+    cargo clean
+    rm -f python/oxitest/_oxitest*.so
+
 # Run hyperfine benchmarks
 bench: (_log _blue "Running benchmarks...")
     bash benchmarks/run.sh
@@ -114,11 +101,6 @@ bench: (_log _blue "Running benchmarks...")
 # Print speedup summary against baseline
 bench-compare: (_log _blue "Comparing benchmarks...")
     python benchmarks/compare.py
-
-# Remove build artifacts
-clean: (_log _red "Removing build artifacts...")
-    cargo clean
-    rm -f python/oxitest/_oxitest*.so
 
 # Check that all required tools are on PATH
 health:
