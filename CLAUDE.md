@@ -17,14 +17,11 @@ just health
 # Build the Rust extension (required before running Python tests)
 just build
 
-# Run Python tests (builds extension first)
+# Run Python tests (no rebuild — build first if Rust changed)
 just test
 
 # Run a single Python test file
 just test python/tests/test_fixtures.py
-
-# Run Python tests without rebuilding (Python-only changes)
-just test-py
 
 # Run Rust unit tests
 just test-rust
@@ -32,17 +29,20 @@ just test-rust
 # Run a single Rust test
 just test-rust <test_name>
 
-# Lint Python + type-check
-just lint
+# Run all static checks (format, lint, clippy, spelling)
+just check
 
-# Format Python + Rust
+# Format code and fix typos
 just fmt
+
+# Full pre-push gate (clean + check + test-rust + build + test)
+just preflight
 
 # Clean build artifacts
 just clean
 
 # Show all available recipes
-just help
+just
 ```
 
 ## Architecture
@@ -93,7 +93,7 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 
 ### Type checking
 
-`ty check` is the project's type checker. It runs on `python/oxitest/` via `just check` and `just lint`.
+`ty check` is the project's type checker. It runs on `python/oxitest/` via `just check`.
 
 ### Testing guidelines
 
