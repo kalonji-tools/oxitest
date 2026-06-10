@@ -135,15 +135,25 @@ impl WorkerSession {
 /// [`spawn_worker_with_process`] so call sites build a struct instead of
 /// passing a long positional argument list.
 pub(crate) struct WorkerParams {
+    /// Unique zero-based index identifying this worker.
     pub worker_id: usize,
+    /// Shared scheduler that distributes test groups to workers.
     pub sched: std::sync::Arc<scheduler::Scheduler>,
+    /// Flag set when the run is cancelled (e.g. maxfail reached).
     pub cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Pre-serialized conftest JSON sent to the worker on each task.
     pub conftest_json: std::sync::Arc<serde_json::value::RawValue>,
+    /// Per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
+    /// Directory to preserve temp files in; `None` = clean up after run.
     pub keep_tmp: Option<std::sync::Arc<str>>,
+    /// Whether to include local variables in failure tracebacks.
     pub show_locals: bool,
+    /// Whether to include oxitest-internal frames in tracebacks.
     pub show_internals: bool,
+    /// Channel for sending results back to the coordinator.
     pub tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+    /// Set of node IDs currently executing across all workers.
     pub in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
 }
 

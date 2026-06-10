@@ -14,8 +14,10 @@ use camino::Utf8PathBuf;
 
 use crate::types::{self, Frame, LineNo};
 
-/// Current version of the worker ↔ runner JSON protocol.
-/// Bump when adding/removing/renaming wire fields.
+/// Wire protocol version for the worker ↔ coordinator JSON channel.
+///
+/// Bump when adding, removing, or changing fields in [`WorkerTask`] or
+/// [`WireResult`]. The coordinator warns on version mismatch.
 pub(crate) const PROTOCOL_VERSION: u32 = 1;
 
 /// A JSON task sent to a worker subprocess over stdin.

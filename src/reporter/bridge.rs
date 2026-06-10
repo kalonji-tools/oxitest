@@ -1,7 +1,7 @@
 //! PyO3 bridge functions for the reporter subsystem.
 //!
 //! These free functions extract fixture timing and cache statistics from the
-//! Python [`FixtureSession`](crate::bridge::FixtureSession) for use by
+//! Python [`FixtureSession`] for use by
 //! reporters during finalization.
 
 use pyo3::prelude::*;

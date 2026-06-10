@@ -28,13 +28,16 @@ use std::io::IsTerminal;
 
 // ─── State types ─────────────────────────────────────────────────────────────
 
+/// Initial pipeline state before any work has been done.
 pub(crate) struct Empty;
 
+/// Files discovered on disk; holds test file and conftest paths.
 pub(crate) struct FilesCollected {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
 }
 
+/// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
 pub(crate) struct Prescanned {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
@@ -45,6 +48,7 @@ pub(crate) struct Prescanned {
     pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
 }
 
+/// Prescan metadata filtered; holds only modules that matched filters plus dynamic fallbacks.
 pub(crate) struct MetadataFiltered {
     /// All test files (for fallback reference).
     #[allow(dead_code)]
@@ -58,6 +62,7 @@ pub(crate) struct MetadataFiltered {
     pub(crate) is_filtered: bool,
 }
 
+/// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
 pub(crate) struct SessionReady {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
@@ -65,6 +70,7 @@ pub(crate) struct SessionReady {
     pub(crate) session_violations: Vec<bridge::RawViolation>,
 }
 
+/// Test items collected via Python import; holds the full `TestItem` list and any violations.
 pub(crate) struct Collected {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
@@ -75,6 +81,7 @@ pub(crate) struct Collected {
     pub(crate) collection_profile: Option<collection::CollectionProfile>,
 }
 
+/// Strict-mode violations split out; holds clean items, violated items, and suite header lines.
 pub(crate) struct PreFilter {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
@@ -85,6 +92,7 @@ pub(crate) struct PreFilter {
     pub(crate) suite_lines: Vec<String>,
 }
 
+/// Keyword/marker filtering applied; items are ready for execution.
 pub(crate) struct Ready {
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
@@ -95,6 +103,7 @@ pub(crate) struct Ready {
     pub(crate) suite_lines: Vec<String>,
 }
 
+/// All tests executed; holds final items, timings, and the reporter.
 pub(crate) struct Executed {
     #[allow(dead_code)]
     pub(crate) test_files: Vec<Utf8PathBuf>,
@@ -147,6 +156,7 @@ impl<S> Pipeline<S> {
     }
 }
 
+/// Data shared across all pipeline states, accessible via `Deref`/`DerefMut` on `Pipeline<S>`.
 pub(crate) struct PipelineShared {
     pub(crate) cfg: config::Config,
     pub(crate) command: config::Command,

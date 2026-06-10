@@ -35,7 +35,7 @@ impl BareAssertCtx {
         }
     }
 
-    /// Convert to a Python dict[str, list[int]].
+    /// Convert to a Python `dict[str, list[int]]`.
     fn into_py_dict(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         for (name, mut lines) in self.by_fn {

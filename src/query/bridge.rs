@@ -1,7 +1,7 @@
 //! PyO3 bridge functions for the query engine.
 //!
 //! These free functions extract fixture and plugin metadata from the Python
-//! [`FixtureSession`](crate::bridge::FixtureSession) for use by the query
+//! [`FixtureSession`] for use by the query
 //! subsystem.
 
 use std::collections::HashMap;

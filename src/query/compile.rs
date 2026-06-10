@@ -282,7 +282,7 @@ impl Parser {
         }
     }
 
-    /// predicate = IDENT "(" [matcher] ")"
+    /// `predicate = IDENT "(" [matcher] ")"`
     fn parse_predicate(&mut self, name: String) -> Result<Expr, DslError> {
         match self.peek() {
             Some(Token::LParen) => {}

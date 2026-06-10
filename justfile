@@ -77,6 +77,11 @@ docs: (_log _green "Building docs...")
 docs-serve: (_log _blue "Serving docs at localhost:8000...")
     mkdocs serve --dev-addr localhost:8000
 
+# Build and serve Rust API docs (including private items)
+docs-rust: (_log _blue "Building Rust API docs...")
+    cargo doc --no-deps --document-private-items
+    python3 -m http.server 3001 --directory target/doc
+
 # Run hyperfine benchmarks
 bench: (_log _blue "Running benchmarks...")
     bash benchmarks/run.sh
