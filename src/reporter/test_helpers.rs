@@ -23,15 +23,17 @@ pub(crate) fn make_pipeline<S>(state: S) -> crate::pipeline::Pipeline<S> {
     let use_color = false;
     let base = super::ReporterOptsBuilder::from_config(&cfg, use_color);
     crate::pipeline::Pipeline {
-        cfg,
-        command,
-        rootdir: camino::Utf8PathBuf::from("."),
-        is_tty: false,
-        use_color,
-        base,
-        cache,
-        python_bin: "python3".to_string(),
-        ast_weight_ms: None,
+        shared: crate::pipeline::PipelineShared {
+            cfg,
+            command,
+            rootdir: camino::Utf8PathBuf::from("."),
+            is_tty: false,
+            use_color,
+            base,
+            cache,
+            python_bin: "python3".to_string(),
+            ast_weight_ms: None,
+        },
         state,
     }
 }
