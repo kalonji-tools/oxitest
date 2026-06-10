@@ -77,10 +77,35 @@ docs: (_log _green "Building docs...")
 docs-serve: (_log _blue "Serving docs at localhost:8000...")
     mkdocs serve --dev-addr localhost:8000
 
+# Build the internals book
+docs-internals: (_log _green "Building internals book...")
+    mdbook build docs/internals
+
+# Serve internals book locally with live reload
+docs-internals-serve: (_log _blue "Serving internals book at localhost:3000...")
+    mdbook serve docs/internals --port 3000
+
 # Build and serve Rust API docs (including private items)
 docs-rust: (_log _blue "Building Rust API docs...")
     cargo doc --no-deps --document-private-items
     python3 -m http.server 3001 --directory target/doc
+
+# Serve all docs in the background (user :8000, internals :3000, Rust API :3001)
+docs-serve-all: (_log _green "Starting all doc servers...")
+    cargo doc --no-deps --document-private-items
+    mkdocs serve --dev-addr localhost:8000 &
+    mdbook serve docs/internals --port 3000 &
+    python3 -m http.server 3001 --directory target/doc &
+    @just _log {{_green}} "User docs:      http://localhost:8000"
+    @just _log {{_green}} "Internals book: http://localhost:3000"
+    @just _log {{_green}} "Rust API docs:  http://localhost:3001/_oxitest"
+    @just _log {{_green}} "Stop with: just docs-stop"
+
+# Stop all background doc servers
+docs-stop: (_log _red "Stopping doc servers...")
+    -pkill -f "mkdocs serve"
+    -pkill -f "mdbook serve"
+    -pkill -f "http.server 3001"
 
 # Run hyperfine benchmarks
 bench: (_log _blue "Running benchmarks...")
@@ -99,7 +124,7 @@ clean: (_log _red "Removing build artifacts...")
 health:
     #!/usr/bin/env bash
     missing=0
-    for cmd in cargo uv maturin ruff ty mkdocs codespell python3; do
+    for cmd in cargo uv maturin ruff ty mkdocs mdbook codespell python3; do
         if command -v "$cmd" > /dev/null 2>&1; then
             printf '  ✓ %s (%s)\n' "$cmd" "$(command -v "$cmd")"
         else

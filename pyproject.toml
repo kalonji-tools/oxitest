@@ -59,7 +59,7 @@ parallel = true
 source = ["python/oxitest"]
 
 [tool.codespell]
-skip = "target,Cargo.lock,devenv.lock"
+skip = "target,Cargo.lock,devenv.lock,docs/internals/mermaid.min.js"
 ignore-words-list = "NotIn,ser,sotre"
 
 [dependency-groups]
