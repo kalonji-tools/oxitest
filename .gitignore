@@ -216,5 +216,6 @@ docs/superpowers/
 
 # MkDocs build output
 docs/site/
+docs/internals/book/
 
 # End of https://www.toptal.com/developers/gitignore/api/rust,python,linux,visualstudiocode,jetbrains,macos,windows,vim
