@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import doctest
 import importlib
+import importlib.util
 import sys
 from typing import TYPE_CHECKING
 

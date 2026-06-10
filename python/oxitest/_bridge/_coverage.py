@@ -28,7 +28,7 @@ class CoveragePyProvider:
     def start(self, config: dict) -> None:  # noqa: ARG002
         """Begin coverage collection."""
         try:
-            import coverage as _coverage  # ty: ignore[unresolved-import]
+            import coverage as _coverage
         except ImportError:
             msg = "--cov requires coverage.py: pip install coverage"
             raise ImportError(msg) from None

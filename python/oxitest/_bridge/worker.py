@@ -51,7 +51,7 @@ from typing import Any
 def _maybe_start_coverage() -> None:
     """Activate coverage collection if the parent process requested it."""
     if os.environ.get("COVERAGE_PROCESS_START"):
-        import coverage  # ty: ignore[unresolved-import]
+        import coverage
 
         coverage.process_startup()
 
