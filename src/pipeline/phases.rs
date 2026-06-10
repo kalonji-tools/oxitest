@@ -406,19 +406,23 @@ impl Pipeline<MetadataFiltered> {
 // ─── Pipeline<SessionReady> ─────────────────────────────────────────────────
 
 impl Pipeline<SessionReady> {
-    pub(crate) fn collect(mut self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
-        self.cache.invalidate_modules();
-        let (mut items, errors, raw_violations, profile) = collection::collect_items(
-            py,
-            &self.state.test_files,
-            &self.cfg,
-            &self.state.session,
-            &mut self.cache,
-        );
+    pub(crate) fn collect(self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
+        let (
+            mut shared,
+            SessionReady {
+                test_files,
+                conftest_files,
+                session,
+                session_violations,
+            },
+        ) = self.into_parts();
+        shared.cache.invalidate_modules();
+        let (mut items, errors, raw_violations, profile) =
+            collection::collect_items(py, &test_files, &shared.cfg, &session, &mut shared.cache);
 
         // Collect doctest items if --doctest-modules is enabled.
-        if self.cfg.doctest_modules {
-            let doctest_files = collector::collect_doctest_files(&self.cfg);
+        if shared.cfg.doctest_modules {
+            let doctest_files = collector::collect_doctest_files(&shared.cfg);
             let doctest_items = collection::collect_doctest_items(&doctest_files);
             tracing::info!(
                 doctest_files = doctest_files.len(),
@@ -430,19 +434,9 @@ impl Pipeline<SessionReady> {
 
         if !errors.is_empty() {
             return Err(helpers::early_exit_with_error(&errors, &|| {
-                self.make_error_reporter()
+                shared.make_error_reporter()
             }));
         }
-
-        let (
-            shared,
-            SessionReady {
-                test_files,
-                conftest_files,
-                session,
-                session_violations,
-            },
-        ) = self.into_parts();
 
         // Merge session-phase violations with collection violations.
         let mut merged_violations = session_violations;
@@ -937,27 +931,28 @@ impl Pipeline<Executed> {
         Ok(self)
     }
 
-    pub(crate) fn finalize(mut self, py: Python<'_>) -> Result<ExitCode, ExitCode> {
+    pub(crate) fn finalize(self, py: Python<'_>) -> Result<ExitCode, ExitCode> {
+        let (mut shared, state) = self.into_parts();
         let ExecutionResults {
             timings,
             interrupted,
             mut reporter,
-        } = self.state.execution_results;
+        } = state.execution_results;
 
-        if let Ok(ft) = reporter::bridge::get_fixture_timings(&self.state.session, py) {
+        if let Ok(ft) = reporter::bridge::get_fixture_timings(&state.session, py) {
             if !ft.is_empty() {
                 reporter.set_fixture_timings(ft);
             }
         }
 
         helpers::finalize(
-            &mut self.cache,
+            &mut shared.cache,
             &timings,
-            self.cfg.cache_max_age,
-            &self.rootdir,
+            shared.cfg.cache_max_age,
+            &shared.rootdir,
         );
 
-        if let Ok(stats) = reporter::bridge::get_cache_stats(&self.state.session, py) {
+        if let Ok(stats) = reporter::bridge::get_cache_stats(&state.session, py) {
             if stats.hits + stats.misses > 0 {
                 reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
             }

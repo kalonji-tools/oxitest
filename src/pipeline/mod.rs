@@ -116,56 +116,34 @@ pub(crate) struct ExecutionResults {
 // ─── Pipeline<S> ─────────────────────────────────────────────────────────────
 
 pub(crate) struct Pipeline<S> {
-    pub(crate) cfg: config::Config,
-    pub(crate) command: config::Command,
-    pub(crate) rootdir: Utf8PathBuf,
-    pub(crate) is_tty: bool,
-    pub(crate) use_color: bool,
-    pub(crate) base: reporter::ReporterOptsBuilder,
-    pub(crate) cache: cache::TestCache,
-    pub(crate) python_bin: String,
-    /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
-    pub(crate) ast_weight_ms: Option<f64>,
+    pub(crate) shared: PipelineShared,
     pub(crate) state: S,
 }
 
 impl<S> std::fmt::Debug for Pipeline<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pipeline")
-            .field("rootdir", &self.rootdir)
+            .field("rootdir", &self.shared.rootdir)
             .finish_non_exhaustive()
     }
 }
 
-impl<S> Pipeline<S> {
-    fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
-        reporter::make_reporter(
-            self.base
-                .clone()
-                .verbosity(config::Verbosity::Normal)
-                .build(),
-            self.is_tty,
-            None,
-            None,
-            vec![],
-        )
+impl<S> std::ops::Deref for Pipeline<S> {
+    type Target = PipelineShared;
+    fn deref(&self) -> &PipelineShared {
+        &self.shared
     }
+}
 
+impl<S> std::ops::DerefMut for Pipeline<S> {
+    fn deref_mut(&mut self) -> &mut PipelineShared {
+        &mut self.shared
+    }
+}
+
+impl<S> Pipeline<S> {
     fn into_parts(self) -> (PipelineShared, S) {
-        (
-            PipelineShared {
-                cfg: self.cfg,
-                command: self.command,
-                rootdir: self.rootdir,
-                is_tty: self.is_tty,
-                use_color: self.use_color,
-                base: self.base,
-                cache: self.cache,
-                python_bin: self.python_bin,
-                ast_weight_ms: self.ast_weight_ms,
-            },
-            self.state,
-        )
+        (self.shared, self.state)
     }
 }
 
@@ -185,15 +163,7 @@ pub(crate) struct PipelineShared {
 impl PipelineShared {
     fn into_pipeline<T>(self, state: T) -> Pipeline<T> {
         Pipeline {
-            cfg: self.cfg,
-            command: self.command,
-            rootdir: self.rootdir,
-            is_tty: self.is_tty,
-            use_color: self.use_color,
-            base: self.base,
-            cache: self.cache,
-            python_bin: self.python_bin,
-            ast_weight_ms: self.ast_weight_ms,
+            shared: self,
             state,
         }
     }
@@ -212,21 +182,7 @@ impl PipelineShared {
     }
 }
 
-// ─── SetupContext ────────────────────────────────────────────────────────────
-
-#[derive(Debug)]
-pub(crate) struct SetupContext {
-    pub(crate) cfg: config::Config,
-    pub(crate) cache: cache::TestCache,
-    pub(crate) command: config::Command,
-    pub(crate) rootdir: Utf8PathBuf,
-    pub(crate) is_tty: bool,
-    pub(crate) use_color: bool,
-    pub(crate) python_bin: String,
-    pub(crate) base: reporter::ReporterOptsBuilder,
-}
-
-fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, ExitCode>> {
+fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, ExitCode>> {
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
@@ -315,7 +271,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         base
     };
 
-    Ok(Ok(Box::new(SetupContext {
+    Ok(Ok(PipelineShared {
         cfg,
         cache,
         command,
@@ -324,7 +280,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<Box<SetupContext>, 
         use_color,
         python_bin,
         base,
-    })))
+        ast_weight_ms: None,
+    }))
 }
 
 // ─── Command entry points ────────────────────────────────────────────────────
@@ -408,21 +365,13 @@ fn query_command(
 // ─── run() ───────────────────────────────────────────────────────────────────
 
 pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
-    let setup_ctx = match setup(py, &args)? {
+    let shared = match setup(py, &args)? {
         Err(code) => return Ok(code.as_i32()),
-        Ok(ctx) => *ctx,
+        Ok(shared) => shared,
     };
 
     let pipeline = Pipeline {
-        cfg: setup_ctx.cfg,
-        command: setup_ctx.command,
-        rootdir: setup_ctx.rootdir,
-        is_tty: setup_ctx.is_tty,
-        use_color: setup_ctx.use_color,
-        base: setup_ctx.base,
-        cache: setup_ctx.cache,
-        python_bin: setup_ctx.python_bin,
-        ast_weight_ms: None,
+        shared,
         state: Empty,
     };
 
