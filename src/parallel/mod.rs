@@ -12,7 +12,7 @@ mod drain;
 mod pool;
 
 pub(crate) use drain::{drain_worker_results, handle_drain_outcome, DrainOutcome};
-pub(crate) use pool::{kill_pool, prewarm_workers, PrewarmedWorker};
+pub(crate) use pool::{kill_pool, prewarm_workers, PoolGuard, PrewarmedWorker};
 
 use crate::{
     config, reporter, scheduler, types,
