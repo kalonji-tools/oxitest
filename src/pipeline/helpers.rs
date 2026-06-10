@@ -60,6 +60,46 @@ pub(in crate::pipeline) fn early_exit_with_error(
         .code()
 }
 
+/// Initialize a FixtureSession: load conftest fixtures, plugins, and async backend.
+pub(super) fn init_session(
+    py: Python<'_>,
+    conftest_files: &[camino::Utf8PathBuf],
+    cfg: &crate::config::Config,
+    make_reporter: impl Fn() -> Box<dyn reporter::Reporter>,
+) -> Result<
+    (
+        crate::bridge::FixtureSession,
+        Vec<crate::bridge::RawViolation>,
+    ),
+    ExitCode,
+> {
+    let (session, fixture_violations) = match crate::bridge::FixtureSession::new(py, conftest_files)
+    {
+        Ok(pair) => pair,
+        Err(e) => {
+            let err = crate::types::CollectError::PyError(format!(
+                "Failed to load conftest fixtures: {}",
+                e
+            ));
+            return Err(early_exit_with_error(&[err], &make_reporter));
+        }
+    };
+
+    if !cfg.plugins.is_empty() {
+        if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
+            let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+            return Err(early_exit_with_error(&[err], &make_reporter));
+        }
+    }
+
+    if let Err(e) = session.init_async_backend(py, &cfg.async_backend) {
+        let err = crate::types::CollectError::PyError(format!("Async backend init failed: {}", e));
+        return Err(early_exit_with_error(&[err], &make_reporter));
+    }
+
+    Ok((session, fixture_violations))
+}
+
 /// Merge timings into the cache, record outcomes, and persist to disk.
 pub(super) fn finalize(
     cache: &mut cache::TestCache,
