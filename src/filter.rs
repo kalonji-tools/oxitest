@@ -20,6 +20,10 @@ use crate::types::{CollectError, TestItem};
 // Marker *conditions* — skip(when=condition), xfail — are evaluated at execution time
 // by the mark handler registry in python/oxitest/_bridge/_mark_registry.py (_MARK_REGISTRY).
 // Both phases must agree on which names are built-in (BUILTIN_MARKERS below).
+/// Single source of truth for built-in marker names.
+///
+/// Must stay in sync with `_BUILTIN_HANDLER_NAMES` in
+/// `python/oxitest/_bridge/_mark_registry.py`; enforced by `test_int_marker_sync.py`.
 pub(crate) const BUILTIN_MARKERS: &[&str] =
     &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
 
@@ -263,7 +267,7 @@ fn filter_prescan_by_node_ids<'a>(
         .collect()
 }
 
-/// Convert a [`PrescanItem`] to a [`QueryEntry`] for DSL evaluation.
+/// Convert a [`PrescanItem`] to a [`QueryEntry`](crate::query::resource::QueryEntry) for DSL evaluation.
 fn prescan_item_to_query_entry(
     item: &PrescanItem,
     file_path: &str,

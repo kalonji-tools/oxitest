@@ -4,6 +4,8 @@
 //! startup overlaps with earlier pipeline stages.
 
 /// A pre-spawned worker subprocess ready for task dispatch.
+///
+/// Tuple of `(child process, buffered stdin writer, stdout line receiver)`.
 pub(crate) type PrewarmedWorker = (
     std::process::Child,
     std::io::BufWriter<std::process::ChildStdin>,
