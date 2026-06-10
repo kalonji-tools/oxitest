@@ -8,7 +8,7 @@ The .coverage.* files are merged by `coverage combine` in CI.
 """
 
 try:
-    import coverage  # ty: ignore[unresolved-import]
+    import coverage
 
     coverage.process_startup()
 except ImportError:
