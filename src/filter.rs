@@ -198,7 +198,6 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<Tes
 ///
 /// With a class: `"{file_path}::{class}::{fn_name}"`,
 /// without:      `"{file_path}::{fn_name}"`.
-#[allow(dead_code)] // Wired in Task 4 (pipeline states)
 fn prescan_node_id(file_path: &str, item: &PrescanItem) -> String {
     if let Some(ref class) = item.class_name {
         format!("{file_path}::{class}::{}", item.fn_name)
