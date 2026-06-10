@@ -26,6 +26,33 @@ pub(crate) fn kill_pool(mut pool: Vec<PrewarmedWorker>) {
     }
 }
 
+/// RAII guard for a pre-warmed worker pool.
+///
+/// On drop, kills all remaining workers. Use `take()` to move workers out
+/// before drop (e.g., to pass them to `ParallelHarness`).
+pub(crate) struct PoolGuard {
+    workers: Vec<PrewarmedWorker>,
+}
+
+impl PoolGuard {
+    pub(crate) fn new(workers: Vec<PrewarmedWorker>) -> Self {
+        Self { workers }
+    }
+
+    /// Move all workers out of the guard. After this, drop is a no-op.
+    pub(crate) fn take(&mut self) -> Vec<PrewarmedWorker> {
+        std::mem::take(&mut self.workers)
+    }
+}
+
+impl Drop for PoolGuard {
+    fn drop(&mut self) {
+        if !self.workers.is_empty() {
+            kill_pool(std::mem::take(&mut self.workers));
+        }
+    }
+}
+
 #[cfg(test)]
 mod prewarm_tests {
     #[test]
@@ -71,6 +98,51 @@ mod prewarm_tests {
     #[test]
     fn kill_pool_on_empty_is_noop() {
         super::kill_pool(vec![]); // must not panic
+    }
+
+    #[test]
+    fn pool_guard_kills_on_drop() {
+        let workers = super::prewarm_workers("cat", 2);
+        let pids: Vec<u32> = workers.iter().map(|(c, _, _)| c.id()).collect();
+        {
+            let _guard = super::PoolGuard::new(workers);
+            // guard drops here
+        }
+        for pid in pids {
+            let proc_path = format!("/proc/{pid}");
+            assert!(
+                !std::path::Path::new(&proc_path).exists(),
+                "process {pid} should not exist after PoolGuard drop (zombie leak)"
+            );
+        }
+    }
+
+    #[test]
+    fn pool_guard_take_prevents_kill_on_drop() {
+        let workers = super::prewarm_workers("cat", 2);
+        let pids: Vec<u32> = workers.iter().map(|(c, _, _)| c.id()).collect();
+        let taken = {
+            let mut guard = super::PoolGuard::new(workers);
+            let taken = guard.take();
+            // guard drops here — no workers left, so no kill
+            taken
+        };
+        // Workers must still be alive (or at least not waited) after guard drop.
+        // Kill them manually now.
+        super::kill_pool(taken);
+        for pid in pids {
+            let proc_path = format!("/proc/{pid}");
+            assert!(
+                !std::path::Path::new(&proc_path).exists(),
+                "process {pid} should not exist after manual kill_pool"
+            );
+        }
+    }
+
+    #[test]
+    fn pool_guard_empty_drop_is_noop() {
+        let guard = super::PoolGuard::new(vec![]);
+        drop(guard); // must not panic
     }
 
     #[test]

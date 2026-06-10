@@ -294,6 +294,53 @@ fn emit_scheduling_diagnostics(
     }
 }
 
+fn report_violations(
+    violated_items: &[Arc<types::TestItem>],
+    all_violations: &[strict::StrictViolation],
+    rep: &mut dyn reporter::Reporter,
+) {
+    for item in violated_items {
+        if let Some(pv) = all_violations.iter().find_map(|v| match v {
+            strict::StrictViolation::PerTest(pv) if pv.node_id() == &item.node_id => Some(pv),
+            _ => None,
+        }) {
+            let outcome = strict::per_test_error(pv);
+            rep.test_started(item);
+            rep.test_completed(item, &outcome, types::DurationMs::ZERO, None);
+        }
+    }
+}
+
+fn emit_shared_fixture_warning(
+    py: Python<'_>,
+    session: &bridge::FixtureSession,
+    cfg: &config::Config,
+    worker_count: usize,
+) {
+    if cfg.auto_arrange_threshold.is_some() {
+        return;
+    }
+    let shared_names = session.shared_fixture_names(py);
+    if shared_names.is_empty() {
+        return;
+    }
+    let list = shared_names.join(", ");
+    let noun = if shared_names.len() == 1 {
+        "fixture"
+    } else {
+        "fixtures"
+    };
+    tracing::warn!(
+        fixtures = %list,
+        fixture_count = shared_names.len(),
+        workers = worker_count,
+        "shared {noun} will run once per worker; \
+         session-scoped fixtures are not shared across parallel worker processes — \
+         use --serial to run them once, or remove shared=True from fixtures \
+         that can be function-scoped"
+    );
+}
+
 /// Report violated items, group and schedule the clean items, decide
 /// serial vs. parallel, dispatch, and return `(interrupted, timings)`.
 ///
@@ -308,18 +355,7 @@ pub(super) fn execute(
     rep: &mut dyn reporter::Reporter,
 ) -> parallel::PhaseResult {
     // Immediately report violated items as Error outcomes (no worker dispatch).
-    for item in &violated_items {
-        // Per-test items may have multiple violations; we report only the first to keep
-        // the error message focused. Users address violations one at a time.
-        if let Some(pv) = all_violations.iter().find_map(|v| match v {
-            strict::StrictViolation::PerTest(pv) if pv.node_id() == &item.node_id => Some(pv),
-            _ => None,
-        }) {
-            let outcome = strict::per_test_error(pv);
-            rep.test_started(item);
-            rep.test_completed(item, &outcome, types::DurationMs::ZERO, None);
-        }
-    }
+    report_violations(&violated_items, &all_violations, rep);
 
     let estimated = ctx.cache.estimated_duration(clean_items, ctx.ast_weight_ms);
 
@@ -415,7 +451,8 @@ pub(super) fn execute(
         }
         ExecutionStrategy::Parallel { worker_count } => {
             // Pre-warm workers NOW — decision is final.
-            let mut pool = Some(parallel::prewarm_workers(ctx.python_bin, worker_count));
+            let mut pool_guard =
+                parallel::PoolGuard::new(parallel::prewarm_workers(ctx.python_bin, worker_count));
 
             // Run arranged fixture groups serially on main process.
             if !plan.arranged_groups.is_empty() {
@@ -424,9 +461,6 @@ pub(super) fn execute(
                 let harness = SerialHarness::from_ctx(py, ctx);
                 for group_modules in plan.arranged_groups {
                     if result.interrupted {
-                        if let Some(p) = pool.take() {
-                            parallel::kill_pool(p);
-                        }
                         return result;
                     }
                     let phase = harness.execute_groups(group_modules, rep);
@@ -436,31 +470,9 @@ pub(super) fn execute(
             }
 
             // Emit shared-fixture warning when auto-arrange is disabled.
-            if ctx.cfg.auto_arrange_threshold.is_none() {
-                let shared_names = ctx.session.shared_fixture_names(py);
-                if !shared_names.is_empty() {
-                    let list = shared_names.join(", ");
-                    let noun = if shared_names.len() == 1 {
-                        "fixture"
-                    } else {
-                        "fixtures"
-                    };
-                    tracing::warn!(
-                        fixtures = %list,
-                        fixture_count = shared_names.len(),
-                        workers = worker_count,
-                        "shared {noun} will run once per worker; \
-                         session-scoped fixtures are not shared across parallel worker processes — \
-                         use --serial to run them once, or remove shared=True from fixtures \
-                         that can be function-scoped"
-                    );
-                }
-            }
+            emit_shared_fixture_warning(py, ctx.session, ctx.cfg, worker_count);
 
             if plan.parallel_groups.is_empty() || result.interrupted {
-                if let Some(p) = pool.take() {
-                    parallel::kill_pool(p);
-                }
                 return result;
             }
 
@@ -469,7 +481,7 @@ pub(super) fn execute(
                 workers: worker_count,
                 conftest_files: ctx.conftest_files,
                 python_bin: ctx.python_bin,
-                pool: std::cell::RefCell::new(pool.take()),
+                pool: std::cell::RefCell::new(Some(pool_guard.take())),
             };
             let parallel_result = harness.execute_groups(plan.parallel_groups, rep);
 
