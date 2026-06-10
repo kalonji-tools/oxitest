@@ -212,7 +212,7 @@ fn prescan_node_id(file_path: &str, item: &PrescanItem) -> String {
 /// A node ID like `path::test_name` matches items with that fn_name.
 /// A node ID like `path::ClassName` matches all methods in that class.
 /// A node ID like `path::ClassName::test_name` matches a specific class method.
-pub(crate) fn filter_prescan_by_node_ids<'a>(
+fn filter_prescan_by_node_ids<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
     node_ids: &[String],
@@ -288,7 +288,7 @@ fn prescan_item_to_query_entry(
 ///
 /// Supports: `name(pattern)`, `mark(name)`, `source(pattern)`, `async()`.
 /// On parse error, returns all items (fall through to eager).
-pub(crate) fn filter_prescan_by_expression<'a>(
+fn filter_prescan_by_expression<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
     expression: &str,
@@ -313,7 +313,7 @@ pub(crate) fn filter_prescan_by_expression<'a>(
 /// Filter prescan items by last-failed node IDs.
 ///
 /// Checks exact match and parametrize prefix match.
-pub(crate) fn filter_prescan_last_failed<'a>(
+fn filter_prescan_last_failed<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
     failed_ids: &std::collections::HashSet<String>,
@@ -327,6 +327,76 @@ pub(crate) fn filter_prescan_last_failed<'a>(
                 .any(|fid| fid == &id || fid.starts_with(&format!("{id}[")))
         })
         .collect()
+}
+
+/// Returns true if any prescan item in the file matches any of the given node IDs.
+pub(crate) fn file_matches_node_ids(
+    items: &[PrescanItem],
+    file_path: &str,
+    node_ids: &[String],
+) -> bool {
+    !filter_prescan_by_node_ids(items, file_path, node_ids).is_empty()
+}
+
+/// Returns true if any prescan item in the file matches the expression.
+///
+/// When `module_marks` is provided, each item is temporarily augmented with
+/// those marks before evaluation — avoiding a full clone of the items slice.
+/// When `module_marks` is `None`, delegates to [`filter_prescan_by_expression`].
+pub(crate) fn file_matches_expression(
+    items: &[PrescanItem],
+    file_path: &str,
+    expression: &str,
+    module_marks: Option<&[String]>,
+) -> bool {
+    if let Some(marks) = module_marks {
+        let tokens = match crate::query::compile::lex(expression) {
+            Ok(t) => t,
+            Err(_) => return true, // fall through to eager on parse error
+        };
+        let parsed = match crate::query::compile::parse(tokens) {
+            Ok(p) => p,
+            Err(_) => return true,
+        };
+        items.iter().any(|item| {
+            let entry = prescan_item_to_query_entry_with_module_marks(item, file_path, marks);
+            crate::query::eval::eval(&parsed, &entry)
+        })
+    } else {
+        !filter_prescan_by_expression(items, file_path, expression).is_empty()
+    }
+}
+
+/// Returns true if any prescan item in the file is in the last-failed set.
+pub(crate) fn file_matches_last_failed(
+    items: &[PrescanItem],
+    file_path: &str,
+    failed_ids: &std::collections::HashSet<String>,
+) -> bool {
+    !filter_prescan_last_failed(items, file_path, failed_ids).is_empty()
+}
+
+/// Like [`prescan_item_to_query_entry`] but augments the mark field with module-level marks.
+fn prescan_item_to_query_entry_with_module_marks(
+    item: &PrescanItem,
+    file_path: &str,
+    module_marks: &[String],
+) -> crate::query::resource::QueryEntry {
+    let mut entry = prescan_item_to_query_entry(item, file_path);
+    let existing = entry.fields.get("mark").cloned().unwrap_or_default();
+    let item_marks: Vec<&str> = if existing.is_empty() {
+        vec![]
+    } else {
+        existing.split(',').collect()
+    };
+    let mut all_marks: Vec<&str> = item_marks;
+    for m in module_marks {
+        if !all_marks.contains(&m.as_str()) {
+            all_marks.push(m.as_str());
+        }
+    }
+    entry.fields.insert("mark".to_string(), all_marks.join(","));
+    entry
 }
 
 #[cfg(test)]
@@ -830,5 +900,110 @@ mod tests {
         let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
         assert!(names.contains(&"test_fail"));
         assert!(names.contains(&"test_param"));
+    }
+
+    mod prescan_file_predicates {
+        use super::*;
+
+        fn make_prescan_item(fn_name: &str) -> PrescanItem {
+            PrescanItem {
+                fn_name: fn_name.to_string(),
+                lineno: 1,
+                is_async: false,
+                markers: vec![],
+                param_ids: vec![],
+                fixture_params: vec![],
+                is_class_method: false,
+                class_name: None,
+                body_weight_ms: 1.0,
+            }
+        }
+
+        // ── file_matches_node_ids ────────────────────────────────────────────
+
+        #[test]
+        fn file_matches_node_ids_exact_match() {
+            let items = vec![make_prescan_item("test_foo"), make_prescan_item("test_bar")];
+            let node_ids = vec!["tests/test_a.py::test_foo".to_string()];
+            assert!(file_matches_node_ids(&items, "tests/test_a.py", &node_ids));
+        }
+
+        #[test]
+        fn file_matches_node_ids_no_match() {
+            let items = vec![make_prescan_item("test_foo"), make_prescan_item("test_bar")];
+            let node_ids = vec!["tests/test_a.py::test_baz".to_string()];
+            assert!(!file_matches_node_ids(&items, "tests/test_a.py", &node_ids));
+        }
+
+        // ── file_matches_expression ──────────────────────────────────────────
+
+        #[test]
+        fn file_matches_expression_by_mark() {
+            let items = vec![
+                PrescanItem {
+                    markers: vec![PrescanMarker {
+                        name: "slow".to_string(),
+                        has_dynamic_args: false,
+                    }],
+                    ..make_prescan_item("test_slow")
+                },
+                make_prescan_item("test_fast"),
+            ];
+            assert!(file_matches_expression(
+                &items,
+                "tests/test_a.py",
+                "mark(slow)",
+                None
+            ));
+        }
+
+        #[test]
+        fn file_matches_expression_with_module_marks() {
+            // Items have no marks of their own; module_marks provides "slow".
+            let items = vec![make_prescan_item("test_foo")];
+            let module_marks = vec!["slow".to_string()];
+            assert!(file_matches_expression(
+                &items,
+                "tests/test_a.py",
+                "mark(slow)",
+                Some(&module_marks),
+            ));
+        }
+
+        #[test]
+        fn file_matches_expression_no_match() {
+            let items = vec![make_prescan_item("test_foo")];
+            assert!(!file_matches_expression(
+                &items,
+                "tests/test_a.py",
+                "mark(slow)",
+                None
+            ));
+        }
+
+        // ── file_matches_last_failed ─────────────────────────────────────────
+
+        #[test]
+        fn file_matches_last_failed_hit() {
+            let items = vec![
+                make_prescan_item("test_pass"),
+                make_prescan_item("test_fail"),
+            ];
+            let mut failed = HashSet::new();
+            failed.insert("tests/test_a.py::test_fail".to_string());
+            assert!(file_matches_last_failed(&items, "tests/test_a.py", &failed));
+        }
+
+        #[test]
+        fn file_matches_last_failed_miss() {
+            let items = vec![make_prescan_item("test_pass")];
+            let mut failed = HashSet::new();
+            failed.insert("tests/test_a.py::test_other".to_string());
+            assert!(!file_matches_last_failed(
+                &items,
+                "tests/test_a.py",
+                &failed
+            ));
+        }
     }
 }
