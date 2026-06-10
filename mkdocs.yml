@@ -1,6 +1,6 @@
 site_name: oxitest
 site_description: A fast, typed, and explicit Python test framework backed by a Rust runner.
-docs_dir: docs/src
+docs_dir: docs/user
 site_dir: docs/site
 
 theme:
@@ -64,7 +64,7 @@ nav:
   - Tutorials:
     - Getting started: tutorials/getting-started.md
   - How-to guides:
-    - Filter tests with -k: how-to/filter-tests.md
+    - Filter tests: how-to/filter-tests.md
     - Configure testpaths: how-to/configure-testpaths.md
     - Migrate from pytest: how-to/migrate-from-pytest.md
     - Use markers: how-to/use-markers.md
@@ -103,11 +103,7 @@ nav:
     - Performance: explanation/performance.md
     - Benchmarks: explanation/benchmarks.md
     - Strict mode: explanation/strict-mode.md
+    - Lazy collection: explanation/lazy-collection.md
     - Parallelism: explanation/parallelism.md
-    - Worker protocol: explanation/worker-protocol.md
     - Conftest helpers: explanation/conftest-helpers.md
     - Working with AI: explanation/why-ai.md
-  - Contributing:
-    - Build setup: contributing/build-setup.md
-    - Architecture: contributing/architecture.md
-    - Contributing guide: contributing/contributing.md

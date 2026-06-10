@@ -28,7 +28,8 @@ jobs:
         with:
           filters: |
             docs:
-              - 'docs/src/**'
+              - 'docs/user/**'
+              - 'docs/internals/**'
               - 'mkdocs.yml'
               - 'pyproject.toml'
 
@@ -51,6 +52,20 @@ jobs:
 
       - name: Build
         run: uv run mkdocs build --strict
+
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.5.2'
+
+      - name: Install mdbook-mermaid
+        run: |
+          curl -sSL https://github.com/badboy/mdbook-mermaid/releases/download/v0.17.0/mdbook-mermaid-v0.17.0-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin
+
+      - name: Build internals book
+        run: mdbook build docs/internals
+
+      - name: Merge into site
+        run: cp -r docs/internals/book docs/site/internals
 
       - uses: actions/upload-pages-artifact@v5
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
