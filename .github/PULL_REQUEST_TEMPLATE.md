@@ -12,7 +12,7 @@ Closes #
 
 - [ ] Tests added / updated
 - [ ] Docs updated (if behaviour changed)
-- [ ] `just check` passes locally <!-- runs ruff, ty, cargo fmt --check, cargo clippy -->
+- [ ] `just check` passes locally <!-- format, lint, clippy, spelling -->
 - [ ] No breaking changes (or documented below)
 
 ## Breaking Changes

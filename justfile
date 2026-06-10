@@ -24,15 +24,15 @@ _red := "31"
 _yellow := "33"
 _blue := "34"
 
-[private]
-_log color msg:
-    @printf '\033[{{color}}m→ %s\033[0m\n' '{{msg}}'
-
 # ── Recipes ──────────────────────────────────────────────────────────────────
 
 # Show available recipes
 default:
     @just --list
+
+[private]
+_log color msg:
+    @printf '\033[{{color}}m→ %s\033[0m\n' '{{msg}}'
 
 # Build the Rust extension
 build *args: (_log _green "Building extension...")
