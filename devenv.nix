@@ -30,6 +30,10 @@ in
     # File watcher
     bacon
 
+    # Internals book
+    mdbook
+    mdbook-mermaid
+
     # Release tooling
     git-cliff
 

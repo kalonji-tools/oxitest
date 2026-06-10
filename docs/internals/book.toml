@@ -1,0 +1,21 @@
+[book]
+authors = ["Sharlon N. Regales"]
+language = "en"
+src = "src"
+title = "oxitest Internals"
+
+[build]
+build-dir = "book"
+
+[output.html]
+site-url = "/oxitest/internals/"
+git-repository-url = "https://github.com/kalonji-tools/oxitest"
+edit-url-template = "https://github.com/kalonji-tools/oxitest/edit/main/docs/internals/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html.fold]
+enable = true
+level = 0
