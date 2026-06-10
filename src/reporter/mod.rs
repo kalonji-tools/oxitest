@@ -1,10 +1,10 @@
 //! Test result reporting — terminal output, CI formatting, and JSON export.
 //!
 //! Defines the [`Reporter`] trait and its concrete implementations:
-//! [`TtyReporter`](tty::TtyReporter) (progress bars, colors),
-//! [`CiReporter`](ci::CiReporter) (GitHub Actions annotations),
-//! [`JsonReporter`](json::JsonReporter) (CTRF format), and
-//! [`PyPluginReporter`](plugin::PyPluginReporter) (user-supplied Python plugins).
+//! `TtyReporter` (progress bars, colors),
+//! `CiReporter` (GitHub Actions annotations),
+//! `JsonReporter` (CTRF format), and
+//! `PyPluginReporter` (user-supplied Python plugins).
 
 pub(crate) mod bridge;
 mod ci;
@@ -66,7 +66,7 @@ pub(crate) fn remove_if_flaky<T>(
 ///
 /// Chooses [`TtyReporter`] or [`CiReporter`] based on `is_tty`, then wraps
 /// all reporters (including optional JSON, JUnit, and plugin reporters) in a
-/// [`CompositeReporter`] which owns the single [`RunStats`] for the run.
+/// [`CompositeReporter`] which owns the single [`RunStats`](stats::RunStats) for the run.
 pub fn make_reporter(
     opts: ReporterOpts,
     is_tty: bool,

@@ -191,45 +191,85 @@ impl ColorMode {
 /// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
 #[derive(Debug)]
 pub struct Config {
+    /// Project root directory (where `pyproject.toml` lives).
     pub rootdir: Utf8PathBuf,
+    /// Directories to search for test files.
     pub testpaths: Vec<Utf8PathBuf>,
+    /// Glob patterns matching test file names (e.g. `test_*.py`).
     pub python_files: Vec<String>,
+    /// Directory names to skip during recursive file discovery.
     pub norecursedirs: Vec<String>,
+    /// Stop the run after this many failures (0 = no limit).
     pub maxfail: usize,
+    /// Custom marker names registered via `[tool.oxitest] markers`.
     pub registered_markers: Vec<String>,
+    /// Default per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
+    /// Force serial (single-process) execution.
     pub serial: bool,
+    /// PDB debugger mode (`PostMortem` or `Always`); `None` = disabled.
     pub debug: Option<DebugMode>,
+    /// Number of parallel worker processes (`Auto` or a fixed count).
     pub workers: Option<WorkerCount>,
+    /// Maximum age (in days) before a cache entry is evicted.
     pub cache_max_age: u32,
+    /// Minimum number of tests required before enabling parallel execution.
     pub min_parallel_tests: usize,
+    /// Multiplier applied to all test timeouts (e.g. 2.0 doubles them).
     pub timeout_multiplier: Option<f64>,
+    /// Estimated per-worker subprocess spawn overhead in milliseconds.
     pub spawn_overhead_ms: f64,
+    /// Strict-mode level for lint-style violations.
     pub strict: Option<StrictMode>,
+    /// Markers that lack a description (used for strict-mode diagnostics).
     pub markers_without_description: Vec<String>,
+    /// Scheduling strategy for distributing tests across workers.
     pub schedule: ScheduleStrategy,
+    /// Failed-test re-run mode (`Only` or `First`); `None` = off.
     pub failed: Option<FailedMode>,
+    /// Traceback display style (short, long, line, no, native, auto).
     pub tb: TbStyle,
+    /// Show local variables in tracebacks.
     pub show_locals: bool,
+    /// Include oxitest-internal frames in tracebacks.
     pub show_internals: bool,
+    /// Output verbosity level.
     pub verbosity: Verbosity,
+    /// Show the N slowest test durations; `None` = disabled.
     pub durations: Option<usize>,
+    /// Terminal color mode (auto, always, never).
     pub color: ColorMode,
+    /// Python plugin module paths to load.
     pub plugins: Vec<String>,
+    /// Per-plugin TOML settings from `[tool.oxitest.<plugin>]`.
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
+    /// Async test backend name (e.g. `"asyncio"`).
     pub async_backend: String,
+    /// Git ref for `--affected` filtering; `None` = disabled.
     pub affected: Option<String>,
+    /// Default base ref for `--affected` when no explicit ref is given.
     pub affected_base: String,
+    /// Number of times to retry failed tests.
     pub retries: usize,
+    /// Delay in seconds between retries.
     pub retries_delay_secs: u64,
+    /// Whether to keep temporary directories after the run.
     pub keep_tmp: Option<KeepTmpMode>,
+    /// Auto-arrange threshold: skip fixture arrangement when item count is below this.
     pub auto_arrange_threshold: Option<u8>,
+    /// Emit per-module collection timing profile.
     pub collection_profile: bool,
+    /// Respect `.gitignore` rules during file discovery.
     pub use_gitignore: bool,
+    /// Collect and run doctests from Python source modules.
     pub doctest_modules: bool,
+    /// Specific node IDs to run (e.g. `path/test.py::test_name`).
     pub node_ids: Vec<crate::types::NodeId>,
+    /// Source files extracted from `node_ids` for targeted collection.
     pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
+    /// Enable coverage collection via `coverage.py`.
     pub cov: bool,
+    /// Coverage report output format (term, html, xml, json, none).
     pub cov_report: Option<cli::CovReportFormat>,
     /// True when the user specified explicit paths or node IDs on the CLI.
     /// Used to skip unused-fixture detection (which requires the full suite).

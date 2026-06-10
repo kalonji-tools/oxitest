@@ -1,4 +1,4 @@
-//! PyO3 module definition — delegates to [`pipeline::run()`] for all test execution.
+//! PyO3 module definition — delegates to `pipeline::run()` for all test execution.
 
 #![allow(clippy::useless_conversion)] // pyo3 macros generate this
 
