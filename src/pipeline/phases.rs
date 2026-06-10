@@ -118,35 +118,9 @@ impl Pipeline<FilesCollected> {
 
     pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
         let (session, fixture_violations) =
-            match bridge::FixtureSession::new(py, &self.state.conftest_files) {
-                Ok(pair) => pair,
-                Err(e) => {
-                    let err = types::CollectError::PyError(format!(
-                        "Failed to load conftest fixtures: {}",
-                        e
-                    ));
-                    return Err(helpers::early_exit_with_error(&[err], &|| {
-                        self.make_error_reporter()
-                    }));
-                }
-            };
-
-        if !self.cfg.plugins.is_empty() {
-            if let Err(e) = session.load_plugins(py, &self.cfg.plugins, &self.cfg.plugin_settings) {
-                let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-                return Err(helpers::early_exit_with_error(&[err], &|| {
-                    self.make_error_reporter()
-                }));
-            }
-        }
-
-        if let Err(e) = session.init_async_backend(py, &self.cfg.async_backend) {
-            let err = types::CollectError::PyError(format!("Async backend init failed: {}", e));
-            return Err(helpers::early_exit_with_error(&[err], &|| {
+            helpers::init_session(py, &self.state.conftest_files, &self.cfg, || {
                 self.make_error_reporter()
-            }));
-        }
-
+            })?;
         let (
             shared,
             FilesCollected {
@@ -356,35 +330,9 @@ impl Pipeline<Prescanned> {
 impl Pipeline<MetadataFiltered> {
     pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
         let (session, fixture_violations) =
-            match bridge::FixtureSession::new(py, &self.state.conftest_files) {
-                Ok(pair) => pair,
-                Err(e) => {
-                    let err = types::CollectError::PyError(format!(
-                        "Failed to load conftest fixtures: {}",
-                        e
-                    ));
-                    return Err(helpers::early_exit_with_error(&[err], &|| {
-                        self.make_error_reporter()
-                    }));
-                }
-            };
-
-        if !self.cfg.plugins.is_empty() {
-            if let Err(e) = session.load_plugins(py, &self.cfg.plugins, &self.cfg.plugin_settings) {
-                let err = types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-                return Err(helpers::early_exit_with_error(&[err], &|| {
-                    self.make_error_reporter()
-                }));
-            }
-        }
-
-        if let Err(e) = session.init_async_backend(py, &self.cfg.async_backend) {
-            let err = types::CollectError::PyError(format!("Async backend init failed: {}", e));
-            return Err(helpers::early_exit_with_error(&[err], &|| {
+            helpers::init_session(py, &self.state.conftest_files, &self.cfg, || {
                 self.make_error_reporter()
-            }));
-        }
-
+            })?;
         let (
             shared,
             MetadataFiltered {
