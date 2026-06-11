@@ -227,6 +227,44 @@ def _build_execution_chain(
 _NULL_SESSION: _SessionProtocol = FixtureSession(_FixtureRegistry())
 
 
+def _evaluate_marks_phase(
+    resolved: _ResolvedTest,
+    session: _SessionProtocol,
+    module_path: str,
+    default_timeout: int | None,
+    marks: list[MarkInfo],
+) -> tuple[TestResult | None, list[MarkWrapper]]:
+    """Evaluate marks and return (short_circuit, wrappers)."""
+    _plugin_registry = getattr(session, "_plugin_registry", None)
+    _plugin_handlers: list[MarkHandler] = []
+    if _plugin_registry is not None:  # pragma: no cover
+        _plugin_handlers = [
+            _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
+        ]
+
+    ctx = _HandlerContext(
+        fn_raw=resolved.fn_raw,
+        fn=resolved.fn,
+        all_kwargs=resolved.all_kwargs,
+        session=session,
+        module_path=module_path,
+        fn_teardowns=resolved.fn_teardowns,
+        default_timeout=default_timeout,
+    )
+    return evaluate_marks(marks, ctx, plugin_handlers=_plugin_handlers or None)
+
+
+def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None:
+    """Run function-scope teardowns in reverse order, suppressing errors."""
+    token = _current_teardown_node_id.set(node_id)
+    try:
+        for td in reversed(fn_teardowns):
+            with contextlib.suppress(Exception):
+                td()
+    finally:
+        _current_teardown_node_id.reset(token)
+
+
 def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
@@ -291,28 +329,10 @@ def run_test(
     all_kwargs = resolved.all_kwargs
     fn_teardowns = resolved.fn_teardowns
 
-    ctx = _HandlerContext(
-        fn_raw=fn_raw,
-        fn=fn,
-        all_kwargs=all_kwargs,
-        session=effective_session,
-        module_path=meta.module_path,
-        fn_teardowns=fn_teardowns,
-        default_timeout=default_timeout,
-    )
     try:
         marks: list[MarkInfo] = get_marks(fn_raw)
-
-        # Build plugin mark handlers for unified dispatch
-        _plugin_registry = getattr(effective_session, "_plugin_registry", None)
-        _plugin_handlers: list[MarkHandler] = []
-        if _plugin_registry is not None:  # pragma: no cover
-            _plugin_handlers = [
-                _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
-            ]
-
-        short_circuit, wrappers = evaluate_marks(
-            marks, ctx, plugin_handlers=_plugin_handlers or None
+        short_circuit, wrappers = _evaluate_marks_phase(
+            resolved, effective_session, meta.module_path, default_timeout, marks
         )
         if short_circuit is not None:
             return short_circuit
@@ -344,12 +364,5 @@ def run_test(
         return result
     finally:
         sys.modules.pop(unique_name, None)
-        token = _current_teardown_node_id.set(meta.node_id)
-        try:
-            for td in reversed(fn_teardowns):
-                # teardown errors already printed by FixtureSession._safe_call
-                with contextlib.suppress(Exception):
-                    td()
-        finally:
-            _current_teardown_node_id.reset(token)
+        _run_teardowns(fn_teardowns, meta.node_id)
         _test_run_context.reset(_run_ctx_token)
