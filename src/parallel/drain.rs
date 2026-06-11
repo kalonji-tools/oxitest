@@ -99,46 +99,50 @@ pub(crate) fn drain_worker_results(
     }
 }
 
+/// Bundles the mutable and shared state needed by [`handle_drain_outcome`].
+pub(crate) struct DrainContext<'a> {
+    pub child: &'a mut std::process::Child,
+    pub items: &'a [std::sync::Arc<crate::types::TestItem>],
+    pub watchdog: std::time::Duration,
+    pub module_path: &'a camino::Utf8Path,
+    pub tx: &'a crossbeam_channel::Sender<WorkerResult>,
+    pub worker_id: usize,
+}
+
 /// Handles the result of draining worker output for one group.
 /// Returns `false` if the subprocess died and should not receive more tasks.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_drain_outcome(
     outcome: DrainOutcome,
-    child: &mut std::process::Child,
-    items: &[std::sync::Arc<crate::types::TestItem>],
     received: usize,
-    watchdog: std::time::Duration,
-    module_path: &camino::Utf8Path,
-    tx: &crossbeam_channel::Sender<WorkerResult>,
-    worker_id: usize,
+    ctx: &mut DrainContext<'_>,
 ) -> bool {
     match outcome {
         DrainOutcome::Complete => true,
         DrainOutcome::TimedOut => {
             tracing::error!(
-                module = %module_path,
-                watchdog_secs = watchdog.as_secs(),
+                module = %ctx.module_path,
+                watchdog_secs = ctx.watchdog.as_secs(),
                 "worker subprocess unresponsive; killing"
             );
-            let _ = child.kill();
-            for item in items.iter().skip(received) {
-                let (wo, dur) = WorkerOutcome::timed_out(watchdog);
-                let _ = tx.send(WorkerResult {
+            let _ = ctx.child.kill();
+            for item in ctx.items.iter().skip(received) {
+                let (wo, dur) = WorkerOutcome::timed_out(ctx.watchdog);
+                let _ = ctx.tx.send(WorkerResult {
                     node_id: item.node_id.to_string(),
                     duration_ms: dur,
                     outcome: wo,
-                    worker_id,
+                    worker_id: ctx.worker_id,
                 });
             }
             false
         }
         DrainOutcome::Disconnected => {
-            for item in items.iter().skip(received) {
-                let _ = tx.send(WorkerResult {
+            for item in ctx.items.iter().skip(received) {
+                let _ = ctx.tx.send(WorkerResult {
                     node_id: item.node_id.to_string(),
                     duration_ms: 0.0,
                     outcome: WorkerOutcome::crashed(),
-                    worker_id,
+                    worker_id: ctx.worker_id,
                 });
             }
             false
