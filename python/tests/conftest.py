@@ -30,6 +30,7 @@ from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.result import TestResult
 
 __all__ = [
+    "exec_inline",
     "make_fixture_def",
     "make_meta",
     "make_session",
@@ -215,6 +216,34 @@ def run_test(
         param_id=param_id,
     )
     return _run_test(meta, session=session, default_timeout=default_timeout)
+
+
+def exec_inline(
+    tmp,
+    code: str,
+    fn_name: str = "test_ok",
+    *,
+    session: _SessionProtocol | None = None,
+    name: str | None = None,
+    param_id: str | None = None,
+    default_timeout: int | None = None,
+) -> TestResult:
+    """Write *code* to a temp test file and execute *fn_name* from it.
+
+    Combines ``write_test_module`` + ``run_test`` into a single call.
+    The file name is derived from *fn_name* unless *name* is given.
+    """
+    if name is None:
+        base = fn_name.removeprefix("test_") or "auto"
+        name = f"test_{base}.py"
+    path = write_test_module(tmp, code, name=name)
+    return run_test(
+        path,
+        fn_name,
+        session=session,
+        param_id=param_id,
+        default_timeout=default_timeout,
+    )
 
 
 def write_test_file(
