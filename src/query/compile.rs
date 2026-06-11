@@ -26,6 +26,24 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
     let mut pos = 0;
     let mut tokens: Vec<Token> = Vec::new();
 
+    // Pre-compute byte offset for each char index (for miette spans on errors).
+    let byte_offsets: Vec<usize> = chars
+        .iter()
+        .scan(0usize, |acc, c| {
+            let off = *acc;
+            *acc += c.len_utf8();
+            Some(off)
+        })
+        .collect();
+    let total_bytes = input.len();
+    let byte_at = |pos: usize| -> usize {
+        if pos < byte_offsets.len() {
+            byte_offsets[pos]
+        } else {
+            total_bytes
+        }
+    };
+
     // Track whether the previous non-whitespace token was an Ident (predicate
     // name). When `(` follows an Ident it is a predicate argument list, so the
     // first bare word inside should be a Str. When `(` follows anything else it
@@ -95,7 +113,9 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
                     pos += 1;
                 }
                 if pos >= len {
-                    return Err(DslError::UnterminatedRegex);
+                    return Err(DslError::UnterminatedRegex {
+                        span: (byte_at(start - 1), total_bytes - byte_at(start - 1)).into(),
+                    });
                 }
                 let pattern: String = chars[start..pos].iter().collect();
                 pos += 1; // skip closing '/'
@@ -112,7 +132,9 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
                     pos += 1;
                 }
                 if pos >= len {
-                    return Err(DslError::UnterminatedString);
+                    return Err(DslError::UnterminatedString {
+                        span: (byte_at(start - 1), total_bytes - byte_at(start - 1)).into(),
+                    });
                 }
                 let s: String = chars[start..pos].iter().collect();
                 pos += 1; // skip closing '"'
@@ -129,7 +151,9 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
                     pos += 1;
                 }
                 if pos >= len {
-                    return Err(DslError::UnterminatedString);
+                    return Err(DslError::UnterminatedString {
+                        span: (byte_at(start - 1), total_bytes - byte_at(start - 1)).into(),
+                    });
                 }
                 let s: String = chars[start..pos].iter().collect();
                 pos += 1; // skip closing '\''
@@ -182,9 +206,9 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
             }
 
             other => {
-                return Err(DslError::ParseError(format!(
-                    "unexpected character '{other}'"
-                )))
+                return Err(DslError::ParseError {
+                    message: format!("unexpected character '{other}'"),
+                })
             }
         }
     }
@@ -220,12 +244,12 @@ impl Parser {
                 self.advance();
                 Ok(())
             }
-            Some(t) => Err(DslError::ParseError(format!(
-                "expected {expected:?}, got {t:?}"
-            ))),
-            None => Err(DslError::ParseError(format!(
-                "expected {expected:?}, got end of input"
-            ))),
+            Some(t) => Err(DslError::ParseError {
+                message: format!("expected {expected:?}, got {t:?}"),
+            }),
+            None => Err(DslError::ParseError {
+                message: format!("expected {expected:?}, got end of input"),
+            }),
         }
     }
 
@@ -278,7 +302,9 @@ impl Parser {
             }
             Some(Token::RParen) => Err(DslError::UnmatchedParen),
             None => Err(DslError::EmptyExpression),
-            Some(other) => Err(DslError::ParseError(format!("unexpected token {other:?}"))),
+            Some(other) => Err(DslError::ParseError {
+                message: format!("unexpected token {other:?}"),
+            }),
         }
     }
 
@@ -286,7 +312,7 @@ impl Parser {
     fn parse_predicate(&mut self, name: String) -> Result<Expr, DslError> {
         match self.peek() {
             Some(Token::LParen) => {}
-            _ => return Err(DslError::MissingParens(name)),
+            _ => return Err(DslError::MissingParens { name }),
         }
         self.advance(); // consume '('
 
@@ -300,9 +326,9 @@ impl Parser {
                 match self.advance().cloned() {
                     Some(Token::Str(s)) => Matcher::Contains(s),
                     other => {
-                        return Err(DslError::ParseError(format!(
-                            "expected string after '~', got {other:?}"
-                        )))
+                        return Err(DslError::ParseError {
+                            message: format!("expected string after '~', got {other:?}"),
+                        })
                     }
                 }
             }
@@ -313,9 +339,9 @@ impl Parser {
                 match self.advance().cloned() {
                     Some(Token::Str(s)) => Matcher::Exact(s),
                     other => {
-                        return Err(DslError::ParseError(format!(
-                            "expected string after '=', got {other:?}"
-                        )))
+                        return Err(DslError::ParseError {
+                            message: format!("expected string after '=', got {other:?}"),
+                        })
                     }
                 }
             }
@@ -333,9 +359,9 @@ impl Parser {
             }
 
             other => {
-                return Err(DslError::ParseError(format!(
-                    "unexpected token in predicate argument: {other:?}"
-                )))
+                return Err(DslError::ParseError {
+                    message: format!("unexpected token in predicate argument: {other:?}"),
+                })
             }
         };
 
@@ -356,10 +382,9 @@ pub(crate) fn parse(tokens: Vec<Token>) -> Result<Expr, DslError> {
     let mut parser = Parser::new(tokens);
     let expr = parser.parse_expr()?;
     if parser.pos < parser.tokens.len() {
-        return Err(DslError::ParseError(format!(
-            "unexpected token {:?}",
-            parser.tokens[parser.pos]
-        )));
+        return Err(DslError::ParseError {
+            message: format!("unexpected token {:?}", parser.tokens[parser.pos]),
+        });
     }
     Ok(expr)
 }
@@ -492,12 +517,53 @@ mod tests {
 
     #[test]
     fn lex_error_unterminated_string() {
-        assert_eq!(lex(r#"name("foo)"#), Err(DslError::UnterminatedString));
+        assert!(matches!(
+            lex(r#"name("foo)"#),
+            Err(DslError::UnterminatedString { .. })
+        ));
+    }
+
+    #[test]
+    fn lex_error_unterminated_string_span() {
+        // name("foo  — quote starts at byte 5, spans to end (byte 10)
+        let err = lex(r#"name("foo)"#).unwrap_err();
+        match err {
+            DslError::UnterminatedString { span } => {
+                assert_eq!(span.offset(), 5, "span should start at the opening quote");
+                assert_eq!(span.len(), 5, "span should cover from quote to end");
+            }
+            other => panic!("expected UnterminatedString, got {other:?}"),
+        }
     }
 
     #[test]
     fn lex_error_unterminated_regex() {
-        assert_eq!(lex("name(/foo)"), Err(DslError::UnterminatedRegex));
+        assert!(matches!(
+            lex("name(/foo)"),
+            Err(DslError::UnterminatedRegex { .. })
+        ));
+    }
+
+    #[test]
+    fn lex_error_unterminated_regex_span() {
+        // name(/foo  — slash starts at byte 5, spans to end (byte 9)
+        let err = lex("name(/foo").unwrap_err();
+        match err {
+            DslError::UnterminatedRegex { span } => {
+                assert_eq!(span.offset(), 5, "span should start at the opening /");
+                assert_eq!(span.len(), 4, "span should cover from / to end");
+            }
+            other => panic!("expected UnterminatedRegex, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lex_error_unexpected_char() {
+        let err = lex("name(foo) #").unwrap_err();
+        assert!(
+            matches!(err, DslError::ParseError { .. }),
+            "expected ParseError, got {err:?}"
+        );
     }
 
     // ── Parser tests ──────────────────────────────────────────────────────────
@@ -607,14 +673,14 @@ mod tests {
 
     #[test]
     fn parse_error_empty() {
-        assert_eq!(lex_and_parse(""), Err(DslError::EmptyExpression));
+        assert!(matches!(lex_and_parse(""), Err(DslError::EmptyExpression)));
     }
 
     #[test]
     fn parse_error_unmatched_paren() {
         assert!(matches!(
             lex_and_parse("(a(x)"),
-            Err(DslError::UnmatchedParen | DslError::ParseError(_))
+            Err(DslError::UnmatchedParen | DslError::ParseError { .. })
         ));
     }
 
@@ -624,7 +690,7 @@ mod tests {
         // parse_predicate sees no LParen → MissingParens
         let result = lex_and_parse("name");
         assert!(
-            matches!(result, Err(DslError::MissingParens(_))),
+            matches!(result, Err(DslError::MissingParens { .. })),
             "expected MissingParens, got {result:?}"
         );
     }
@@ -665,5 +731,47 @@ mod tests {
     fn bare_word_char_rejects_whitespace() {
         assert!(!is_bare_word_char(' '));
         assert!(!is_bare_word_char('\t'));
+    }
+
+    // ── miette diagnostic rendering ──────────────────────────────────────
+
+    #[test]
+    fn miette_renders_unterminated_string_with_span() {
+        use miette::{GraphicalReportHandler, GraphicalTheme};
+
+        let input = r#"name("foo"#;
+        let err = lex(input).unwrap_err();
+        let report = miette::Report::new(err).with_source_code(input.to_string());
+        let mut buf = String::new();
+        let handler = GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor());
+        handler.render_report(&mut buf, report.as_ref()).unwrap();
+        assert!(
+            buf.contains("string starts here"),
+            "diagnostic should contain the label, got:\n{buf}"
+        );
+        assert!(
+            buf.contains("close the string"),
+            "diagnostic should contain the help text, got:\n{buf}"
+        );
+    }
+
+    #[test]
+    fn miette_renders_unterminated_regex_with_span() {
+        use miette::{GraphicalReportHandler, GraphicalTheme};
+
+        let input = "name(/foo";
+        let err = lex(input).unwrap_err();
+        let report = miette::Report::new(err).with_source_code(input.to_string());
+        let mut buf = String::new();
+        let handler = GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor());
+        handler.render_report(&mut buf, report.as_ref()).unwrap();
+        assert!(
+            buf.contains("regex starts here"),
+            "diagnostic should contain the label, got:\n{buf}"
+        );
+        assert!(
+            buf.contains("close the regex"),
+            "diagnostic should contain the help text, got:\n{buf}"
+        );
     }
 }

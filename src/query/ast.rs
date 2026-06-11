@@ -36,14 +36,22 @@ pub(crate) enum Token {
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 /// Errors produced by the DSL lexer, parser, and validator.
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub(crate) enum DslError {
     /// A string literal was not properly terminated.
     #[error("unterminated string literal")]
-    UnterminatedString,
+    #[diagnostic(help("close the string with a matching quote character"))]
+    UnterminatedString {
+        #[label("string starts here")]
+        span: miette::SourceSpan,
+    },
     /// A regex literal was not properly terminated.
     #[error("unterminated regex literal")]
-    UnterminatedRegex,
+    #[diagnostic(help("close the regex with a matching '/'"))]
+    UnterminatedRegex {
+        #[label("regex starts here")]
+        span: miette::SourceSpan,
+    },
     /// The expression string is empty.
     #[error("empty expression")]
     EmptyExpression,
@@ -51,13 +59,15 @@ pub(crate) enum DslError {
     #[error("unmatched ')'")]
     UnmatchedParen,
     /// A predicate was missing its `(...)` argument list.
-    #[error("expected '(' after predicate name '{0}'")]
-    MissingParens(String),
+    #[error("expected '(' after predicate name '{name}'")]
+    #[diagnostic(help("predicates require parentheses: {name}() or {name}(value)"))]
+    MissingParens { name: String },
     /// A general parse error with a message.
-    #[error("parse error: {0}")]
-    ParseError(String),
+    #[error("parse error: {message}")]
+    ParseError { message: String },
     /// A predicate name is not valid for the given resource kind.
     #[error("predicate '{predicate}' is not valid for resource '{resource}'")]
+    #[diagnostic(help("valid predicates: name, source, mark, async"))]
     InvalidPredicate {
         /// The predicate name used.
         predicate: String,
@@ -65,8 +75,8 @@ pub(crate) enum DslError {
         resource: String,
     },
     /// A regex pattern failed to compile.
-    #[error("invalid regex pattern '{0}': {1}")]
-    InvalidRegex(String, String),
+    #[error("invalid regex pattern '{pattern}': {reason}")]
+    InvalidRegex { pattern: String, reason: String },
 }
 
 // ── AST ───────────────────────────────────────────────────────────────────────

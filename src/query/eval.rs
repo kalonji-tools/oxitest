@@ -75,8 +75,10 @@ pub(crate) fn validate_predicates(expr: &Expr, resource: &ResourceKind) -> Resul
             }
             // Also validate regex patterns compile
             if let Matcher::Regex(pattern) = matcher {
-                Regex::new(pattern)
-                    .map_err(|e| DslError::InvalidRegex(pattern.clone(), e.to_string()))?;
+                Regex::new(pattern).map_err(|e| DslError::InvalidRegex {
+                    pattern: pattern.clone(),
+                    reason: e.to_string(),
+                })?;
             }
             Ok(())
         }
