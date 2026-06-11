@@ -4,6 +4,15 @@ use crate::collector;
 use crate::types::ExitCode;
 use crate::{config, filter};
 
+/// Pre-computed filter state used by [`file_passes_all_filters`].
+struct FilterPredicates<'a> {
+    node_ids: &'a [String],
+    expression: Option<&'a str>,
+    failed_ids: &'a std::collections::HashSet<String>,
+    has_node_ids: bool,
+    has_failed_filter: bool,
+}
+
 impl Pipeline<Prescanned> {
     pub(crate) fn filter_metadata(self) -> Result<Pipeline<MetadataFiltered>, ExitCode> {
         let has_node_ids = !self.cfg.node_ids.is_empty();
@@ -52,21 +61,21 @@ impl Pipeline<Prescanned> {
         };
         let node_ids: Vec<String> = self.cfg.node_ids.iter().map(|n| n.to_string()).collect();
 
+        let preds = FilterPredicates {
+            node_ids: &node_ids,
+            expression: expression.as_deref(),
+            failed_ids: &failed_ids,
+            has_node_ids,
+            has_failed_filter,
+        };
+
         let mut modules_to_import = Vec::new();
         for (path, items, has_dynamic) in &self.state.prescan_data {
             if *has_dynamic {
                 modules_to_import.push(path.clone());
                 continue;
             }
-            if self.file_passes_all_filters(
-                path,
-                items,
-                has_node_ids,
-                has_failed_filter,
-                &node_ids,
-                expression.as_deref(),
-                &failed_ids,
-            ) {
+            if self.file_passes_all_filters(path, items, &preds) {
                 modules_to_import.push(path.clone());
             }
         }
@@ -93,37 +102,34 @@ impl Pipeline<Prescanned> {
     /// Returns true if the file should be imported given the active filters.
     ///
     /// Uses early-return false for each failing filter (AND semantics, short-circuit).
-    #[allow(clippy::too_many_arguments)]
     fn file_passes_all_filters(
         &self,
         path: &camino::Utf8Path,
         items: &[crate::prescan::PrescanItem],
-        has_node_ids: bool,
-        has_failed_filter: bool,
-        node_ids: &[String],
-        expression: Option<&str>,
-        failed_ids: &std::collections::HashSet<String>,
+        preds: &FilterPredicates<'_>,
     ) -> bool {
-        if has_node_ids {
+        if preds.has_node_ids {
             // Only apply node ID filtering to files that came from node ID args,
             // not bare path args. Files from bare paths pass through unconditionally.
             let is_node_id_source = self.cfg.node_id_source_files.is_empty()
                 || self.cfg.node_id_source_files.contains(path);
-            if is_node_id_source && !filter::file_matches_node_ids(items, path.as_str(), node_ids) {
+            if is_node_id_source
+                && !filter::file_matches_node_ids(items, path.as_str(), preds.node_ids)
+            {
                 return false;
             }
         }
 
-        if let Some(expr) = expression {
+        if let Some(expr) = preds.expression {
             let module_marks = self.state.module_markers.get(path).map(|v| v.as_slice());
             if !filter::file_matches_expression(items, path.as_str(), expr, module_marks) {
                 return false;
             }
         }
 
-        if has_failed_filter
-            && !failed_ids.is_empty()
-            && !filter::file_matches_last_failed(items, path.as_str(), failed_ids)
+        if preds.has_failed_filter
+            && !preds.failed_ids.is_empty()
+            && !filter::file_matches_last_failed(items, path.as_str(), preds.failed_ids)
         {
             return false;
         }
