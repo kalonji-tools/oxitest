@@ -126,8 +126,8 @@ def test_large_computation():
 ```
 
 ```bash
-oxitest tests/ -m slow          # run only slow tests
-oxitest tests/ -m "not slow"    # skip slow tests
+oxitest tests/ -E "mark(slow)"          # run only slow tests
+oxitest tests/ -E "not mark(slow)"      # skip slow tests
 ```
 
 Built-in marks — `skip`, `xfail`, `timeout` — work without registration.
