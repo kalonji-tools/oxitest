@@ -13,11 +13,9 @@ from oxitest._bridge._errors import (
     FixtureSetupError,
 )
 from oxitest._bridge._fixture_registry import (
-    FixtureDef,
     FixtureRegistry,
     FixtureShadowWarning,
 )
-from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge.result import ViolationKind
 
@@ -67,13 +65,7 @@ def test_registry_get_returns_none_for_unknown():
 
 def test_registry_register_and_get():
     reg = FixtureRegistry()
-    defn = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/c.py",
-    )
+    defn = helpers.common.make_fixture_def("db", conftest_path="/c.py")
     reg.register(defn)
     assert reg.get("db") is defn, (
         "FixtureRegistry.get('db') should return the exact FixtureDef that was "
@@ -83,8 +75,12 @@ def test_registry_register_and_get():
 
 def test_registry_most_local_wins():
     reg = FixtureRegistry()
-    root = FixtureDef("db", lambda: 1, False, None, "/root/conftest.py")
-    leaf = FixtureDef("db", lambda: 2, False, None, "/root/tests/conftest.py")
+    root = helpers.common.make_fixture_def(
+        "db", lambda: 1, conftest_path="/root/conftest.py"
+    )
+    leaf = helpers.common.make_fixture_def(
+        "db", lambda: 2, conftest_path="/root/tests/conftest.py"
+    )
     reg.register(root)
     reg.register(leaf)
     assert reg.get("db") is leaf, (
@@ -95,8 +91,8 @@ def test_registry_most_local_wins():
 
 def test_registry_get_autouse_returns_only_autouse():
     reg = FixtureRegistry()
-    auto = FixtureDef("setup", lambda: None, True, None, "/c.py")
-    manual = FixtureDef("db", lambda: None, False, None, "/c.py")
+    auto = helpers.common.make_fixture_def("setup", autouse=True, conftest_path="/c.py")
+    manual = helpers.common.make_fixture_def("db", conftest_path="/c.py")
     reg.register(auto)
     reg.register(manual)
     result = list(reg.get_autouse())
@@ -122,12 +118,8 @@ def test_registry_get_autouse_empty():
 def test_register_returns_violation_for_untyped_fixture():
     # Arrange
     reg = FixtureRegistry()
-    defn = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/project/conftest.py",
+    defn = helpers.common.make_fixture_def(
+        "db", lambda: None, conftest_path="/project/conftest.py"
     )
 
     # Act
@@ -157,12 +149,8 @@ def test_register_returns_empty_for_typed_fixture():
     def typed_fixture() -> int:
         return 42
 
-    defn = FixtureDef(
-        name="val",
-        func=typed_fixture,
-        autouse=False,
-        params=None,
-        conftest_path="/project/conftest.py",
+    defn = helpers.common.make_fixture_def(
+        "val", typed_fixture, conftest_path="/project/conftest.py"
     )
 
     # Act
@@ -181,20 +169,8 @@ def test_register_returns_empty_for_typed_fixture():
 def test_register_duplicate_name_warns(warn: WarnCapture) -> None:
     # Arrange
     reg = FixtureRegistry()
-    parent_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="conftest.py",
-    )
-    child_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="tests/conftest.py",
-    )
+    parent_def = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
+    child_def = helpers.common.make_fixture_def("db", conftest_path="tests/conftest.py")
 
     # Act
     reg.register(parent_def)
@@ -217,13 +193,7 @@ def test_register_duplicate_name_warns(warn: WarnCapture) -> None:
 def test_register_first_fixture_no_shadow_warning(warn: WarnCapture) -> None:
     # Arrange
     reg = FixtureRegistry()
-    defn = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="conftest.py",
-    )
+    defn = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
 
     # Act
     reg.register(defn)
@@ -241,20 +211,8 @@ def test_register_first_fixture_no_shadow_warning(warn: WarnCapture) -> None:
 def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
     # Arrange
     reg = FixtureRegistry()
-    first = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="conftest.py",
-    )
-    second = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="conftest.py",
-    )
+    first = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
+    second = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
 
     # Act
     reg.register(first)
@@ -280,9 +238,9 @@ def test_function_scope_new_instance_per_resolve():
         calls.append(1)
         return len(calls)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("val", factory, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
+    )
 
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -308,9 +266,9 @@ def test_yield_fixture_function_scope_teardown():
         yield "value"
         torn_down.append(True)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("val", factory, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
+    )
 
     def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -341,9 +299,9 @@ def test_addfinalizer_runs_in_teardown():
         ctx.addfinalizer(lambda: calls.append("done"))
         return "val"
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("thing", factory, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
+    )
 
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -369,14 +327,13 @@ def test_addfinalizer_runs_in_teardown():
 
 
 def test_dag_fixture_depending_on_fixture():
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("base", lambda: 10, False, None, "/c.py"))
-
     def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
         return base * 2
 
-    reg.register(FixtureDef("derived", derived, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("base", lambda: 10, conftest_path="/c.py"),
+        helpers.common.make_fixture_def("derived", derived, conftest_path="/c.py"),
+    )
 
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -397,9 +354,11 @@ def test_autouse_runs_side_effects_without_being_in_kwargs():
     def setup():
         calls.append(1)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "setup", setup, autouse=True, conftest_path="/c.py"
+        )
+    )
 
     def fn():
         pass  # does NOT request 'setup'
@@ -422,9 +381,11 @@ def test_autouse_teardown_still_runs():
         yield
         torn_down.append(True)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "setup", setup, autouse=True, conftest_path="/c.py"
+        )
+    )
 
     def fn():
         pass
@@ -442,8 +403,7 @@ def test_autouse_teardown_still_runs():
 
 
 def test_missing_fixture_raises_not_found():
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     def fn(nonexistent: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -457,17 +417,16 @@ def test_missing_fixture_raises_not_found():
 
 
 def test_cycle_raises_fixture_cycle_error():
-    reg = FixtureRegistry()
-
     def a(b: Fixture[int]) -> int:  # type: ignore[type-arg]
         return b
 
     def b(a: Fixture[int]) -> int:  # type: ignore[type-arg]
         return a
 
-    reg.register(FixtureDef("a", a, False, None, "/c.py"))
-    reg.register(FixtureDef("b", b, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("a", a, conftest_path="/c.py"),
+        helpers.common.make_fixture_def("b", b, conftest_path="/c.py"),
+    )
 
     def fn(a: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -480,9 +439,9 @@ def test_setup_error_raises_fixture_setup_error():
     def bad():
         raise ValueError("oops")
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("bad", bad, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("bad", bad, conftest_path="/c.py")
+    )
 
     def fn(bad: Fixture[None]) -> None:  # type: ignore[type-arg]
         pass
@@ -510,9 +469,9 @@ def test_fixture_marker_param_resolved_by_name():
         calls.append(1)
         return 42
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("val", factory, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
+    )
 
     def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -529,8 +488,7 @@ def test_fixture_marker_param_resolved_by_name():
 
 
 def test_non_fixture_param_ignored_by_resolver():
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     def fn(x: int) -> None:
         pass
@@ -543,8 +501,7 @@ def test_non_fixture_param_ignored_by_resolver():
 
 
 def test_fixture_test_context_injected_directly():
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     def fn(ctx: Fixture[OxiTestContext]) -> None:  # type: ignore[type-arg]
         pass
@@ -558,14 +515,13 @@ def test_fixture_test_context_injected_directly():
 
 def test_fixture_dep_resolved_via_annotation():
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("base", lambda: 10, False, None, "/c.py"))
-
     def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
         return base * 3
 
-    reg.register(FixtureDef("derived", derived, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("base", lambda: 10, conftest_path="/c.py"),
+        helpers.common.make_fixture_def("derived", derived, conftest_path="/c.py"),
+    )
 
     def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -585,9 +541,11 @@ def test_autouse_not_double_invoked_when_explicitly_requested():
         calls.append(1)
         return len(calls)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("setup", setup, True, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "setup", setup, autouse=True, conftest_path="/c.py"
+        )
+    )
 
     def fn(setup: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -759,23 +717,13 @@ def test_fixture_ref_inner_type_rejects_fixture_type():
 
 def test_resolve_for_test_skip_names_prevents_resolution():
     """skip_names prevents resolving Fixture[T] params by those names."""
-    registry = FixtureRegistry()
     called: list[str] = []
 
     def my_db() -> int:
         called.append("db")
         return 42
 
-    registry.register(
-        FixtureDef(
-            name="db",
-            func=my_db,
-            autouse=False,
-            params=None,
-            conftest_path="",
-        )
-    )
-    session = FixtureSession(registry)
+    session = helpers.common.make_session(helpers.common.make_fixture_def("db", my_db))
 
     def test_fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -793,9 +741,11 @@ def test_resolve_for_test_skip_names_prevents_resolution():
 def test_unannotated_param_matching_fixture_raises_helpful_error():
     from oxitest._bridge._errors import UnannotatedFixtureParamError
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
+        )
+    )
 
     # param 'numbers' has no annotation — should raise a helpful error
     def test_fn(numbers) -> None:  # type: ignore[annotation-unchecked]
@@ -821,9 +771,11 @@ def test_unannotated_param_matching_fixture_raises_helpful_error():
 def test_wrong_annotation_matching_fixture_raises_helpful_error():
     from oxitest._bridge._errors import UnannotatedFixtureParamError
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("numbers", lambda: [1, 2, 3], False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
+        )
+    )
 
     # param 'numbers' has wrong annotation (list[int] instead of Fixture[list[int]])
     def test_fn(numbers: list[int]) -> None:
@@ -888,9 +840,9 @@ def test_on_teardown_registers_cleanup():
         ctx.on_teardown(lambda: calls.append("done"))
         return "val"
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("thing", factory, False, None, "/c.py"))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
+    )
 
     def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -954,9 +906,11 @@ def test_shared_fixture_is_called_once_across_tests():
         calls.append(1)
         return len(calls)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("db", factory, False, None, "/c.py", shared=True))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", factory, shared=True, conftest_path="/c.py"
+        )
+    )
 
     def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
@@ -974,9 +928,11 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy():
     def factory() -> dict[str, int]:
         return {"x": 1}
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("cfg", factory, False, None, "/c.py", shared=True))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "cfg", factory, shared=True, conftest_path="/c.py"
+        )
+    )
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
@@ -994,9 +950,11 @@ def test_shared_fixture_proxy_raises_on_item_mutation():
     def factory() -> dict[str, int]:
         return {"x": 1}
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("cfg", factory, False, None, "/c.py", shared=True))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "cfg", factory, shared=True, conftest_path="/c.py"
+        )
+    )
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
@@ -1013,9 +971,11 @@ def test_shared_fixture_teardown_runs_on_end_session():
         yield "v"
         torn_down.append(True)
 
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("res", factory, False, None, "/c.py", shared=True))
-    session = FixtureSession(reg)
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "res", factory, shared=True, conftest_path="/c.py"
+        )
+    )
 
     def fn(res: Fixture[str]) -> None:  # type: ignore[type-arg]
         pass
@@ -1062,13 +1022,8 @@ def test_fixture_not_found_error_without_namespace():
 
 
 def test_fixture_def_has_namespace_field():
-    defn = FixtureDef(
-        name="conn",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/path/conftest.py",
-        namespace="db",
+    defn = helpers.common.make_fixture_def(
+        "conn", namespace="db", conftest_path="/path/conftest.py"
     )
     assert defn.namespace == "db", (
         f"FixtureDef(namespace='db') should store namespace='db', got "
@@ -1077,13 +1032,7 @@ def test_fixture_def_has_namespace_field():
 
 
 def test_fixture_def_namespace_defaults_to_empty():
-    defn = FixtureDef(
-        name="conn",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="",
-    )
+    defn = helpers.common.make_fixture_def("conn")
     assert defn.namespace == "", (
         f"FixtureDef without namespace should default to '', got {defn.namespace!r}"
     )
@@ -1094,7 +1043,7 @@ def test_fixture_def_namespace_defaults_to_empty():
 
 def test_registry_get_in_namespace_returns_matching_def():
     reg = FixtureRegistry()
-    defn = FixtureDef("conn", lambda: 1, False, None, "", namespace="db")
+    defn = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     reg.register(defn)
     result = reg.get_in_namespace("conn", "db")
     assert result is defn, (
@@ -1105,8 +1054,8 @@ def test_registry_get_in_namespace_returns_matching_def():
 
 def test_registry_get_in_namespace_ignores_other_namespace():
     reg = FixtureRegistry()
-    db_def = FixtureDef("conn", lambda: 1, False, None, "", namespace="db")
-    http_def = FixtureDef("conn", lambda: 2, False, None, "", namespace="http")
+    db_def = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
+    http_def = helpers.common.make_fixture_def("conn", lambda: 2, namespace="http")
     reg.register(db_def)
     reg.register(http_def)
     assert reg.get_in_namespace("conn", "db") is db_def, (
@@ -1121,7 +1070,7 @@ def test_registry_get_in_namespace_ignores_other_namespace():
 
 def test_registry_get_in_namespace_returns_none_when_missing():
     reg = FixtureRegistry()
-    defn = FixtureDef("conn", lambda: 1, False, None, "", namespace="db")
+    defn = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     reg.register(defn)
     assert reg.get_in_namespace("conn", "http") is None, (
         "get_in_namespace('conn', 'http') should return None (wrong namespace)"
@@ -1133,7 +1082,7 @@ def test_registry_get_in_namespace_returns_none_when_missing():
 
 def test_registry_has_namespace_true():
     reg = FixtureRegistry()
-    reg.register(FixtureDef("conn", lambda: 1, False, None, "", namespace="db"))
+    reg.register(helpers.common.make_fixture_def("conn", lambda: 1, namespace="db"))
     assert reg.has_namespace("db") is True, (
         "has_namespace('db') should return True when a fixture with that namespace is "
         "registered"
@@ -1142,7 +1091,7 @@ def test_registry_has_namespace_true():
 
 def test_registry_has_namespace_false():
     reg = FixtureRegistry()
-    reg.register(FixtureDef("conn", lambda: 1, False, None, "", namespace="db"))
+    reg.register(helpers.common.make_fixture_def("conn", lambda: 1, namespace="db"))
     assert reg.has_namespace("http") is False, (
         "has_namespace('http') should return False when no fixture with that namespace "
         "exists"
@@ -1161,7 +1110,7 @@ def test_registry_has_namespace_empty_registry():
 
 def test_registry_contains_registered_name():
     reg = FixtureRegistry()
-    reg.register(FixtureDef("db", lambda: None, False, None, "conftest.py"))
+    reg.register(helpers.common.make_fixture_def("db", conftest_path="conftest.py"))
     assert "db" in reg, "__contains__ should return True for a registered fixture name"
 
 
@@ -1174,8 +1123,8 @@ def test_registry_contains_returns_false_for_unknown():
 
 def test_registry_iter_yields_registered_names():
     reg = FixtureRegistry()
-    reg.register(FixtureDef("a", lambda: None, False, None, "conftest.py"))
-    reg.register(FixtureDef("b", lambda: None, False, None, "conftest.py"))
+    reg.register(helpers.common.make_fixture_def("a", conftest_path="conftest.py"))
+    reg.register(helpers.common.make_fixture_def("b", conftest_path="conftest.py"))
     assert set(reg) == {"a", "b"}, "__iter__ should yield all registered fixture names"
 
 
@@ -1186,8 +1135,16 @@ def test_registry_iter_empty():
 
 def test_registry_all_defs_returns_all_entries():
     reg = FixtureRegistry()
-    reg.register(FixtureDef("db", lambda: "root", False, None, "root/conftest.py"))
-    reg.register(FixtureDef("db", lambda: "leaf", False, None, "root/sub/conftest.py"))
+    reg.register(
+        helpers.common.make_fixture_def(
+            "db", lambda: "root", conftest_path="root/conftest.py"
+        )
+    )
+    reg.register(
+        helpers.common.make_fixture_def(
+            "db", lambda: "leaf", conftest_path="root/sub/conftest.py"
+        )
+    )
     defs = reg.all_defs("db")
     assert len(defs) == 2, (
         "all_defs should return all registered FixtureDefs for a name"
@@ -1211,12 +1168,10 @@ def test_registry_all_defs_returns_empty_for_unknown():
 
 
 def test_get_fixture_in_namespace_resolves_correct_fixture():
-    reg = FixtureRegistry()
-    reg.register(FixtureDef("conn", lambda: "db-conn", False, None, "", namespace="db"))
-    reg.register(
-        FixtureDef("conn", lambda: "http-conn", False, None, "", namespace="http")
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
+        helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
-    session = FixtureSession(reg)
 
     result = session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
     assert result == "db-conn", (
@@ -1232,8 +1187,7 @@ def test_get_fixture_in_namespace_resolves_correct_fixture():
 
 
 def test_get_fixture_in_namespace_raises_not_found_with_namespace():
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     with raises(FixtureNotFoundError) as exc_info:
         session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
@@ -1274,8 +1228,7 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
     """Test that resolve_for_test injects FixturesProxy for bare Fixtures annotation."""
     from oxitest._bridge.proxy_ns import FixturesProxy
 
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     # Create the test function with Fixtures annotation
     # Use the actual Fixtures class directly (not string annotation)
@@ -1297,8 +1250,7 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
 
 def test_resolve_for_test_fixtures_proxy_has_correct_session():
     """Verify that FixturesProxy holds reference to the correct session."""
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = helpers.common.make_session()
 
     def test_fn(fx: Fixtures) -> None:
         pass
@@ -1317,43 +1269,25 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session():
 
 
 def test_has_shared_fixtures_empty_registry():
-    session = FixtureSession(FixtureRegistry())
+    session = helpers.common.make_session()
     assert session.has_shared_fixtures() is False, (
         "has_shared_fixtures() on an empty registry should return False"
     )
 
 
 def test_has_shared_fixtures_false_when_no_fixture_is_shared():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=False,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("db", conftest_path="/c.py")
     )
-    session = FixtureSession(reg)
     assert session.has_shared_fixtures() is False, (
         "has_shared_fixtures() should return False when no fixture has shared=True"
     )
 
 
 def test_has_shared_fixtures_true_when_any_fixture_is_shared():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("db", shared=True, conftest_path="/c.py")
     )
-    session = FixtureSession(reg)
     assert session.has_shared_fixtures() is True, (
         "has_shared_fixtures() should return True when any fixture has shared=True"
     )
@@ -1363,26 +1297,12 @@ def test_has_shared_fixtures_uses_most_local_definition():
     # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
     # The effective definition is the last-registered one (leaf), so
     # has_shared_fixtures() should return False.
-    reg = FixtureRegistry()
-    root_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/root/conftest.py",
-        shared=True,
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", shared=True, conftest_path="/root/conftest.py"
+        ),
+        helpers.common.make_fixture_def("db", conftest_path="/root/sub/conftest.py"),
     )
-    leaf_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/root/sub/conftest.py",
-        shared=False,
-    )
-    reg.register(root_def)
-    reg.register(leaf_def)
-    session = FixtureSession(reg)
     assert session.has_shared_fixtures() is False, (
         "has_shared_fixtures() should use only the most-local definition; "
         "root shared=True overridden by leaf shared=False should return False"
@@ -1393,26 +1313,12 @@ def test_shared_fixture_names_uses_most_local_definition():
     # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
     # shared_fixture_names() should NOT include "db" because the effective definition
     # (defs[-1]) has shared=False.
-    reg = FixtureRegistry()
-    root_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/root/conftest.py",
-        shared=True,
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", shared=True, conftest_path="/root/conftest.py"
+        ),
+        helpers.common.make_fixture_def("db", conftest_path="/root/sub/conftest.py"),
     )
-    leaf_def = FixtureDef(
-        name="db",
-        func=lambda: None,
-        autouse=False,
-        params=None,
-        conftest_path="/root/sub/conftest.py",
-        shared=False,
-    )
-    reg.register(root_def)
-    reg.register(leaf_def)
-    session = FixtureSession(reg)
     assert session.shared_fixture_names() == [], (
         "shared_fixture_names() should use only the most-local definition; "
         "a root shared=True overridden by leaf shared=False should not appear"
@@ -1420,56 +1326,20 @@ def test_shared_fixture_names_uses_most_local_definition():
 
 
 def test_shared_fixture_names_returns_empty_when_no_shared():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="client",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=False,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("client", conftest_path="/c.py")
     )
-    session = FixtureSession(reg)
     assert session.shared_fixture_names() == [], (
         "shared_fixture_names() should return [] when no fixture has shared=True"
     )
 
 
 def test_shared_fixture_names_returns_only_shared_names():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("db", shared=True, conftest_path="/c.py"),
+        helpers.common.make_fixture_def("cache", shared=True, conftest_path="/c.py"),
+        helpers.common.make_fixture_def("client", conftest_path="/c.py"),
     )
-    reg.register(
-        FixtureDef(
-            name="cache",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=True,
-        )
-    )
-    reg.register(
-        FixtureDef(
-            name="client",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=False,
-        )
-    )
-    session = FixtureSession(reg)
     assert session.shared_fixture_names() == ["cache", "db"], (
         "shared_fixture_names() should return only names where shared=True, got "
         f"{session.shared_fixture_names()!r}"
@@ -1480,42 +1350,25 @@ def test_shared_fixture_names_returns_only_shared_names():
 
 
 def test_shared_fixture_groups_empty_registry():
-    session = FixtureSession(FixtureRegistry())
+    session = helpers.common.make_session()
     assert session.shared_fixture_groups() == [], (
         "empty registry should return no fixture groups"
     )
 
 
 def test_shared_fixture_groups_no_shared_fixtures():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="store",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("store", conftest_path="/conftest.py")
     )
-    session = FixtureSession(reg)
     assert session.shared_fixture_groups() == [], (
         "registry with no shared fixtures should return no groups"
     )
 
 
 def test_shared_fixture_groups_single_shared():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("db", shared=True, conftest_path="/conftest.py")
     )
-    session = FixtureSession(reg)
     groups = session.shared_fixture_groups()
     assert groups == [["db"]], (
         f"single shared fixture should produce one group, got {groups}"
@@ -1529,27 +1382,12 @@ def test_shared_fixture_groups_transitive_dependency():
     def _repo(db):
         pass
 
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=_db,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", _db, shared=True, conftest_path="/conftest.py"
+        ),
+        helpers.common.make_fixture_def("repo", _repo, conftest_path="/conftest.py"),
     )
-    reg.register(
-        FixtureDef(
-            name="repo",
-            func=_repo,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-        )
-    )
-    session = FixtureSession(reg)
     groups = session.shared_fixture_groups()
     assert groups == [["db", "repo"]], (
         f"repo depends on shared db — should form one group, got {groups}"
@@ -1557,28 +1395,14 @@ def test_shared_fixture_groups_transitive_dependency():
 
 
 def test_shared_fixture_groups_two_independent_shared():
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "db", shared=True, conftest_path="/conftest.py"
+        ),
+        helpers.common.make_fixture_def(
+            "cache", shared=True, conftest_path="/conftest.py"
+        ),
     )
-    reg.register(
-        FixtureDef(
-            name="cache",
-            func=lambda: None,
-            autouse=False,
-            params=None,
-            conftest_path="/conftest.py",
-            shared=True,
-        )
-    )
-    session = FixtureSession(reg)
     groups = session.shared_fixture_groups()
     assert len(groups) == 2, (
         f"two independent shared fixtures should produce two groups, got {groups}"
@@ -1599,37 +1423,13 @@ def test_shared_fixture_groups_transitive_merge():
     def _service(db, cache):
         pass
 
-    reg = FixtureRegistry()
-    reg.register(
-        FixtureDef(
-            name="db",
-            func=_db,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=True,
-        )
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def("db", _db, shared=True, conftest_path="/c.py"),
+        helpers.common.make_fixture_def(
+            "cache", _cache, shared=True, conftest_path="/c.py"
+        ),
+        helpers.common.make_fixture_def("service", _service, conftest_path="/c.py"),
     )
-    reg.register(
-        FixtureDef(
-            name="cache",
-            func=_cache,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-            shared=True,
-        )
-    )
-    reg.register(
-        FixtureDef(
-            name="service",
-            func=_service,
-            autouse=False,
-            params=None,
-            conftest_path="/c.py",
-        )
-    )
-    session = FixtureSession(reg)
     groups = session.shared_fixture_groups()
     # service links db+cache into one connected component
     assert len(groups) == 1, (
