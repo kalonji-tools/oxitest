@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 use super::super::{helpers, Executed, ExecutionResults, Pipeline};
+use crate::pipeline::execution::DebugOptions;
 use crate::types::ExitCode;
 use crate::{reporter, retry};
 
@@ -23,9 +24,12 @@ impl Pipeline<Executed> {
             delay_secs: self.cfg.retries_delay_secs,
             session: &self.state.session,
             timeout_secs: self.cfg.timeout_secs,
-            keep_tmp: self.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
-            show_locals: self.cfg.show_locals,
-            show_internals: self.cfg.show_internals,
+            opts: DebugOptions {
+                debug_mode: None,
+                keep_tmp: self.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+                show_locals: self.cfg.show_locals,
+                show_internals: self.cfg.show_internals,
+            },
         };
         let retry::RetryResult {
             flaky_ids,

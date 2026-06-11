@@ -27,9 +27,7 @@ pub(crate) struct RetryContext<'a> {
     pub delay_secs: u64,
     pub session: &'a bridge::FixtureSession,
     pub timeout_secs: Option<u64>,
-    pub keep_tmp: Option<&'a str>,
-    pub show_locals: bool,
-    pub show_internals: bool,
+    pub opts: execution::DebugOptions<'a>,
 }
 
 /// Identify test items whose timings show a failure outcome.
@@ -86,16 +84,12 @@ pub(crate) fn run_retries(
                 std::thread::sleep(std::time::Duration::from_secs(ctx.delay_secs));
             }
 
-            let (outcome, duration_ms) = execution::run_timed(
-                ctx.py,
-                item,
-                ctx.session,
-                ctx.timeout_secs,
-                None,
-                ctx.keep_tmp,
-                ctx.show_locals,
-                ctx.show_internals,
-            );
+            let retry_opts = execution::DebugOptions {
+                debug_mode: None,
+                ..ctx.opts
+            };
+            let (outcome, duration_ms) =
+                execution::run_timed(ctx.py, item, ctx.session, ctx.timeout_secs, retry_opts);
 
             if !outcome.is_hard_failure() {
                 let flaky_outcome = TestOutcome::Flaky {
