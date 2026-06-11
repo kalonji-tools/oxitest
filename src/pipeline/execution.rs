@@ -20,6 +20,15 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) ast_weight_ms: Option<f64>,
 }
 
+/// Debug and display options passed through the execution pipeline.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct DebugOptions<'a> {
+    pub debug_mode: Option<&'a str>,
+    pub keep_tmp: Option<&'a str>,
+    pub show_locals: bool,
+    pub show_internals: bool,
+}
+
 fn resolve_timeout(
     cache: &(impl cache::TimingCache + ?Sized),
     item: &types::TestItem,
@@ -35,28 +44,16 @@ fn resolve_timeout(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_timed(
     py: Python<'_>,
     item: &types::TestItem,
     session: &bridge::FixtureSession,
     timeout: Option<u64>,
-    debug_mode: Option<&str>,
-    keep_tmp: Option<&str>,
-    show_locals: bool,
-    show_internals: bool,
+    opts: DebugOptions<'_>,
 ) -> (types::TestOutcome, types::DurationMs) {
     let start = std::time::Instant::now();
-    let outcome = bridge::run_test_with_session_obj(
-        py,
-        item,
-        session.as_py_object(py),
-        timeout,
-        debug_mode,
-        keep_tmp,
-        show_locals,
-        show_internals,
-    );
+    let outcome =
+        bridge::run_test_with_session_obj(py, item, session.as_py_object(py), timeout, opts);
     let duration_ms = types::DurationMs::new(start.elapsed().as_secs_f64() * 1000.0);
     (outcome, duration_ms)
 }
@@ -69,10 +66,7 @@ pub(super) struct SerialHarness<'a> {
     pub timeout_secs: Option<u64>,
     pub timeout_multiplier: Option<f64>,
     pub maxfail: usize,
-    pub debug_mode: Option<&'a str>,
-    pub keep_tmp: Option<&'a str>,
-    pub show_locals: bool,
-    pub show_internals: bool,
+    pub opts: DebugOptions<'a>,
 }
 
 impl<'a> SerialHarness<'a> {
@@ -84,10 +78,12 @@ impl<'a> SerialHarness<'a> {
             timeout_secs: ctx.cfg.timeout_secs,
             timeout_multiplier: ctx.cfg.timeout_multiplier,
             maxfail: ctx.cfg.maxfail,
-            debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
-            keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
-            show_locals: ctx.cfg.show_locals,
-            show_internals: ctx.cfg.show_internals,
+            opts: DebugOptions {
+                debug_mode: ctx.cfg.debug.as_ref().map(|m| m.as_str()),
+                keep_tmp: ctx.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
+                show_locals: ctx.cfg.show_locals,
+                show_internals: ctx.cfg.show_internals,
+            },
         }
     }
 }
@@ -108,16 +104,8 @@ impl ExecutionHarness for SerialHarness<'_> {
                 rep.test_started(item);
                 let timeout =
                     resolve_timeout(self.cache, item, self.timeout_secs, self.timeout_multiplier);
-                let (outcome, duration_ms) = run_timed(
-                    self.py,
-                    item,
-                    self.session,
-                    timeout,
-                    self.debug_mode,
-                    self.keep_tmp,
-                    self.show_locals,
-                    self.show_internals,
-                );
+                let (outcome, duration_ms) =
+                    run_timed(self.py, item, self.session, timeout, self.opts);
                 timings.push(types::TestTiming {
                     node_id: item.node_id.clone(),
                     duration_ms,
