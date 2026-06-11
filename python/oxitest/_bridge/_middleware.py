@@ -223,6 +223,13 @@ class MiddlewareBuilder:
 
     Plugins can customise ordering via ``insert_after``, ``insert_before``,
     and ``remove`` before calling ``build()``.
+
+    Ordering constraints (enforced):
+
+    - ``BareAssertMiddleware`` must remain **first** in the pipeline.
+      It cannot be removed or have another middleware inserted before it.
+    - ``AsyncBridgeMiddleware`` must remain **last** in the pipeline.
+      It cannot be removed or have another middleware inserted after it.
     """
 
     def __init__(self) -> None:
@@ -234,14 +241,34 @@ class MiddlewareBuilder:
         ]
 
     def insert_after(self, target: type, new: type) -> None:
+        if target is AsyncBridgeMiddleware:
+            raise ValueError(
+                "Cannot insert after AsyncBridgeMiddleware"
+                " — it must remain last in the pipeline"
+            )
         idx = self._pipeline.index(target)
         self._pipeline.insert(idx + 1, new)
 
     def insert_before(self, target: type, new: type) -> None:
+        if target is BareAssertMiddleware:
+            raise ValueError(
+                "Cannot insert before BareAssertMiddleware"
+                " — it must remain first in the pipeline"
+            )
         idx = self._pipeline.index(target)
         self._pipeline.insert(idx, new)
 
     def remove(self, target: type) -> None:
+        if target is BareAssertMiddleware:
+            raise ValueError(
+                "BareAssertMiddleware cannot be removed"
+                " — it must remain first in the pipeline"
+            )
+        if target is AsyncBridgeMiddleware:
+            raise ValueError(
+                "AsyncBridgeMiddleware cannot be removed"
+                " — it must remain last in the pipeline"
+            )
         self._pipeline.remove(target)
 
     def build(
