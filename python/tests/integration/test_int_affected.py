@@ -1,7 +1,6 @@
 """Integration tests: --affected flag with parallel execution."""
 
 import subprocess
-import sys
 from pathlib import Path
 
 import oxitest
@@ -80,23 +79,12 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]):
     run(*wt_git, "add", "test_new.py")
 
     # Act — run oxitest --affected in the worktree.
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(worktree_path),
-            "--color",
-            "never",
-            "--affected=HEAD",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(worktree_path),
+    out, err, rc = helpers.common.run_oxitest(
+        worktree_path,
+        "--affected=HEAD",
         env=clean_env,
+        cwd=str(worktree_path),
     )
-    out, err, rc = result.stdout, result.stderr, result.returncode
 
     # Assert — should not fail with ENOENT, and should detect the new file.
     assert "No such file or directory" not in err, (

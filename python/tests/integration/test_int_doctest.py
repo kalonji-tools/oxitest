@@ -1,10 +1,9 @@
 """Integration tests: --doctest-modules flag."""
 
-import subprocess
-import sys
 from pathlib import Path
 
 import oxitest
+from conftest import helpers
 from oxitest import Fixture, TempDir, Yields
 
 fx = oxitest.Fixtures()
@@ -37,22 +36,7 @@ def doctest_project(tmp: TempDir) -> Yields[Path]:
 def test_doctest_modules_collects_and_runs(doctest_project: Fixture[Path]):
     """--doctest-modules collects doctests from source files."""
     tmp = doctest_project
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp),
-            "--doctest-modules",
-            "--color",
-            "never",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    out = result.stdout
+    out, _, _ = helpers.common.run_oxitest(tmp, "--doctest-modules", cwd=str(tmp))
 
     # Should have 1 passed (add) and 1 failed (broken)
     assert "1 passed" in out, f"expected 1 passed in:\n{out}"
@@ -62,14 +46,7 @@ def test_doctest_modules_collects_and_runs(doctest_project: Fixture[Path]):
 def test_doctest_modules_off_by_default(doctest_project: Fixture[Path]):
     """Without --doctest-modules, doctests are not collected."""
     tmp = doctest_project
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", str(tmp), "--color", "never"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    out = result.stdout
+    out, _, _ = helpers.common.run_oxitest(tmp, cwd=str(tmp))
     # No test files match test_*.py, so 0 items collected
     assert "collected 0 items" in out, f"expected 0 items in:\n{out}"
 
@@ -78,22 +55,7 @@ def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]):
     """Doctests and regular tests coexist in the same run."""
     tmp = doctest_project
     (tmp / "test_math.py").write_text("def test_one(): assert 1 == 1\n")
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp),
-            "--doctest-modules",
-            "--color",
-            "never",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    out = result.stdout
+    out, _, _ = helpers.common.run_oxitest(tmp, "--doctest-modules", cwd=str(tmp))
     # 1 regular test + 1 doctest pass (add), 1 doctest fail (broken)
     assert "2 passed" in out, f"expected 2 passed in:\n{out}"
     assert "1 failed" in out, f"expected 1 failed in:\n{out}"
@@ -102,21 +64,5 @@ def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]):
 def test_doctest_node_id_format(doctest_project: Fixture[Path]):
     """Doctest node IDs use the <doctest> prefix."""
     tmp = doctest_project
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp),
-            "--doctest-modules",
-            "--color",
-            "never",
-            "-v",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-    )
-    out = result.stdout
+    out, _, _ = helpers.common.run_oxitest(tmp, "--doctest-modules", "-v", cwd=str(tmp))
     assert "<doctest>" in out, f"expected <doctest> prefix in node IDs:\n{out}"

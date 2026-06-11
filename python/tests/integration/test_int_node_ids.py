@@ -28,8 +28,11 @@ def test_sub():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_math.py::test_add"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_math.py::test_add",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -46,8 +49,11 @@ def test_add():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_math.py::test_nonexistent"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_math.py::test_nonexistent",
+        cwd=".",
     )
     helpers.integ.assert_contains(out, "no tests ran")
 
@@ -74,8 +80,11 @@ def test_standalone():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_cls.py::TestSuite::test_alpha"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_cls.py::TestSuite::test_alpha",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -99,8 +108,11 @@ def test_standalone():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_cls.py::TestSuite"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_cls.py::TestSuite",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=2)
 
@@ -133,8 +145,11 @@ def test_math(x: int, y: int, expected: int):
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_param.py::test_math"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_param.py::test_math",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=2)
 
@@ -163,8 +178,11 @@ def test_mul(x: int, expected: int):
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_param.py::test_mul[double]"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_param.py::test_mul[double]",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -191,8 +209,12 @@ def test_three():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_a.py::test_one", "test_b.py"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_a.py::test_one",
+        "test_b.py",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=2)
 
@@ -230,7 +252,7 @@ def db() -> str:
 strict = "abort"
 """,
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "run", "test_a.py")
+    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "run", "test_a.py", cwd=".")
     helpers.integ.assert_passed(out, rc, count=1)
     helpers.integ.assert_excludes(out, "unused-fixture")
 
@@ -264,8 +286,11 @@ def db() -> str:
 strict = "abort"
 """,
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_a.py::test_no_fixture"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_a.py::test_no_fixture",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
     helpers.integ.assert_excludes(out, "unused-fixture")
@@ -296,8 +321,11 @@ def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir):
         "def test_sees_sub(sub_val: Fixture[str]):\n"
         "    assert sub_val == 'from_sub'\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "tests/deep/test_deep.py::test_sees_root"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "tests/deep/test_deep.py::test_sees_root",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -324,7 +352,11 @@ def test_gamma():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_a.py::test_alpha", "test_b.py::test_gamma"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_a.py::test_alpha",
+        "test_b.py::test_gamma",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=2)
