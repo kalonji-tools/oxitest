@@ -10,7 +10,7 @@ oxitest is split into a **Rust core** (`src/`) and a **Python bridge** (`python/
 
 - **CLI parsing and configuration** (`config/`) -- clap-based CLI, `pyproject.toml` deserialization, merge logic.
 - **File discovery** (`collector.rs`) -- walks the filesystem with `ignore` + `globset`. No Python import required.
-- **AST prescan** (`prescan.rs`, `python_ast.rs`) -- parses Python source with `rustpython-parser` to extract test function names, markers, parametrize IDs, and estimated body weights. This enables lazy collection: filtering before Python import.
+- **AST prescan** (`prescan.rs`, `python_ast.rs`) -- parses Python source with `rustpython-parser` to extract test function names, markers, parametrize IDs, and estimated body weights. Files are parsed in parallel via `rayon::par_iter` (CPU-bound, no GIL), then results are accumulated sequentially for deterministic ordering. This enables lazy collection: filtering before Python import.
 - **Filtering and grouping** (`filter.rs`) -- query DSL (`-E`) filtering by name, marker, path, etc. Groups items by module for parallel dispatch. Also owns `BUILTIN_MARKERS`.
 - **Scheduling** (`scheduler.rs`) -- distributes module groups across workers using timing cache data.
 - **Parallel execution** (`parallel/`) -- spawns and manages worker subprocesses, drains JSON results with a per-result watchdog timeout.
@@ -33,7 +33,7 @@ oxitest is split into a **Rust core** (`src/`) and a **Python bridge** (`python/
 The boundary maximizes the amount of work that runs in compiled code:
 
 1. **File I/O and globbing** are faster in Rust with zero GIL contention.
-2. **AST prescan** avoids importing modules that will be filtered out -- the single biggest performance win in lazy collection.
+2. **AST prescan** avoids importing modules that will be filtered out -- the single biggest performance win in lazy collection. Prescan and metadata filtering both use `rayon` for parallel execution across files.
 3. **Parallel orchestration** in Rust avoids the GIL entirely. Workers are separate Python processes communicating over stdio JSON; the Rust side manages the subprocess pool, watchdog timeouts, and result aggregation without holding the GIL.
 4. **Reporting** runs in Rust to avoid GIL contention during progress bar updates in parallel mode.
 
