@@ -36,9 +36,7 @@ __all__ = [
     "make_session_with",
     "RecordingDebugger",
     "run_oxitest",
-    "run_oxitest_env",
     "run_oxitest_subcmd",
-    "run_oxitest_subcmd_cwd",
     "run_test",
     "write_test_file",
     "write_test_module",
@@ -120,24 +118,33 @@ def make_session_with(name: str, factory) -> FixtureSession:
 def run_oxitest(
     tmp_path,
     *extra_args: str,
+    env: dict[str, str] | None = None,
+    cwd: str | None = None,
+    timeout: int = 60,
 ) -> tuple[str, str, int]:
     """Run oxitest as a subprocess and return ``(stdout, stderr, returncode)``.
 
-    Disables color output and enforces a 60-second timeout.
+    Disables color output and enforces a timeout (default 60 s).
+
+    Args:
+        tmp_path: Path to pass as the positional argument. Pass ``None``
+            to omit (e.g. for ``oxitest env``).
+        env: Optional environment dict passed directly to ``subprocess.run``.
+            Caller is responsible for inheriting ``os.environ`` if needed.
+        cwd: Optional working directory for the subprocess.
+        timeout: Subprocess timeout in seconds.
     """
+    cmd = [sys.executable, "-m", "oxitest"]
+    if tmp_path is not None:
+        cmd.append(str(tmp_path))
+    cmd.extend(["--color", "never", *extra_args])
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp_path),
-            "--color",
-            "never",
-            *extra_args,
-        ],
+        cmd,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=timeout,
+        cwd=cwd,
+        env=env,
     )
     return result.stdout, result.stderr, result.returncode
 
@@ -146,55 +153,29 @@ def run_oxitest_subcmd(
     tmp_path,
     *subcmd_and_args: str,
     timeout: int = 60,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> tuple[str, str, int]:
     """Run oxitest with a subcommand as a subprocess.
 
-    Accepts the subcommand parts and extra args as positional arguments.
-    For example: ``run_oxitest_subcmd(tmp, "query", "tests", "--count")``.
+    When *cwd* is not ``None``, *tmp_path* is used as the subprocess
+    working directory and is **not** appended as a positional path
+    argument.  The actual *cwd* value is treated as a flag — callers
+    conventionally pass ``cwd="."`` to activate this mode.
     """
-    # Only pass --color=never for commands that support it (not query).
-    cmd = [sys.executable, "-m", "oxitest", *subcmd_and_args, str(tmp_path)]
-    if subcmd_and_args and subcmd_and_args[0] != "query":
-        cmd.extend(["--color", "never"])
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    return result.stdout, result.stderr, result.returncode
-
-
-def run_oxitest_subcmd_cwd(
-    tmp_path,
-    *subcmd_and_args: str,
-    timeout: int = 60,
-) -> tuple[str, str, int]:
-    """Run oxitest subcommand using cwd instead of a path argument.
-
-    Some subcommands (``query plugins``, ``query fixtures``) discover the
-    project via the working directory rather than a positional path.
-    """
+    use_cwd = cwd is not None
     cmd = [sys.executable, "-m", "oxitest", *subcmd_and_args]
-    if subcmd_and_args and subcmd_and_args[0] != "query":
+    if not use_cwd and tmp_path is not None:
+        cmd.append(str(tmp_path))
+    if subcmd_and_args and subcmd_and_args[0] not in {"query", "env"}:
         cmd.extend(["--color", "never"])
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
-        cwd=str(tmp_path),
-    )
-    return result.stdout, result.stderr, result.returncode
-
-
-def run_oxitest_env() -> tuple[str, str, int]:
-    """Run `oxitest env` (no paths needed)."""
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", "env"],
-        capture_output=True,
-        text=True,
-        timeout=60,
+        cwd=str(tmp_path) if use_cwd else None,
+        env=env,
     )
     return result.stdout, result.stderr, result.returncode
 
