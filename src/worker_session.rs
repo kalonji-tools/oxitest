@@ -5,7 +5,7 @@
 //! state for a single worker thread.
 
 use crate::{
-    parallel::{drain_worker_results, handle_drain_outcome, DrainOutcome},
+    parallel::{drain_worker_results, handle_drain_outcome, DrainContext, DrainOutcome},
     scheduler,
     worker_result::{WorkerOutcome, WorkerTask, WorkerTaskItem},
 };
@@ -253,13 +253,15 @@ fn run_worker_loop(
 
         subprocess_alive = handle_drain_outcome(
             drain_outcome,
-            &mut child,
-            &group.items,
             received,
-            watchdog,
-            &group.module_path,
-            &tx,
-            worker_id,
+            &mut DrainContext {
+                child: &mut child,
+                items: &group.items,
+                watchdog,
+                module_path: &group.module_path,
+                tx: &tx,
+                worker_id,
+            },
         );
     }
 
