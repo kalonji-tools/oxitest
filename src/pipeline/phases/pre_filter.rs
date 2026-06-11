@@ -5,6 +5,32 @@ use crate::cache::OutcomeCache;
 use crate::types::ExitCode;
 use crate::{config, filter, query, reporter, types};
 
+fn format_dsl_error(expression: &str, error: query::ast::DslError) -> String {
+    use miette::{GraphicalReportHandler, GraphicalTheme};
+
+    let report = miette::Report::new(error).with_source_code(expression.to_string());
+    let mut buf = String::new();
+    let handler = GraphicalReportHandler::new_themed(GraphicalTheme::unicode_nocolor());
+    let _ = handler.render_report(&mut buf, report.as_ref());
+    buf
+}
+
+fn dsl_error_exit(
+    expression: &str,
+    error: query::ast::DslError,
+    shared: &PipelineShared,
+) -> ExitCode {
+    let msg = format_dsl_error(expression, error);
+    shared
+        .make_error_reporter()
+        .finish(
+            &[types::CollectError::PyError(msg)],
+            false,
+            &reporter::ReporterSession::new(0),
+        )
+        .code()
+}
+
 fn apply_query_dsl_filter(
     items: Vec<std::sync::Arc<types::TestItem>>,
     expression: &str,
@@ -12,46 +38,15 @@ fn apply_query_dsl_filter(
 ) -> Result<Vec<std::sync::Arc<types::TestItem>>, ExitCode> {
     let tokens = match query::compile::lex(expression) {
         Ok(t) => t,
-        Err(e) => {
-            return Err(shared
-                .make_error_reporter()
-                .finish(
-                    &[types::CollectError::PyError(format!(
-                        "invalid -E expression: {e}"
-                    ))],
-                    false,
-                    &reporter::ReporterSession::new(0),
-                )
-                .code());
-        }
+        Err(e) => return Err(dsl_error_exit(expression, e, shared)),
     };
     let parsed = match query::compile::parse(tokens) {
         Ok(p) => p,
-        Err(e) => {
-            return Err(shared
-                .make_error_reporter()
-                .finish(
-                    &[types::CollectError::PyError(format!(
-                        "invalid -E expression: {e}"
-                    ))],
-                    false,
-                    &reporter::ReporterSession::new(0),
-                )
-                .code());
-        }
+        Err(e) => return Err(dsl_error_exit(expression, e, shared)),
     };
     if let Err(e) = query::eval::validate_predicates(&parsed, &query::resource::ResourceKind::Tests)
     {
-        return Err(shared
-            .make_error_reporter()
-            .finish(
-                &[types::CollectError::PyError(format!(
-                    "invalid -E expression: {e}"
-                ))],
-                false,
-                &reporter::ReporterSession::new(0),
-            )
-            .code());
+        return Err(dsl_error_exit(expression, e, shared));
     }
     Ok(items
         .into_iter()
