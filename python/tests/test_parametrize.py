@@ -890,52 +890,68 @@ def test_dataclass_cases_resolve_compact_mode():
     assert fixrefs == frozenset(), f"no FixtureRef fields, got {fixrefs}"
 
 
-def test_build_dict_cases_validates_extra_key():
-    from oxitest import raises
-    from oxitest._bridge.parametrize import _build_dict_cases
-
-    def test_fn(x: int, y: int) -> None:
-        pass
-
-    with raises(TypeError, match="unexpected key"):
-        _build_dict_cases({"basic": {"x": 1, "y": 2, "z": 3}}, test_fn)
-
-
-def test_build_dict_cases_validates_missing_key():
-    from oxitest import raises
-    from oxitest._bridge.parametrize import _build_dict_cases
-
-    def test_fn(x: int, y: int) -> None:
-        pass
-
-    with raises(TypeError, match="missing key"):
-        _build_dict_cases({"basic": {"x": 1}}, test_fn)
+def test_dict_parametrize_rejects_extra_key(tmp: TempDir):
+    code = (
+        "import oxitest\n"
+        "\n"
+        "@oxitest.parametrize(basic={'x': 1, 'y': 2, 'z': 3})\n"
+        "def test_fn(x: int, y: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(ImportError, match="unexpected key"):
+        collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_build_dataclass_cases_rejects_non_frozen():
-    from oxitest import raises
-    from oxitest._bridge.parametrize import _build_dataclass_cases
+def test_dict_parametrize_rejects_missing_key(tmp: TempDir):
+    code = (
+        "import oxitest\n"
+        "\n"
+        "@oxitest.parametrize(basic={'x': 1})\n"
+        "def test_fn(x: int, y: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(ImportError, match="missing key"):
+        collect_module(helpers.common.write_test_module(tmp, code))
 
-    @dataclass
-    class Mutable:
-        x: int
 
-    with raises(TypeError, match="frozen=True"):
-        _build_dataclass_cases({"basic": Mutable(x=1)})
+def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir):
+    code = (
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "\n"
+        "@dataclass\n"
+        "class Mutable:\n"
+        "    x: int\n"
+        "\n"
+        "@oxitest.parametrize(basic=Mutable(x=1))\n"
+        "def test_fn(x: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(ImportError, match="frozen=True"):
+        collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_build_dataclass_cases_rejects_mixed_types():
-    from oxitest import raises
-    from oxitest._bridge.parametrize import _build_dataclass_cases
-
-    @dataclass(frozen=True)
-    class OtherCase:
-        z: int
-
-    with raises(TypeError, match="instance of 'AddCase'"):
-        _build_dataclass_cases(
-            {"a": AddCase(x=1, y=2, expected=3), "b": OtherCase(z=1)}
-        )
+def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir):
+    code = (
+        "from dataclasses import dataclass\n"
+        "import oxitest\n"
+        "\n"
+        "@dataclass(frozen=True)\n"
+        "class CaseA:\n"
+        "    x: int\n"
+        "    y: int\n"
+        "    expected: int\n"
+        "\n"
+        "@dataclass(frozen=True)\n"
+        "class CaseB:\n"
+        "    z: int\n"
+        "\n"
+        "@oxitest.parametrize(a=CaseA(x=1, y=2, expected=3), b=CaseB(z=1))\n"
+        "def test_fn(x: int, y: int, expected: int) -> None:\n"
+        "    pass\n"
+    )
+    with raises(ImportError, match="instance of 'CaseA'"):
+        collect_module(helpers.common.write_test_module(tmp, code))
 
 
 def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
