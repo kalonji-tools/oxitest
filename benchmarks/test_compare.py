@@ -9,9 +9,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmarks.compare import (
+    LAZY_RATIO_THRESHOLD,
     check_regression,
+    dogfood_summary,
     find_commands,
+    lazy_summary,
     net_overhead,
+    realistic_summary,
     speedup_ratio,
     tier_summary,
 )
@@ -103,3 +107,114 @@ def test_tier_summary_serial_only() -> None:
     assert summary["oxitest_serial"] is not None, ""
     assert summary["oxitest_parallel"] is None, ""
     assert abs(summary["speedup_serial"] - 2.286) < 0.01, ""
+
+
+def test_lazy_summary_under_threshold() -> None:
+    lazy_results = [
+        {
+            "command": "oxitest benchmarks/generated/l/oxitest/test_gen_0.py::test_trivial_0",
+            "mean": 0.08,
+        }
+    ]
+    summary = lazy_summary("lazy_node_id", lazy_results, l_parallel_mean=1.0)
+    assert summary is not None, ""
+    assert summary["tier"] == "lazy_node_id", ""
+    assert abs(summary["mean"] - 0.08) < 1e-9, ""
+    assert abs(summary["ratio"] - 0.08) < 1e-9, ""
+    assert not summary["is_regression"], ""
+
+
+def test_lazy_summary_over_threshold() -> None:
+    lazy_results = [
+        {
+            "command": "oxitest benchmarks/generated/l/oxitest/ -E 'name(test_trivial_0)'",
+            "mean": 0.40,
+        }
+    ]
+    summary = lazy_summary("lazy_name", lazy_results, l_parallel_mean=1.0)
+    assert summary is not None, ""
+    assert abs(summary["ratio"] - 0.40) < 1e-9, ""
+    assert summary["is_regression"], ""
+
+
+def test_lazy_summary_empty_results() -> None:
+    summary = lazy_summary("lazy_mark", [], l_parallel_mean=1.0)
+    assert summary is None, ""
+
+
+def test_lazy_summary_zero_l_parallel() -> None:
+    lazy_results = [{"command": "oxitest ...", "mean": 0.08}]
+    summary = lazy_summary("lazy_node_id", lazy_results, l_parallel_mean=0.0)
+    assert summary is None, ""
+
+
+def test_lazy_ratio_threshold_value() -> None:
+    assert LAZY_RATIO_THRESHOLD == 0.35, ""
+
+
+def test_realistic_summary_full() -> None:
+    tier_results = [
+        {
+            "command": "oxitest --serial benchmarks/generated/realistic/oxitest/",
+            "mean": 9.0,
+        },
+        {"command": "oxitest benchmarks/generated/realistic/oxitest/", "mean": 3.0},
+        {
+            "command": "oxitest --workers 1 benchmarks/generated/realistic/oxitest/",
+            "mean": 9.5,
+        },
+        {
+            "command": "oxitest --workers 2 benchmarks/generated/realistic/oxitest/",
+            "mean": 5.0,
+        },
+        {
+            "command": "oxitest --workers 4 benchmarks/generated/realistic/oxitest/",
+            "mean": 3.2,
+        },
+    ]
+    summary = realistic_summary(tier_results)
+    assert summary is not None, ""
+    assert len(summary["entries"]) == 5, ""
+    serial_entry = summary["entries"][0]
+    assert serial_entry["label"] == "serial", ""
+    assert abs(serial_entry["mean"] - 9.0) < 1e-9, ""
+    assert serial_entry["speedup"] is None, ""
+    auto_entry = summary["entries"][1]
+    assert auto_entry["label"] == "auto", ""
+    assert abs(auto_entry["speedup"] - 3.0) < 0.01, ""
+    w4_entry = summary["entries"][4]
+    assert w4_entry["label"] == "--workers 4", ""
+    assert abs(w4_entry["speedup"] - 2.8125) < 0.01, ""
+
+
+def test_realistic_summary_empty() -> None:
+    summary = realistic_summary([])
+    assert summary is None, ""
+
+
+def test_dogfood_summary_serial_and_parallel() -> None:
+    tier_results = [
+        {"command": "oxitest --serial python/tests/", "mean": 5.0},
+        {"command": "oxitest python/tests/", "mean": 2.0},
+    ]
+    summary = dogfood_summary(tier_results)
+    assert summary is not None, ""
+    assert abs(summary["serial"] - 5.0) < 1e-9, ""
+    assert abs(summary["parallel"] - 2.0) < 1e-9, ""
+    assert abs(summary["speedup"] - 2.5) < 0.01, ""
+
+
+def test_dogfood_summary_serial_only() -> None:
+    tier_results = [
+        {"command": "oxitest --serial python/tests/", "mean": 5.0},
+    ]
+    summary = dogfood_summary(tier_results)
+    assert summary is not None, ""
+    assert abs(summary["serial"] - 5.0) < 1e-9, ""
+    assert summary["parallel"] is None, ""
+    assert summary["speedup"] is None, ""
+
+
+def test_dogfood_summary_empty() -> None:
+    summary = dogfood_summary([])
+    assert summary is None, ""
