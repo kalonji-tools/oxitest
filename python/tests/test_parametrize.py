@@ -117,8 +117,8 @@ def test_parametrize_rejects_wrong_instance_type():
 
 
 def test_collect_parametrize_expands_to_n_items(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "@dataclass(frozen=True)\n"
@@ -128,9 +128,9 @@ def test_collect_parametrize_expands_to_n_items(tmp: TempDir):
         "@oxitest.parametrize("
         "basic=AddCase(x=1, y=2), neg=AddCase(x=-1, y=2))\n"
         "def test_add(x, y):\n"
-        "    assert x + y > 0\n"
+        "    assert x + y > 0\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, (
         f"parametrize with 2 cases should yield 2 items, got {len(items)}: "
         f"{[i.fn_name for i in items]}"
@@ -147,8 +147,8 @@ def test_collect_parametrize_expands_to_n_items(tmp: TempDir):
 
 
 def test_collect_parametrize_item_has_param_values(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "@dataclass(frozen=True)\n"
@@ -157,9 +157,9 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir):
         "    y: int\n"
         "@oxitest.parametrize(basic=AddCase(x=1, y=2))\n"
         "def test_add(x, y):\n"
-        "    pass\n"
+        "    pass\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 parametrized item, got {len(items)}"
     assert items[0].fn_name == "test_add", (
         f"expected fn_name='test_add', got {items[0].fn_name!r}"
@@ -176,9 +176,8 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir):
 
 
 def test_collect_non_parametrize_has_none_param_id(tmp: TempDir):
-    f = tmp / "test_foo.py"
-    f.write_text("def test_foo(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(tmp, "def test_foo(): pass\n")
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].param_id is None, (
         f"non-parametrized test should have param_id=None, got {items[0].param_id!r}"
@@ -260,8 +259,8 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
 
 
 def test_executor_runs_parametrize_case(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "@dataclass(frozen=True)\n"
@@ -271,9 +270,10 @@ def test_executor_runs_parametrize_case(tmp: TempDir):
         "    expected: int\n"
         "@oxitest.parametrize(basic=AddCase(x=1, y=2, expected=3))\n"
         "def test_add(x, y, expected):\n"
-        "    assert x + y == expected\n"
+        "    assert x + y == expected\n",
+        "test_add",
+        param_id="basic",
     )
-    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="basic")
     assert result.status == "passed", (
         f"parametrize case 'basic' should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -281,8 +281,8 @@ def test_executor_runs_parametrize_case(tmp: TempDir):
 
 
 def test_executor_parametrize_failure(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "@dataclass(frozen=True)\n"
@@ -292,9 +292,10 @@ def test_executor_parametrize_failure(tmp: TempDir):
         "    expected: int\n"
         "@oxitest.parametrize(wrong=AddCase(x=1, y=2, expected=99))\n"
         "def test_add(x, y, expected):\n"
-        "    assert x + y == expected\n"
+        "    assert x + y == expected\n",
+        "test_add",
+        param_id="wrong",
     )
-    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="wrong")
     assert result.status == "failed", (
         f"wrong expected value should produce status='failed', got {result.status!r}"
     )
@@ -391,8 +392,8 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
 
 def test_fixture_ref_compact_mode_raises(tmp: TempDir):
     """FixtureRef fields are incompatible with compact mode — must return error."""
-    f = tmp / "test_bad.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -403,9 +404,10 @@ def test_fixture_ref_compact_mode_raises(tmp: TempDir):
         "def my_db(): return 'x'\n"
         "@oxitest.parametrize(pg=DbCase(db=my_db))\n"
         "def test_db(case: DbCase) -> None:\n"  # compact mode: single DbCase param
-        "    pass\n"
+        "    pass\n",
+        "test_db",
+        param_id="pg",
     )
-    result = helpers.common.run_test(str(f), "test_db", session=None, param_id="pg")
     assert result.status == "error", (
         f"FixtureRef in compact mode should produce status='error', got "
         f"{result.status!r}"
@@ -445,8 +447,8 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir):
 
 def test_fixture_ref_no_session_returns_error(tmp: TempDir):
     """FixtureRef field with session=None returns error result, not None injection."""
-    f = tmp / "test_bad.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -457,9 +459,10 @@ def test_fixture_ref_no_session_returns_error(tmp: TempDir):
         "def my_db(): return 'x'\n"
         "@oxitest.parametrize(pg=DbCase(db=my_db))\n"
         "def test_db(db: Fixture[str]) -> None:\n"  # expanded mode
-        "    pass\n"
+        "    pass\n",
+        "test_db",
+        param_id="pg",
     )
-    result = helpers.common.run_test(str(f), "test_db", session=None, param_id="pg")
     assert result.status == "error", (
         f"FixtureRef with session=None should produce status='error', got "
         f"{result.status!r}"
@@ -578,8 +581,7 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema():
 
 def test_executor_dict_mode_passes(tmp: TempDir):
     """Dict mode: case values injected as individual kwargs, test passes."""
-    f = tmp / "test_add.py"
-    f.write_text(
+    code = (
         "import oxitest\n"
         "@oxitest.parametrize(\n"
         "    basic=dict(x=1, y=2, expected=3),\n"
@@ -588,26 +590,23 @@ def test_executor_dict_mode_passes(tmp: TempDir):
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result_basic = helpers.common.run_test(
-        str(f), "test_add", session=None, param_id="basic"
-    )
-    result_neg = helpers.common.run_test(
-        str(f), "test_add", session=None, param_id="negative"
-    )
+    result_basic = helpers.common.exec_inline(tmp, code, "test_add", param_id="basic")
+    result_neg = helpers.common.exec_inline(tmp, code, "test_add", param_id="negative")
     assert result_basic.status == "passed", result_basic.message
     assert result_neg.status == "passed", result_neg.message
 
 
 def test_executor_dict_mode_failure(tmp: TempDir):
     """Dict mode: failing assertion produces 'failed' status."""
-    f = tmp / "test_add.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "import oxitest\n"
         "@oxitest.parametrize(wrong=dict(x=1, y=2, expected=99))\n"
         "def test_add(x: int, y: int, expected: int) -> None:\n"
-        "    assert x + y == expected\n"
+        "    assert x + y == expected\n",
+        "test_add",
+        param_id="wrong",
     )
-    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="wrong")
     assert result.status == "failed", (
         f"wrong expected value in dict mode should produce status='failed', got "
         f"{result.status!r}"
@@ -641,17 +640,17 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir):
 
 
 def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "@oxitest.parametrize(\n"
         "    basic=dict(x=1, y=2),\n"
         "    neg=dict(x=-1, y=2),\n"
         ")\n"
         "def test_add(x: int, y: int) -> None:\n"
-        "    assert x + y > 0\n"
+        "    assert x + y > 0\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, (
         f"dict parametrize with 2 cases should yield 2 items, got {len(items)}"
     )
@@ -663,14 +662,14 @@ def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir):
 
 
 def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir):
-    f = tmp / "test_add.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "@oxitest.parametrize(basic=dict(x=1, y=2))\n"
         "def test_add(x: int, y: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].param_id == "basic", (
         f"expected param_id='basic', got {items[0].param_id!r}"
@@ -1203,8 +1202,8 @@ def test_parametrize_rejects_overlapping_fields():
 
 
 def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
-    f = tmp / "test_math.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1215,9 +1214,9 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1), b=partial(Case, x=2))\n"
         "@oxitest.parametrize(c=partial(Case, y=10), d=partial(Case, y=20))\n"
         "def test_math(x: int, y: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 4, (
         f"2x2 composition should yield 4 items, got {len(items)}: "
         f"{[i.param_id for i in items]}"
@@ -1229,8 +1228,8 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
 
 
 def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
-    f = tmp / "test_math.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1241,9 +1240,9 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "@oxitest.parametrize(c=partial(Case, y=10))\n"
         "def test_math(x: int, y: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"1x1 composition should yield 1 item, got {len(items)}"
     item = items[0]
     assert item.param_id == "a-c", f"expected 'a-c', got {item.param_id!r}"
@@ -1256,8 +1255,8 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
 
 
 def test_collect_composed_rejects_single_partial_layer(tmp: TempDir):
-    f = tmp / "test_bad.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1267,15 +1266,15 @@ def test_collect_composed_rejects_single_partial_layer(tmp: TempDir):
         "    y: int\n"
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "def test_fn(x: int, y: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
     with raises(TypeError, match="requires at least 2"):
-        collect_module(str(f))
+        collect_module(path)
 
 
 def test_collect_composed_rejects_incomplete_fields(tmp: TempDir):
-    f = tmp / "test_bad.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1287,15 +1286,15 @@ def test_collect_composed_rejects_incomplete_fields(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "@oxitest.parametrize(c=partial(Case, y=10))\n"
         "def test_fn(x: int, y: int, z: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
     with raises(TypeError, match="missing field"):
-        collect_module(str(f))
+        collect_module(path)
 
 
 def test_collect_composed_3_layers(tmp: TempDir):
-    f = tmp / "test_math.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1308,9 +1307,9 @@ def test_collect_composed_3_layers(tmp: TempDir):
         "@oxitest.parametrize(b=partial(Case, y=2))\n"
         "@oxitest.parametrize(c=partial(Case, z=3))\n"
         "def test_fn(x: int, y: int, z: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"1x1x1 should yield 1 item, got {len(items)}"
     assert items[0].param_id == "a-b-c", f"expected 'a-b-c', got {items[0].param_id!r}"
 
@@ -1319,8 +1318,8 @@ def test_collect_composed_3_layers(tmp: TempDir):
 
 
 def test_executor_composed_parametrize_passes(tmp: TempDir):
-    f = tmp / "test_math.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1332,9 +1331,10 @@ def test_executor_composed_parametrize_passes(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "@oxitest.parametrize(c=partial(Case, y=2, expected=3))\n"
         "def test_add(x: int, y: int, expected: int) -> None:\n"
-        "    assert x + y == expected\n"
+        "    assert x + y == expected\n",
+        "test_add",
+        param_id="a-c",
     )
-    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="a-c")
     assert result.status == "passed", (
         f"composed parametrize should pass, got status={result.status!r}, "
         f"msg={result.message!r}"
@@ -1342,8 +1342,8 @@ def test_executor_composed_parametrize_passes(tmp: TempDir):
 
 
 def test_executor_composed_parametrize_failure(tmp: TempDir):
-    f = tmp / "test_math.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1355,9 +1355,10 @@ def test_executor_composed_parametrize_failure(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "@oxitest.parametrize(c=partial(Case, y=2, expected=99))\n"
         "def test_add(x: int, y: int, expected: int) -> None:\n"
-        "    assert x + y == expected\n"
+        "    assert x + y == expected\n",
+        "test_add",
+        param_id="a-c",
     )
-    result = helpers.common.run_test(str(f), "test_add", session=None, param_id="a-c")
     assert result.status == "failed", (
         f"wrong expected should fail, got status={result.status!r}"
     )
@@ -1395,8 +1396,8 @@ def test_executor_composed_with_fixture(tmp: TempDir):
 
 
 def test_executor_composed_compact_mode(tmp: TempDir):
-    f = tmp / "test_compact.py"
-    f.write_text(
+    result = helpers.common.exec_inline(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "from oxitest import partial\n"
@@ -1407,10 +1408,9 @@ def test_executor_composed_compact_mode(tmp: TempDir):
         "@oxitest.parametrize(a=partial(Case, x=1))\n"
         "@oxitest.parametrize(c=partial(Case, y=2))\n"
         "def test_compact(case: Case) -> None:\n"
-        "    assert case.x + case.y == 3\n"
-    )
-    result = helpers.common.run_test(
-        str(f), "test_compact", session=None, param_id="a-c"
+        "    assert case.x + case.y == 3\n",
+        "test_compact",
+        param_id="a-c",
     )
     assert result.status == "passed", (
         f"compact mode with composition should pass, got status={result.status!r}, "

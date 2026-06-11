@@ -247,12 +247,6 @@ def test_mark_stacking_two_decorators():
 # ── executor-level marker tests ───────────────────────────────────────────────
 
 
-def _write_test(tmp: TempDir, code: str) -> str:
-    f = tmp / "test_exec.py"
-    f.write_text("import oxitest\n" + code)
-    return str(f)
-
-
 @dataclasses.dataclass(frozen=True)
 class MarkerCase:
     code: str
@@ -340,8 +334,7 @@ class MarkerCase:
 def test_mark_executor_result(
     tmp: TempDir, code: str, expected_status: str, message_contains: str
 ) -> None:
-    path = _write_test(tmp, code)
-    result = helpers.common.run_test(path, "test_foo")
+    result = helpers.common.exec_inline(tmp, "import oxitest\n" + code, "test_foo")
     assert result.status == expected_status, (
         f"mark executor result: expected status={expected_status!r}, "
         f"got {result.status!r} (message={result.message!r})"
@@ -363,11 +356,17 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
     reg.register(helpers.common.make_fixture_def("my_fixture", side_effect_fixture))
     session = FixtureSession(reg)
 
-    path = _write_test(
-        tmp,
-        "@oxitest.mark.usefixtures('my_fixture')\ndef test_foo(): pass\n",
+    code = (
+        "import oxitest\n"
+        "@oxitest.mark.usefixtures('my_fixture')\n"
+        "def test_foo(): pass\n"
     )
-    result = helpers.common.run_test(path, "test_foo", session)
+    result = helpers.common.exec_inline(
+        tmp,
+        code,
+        "test_foo",
+        session=session,
+    )
     assert result.status == "passed", (  # usefixtures does not short-circuit
         f"@mark.usefixtures should not short-circuit, expected status='passed', got "
         f"{result.status!r}"
@@ -553,24 +552,27 @@ def test_each_handler_has_mark_name_class_attr():
 
 
 def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
-    path = _write_test(tmp, "def test_foo(): assert False\n")
-    result = helpers.common.run_test(path, "test_foo")
+    result = helpers.common.exec_inline(
+        tmp, "import oxitest\ndef test_foo(): assert False\n", "test_foo"
+    )
     assert result.exc_type == "AssertionError", (
         f"expected exc_type='AssertionError', got {result.exc_type!r}"
     )
 
 
 def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
-    path = _write_test(tmp, "def test_foo(): raise ValueError('boom')\n")
-    result = helpers.common.run_test(path, "test_foo")
+    result = helpers.common.exec_inline(
+        tmp, "import oxitest\ndef test_foo(): raise ValueError('boom')\n", "test_foo"
+    )
     assert result.exc_type == "ValueError", (
         f"expected exc_type='ValueError', got {result.exc_type!r}"
     )
 
 
 def test_exc_type_empty_on_pass(tmp: TempDir) -> None:
-    path = _write_test(tmp, "def test_foo(): pass\n")
-    result = helpers.common.run_test(path, "test_foo")
+    result = helpers.common.exec_inline(
+        tmp, "import oxitest\ndef test_foo(): pass\n", "test_foo"
+    )
     assert result.exc_type == "", f"expected exc_type='', got {result.exc_type!r}"
 
 
