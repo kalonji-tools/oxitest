@@ -14,10 +14,11 @@ def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir):
             "test_c.py": "def test_four(): pass\n",
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
+    out, _, rc = helpers.common.run_oxitest_subcmd(
         tmp,
         "run",
         "test_a.py::test_one",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -108,9 +109,10 @@ def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir):
     (integ_dir / "test_b.py").write_text("def test_integ(): pass\n")
 
     # Run only unit test
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
+    out, _, rc = helpers.common.run_oxitest_subcmd(
         tmp,
         "run",
         "unit/test_a.py::test_unit",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)

@@ -1,8 +1,8 @@
 """Integration tests: flag interactions (--list, -k, --serial, --json, etc.)."""
 
 import json
+import os
 import subprocess
-import sys
 from pathlib import Path
 
 import oxitest
@@ -183,34 +183,21 @@ def test_debug_always_with_plugin_backend(tmp: TempDir):
         f'marker_path = "{marker_file}"\n'
     )
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            "debug",
-            str(tmp),
-            "--color",
-            "never",
-            "--always",
-        ],
-        capture_output=True,
-        text=True,
+    plugin_env = {
+        **os.environ,
+        "PYTHONPATH": str(tmp) + os.pathsep + os.environ.get("PYTHONPATH", ""),
+    }
+    out, err, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "debug",
+        "--always",
         timeout=30,
-        env={
-            **__import__("os").environ,
-            "PYTHONPATH": str(tmp)
-            + __import__("os").pathsep
-            + __import__("os").environ.get("PYTHONPATH", ""),
-        },
+        env=plugin_env,
     )
-    assert result.returncode == 0, (
-        f"expected exit 0, got {result.returncode}\n"
-        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
-    )
+    assert rc == 0, f"expected exit 0, got {rc}\nstdout: {out!r}\nstderr: {err!r}"
     assert marker_file.exists(), (
         f"marker file should exist (plugin trace() was called)\n"
-        f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+        f"stdout: {out!r}\nstderr: {err!r}"
     )
     assert marker_file.read_text() == "traced", (
         f"marker file content wrong: {marker_file.read_text()!r}"
@@ -300,23 +287,12 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]):
     run(*git, "add", "test_new.py")
 
     # Act — use clean env so oxitest doesn't see prek's GIT_* vars
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(tmp),
-            "--color",
-            "never",
-            "--affected=HEAD",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
+    out, _, rc = helpers.common.run_oxitest(
+        tmp,
+        "--affected=HEAD",
         env=clean_env,
+        cwd=str(tmp),
     )
-    out, _, rc = result.stdout, result.stderr, result.returncode
 
     # Assert — only the new file should be collected (1 test, not 2)
     helpers.integ.assert_passed(out, rc, count=1)
@@ -347,23 +323,12 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]):
     run(*git, "add", "tests/test_two.py")
 
     # Act — pass the subdirectory as the path (this triggered the bug)
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "oxitest",
-            str(subdir),
-            "--color",
-            "never",
-            "--affected=HEAD",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
+    out, _, rc = helpers.common.run_oxitest(
+        subdir,
+        "--affected=HEAD",
         env=clean_env,
+        cwd=str(tmp),
     )
-    out, _, rc = result.stdout, result.stderr, result.returncode
 
     # Assert — only the new file should be collected (1 test, not 2)
     helpers.integ.assert_passed(out, rc, count=1)
@@ -447,7 +412,7 @@ def test_durations_shows_fixture_timings(tmp: TempDir):
 
 def test_capture_environment_prints_versions():
     """`env` subcommand prints Python and oxitest versions and exits 0."""
-    out, _, rc = helpers.common.run_oxitest_env()
+    out, _, rc = helpers.common.run_oxitest_subcmd(None, "env")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out.lower(), "python:", "oxitest:")
     # Should NOT run tests

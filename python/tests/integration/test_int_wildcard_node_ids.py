@@ -24,8 +24,11 @@ def test_glob_function_name(tmp: TempDir):
     """Glob in function name selects only matching tests."""
     _write_project(tmp)
     # test_a* matches test_add only (test_sub and test_mul don't start with test_a)
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_math.py::test_a*"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_math.py::test_a*",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
 
@@ -33,7 +36,9 @@ def test_glob_function_name(tmp: TempDir):
 def test_glob_star_selects_all_in_file(tmp: TempDir):
     """Glob `*` selects all tests in the targeted file, no others."""
     _write_project(tmp)
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(tmp, "run", "test_math.py::*")
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "run", "test_math.py::*", cwd="."
+    )
     # test_math.py has 3 tests; test_string.py tests must not run
     helpers.integ.assert_passed(out, rc, count=3)
 
@@ -41,8 +46,11 @@ def test_glob_star_selects_all_in_file(tmp: TempDir):
 def test_glob_no_match_runs_nothing(tmp: TempDir):
     """Glob with no matches collects zero tests."""
     _write_project(tmp)
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_math.py::test_zzz*"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_math.py::test_zzz*",
+        cwd=".",
     )
     helpers.integ.assert_contains(out, "no tests ran")
 
@@ -50,7 +58,10 @@ def test_glob_no_match_runs_nothing(tmp: TempDir):
 def test_non_glob_prefix_matching_preserved(tmp: TempDir):
     """Non-glob node IDs still use existing prefix matching."""
     _write_project(tmp)
-    out, _, rc = helpers.common.run_oxitest_subcmd_cwd(
-        tmp, "run", "test_math.py::test_add"
+    out, _, rc = helpers.common.run_oxitest_subcmd(
+        tmp,
+        "run",
+        "test_math.py::test_add",
+        cwd=".",
     )
     helpers.integ.assert_passed(out, rc, count=1)
