@@ -2,7 +2,7 @@
 
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::types::ExitCode;
-use crate::{cache, reporter, types};
+use crate::{bridge, cache, config, reporter, strict, types};
 use pyo3::prelude::*;
 
 /// Returns a human-readable OS description, e.g. "Ubuntu 24.04.2 LTS x86_64".
@@ -110,4 +110,75 @@ pub(super) fn finalize(
     cache.merge_timings(timings, cache_max_age);
     cache.record_timing_outcomes(timings);
     cache.save(rootdir);
+}
+
+/// Result of applying strict-mode violation processing.
+pub(super) struct StrictModeResult {
+    pub clean_items: Vec<std::sync::Arc<types::TestItem>>,
+    pub violated_items: Vec<std::sync::Arc<types::TestItem>>,
+    pub all_violations: Vec<strict::StrictViolation>,
+    pub suite_lines: Vec<String>,
+}
+
+/// Evaluate strict-mode violations and partition items accordingly.
+pub(super) fn apply_strict_mode(
+    cfg: &config::Config,
+    items: Vec<std::sync::Arc<types::TestItem>>,
+    raw_violations: Vec<bridge::RawViolation>,
+    use_color: bool,
+) -> Result<StrictModeResult, types::ExitCode> {
+    if cfg.strict.is_none() {
+        return Ok(StrictModeResult {
+            clean_items: items,
+            violated_items: vec![],
+            all_violations: vec![],
+            suite_lines: vec![],
+        });
+    }
+
+    // Build the full violation list.
+    let mut all_violations = strict::check_config(cfg);
+    all_violations.extend(strict::check_collected(raw_violations));
+
+    // Abort mode: print and signal early exit.
+    if cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
+        let abort_lines: Vec<String> = all_violations
+            .iter()
+            .map(strict::format_violation_line)
+            .collect();
+        reporter::print_strict_abort(&abort_lines, use_color);
+        return Err(ExitCode::CollectError);
+    }
+
+    // Enforce mode: build suite-level violation lines.
+    let suite_lines: Vec<String> = if cfg.strict == Some(config::StrictMode::Enforce) {
+        strict::suite_level(&all_violations)
+            .iter()
+            .map(|v| v.to_string())
+            .collect()
+    } else {
+        vec![]
+    };
+
+    // Partition items into violated vs. clean.
+    let (violated_items, clean_items): (Vec<_>, Vec<_>) =
+        if cfg.strict == Some(config::StrictMode::Enforce) {
+            let violated_ids: std::collections::HashSet<&str> = all_violations
+                .iter()
+                .filter_map(|v| v.node_id())
+                .map(|id| id.as_ref())
+                .collect();
+            items
+                .into_iter()
+                .partition(|i| violated_ids.contains(i.node_id.as_ref()))
+        } else {
+            (vec![], items)
+        };
+
+    Ok(StrictModeResult {
+        clean_items,
+        violated_items,
+        all_violations,
+        suite_lines,
+    })
 }
