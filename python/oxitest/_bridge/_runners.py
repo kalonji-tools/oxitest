@@ -116,6 +116,25 @@ def _debug_post_mortem(
     backend.post_mortem(tb)
 
 
+def _call_with_warnings(
+    fn: Callable[..., Any],
+    all_kwargs: dict[str, Any],
+    no_message_lines: tuple[int, ...],
+) -> TestResult:
+    """Shared warning-capture logic for the test happy path.
+
+    Calls *fn* synchronously and checks for warnings.
+    Exceptions propagate to the caller for handling.
+    """
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        fn(**all_kwargs)
+    has_warnings, warning_msg = check_warnings(w, all_kwargs)
+    if has_warnings:
+        return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
+    return TestResult.passed(no_message_lines=no_message_lines)
+
+
 def run_base(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
@@ -132,13 +151,7 @@ def run_base(
     if debug_mode == DebugMode.ALWAYS and backend is not None:
         _trace_before_test(all_kwargs, node_id, backend, file=file)
     try:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            fn(**all_kwargs)
-        has_warnings, warning_msg = check_warnings(w, all_kwargs)
-        if has_warnings:
-            return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
-        return TestResult.passed(no_message_lines=no_message_lines)
+        return _call_with_warnings(fn, all_kwargs, no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
