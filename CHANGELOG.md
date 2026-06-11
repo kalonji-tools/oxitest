@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.0.0-alpha.2] - 2026-06-11
+
+### Features
+
+
+- Rich query DSL error diagnostics with miette (#899)
+
+### Performance
+
+
+- Parallelize AST prescan with rayon (#897)
+- Parallelize metadata filtering with rayon (#898)
+
 ## [1.0.0-alpha.1] - 2026-06-09
 
 ### Bug Fixes
