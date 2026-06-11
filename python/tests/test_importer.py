@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import textwrap
 from types import ModuleType
 
 import oxitest
+from conftest import helpers
 from oxitest import TempDir, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
@@ -21,16 +21,16 @@ from oxitest._bridge.result import CollectedItem, ViolationKind
 
 
 def test_collect_empty_module(tmp: TempDir):
-    f = tmp / "test_empty.py"
-    f.write_text("")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(tmp, "", name="test_empty.py")
+    items, _ = collect_module(path)
     assert items == [], f"collecting an empty module should yield no items, got {items}"
 
 
 def test_collect_single_test_function(tmp: TempDir):
-    f = tmp / "test_foo.py"
-    f.write_text("def test_bar(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp, "def test_bar(): pass\n", name="test_foo.py"
+    )
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 collected item, got {len(items)}: {items}"
     assert items[0].fn_name == "test_bar", (
         f"expected fn_name='test_bar', got {items[0].fn_name!r}"
@@ -44,9 +44,10 @@ def test_collect_single_test_function(tmp: TempDir):
 
 
 def test_collect_multiple_functions(tmp: TempDir):
-    f = tmp / "test_multi.py"
-    f.write_text("def test_one(): pass\ndef test_two(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp, "def test_one(): pass\ndef test_two(): pass\n", name="test_multi.py"
+    )
+    items, _ = collect_module(path)
     assert len(items) == 2, (
         f"expected 2 items, got {len(items)}: {[i.fn_name for i in items]}"
     )
@@ -56,9 +57,10 @@ def test_collect_multiple_functions(tmp: TempDir):
 
 
 def test_collect_ignores_non_test_functions(tmp: TempDir):
-    f = tmp / "test_foo.py"
-    f.write_text("def helper(): pass\ndef test_real(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp, "def helper(): pass\ndef test_real(): pass\n", name="test_foo.py"
+    )
+    items, _ = collect_module(path)
     assert len(items) == 1, (
         f"helper functions should not be collected, expected 1 item got {len(items)}: "
         f"{[i.fn_name for i in items]}"
@@ -75,10 +77,11 @@ def test_collect_raises_on_missing_file():
 
 def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir):
     """collect_module error: plain traceback, no TestResult repr, real newlines."""
-    f = tmp / "test_bad_import.py"
-    f.write_text("import _oxitest_nonexistent_module_xyz\n")
+    path = helpers.common.write_test_module(
+        tmp, "import _oxitest_nonexistent_module_xyz\n", name="test_bad_import.py"
+    )
     with oxitest.raises(ImportError) as exc_info:
-        collect_module(str(f))
+        collect_module(path)
     msg = str(exc_info.value)
     assert "TestResult(" not in msg, (
         f"message must not be TestResult repr, got: {msg!r}"
@@ -91,9 +94,12 @@ def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir):
 
 
 def test_collect_extracts_marker_names(tmp: TempDir):
-    f = tmp / "test_marked.py"
-    f.write_text("import oxitest\n@oxitest.mark.slow\ndef test_query(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n@oxitest.mark.slow\ndef test_query(): pass\n",
+        name="test_marked.py",
+    )
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].markers == ("slow",), (
         f"expected markers=('slow',), got {items[0].markers}"
@@ -101,14 +107,15 @@ def test_collect_extracts_marker_names(tmp: TempDir):
 
 
 def test_collect_extracts_multiple_markers(tmp: TempDir):
-    f = tmp / "test_multi_mark.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "@oxitest.mark.slow\n"
         "@oxitest.mark.integration\n"
-        "def test_query(): pass\n"
+        "def test_query(): pass\n",
+        name="test_multi_mark.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert "slow" in items[0].markers, (
         f"'slow' marker should be collected, got markers: {items[0].markers}"
     )
@@ -158,11 +165,14 @@ def test_propagate_class_marks_copies_all_marks():
 
 def test_collect_class_methods_use_qualified_name(tmp: TempDir):
     """Class methods are returned as 'ClassName::method_name'."""
-    f = tmp / "test_cls.py"
-    f.write_text(
-        "class TestSuite:\n    def test_foo(self): pass\n    def test_bar(self): pass\n"
+    path = helpers.common.write_test_module(
+        tmp,
+        "class TestSuite:\n"
+        "    def test_foo(self): pass\n"
+        "    def test_bar(self): pass\n",
+        name="test_cls.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     names = [item.fn_name for item in items]
     assert "TestSuite::test_foo" in names, (
         f"class method should be collected as 'TestSuite::test_foo', got names: {names}"
@@ -174,15 +184,16 @@ def test_collect_class_methods_use_qualified_name(tmp: TempDir):
 
 def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir):
     """usefixtures on a class is propagated to each test method at collection time."""
-    f = tmp / "test_cls.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "@oxitest.mark.usefixtures('db')\n"
         "class TestSuite:\n"
         "    def test_foo(self): pass\n"
-        "    def test_bar(self): pass\n"
+        "    def test_bar(self): pass\n",
+        name="test_cls.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, (
         f"expected 2 class methods, got {len(items)}: {[i.fn_name for i in items]}"
     )
@@ -195,14 +206,15 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir):
 
 def test_collect_class_skip_propagated(tmp: TempDir):
     """skip on a class IS propagated to test methods."""
-    f = tmp / "test_cls_skip.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "@oxitest.mark.skip(reason='class skip')\n"
         "class TestSuite:\n"
-        "    def test_foo(self): pass\n"
+        "    def test_foo(self): pass\n",
+        name="test_cls_skip.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 method to be collected, got {len(items)}"
     assert "skip" in items[0].markers, (
         f"skip mark should propagate from class to method, got markers: "
@@ -250,14 +262,15 @@ def test_collected_item_with_markers_and_param():
 
 
 def test_collect_module_registers_fixtures_from_test_module(tmp: TempDir) -> None:
-    f = tmp / "test_self_contained.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
         "def my_val():\n"
         "    return 42\n"
-        "def test_foo(my_val): pass\n"
+        "def test_foo(my_val): pass\n",
+        name="test_self_contained.py",
     )
     from oxitest._bridge._fixture_registry import FixtureRegistry
 
@@ -267,22 +280,20 @@ def test_collect_module_registers_fixtures_from_test_module(tmp: TempDir) -> Non
         _registry = registry
         _module_cache = None
 
-    collect_module(str(f), session=_FakeSession())  # type: ignore[arg-type]
+    collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
     defn = registry.get("my_val")
     assert defn is not None, (
         "collect_module should register fixtures from test module's Fixtures() instance"
     )
-    assert defn.conftest_path == str(f), (
-        f"registered fixture conftest_path should be {str(f)!r}, got "
+    assert defn.conftest_path == path, (
+        f"registered fixture conftest_path should be {path!r}, got "
         f"{defn.conftest_path!r}"
     )
 
 
 def _write_py(tmp_path: TempDir, src: str) -> str:
     """Write source code to a temp file and return its path as str."""
-    p = tmp_path / "test_viol.py"
-    p.write_text(textwrap.dedent(src))
-    return str(p)
+    return helpers.common.write_test_module(tmp_path, src, name="test_viol.py")
 
 
 def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir):
@@ -401,9 +412,10 @@ def test_check_fn_violations_class_method_missing_mark_reason():
 
 
 def test_collect_async_function_sets_is_async(tmp: TempDir):
-    f = tmp / "test_async.py"
-    f.write_text("async def test_hello(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp, "async def test_hello(): pass\n", name="test_async.py"
+    )
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].is_async is True, (
         f"async def test should have is_async=True, got {items[0].is_async!r}"
@@ -411,9 +423,10 @@ def test_collect_async_function_sets_is_async(tmp: TempDir):
 
 
 def test_collect_sync_function_sets_is_async_false(tmp: TempDir):
-    f = tmp / "test_sync.py"
-    f.write_text("def test_hello(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp, "def test_hello(): pass\n", name="test_sync.py"
+    )
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].is_async is False, (
         f"sync def test should have is_async=False, got {items[0].is_async!r}"
@@ -421,9 +434,12 @@ def test_collect_sync_function_sets_is_async_false(tmp: TempDir):
 
 
 def test_collect_mixed_sync_async(tmp: TempDir):
-    f = tmp / "test_mixed.py"
-    f.write_text("def test_sync(): pass\nasync def test_async(): pass\n")
-    items, _ = collect_module(str(f))
+    path = helpers.common.write_test_module(
+        tmp,
+        "def test_sync(): pass\nasync def test_async(): pass\n",
+        name="test_mixed.py",
+    )
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     by_name = {item.fn_name: item for item in items}
     assert by_name["test_sync"].is_async is False, "sync test should be is_async=False"
@@ -432,8 +448,8 @@ def test_collect_mixed_sync_async(tmp: TempDir):
 
 def test_async_fixture_flagged_during_registration(tmp: TempDir):
     """Async fixtures should have is_async=True on their FixtureDef."""
-    f = tmp / "test_async_fx.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
@@ -442,7 +458,8 @@ def test_async_fixture_flagged_during_registration(tmp: TempDir):
         "@fixtures.fixture\n"
         "def sync_val():\n"
         "    return 1\n"
-        "async def test_foo(async_val, sync_val): pass\n"
+        "async def test_foo(async_val, sync_val): pass\n",
+        name="test_async_fx.py",
     )
     from oxitest._bridge._fixture_registry import FixtureRegistry
 
@@ -452,7 +469,7 @@ def test_async_fixture_flagged_during_registration(tmp: TempDir):
         _registry = registry
         _module_cache = None
 
-    collect_module(str(f), session=_FakeSession())  # type: ignore[arg-type]
+    collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
     async_defn = registry.get("async_val")
     sync_defn = registry.get("sync_val")
     assert async_defn is not None, "async_val fixture should be registered"
@@ -466,13 +483,14 @@ def test_async_fixture_flagged_during_registration(tmp: TempDir):
 
 
 def test_collect_async_class_method_sets_is_async(tmp: TempDir):
-    f = tmp / "test_cls_async.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "class TestSuite:\n"
         "    async def test_async_method(self): pass\n"
-        "    def test_sync_method(self): pass\n"
+        "    def test_sync_method(self): pass\n",
+        name="test_cls_async.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     by_name = {item.fn_name: item for item in items}
     assert by_name["TestSuite::test_async_method"].is_async is True, (
@@ -650,14 +668,15 @@ def test_apply_module_marks_empty_list_is_noop():
 
 def test_collect_module_with_oxi_mark_single(tmp: TempDir):
     """oxi_mark = oxi.mark.slow applies 'slow' to all tests."""
-    f = tmp / "test_mod_mark.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "oxi_mark = oxitest.mark.slow\n"
         "def test_a(): pass\n"
-        "def test_b(): pass\n"
+        "def test_b(): pass\n",
+        name="test_mod_mark.py",
     )
-    items, violations = collect_module(str(f))
+    items, violations = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     for item in items:
         assert "slow" in item.markers, (
@@ -668,14 +687,15 @@ def test_collect_module_with_oxi_mark_single(tmp: TempDir):
 
 def test_collect_module_with_oxi_mark_list(tmp: TempDir):
     """oxi_mark = [mark.slow, mark.timeout(10)] applies both marks to all tests."""
-    f = tmp / "test_mod_marks.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow, oxitest.mark.timeout(10)]\n"
         "def test_a(): pass\n"
-        "def test_b(): pass\n"
+        "def test_b(): pass\n",
+        name="test_mod_marks.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     for item in items:
         assert "slow" in item.markers, (
@@ -688,15 +708,16 @@ def test_collect_module_with_oxi_mark_list(tmp: TempDir):
 
 def test_collect_module_oxi_mark_per_test_override(tmp: TempDir):
     """Per-test mark overrides module mark of the same name."""
-    f = tmp / "test_override.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.timeout(120)]\n"
         "@oxitest.mark.timeout(5)\n"
         "def test_fast(): pass\n"
-        "def test_slow(): pass\n"
+        "def test_slow(): pass\n",
+        name="test_override.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     for item in items:
         assert "timeout" in item.markers, (
@@ -706,8 +727,8 @@ def test_collect_module_oxi_mark_per_test_override(tmp: TempDir):
 
 def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
     """Module marks apply to each parametrize case."""
-    f = tmp / "test_param.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow]\n"
@@ -715,9 +736,10 @@ def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
         "class C:\n"
         "    x: int\n"
         "@oxitest.parametrize(case_a=C(1), case_b=C(2))\n"
-        "def test_compute(c: C): pass\n"
+        "def test_compute(c: C): pass\n",
+        name="test_param.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 parametrize cases, got {len(items)}"
     for item in items:
         assert "slow" in item.markers, (
@@ -728,15 +750,16 @@ def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
 
 def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir):
     """Module marks apply to test methods inside Test* classes."""
-    f = tmp / "test_cls_mod.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow]\n"
         "class TestSuite:\n"
         "    def test_foo(self): pass\n"
-        "    def test_bar(self): pass\n"
+        "    def test_bar(self): pass\n",
+        name="test_cls_mod.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     for item in items:
         assert "slow" in item.markers, (
@@ -747,11 +770,12 @@ def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir):
 
 def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
     """Invalid entries in oxi_mark produce violations."""
-    f = tmp / "test_bad_mark.py"
-    f.write_text(
-        "import oxitest\noxi_mark = [oxitest.mark.slow, 42]\ndef test_a(): pass\n"
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\noxi_mark = [oxitest.mark.slow, 42]\ndef test_a(): pass\n",
+        name="test_bad_mark.py",
     )
-    items, violations = collect_module(str(f))
+    items, violations = collect_module(path)
     assert len(items) == 1, f"expected 1 item (tests still collected), got {len(items)}"
     assert "slow" in items[0].markers, (
         f"valid mark 'slow' should still apply, got {items[0].markers}"
@@ -769,16 +793,17 @@ def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
 
 def test_propagate_class_marks_copies_skip(tmp: TempDir):
     """Class-level @mark.skip propagates to all methods."""
-    f = tmp / "test_class_skip.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "@oxitest.mark.skip(reason='class skip')\n"
         "class TestSkipped:\n"
         "    def test_a(self): pass\n"
-        "    def test_b(self): pass\n"
+        "    def test_b(self): pass\n",
+        name="test_class_skip.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 2, f"expected 2 items, got {len(items)}"
     for item in items:
         assert "skip" in item.markers, (
@@ -788,15 +813,16 @@ def test_propagate_class_marks_copies_skip(tmp: TempDir):
 
 def test_propagate_class_marks_copies_timeout(tmp: TempDir):
     """Class-level @mark.timeout propagates to all methods."""
-    f = tmp / "test_class_timeout.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "@oxitest.mark.timeout(10)\n"
         "class TestTimed:\n"
-        "    def test_a(self): pass\n"
+        "    def test_a(self): pass\n",
+        name="test_class_timeout.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert "timeout" in items[0].markers, (
         f"expected timeout marker, got {items[0].markers}"
@@ -805,15 +831,16 @@ def test_propagate_class_marks_copies_timeout(tmp: TempDir):
 
 def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
     """Class-level custom mark propagates to methods."""
-    f = tmp / "test_class_custom.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "@oxitest.mark.slow\n"
         "class TestSlow:\n"
-        "    def test_a(self): pass\n"
+        "    def test_a(self): pass\n",
+        name="test_class_custom.py",
     )
-    items, _ = collect_module(str(f))
+    items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert "slow" in items[0].markers, f"expected slow marker, got {items[0].markers}"
 
@@ -823,15 +850,16 @@ def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
 
 def test_module_mark_skip_when_false_no_violation(tmp: TempDir):
     """oxi_mark = mark.skip(when=False) is a no-op, not a violation."""
-    f = tmp / "test_skip_false.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "oxi_mark = oxitest.mark.skip(when=False, reason='not skipped')\n"
         "\n"
-        "def test_ok(): pass\n"
+        "def test_ok(): pass\n",
+        name="test_skip_false.py",
     )
-    items, violations = collect_module(str(f))
+    items, violations = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
         f"skip(when=False) should not be a violation: {violations}"
@@ -844,15 +872,16 @@ def test_module_mark_skip_when_false_no_violation(tmp: TempDir):
 
 def test_module_mark_skip_when_true_applies(tmp: TempDir):
     """oxi_mark = mark.skip(when=True) applies skip to all tests."""
-    f = tmp / "test_skip_true.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "oxi_mark = oxitest.mark.skip(when=True, reason='always skip')\n"
         "\n"
-        "def test_ok(): pass\n"
+        "def test_ok(): pass\n",
+        name="test_skip_true.py",
     )
-    items, violations = collect_module(str(f))
+    items, violations = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert "skip" in items[0].markers, (
         f"skip(when=True) should apply skip marker, got {items[0].markers}"
@@ -864,15 +893,16 @@ def test_module_mark_skip_when_true_applies(tmp: TempDir):
 
 def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir):
     """oxi_mark list with skip(when=False) silently skips the no-op entry."""
-    f = tmp / "test_skip_false_list.py"
-    f.write_text(
+    path = helpers.common.write_test_module(
+        tmp,
         "import oxitest\n"
         "\n"
         "oxi_mark = [oxitest.mark.skip(when=False), oxitest.mark.slow]\n"
         "\n"
-        "def test_ok(): pass\n"
+        "def test_ok(): pass\n",
+        name="test_skip_false_list.py",
     )
-    items, violations = collect_module(str(f))
+    items, violations = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert "slow" in items[0].markers, (
         f"slow mark should still apply, got {items[0].markers}"
