@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 REGRESSION_THRESHOLD = 0.10  # 10%
+LAZY_RATIO_THRESHOLD = 0.35  # lazy run must stay under 35% of full L parallel
 
 
 def load_results(path: str) -> list[dict]:
@@ -73,6 +74,63 @@ def tier_summary(tier: str, tier_results: list[dict]) -> dict:
     }
 
 
+def lazy_summary(
+    tier: str, lazy_results: list[dict], *, l_parallel_mean: float
+) -> dict | None:
+    """Build a summary for a lazy-collection tier, compared against L parallel."""
+    if not lazy_results or l_parallel_mean <= 0:
+        return None
+    mean = lazy_results[0]["mean"]
+    ratio = mean / l_parallel_mean
+    return {
+        "tier": tier,
+        "mean": mean,
+        "ratio": ratio,
+        "is_regression": ratio > LAZY_RATIO_THRESHOLD,
+    }
+
+
+def realistic_summary(tier_results: list[dict]) -> dict | None:
+    """Build a summary for the realistic tier with worker sweep."""
+    if not tier_results:
+        return None
+    serial_mean = find_command_mean(tier_results, "oxitest --serial")
+    if serial_mean is None:
+        return None
+    entries: list[dict] = []
+    for r in tier_results:
+        cmd = r["command"]
+        mean = r["mean"]
+        if "--serial" in cmd:
+            label = "serial"
+            speedup = None
+        elif "--workers" in cmd:
+            # Extract "--workers N" from command
+            parts = cmd.split()
+            wi = parts.index("--workers")
+            label = f"--workers {parts[wi + 1]}"
+            speedup = speedup_ratio(mean, serial_mean)
+        else:
+            label = "auto"
+            speedup = speedup_ratio(mean, serial_mean)
+        entries.append({"label": label, "mean": mean, "speedup": speedup})
+    return {"entries": entries}
+
+
+def dogfood_summary(tier_results: list[dict]) -> dict | None:
+    """Build a summary for the dogfood tier (oxitest's own test suite)."""
+    if not tier_results:
+        return None
+    serial = find_command_mean(tier_results, "oxitest --serial")
+    parallel = None
+    for r in tier_results:
+        if "oxitest" in r["command"] and "--serial" not in r["command"]:
+            parallel = r["mean"]
+            break
+    speedup = speedup_ratio(parallel, serial) if parallel and serial else None
+    return {"serial": serial, "parallel": parallel, "speedup": speedup}
+
+
 def main() -> int:
     results = load_results("benchmarks/results.json")
 
@@ -121,6 +179,70 @@ def main() -> int:
                 warm_ms = f"{s['oxitest_parallel'] * 1000:.0f}ms"
                 print(f"  cache cold: {cold_ms}  warm: {warm_ms}")
 
+        print()
+
+    # Lazy collection
+    l_tier_results = find_commands(results, tier="l")
+    l_parallel = None
+    for r in l_tier_results:
+        if (
+            "oxitest" in r["command"]
+            and "--serial" not in r["command"]
+            and "pytest" not in r["command"]
+        ):
+            l_parallel = r["mean"]
+            break
+
+    lazy_tiers = ["lazy_node_id", "lazy_name", "lazy_mark"]
+    lazy_labels = {
+        "lazy_node_id": "node ID",
+        "lazy_name": "name()",
+        "lazy_mark": "mark()",
+    }
+    lazy_printed = False
+    for lt in lazy_tiers:
+        lr = find_commands(results, tier=lt)
+        if not lr or l_parallel is None:
+            continue
+        s = lazy_summary(lt, lr, l_parallel_mean=l_parallel)
+        if s is None:
+            continue
+        if not lazy_printed:
+            print("LAZY COLLECTION")
+            lazy_printed = True
+        marker = "REGRESSION" if s["is_regression"] else "ok"
+        label = lazy_labels.get(lt, lt)
+        print(
+            f"  {label}: {s['mean'] * 1000:.0f}ms  (ratio: {s['ratio']:.2f}) {marker}"
+        )
+        if s["is_regression"]:
+            has_regression = True
+    if lazy_printed:
+        print()
+
+    # Realistic (worker sweep)
+    realistic_results = find_commands(results, tier="realistic")
+    rs = realistic_summary(realistic_results)
+    if rs is not None:
+        print("REALISTIC")
+        for entry in rs["entries"]:
+            speedup_str = (
+                f"  ({entry['speedup']:.2f}x vs serial)" if entry["speedup"] else ""
+            )
+            print(f"  {entry['label']:>12}: {entry['mean'] * 1000:.0f}ms{speedup_str}")
+        print()
+
+    # Dogfood (oxitest's own test suite)
+    dogfood_results = find_commands(results, tier="dogfood")
+    ds = dogfood_summary(dogfood_results)
+    if ds is not None:
+        print("DOGFOOD")
+        if ds["serial"]:
+            print(f"  serial:   {ds['serial'] * 1000:.0f}ms")
+        if ds["parallel"]:
+            print(f"  parallel: {ds['parallel'] * 1000:.0f}ms")
+        if ds["speedup"]:
+            print(f"  speedup:  {ds['speedup']:.2f}x")
         print()
 
     # Regression check against baseline
