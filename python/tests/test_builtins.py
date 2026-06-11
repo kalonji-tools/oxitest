@@ -22,6 +22,23 @@ from oxitest._bridge._builtins import (  # noqa: F401
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._test_meta import TestMeta
 
+
+def _make_builtin_ctx(*, fn_name: str = "", keep_tmp: str | None = None):
+    """Create a ``_BuiltinContext`` with sensible test defaults.
+
+    Returns ``(ctx, teardowns)`` — the teardowns list is needed by
+    most tests to verify teardown registration and run cleanup.
+    """
+    teardowns: list = []
+    ctx = _BuiltinContext(
+        meta=TestMeta(module_path="t.py", fn_name=fn_name, node_id=""),
+        inject_scope="function",
+        teardown_stack=teardowns,
+        keep_tmp=keep_tmp,
+    )
+    return ctx, teardowns
+
+
 # ── BuiltinFixture base ───────────────────────────────────────────────────────
 
 
@@ -39,7 +56,7 @@ def test_builtin_fixture_registration():
             "_Sentinel"
         )
     finally:
-        del BuiltinFixture._registry[_Sentinel]
+        BuiltinFixture._registry.pop(_Sentinel, None)
 
 
 def test_builtin_fixture_for_type_unknown_returns_none():
@@ -49,31 +66,18 @@ def test_builtin_fixture_for_type_unknown_returns_none():
 
 
 def test_builtin_fixture_create_raises_not_implemented():
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=[],
-    )
+    ctx, _ = _make_builtin_ctx()
     with raises(NotImplementedError):
         BuiltinFixture().create(ctx)
 
 
 def test_builtin_context_keep_tmp_default_is_none():
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=[],
-    )
+    ctx, _ = _make_builtin_ctx()
     assert ctx.keep_tmp is None, "_BuiltinContext.keep_tmp should default to None"
 
 
 def test_builtin_context_keep_tmp_accepts_value():
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=[],
-        keep_tmp="failed",
-    )
+    ctx, _ = _make_builtin_ctx(keep_tmp="failed")
     assert ctx.keep_tmp == "failed", (
         "_BuiltinContext.keep_tmp should accept and store 'failed'"
     )
@@ -85,12 +89,7 @@ def test_builtin_context_keep_tmp_accepts_value():
 def test_tempdir_fixture_creates_directory():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     tmp = _TempDirFixture().create(ctx)
 
     assert tmp.path.is_dir(), (
@@ -106,12 +105,7 @@ def test_tempdir_fixture_creates_directory():
 def test_tempdir_fixture_directory_name_includes_fn_name():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="my_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="my_test")
     tmp = _TempDirFixture().create(ctx)
 
     assert tmp.path.is_dir(), (
@@ -128,12 +122,7 @@ def test_tempdir_fixture_directory_name_includes_fn_name():
 def test_tempdir_fixture_teardown_removes_directory():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -148,14 +137,8 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure():
     from oxitest._bridge.result import StatusKind, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="fail_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-        keep_tmp="failed",
-        result_cell=result_cell,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
+    ctx.result_cell = result_cell
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
     assert path.is_dir(), "TempDir should create a directory"
@@ -179,14 +162,8 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass():
     from oxitest._bridge.result import TestResult
 
     result_cell: list[TestResult | None] = [None]
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="pass_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-        keep_tmp="failed",
-        result_cell=result_cell,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="failed")
+    ctx.result_cell = result_cell
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -204,14 +181,8 @@ def test_tempdir_keep_tmp_always_preserves_on_pass():
     from oxitest._bridge.result import TestResult
 
     result_cell: list[TestResult | None] = [None]
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="pass_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-        keep_tmp="always",
-        result_cell=result_cell,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="always")
+    ctx.result_cell = result_cell
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -231,14 +202,8 @@ def test_tempdir_keep_tmp_failed_preserves_on_error():
     from oxitest._bridge.result import StatusKind, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="err_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-        keep_tmp="failed",
-        result_cell=result_cell,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="err_test", keep_tmp="failed")
+    ctx.result_cell = result_cell
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -266,14 +231,8 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
     from oxitest._bridge.result import StatusKind, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="fail_test", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-        keep_tmp="failed",
-        result_cell=result_cell,
-    )
+    ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
+    ctx.result_cell = result_cell
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -300,12 +259,8 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
 def test_tempdir_factory_mktemp_creates_distinct_dirs():
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="session",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
+    ctx.inject_scope = "session"
     factory = _TempDirFactoryFixture().create(ctx)
 
     a = factory.mktemp("a")
@@ -326,12 +281,8 @@ def test_tempdir_factory_mktemp_creates_distinct_dirs():
 def test_tempdir_factory_teardown_removes_all_dirs():
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="session",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
+    ctx.inject_scope = "session"
     factory = _TempDirFactoryFixture().create(ctx)
 
     a = factory.mktemp("x")
@@ -363,12 +314,7 @@ def test_tempdir_factory_scope_is_session():
 def test_stdcapture_captures_print():
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx)
 
     print("hello")
@@ -387,12 +333,7 @@ def test_stdcapture_captures_print():
 def test_stdcapture_readouterr_resets_buffer():
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx)
 
     print("first")
@@ -411,12 +352,7 @@ def test_stdcapture_disabled_passes_through(cap_outer: StdCapture):
 
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx)
 
     with cap.disabled():
@@ -436,12 +372,7 @@ def test_stdcapture_teardown_restores_streams():
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
     real_stdout = sys.stdout
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     _StdCaptureFixture().create(ctx)
 
     assert sys.stdout is not real_stdout, (
@@ -461,12 +392,7 @@ def test_fdcapture_captures_fd_write():
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _FdCaptureFixture().create(ctx)
 
     os.write(1, b"raw\n")
@@ -483,12 +409,7 @@ def test_fdcapture_readouterr_resets_buffer():
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _FdCaptureFixture().create(ctx)
 
     os.write(1, b"first\n")
@@ -508,12 +429,7 @@ def test_fdcapture_disabled_passes_through():
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     cap = _FdCaptureFixture().create(ctx)
 
     with cap.disabled():
@@ -535,12 +451,7 @@ def test_fdcapture_teardown_restores_fds():
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
 
     saved_fd = os.dup(1)  # save a reference to the current real stdout fd
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     _FdCaptureFixture().create(ctx)
 
     teardowns[0]()
@@ -560,12 +471,7 @@ def test_patcher_setattr_overrides_attribute():
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     obj = types.SimpleNamespace(x=1)
@@ -580,12 +486,7 @@ def test_patcher_setattr_restores_on_teardown():
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     obj = types.SimpleNamespace(x=1)
@@ -605,12 +506,7 @@ def test_patcher_setenv_sets_and_restores():
     key = "_OXITEST_PATCHER_TEST"
     os.environ.pop(key, None)
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     patch.setenv(key, "hello")
@@ -633,12 +529,7 @@ def test_patcher_delenv_removes_and_restores():
     key = "_OXITEST_PATCHER_DEL_TEST"
     os.environ[key] = "original"
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     patch.delenv(key)
@@ -661,12 +552,7 @@ def test_patcher_chdir_changes_and_restores(tmp: TempDir):
 
     original = os.getcwd()
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     patch.chdir(tmp)
@@ -685,12 +571,7 @@ def test_patcher_teardown_undoes_in_lifo_order():
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     obj = types.SimpleNamespace(a="orig_a", b="orig_b")
@@ -1054,15 +935,9 @@ def test_logcapture_teardown_uninstalls_backends():
 def test_logcapture_fixture_registers_teardown():
     import logging
 
-    from oxitest._bridge._builtin_context import _BuiltinContext
     from oxitest._bridge._builtins._logcapture import _LogCaptureFixture
 
-    teardowns: list = []
-    ctx = _BuiltinContext(
-        meta=TestMeta(module_path="t.py", fn_name="", node_id=""),
-        inject_scope="function",
-        teardown_stack=teardowns,
-    )
+    ctx, teardowns = _make_builtin_ctx()
     _LogCaptureFixture().create(ctx)
 
     assert len(teardowns) == 1, (
