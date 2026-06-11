@@ -69,16 +69,20 @@ impl Pipeline<Prescanned> {
             has_failed_filter,
         };
 
-        let mut modules_to_import = Vec::new();
-        for (path, items, has_dynamic) in &self.state.prescan_data {
-            if *has_dynamic {
-                modules_to_import.push(path.clone());
-                continue;
-            }
-            if self.file_passes_all_filters(path, items, &preds) {
-                modules_to_import.push(path.clone());
-            }
-        }
+        use rayon::prelude::*;
+
+        let modules_to_import: Vec<camino::Utf8PathBuf> = self
+            .state
+            .prescan_data
+            .par_iter()
+            .filter_map(|(path, items, has_dynamic)| {
+                if *has_dynamic || self.file_passes_all_filters(path, items, &preds) {
+                    Some(path.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         let filtered_conftests =
             collector::conftests_for_modules(&self.state.conftest_files, &modules_to_import);
