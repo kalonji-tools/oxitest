@@ -168,6 +168,19 @@ def test_conflicting_debugger_backends_raises():
         _remove_fake_module("dbg_plugin_b")
 
 
+def test_flatten_protocol_returns_empty_for_no_plugins():
+    registry = PluginRegistry()
+    assert registry.log_backends == (), f"expected empty, got {registry.log_backends!r}"
+    assert registry.fixture_providers == (), (
+        f"expected empty, got {registry.fixture_providers!r}"
+    )
+    assert registry.execution_wrappers == (), (
+        f"expected empty, got {registry.execution_wrappers!r}"
+    )
+    assert registry.collectors == (), f"expected empty, got {registry.collectors!r}"
+    assert registry.reporters == (), f"expected empty, got {registry.reporters!r}"
+
+
 @oxitest.mark.inprocess
 def test_single_debugger_backend_is_valid():
     """One plugin providing a debugger backend should not raise."""

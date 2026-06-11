@@ -96,6 +96,15 @@ class PluginEntry:
         return self.plugin
 
 
+def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
+    """Flatten a list-valued protocol attribute across all loaded plugins."""
+    return tuple(
+        itertools.chain.from_iterable(
+            getattr(e.plugin, attr) for e in entries if e.plugin is not None
+        )
+    )
+
+
 @dataclass
 class PluginRegistry:
     """Holds all loaded plugin instances."""
@@ -103,78 +112,56 @@ class PluginRegistry:
     entries: list[PluginEntry] = field(default_factory=list)
 
     @functools.cached_property
-    def log_backends(self) -> list[LogBackend]:
+    def log_backends(self) -> tuple[LogBackend, ...]:
         """All log backends from all plugins."""
-        return list(
-            itertools.chain.from_iterable(
-                e.plugin.log_backends for e in self.entries if e.plugin is not None
-            )
-        )
+        return _flatten_protocol(self.entries, "log_backends")
 
     @functools.cached_property
-    def fixture_providers(self) -> list[FixtureProvider]:
+    def fixture_providers(self) -> tuple[FixtureProvider, ...]:
         """All fixture providers from all plugins."""
-        return list(
-            itertools.chain.from_iterable(
-                e.plugin.fixture_providers for e in self.entries if e.plugin is not None
-            )
-        )
+        return _flatten_protocol(self.entries, "fixture_providers")
 
     @functools.cached_property
-    def execution_wrappers(self) -> list[ExecutionWrapper]:
+    def execution_wrappers(self) -> tuple[ExecutionWrapper, ...]:
         """All execution wrappers from all plugins."""
-        return list(
-            itertools.chain.from_iterable(
-                e.plugin.execution_wrappers
-                for e in self.entries
-                if e.plugin is not None
-            )
-        )
+        return _flatten_protocol(self.entries, "execution_wrappers")
 
     @functools.cached_property
-    def collectors(self) -> list[Collector]:
+    def collectors(self) -> tuple[Collector, ...]:
         """All collectors from all plugins."""
-        return list(
-            itertools.chain.from_iterable(
-                e.plugin.collectors for e in self.entries if e.plugin is not None
-            )
-        )
+        return _flatten_protocol(self.entries, "collectors")
 
     @functools.cached_property
-    def reporters(self) -> list[Reporter]:
+    def reporters(self) -> tuple[Reporter, ...]:
         """All reporters from all plugins."""
-        return list(
-            itertools.chain.from_iterable(
-                e.plugin.reporters for e in self.entries if e.plugin is not None
-            )
-        )
+        return _flatten_protocol(self.entries, "reporters")
 
     @functools.cached_property
-    def async_backends(self) -> list[tuple[str, Any]]:
+    def async_backends(self) -> tuple[tuple[str, Any], ...]:
         """All async backends from all plugins, as (module_name, backend) pairs."""
-        return [
+        return tuple(
             (entry.module_name, entry.plugin.async_backend)
             for entry in self.entries
             if entry.plugin is not None and entry.plugin.async_backend is not None
-        ]
+        )
 
     @functools.cached_property
-    def debugger_backends(self) -> list[tuple[str, DebuggerBackend]]:
+    def debugger_backends(self) -> tuple[tuple[str, DebuggerBackend], ...]:
         """All debugger backends from all plugins, as (module_name, backend) pairs."""
-        return [
+        return tuple(
             (entry.module_name, entry.plugin.debugger_backend)
             for entry in self.entries
             if entry.plugin is not None and entry.plugin.debugger_backend is not None
-        ]
+        )
 
     @functools.cached_property
-    def coverage_providers(self) -> list[tuple[str, object]]:
+    def coverage_providers(self) -> tuple[tuple[str, object], ...]:
         """All coverage providers from all plugins, as (module_name, provider) pairs."""
-        return [
+        return tuple(
             (entry.module_name, entry.plugin.coverage_provider)
             for entry in self.entries
             if entry.plugin is not None and entry.plugin.coverage_provider is not None
-        ]
+        )
 
     def register_deferred(self, entry: PluginEntry) -> None:
         """Append a deferred (not yet imported) plugin entry."""
