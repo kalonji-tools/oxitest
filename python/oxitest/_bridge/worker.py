@@ -45,7 +45,31 @@ import json
 import os
 import sys
 import time
-from typing import Any
+from typing import NotRequired, TypedDict
+
+
+class WorkerTaskItem(TypedDict):
+    """A single test item within a worker task."""
+
+    fn_name: str
+    param_id: str | None
+    node_id: str
+    markers: list[str]
+
+
+class WorkerTask(TypedDict):
+    """JSON task sent from the Rust coordinator to a worker subprocess.
+
+    Must stay in sync with ``WorkerTask`` in ``src/worker_result.rs``.
+    """
+
+    module_path: str
+    items: list[WorkerTaskItem]
+    conftest_paths: list[str]
+    timeout_secs: int | None
+    keep_tmp: NotRequired[str]
+    show_locals: NotRequired[bool]
+    show_internals: NotRequired[bool]
 
 
 def _maybe_start_coverage() -> None:
@@ -56,15 +80,15 @@ def _maybe_start_coverage() -> None:
         coverage.process_startup()
 
 
-def run(task: dict) -> None:
+def run(task: WorkerTask) -> None:
     from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.conftest_loader import create_session
     from oxitest._bridge.executor import run_test
     from oxitest._bridge.importer import collect_module
 
     module_path: str = task["module_path"]
-    items: list[dict] = task["items"]
-    conftest_paths: list[str] = task.get("conftest_paths") or []
+    items: list[WorkerTaskItem] = task["items"]
+    conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str | None = task.get("keep_tmp")
     show_locals: bool = task.get("show_locals", False)
@@ -112,7 +136,7 @@ def main() -> None:
     for raw in sys.stdin:
         raw = raw.strip()
         if raw:
-            task: dict[str, Any] = json.loads(raw)
+            task: WorkerTask = json.loads(raw)
             run(task)
 
 
