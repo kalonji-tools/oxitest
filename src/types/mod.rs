@@ -389,34 +389,74 @@ pub struct Frame {
     pub locals: Vec<LocalVar>,
 }
 
+/// Structured diagnostic payload for Failed and Error outcomes.
+///
+/// Comparison fields (`left`, `right`, `op`, `field_diffs`) are populated
+/// for assertion failures and empty for unhandled errors.
+#[derive(Debug, Clone)]
+pub struct FailureDiagnostic {
+    pub message: String,
+    pub file: Utf8PathBuf,
+    pub lineno: LineNo,
+    pub source_line: String,
+    pub frames: Vec<Frame>,
+    /// Left operand of the comparison (empty for Error outcomes).
+    pub left: String,
+    /// Right operand of the comparison (empty for Error outcomes).
+    pub right: String,
+    /// Comparison operator (empty for Error outcomes).
+    pub op: String,
+    /// Per-field diffs for dataclass/object comparisons (empty for Error outcomes).
+    pub field_diffs: Vec<FieldDiff>,
+}
+
+impl FailureDiagnostic {
+    /// Create an error diagnostic (no comparison fields).
+    pub fn error(
+        message: String,
+        file: Utf8PathBuf,
+        lineno: LineNo,
+        source_line: String,
+        frames: Vec<Frame>,
+    ) -> Self {
+        Self {
+            message,
+            file,
+            lineno,
+            source_line,
+            frames,
+            left: String::new(),
+            right: String::new(),
+            op: String::new(),
+            field_diffs: vec![],
+        }
+    }
+
+    /// Sentinel for worker crashes and timeouts (no location data).
+    pub fn sentinel(message: String) -> Self {
+        Self::error(
+            message,
+            Utf8PathBuf::default(),
+            LineNo::ZERO,
+            String::new(),
+            vec![],
+        )
+    }
+}
+
 /// The eight possible results of running a single test.
 ///
-/// Variants carry structured diagnostic data (file, line, left/right values for diffs,
-/// traceback frames) so the reporter can render rich output without re-parsing strings.
-/// Use [`TestOutcome::is_hard_failure`] to determine whether the run exits with code 1.
+/// `Failed` and `Error` variants hold a boxed [`FailureDiagnostic`] to keep the
+/// enum small (~32 bytes instead of ~200). Use [`TestOutcome::diagnostic()`] to
+/// access the shared payload. [`TestOutcome::is_hard_failure`] determines whether
+/// the run exits with code 1.
 #[derive(Debug, Clone)]
 pub enum TestOutcome {
     Passed {
         no_message_lines: Vec<usize>,
     },
-    Failed {
-        message: String,
-        file: Utf8PathBuf,
-        lineno: LineNo,
-        source_line: String,
-        left: String,
-        right: String,
-        op: String,
-        frames: Vec<Frame>,
-        field_diffs: Vec<FieldDiff>,
-    },
-    Error {
-        message: String,
-        file: Utf8PathBuf,
-        lineno: LineNo,
-        source_line: String,
-        frames: Vec<Frame>,
-    },
+    Failed(Box<FailureDiagnostic>),
+    Error(Box<FailureDiagnostic>),
     Skipped {
         reason: String,
     },
@@ -443,8 +483,8 @@ impl TestOutcome {
     pub fn is_hard_failure(&self) -> bool {
         matches!(
             self,
-            TestOutcome::Failed { .. }
-                | TestOutcome::Error { .. }
+            TestOutcome::Failed(..)
+                | TestOutcome::Error(..)
                 | TestOutcome::Timeout { .. }
                 | TestOutcome::XPassed { strict: true }
         )
@@ -454,8 +494,8 @@ impl TestOutcome {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed { .. } => "passed",
-            Self::Failed { .. } => "failed",
-            Self::Error { .. } => "error",
+            Self::Failed(..) => "failed",
+            Self::Error(..) => "error",
             Self::Skipped { .. } => "skipped",
             Self::Warned { .. } => "warned",
             Self::XFailed { .. } => "xfailed",
@@ -473,10 +513,8 @@ impl TestOutcome {
     pub fn message(&self) -> Option<&str> {
         let s = match self {
             Self::Passed { .. } | Self::XPassed { .. } => return None,
-            Self::Failed { message, .. }
-            | Self::Error { message, .. }
-            | Self::Timeout { message }
-            | Self::Flaky { message } => message.as_str(),
+            Self::Failed(d) | Self::Error(d) => d.message.as_str(),
+            Self::Timeout { message } | Self::Flaky { message } => message.as_str(),
             Self::Skipped { reason } | Self::Warned { reason, .. } | Self::XFailed { reason } => {
                 reason.as_str()
             }
@@ -488,52 +526,17 @@ impl TestOutcome {
         }
     }
 
-    /// Extract structured diagnostic parts for rendering.
-    ///
-    /// Returns `Some` for `Failed` and `Error` variants (which carry location and
-    /// traceback data), `None` for all other variants.
-    pub fn diagnostic_parts(&self) -> Option<DiagnosticParts<'_>> {
+    /// Returns the diagnostic payload for Failed and Error outcomes.
+    pub fn diagnostic(&self) -> Option<&FailureDiagnostic> {
         match self {
-            TestOutcome::Failed {
-                message,
-                file,
-                lineno,
-                source_line,
-                left,
-                right,
-                op,
-                frames,
-                field_diffs,
-            } => Some(DiagnosticParts {
-                file: file.as_str(),
-                lineno: *lineno,
-                source_line,
-                message,
-                frames,
-                left,
-                right,
-                op,
-                field_diffs,
-            }),
-            TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                frames,
-            } => Some(DiagnosticParts {
-                file: file.as_str(),
-                lineno: *lineno,
-                source_line,
-                message,
-                frames,
-                left: "",
-                right: "",
-                op: "",
-                field_diffs: &[],
-            }),
+            Self::Failed(d) | Self::Error(d) => Some(d),
             _ => None,
         }
+    }
+
+    /// True if this is an Error variant (not Failed).
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::Error(..))
     }
 }
 
@@ -541,26 +544,6 @@ impl std::fmt::Display for TestOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
-}
-
-/// Structured diagnostic data extracted from a `Failed` or `Error` outcome.
-///
-/// Used by the diagnostic renderer to separate data extraction from formatting.
-/// Fields borrow from the parent `TestOutcome` — the lifetime ties them together.
-pub struct DiagnosticParts<'a> {
-    pub file: &'a str,
-    pub lineno: LineNo,
-    pub source_line: &'a str,
-    pub message: &'a str,
-    pub frames: &'a [Frame],
-    /// Left operand of the comparison (empty for Error outcomes).
-    pub left: &'a str,
-    /// Right operand of the comparison (empty for Error outcomes).
-    pub right: &'a str,
-    /// Comparison operator (empty for Error outcomes or non-comparison assertions).
-    pub op: &'a str,
-    /// Per-field diffs for dataclass/object comparisons.
-    pub field_diffs: &'a [FieldDiff],
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -630,8 +613,8 @@ impl From<&TestOutcome> for OutcomeKind {
     fn from(outcome: &TestOutcome) -> Self {
         match outcome {
             TestOutcome::Passed { .. } => Self::Passed,
-            TestOutcome::Failed { .. } => Self::Failed,
-            TestOutcome::Error { .. } => Self::Error,
+            TestOutcome::Failed(..) => Self::Failed,
+            TestOutcome::Error(..) => Self::Error,
             TestOutcome::Skipped { .. } => Self::Skipped,
             TestOutcome::Warned { .. } => Self::Warned,
             TestOutcome::XFailed { .. } => Self::XFailed,
@@ -684,17 +667,7 @@ mod failure_accumulator_tests {
     #[test]
     fn test_no_maxfail_never_stops() {
         let mut acc = FailureAccumulator::new(0);
-        let outcome = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let outcome = TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())));
         assert!(!acc.record(&outcome));
         assert!(!acc.record(&outcome));
     }
@@ -702,17 +675,7 @@ mod failure_accumulator_tests {
     #[test]
     fn test_maxfail_stops_at_threshold() {
         let mut acc = FailureAccumulator::new(2);
-        let fail = TestOutcome::Failed {
-            message: String::new(),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
-        };
+        let fail = TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())));
         let pass = TestOutcome::Passed {
             no_message_lines: vec![],
         };
@@ -740,7 +703,7 @@ mod tests {
 
     #[test]
     fn test_outcome_failed_carries_location() {
-        let o = TestOutcome::Failed {
+        let o = TestOutcome::Failed(Box::new(FailureDiagnostic {
             message: "msg".to_string(),
             file: Utf8PathBuf::from("test_foo.py"),
             lineno: LineNo::new(7),
@@ -750,19 +713,12 @@ mod tests {
             op: "==".to_string(),
             frames: vec![],
             field_diffs: vec![],
-        };
-        if let TestOutcome::Failed {
-            lineno,
-            left,
-            right,
-            op,
-            ..
-        } = o
-        {
-            assert_eq!(lineno, LineNo::new(7));
-            assert_eq!(left, "0");
-            assert_eq!(right, "1");
-            assert_eq!(op, "==");
+        }));
+        if let TestOutcome::Failed(d) = o {
+            assert_eq!(d.lineno, LineNo::new(7));
+            assert_eq!(d.left, "0");
+            assert_eq!(d.right, "1");
+            assert_eq!(d.op, "==");
         } else {
             panic!("wrong variant");
         }
@@ -958,27 +914,11 @@ mod tests {
                 "passed",
             ),
             (
-                TestOutcome::Failed {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 "failed",
             ),
             (
-                TestOutcome::Error {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 "error",
             ),
             (
@@ -1028,24 +968,8 @@ mod tests {
     #[test]
     fn is_hard_failure_all_variants() {
         let hard: Vec<TestOutcome> = vec![
-            TestOutcome::Failed {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                left: String::new(),
-                right: String::new(),
-                op: String::new(),
-                frames: vec![],
-                field_diffs: vec![],
-            },
-            TestOutcome::Error {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                frames: vec![],
-            },
+            TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
+            TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
             TestOutcome::XPassed { strict: true },
             TestOutcome::Timeout {
                 message: String::new(),
@@ -1222,26 +1146,16 @@ mod tests {
     fn outcome_failed_builder_defaults() {
         let outcome = TestOutcome::failed("oops").build();
         match outcome {
-            TestOutcome::Failed {
-                message,
-                file,
-                lineno,
-                source_line,
-                left,
-                right,
-                op,
-                frames,
-                field_diffs,
-            } => {
-                assert_eq!(message, "oops");
-                assert_eq!(file.as_str(), "tests/test_foo.py");
-                assert_eq!(lineno, LineNo::new(1));
-                assert_eq!(source_line, "");
-                assert_eq!(left, "");
-                assert_eq!(right, "");
-                assert_eq!(op, "");
-                assert!(frames.is_empty());
-                assert!(field_diffs.is_empty());
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.message, "oops");
+                assert_eq!(d.file.as_str(), "tests/test_foo.py");
+                assert_eq!(d.lineno, LineNo::new(1));
+                assert_eq!(d.source_line, "");
+                assert_eq!(d.left, "");
+                assert_eq!(d.right, "");
+                assert_eq!(d.op, "");
+                assert!(d.frames.is_empty());
+                assert!(d.field_diffs.is_empty());
             }
             other => panic!("expected Failed, got {}", other.as_str()),
         }
@@ -1256,19 +1170,12 @@ mod tests {
             .comparison("41", "==", "42")
             .build();
         match outcome {
-            TestOutcome::Failed {
-                left,
-                op,
-                right,
-                file,
-                lineno,
-                ..
-            } => {
-                assert_eq!(left, "41");
-                assert_eq!(op, "==");
-                assert_eq!(right, "42");
-                assert_eq!(file.as_str(), "test.py");
-                assert_eq!(lineno, LineNo::new(8));
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.left, "41");
+                assert_eq!(d.op, "==");
+                assert_eq!(d.right, "42");
+                assert_eq!(d.file.as_str(), "test.py");
+                assert_eq!(d.lineno, LineNo::new(8));
             }
             other => panic!("expected Failed, got {}", other.as_str()),
         }
@@ -1278,18 +1185,12 @@ mod tests {
     fn outcome_error_builder_defaults() {
         let outcome = TestOutcome::error("RuntimeError").build();
         match outcome {
-            TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                frames,
-            } => {
-                assert_eq!(message, "RuntimeError");
-                assert_eq!(file.as_str(), "tests/test_foo.py");
-                assert_eq!(lineno, LineNo::new(1));
-                assert_eq!(source_line, "");
-                assert!(frames.is_empty());
+            TestOutcome::Error(d) => {
+                assert_eq!(d.message, "RuntimeError");
+                assert_eq!(d.file.as_str(), "tests/test_foo.py");
+                assert_eq!(d.lineno, LineNo::new(1));
+                assert_eq!(d.source_line, "");
+                assert!(d.frames.is_empty());
             }
             other => panic!("expected Error, got {}", other.as_str()),
         }
@@ -1303,17 +1204,11 @@ mod tests {
             .source("int('abc')")
             .build();
         match outcome {
-            TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                ..
-            } => {
-                assert_eq!(message, "ValueError");
-                assert_eq!(file.as_str(), "mod.py");
-                assert_eq!(lineno, LineNo::new(5));
-                assert_eq!(source_line, "int('abc')");
+            TestOutcome::Error(d) => {
+                assert_eq!(d.message, "ValueError");
+                assert_eq!(d.file.as_str(), "mod.py");
+                assert_eq!(d.lineno, LineNo::new(5));
+                assert_eq!(d.source_line, "int('abc')");
             }
             other => panic!("expected Error, got {}", other.as_str()),
         }
@@ -1339,24 +1234,8 @@ mod tests {
             TestOutcome::Passed {
                 no_message_lines: vec![],
             },
-            TestOutcome::Failed {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                left: String::new(),
-                right: String::new(),
-                op: String::new(),
-                frames: vec![],
-                field_diffs: vec![],
-            },
-            TestOutcome::Error {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                frames: vec![],
-            },
+            TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
+            TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
             TestOutcome::Skipped {
                 reason: String::new(),
             },
@@ -1401,27 +1280,15 @@ mod message_tests {
             (TestOutcome::XPassed { strict: true }, None),
             (TestOutcome::XPassed { strict: false }, None),
             (
-                TestOutcome::Failed {
-                    message: "assertion failed".to_string(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(
+                    "assertion failed".to_string(),
+                ))),
                 Some("assertion failed"),
             ),
             (
-                TestOutcome::Error {
-                    message: "ImportError".to_string(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(
+                    "ImportError".to_string(),
+                ))),
                 Some("ImportError"),
             ),
             (
@@ -1468,24 +1335,8 @@ mod message_tests {
     #[test]
     fn message_empty_string_returns_none() {
         let cases: Vec<TestOutcome> = vec![
-            TestOutcome::Failed {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                left: String::new(),
-                right: String::new(),
-                op: String::new(),
-                frames: vec![],
-                field_diffs: vec![],
-            },
-            TestOutcome::Error {
-                message: String::new(),
-                file: Utf8PathBuf::new(),
-                lineno: LineNo::ZERO,
-                source_line: String::new(),
-                frames: vec![],
-            },
+            TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
+            TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
             TestOutcome::Skipped {
                 reason: String::new(),
             },
@@ -1513,12 +1364,12 @@ mod message_tests {
 }
 
 #[cfg(test)]
-mod diagnostic_parts_tests {
+mod diagnostic_tests {
     use super::*;
 
     #[test]
     fn failed_returns_some_with_all_fields() {
-        let outcome = TestOutcome::Failed {
+        let outcome = TestOutcome::Failed(Box::new(FailureDiagnostic {
             message: "expected 4".to_string(),
             file: Utf8PathBuf::from("tests/test_foo.py"),
             lineno: LineNo::new(8),
@@ -1528,38 +1379,34 @@ mod diagnostic_parts_tests {
             op: "==".to_string(),
             frames: vec![],
             field_diffs: vec![],
-        };
-        let parts = outcome
-            .diagnostic_parts()
-            .expect("Failed should return Some");
-        assert_eq!(parts.file, "tests/test_foo.py");
-        assert_eq!(parts.lineno, LineNo::new(8));
-        assert_eq!(parts.source_line, "assert add(1, 2) == 4");
-        assert_eq!(parts.message, "expected 4");
-        assert_eq!(parts.left, "3");
-        assert_eq!(parts.right, "4");
-        assert_eq!(parts.op, "==");
-        assert!(parts.frames.is_empty());
+        }));
+        let diag = outcome.diagnostic().expect("Failed should return Some");
+        assert_eq!(diag.file.as_str(), "tests/test_foo.py");
+        assert_eq!(diag.lineno, LineNo::new(8));
+        assert_eq!(diag.source_line, "assert add(1, 2) == 4");
+        assert_eq!(diag.message, "expected 4");
+        assert_eq!(diag.left, "3");
+        assert_eq!(diag.right, "4");
+        assert_eq!(diag.op, "==");
+        assert!(diag.frames.is_empty());
     }
 
     #[test]
     fn error_returns_some_with_empty_comparison_fields() {
-        let outcome = TestOutcome::Error {
-            message: "ValueError: bad".to_string(),
-            file: Utf8PathBuf::from("tests/test_foo.py"),
-            lineno: LineNo::new(22),
-            source_line: "result = divide(10, 0)".to_string(),
-            frames: vec![],
-        };
-        let parts = outcome
-            .diagnostic_parts()
-            .expect("Error should return Some");
-        assert_eq!(parts.file, "tests/test_foo.py");
-        assert_eq!(parts.lineno, LineNo::new(22));
-        assert_eq!(parts.message, "ValueError: bad");
-        assert!(parts.left.is_empty());
-        assert!(parts.right.is_empty());
-        assert!(parts.op.is_empty());
+        let outcome = TestOutcome::Error(Box::new(FailureDiagnostic::error(
+            "ValueError: bad".to_string(),
+            Utf8PathBuf::from("tests/test_foo.py"),
+            LineNo::new(22),
+            "result = divide(10, 0)".to_string(),
+            vec![],
+        )));
+        let diag = outcome.diagnostic().expect("Error should return Some");
+        assert_eq!(diag.file.as_str(), "tests/test_foo.py");
+        assert_eq!(diag.lineno, LineNo::new(22));
+        assert_eq!(diag.message, "ValueError: bad");
+        assert!(diag.left.is_empty());
+        assert!(diag.right.is_empty());
+        assert!(diag.op.is_empty());
     }
 
     #[test]
@@ -1589,7 +1436,7 @@ mod diagnostic_parts_tests {
         ];
         for outcome in cases {
             assert!(
-                outcome.diagnostic_parts().is_none(),
+                outcome.diagnostic().is_none(),
                 "expected None for {outcome:?}"
             );
         }

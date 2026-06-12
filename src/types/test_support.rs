@@ -154,7 +154,7 @@ impl FailedOutcomeBuilder {
         self
     }
     pub(crate) fn build(self) -> TestOutcome {
-        TestOutcome::Failed {
+        TestOutcome::Failed(Box::new(FailureDiagnostic {
             message: self.message,
             file: self.file,
             lineno: self.lineno,
@@ -164,7 +164,7 @@ impl FailedOutcomeBuilder {
             op: self.op,
             frames: self.frames,
             field_diffs: self.field_diffs,
-        }
+        }))
     }
 }
 
@@ -200,12 +200,12 @@ impl ErrorOutcomeBuilder {
         self
     }
     pub(crate) fn build(self) -> TestOutcome {
-        TestOutcome::Error {
-            message: self.message,
-            file: self.file,
-            lineno: self.lineno,
-            source_line: self.source_line,
-            frames: self.frames,
-        }
+        TestOutcome::Error(Box::new(FailureDiagnostic::error(
+            self.message,
+            self.file,
+            self.lineno,
+            self.source_line,
+            self.frames,
+        )))
     }
 }

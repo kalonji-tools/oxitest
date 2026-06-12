@@ -34,8 +34,8 @@ impl TestOutcome {
         match self {
             Self::Passed { no_message_lines } if no_message_lines.is_empty() => '.',
             Self::Passed { .. } => '\u{00B7}', // middot — bare assert passed
-            Self::Failed { .. } => 'F',
-            Self::Error { .. } => 'E',
+            Self::Failed(..) => 'F',
+            Self::Error(..) => 'E',
             Self::Skipped { .. } => 's',
             Self::Warned { .. } => '.', // same as clean pass — warning shown in summary
             Self::XFailed { .. } => 'x',
@@ -48,8 +48,8 @@ impl TestOutcome {
     /// Short display label for TTY output. Empty string for passing tests.
     pub(crate) fn label(&self) -> &'static str {
         match self {
-            Self::Failed { .. } => "FAIL ",
-            Self::Error { .. } => "ERROR",
+            Self::Failed(..) => "FAIL ",
+            Self::Error(..) => "ERROR",
             Self::Skipped { .. } => "SKIP ",
             Self::Warned { .. } => "WARN ",
             Self::XFailed { .. } => "XFAIL",
@@ -64,8 +64,8 @@ impl TestOutcome {
     pub(crate) fn color_category(&self) -> ColorCategory {
         match self {
             Self::Passed { .. } => ColorCategory::Pass,
-            Self::Failed { .. } | Self::XPassed { strict: true } => ColorCategory::Fail,
-            Self::Error { .. } => ColorCategory::Error,
+            Self::Failed(..) | Self::XPassed { strict: true } => ColorCategory::Fail,
+            Self::Error(..) => ColorCategory::Error,
             Self::Skipped { .. } => ColorCategory::Skip,
             Self::Warned { .. } | Self::XPassed { strict: false } | Self::Flaky { .. } => {
                 ColorCategory::Warn
@@ -82,8 +82,8 @@ impl TestOutcome {
             | Self::Warned { .. }
             | Self::XPassed { strict: false }
             | Self::Flaky { .. } => JunitCategory::Passed,
-            Self::Failed { .. } | Self::XPassed { strict: true } => JunitCategory::Failed,
-            Self::Error { .. } | Self::Timeout { .. } => JunitCategory::Error,
+            Self::Failed(..) | Self::XPassed { strict: true } => JunitCategory::Failed,
+            Self::Error(..) | Self::Timeout { .. } => JunitCategory::Error,
             Self::Skipped { .. } | Self::XFailed { .. } => JunitCategory::Skipped,
         }
     }
@@ -98,8 +98,8 @@ impl TestOutcome {
             | Self::Warned { .. }
             | Self::XPassed { strict: false }
             | Self::Flaky { .. } => "passed",
-            Self::Failed { .. }
-            | Self::Error { .. }
+            Self::Failed(..)
+            | Self::Error(..)
             | Self::XPassed { strict: true }
             | Self::Timeout { .. } => "failed",
             Self::Skipped { .. } | Self::XFailed { .. } => "skipped",
@@ -110,8 +110,7 @@ impl TestOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{LineNo, TestOutcome};
-    use camino::Utf8PathBuf;
+    use crate::types::{FailureDiagnostic, TestOutcome};
 
     // ── dot_char ─────────────────────────────────────────────────────────────
 
@@ -131,27 +130,11 @@ mod tests {
                 '\u{00B7}',
             ),
             (
-                TestOutcome::Failed {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 'F',
             ),
             (
-                TestOutcome::Error {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 'E',
             ),
             (
@@ -215,27 +198,11 @@ mod tests {
                 "",
             ),
             (
-                TestOutcome::Failed {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 "FAIL ",
             ),
             (
-                TestOutcome::Error {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 "ERROR",
             ),
             (
@@ -290,28 +257,12 @@ mod tests {
                 ColorCategory::Pass,
             ),
             (
-                TestOutcome::Failed {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 ColorCategory::Fail,
             ),
             (TestOutcome::XPassed { strict: true }, ColorCategory::Fail),
             (
-                TestOutcome::Error {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 ColorCategory::Error,
             ),
             (
@@ -385,28 +336,12 @@ mod tests {
                 JunitCategory::Passed,
             ),
             (
-                TestOutcome::Failed {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 JunitCategory::Failed,
             ),
             (TestOutcome::XPassed { strict: true }, JunitCategory::Failed),
             (
-                TestOutcome::Error {
-                    message: String::new(),
-                    file: Utf8PathBuf::new(),
-                    lineno: LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 JunitCategory::Error,
             ),
             (

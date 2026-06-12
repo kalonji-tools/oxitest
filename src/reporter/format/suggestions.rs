@@ -7,7 +7,7 @@ use crate::types::TestOutcome;
 /// The caller is responsible for formatting (color, indentation, box chrome).
 pub(crate) fn suggest_fix(outcome: &TestOutcome) -> Option<String> {
     let message = match outcome {
-        TestOutcome::Failed { .. } | TestOutcome::Error { .. } => outcome.message()?,
+        TestOutcome::Failed(..) | TestOutcome::Error(..) => outcome.message()?,
         _ => return None,
     };
 

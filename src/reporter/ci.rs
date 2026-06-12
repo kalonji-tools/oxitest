@@ -31,12 +31,8 @@ impl CiReporter {
         // --tb=line: compact one-liner per failure
         if self.opts.tb == crate::config::TbStyle::Line {
             let (label, message, lineno) = match outcome {
-                TestOutcome::Failed {
-                    message, lineno, ..
-                } => ("FAILED", message.as_str(), *lineno),
-                TestOutcome::Error {
-                    message, lineno, ..
-                } => ("ERROR", message.as_str(), *lineno),
+                TestOutcome::Failed(d) => ("FAILED", d.message.as_str(), d.lineno),
+                TestOutcome::Error(d) => ("ERROR", d.message.as_str(), d.lineno),
                 TestOutcome::Timeout { message } => ("TIMEOUT", message.as_str(), LineNo::ZERO),
                 _ => return,
             };
@@ -61,7 +57,7 @@ impl CiReporter {
         let header = if let Some(pid) = &item.param_id {
             let sep = case_sep(c);
             match outcome {
-                TestOutcome::Failed { .. } => {
+                TestOutcome::Failed(..) => {
                     format!(
                         "{}{}{}",
                         color_fail(pid, c),
@@ -78,7 +74,7 @@ impl CiReporter {
             }
         } else {
             match outcome {
-                TestOutcome::Failed { .. } => color_fail(&format!("FAILED  {}", item.node_id), c),
+                TestOutcome::Failed(..) => color_fail(&format!("FAILED  {}", item.node_id), c),
                 _ => color_error_token(&format!("ERROR   {}", item.node_id), c),
             }
         };
@@ -129,9 +125,9 @@ impl Reporter for CiReporter {
     ) {
         self.dot_buf.push(outcome.dot_char());
         match outcome {
-            TestOutcome::Failed { .. }
-            | TestOutcome::Error { .. }
-            | TestOutcome::Timeout { .. } => self.push_deferred_diag(item, outcome, parallel_ctx),
+            TestOutcome::Failed(..) | TestOutcome::Error(..) | TestOutcome::Timeout { .. } => {
+                self.push_deferred_diag(item, outcome, parallel_ctx)
+            }
             TestOutcome::Flaky { .. } => {
                 super::remove_if_flaky(&mut self.deferred_diags, outcome, item, |d, target| {
                     d.contains(target)

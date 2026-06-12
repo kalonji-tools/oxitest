@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use crate::config::TbStyle;
-use crate::types::{TestItem, TestOutcome};
+use crate::types::{FailureDiagnostic, TestItem, TestOutcome};
 
 use super::diff::fmt_field_diffs;
 use super::fmt_diff;
@@ -110,13 +110,8 @@ fn render_params(out: &mut String, param_values: &[crate::types::ParamPair], use
 }
 
 /// Render the WHAT section: bold source line hero + optional failure-frame locals.
-fn render_source(
-    out: &mut String,
-    parts: &crate::types::DiagnosticParts<'_>,
-    show_locals: bool,
-    use_color: bool,
-) {
-    if parts.source_line.is_empty() {
+fn render_source(out: &mut String, diag: &FailureDiagnostic, show_locals: bool, use_color: bool) {
+    if diag.source_line.is_empty() {
         return;
     }
     let _ = writeln!(
@@ -124,11 +119,14 @@ fn render_source(
         "{}{}  {}",
         BOX.margin,
         color_dim(BOX.vert, use_color),
-        color_bold_white(parts.source_line, use_color)
+        color_bold_white(&diag.source_line, use_color)
     );
     if show_locals {
-        let failure_locals = parts.frames.iter().find_map(|f| {
-            if f.file.as_str() == parts.file && f.lineno == parts.lineno && !f.locals.is_empty() {
+        let failure_locals = diag.frames.iter().find_map(|f| {
+            if f.file.as_str() == diag.file.as_str()
+                && f.lineno == diag.lineno
+                && !f.locals.is_empty()
+            {
                 Some(&f.locals)
             } else {
                 None
@@ -162,16 +160,11 @@ fn render_locals(
 }
 
 /// Render the TRACE section: non-failure traceback frames.
-fn render_trace(
-    out: &mut String,
-    parts: &crate::types::DiagnosticParts<'_>,
-    show_locals: bool,
-    use_color: bool,
-) {
-    let trace_frames: Vec<_> = parts
+fn render_trace(out: &mut String, diag: &FailureDiagnostic, show_locals: bool, use_color: bool) {
+    let trace_frames: Vec<_> = diag
         .frames
         .iter()
-        .filter(|f| !(f.file.as_str() == parts.file && f.lineno == parts.lineno))
+        .filter(|f| !(f.file.as_str() == diag.file.as_str() && f.lineno == diag.lineno))
         .collect();
     if trace_frames.is_empty() {
         return;
@@ -269,30 +262,30 @@ pub(crate) fn fmt_diagnostic_block(
         return String::new();
     }
 
-    let parts = match outcome.diagnostic_parts() {
-        Some(p) => p,
+    let diag = match outcome.diagnostic() {
+        Some(d) => d,
         None => return String::new(),
     };
 
-    let is_error = matches!(outcome, TestOutcome::Error { .. });
+    let is_error = outcome.is_error();
     let mut out = String::new();
 
-    render_where(&mut out, parts.file, parts.lineno, use_color);
+    render_where(&mut out, diag.file.as_str(), diag.lineno, use_color);
     render_params(&mut out, &item.param_values, use_color);
-    render_source(&mut out, &parts, show_locals, use_color);
+    render_source(&mut out, diag, show_locals, use_color);
     if !is_error {
         render_values(
             &mut out,
-            parts.left,
-            parts.right,
-            parts.op,
-            parts.field_diffs,
+            &diag.left,
+            &diag.right,
+            &diag.op,
+            &diag.field_diffs,
             use_color,
         );
     }
-    render_trace(&mut out, &parts, show_locals, use_color);
+    render_trace(&mut out, diag, show_locals, use_color);
     render_hint(&mut out, outcome, use_color);
-    render_closing(&mut out, parts.message, use_color);
+    render_closing(&mut out, &diag.message, use_color);
 
     out
 }

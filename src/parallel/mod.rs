@@ -328,21 +328,13 @@ mod worker_count_tests {
         let outcome = crate::types::TestOutcome::from(worker_outcome);
 
         match outcome {
-            crate::types::TestOutcome::Failed {
-                file,
-                lineno,
-                source_line,
-                left,
-                right,
-                op,
-                ..
-            } => {
-                assert_eq!(file, "test_mod.py");
-                assert_eq!(lineno, crate::types::LineNo::new(10));
-                assert_eq!(source_line, "assert x == y");
-                assert_eq!(left, "1");
-                assert_eq!(right, "2");
-                assert_eq!(op, "==");
+            crate::types::TestOutcome::Failed(d) => {
+                assert_eq!(d.file, "test_mod.py");
+                assert_eq!(d.lineno, crate::types::LineNo::new(10));
+                assert_eq!(d.source_line, "assert x == y");
+                assert_eq!(d.left, "1");
+                assert_eq!(d.right, "2");
+                assert_eq!(d.op, "==");
             }
             other => panic!("Expected Failed, got {:?}", other),
         }
@@ -361,15 +353,10 @@ mod worker_count_tests {
         let result: WireResult = serde_json::from_str(json).unwrap();
         let (_, _, worker_outcome) = result.into_worker_outcome();
         match crate::types::TestOutcome::from(worker_outcome) {
-            crate::types::TestOutcome::Error {
-                file,
-                lineno,
-                source_line,
-                ..
-            } => {
-                assert_eq!(file, "t.py");
-                assert_eq!(lineno, crate::types::LineNo::new(5));
-                assert_eq!(source_line, "import bad");
+            crate::types::TestOutcome::Error(d) => {
+                assert_eq!(d.file, "t.py");
+                assert_eq!(d.lineno, crate::types::LineNo::new(5));
+                assert_eq!(d.source_line, "import bad");
             }
             other => panic!("Expected Error, got {:?}", other),
         }
@@ -393,11 +380,11 @@ mod worker_count_tests {
         ));
         assert!(matches!(
             TestOutcome::from(make_wire_result("failed").2),
-            TestOutcome::Failed { .. }
+            TestOutcome::Failed(..)
         ));
         assert!(matches!(
             TestOutcome::from(make_wire_result("error").2),
-            TestOutcome::Error { .. }
+            TestOutcome::Error(..)
         ));
         assert!(matches!(
             TestOutcome::from(make_wire_result("skipped").2),
@@ -438,9 +425,9 @@ mod worker_count_tests {
         let (wo, dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(30));
         assert!(dur > 0.0, "timed_out must produce a positive duration");
         match TestOutcome::from(wo) {
-            TestOutcome::Error { message, .. } => {
+            TestOutcome::Error(d) => {
                 assert!(
-                    message.contains("30"),
+                    d.message.contains("30"),
                     "message should mention the watchdog duration"
                 );
             }
@@ -453,9 +440,9 @@ mod worker_count_tests {
         use crate::types::TestOutcome;
         let wo = WorkerOutcome::crashed();
         match TestOutcome::from(wo) {
-            TestOutcome::Error { message, .. } => {
+            TestOutcome::Error(d) => {
                 assert!(
-                    message.contains("unexpectedly"),
+                    d.message.contains("unexpectedly"),
                     "crashed result must include a message explaining the failure"
                 );
             }
@@ -468,7 +455,7 @@ mod worker_count_tests {
         use crate::types::TestOutcome;
         let (wo, _dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(60));
         assert!(
-            matches!(TestOutcome::from(wo), TestOutcome::Error { .. }),
+            matches!(TestOutcome::from(wo), TestOutcome::Error(..)),
             "timed_out WorkerOutcome must map to TestOutcome::Error"
         );
     }
@@ -478,7 +465,7 @@ mod worker_count_tests {
         use crate::types::TestOutcome;
         let wo = WorkerOutcome::crashed();
         assert!(
-            matches!(TestOutcome::from(wo), TestOutcome::Error { .. }),
+            matches!(TestOutcome::from(wo), TestOutcome::Error(..)),
             "crashed WorkerOutcome must map to TestOutcome::Error"
         );
     }
