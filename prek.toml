@@ -102,11 +102,3 @@ language = "system"
 entry = "bash -c 'PYTHONPATH=python uv run python -m oxitest --affected'"
 pass_filenames = false
 stages = ["pre-push"]
-
-[[repos.hooks]]
-id = "graphify-rebuild"
-name = "graphify rebuild"
-language = "system"
-entry = "graphify update ."
-pass_filenames = false
-stages = ["post-commit", "post-checkout"]
