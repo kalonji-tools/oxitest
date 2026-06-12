@@ -184,7 +184,7 @@ fn pretty_print_collection(s: &str) -> String {
 /// Each entry is `(field_name, left_repr, right_repr)`.
 /// Returns empty string if `field_diffs` is empty.
 pub(crate) fn fmt_field_diffs(
-    field_diffs: &[(String, String, String)],
+    field_diffs: &[crate::types::FieldDiff],
     left_repr: &str,
     use_color: bool,
 ) -> String {
@@ -203,17 +203,18 @@ pub(crate) fn fmt_field_diffs(
 
     let name_width = field_diffs
         .iter()
-        .map(|(name, _, _)| name.len())
+        .map(|diff| diff.field.len())
         .max()
         .unwrap_or(0);
 
     writeln!(out, "field diffs ({type_name}):").unwrap();
-    for (name, left, right) in field_diffs {
-        let left_colored = color_fail(left, use_color);
-        let right_colored = color_pass(right, use_color);
+    for diff in field_diffs {
+        let left_colored = color_fail(&diff.left, use_color);
+        let right_colored = color_pass(&diff.right, use_color);
         writeln!(
             out,
-            "  {name:<name_width$}  {left_colored} != {right_colored}",
+            "  {:<name_width$}  {left_colored} != {right_colored}",
+            diff.field,
         )
         .unwrap();
     }
@@ -309,13 +310,18 @@ mod snapshot_tests {
 
     #[test]
     fn field_diffs_two_fields() {
+        use crate::types::FieldDiff;
         let diffs = vec![
-            (
-                "email".to_string(),
-                "'alice@example.com'".to_string(),
-                "'alice@test.com'".to_string(),
-            ),
-            ("age".to_string(), "30".to_string(), "31".to_string()),
+            FieldDiff {
+                field: "email".to_string(),
+                left: "'alice@example.com'".to_string(),
+                right: "'alice@test.com'".to_string(),
+            },
+            FieldDiff {
+                field: "age".to_string(),
+                left: "30".to_string(),
+                right: "31".to_string(),
+            },
         ];
         let result = fmt_field_diffs(
             &diffs,

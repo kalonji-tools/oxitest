@@ -90,7 +90,7 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
 }
 
 pub(crate) fn fmt_tip_block(
-    tip_lines: &[(String, usize)],
+    tip_lines: &[crate::reporter::stats::TipLine],
     show_tips: bool,
     use_color: bool,
 ) -> String {
@@ -101,7 +101,7 @@ pub(crate) fn fmt_tip_block(
     if show_tips {
         let locations: Vec<String> = tip_lines
             .iter()
-            .map(|(f, ln)| color_dim(&format!("        {}:{}", f, ln), use_color))
+            .map(|t| color_dim(&format!("        {}:{}", t.file, t.lineno), use_color))
             .collect();
         format!(
             "  {}   {} assertions without messages:\n{}\n",
@@ -120,7 +120,7 @@ pub(crate) fn fmt_tip_block(
 }
 
 pub(crate) fn fmt_warning_block(
-    warning_msgs: &[(String, String)],
+    warning_msgs: &[crate::reporter::stats::WarningEntry],
     show_warnings: bool,
     use_color: bool,
 ) -> String {
@@ -130,13 +130,13 @@ pub(crate) fn fmt_warning_block(
     let label = color_warn("warn", use_color);
     if show_warnings {
         let mut block = format!("  {}  {} warnings:\n", label, warning_msgs.len());
-        for (fn_name, reason) in warning_msgs {
+        for w in warning_msgs {
             block.push_str(&format!(
                 "        {} {}\n",
                 color_dim("┌─", use_color),
-                color_dim(fn_name, use_color),
+                color_dim(&w.context, use_color),
             ));
-            for line in reason.split('\n') {
+            for line in w.message.split('\n') {
                 if !line.is_empty() {
                     block.push_str(&format!(
                         "        {}  {}\n",
@@ -265,7 +265,11 @@ mod tests {
 
     #[test]
     fn test_tip_block_collapsed_shows_count_and_hint() {
-        let tips = vec![("tests/test_foo.py".to_string(), 12usize)];
+        use crate::reporter::stats::TipLine;
+        let tips = vec![TipLine {
+            file: "tests/test_foo.py".to_string(),
+            lineno: 12,
+        }];
         let s = fmt_tip_block(&tips, false, false);
         assert!(s.contains("1 assertions without messages"));
         assert!(s.contains("--tips to expand"));
@@ -274,9 +278,16 @@ mod tests {
 
     #[test]
     fn test_tip_block_expanded_shows_locations() {
+        use crate::reporter::stats::TipLine;
         let tips = vec![
-            ("tests/test_foo.py".to_string(), 12usize),
-            ("tests/test_bar.py".to_string(), 7usize),
+            TipLine {
+                file: "tests/test_foo.py".to_string(),
+                lineno: 12,
+            },
+            TipLine {
+                file: "tests/test_bar.py".to_string(),
+                lineno: 7,
+            },
         ];
         let s = fmt_tip_block(&tips, true, false);
         assert!(s.contains("2 assertions without messages"));
@@ -293,15 +304,16 @@ mod tests {
 
     #[test]
     fn test_warning_block_collapsed_plural() {
+        use crate::reporter::stats::WarningEntry;
         let warnings = vec![
-            (
-                "tests/test_foo.py::test_a".to_string(),
-                "DeprecationWarning".to_string(),
-            ),
-            (
-                "tests/test_foo.py::test_b".to_string(),
-                "DeprecationWarning".to_string(),
-            ),
+            WarningEntry {
+                context: "tests/test_foo.py::test_a".to_string(),
+                message: "DeprecationWarning".to_string(),
+            },
+            WarningEntry {
+                context: "tests/test_foo.py::test_b".to_string(),
+                message: "DeprecationWarning".to_string(),
+            },
         ];
         let s = fmt_warning_block(&warnings, false, false);
         assert!(s.contains("2 warnings"));
@@ -311,10 +323,11 @@ mod tests {
 
     #[test]
     fn test_warning_block_collapsed_singular() {
-        let warnings = vec![(
-            "tests/test_foo.py::test_a".to_string(),
-            "DeprecationWarning".to_string(),
-        )];
+        use crate::reporter::stats::WarningEntry;
+        let warnings = vec![WarningEntry {
+            context: "tests/test_foo.py::test_a".to_string(),
+            message: "DeprecationWarning".to_string(),
+        }];
         let s = fmt_warning_block(&warnings, false, false);
         assert!(s.contains("1 warning"));
         assert!(!s.contains("1 warnings"));
@@ -322,10 +335,11 @@ mod tests {
 
     #[test]
     fn test_warning_block_expanded_shows_node_and_reason() {
-        let warnings = vec![(
-            "tests/test_foo.py::test_a".to_string(),
-            "use new_api() instead".to_string(),
-        )];
+        use crate::reporter::stats::WarningEntry;
+        let warnings = vec![WarningEntry {
+            context: "tests/test_foo.py::test_a".to_string(),
+            message: "use new_api() instead".to_string(),
+        }];
         let s = fmt_warning_block(&warnings, true, false);
         assert!(s.contains("tests/test_foo.py::test_a"));
         assert!(s.contains("use new_api() instead"));

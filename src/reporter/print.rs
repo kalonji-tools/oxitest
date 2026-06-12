@@ -48,8 +48,8 @@ pub(crate) fn print_summary_section(
                 "\n{}",
                 colors::color_dim(&format!("slowest {} tests", slowest.len()), opts.use_color)
             );
-            for (node_id, ms) in &slowest {
-                println!("  {:>8.2}ms  {}", ms, node_id);
+            for entry in &slowest {
+                println!("  {:>8.2}ms  {}", entry.duration_ms, entry.node_id);
             }
         }
         let slowest_fx = stats.slowest_fixtures(n);
