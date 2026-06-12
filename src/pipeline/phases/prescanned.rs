@@ -15,14 +15,14 @@ struct FilterPredicates<'a> {
 
 impl Pipeline<Prescanned> {
     pub(crate) fn filter_metadata(self) -> Result<Pipeline<MetadataFiltered>, ExitCode> {
-        let has_node_ids = !self.cfg.node_ids.is_empty();
+        let has_node_ids = !self.cfg.filter.node_ids.is_empty();
         let has_expression = match &self.command {
             config::Command::Run(a) => a.filter.expression.is_some(),
             config::Command::Debug(a) => a.filter.expression.is_some(),
             _ => false,
         };
-        let has_failed_filter = matches!(self.cfg.failed, Some(config::FailedMode::Only));
-        let has_affected = self.cfg.affected.is_some();
+        let has_failed_filter = matches!(self.cfg.filter.failed, Some(config::FailedMode::Only));
+        let has_affected = self.cfg.filter.affected.is_some();
         let is_filtered = has_node_ids || has_expression || has_failed_filter || has_affected;
 
         if !is_filtered {
@@ -59,7 +59,13 @@ impl Pipeline<Prescanned> {
         } else {
             std::collections::HashSet::new()
         };
-        let node_ids: Vec<String> = self.cfg.node_ids.iter().map(|n| n.to_string()).collect();
+        let node_ids: Vec<String> = self
+            .cfg
+            .filter
+            .node_ids
+            .iter()
+            .map(|n| n.to_string())
+            .collect();
 
         let preds = FilterPredicates {
             node_ids: &node_ids,
@@ -115,8 +121,8 @@ impl Pipeline<Prescanned> {
         if preds.has_node_ids {
             // Only apply node ID filtering to files that came from node ID args,
             // not bare path args. Files from bare paths pass through unconditionally.
-            let is_node_id_source = self.cfg.node_id_source_files.is_empty()
-                || self.cfg.node_id_source_files.contains(path);
+            let is_node_id_source = self.cfg.filter.node_id_source_files.is_empty()
+                || self.cfg.filter.node_id_source_files.contains(path);
             if is_node_id_source
                 && !filter::file_matches_node_ids(items, path.as_str(), preds.node_ids)
             {

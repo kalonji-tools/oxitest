@@ -7,7 +7,7 @@ use crate::{affected, config, query};
 
 impl Pipeline<FilesCollected> {
     pub(crate) fn affected(mut self) -> Result<Pipeline<FilesCollected>, ExitCode> {
-        if let Some(base_ref) = self.cfg.affected.as_ref() {
+        if let Some(base_ref) = self.cfg.filter.affected.as_ref() {
             match affected::filter_affected_test_files(
                 &self.state.test_files,
                 &self.cfg.rootdir,

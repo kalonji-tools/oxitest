@@ -80,13 +80,13 @@ impl ReporterOptsBuilder {
             fn_count: 0,
             async_count: 0,
             use_color,
-            tb: cfg.tb.clone(),
-            show_tips: cfg.verbosity >= Verbosity::Detailed,
-            show_warnings: cfg.verbosity >= Verbosity::Detailed,
-            show_locals: cfg.show_locals,
-            show_internals: cfg.show_internals,
-            verbosity: cfg.verbosity,
-            show_durations: cfg.durations,
+            tb: cfg.output.tb.clone(),
+            show_tips: cfg.output.verbosity >= Verbosity::Detailed,
+            show_warnings: cfg.output.verbosity >= Verbosity::Detailed,
+            show_locals: cfg.output.show_locals,
+            show_internals: cfg.output.show_internals,
+            verbosity: cfg.output.verbosity,
+            show_durations: cfg.output.durations,
             name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
         }
@@ -234,10 +234,8 @@ mod tests {
 
     #[test]
     fn test_from_config_verbose_implies_show_tips_and_warnings() {
-        let cfg = crate::config::Config {
-            verbosity: Verbosity::Detailed,
-            ..crate::config::Config::default()
-        };
+        let mut cfg = crate::config::Config::default();
+        cfg.output.verbosity = Verbosity::Detailed;
         let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert!(opts.show_tips);
         assert!(opts.show_warnings);
@@ -275,10 +273,8 @@ mod tests {
 
     #[test]
     fn test_from_config_durations() {
-        let cfg = crate::config::Config {
-            durations: Some(5),
-            ..crate::config::Config::default()
-        };
+        let mut cfg = crate::config::Config::default();
+        cfg.output.durations = Some(5);
         let opts = ReporterOptsBuilder::from_config(&cfg, false).build();
         assert_eq!(opts.show_durations, Some(5));
     }

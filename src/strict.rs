@@ -98,9 +98,10 @@ impl StrictViolation {
 /// Check for suite-level violations derivable from the config alone.
 ///
 /// Currently produces one [`SuiteViolation::MarkerNoDescription`] per marker in
-/// `config.markers_without_description`. Called before collection begins.
+/// `config.markers.markers_without_description`. Called before collection begins.
 pub fn check_config(config: &Config) -> Vec<StrictViolation> {
     config
+        .markers
         .markers_without_description
         .iter()
         .map(|name| {

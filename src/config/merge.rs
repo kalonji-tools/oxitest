@@ -11,18 +11,18 @@ use super::*;
 /// Applies an `Option` value to a config field when `Some`.
 ///
 /// Two variants:
-///   `apply_if_some!(cfg, field, value)` — assigns the inner value directly.
-///   `apply_if_some!(cfg, field, value, wrap)` — wraps the inner value in `Some`
+///   `apply_if_some!(target, field, value)` — assigns the inner value directly.
+///   `apply_if_some!(target, field, value, wrap)` — wraps the inner value in `Some`
 ///     (for fields where the target is `Option<T>`).
 macro_rules! apply_if_some {
-    ($config:expr, $field:ident, $value:expr) => {
+    ($target:expr, $field:ident, $value:expr) => {
         if let Some(v) = $value {
-            $config.$field = v;
+            $target.$field = v;
         }
     };
-    ($config:expr, $field:ident, $value:expr, wrap) => {
+    ($target:expr, $field:ident, $value:expr, wrap) => {
         if let Some(v) = $value {
-            $config.$field = Some(v);
+            $target.$field = Some(v);
         }
     };
 }
@@ -80,25 +80,25 @@ impl Config {
     /// Apply shared overrides from either TOML or CLI source.
     fn apply_overrides(&mut self, ovr: Overrides) {
         // ── Execution ──────────────────────────────────────────────────
-        apply_if_some!(self, schedule, ovr.schedule);
-        apply_if_some!(self, retries, ovr.retries);
-        apply_if_some!(self, retries_delay_secs, ovr.retries_delay_secs);
-        apply_if_some!(self, workers, ovr.workers, wrap);
-        apply_if_some!(self, failed, ovr.failed, wrap);
-        apply_if_some!(self, keep_tmp, ovr.keep_tmp, wrap);
+        apply_if_some!(self.filter, schedule, ovr.schedule);
+        apply_if_some!(self.exec, retries, ovr.retries);
+        apply_if_some!(self.exec, retries_delay_secs, ovr.retries_delay_secs);
+        apply_if_some!(self.exec, workers, ovr.workers, wrap);
+        apply_if_some!(self.filter, failed, ovr.failed, wrap);
+        apply_if_some!(self.output, keep_tmp, ovr.keep_tmp, wrap);
         if let Some(v) = ovr.auto_arrange_threshold {
-            self.auto_arrange_threshold = v;
+            self.exec.auto_arrange_threshold = v;
         }
 
         // ── Output ─────────────────────────────────────────────────────
-        apply_if_some!(self, tb, ovr.tb);
-        apply_if_some!(self, show_locals, ovr.show_locals);
-        apply_if_some!(self, show_internals, ovr.show_internals);
-        apply_if_some!(self, color, ovr.color);
-        apply_if_some!(self, durations, ovr.durations, wrap);
+        apply_if_some!(self.output, tb, ovr.tb);
+        apply_if_some!(self.output, show_locals, ovr.show_locals);
+        apply_if_some!(self.output, show_internals, ovr.show_internals);
+        apply_if_some!(self.output, color, ovr.color);
+        apply_if_some!(self.output, durations, ovr.durations, wrap);
 
         // ── Filtering ──────────────────────────────────────────────────
-        apply_if_some!(self, strict, ovr.strict, wrap);
+        apply_if_some!(self.markers, strict, ovr.strict, wrap);
     }
 
     /// Merge fields from a parsed `[tool.oxitest]` section (fluent builder).
@@ -109,38 +109,40 @@ impl Config {
     pub(super) fn merge_toml(mut self, tc: OxitestConfig, rootdir: Option<&Utf8Path>) -> Self {
         // ── Paths ────────────────────────────────────────────────────────
         if let Some(paths) = tc.testpaths {
-            self.testpaths = match rootdir {
+            self.paths.testpaths = match rootdir {
                 Some(root) => resolve_testpaths(&paths, root),
                 None => paths.into_iter().map(Utf8PathBuf::from).collect(),
             };
         }
-        apply_if_some!(self, python_files, tc.python_files);
-        apply_if_some!(self, norecursedirs, tc.norecursedirs);
-        apply_if_some!(self, use_gitignore, tc.use_gitignore);
-        apply_if_some!(self, doctest_modules, tc.doctest_modules);
+        apply_if_some!(self.paths, python_files, tc.python_files);
+        apply_if_some!(self.paths, norecursedirs, tc.norecursedirs);
+        apply_if_some!(self.paths, use_gitignore, tc.use_gitignore);
+        apply_if_some!(self.paths, doctest_modules, tc.doctest_modules);
 
         // ── Execution (unique to TOML) ──────────────────────────────────
-        apply_if_some!(self, maxfail, tc.maxfail);
-        apply_if_some!(self, serial, tc.serial);
-        apply_if_some!(self, async_backend, tc.async_backend);
-        self.cache_max_age = tc.cache_max_age.unwrap_or(self.cache_max_age);
-        self.min_parallel_tests = tc.min_parallel_tests.unwrap_or(self.min_parallel_tests);
-        self.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(self.spawn_overhead_ms);
-        self.timeout_secs = tc.timeout;
-        self.timeout_multiplier = tc.timeout_multiplier;
+        apply_if_some!(self.exec, maxfail, tc.maxfail);
+        apply_if_some!(self.exec, serial, tc.serial);
+        apply_if_some!(self.features, async_backend, tc.async_backend);
+        self.features.cache_max_age = tc.cache_max_age.unwrap_or(self.features.cache_max_age);
+        self.exec.min_parallel_tests = tc
+            .min_parallel_tests
+            .unwrap_or(self.exec.min_parallel_tests);
+        self.exec.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(self.exec.spawn_overhead_ms);
+        self.exec.timeout_secs = tc.timeout;
+        self.exec.timeout_multiplier = tc.timeout_multiplier;
 
         // ── Output (unique to TOML) ─────────────────────────────────────
-        apply_if_some!(self, verbosity, tc.verbosity);
+        apply_if_some!(self.output, verbosity, tc.verbosity);
 
         // ── Filtering (unique to TOML) ──────────────────────────────────
-        apply_if_some!(self, plugins, tc.plugins);
-        self.plugin_settings = tc.plugin_settings;
-        apply_if_some!(self, affected_base, tc.affected_base);
+        apply_if_some!(self.features, plugins, tc.plugins);
+        self.features.plugin_settings = tc.plugin_settings;
+        apply_if_some!(self.filter, affected_base, tc.affected_base);
 
         if let Some(raw_markers) = tc.markers {
             let (names, no_desc) = parse_marker_descriptions(&raw_markers);
-            self.registered_markers = names;
-            self.markers_without_description = no_desc;
+            self.markers.registered_markers = names;
+            self.markers.markers_without_description = no_desc;
         }
 
         // ── Shared overrides ────────────────────────────────────────────
@@ -178,35 +180,35 @@ impl Config {
         // ── Execution (unique to CLI) ───────────────────────────────────
         // validate() guarantees -x and --maxfail are mutually exclusive.
         if args.exitfirst {
-            self.maxfail = 1;
+            self.exec.maxfail = 1;
         }
         if let Some(n) = args.maxfail {
             if n > 0 {
-                self.maxfail = n;
+                self.exec.maxfail = n;
             }
         }
         if args.serial {
-            self.serial = true;
+            self.exec.serial = true;
         }
-        apply_if_some!(self, timeout_secs, args.timeout, wrap);
+        apply_if_some!(self.exec, timeout_secs, args.timeout, wrap);
         if args.doctest_modules {
-            self.doctest_modules = true;
+            self.paths.doctest_modules = true;
         }
 
         // ── Filtering (unique to CLI) ───────────────────────────────────
         self.merge_affected(&args.filter.affected);
 
         // ── Coverage ──────────────────────────────────────────────────
-        self.cov = args.cov;
+        self.features.cov = args.cov;
         if args.cov_report.is_some() {
-            self.cov_report = args.cov_report.clone();
+            self.features.cov_report = args.cov_report.clone();
         }
 
         // ── Output (unique to CLI) ──────────────────────────────────
         if let Some(level) = args.verbosity.resolve() {
-            self.verbosity = level;
+            self.output.verbosity = level;
         }
-        self.collection_profile = args.collection_profile;
+        self.output.collection_profile = args.collection_profile;
 
         // ── Shared overrides ────────────────────────────────────────────
         self.apply_overrides(Overrides {
@@ -248,7 +250,7 @@ impl Config {
 
         // ── Output (unique to CLI) ──────────────────────────────────
         if let Some(level) = args.verbosity.resolve() {
-            self.verbosity = level;
+            self.output.verbosity = level;
         }
 
         // ── Shared overrides ────────────────────────────────────────────
@@ -274,7 +276,7 @@ impl Config {
     pub fn merge_query_args(mut self, args: &cli::QueryArgs) -> Self {
         self.merge_paths(&args.paths);
         if let Some(c) = args.color {
-            self.color = c;
+            self.output.color = c;
         }
         self
     }
@@ -282,8 +284,8 @@ impl Config {
     /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
     fn merge_paths(&mut self, paths: &[Utf8PathBuf]) {
         if !paths.is_empty() {
-            self.has_explicit_paths = true;
-            self.testpaths = paths
+            self.filter.has_explicit_paths = true;
+            self.paths.testpaths = paths
                 .iter()
                 .map(|p| {
                     if p.is_absolute() {
@@ -304,7 +306,7 @@ impl Config {
     fn canonicalize_node_ids(&mut self, raw_ids: &[crate::types::NodeId]) {
         use crate::types::NodeId;
 
-        self.node_ids = raw_ids
+        self.filter.node_ids = raw_ids
             .iter()
             .map(|id| {
                 let id_str: &str = id.as_ref();
@@ -335,7 +337,8 @@ impl Config {
             .collect();
 
         // Only populate source files from non-glob node IDs.
-        self.node_id_source_files = self
+        self.filter.node_id_source_files = self
+            .filter
             .node_ids
             .iter()
             .filter(|id| !crate::filter::contains_glob_chars(id.as_ref()))
@@ -347,11 +350,11 @@ impl Config {
     /// Merge the `--affected` flag into config, resolving empty sentinel to `affected_base`.
     fn merge_affected(&mut self, affected: &Option<String>) {
         if let Some(ref val) = affected {
-            self.has_explicit_paths = true;
+            self.filter.has_explicit_paths = true;
             if val.is_empty() {
-                self.affected = Some(self.affected_base.clone());
+                self.filter.affected = Some(self.filter.affected_base.clone());
             } else {
-                self.affected = affected.clone();
+                self.filter.affected = affected.clone();
             }
         }
     }
@@ -385,7 +388,10 @@ mod tests {
     fn test_load_with_no_pyproject_returns_defaults() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(config.python_files, Config::default().python_files);
+        assert_eq!(
+            config.paths.python_files,
+            Config::default().paths.python_files
+        );
     }
 
     #[test]
@@ -413,7 +419,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.testpaths, vec![utf8_dir.to_owned()]);
+        assert_eq!(config.paths.testpaths, vec![utf8_dir.to_owned()]);
     }
 
     #[test]
@@ -426,7 +432,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.testpaths, vec![utf8_dir.join("tests")]);
+        assert_eq!(config.paths.testpaths, vec![utf8_dir.join("tests")]);
     }
 
     #[test]
@@ -439,7 +445,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.python_files, vec!["check_*.py".to_string()]);
+        assert_eq!(config.paths.python_files, vec!["check_*.py".to_string()]);
     }
 
     #[test]
@@ -449,7 +455,7 @@ mod tests {
         let mut args = base_run_args();
         args.exitfirst = true;
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.maxfail, 1);
+        assert_eq!(merged.exec.maxfail, 1);
     }
 
     #[test]
@@ -459,7 +465,7 @@ mod tests {
         let mut args = base_run_args();
         args.maxfail = Some(3);
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.maxfail, 3);
+        assert_eq!(merged.exec.maxfail, 3);
     }
 
     #[test]
@@ -471,50 +477,50 @@ mod tests {
         let mut args = base_run_args();
         args.paths = vec![custom.clone()];
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.testpaths, vec![custom]);
+        assert_eq!(merged.paths.testpaths, vec![custom]);
     }
 
     #[test]
     fn test_tb_from_pyproject() {
         let toml = "[tool.oxitest]\ntb = \"detail\"\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.tb, TbStyle::Detail);
+        assert_eq!(cfg.output.tb, TbStyle::Detail);
     }
 
     #[test]
     fn test_verbosity_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nverbosity = \"detailed\"\n").unwrap();
-        assert_eq!(cfg.verbosity, Verbosity::Detailed);
+        assert_eq!(cfg.output.verbosity, Verbosity::Detailed);
     }
 
     #[test]
     fn test_verbosity_full_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nverbosity = \"full\"\n").unwrap();
-        assert_eq!(cfg.verbosity, Verbosity::Full);
+        assert_eq!(cfg.output.verbosity, Verbosity::Full);
     }
 
     #[test]
     fn test_maxfail_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nmaxfail = 5\n").unwrap();
-        assert_eq!(cfg.maxfail, 5);
+        assert_eq!(cfg.exec.maxfail, 5);
     }
 
     #[test]
     fn test_durations_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\ndurations = 10\n").unwrap();
-        assert_eq!(cfg.durations, Some(10));
+        assert_eq!(cfg.output.durations, Some(10));
     }
 
     #[test]
     fn test_serial_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nserial = true\n").unwrap();
-        assert!(cfg.serial);
+        assert!(cfg.exec.serial);
     }
 
     #[test]
     fn test_color_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\ncolor = \"never\"\n").unwrap();
-        assert_eq!(cfg.color, ColorMode::Never);
+        assert_eq!(cfg.output.color, ColorMode::Never);
     }
 
     #[test]
@@ -526,10 +532,10 @@ mod tests {
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(cfg.color, ColorMode::Always);
+        assert_eq!(cfg.output.color, ColorMode::Always);
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.color, ColorMode::Always);
+        assert_eq!(merged.output.color, ColorMode::Always);
     }
 
     #[test]
@@ -543,7 +549,7 @@ mod tests {
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--color", "never"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.color, ColorMode::Never);
+        assert_eq!(merged.output.color, ColorMode::Never);
     }
 
     #[test]
@@ -556,8 +562,12 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert!(config.registered_markers.contains(&"slow".to_string()));
         assert!(config
+            .markers
+            .registered_markers
+            .contains(&"slow".to_string()));
+        assert!(config
+            .markers
             .registered_markers
             .contains(&"integration".to_string()));
     }
@@ -572,7 +582,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.registered_markers, vec!["slow".to_string()]);
+        assert_eq!(config.markers.registered_markers, vec!["slow".to_string()]);
     }
 
     #[test]
@@ -585,7 +595,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.timeout_secs, Some(30));
+        assert_eq!(config.exec.timeout_secs, Some(30));
     }
 
     #[test]
@@ -593,7 +603,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "[tool.oxitest]\n").unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(config.timeout_secs, None);
+        assert_eq!(config.exec.timeout_secs, None);
     }
 
     #[test]
@@ -630,7 +640,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.cache_max_age, 20);
+        assert_eq!(config.features.cache_max_age, 20);
     }
 
     #[test]
@@ -643,14 +653,14 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.min_parallel_tests, 50);
+        assert_eq!(config.exec.min_parallel_tests, 50);
     }
 
     #[test]
     fn test_timeout_multiplier_default_is_none() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert!(config.timeout_multiplier.is_none());
+        assert!(config.exec.timeout_multiplier.is_none());
     }
 
     #[test]
@@ -663,7 +673,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.timeout_multiplier, Some(3.0));
+        assert_eq!(config.exec.timeout_multiplier, Some(3.0));
     }
 
     #[test]
@@ -676,7 +686,7 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.failed, Some(FailedMode::First));
+        assert_eq!(config.filter.failed, Some(FailedMode::First));
     }
 
     #[test]
@@ -686,7 +696,7 @@ mod tests {
 spawn_overhead_ms = 100.0
 "#;
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.spawn_overhead_ms, 100.0_f64);
+        assert_eq!(cfg.exec.spawn_overhead_ms, 100.0_f64);
     }
 
     #[test]
@@ -699,22 +709,28 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.timeout_secs, Config::default().timeout_secs);
-        assert_eq!(config.python_files, Config::default().python_files);
+        assert_eq!(
+            config.exec.timeout_secs,
+            Config::default().exec.timeout_secs
+        );
+        assert_eq!(
+            config.paths.python_files,
+            Config::default().paths.python_files
+        );
     }
 
     #[test]
     fn test_strict_loads_from_toml() {
         let toml = "[tool.oxitest]\nstrict = \"enforce\"\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.strict, Some(StrictMode::Enforce));
+        assert_eq!(cfg.markers.strict, Some(StrictMode::Enforce));
     }
 
     #[test]
     fn test_strict_absent_in_toml_is_none() {
         let toml = "[tool.oxitest]\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert!(cfg.strict.is_none());
+        assert!(cfg.markers.strict.is_none());
     }
 
     #[test]
@@ -728,21 +744,24 @@ spawn_overhead_ms = 100.0
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--strict=enforce"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.strict, Some(StrictMode::Enforce));
+        assert_eq!(merged.markers.strict, Some(StrictMode::Enforce));
     }
 
     #[test]
     fn test_markers_without_description_populated() {
         let toml = "[tool.oxitest]\nmarkers = [\"slow: marks slow tests\", \"db\"]\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.markers_without_description, vec!["db".to_string()]);
+        assert_eq!(
+            cfg.markers.markers_without_description,
+            vec!["db".to_string()]
+        );
     }
 
     #[test]
     fn test_markers_all_with_description_leaves_list_empty() {
         let toml = "[tool.oxitest]\nmarkers = [\"slow: marks slow\", \"db: hits db\"]\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert!(cfg.markers_without_description.is_empty());
+        assert!(cfg.markers.markers_without_description.is_empty());
     }
 
     #[test]
@@ -756,7 +775,7 @@ spawn_overhead_ms = 100.0
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.strict, Some(StrictMode::Enforce));
+        assert_eq!(merged.markers.strict, Some(StrictMode::Enforce));
     }
 
     #[test]
@@ -768,7 +787,7 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.workers, Some(WorkerCount::Auto));
+        assert_eq!(config.exec.workers, Some(WorkerCount::Auto));
     }
 
     #[test]
@@ -780,7 +799,7 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.workers, Some(WorkerCount::Fixed(4)));
+        assert_eq!(config.exec.workers, Some(WorkerCount::Fixed(4)));
     }
 
     #[test]
@@ -792,7 +811,7 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert!(config.workers.is_none());
+        assert!(config.exec.workers.is_none());
     }
 
     #[test]
@@ -815,11 +834,11 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.workers, Some(WorkerCount::Auto));
+        assert_eq!(config.exec.workers, Some(WorkerCount::Auto));
 
         let args = parse_run(&["--workers", "2"]);
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.workers, Some(WorkerCount::Fixed(2)));
+        assert_eq!(merged.exec.workers, Some(WorkerCount::Fixed(2)));
     }
 
     #[test]
@@ -833,15 +852,13 @@ spawn_overhead_ms = 100.0
         .unwrap();
         let args = base_run_args();
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.workers, Some(WorkerCount::Fixed(8)));
+        assert_eq!(merged.exec.workers, Some(WorkerCount::Fixed(8)));
     }
 
     #[test]
     fn test_config_worker_count_auto_is_cpu_count() {
-        let config = Config {
-            workers: Some(WorkerCount::Auto),
-            ..Config::default()
-        };
+        let mut config = Config::default();
+        config.exec.workers = Some(WorkerCount::Auto);
         assert!(config.worker_count() >= 1);
     }
 
@@ -855,7 +872,7 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert_eq!(config.schedule, ScheduleStrategy::FailedFirst);
+        assert_eq!(config.filter.schedule, ScheduleStrategy::FailedFirst);
     }
 
     #[test]
@@ -869,7 +886,7 @@ spawn_overhead_ms = 100.0
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.schedule, ScheduleStrategy::Random);
+        assert_eq!(merged.filter.schedule, ScheduleStrategy::Random);
     }
 
     #[test]
@@ -883,7 +900,7 @@ spawn_overhead_ms = 100.0
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--schedule", "failed-first"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.schedule, ScheduleStrategy::FailedFirst);
+        assert_eq!(merged.filter.schedule, ScheduleStrategy::FailedFirst);
     }
 
     #[test]
@@ -895,10 +912,10 @@ spawn_overhead_ms = 100.0
         )
         .unwrap();
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(cfg.timeout_secs, Some(60));
+        assert_eq!(cfg.exec.timeout_secs, Some(60));
         let args = parse_run(&["--timeout", "10"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.timeout_secs, Some(10));
+        assert_eq!(merged.exec.timeout_secs, Some(10));
     }
 
     #[test]
@@ -912,7 +929,7 @@ spawn_overhead_ms = 100.0
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.timeout_secs, Some(45));
+        assert_eq!(merged.exec.timeout_secs, Some(45));
     }
 
     // ── WorkerCount serde visitor edge cases ─────────────────────────────────
@@ -946,7 +963,7 @@ spawn_overhead_ms = 100.0
 plugins = ["oxitest_loguru", "oxitest_db"]
 "#;
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.plugins, vec!["oxitest_loguru", "oxitest_db"]);
+        assert_eq!(cfg.features.plugins, vec!["oxitest_loguru", "oxitest_db"]);
     }
 
     #[test]
@@ -960,8 +977,8 @@ level = "DEBUG"
 timeout = 30
 "#;
         let cfg = Config::from_str(toml).unwrap();
-        assert!(cfg.plugin_settings.contains_key("myplugin"));
-        let settings = &cfg.plugin_settings["myplugin"];
+        assert!(cfg.features.plugin_settings.contains_key("myplugin"));
+        let settings = &cfg.features.plugin_settings["myplugin"];
         assert_eq!(
             settings.get("level").and_then(|v| v.as_str()),
             Some("DEBUG")
@@ -975,7 +992,7 @@ timeout = 30
 async_backend = "trio"
 "#;
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.async_backend, "trio");
+        assert_eq!(cfg.features.async_backend, "trio");
     }
 
     #[test]
@@ -989,7 +1006,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.affected, Some("main".to_string()));
+        assert_eq!(merged.filter.affected, Some("main".to_string()));
     }
 
     #[test]
@@ -998,7 +1015,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.affected, Some("HEAD".to_string()));
+        assert_eq!(merged.filter.affected, Some("HEAD".to_string()));
     }
 
     #[test]
@@ -1012,19 +1029,19 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected=develop"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.affected, Some("develop".to_string()));
+        assert_eq!(merged.filter.affected, Some("develop".to_string()));
     }
 
     #[test]
     fn test_retries_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nretries = 2\n").unwrap();
-        assert_eq!(cfg.retries, 2);
+        assert_eq!(cfg.exec.retries, 2);
     }
 
     #[test]
     fn test_retries_delay_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nretries_delay = 5\n").unwrap();
-        assert_eq!(cfg.retries_delay_secs, 5);
+        assert_eq!(cfg.exec.retries_delay_secs, 5);
     }
 
     #[test]
@@ -1038,7 +1055,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--retries", "5"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.retries, 5);
+        assert_eq!(merged.exec.retries, 5);
     }
 
     // ── resolve_testpaths tests ──────────────────────────────────────────
@@ -1127,21 +1144,28 @@ async_backend = "trio"
     fn test_debug_post_mortem_apply_to() {
         let mut cfg = Config::default();
         DebugMode::PostMortem.apply_to(&mut cfg, None);
-        assert!(cfg.serial, "debug should imply serial");
-        assert_eq!(cfg.maxfail, 1, "post-mortem should imply maxfail=1");
-        assert_eq!(cfg.tb, TbStyle::Detail, "debug should imply tb=detail");
-        assert!(cfg.debug.is_some(), "debug should be stored on config");
-        assert_eq!(cfg.timeout_secs, None, "debug should clear timeout");
-        assert!(cfg.show_internals, "debug should imply show_internals");
+        assert!(cfg.exec.serial, "debug should imply serial");
+        assert_eq!(cfg.exec.maxfail, 1, "post-mortem should imply maxfail=1");
+        assert_eq!(
+            cfg.output.tb,
+            TbStyle::Detail,
+            "debug should imply tb=detail"
+        );
+        assert!(cfg.exec.debug.is_some(), "debug should be stored on config");
+        assert_eq!(cfg.exec.timeout_secs, None, "debug should clear timeout");
+        assert!(
+            cfg.output.show_internals,
+            "debug should imply show_internals"
+        );
     }
 
     #[test]
     fn test_debug_post_mortem_clears_pyproject_timeout() {
         let mut cfg = Config::default();
-        cfg.timeout_secs = Some(30);
+        cfg.exec.timeout_secs = Some(30);
         DebugMode::PostMortem.apply_to(&mut cfg, None);
         assert_eq!(
-            cfg.timeout_secs, None,
+            cfg.exec.timeout_secs, None,
             "debug should clear pyproject timeout"
         );
     }
@@ -1150,21 +1174,25 @@ async_backend = "trio"
     fn test_debug_always_does_not_imply_maxfail() {
         let mut cfg = Config::default();
         DebugMode::Always.apply_to(&mut cfg, None);
-        assert!(cfg.serial, "always should imply serial");
-        assert_eq!(cfg.maxfail, 0, "always should NOT imply maxfail=1");
-        assert_eq!(cfg.tb, TbStyle::Detail, "always should imply tb=detail");
-        assert_eq!(cfg.timeout_secs, None, "always should clear timeout");
+        assert!(cfg.exec.serial, "always should imply serial");
+        assert_eq!(cfg.exec.maxfail, 0, "always should NOT imply maxfail=1");
+        assert_eq!(
+            cfg.output.tb,
+            TbStyle::Detail,
+            "always should imply tb=detail"
+        );
+        assert_eq!(cfg.exec.timeout_secs, None, "always should clear timeout");
     }
 
     #[test]
     fn test_debug_does_not_override_explicit_tb() {
         // When cli_tb is Some, apply_to should NOT override tb to Detail.
-        // The caller sets cfg.tb via the override mechanism after apply_to.
+        // The caller sets cfg.output.tb via the override mechanism after apply_to.
         let mut cfg = Config::default();
-        cfg.tb = TbStyle::No; // User chose --tb=no explicitly
+        cfg.output.tb = TbStyle::No; // User chose --tb=no explicitly
         DebugMode::PostMortem.apply_to(&mut cfg, Some(&TbStyle::No));
         assert_eq!(
-            cfg.tb,
+            cfg.output.tb,
             TbStyle::No,
             "explicit --tb should not be overridden"
         );
@@ -1176,9 +1204,9 @@ async_backend = "trio"
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = DebugArgs::default_for_test();
         let merged = config.merge_debug_args(&args);
-        assert!(merged.serial);
-        assert_eq!(merged.maxfail, 1);
-        assert!(merged.debug.is_some());
+        assert!(merged.exec.serial);
+        assert_eq!(merged.exec.maxfail, 1);
+        assert!(merged.exec.debug.is_some());
     }
 
     // ── keep_tmp tests ──────────────────────────────────────────────────
@@ -1186,13 +1214,13 @@ async_backend = "trio"
     #[test]
     fn test_keep_tmp_from_pyproject_failed() {
         let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"failed\"\n").unwrap();
-        assert_eq!(cfg.keep_tmp, Some(KeepTmpMode::Failed));
+        assert_eq!(cfg.output.keep_tmp, Some(KeepTmpMode::Failed));
     }
 
     #[test]
     fn test_keep_tmp_from_pyproject_always() {
         let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"always\"\n").unwrap();
-        assert_eq!(cfg.keep_tmp, Some(KeepTmpMode::Always));
+        assert_eq!(cfg.output.keep_tmp, Some(KeepTmpMode::Always));
     }
 
     #[test]
@@ -1206,7 +1234,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--keep-tmp=failed"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Failed));
+        assert_eq!(merged.output.keep_tmp, Some(KeepTmpMode::Failed));
     }
 
     #[test]
@@ -1220,21 +1248,21 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.keep_tmp, Some(KeepTmpMode::Always));
+        assert_eq!(merged.output.keep_tmp, Some(KeepTmpMode::Always));
     }
 
     #[test]
     fn test_show_locals_from_pyproject() {
         let toml = "[tool.oxitest]\nshow_locals = true\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert!(cfg.show_locals);
+        assert!(cfg.output.show_locals);
     }
 
     #[test]
     fn test_show_internals_from_pyproject() {
         let toml = "[tool.oxitest]\nshow_internals = true\n";
         let cfg = Config::from_str(toml).unwrap();
-        assert!(cfg.show_internals);
+        assert!(cfg.output.show_internals);
     }
 
     // ── auto_arrange tests (TOML only) ──────────────────────────────────
@@ -1242,13 +1270,13 @@ async_backend = "trio"
     #[test]
     fn test_auto_arrange_from_pyproject_custom() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = 50\n").unwrap();
-        assert_eq!(cfg.auto_arrange_threshold, Some(50));
+        assert_eq!(cfg.exec.auto_arrange_threshold, Some(50));
     }
 
     #[test]
     fn test_auto_arrange_from_pyproject_false() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
-        assert_eq!(cfg.auto_arrange_threshold, None);
+        assert_eq!(cfg.exec.auto_arrange_threshold, None);
     }
 
     // ── use_gitignore tests ─────────────────────────────────────────────
@@ -1256,27 +1284,27 @@ async_backend = "trio"
     #[test]
     fn test_use_gitignore_from_pyproject_false() {
         let cfg = Config::from_str("[tool.oxitest]\nuse_gitignore = false\n").unwrap();
-        assert!(!cfg.use_gitignore);
+        assert!(!cfg.paths.use_gitignore);
     }
 
     #[test]
     fn test_use_gitignore_from_pyproject_true() {
         let cfg = Config::from_str("[tool.oxitest]\nuse_gitignore = true\n").unwrap();
-        assert!(cfg.use_gitignore);
+        assert!(cfg.paths.use_gitignore);
     }
 
     #[test]
     fn test_use_gitignore_absent_defaults_true() {
         let cfg = Config::from_str("[tool.oxitest]\n").unwrap();
-        assert!(cfg.use_gitignore);
+        assert!(cfg.paths.use_gitignore);
     }
 
     #[test]
     fn test_use_gitignore_cli_disables() {
         let dir = TempDir::new().unwrap();
         let mut cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert!(cfg.use_gitignore);
-        cfg.use_gitignore = false; // simulates what pipeline does with CLI flag
-        assert!(!cfg.use_gitignore);
+        assert!(cfg.paths.use_gitignore);
+        cfg.paths.use_gitignore = false; // simulates what pipeline does with CLI flag
+        assert!(!cfg.paths.use_gitignore);
     }
 }

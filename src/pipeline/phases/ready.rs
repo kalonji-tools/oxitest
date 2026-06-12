@@ -38,18 +38,19 @@ impl Pipeline<Ready> {
         shared.cache.invalidate(&clean_items);
 
         // Fetch plugin reporters from Python registry.
-        let plugin_reporters: Vec<Box<dyn reporter::Reporter>> = if !shared.cfg.plugins.is_empty() {
-            bridge::get_plugin_reporters(py, &session)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|obj| {
-                    Box::new(reporter::plugin::PyPluginReporter::new(obj))
-                        as Box<dyn reporter::Reporter>
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+        let plugin_reporters: Vec<Box<dyn reporter::Reporter>> =
+            if !shared.cfg.features.plugins.is_empty() {
+                bridge::get_plugin_reporters(py, &session)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|obj| {
+                        Box::new(reporter::plugin::PyPluginReporter::new(obj))
+                            as Box<dyn reporter::Reporter>
+                    })
+                    .collect()
+            } else {
+                vec![]
+            };
 
         let (json_path, junit_path) = match &shared.command {
             crate::config::Command::Run(a) => (a.json.clone(), a.junit_xml.clone()),

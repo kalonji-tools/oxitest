@@ -133,9 +133,9 @@ pub(super) fn collect_items(
     let mut items: Vec<Arc<types::TestItem>> = Vec::new();
     let mut errors = Vec::new();
     let mut raw_violations: Vec<bridge::RawViolation> = Vec::new();
-    let collect_violations = cfg.strict.is_some();
+    let collect_violations = cfg.markers.strict.is_some();
 
-    let profile_enabled = cfg.collection_profile;
+    let profile_enabled = cfg.output.collection_profile;
     let wall_start = std::time::Instant::now();
     let mut file_profiles: Vec<FileProfile> = Vec::new();
 
@@ -229,8 +229,12 @@ pub(super) fn collect_items(
     }
 
     if errors.is_empty() {
-        let registered: std::collections::HashSet<&str> =
-            cfg.registered_markers.iter().map(String::as_str).collect();
+        let registered: std::collections::HashSet<&str> = cfg
+            .markers
+            .registered_markers
+            .iter()
+            .map(String::as_str)
+            .collect();
         let marker_errors = filter::validate_markers(&items, &registered);
         errors.extend(marker_errors);
     }
