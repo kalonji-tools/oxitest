@@ -158,8 +158,8 @@ impl RunStats {
     pub(crate) fn record(&mut self, item: &TestItem, outcome: &TestOutcome) {
         match outcome {
             TestOutcome::Passed { no_message_lines } => self.record_passed(item, no_message_lines),
-            TestOutcome::Failed { .. } => self.record_failed(),
-            TestOutcome::Error { .. } => self.record_errored(),
+            TestOutcome::Failed(..) => self.record_failed(),
+            TestOutcome::Error(..) => self.record_errored(),
             TestOutcome::Skipped { .. } => self.record_skipped(),
             TestOutcome::Warned {
                 reason,

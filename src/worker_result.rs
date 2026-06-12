@@ -12,7 +12,7 @@
 
 use camino::Utf8PathBuf;
 
-use crate::types::{self, FieldDiff, Frame, LineNo};
+use crate::types::{self, FailureDiagnostic, Frame, LineNo};
 
 /// Wire protocol version for the worker ↔ coordinator JSON channel.
 ///
@@ -84,24 +84,8 @@ pub(crate) enum WorkerOutcome {
     Passed {
         no_message_lines: Vec<usize>,
     },
-    Failed {
-        message: String,
-        file: Utf8PathBuf,
-        lineno: LineNo,
-        source_line: String,
-        left: String,
-        right: String,
-        op: String,
-        frames: Vec<Frame>,
-        field_diffs: Vec<FieldDiff>,
-    },
-    Error {
-        message: String,
-        file: Utf8PathBuf,
-        lineno: LineNo,
-        source_line: String,
-        frames: Vec<Frame>,
-    },
+    Failed(FailureDiagnostic),
+    Error(FailureDiagnostic),
     Skipped {
         reason: String,
     },
@@ -126,40 +110,8 @@ impl From<WorkerOutcome> for types::TestOutcome {
             WorkerOutcome::Passed { no_message_lines } => {
                 types::TestOutcome::Passed { no_message_lines }
             }
-            WorkerOutcome::Failed {
-                message,
-                file,
-                lineno,
-                source_line,
-                left,
-                right,
-                op,
-                frames,
-                field_diffs,
-            } => types::TestOutcome::Failed {
-                message,
-                file,
-                lineno,
-                source_line,
-                left,
-                right,
-                op,
-                frames,
-                field_diffs,
-            },
-            WorkerOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                frames,
-            } => types::TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                frames,
-            },
+            WorkerOutcome::Failed(d) => types::TestOutcome::Failed(Box::new(d)),
+            WorkerOutcome::Error(d) => types::TestOutcome::Error(Box::new(d)),
             WorkerOutcome::Skipped { reason } => types::TestOutcome::Skipped { reason },
             WorkerOutcome::XFailed { reason } => types::TestOutcome::XFailed { reason },
             WorkerOutcome::XPassed { strict } => types::TestOutcome::XPassed { strict },
@@ -178,13 +130,7 @@ impl From<WorkerOutcome> for types::TestOutcome {
 impl WorkerOutcome {
     /// Synthesise an error outcome for a test that could not be executed.
     pub(crate) fn error_sentinel(message: String) -> Self {
-        WorkerOutcome::Error {
-            message,
-            file: Utf8PathBuf::default(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
-        }
+        WorkerOutcome::Error(FailureDiagnostic::sentinel(message))
     }
 
     /// Synthesise an error outcome for a test whose subprocess never responded.
@@ -265,7 +211,7 @@ impl WireResult {
 
         let outcome = match self.outcome {
             types::OutcomeKind::Passed => WorkerOutcome::Passed { no_message_lines },
-            types::OutcomeKind::Failed => WorkerOutcome::Failed {
+            types::OutcomeKind::Failed => WorkerOutcome::Failed(FailureDiagnostic {
                 message: self.message.unwrap_or_default(),
                 file,
                 lineno,
@@ -275,14 +221,14 @@ impl WireResult {
                 op: self.op.unwrap_or_default(),
                 frames,
                 field_diffs: self.field_diffs.into_iter().map(Into::into).collect(),
-            },
-            types::OutcomeKind::Error => WorkerOutcome::Error {
-                message: self.message.unwrap_or_default(),
+            }),
+            types::OutcomeKind::Error => WorkerOutcome::Error(FailureDiagnostic::error(
+                self.message.unwrap_or_default(),
                 file,
                 lineno,
                 source_line,
                 frames,
-            },
+            )),
             types::OutcomeKind::Skipped => WorkerOutcome::Skipped {
                 reason: self.failure_repr.unwrap_or_default(),
             },
@@ -306,13 +252,13 @@ impl WireResult {
                         "Unknown outcome string from worker — treating as error"
                     );
                 }
-                WorkerOutcome::Error {
-                    message: self.message.unwrap_or_default(),
+                WorkerOutcome::Error(FailureDiagnostic::error(
+                    self.message.unwrap_or_default(),
                     file,
                     lineno,
                     source_line,
                     frames,
-                }
+                ))
             }
         };
 
@@ -366,10 +312,10 @@ mod frame_tests {
         let r: WireResult = serde_json::from_str(json).unwrap();
         let (_, _, outcome) = r.into_worker_outcome();
         match types::TestOutcome::from(outcome) {
-            types::TestOutcome::Failed { frames, .. } => {
-                assert_eq!(frames.len(), 2);
+            types::TestOutcome::Failed(d) => {
+                assert_eq!(d.frames.len(), 2);
                 assert_eq!(
-                    frames[0],
+                    d.frames[0],
                     Frame {
                         file: Utf8PathBuf::from("t.py"),
                         lineno: LineNo::new(10),
@@ -379,7 +325,7 @@ mod frame_tests {
                     }
                 );
                 assert_eq!(
-                    frames[1],
+                    d.frames[1],
                     Frame {
                         file: Utf8PathBuf::from("t.py"),
                         lineno: LineNo::new(3),
@@ -400,7 +346,7 @@ mod frame_tests {
         assert!(r.frames.is_empty());
         let (_, _, outcome) = r.into_worker_outcome();
         match types::TestOutcome::from(outcome) {
-            types::TestOutcome::Failed { frames, .. } => assert!(frames.is_empty()),
+            types::TestOutcome::Failed(d) => assert!(d.frames.is_empty()),
             other => panic!("expected Failed, got {other:?}"),
         }
     }
@@ -438,8 +384,8 @@ mod lineno_cast_tests {
         .unwrap();
         let (_, _, outcome) = r.into_worker_outcome();
         match types::TestOutcome::from(outcome) {
-            types::TestOutcome::Failed { lineno, .. } => {
-                assert_eq!(lineno, LineNo::new(42));
+            types::TestOutcome::Failed(d) => {
+                assert_eq!(d.lineno, LineNo::new(42));
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -752,8 +698,8 @@ mod outcome_conversion_tests {
         let r = make_result(json);
         let (_, _, outcome) = r.into_worker_outcome();
         match types::TestOutcome::from(outcome) {
-            types::TestOutcome::Failed { message, .. } => {
-                assert_eq!(message, "structured message");
+            types::TestOutcome::Failed(d) => {
+                assert_eq!(d.message, "structured message");
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -867,15 +813,13 @@ mod outcome_conversion_tests {
         let r = make_result(json);
         let (_, _, outcome) = r.into_worker_outcome();
         match types::TestOutcome::from(outcome) {
-            types::TestOutcome::Error {
-                message, frames, ..
-            } => {
-                assert_eq!(message, "ImportError: no module");
-                assert_eq!(frames.len(), 2);
-                assert_eq!(frames[0].file, "conftest.py");
-                assert_eq!(frames[0].lineno, LineNo::new(3));
-                assert_eq!(frames[0].name, "<module>");
-                assert_eq!(frames[1].name, "setup");
+            types::TestOutcome::Error(d) => {
+                assert_eq!(d.message, "ImportError: no module");
+                assert_eq!(d.frames.len(), 2);
+                assert_eq!(d.frames[0].file, "conftest.py");
+                assert_eq!(d.frames[0].lineno, LineNo::new(3));
+                assert_eq!(d.frames[0].name, "<module>");
+                assert_eq!(d.frames[1].name, "setup");
             }
             other => panic!("expected Error, got {other:?}"),
         }
@@ -885,7 +829,7 @@ mod outcome_conversion_tests {
 #[cfg(test)]
 mod worker_outcome_tests {
     use super::*;
-    use crate::types::{LineNo, TestOutcome};
+    use crate::types::{FailureDiagnostic, LineNo, TestOutcome};
     use camino::Utf8PathBuf;
 
     #[test]
@@ -903,7 +847,7 @@ mod worker_outcome_tests {
 
     #[test]
     fn failed_converts_to_test_outcome() {
-        let wo = WorkerOutcome::Failed {
+        let wo = WorkerOutcome::Failed(FailureDiagnostic {
             message: "assert 1 == 2".into(),
             file: Utf8PathBuf::from("t.py"),
             lineno: LineNo::new(10),
@@ -913,23 +857,15 @@ mod worker_outcome_tests {
             op: "==".into(),
             frames: vec![],
             field_diffs: vec![],
-        };
+        });
         match TestOutcome::from(wo) {
-            TestOutcome::Failed {
-                message,
-                file,
-                lineno,
-                left,
-                right,
-                op,
-                ..
-            } => {
-                assert_eq!(message, "assert 1 == 2");
-                assert_eq!(file, "t.py");
-                assert_eq!(lineno, LineNo::new(10));
-                assert_eq!(left, "1");
-                assert_eq!(right, "2");
-                assert_eq!(op, "==");
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.message, "assert 1 == 2");
+                assert_eq!(d.file, "t.py");
+                assert_eq!(d.lineno, LineNo::new(10));
+                assert_eq!(d.left, "1");
+                assert_eq!(d.right, "2");
+                assert_eq!(d.op, "==");
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -937,23 +873,18 @@ mod worker_outcome_tests {
 
     #[test]
     fn error_converts_to_test_outcome() {
-        let wo = WorkerOutcome::Error {
-            message: "ImportError".into(),
-            file: Utf8PathBuf::from("t.py"),
-            lineno: LineNo::new(3),
-            source_line: "import bad".into(),
-            frames: vec![],
-        };
+        let wo = WorkerOutcome::Error(FailureDiagnostic::error(
+            "ImportError".into(),
+            Utf8PathBuf::from("t.py"),
+            LineNo::new(3),
+            "import bad".into(),
+            vec![],
+        ));
         match TestOutcome::from(wo) {
-            TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                ..
-            } => {
-                assert_eq!(message, "ImportError");
-                assert_eq!(file, "t.py");
-                assert_eq!(lineno, LineNo::new(3));
+            TestOutcome::Error(d) => {
+                assert_eq!(d.message, "ImportError");
+                assert_eq!(d.file, "t.py");
+                assert_eq!(d.lineno, LineNo::new(3));
             }
             other => panic!("expected Error, got {other:?}"),
         }
@@ -1023,18 +954,12 @@ mod worker_outcome_tests {
     fn error_sentinel_builds_error_variant() {
         let wo = WorkerOutcome::error_sentinel("boom".into());
         match TestOutcome::from(wo) {
-            TestOutcome::Error {
-                message,
-                file,
-                lineno,
-                source_line,
-                frames,
-            } => {
-                assert_eq!(message, "boom");
-                assert_eq!(file, "");
-                assert_eq!(lineno, LineNo::ZERO);
-                assert_eq!(source_line, "");
-                assert!(frames.is_empty());
+            TestOutcome::Error(d) => {
+                assert_eq!(d.message, "boom");
+                assert_eq!(d.file, "");
+                assert_eq!(d.lineno, LineNo::ZERO);
+                assert_eq!(d.source_line, "");
+                assert!(d.frames.is_empty());
             }
             other => panic!("expected Error, got {other:?}"),
         }
@@ -1044,7 +969,7 @@ mod worker_outcome_tests {
     fn timed_out_sentinel_contains_duration_message() {
         let (wo, dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(30));
         match TestOutcome::from(wo) {
-            TestOutcome::Error { message, .. } => assert!(message.contains("30")),
+            TestOutcome::Error(d) => assert!(d.message.contains("30")),
             other => panic!("expected Error, got {other:?}"),
         }
         assert!((dur - 30_000.0).abs() < 1e-9);
@@ -1054,8 +979,8 @@ mod worker_outcome_tests {
     fn crashed_sentinel_contains_crash_message() {
         let wo = WorkerOutcome::crashed();
         match TestOutcome::from(wo) {
-            TestOutcome::Error { message, .. } => {
-                assert!(message.contains("unexpectedly"));
+            TestOutcome::Error(d) => {
+                assert!(d.message.contains("unexpectedly"));
             }
             other => panic!("expected Error, got {other:?}"),
         }
@@ -1091,21 +1016,13 @@ mod wire_conversion_tests {
         assert_eq!(node_id, "t.py::test_b");
         assert!((duration_ms - 5.0).abs() < 1e-9);
         match TestOutcome::from(outcome) {
-            TestOutcome::Failed {
-                message,
-                file,
-                lineno,
-                left,
-                right,
-                op,
-                ..
-            } => {
-                assert_eq!(message, "assert 1 == 2");
-                assert_eq!(file, "t.py");
-                assert_eq!(lineno, LineNo::new(10));
-                assert_eq!(left, "1");
-                assert_eq!(right, "2");
-                assert_eq!(op, "==");
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.message, "assert 1 == 2");
+                assert_eq!(d.file, "t.py");
+                assert_eq!(d.lineno, LineNo::new(10));
+                assert_eq!(d.left, "1");
+                assert_eq!(d.right, "2");
+                assert_eq!(d.op, "==");
             }
             other => panic!("expected Failed, got {other:?}"),
         }
@@ -1211,12 +1128,10 @@ mod wire_conversion_tests {
         );
         let (_, _, outcome) = wire.into_worker_outcome();
         match TestOutcome::from(outcome) {
-            TestOutcome::Error {
-                message, frames, ..
-            } => {
-                assert_eq!(message, "ImportError: no module");
-                assert_eq!(frames.len(), 1);
-                assert_eq!(frames[0].name, "<module>");
+            TestOutcome::Error(d) => {
+                assert_eq!(d.message, "ImportError: no module");
+                assert_eq!(d.frames.len(), 1);
+                assert_eq!(d.frames[0].name, "<module>");
             }
             other => panic!("expected Error, got {other:?}"),
         }
@@ -1226,10 +1141,7 @@ mod wire_conversion_tests {
     fn wire_unknown_outcome_maps_to_error() {
         let wire = deser(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.0}"#);
         let (_, _, outcome) = wire.into_worker_outcome();
-        assert!(matches!(
-            TestOutcome::from(outcome),
-            TestOutcome::Error { .. }
-        ));
+        assert!(matches!(TestOutcome::from(outcome), TestOutcome::Error(..)));
     }
 
     #[test]
