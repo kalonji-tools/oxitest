@@ -215,8 +215,8 @@ junit.xml
 docs/superpowers/
 
 # Graphify (knowledge graph)
+graphify-out/cost.json
 graphify-out/cache/
-graphify-out/.graphify_*
 
 # MkDocs build output
 docs/site/
