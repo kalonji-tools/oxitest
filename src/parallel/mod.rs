@@ -16,7 +16,6 @@ pub(crate) use pool::{kill_pool, prewarm_workers, PoolGuard, PrewarmedWorker};
 
 use crate::{
     config, reporter, scheduler, types,
-    worker_result::WorkerOutcome,
     worker_session::{spawn_worker, spawn_worker_with_process, WorkerParams},
 };
 
@@ -26,7 +25,7 @@ use drain::{drain_remaining_into_crashed, handle_worker_result};
 pub(crate) struct WorkerResult {
     pub node_id: String,
     pub duration_ms: f64,
-    pub outcome: WorkerOutcome,
+    pub outcome: types::TestOutcome,
     pub worker_id: usize,
 }
 
@@ -169,7 +168,7 @@ pub(crate) fn run_phase_parallel(
 #[cfg(test)]
 mod worker_count_tests {
     use crate::config::{self, WorkerCount};
-    use crate::worker_result::{WireResult, WorkerOutcome};
+    use crate::worker_result::WireResult;
     use std::time::Duration;
 
     #[test]
@@ -324,8 +323,8 @@ mod worker_count_tests {
             "strict": false
         }"#;
         let result: WireResult = serde_json::from_str(json).unwrap();
-        let (_, _, worker_outcome) = result.into_worker_outcome();
-        let outcome = crate::types::TestOutcome::from(worker_outcome);
+        let (_, _, worker_outcome) = result.into_outcome();
+        let outcome = worker_outcome;
 
         match outcome {
             crate::types::TestOutcome::Failed(d) => {
@@ -351,8 +350,8 @@ mod worker_count_tests {
             "source_line": "import bad"
         }"#;
         let result: WireResult = serde_json::from_str(json).unwrap();
-        let (_, _, worker_outcome) = result.into_worker_outcome();
-        match crate::types::TestOutcome::from(worker_outcome) {
+        let (_, _, outcome) = result.into_outcome();
+        match outcome {
             crate::types::TestOutcome::Error(d) => {
                 assert_eq!(d.file, "t.py");
                 assert_eq!(d.lineno, crate::types::LineNo::new(5));
@@ -362,12 +361,12 @@ mod worker_count_tests {
         }
     }
 
-    fn make_wire_result(status: &str) -> (String, f64, WorkerOutcome) {
+    fn make_wire_result(status: &str) -> (String, f64, crate::types::TestOutcome) {
         let wire: WireResult = serde_json::from_str(&format!(
             r#"{{"node_id":"t::f","outcome":"{status}","duration_ms":1.0,"failure_repr":"reason"}}"#
         ))
         .expect("test JSON must be valid");
-        wire.into_worker_outcome()
+        wire.into_outcome()
     }
 
     #[test]
@@ -375,35 +374,35 @@ mod worker_count_tests {
         use crate::types::TestOutcome;
 
         assert!(matches!(
-            TestOutcome::from(make_wire_result("passed").2),
+            make_wire_result("passed").2,
             TestOutcome::Passed { .. }
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("failed").2),
+            make_wire_result("failed").2,
             TestOutcome::Failed(..)
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("error").2),
+            make_wire_result("error").2,
             TestOutcome::Error(..)
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("skipped").2),
+            make_wire_result("skipped").2,
             TestOutcome::Skipped { .. }
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("xfailed").2),
+            make_wire_result("xfailed").2,
             TestOutcome::XFailed { .. }
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("xpassed").2),
+            make_wire_result("xpassed").2,
             TestOutcome::XPassed { .. }
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("warned").2),
+            make_wire_result("warned").2,
             TestOutcome::Warned { .. }
         ));
         assert!(matches!(
-            TestOutcome::from(make_wire_result("timeout").2),
+            make_wire_result("timeout").2,
             TestOutcome::Timeout { .. }
         ));
     }
@@ -414,17 +413,17 @@ mod worker_count_tests {
         // Any unrecognised status string must become Error, not panic.
         let (_, _, outcome) = make_wire_result("flaky");
         assert!(
-            matches!(TestOutcome::from(outcome), TestOutcome::Error { .. }),
+            matches!(outcome, TestOutcome::Error { .. }),
             "unknown status must map to Error"
         );
     }
 
     #[test]
-    fn worker_outcome_timed_out_has_error_outcome_and_preserves_duration() {
+    fn timed_out_sentinel_has_error_outcome_and_preserves_duration() {
         use crate::types::TestOutcome;
-        let (wo, dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(30));
+        let (outcome, dur) = TestOutcome::timed_out_sentinel(std::time::Duration::from_secs(30));
         assert!(dur > 0.0, "timed_out must produce a positive duration");
-        match TestOutcome::from(wo) {
+        match outcome {
             TestOutcome::Error(d) => {
                 assert!(
                     d.message.contains("30"),
@@ -436,10 +435,10 @@ mod worker_count_tests {
     }
 
     #[test]
-    fn worker_outcome_crashed_converts_to_error_outcome() {
+    fn crashed_sentinel_converts_to_error_outcome() {
         use crate::types::TestOutcome;
-        let wo = WorkerOutcome::crashed();
-        match TestOutcome::from(wo) {
+        let outcome = TestOutcome::crashed_sentinel();
+        match outcome {
             TestOutcome::Error(d) => {
                 assert!(
                     d.message.contains("unexpectedly"),
@@ -451,22 +450,22 @@ mod worker_count_tests {
     }
 
     #[test]
-    fn worker_result_timed_out_converts_to_error_outcome() {
+    fn timed_out_sentinel_is_error_outcome() {
         use crate::types::TestOutcome;
-        let (wo, _dur) = WorkerOutcome::timed_out(std::time::Duration::from_secs(60));
+        let (outcome, _dur) = TestOutcome::timed_out_sentinel(std::time::Duration::from_secs(60));
         assert!(
-            matches!(TestOutcome::from(wo), TestOutcome::Error(..)),
-            "timed_out WorkerOutcome must map to TestOutcome::Error"
+            matches!(outcome, TestOutcome::Error(..)),
+            "timed_out_sentinel must produce TestOutcome::Error"
         );
     }
 
     #[test]
-    fn worker_result_crashed_converts_to_error_outcome() {
+    fn crashed_sentinel_is_error_outcome() {
         use crate::types::TestOutcome;
-        let wo = WorkerOutcome::crashed();
+        let outcome = TestOutcome::crashed_sentinel();
         assert!(
-            matches!(TestOutcome::from(wo), TestOutcome::Error(..)),
-            "crashed WorkerOutcome must map to TestOutcome::Error"
+            matches!(outcome, TestOutcome::Error(..)),
+            "crashed_sentinel must produce TestOutcome::Error"
         );
     }
 
@@ -479,8 +478,8 @@ mod worker_count_tests {
         )
         .expect("test JSON must be valid");
 
-        let (_, _, worker_outcome) = wr.into_worker_outcome();
-        match TestOutcome::from(worker_outcome) {
+        let (_, _, outcome) = wr.into_outcome();
+        match outcome {
             TestOutcome::Passed { no_message_lines } => {
                 assert_eq!(
                     no_message_lines,

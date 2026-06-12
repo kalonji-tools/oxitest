@@ -6,8 +6,8 @@
 
 use crate::{
     parallel::{drain_worker_results, handle_drain_outcome, DrainContext, DrainOutcome},
-    scheduler,
-    worker_result::{WorkerOutcome, WorkerTask, WorkerTaskItem},
+    scheduler, types,
+    worker_result::{WorkerTask, WorkerTaskItem},
 };
 
 /// Takes stdin and stdout pipes from a child spawned with `Stdio::piped()`.
@@ -234,7 +234,7 @@ fn run_worker_loop(
                 let _ = tx.send(crate::parallel::WorkerResult {
                     node_id: item.node_id.to_string(),
                     duration_ms: 0.0,
-                    outcome: WorkerOutcome::crashed(),
+                    outcome: types::TestOutcome::crashed_sentinel(),
                     worker_id,
                 });
             }

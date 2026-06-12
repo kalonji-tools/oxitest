@@ -3,10 +3,7 @@
 //! Contains the per-result watchdog drain loop, outcome handling for timeouts
 //! and disconnects, and the crash-drain logic for unassigned scheduler groups.
 
-use crate::{
-    reporter, scheduler, types,
-    worker_result::{WireResult, WorkerOutcome},
-};
+use crate::{reporter, scheduler, types, worker_result::WireResult};
 
 use super::WorkerResult;
 
@@ -74,7 +71,7 @@ pub(crate) fn drain_worker_results(
                         }
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
-                        let (node_id, dur, outcome) = r.into_worker_outcome();
+                        let (node_id, dur, outcome) = r.into_outcome();
                         let _ = tx.send(WorkerResult {
                             node_id,
                             duration_ms: dur,
@@ -126,11 +123,11 @@ pub(crate) fn handle_drain_outcome(
             );
             let _ = ctx.child.kill();
             for item in ctx.items.iter().skip(received) {
-                let (wo, dur) = WorkerOutcome::timed_out(ctx.watchdog);
+                let (outcome, dur) = types::TestOutcome::timed_out_sentinel(ctx.watchdog);
                 let _ = ctx.tx.send(WorkerResult {
                     node_id: item.node_id.to_string(),
                     duration_ms: dur,
-                    outcome: wo,
+                    outcome,
                     worker_id: ctx.worker_id,
                 });
             }
@@ -141,7 +138,7 @@ pub(crate) fn handle_drain_outcome(
                 let _ = ctx.tx.send(WorkerResult {
                     node_id: item.node_id.to_string(),
                     duration_ms: 0.0,
-                    outcome: WorkerOutcome::crashed(),
+                    outcome: types::TestOutcome::crashed_sentinel(),
                     worker_id: ctx.worker_id,
                 });
             }
@@ -159,7 +156,7 @@ pub(crate) fn handle_drain_outcome(
 pub(super) fn handle_worker_result(
     node_id_str: &str,
     duration_ms: f64,
-    outcome: WorkerOutcome,
+    outcome: types::TestOutcome,
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
@@ -176,7 +173,6 @@ pub(super) fn handle_worker_result(
         }
     };
     let node_id = types::NodeId::from_raw(node_id_str);
-    let outcome = types::TestOutcome::from(outcome);
     let duration_ms = types::DurationMs::new(duration_ms);
     rep.test_started(&item);
     rep.test_completed(&item, &outcome, duration_ms, parallel_ctx);
@@ -189,7 +185,7 @@ pub(super) fn handle_worker_result(
 }
 
 /// Drain any groups still queued in `sched` after all workers have exited and
-/// emit `WorkerOutcome::crashed` for each item via the reporter.
+/// emit `TestOutcome::crashed_sentinel` for each item via the reporter.
 ///
 /// Called from `run_phase_parallel` after its result channel is exhausted — at
 /// that point every worker thread has already returned (they drop their `tx`
@@ -206,7 +202,7 @@ pub(super) fn drain_remaining_into_crashed(
             handle_worker_result(
                 item.node_id.as_ref(),
                 0.0,
-                WorkerOutcome::crashed(),
+                types::TestOutcome::crashed_sentinel(),
                 item_lookup,
                 rep,
                 timings,
@@ -568,11 +564,11 @@ mod result_handler_tests {
         }
     }
 
-    fn make_worker_result(node_id: &str) -> (String, f64, WorkerOutcome) {
+    fn make_worker_result(node_id: &str) -> (String, f64, types::TestOutcome) {
         let json = format!(r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":0.0}}"#);
         serde_json::from_str::<WireResult>(&json)
             .unwrap()
-            .into_worker_outcome()
+            .into_outcome()
     }
 
     fn make_item(node_id: &str) -> Arc<types::TestItem> {

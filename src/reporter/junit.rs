@@ -221,8 +221,7 @@ impl JunitReporter {
 mod snapshot_tests {
     use super::*;
     use crate::reporter::Reporter;
-    use crate::types::{DurationMs, TestItem, TestOutcome};
-    use crate::worker_result::WorkerOutcome;
+    use crate::types::{DurationMs, FailureDiagnostic, TestItem, TestOutcome};
     use insta::assert_snapshot;
 
     /// Normalize all `time="..."` attribute values to `time="0.000"` for snapshot stability.
@@ -249,32 +248,30 @@ mod snapshot_tests {
         let mut rep = JunitReporter::new(path.clone());
         for (name, status) in items {
             let item = TestItem::builder("tests/test_foo.py", name).arc();
-            let outcome = TestOutcome::from(match *status {
-                "passed" => WorkerOutcome::Passed {
+            let outcome = match *status {
+                "passed" => TestOutcome::Passed {
                     no_message_lines: vec![],
                 },
                 "failed" => {
-                    WorkerOutcome::Failed(crate::types::FailureDiagnostic::sentinel(String::new()))
+                    TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())))
                 }
-                "skipped" => WorkerOutcome::Skipped {
+                "skipped" => TestOutcome::Skipped {
                     reason: String::new(),
                 },
-                "error" => {
-                    WorkerOutcome::Error(crate::types::FailureDiagnostic::sentinel(String::new()))
-                }
-                "xfailed" => WorkerOutcome::XFailed {
+                "error" => TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
+                "xfailed" => TestOutcome::XFailed {
                     reason: String::new(),
                 },
-                "xpassed" => WorkerOutcome::XPassed { strict: false },
-                "warned" => WorkerOutcome::Warned {
+                "xpassed" => TestOutcome::XPassed { strict: false },
+                "warned" => TestOutcome::Warned {
                     reason: String::new(),
                     no_message_lines: vec![],
                 },
-                "timeout" => WorkerOutcome::Timeout {
-                    reason: String::new(),
+                "timeout" => TestOutcome::Timeout {
+                    message: String::new(),
                 },
                 other => panic!("unexpected status in test: {other}"),
-            });
+            };
             rep.test_started(&item);
             rep.test_completed(&item, &outcome, DurationMs::ZERO, None);
         }
