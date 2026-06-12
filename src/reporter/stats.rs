@@ -54,8 +54,9 @@ pub(crate) struct WarningEntry {
     pub(crate) message: String,
 }
 
-#[derive(Clone)]
-pub(crate) struct RunStats {
+/// Outcome counters incremented once per test.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OutcomeCounters {
     pub(crate) passed: usize,
     pub(crate) failed: usize,
     pub(crate) errored: usize,
@@ -67,9 +68,20 @@ pub(crate) struct RunStats {
     pub(crate) timeout: usize,
     pub(crate) flaky: usize,
     pub(crate) strict_suite: usize,
+}
+
+/// Diagnostic data accumulated during a run.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct DiagnosticBag {
     pub(crate) tip_lines: Vec<TipLine>,
     pub(crate) warning_msgs: Vec<WarningEntry>,
     pub(crate) timings: Vec<TimingEntry>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RunStats {
+    pub(crate) counts: OutcomeCounters,
+    pub(crate) diagnostics: DiagnosticBag,
     pub(crate) fixture_cache_hits: usize,
     pub(crate) fixture_cache_misses: usize,
     pub(crate) fixture_cache_breakdown: Vec<FixtureCacheEntry>,
@@ -79,20 +91,8 @@ pub(crate) struct RunStats {
 impl RunStats {
     pub(crate) fn new() -> Self {
         Self {
-            passed: 0,
-            failed: 0,
-            errored: 0,
-            skipped: 0,
-            warned: 0,
-            xfailed: 0,
-            xpassed: 0,
-            xpassed_strict: 0,
-            timeout: 0,
-            flaky: 0,
-            strict_suite: 0,
-            tip_lines: Vec::new(),
-            warning_msgs: Vec::new(),
-            timings: Vec::new(),
+            counts: OutcomeCounters::default(),
+            diagnostics: DiagnosticBag::default(),
             fixture_cache_hits: 0,
             fixture_cache_misses: 0,
             fixture_cache_breakdown: Vec::new(),
@@ -101,20 +101,20 @@ impl RunStats {
     }
 
     pub(crate) fn record_passed(&mut self, item: &TestItem, no_message_lines: &[usize]) {
-        self.passed += 1;
+        self.counts.passed += 1;
         self.collect_tips(item, no_message_lines);
     }
 
     pub(crate) fn record_failed(&mut self) {
-        self.failed += 1;
+        self.counts.failed += 1;
     }
 
     pub(crate) fn record_errored(&mut self) {
-        self.errored += 1;
+        self.counts.errored += 1;
     }
 
     pub(crate) fn record_timeout(&mut self) {
-        self.timeout += 1;
+        self.counts.timeout += 1;
     }
 
     /// Record a flaky outcome, undoing the original failure count.
@@ -122,18 +122,18 @@ impl RunStats {
     /// A flaky test was counted as a failure in the initial run. Since we
     /// don't track which failure type, decrement in priority order.
     pub(crate) fn record_flaky(&mut self) {
-        self.flaky += 1;
-        if self.failed > 0 {
-            self.failed -= 1;
-        } else if self.errored > 0 {
-            self.errored -= 1;
-        } else if self.timeout > 0 {
-            self.timeout -= 1;
+        self.counts.flaky += 1;
+        if self.counts.failed > 0 {
+            self.counts.failed -= 1;
+        } else if self.counts.errored > 0 {
+            self.counts.errored -= 1;
+        } else if self.counts.timeout > 0 {
+            self.counts.timeout -= 1;
         }
     }
 
     pub(crate) fn record_skipped(&mut self) {
-        self.skipped += 1;
+        self.counts.skipped += 1;
     }
 
     pub(crate) fn record_warned(
@@ -142,8 +142,8 @@ impl RunStats {
         reason: &str,
         no_message_lines: &[usize],
     ) {
-        self.warned += 1;
-        self.warning_msgs.push(WarningEntry {
+        self.counts.warned += 1;
+        self.diagnostics.warning_msgs.push(WarningEntry {
             context: item.fn_name.clone(),
             message: reason.to_string(),
         });
@@ -151,7 +151,7 @@ impl RunStats {
     }
 
     pub(crate) fn record_xfailed(&mut self) {
-        self.xfailed += 1;
+        self.counts.xfailed += 1;
     }
 
     /// Single dispatch point — call this from reporters instead of the individual methods.
@@ -175,18 +175,18 @@ impl RunStats {
     }
 
     pub(crate) fn record_xpassed(&mut self, strict: bool) {
-        self.xpassed += 1;
+        self.counts.xpassed += 1;
         if strict {
-            self.xpassed_strict += 1;
+            self.counts.xpassed_strict += 1;
         }
     }
 
     pub(crate) fn record_strict_suite(&mut self, count: usize) {
-        self.strict_suite += count;
+        self.counts.strict_suite += count;
     }
 
     pub(crate) fn record_timing(&mut self, node_id: &str, duration_ms: DurationMs) {
-        self.timings.push(TimingEntry {
+        self.diagnostics.timings.push(TimingEntry {
             node_id: node_id.to_string(),
             duration_ms: duration_ms.as_f64(),
         });
@@ -197,7 +197,7 @@ impl RunStats {
         if n == 0 {
             return vec![];
         }
-        let mut sorted = self.timings.clone();
+        let mut sorted = self.diagnostics.timings.clone();
         sorted.sort_unstable_by(|a, b| {
             b.duration_ms
                 .partial_cmp(&a.duration_ms)
@@ -246,7 +246,7 @@ impl RunStats {
         if !lines.is_empty() {
             let file = item.module_path.to_string();
             for &ln in lines {
-                self.tip_lines.push(TipLine {
+                self.diagnostics.tip_lines.push(TipLine {
                     file: file.clone(),
                     lineno: ln,
                 });
@@ -263,16 +263,16 @@ mod tests {
     fn test_record_flaky_increments_counter() {
         let mut stats = RunStats::new();
         stats.record_flaky();
-        assert_eq!(stats.flaky, 1);
-        assert_eq!(stats.failed, 0);
+        assert_eq!(stats.counts.flaky, 1);
+        assert_eq!(stats.counts.failed, 0);
     }
 
     #[test]
     fn test_record_timeout_increments_counter() {
         let mut stats = RunStats::new();
         stats.record_timeout();
-        assert_eq!(stats.timeout, 1);
-        assert_eq!(stats.errored, 0); // must NOT increment errored
+        assert_eq!(stats.counts.timeout, 1);
+        assert_eq!(stats.counts.errored, 0); // must NOT increment errored
     }
 
     #[test]
@@ -280,7 +280,7 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_timing("tests/test_foo.py::test_a", DurationMs::new(42.5));
         stats.record_timing("tests/test_foo.py::test_b", DurationMs::new(10.0));
-        assert_eq!(stats.timings.len(), 2);
+        assert_eq!(stats.diagnostics.timings.len(), 2);
     }
 
     #[test]
@@ -313,7 +313,7 @@ mod tests {
     fn test_record_strict_suite_increments_counter() {
         let mut stats = RunStats::new();
         stats.record_strict_suite(3);
-        assert_eq!(stats.strict_suite, 3);
+        assert_eq!(stats.counts.strict_suite, 3);
     }
 
     #[test]
@@ -321,7 +321,7 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_strict_suite(3);
         stats.record_strict_suite(2);
-        assert_eq!(stats.strict_suite, 5);
+        assert_eq!(stats.counts.strict_suite, 5);
     }
 
     #[test]
