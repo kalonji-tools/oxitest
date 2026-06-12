@@ -71,8 +71,8 @@ in
   };
 
   enterShell = ''
-    # Put venv bin on PATH so prek hooks find ruff, ty, codespell
-    export PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH"
+    # Put venv bin and uv tools on PATH so prek hooks find ruff, ty, codespell, graphify
+    export PATH="$HOME/.local/bin:$UV_PROJECT_ENVIRONMENT/bin:$PATH"
 
     # Symlink .venv → devenv venv so tools with hardcoded .venv paths work
     # (e.g. ty's python = ".venv" in pyproject.toml)
