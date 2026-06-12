@@ -83,18 +83,18 @@ fn render_where(out: &mut String, file: &str, lineno: crate::types::LineNo, use_
 }
 
 /// Render the WITH WHAT section: inline param key=value pairs.
-fn render_params(out: &mut String, param_values: &[(String, String)], use_color: bool) {
+fn render_params(out: &mut String, param_values: &[crate::types::ParamPair], use_color: bool) {
     if param_values.is_empty() {
         return;
     }
     let params_str = param_values
         .iter()
-        .map(|(k, v)| {
+        .map(|p| {
             format!(
                 "{} {} {}",
-                color_dim(k, use_color),
+                color_dim(&p.name, use_color),
                 color_dim("=", use_color),
-                v,
+                p.value,
             )
         })
         .collect::<Vec<_>>()
@@ -142,16 +142,21 @@ fn render_source(
 }
 
 /// Render local variable bindings at a given indentation depth.
-fn render_locals(out: &mut String, locals: &[(String, String)], indent: usize, use_color: bool) {
+fn render_locals(
+    out: &mut String,
+    locals: &[crate::types::LocalVar],
+    indent: usize,
+    use_color: bool,
+) {
     let pad = " ".repeat(indent);
-    for (name, value) in locals {
+    for local in locals {
         let _ = writeln!(
             out,
             "{}{}{pad}{} = {}",
             BOX.margin,
             color_dim(BOX.vert, use_color),
-            color_dim(name, use_color),
-            color_dim(value, use_color)
+            color_dim(&local.name, use_color),
+            color_dim(&local.repr, use_color)
         );
     }
 }
@@ -298,7 +303,7 @@ fn render_values(
     left: &str,
     right: &str,
     op: &str,
-    field_diffs: &[(String, String, String)],
+    field_diffs: &[crate::types::FieldDiff],
     use_color: bool,
 ) {
     if !op.is_empty() && !left.is_empty() && !right.is_empty() {
@@ -553,9 +558,18 @@ mod tests {
             markers: vec![],
             param_id: Some("basic".to_string()),
             param_values: vec![
-                ("x".to_string(), "1".to_string()),
-                ("y".to_string(), "2".to_string()),
-                ("expected".to_string(), "3".to_string()),
+                crate::types::ParamPair {
+                    name: "x".to_string(),
+                    value: "1".to_string(),
+                },
+                crate::types::ParamPair {
+                    name: "y".to_string(),
+                    value: "2".to_string(),
+                },
+                crate::types::ParamPair {
+                    name: "expected".to_string(),
+                    value: "3".to_string(),
+                },
             ],
             is_async: false,
             fixture_names: vec![],
@@ -586,7 +600,10 @@ mod tests {
             lineno: LineNo::ZERO,
             markers: vec![],
             param_id: Some("basic".to_string()),
-            param_values: vec![("x".to_string(), "1".to_string())],
+            param_values: vec![crate::types::ParamPair {
+                name: "x".to_string(),
+                value: "1".to_string(),
+            }],
             is_async: false,
             fixture_names: vec![],
             fixref_names: vec![],
@@ -782,7 +799,10 @@ mod tests {
                 lineno: LineNo::new(5),
                 name: "test_check".to_string(),
                 line: "assert result == 10".to_string(),
-                locals: vec![("result".to_string(), "7".to_string())],
+                locals: vec![crate::types::LocalVar {
+                    name: "result".to_string(),
+                    repr: "7".to_string(),
+                }],
             }])
             .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, true, false);
@@ -806,7 +826,10 @@ mod tests {
                 lineno: LineNo::new(5),
                 name: "test_check".to_string(),
                 line: "assert result == 10".to_string(),
-                locals: vec![("result".to_string(), "7".to_string())],
+                locals: vec![crate::types::LocalVar {
+                    name: "result".to_string(),
+                    repr: "7".to_string(),
+                }],
             }])
             .build();
         let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);

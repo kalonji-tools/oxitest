@@ -49,9 +49,10 @@ impl ReporterSession {
     }
 
     pub(crate) fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .warning_msgs
-            .push((context.to_string(), error.to_string()));
+        self.stats.warning_msgs.push(stats::WarningEntry {
+            context: context.to_string(),
+            message: error.to_string(),
+        });
     }
 }
 
@@ -108,7 +109,13 @@ mod tests {
         let mut session = ReporterSession::new(0);
         session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
         assert_eq!(session.stats().warning_msgs.len(), 1);
-        assert_eq!(session.stats().warning_msgs[0].0, "end_module(test.py)");
-        assert_eq!(session.stats().warning_msgs[0].1, "RuntimeError: boom");
+        assert_eq!(
+            session.stats().warning_msgs[0].context,
+            "end_module(test.py)"
+        );
+        assert_eq!(
+            session.stats().warning_msgs[0].message,
+            "RuntimeError: boom"
+        );
     }
 }

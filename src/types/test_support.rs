@@ -16,7 +16,7 @@ pub(crate) struct TestItemBuilder {
     pub(super) lineno: LineNo,
     pub(super) markers: Vec<String>,
     pub(super) param_id: Option<String>,
-    pub(super) param_values: Vec<(String, String)>,
+    pub(super) param_values: Vec<ParamPair>,
     pub(super) is_async: bool,
     pub(super) fixture_names: Vec<String>,
     pub(super) fixref_names: Vec<String>,
@@ -39,7 +39,7 @@ impl TestItemBuilder {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn param_values(mut self, pv: Vec<(String, String)>) -> Self {
+    pub(crate) fn param_values(mut self, pv: Vec<ParamPair>) -> Self {
         self.param_values = pv;
         self
     }
@@ -107,7 +107,7 @@ pub(crate) struct FailedOutcomeBuilder {
     pub(super) right: String,
     pub(super) op: String,
     pub(super) frames: Vec<Frame>,
-    pub(super) field_diffs: Vec<(String, String, String)>,
+    pub(super) field_diffs: Vec<FieldDiff>,
 }
 
 #[allow(dead_code)]
@@ -149,7 +149,7 @@ impl FailedOutcomeBuilder {
         self
     }
     #[allow(dead_code)]
-    pub(crate) fn field_diffs(mut self, d: Vec<(String, String, String)>) -> Self {
+    pub(crate) fn field_diffs(mut self, d: Vec<FieldDiff>) -> Self {
         self.field_diffs = d;
         self
     }

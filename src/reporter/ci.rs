@@ -368,7 +368,10 @@ mod tests {
             lineno: LineNo::new(5),
             markers: vec![],
             param_id: Some("neg".to_string()),
-            param_values: vec![("x".to_string(), "-1".to_string())],
+            param_values: vec![crate::types::ParamPair {
+                name: "x".to_string(),
+                value: "-1".to_string(),
+            }],
             is_async: false,
             fixture_names: vec![],
             fixref_names: vec![],

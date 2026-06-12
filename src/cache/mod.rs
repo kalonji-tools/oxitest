@@ -22,7 +22,7 @@ pub use timing::TimingCache;
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::types::{LineNo, OutcomeKind};
+use crate::types::{LineNo, OutcomeKind, ParamPair};
 
 const CACHE_VERSION: u32 = 1;
 
@@ -47,7 +47,7 @@ pub(super) struct CachedItemData {
     lineno: LineNo,
     markers: Vec<String>,
     param_id: Option<String>,
-    param_values: Vec<(String, String)>,
+    param_values: Vec<ParamPair>,
     #[serde(default)]
     is_async: bool,
     #[serde(default)]

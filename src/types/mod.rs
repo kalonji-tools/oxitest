@@ -145,6 +145,109 @@ impl std::fmt::Display for LineNo {
     }
 }
 
+/// A single parameter name-value pair from `@parametrize`.
+///
+/// Serializes as a JSON array `[name, value]` for wire/cache compatibility.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamPair {
+    pub name: String,
+    pub value: String,
+}
+
+impl From<(String, String)> for ParamPair {
+    fn from((name, value): (String, String)) -> Self {
+        Self { name, value }
+    }
+}
+
+impl From<ParamPair> for (String, String) {
+    fn from(p: ParamPair) -> Self {
+        (p.name, p.value)
+    }
+}
+
+impl serde::Serialize for ParamPair {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (&self.name, &self.value).serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ParamPair {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (name, value) = <(String, String)>::deserialize(deserializer)?;
+        Ok(Self { name, value })
+    }
+}
+
+/// A local variable captured from a traceback frame.
+///
+/// Serializes as a JSON array `[name, repr]` for wire compatibility.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalVar {
+    pub name: String,
+    pub repr: String,
+}
+
+impl From<(String, String)> for LocalVar {
+    fn from((name, repr): (String, String)) -> Self {
+        Self { name, repr }
+    }
+}
+
+impl From<LocalVar> for (String, String) {
+    fn from(l: LocalVar) -> Self {
+        (l.name, l.repr)
+    }
+}
+
+impl serde::Serialize for LocalVar {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (&self.name, &self.repr).serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for LocalVar {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (name, repr) = <(String, String)>::deserialize(deserializer)?;
+        Ok(Self { name, repr })
+    }
+}
+
+/// Per-field diff for dataclass/object comparison assertions.
+///
+/// Serializes as a JSON array `[field, left, right]` for wire compatibility.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldDiff {
+    pub field: String,
+    pub left: String,
+    pub right: String,
+}
+
+impl From<(String, String, String)> for FieldDiff {
+    fn from((field, left, right): (String, String, String)) -> Self {
+        Self { field, left, right }
+    }
+}
+
+impl From<FieldDiff> for (String, String, String) {
+    fn from(d: FieldDiff) -> Self {
+        (d.field, d.left, d.right)
+    }
+}
+
+impl serde::Serialize for FieldDiff {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (&self.field, &self.left, &self.right).serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FieldDiff {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (field, left, right) = <(String, String, String)>::deserialize(deserializer)?;
+        Ok(Self { field, left, right })
+    }
+}
+
 /// Process exit code with named variants for each documented exit status.
 ///
 /// - `Success` (0) — all tests passed (or were skipped / xfailed).
@@ -197,7 +300,7 @@ pub struct TestItem {
     pub(crate) lineno: LineNo,
     pub(crate) markers: Vec<String>,
     pub(crate) param_id: Option<String>,
-    pub(crate) param_values: Vec<(String, String)>,
+    pub(crate) param_values: Vec<ParamPair>,
     pub(crate) is_async: bool,
     pub(crate) fixture_names: Vec<String>,
     pub(crate) fixref_names: Vec<String>,
@@ -283,7 +386,7 @@ pub struct Frame {
     pub lineno: LineNo,
     pub name: String,
     pub line: String,
-    pub locals: Vec<(String, String)>,
+    pub locals: Vec<LocalVar>,
 }
 
 /// The eight possible results of running a single test.
@@ -305,7 +408,7 @@ pub enum TestOutcome {
         right: String,
         op: String,
         frames: Vec<Frame>,
-        field_diffs: Vec<(String, String, String)>,
+        field_diffs: Vec<FieldDiff>,
     },
     Error {
         message: String,
@@ -456,8 +559,8 @@ pub struct DiagnosticParts<'a> {
     pub right: &'a str,
     /// Comparison operator (empty for Error outcomes or non-comparison assertions).
     pub op: &'a str,
-    /// Per-field diffs for dataclass/object comparisons: `(field_name, left_value, right_value)`.
-    pub field_diffs: &'a [(String, String, String)],
+    /// Per-field diffs for dataclass/object comparisons.
+    pub field_diffs: &'a [FieldDiff],
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -717,7 +820,10 @@ mod tests {
             lineno: LineNo::new(1),
             markers: vec![],
             param_id: Some("basic".to_string()),
-            param_values: vec![("x".to_string(), "1".to_string())],
+            param_values: vec![ParamPair {
+                name: "x".to_string(),
+                value: "1".to_string(),
+            }],
             is_async: false,
             fixture_names: vec![],
             fixref_names: vec![],
