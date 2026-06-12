@@ -69,10 +69,10 @@ pub(crate) fn run_phase_parallel(
             serde_json::value::RawValue::from_string(json_str).expect("valid JSON"),
         )
     };
-    let timeout_secs = cfg.timeout_secs;
-    let keep_tmp: Option<Arc<str>> = cfg.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
-    let show_locals = cfg.show_locals;
-    let show_internals = cfg.show_internals;
+    let timeout_secs = cfg.exec.timeout_secs;
+    let keep_tmp: Option<Arc<str>> = cfg.output.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
+    let show_locals = cfg.output.show_locals;
+    let show_internals = cfg.output.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
 
     let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
@@ -108,7 +108,7 @@ pub(crate) fn run_phase_parallel(
 
     drop(tx);
 
-    let mut acc = types::FailureAccumulator::new(cfg.maxfail);
+    let mut acc = types::FailureAccumulator::new(cfg.exec.maxfail);
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 

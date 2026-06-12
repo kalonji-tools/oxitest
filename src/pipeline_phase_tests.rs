@@ -149,7 +149,7 @@ mod strict_or_skip_disabled_tests {
                 raw_violations: vec![],
                 collection_profile: None,
             });
-            // cfg.strict is None by default
+            // cfg.markers.strict is None by default
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -245,7 +245,7 @@ mod strict_enforce_detailed_tests {
                 ],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -276,7 +276,7 @@ mod strict_enforce_detailed_tests {
                 }],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
             // Suite lines should be empty because BareAssert is PerTest, not Suite
@@ -297,7 +297,7 @@ mod strict_enforce_detailed_tests {
                 raw_violations: vec![],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
             assert_eq!(p.state.test_files.len(), 1);
@@ -330,7 +330,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
-            p.cfg.failed = Some(FailedMode::Only);
+            p.cfg.filter.failed = Some(FailedMode::Only);
 
             let result = p.filter(py);
             assert!(result.is_ok());
@@ -356,7 +356,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
-            p.cfg.failed = Some(FailedMode::First);
+            p.cfg.filter.failed = Some(FailedMode::First);
 
             let result = p.filter(py);
             assert!(result.is_ok());
@@ -382,7 +382,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
-            // cfg.failed is None by default
+            // cfg.filter.failed is None by default
 
             let result = p.filter(py);
             assert!(result.is_ok());

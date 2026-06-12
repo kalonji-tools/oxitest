@@ -23,15 +23,15 @@ impl DebugMode {
     /// traceback style and maxfail. `cli_tb` should be `Some` only if the user
     /// passed an explicit `--tb` flag (prevents overriding their choice).
     pub fn apply_to(&self, cfg: &mut Config, cli_tb: Option<&TbStyle>) {
-        cfg.debug = Some(self.clone());
-        cfg.serial = true;
-        cfg.timeout_secs = None;
-        cfg.show_internals = true;
+        cfg.exec.debug = Some(self.clone());
+        cfg.exec.serial = true;
+        cfg.exec.timeout_secs = None;
+        cfg.output.show_internals = true;
         if cli_tb.is_none() {
-            cfg.tb = TbStyle::Detail;
+            cfg.output.tb = TbStyle::Detail;
         }
         if matches!(self, DebugMode::PostMortem) {
-            cfg.maxfail = 1;
+            cfg.exec.maxfail = 1;
         }
     }
 }
@@ -184,102 +184,26 @@ impl ColorMode {
     }
 }
 
-/// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
-///
-/// CLI flags take precedence over `pyproject.toml` values. Construct via
-/// `Config::load(rootdir)` then `config.merge_run_args(&args)` or
-/// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
+// ─── Sub-struct definitions ──────────────────────────────────────────────────
+
+/// File discovery and path configuration.
 #[derive(Debug)]
-pub struct Config {
-    /// Project root directory (where `pyproject.toml` lives).
-    pub rootdir: Utf8PathBuf,
+pub struct PathConfig {
     /// Directories to search for test files.
     pub testpaths: Vec<Utf8PathBuf>,
     /// Glob patterns matching test file names (e.g. `test_*.py`).
     pub python_files: Vec<String>,
     /// Directory names to skip during recursive file discovery.
     pub norecursedirs: Vec<String>,
-    /// Stop the run after this many failures (0 = no limit).
-    pub maxfail: usize,
-    /// Custom marker names registered via `[tool.oxitest] markers`.
-    pub registered_markers: Vec<String>,
-    /// Default per-test timeout in seconds; `None` means no timeout.
-    pub timeout_secs: Option<u64>,
-    /// Force serial (single-process) execution.
-    pub serial: bool,
-    /// PDB debugger mode (`PostMortem` or `Always`); `None` = disabled.
-    pub debug: Option<DebugMode>,
-    /// Number of parallel worker processes (`Auto` or a fixed count).
-    pub workers: Option<WorkerCount>,
-    /// Maximum age (in days) before a cache entry is evicted.
-    pub cache_max_age: u32,
-    /// Minimum number of tests required before enabling parallel execution.
-    pub min_parallel_tests: usize,
-    /// Multiplier applied to all test timeouts (e.g. 2.0 doubles them).
-    pub timeout_multiplier: Option<f64>,
-    /// Estimated per-worker subprocess spawn overhead in milliseconds.
-    pub spawn_overhead_ms: f64,
-    /// Strict-mode level for lint-style violations.
-    pub strict: Option<StrictMode>,
-    /// Markers that lack a description (used for strict-mode diagnostics).
-    pub markers_without_description: Vec<String>,
-    /// Scheduling strategy for distributing tests across workers.
-    pub schedule: ScheduleStrategy,
-    /// Failed-test re-run mode (`Only` or `First`); `None` = off.
-    pub failed: Option<FailedMode>,
-    /// Traceback display style (short, long, line, no, native, auto).
-    pub tb: TbStyle,
-    /// Show local variables in tracebacks.
-    pub show_locals: bool,
-    /// Include oxitest-internal frames in tracebacks.
-    pub show_internals: bool,
-    /// Output verbosity level.
-    pub verbosity: Verbosity,
-    /// Show the N slowest test durations; `None` = disabled.
-    pub durations: Option<usize>,
-    /// Terminal color mode (auto, always, never).
-    pub color: ColorMode,
-    /// Python plugin module paths to load.
-    pub plugins: Vec<String>,
-    /// Per-plugin TOML settings from `[tool.oxitest.<plugin>]`.
-    pub plugin_settings: std::collections::HashMap<String, toml::Value>,
-    /// Async test backend name (e.g. `"asyncio"`).
-    pub async_backend: String,
-    /// Git ref for `--affected` filtering; `None` = disabled.
-    pub affected: Option<String>,
-    /// Default base ref for `--affected` when no explicit ref is given.
-    pub affected_base: String,
-    /// Number of times to retry failed tests.
-    pub retries: usize,
-    /// Delay in seconds between retries.
-    pub retries_delay_secs: u64,
-    /// Whether to keep temporary directories after the run.
-    pub keep_tmp: Option<KeepTmpMode>,
-    /// Auto-arrange threshold: skip fixture arrangement when item count is below this.
-    pub auto_arrange_threshold: Option<u8>,
-    /// Emit per-module collection timing profile.
-    pub collection_profile: bool,
     /// Respect `.gitignore` rules during file discovery.
     pub use_gitignore: bool,
     /// Collect and run doctests from Python source modules.
     pub doctest_modules: bool,
-    /// Specific node IDs to run (e.g. `path/test.py::test_name`).
-    pub node_ids: Vec<crate::types::NodeId>,
-    /// Source files extracted from `node_ids` for targeted collection.
-    pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
-    /// Enable coverage collection via `coverage.py`.
-    pub cov: bool,
-    /// Coverage report output format (term, html, xml, json, none).
-    pub cov_report: Option<cli::CovReportFormat>,
-    /// True when the user specified explicit paths or node IDs on the CLI.
-    /// Used to skip unused-fixture detection (which requires the full suite).
-    pub has_explicit_paths: bool,
 }
 
-impl Default for Config {
+impl Default for PathConfig {
     fn default() -> Self {
-        Config {
-            rootdir: Utf8PathBuf::from("."),
+        Self {
             testpaths: vec![Utf8PathBuf::from(".")],
             python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
             norecursedirs: vec![
@@ -292,43 +216,203 @@ impl Default for Config {
                 "build".to_string(),
                 "node_modules".to_string(),
             ],
+            use_gitignore: true,
+            doctest_modules: false,
+        }
+    }
+}
+
+/// Execution control: parallelism, timeouts, retries, debug mode.
+#[derive(Debug)]
+pub struct ExecConfig {
+    /// Stop the run after this many failures (0 = no limit).
+    pub maxfail: usize,
+    /// Force serial (single-process) execution.
+    pub serial: bool,
+    /// PDB debugger mode (`PostMortem` or `Always`); `None` = disabled.
+    pub debug: Option<DebugMode>,
+    /// Number of parallel worker processes (`Auto` or a fixed count).
+    pub workers: Option<WorkerCount>,
+    /// Default per-test timeout in seconds; `None` means no timeout.
+    pub timeout_secs: Option<u64>,
+    /// Multiplier applied to all test timeouts (e.g. 2.0 doubles them).
+    pub timeout_multiplier: Option<f64>,
+    /// Estimated per-worker subprocess spawn overhead in milliseconds.
+    pub spawn_overhead_ms: f64,
+    /// Minimum number of tests required before enabling parallel execution.
+    pub min_parallel_tests: usize,
+    /// Number of times to retry failed tests.
+    pub retries: usize,
+    /// Delay in seconds between retries.
+    pub retries_delay_secs: u64,
+    /// Auto-arrange threshold: skip fixture arrangement when item count is below this.
+    pub auto_arrange_threshold: Option<u8>,
+}
+
+impl Default for ExecConfig {
+    fn default() -> Self {
+        Self {
             maxfail: 0,
-            registered_markers: vec![],
-            timeout_secs: None,
             serial: false,
             debug: None,
             workers: None,
-            cache_max_age: 50,
-            min_parallel_tests: 100,
+            timeout_secs: None,
             timeout_multiplier: None,
             spawn_overhead_ms: 250.0,
-            strict: None,
-            markers_without_description: vec![],
-            schedule: ScheduleStrategy::LongestFirst,
-            failed: None,
+            min_parallel_tests: 100,
+            retries: 0,
+            retries_delay_secs: 0,
+            auto_arrange_threshold: Some(70),
+        }
+    }
+}
+
+/// Output and display configuration.
+#[derive(Debug)]
+pub struct OutputConfig {
+    /// Traceback display style (short, long, line, no, native, auto).
+    pub tb: TbStyle,
+    /// Show local variables in tracebacks.
+    pub show_locals: bool,
+    /// Include oxitest-internal frames in tracebacks.
+    pub show_internals: bool,
+    /// Output verbosity level.
+    pub verbosity: Verbosity,
+    /// Show the N slowest test durations; `None` = disabled.
+    pub durations: Option<usize>,
+    /// Terminal color mode (auto, always, never).
+    pub color: ColorMode,
+    /// Emit per-module collection timing profile.
+    pub collection_profile: bool,
+    /// Whether to keep temporary directories after the run.
+    pub keep_tmp: Option<KeepTmpMode>,
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
             tb: TbStyle::Detail,
             show_locals: false,
             show_internals: false,
             verbosity: Verbosity::Normal,
             durations: None,
             color: ColorMode::Auto,
-            plugins: vec![],
-            plugin_settings: std::collections::HashMap::new(),
-            async_backend: "asyncio".to_string(),
-            affected: None,
-            affected_base: "HEAD".to_string(),
-            retries: 0,
-            retries_delay_secs: 0,
-            keep_tmp: None,
-            auto_arrange_threshold: Some(70),
             collection_profile: false,
-            use_gitignore: true,
-            cov: false,
-            cov_report: None,
-            doctest_modules: false,
+            keep_tmp: None,
+        }
+    }
+}
+
+/// Marker registration and strict-mode configuration.
+#[derive(Debug, Default)]
+pub struct MarkerConfig {
+    /// Custom marker names registered via `[tool.oxitest] markers`.
+    pub registered_markers: Vec<String>,
+    /// Markers that lack a description (used for strict-mode diagnostics).
+    pub markers_without_description: Vec<String>,
+    /// Strict-mode level for lint-style violations.
+    pub strict: Option<StrictMode>,
+}
+
+/// Filtering and scheduling configuration.
+#[derive(Debug)]
+pub struct FilterConfig {
+    /// Scheduling strategy for distributing tests across workers.
+    pub schedule: ScheduleStrategy,
+    /// Failed-test re-run mode (`Only` or `First`); `None` = off.
+    pub failed: Option<FailedMode>,
+    /// Specific node IDs to run (e.g. `path/test.py::test_name`).
+    pub node_ids: Vec<crate::types::NodeId>,
+    /// Source files extracted from `node_ids` for targeted collection.
+    pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
+    /// True when the user specified explicit paths or node IDs on the CLI.
+    /// Used to skip unused-fixture detection (which requires the full suite).
+    pub has_explicit_paths: bool,
+    /// Git ref for `--affected` filtering; `None` = disabled.
+    pub affected: Option<String>,
+    /// Default base ref for `--affected` when no explicit ref is given.
+    pub affected_base: String,
+}
+
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self {
+            schedule: ScheduleStrategy::LongestFirst,
+            failed: None,
             node_ids: vec![],
             node_id_source_files: std::collections::HashSet::new(),
             has_explicit_paths: false,
+            affected: None,
+            affected_base: "HEAD".to_string(),
+        }
+    }
+}
+
+/// Feature flags: plugins, coverage, async, caching.
+#[derive(Debug)]
+pub struct FeatureConfig {
+    /// Python plugin module paths to load.
+    pub plugins: Vec<String>,
+    /// Per-plugin TOML settings from `[tool.oxitest.<plugin>]`.
+    pub plugin_settings: std::collections::HashMap<String, toml::Value>,
+    /// Async test backend name (e.g. `"asyncio"`).
+    pub async_backend: String,
+    /// Enable coverage collection via `coverage.py`.
+    pub cov: bool,
+    /// Coverage report output format (term, html, xml, json, none).
+    pub cov_report: Option<cli::CovReportFormat>,
+    /// Maximum age (in days) before a cache entry is evicted.
+    pub cache_max_age: u32,
+}
+
+impl Default for FeatureConfig {
+    fn default() -> Self {
+        Self {
+            plugins: vec![],
+            plugin_settings: std::collections::HashMap::new(),
+            async_backend: "asyncio".to_string(),
+            cov: false,
+            cov_report: None,
+            cache_max_age: 50,
+        }
+    }
+}
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+/// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
+///
+/// CLI flags take precedence over `pyproject.toml` values. Construct via
+/// `Config::load(rootdir)` then `config.merge_run_args(&args)` or
+/// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
+#[derive(Debug)]
+pub struct Config {
+    /// Project root directory (where `pyproject.toml` lives).
+    pub rootdir: Utf8PathBuf,
+    /// File discovery and path configuration.
+    pub paths: PathConfig,
+    /// Execution control: parallelism, timeouts, retries, debug mode.
+    pub exec: ExecConfig,
+    /// Output and display configuration.
+    pub output: OutputConfig,
+    /// Marker registration and strict-mode configuration.
+    pub markers: MarkerConfig,
+    /// Filtering and scheduling configuration.
+    pub filter: FilterConfig,
+    /// Feature flags: plugins, coverage, async, caching.
+    pub features: FeatureConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            rootdir: Utf8PathBuf::from("."),
+            paths: PathConfig::default(),
+            exec: ExecConfig::default(),
+            output: OutputConfig::default(),
+            markers: MarkerConfig::default(),
+            filter: FilterConfig::default(),
+            features: FeatureConfig::default(),
         }
     }
 }
@@ -370,7 +454,10 @@ impl Config {
     pub fn load(rootdir: &Utf8Path) -> Self {
         let pyproject_path = rootdir.join("pyproject.toml");
         let config = Config {
-            testpaths: vec![rootdir.to_owned()],
+            paths: PathConfig {
+                testpaths: vec![rootdir.to_owned()],
+                ..PathConfig::default()
+            },
             rootdir: rootdir.to_owned(),
             ..Config::default()
         };
@@ -402,8 +489,8 @@ impl Config {
     /// On single-CPU machines `Auto` resolves to 1, which means `--workers auto`
     /// silently falls back to serial (no point spawning one subprocess worker).
     pub fn worker_count(&self) -> usize {
-        match self.workers {
-            _ if self.serial => 1,
+        match self.exec.workers {
+            _ if self.exec.serial => 1,
             Some(WorkerCount::Fixed(n)) => n,
             Some(WorkerCount::Auto) | None => cpu_count(),
         }
@@ -467,8 +554,8 @@ mod tests {
     #[test]
     fn test_default_python_files() {
         let config = Config::default();
-        assert!(config.python_files.contains(&"test_*.py".to_string()));
-        assert!(config.python_files.contains(&"*_test.py".to_string()));
+        assert!(config.paths.python_files.contains(&"test_*.py".to_string()));
+        assert!(config.paths.python_files.contains(&"*_test.py".to_string()));
     }
 
     #[test]
@@ -509,7 +596,7 @@ mod tests {
     #[test]
     fn test_tb_default_is_detail() {
         let cfg = Config::default();
-        assert_eq!(cfg.tb, TbStyle::Detail);
+        assert_eq!(cfg.output.tb, TbStyle::Detail);
     }
 
     #[test]
@@ -705,20 +792,20 @@ mod tests {
     fn test_cache_max_age_default_is_50() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(config.cache_max_age, 50);
+        assert_eq!(config.features.cache_max_age, 50);
     }
 
     #[test]
     fn test_min_parallel_tests_default_is_100() {
         let dir = TempDir::new().unwrap();
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
-        assert_eq!(config.min_parallel_tests, 100);
+        assert_eq!(config.exec.min_parallel_tests, 100);
     }
 
     #[test]
     fn config_spawn_overhead_ms_defaults_to_250() {
         let cfg = Config::default();
-        assert_eq!(cfg.spawn_overhead_ms, 250.0_f64);
+        assert_eq!(cfg.exec.spawn_overhead_ms, 250.0_f64);
     }
 
     #[test]
@@ -784,7 +871,7 @@ mod tests {
     #[test]
     fn test_retries_default_is_zero() {
         let cfg = Config::default();
-        assert_eq!(cfg.retries, 0);
+        assert_eq!(cfg.exec.retries, 0);
     }
 
     #[test]
@@ -833,48 +920,48 @@ mod tests {
     #[test]
     fn test_plugins_default_empty() {
         let cfg = Config::default();
-        assert!(cfg.plugins.is_empty());
+        assert!(cfg.features.plugins.is_empty());
     }
 
     #[test]
     fn test_async_backend_default() {
         let cfg = Config::default();
-        assert_eq!(cfg.async_backend, "asyncio");
+        assert_eq!(cfg.features.async_backend, "asyncio");
     }
 
     #[test]
     fn test_schedule_strategy_default_is_longest_first() {
         let cfg = Config::default();
-        assert_eq!(cfg.schedule, ScheduleStrategy::LongestFirst);
+        assert_eq!(cfg.filter.schedule, ScheduleStrategy::LongestFirst);
     }
 
     #[test]
     fn test_keep_tmp_default_is_none() {
         let cfg = Config::default();
-        assert!(cfg.keep_tmp.is_none());
+        assert!(cfg.output.keep_tmp.is_none());
     }
 
     #[test]
     fn test_show_locals_default_is_false() {
         let cfg = Config::default();
-        assert!(!cfg.show_locals);
+        assert!(!cfg.output.show_locals);
     }
 
     #[test]
     fn test_show_internals_default_is_false() {
         let cfg = Config::default();
-        assert!(!cfg.show_internals);
+        assert!(!cfg.output.show_internals);
     }
 
     #[test]
     fn test_auto_arrange_default_is_some_70() {
         let cfg = Config::default();
-        assert_eq!(cfg.auto_arrange_threshold, Some(70));
+        assert_eq!(cfg.exec.auto_arrange_threshold, Some(70));
     }
 
     #[test]
     fn test_use_gitignore_default_is_true() {
         let cfg = Config::default();
-        assert!(cfg.use_gitignore);
+        assert!(cfg.paths.use_gitignore);
     }
 }

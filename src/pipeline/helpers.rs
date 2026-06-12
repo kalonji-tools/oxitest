@@ -85,14 +85,16 @@ pub(super) fn init_session(
         }
     };
 
-    if !cfg.plugins.is_empty() {
-        if let Err(e) = session.load_plugins(py, &cfg.plugins, &cfg.plugin_settings) {
+    if !cfg.features.plugins.is_empty() {
+        if let Err(e) =
+            session.load_plugins(py, &cfg.features.plugins, &cfg.features.plugin_settings)
+        {
             let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
             return Err(early_exit_with_error(&[err], &make_reporter));
         }
     }
 
-    if let Err(e) = session.init_async_backend(py, &cfg.async_backend) {
+    if let Err(e) = session.init_async_backend(py, &cfg.features.async_backend) {
         let err = crate::types::CollectError::PyError(format!("Async backend init failed: {}", e));
         return Err(early_exit_with_error(&[err], &make_reporter));
     }
@@ -127,7 +129,7 @@ pub(super) fn apply_strict_mode(
     raw_violations: Vec<bridge::RawViolation>,
     use_color: bool,
 ) -> Result<StrictModeResult, types::ExitCode> {
-    if cfg.strict.is_none() {
+    if cfg.markers.strict.is_none() {
         return Ok(StrictModeResult {
             clean_items: items,
             violated_items: vec![],
@@ -141,7 +143,7 @@ pub(super) fn apply_strict_mode(
     all_violations.extend(strict::check_collected(raw_violations));
 
     // Abort mode: print and signal early exit.
-    if cfg.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
+    if cfg.markers.strict == Some(config::StrictMode::Abort) && !all_violations.is_empty() {
         let abort_lines: Vec<String> = all_violations
             .iter()
             .map(strict::format_violation_line)
@@ -151,7 +153,7 @@ pub(super) fn apply_strict_mode(
     }
 
     // Enforce mode: build suite-level violation lines.
-    let suite_lines: Vec<String> = if cfg.strict == Some(config::StrictMode::Enforce) {
+    let suite_lines: Vec<String> = if cfg.markers.strict == Some(config::StrictMode::Enforce) {
         strict::suite_level(&all_violations)
             .iter()
             .map(|v| v.to_string())
@@ -162,7 +164,7 @@ pub(super) fn apply_strict_mode(
 
     // Partition items into violated vs. clean.
     let (violated_items, clean_items): (Vec<_>, Vec<_>) =
-        if cfg.strict == Some(config::StrictMode::Enforce) {
+        if cfg.markers.strict == Some(config::StrictMode::Enforce) {
             let violated_ids: std::collections::HashSet<&str> = all_violations
                 .iter()
                 .filter_map(|v| v.node_id())

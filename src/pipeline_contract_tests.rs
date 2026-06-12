@@ -26,7 +26,7 @@ mod strict_phase_contract_tests {
                 }],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -60,7 +60,7 @@ mod strict_phase_contract_tests {
                 }],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Abort);
+            p.cfg.markers.strict = Some(StrictMode::Abort);
 
             let result = p.strict_or_skip(py);
             assert!(result.is_err());
@@ -80,7 +80,7 @@ mod strict_phase_contract_tests {
                 raw_violations: vec![],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -179,7 +179,7 @@ mod context_threading_tests {
                 }],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 2);
@@ -242,7 +242,7 @@ mod context_threading_tests {
                 }],
                 collection_profile: None,
             });
-            p.cfg.strict = Some(StrictMode::Enforce);
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
             match &mut p.command {
                 crate::config::Command::Run(a) => {
                     a.filter.expression = Some("name(good)".to_string())

@@ -69,7 +69,7 @@ mod strict_pipeline_tests {
     fn all_violations_empty_when_strict_none() {
         let cfg = Config::default();
         let raw: Vec<bridge::RawViolation> = vec![];
-        let violations: Vec<StrictViolation> = if cfg.strict.is_some() {
+        let violations: Vec<StrictViolation> = if cfg.markers.strict.is_some() {
             let mut v = strict::check_config(&cfg);
             v.extend(strict::check_collected(raw));
             v

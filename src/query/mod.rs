@@ -74,7 +74,7 @@ pub(crate) fn collect_entries(
         ResourceKind::Tests => Ok(extract::extract_test_entries(test_files)),
         ResourceKind::Marks => Ok(extract::extract_mark_entries(
             test_files,
-            &cfg.registered_markers,
+            &cfg.markers.registered_markers,
         )),
         ResourceKind::Helpers => Ok(extract::extract_helper_entries(conftest_files)),
         ResourceKind::Fixtures => match session {
