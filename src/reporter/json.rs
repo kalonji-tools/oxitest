@@ -137,27 +137,15 @@ mod snapshot_tests {
                 "passed" => WorkerOutcome::Passed {
                     no_message_lines: vec![],
                 },
-                "failed" => WorkerOutcome::Failed {
-                    message: String::new(),
-                    file: camino::Utf8PathBuf::new(),
-                    lineno: crate::types::LineNo::ZERO,
-                    source_line: String::new(),
-                    left: String::new(),
-                    right: String::new(),
-                    op: String::new(),
-                    frames: vec![],
-                    field_diffs: vec![],
-                },
+                "failed" => {
+                    WorkerOutcome::Failed(crate::types::FailureDiagnostic::sentinel(String::new()))
+                }
                 "skipped" => WorkerOutcome::Skipped {
                     reason: String::new(),
                 },
-                "error" => WorkerOutcome::Error {
-                    message: String::new(),
-                    file: camino::Utf8PathBuf::new(),
-                    lineno: crate::types::LineNo::ZERO,
-                    source_line: String::new(),
-                    frames: vec![],
-                },
+                "error" => {
+                    WorkerOutcome::Error(crate::types::FailureDiagnostic::sentinel(String::new()))
+                }
                 "xfailed" => WorkerOutcome::XFailed {
                     reason: String::new(),
                 },

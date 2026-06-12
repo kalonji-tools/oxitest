@@ -9,11 +9,9 @@
 //! Violations are either warnings (enforce mode) or hard errors (abort mode)
 //! depending on the [`StrictMode`](crate::config::StrictMode) setting.
 
-use camino::Utf8PathBuf;
-
 use crate::bridge::{RawViolation, ViolationKind};
 use crate::config::Config;
-use crate::types::{LineNo, NodeId, TestOutcome};
+use crate::types::{NodeId, TestOutcome};
 
 // ── Violation types ───────────────────────────────────────────────────────────
 
@@ -326,13 +324,7 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
             )
         }
     };
-    TestOutcome::Error {
-        message,
-        file: Utf8PathBuf::new(),
-        lineno: LineNo::ZERO,
-        source_line: String::new(),
-        frames: vec![],
-    }
+    TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::sentinel(message)))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -475,9 +467,7 @@ mod tests {
             lines: vec![5],
         };
         let outcome = per_test_error(&v);
-        assert!(
-            matches!(outcome, TestOutcome::Error { message, .. } if message.contains("strict"))
-        );
+        assert!(matches!(outcome, TestOutcome::Error(d) if d.message.contains("strict")));
     }
 
     #[test]
@@ -510,7 +500,8 @@ mod tests {
             lines: vec![],
         };
         let outcome = per_test_error(&v);
-        if let TestOutcome::Error { message, .. } = outcome {
+        if let TestOutcome::Error(d) = outcome {
+            let message = &d.message;
             assert!(
                 !message.ends_with(' '),
                 "message must not have trailing space: {:?}",
@@ -566,7 +557,8 @@ mod tests {
             node_id: NodeId::from_raw("tests/test_foo.py::test_single"),
         };
         let outcome = per_test_error(&v);
-        if let TestOutcome::Error { message, .. } = outcome {
+        if let TestOutcome::Error(d) = outcome {
+            let message = &d.message;
             assert!(
                 message.contains("strict"),
                 "message must contain 'strict': {message:?}"
@@ -615,7 +607,8 @@ mod tests {
             fixture_name: "db".to_string(),
         };
         let outcome = per_test_error(&v);
-        if let TestOutcome::Error { message, .. } = outcome {
+        if let TestOutcome::Error(d) = outcome {
+            let message = &d.message;
             assert!(
                 message.contains("strict"),
                 "message must contain 'strict': {message:?}"
@@ -673,7 +666,8 @@ mod tests {
             fixture_name: "unused_db".to_string(),
         };
         let outcome = per_test_error(&v);
-        if let TestOutcome::Error { message, .. } = outcome {
+        if let TestOutcome::Error(d) = outcome {
+            let message = &d.message;
             assert!(
                 message.contains("strict"),
                 "message must contain 'strict': {message:?}"

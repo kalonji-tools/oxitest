@@ -340,12 +340,10 @@ pub(crate) fn run_test_with_session_obj(
     opts: crate::pipeline::execution::DebugOptions<'_>,
 ) -> TestOutcome {
     try_run_test_with_session_obj(py, item, session_obj, default_timeout, opts).unwrap_or_else(
-        |e| TestOutcome::Error {
-            message: format!("{} — {}", item.node_id, e),
-            file: Utf8PathBuf::new(),
-            lineno: LineNo::ZERO,
-            source_line: String::new(),
-            frames: vec![],
+        |e| {
+            TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::sentinel(
+                format!("{} — {}", item.node_id, e),
+            )))
         },
     )
 }
@@ -498,7 +496,7 @@ fn convert_test_result(r: TestResult) -> WorkerOutcome {
             reason: r.message,
             no_message_lines: r.no_message_lines,
         },
-        "failed" => WorkerOutcome::Failed {
+        "failed" => WorkerOutcome::Failed(crate::types::FailureDiagnostic {
             message: r.message,
             file,
             lineno,
@@ -508,18 +506,18 @@ fn convert_test_result(r: TestResult) -> WorkerOutcome {
             op: r.op,
             frames,
             field_diffs: r.field_diffs.into_iter().map(Into::into).collect(),
-        },
+        }),
         "skipped" => WorkerOutcome::Skipped { reason: r.message },
         "xfailed" => WorkerOutcome::XFailed { reason: r.message },
         "xpassed" => WorkerOutcome::XPassed { strict: r.strict },
         "timeout" => WorkerOutcome::Timeout { reason: r.message },
-        _ => WorkerOutcome::Error {
-            message: r.message,
+        _ => WorkerOutcome::Error(crate::types::FailureDiagnostic::error(
+            r.message,
             file,
             lineno,
-            source_line: r.source_line,
+            r.source_line,
             frames,
-        },
+        )),
     }
 }
 
