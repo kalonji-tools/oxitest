@@ -538,6 +538,25 @@ impl TestOutcome {
     pub fn is_error(&self) -> bool {
         matches!(self, Self::Error(..))
     }
+
+    /// Synthesise an error for a test that could not execute.
+    pub fn error_sentinel(message: String) -> Self {
+        TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(message)))
+    }
+
+    /// Synthesise for an unresponsive worker subprocess.
+    pub fn timed_out_sentinel(watchdog: std::time::Duration) -> (Self, f64) {
+        let outcome = Self::error_sentinel(format!(
+            "Worker subprocess unresponsive after {}s",
+            watchdog.as_secs()
+        ));
+        (outcome, watchdog.as_millis() as f64)
+    }
+
+    /// Synthesise for a crashed worker subprocess.
+    pub fn crashed_sentinel() -> Self {
+        Self::error_sentinel("Worker subprocess exited unexpectedly".to_string())
+    }
 }
 
 impl std::fmt::Display for TestOutcome {

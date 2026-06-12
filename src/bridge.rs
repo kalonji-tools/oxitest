@@ -14,7 +14,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
 use crate::types::{CollectError, Frame, LineNo, NodeId, TestItem, TestOutcome};
-use crate::worker_result::WorkerOutcome;
 
 fn py_collect_err(e: PyErr) -> CollectError {
     CollectError::PyError(e.to_string())
@@ -476,27 +475,26 @@ fn try_run_test_with_session_obj(
         )?
         .extract()?;
 
-    let r_outcome = convert_test_result(r);
-    Ok(TestOutcome::from(r_outcome))
+    Ok(convert_test_result(r))
 }
 
-/// Convert a Python [`TestResult`] into a [`WorkerOutcome`].
+/// Convert a Python [`TestResult`] into a [`TestOutcome`].
 ///
 /// Pure function — testable without a Python runtime.
-fn convert_test_result(r: TestResult) -> WorkerOutcome {
+fn convert_test_result(r: TestResult) -> TestOutcome {
     let frames: Vec<Frame> = r.frames.into_iter().map(Into::into).collect();
     let lineno = LineNo::new(r.lineno);
     let file = Utf8PathBuf::from(r.file);
 
     match r.status.as_str() {
-        "passed" => WorkerOutcome::Passed {
+        "passed" => TestOutcome::Passed {
             no_message_lines: r.no_message_lines,
         },
-        "warned" => WorkerOutcome::Warned {
+        "warned" => TestOutcome::Warned {
             reason: r.message,
             no_message_lines: r.no_message_lines,
         },
-        "failed" => WorkerOutcome::Failed(crate::types::FailureDiagnostic {
+        "failed" => TestOutcome::Failed(Box::new(crate::types::FailureDiagnostic {
             message: r.message,
             file,
             lineno,
@@ -506,25 +504,24 @@ fn convert_test_result(r: TestResult) -> WorkerOutcome {
             op: r.op,
             frames,
             field_diffs: r.field_diffs.into_iter().map(Into::into).collect(),
-        }),
-        "skipped" => WorkerOutcome::Skipped { reason: r.message },
-        "xfailed" => WorkerOutcome::XFailed { reason: r.message },
-        "xpassed" => WorkerOutcome::XPassed { strict: r.strict },
-        "timeout" => WorkerOutcome::Timeout { reason: r.message },
-        _ => WorkerOutcome::Error(crate::types::FailureDiagnostic::error(
+        })),
+        "skipped" => TestOutcome::Skipped { reason: r.message },
+        "xfailed" => TestOutcome::XFailed { reason: r.message },
+        "xpassed" => TestOutcome::XPassed { strict: r.strict },
+        "timeout" => TestOutcome::Timeout { message: r.message },
+        _ => TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::error(
             r.message,
             file,
             lineno,
             r.source_line,
             frames,
-        )),
+        ))),
     }
 }
 
 #[cfg(test)]
 mod convert_tests {
     use super::*;
-    use crate::worker_result::WorkerOutcome;
 
     fn make_test_result(status: &str) -> TestResult {
         TestResult {
@@ -547,48 +544,48 @@ mod convert_tests {
     #[test]
     fn convert_passed() {
         let outcome = convert_test_result(make_test_result("passed"));
-        assert!(matches!(outcome, WorkerOutcome::Passed { .. }));
+        assert!(matches!(outcome, TestOutcome::Passed { .. }));
     }
 
     #[test]
     fn convert_failed() {
         let outcome = convert_test_result(make_test_result("failed"));
-        assert!(matches!(outcome, WorkerOutcome::Failed { .. }));
+        assert!(matches!(outcome, TestOutcome::Failed(..)));
     }
 
     #[test]
     fn convert_skipped() {
         let outcome = convert_test_result(make_test_result("skipped"));
-        assert!(matches!(outcome, WorkerOutcome::Skipped { .. }));
+        assert!(matches!(outcome, TestOutcome::Skipped { .. }));
     }
 
     #[test]
     fn convert_xfailed() {
         let outcome = convert_test_result(make_test_result("xfailed"));
-        assert!(matches!(outcome, WorkerOutcome::XFailed { .. }));
+        assert!(matches!(outcome, TestOutcome::XFailed { .. }));
     }
 
     #[test]
     fn convert_xpassed() {
         let outcome = convert_test_result(make_test_result("xpassed"));
-        assert!(matches!(outcome, WorkerOutcome::XPassed { .. }));
+        assert!(matches!(outcome, TestOutcome::XPassed { .. }));
     }
 
     #[test]
     fn convert_timeout() {
         let outcome = convert_test_result(make_test_result("timeout"));
-        assert!(matches!(outcome, WorkerOutcome::Timeout { .. }));
+        assert!(matches!(outcome, TestOutcome::Timeout { .. }));
     }
 
     #[test]
     fn convert_warned() {
         let outcome = convert_test_result(make_test_result("warned"));
-        assert!(matches!(outcome, WorkerOutcome::Warned { .. }));
+        assert!(matches!(outcome, TestOutcome::Warned { .. }));
     }
 
     #[test]
     fn convert_unknown_status_becomes_error() {
         let outcome = convert_test_result(make_test_result("banana"));
-        assert!(matches!(outcome, WorkerOutcome::Error { .. }));
+        assert!(matches!(outcome, TestOutcome::Error(..)));
     }
 }
