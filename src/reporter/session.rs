@@ -49,10 +49,13 @@ impl ReporterSession {
     }
 
     pub(crate) fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats.warning_msgs.push(stats::WarningEntry {
-            context: context.to_string(),
-            message: error.to_string(),
-        });
+        self.stats
+            .diagnostics
+            .warning_msgs
+            .push(stats::WarningEntry {
+                context: context.to_string(),
+                message: error.to_string(),
+            });
     }
 }
 
@@ -70,15 +73,15 @@ mod tests {
         };
         session.record_outcome(&item, &outcome, DurationMs::new(42.5));
 
-        assert_eq!(session.stats().passed, 1);
-        assert_eq!(session.stats().timings.len(), 1);
+        assert_eq!(session.stats().counts.passed, 1);
+        assert_eq!(session.stats().diagnostics.timings.len(), 1);
     }
 
     #[test]
     fn record_strict_suite_delegates_to_stats() {
         let mut session = ReporterSession::new(3);
         session.record_strict_suite();
-        assert_eq!(session.stats().strict_suite, 3);
+        assert_eq!(session.stats().counts.strict_suite, 3);
     }
 
     #[test]
@@ -108,13 +111,13 @@ mod tests {
     fn record_teardown_warning_appends_to_stats() {
         let mut session = ReporterSession::new(0);
         session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
-        assert_eq!(session.stats().warning_msgs.len(), 1);
+        assert_eq!(session.stats().diagnostics.warning_msgs.len(), 1);
         assert_eq!(
-            session.stats().warning_msgs[0].context,
+            session.stats().diagnostics.warning_msgs[0].context,
             "end_module(test.py)"
         );
         assert_eq!(
-            session.stats().warning_msgs[0].message,
+            session.stats().diagnostics.warning_msgs[0].message,
             "RuntimeError: boom"
         );
     }

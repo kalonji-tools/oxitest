@@ -37,8 +37,12 @@ pub(crate) fn print_summary_section(
     collect_errors: &[CollectError],
     interrupted: bool,
 ) -> ExitCode {
-    let tip_block = fmt_tip_block(&stats.tip_lines, opts.show_tips, opts.use_color);
-    let warn_block = fmt_warning_block(&stats.warning_msgs, opts.show_warnings, opts.use_color);
+    let tip_block = fmt_tip_block(&stats.diagnostics.tip_lines, opts.show_tips, opts.use_color);
+    let warn_block = fmt_warning_block(
+        &stats.diagnostics.warning_msgs,
+        opts.show_warnings,
+        opts.use_color,
+    );
     let summary = fmt_summary(stats, collect_errors.len(), opts.use_color);
     println!("\n{}", summary);
     if let Some(n) = opts.show_durations {
