@@ -21,7 +21,7 @@ impl Pipeline<SessionReady> {
             collection::collect_items(py, &test_files, &shared.cfg, &session, &mut shared.cache);
 
         // Collect doctest items if --doctest-modules is enabled.
-        if shared.cfg.doctest_modules {
+        if shared.cfg.paths.doctest_modules {
             let doctest_files = collector::collect_doctest_files(&shared.cfg);
             let doctest_items = collection::collect_doctest_items(&doctest_files);
             tracing::info!(
@@ -43,7 +43,7 @@ impl Pipeline<SessionReady> {
         merged_violations.extend(raw_violations);
 
         // Detect unused fixtures when strict mode is enabled.
-        if shared.cfg.strict.is_some() && !shared.cfg.has_explicit_paths {
+        if shared.cfg.markers.strict.is_some() && !shared.cfg.filter.has_explicit_paths {
             if let Ok(unused) = bridge::find_unused_fixtures(py, &session, &items) {
                 merged_violations.extend(unused);
             }
@@ -52,8 +52,8 @@ impl Pipeline<SessionReady> {
         // Apply node ID filter early.
         let items = filter::filter_by_node_ids(
             items,
-            &shared.cfg.node_ids,
-            &shared.cfg.node_id_source_files,
+            &shared.cfg.filter.node_ids,
+            &shared.cfg.filter.node_id_source_files,
         );
 
         if let Some(ref prof) = profile {
@@ -80,7 +80,7 @@ impl Pipeline<SessionReady> {
                 eprintln!("error: --tree is only valid for the 'fixtures' resource");
                 return Ok(ExitCode::UsageError);
             }
-            let verbosity = self.cfg.verbosity as i32;
+            let verbosity = self.cfg.output.verbosity as i32;
             match query::bridge::tree_fixtures(
                 &self.state.session,
                 py,

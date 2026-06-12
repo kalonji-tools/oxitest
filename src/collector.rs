@@ -35,7 +35,7 @@ fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
 pub fn collect_files(
     config: &Config,
 ) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
-    let glob_set = build_glob_set(&config.python_files)?;
+    let glob_set = build_glob_set(&config.paths.python_files)?;
     let mut files = Vec::new();
     let mut conftest_set: HashSet<Utf8PathBuf> = HashSet::new();
 
@@ -46,7 +46,7 @@ pub fn collect_files(
         conftest_set.insert(normalize_path(&rootdir_conftest, &config.rootdir));
     }
 
-    for testpath in &config.testpaths {
+    for testpath in &config.paths.testpaths {
         collect_from(testpath, config, &glob_set, &mut files, &mut conftest_set);
     }
 
@@ -68,7 +68,7 @@ pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
     let mut files = Vec::new();
     let mut dummy_conftests = HashSet::new();
 
-    for testpath in &config.testpaths {
+    for testpath in &config.paths.testpaths {
         collect_from(
             testpath,
             config,
@@ -150,11 +150,11 @@ fn collect_from(
         return;
     }
 
-    let norecursedirs = config.norecursedirs.clone();
+    let norecursedirs = config.paths.norecursedirs.clone();
     let walker = WalkBuilder::new(path)
         .follow_links(false)
         .hidden(false)
-        .git_ignore(config.use_gitignore)
+        .git_ignore(config.paths.use_gitignore)
         .git_global(false)
         .git_exclude(false)
         .filter_entry(move |e| {
@@ -204,46 +204,13 @@ mod tests {
         };
         Config {
             rootdir: canonical_root.clone(),
-            testpaths: vec![canonical_root],
-            python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
-            norecursedirs: vec![".git".to_string(), "__pycache__".to_string()],
-            maxfail: 0,
-            registered_markers: vec![],
-            timeout_secs: None,
-            serial: false,
-            debug: None,
-            workers: None,
-            cache_max_age: 50,
-            min_parallel_tests: 100,
-            timeout_multiplier: None,
-            spawn_overhead_ms: 250.0,
-            strict: None,
-            markers_without_description: vec![],
-            schedule: crate::config::ScheduleStrategy::LongestFirst,
-            failed: None,
-            tb: crate::config::TbStyle::Detail,
-            show_locals: false,
-            show_internals: false,
-            verbosity: crate::config::Verbosity::Normal,
-            durations: None,
-            color: crate::config::ColorMode::Auto,
-            plugins: vec![],
-            plugin_settings: std::collections::HashMap::new(),
-            async_backend: "asyncio".to_string(),
-            affected: None,
-            affected_base: "HEAD".to_string(),
-            retries: 0,
-            retries_delay_secs: 0,
-            keep_tmp: None,
-            auto_arrange_threshold: Some(70),
-            collection_profile: false,
-            use_gitignore: true,
-            cov: false,
-            cov_report: None,
-            doctest_modules: false,
-            node_ids: vec![],
-            node_id_source_files: std::collections::HashSet::new(),
-            has_explicit_paths: false,
+            paths: crate::config::PathConfig {
+                testpaths: vec![canonical_root],
+                python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
+                norecursedirs: vec![".git".to_string(), "__pycache__".to_string()],
+                ..Default::default()
+            },
+            ..Config::default()
         }
     }
 
@@ -295,9 +262,12 @@ mod tests {
         f.touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = Config {
-            testpaths: vec![camino::Utf8Path::from_path(f.path()).unwrap().to_owned()],
-            python_files: vec!["test_*.py".to_string()],
-            norecursedirs: vec![],
+            paths: crate::config::PathConfig {
+                testpaths: vec![camino::Utf8Path::from_path(f.path()).unwrap().to_owned()],
+                python_files: vec!["test_*.py".to_string()],
+                norecursedirs: vec![],
+                ..Default::default()
+            },
             ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config).unwrap();
@@ -317,8 +287,11 @@ mod tests {
         dir.child("helper.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = Config {
-            python_files: vec!["test_*_integration.py".to_string()],
-            norecursedirs: vec![],
+            paths: crate::config::PathConfig {
+                python_files: vec!["test_*_integration.py".to_string()],
+                norecursedirs: vec![],
+                ..make_config(utf8_dir).paths
+            },
             ..make_config(utf8_dir)
         };
         let (files, _) = collect_files(&config).unwrap();
@@ -398,10 +371,9 @@ mod tests {
         dir.child("test_visible.py").touch().unwrap();
 
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
-        let config = Config {
-            use_gitignore: false,
-            ..make_config(utf8_dir)
-        };
+        let mut config = make_config(utf8_dir);
+        config.paths.use_gitignore = false;
+        let config = config;
         let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 2);
     }
@@ -429,14 +401,13 @@ mod tests {
         dir.child("test_visible.py").touch().unwrap();
 
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
-        let config = Config {
-            norecursedirs: vec![
-                ".git".to_string(),
-                "__pycache__".to_string(),
-                "custom_ignored".to_string(),
-            ],
-            ..make_config(utf8_dir)
-        };
+        let mut config = make_config(utf8_dir);
+        config.paths.norecursedirs = vec![
+            ".git".to_string(),
+            "__pycache__".to_string(),
+            "custom_ignored".to_string(),
+        ];
+        let config = config;
         let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
@@ -490,18 +461,14 @@ mod tests {
             Err(_) => utf8_dir.to_owned(),
         };
 
-        let config_dot = Config {
-            rootdir: canonical_root.clone(),
-            testpaths: vec![canonical_root.join("./sub/test_foo.py")],
-            ..make_config(utf8_dir)
-        };
+        let mut config_dot = make_config(utf8_dir);
+        config_dot.rootdir = canonical_root.clone();
+        config_dot.paths.testpaths = vec![canonical_root.join("./sub/test_foo.py")];
         let (files_dot, _) = collect_files(&config_dot).unwrap();
 
-        let config_plain = Config {
-            rootdir: canonical_root.clone(),
-            testpaths: vec![canonical_root.join("sub/test_foo.py")],
-            ..make_config(utf8_dir)
-        };
+        let mut config_plain = make_config(utf8_dir);
+        config_plain.rootdir = canonical_root.clone();
+        config_plain.paths.testpaths = vec![canonical_root.join("sub/test_foo.py")];
         let (files_plain, _) = collect_files(&config_plain).unwrap();
 
         assert_eq!(files_dot.len(), 1);
@@ -560,11 +527,10 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
-        let config = Config {
-            python_files: vec!["test_*.py".to_string(), "[".to_string()],
-            norecursedirs: vec![],
-            ..make_config(utf8_dir)
-        };
+        let mut config = make_config(utf8_dir);
+        config.paths.python_files = vec!["test_*.py".to_string(), "[".to_string()];
+        config.paths.norecursedirs = vec![];
+        let config = config;
         let err = collect_files(&config).unwrap_err();
         assert!(
             err.to_string().contains('['),

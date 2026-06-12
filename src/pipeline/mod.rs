@@ -260,20 +260,21 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
 
     let mut cfg = cfg;
     if !use_gitignore {
-        cfg.use_gitignore = false;
+        cfg.paths.use_gitignore = false;
     }
 
     let cache = cache::TestCache::load(&rootdir);
 
-    let is_tty = std::io::stdout().is_terminal() && cfg.debug.is_none();
-    let use_color = cfg.color.resolve(is_tty || cfg.debug.is_some());
+    let is_tty = std::io::stdout().is_terminal() && cfg.exec.debug.is_none();
+    let use_color = cfg.output.color.resolve(is_tty || cfg.exec.debug.is_some());
 
     let python_bin = py
         .import("sys")?
         .getattr("executable")?
         .extract::<String>()?;
 
-    let base = reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.tb.clone());
+    let base =
+        reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.output.tb.clone());
 
     let base = if let config::Command::Run(args) = &command {
         base.show_tips(args.tips).show_warnings(args.warnings)
@@ -298,8 +299,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
 
 fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
     // Extract coverage config before pipeline consumes it
-    let cov_enabled = pipeline.cfg.cov;
-    let cov_report_format = pipeline.cfg.cov_report.clone();
+    let cov_enabled = pipeline.cfg.features.cov;
+    let cov_report_format = pipeline.cfg.features.cov_report.clone();
 
     // Start coverage before any test execution
     let cov_provider = if cov_enabled {

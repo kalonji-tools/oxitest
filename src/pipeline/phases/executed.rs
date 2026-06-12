@@ -8,7 +8,7 @@ use crate::{reporter, retry};
 impl Pipeline<Executed> {
     pub(crate) fn retry(mut self, py: Python<'_>) -> Result<Pipeline<Executed>, ExitCode> {
         let not_interrupted = !self.state.execution_results.interrupted;
-        if self.cfg.retries == 0 || !not_interrupted {
+        if self.cfg.exec.retries == 0 || !not_interrupted {
             return Ok(self);
         }
 
@@ -20,15 +20,15 @@ impl Pipeline<Executed> {
 
         let retry_ctx = retry::RetryContext {
             py,
-            max_retries: self.cfg.retries,
-            delay_secs: self.cfg.retries_delay_secs,
+            max_retries: self.cfg.exec.retries,
+            delay_secs: self.cfg.exec.retries_delay_secs,
             session: &self.state.session,
-            timeout_secs: self.cfg.timeout_secs,
+            timeout_secs: self.cfg.exec.timeout_secs,
             opts: DebugOptions {
                 debug_mode: None,
-                keep_tmp: self.cfg.keep_tmp.as_ref().map(|m| m.as_str()),
-                show_locals: self.cfg.show_locals,
-                show_internals: self.cfg.show_internals,
+                keep_tmp: self.cfg.output.keep_tmp.as_ref().map(|m| m.as_str()),
+                show_locals: self.cfg.output.show_locals,
+                show_internals: self.cfg.output.show_internals,
             },
         };
         let retry::RetryResult {
@@ -64,7 +64,7 @@ impl Pipeline<Executed> {
         helpers::finalize(
             &mut shared.cache,
             &timings,
-            shared.cfg.cache_max_age,
+            shared.cfg.features.cache_max_age,
             &shared.rootdir,
         );
 

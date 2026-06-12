@@ -84,8 +84,8 @@ impl Pipeline<PreFilter> {
         // Node ID filter (positional node IDs).
         let items = filter::filter_by_node_ids(
             items,
-            &shared.cfg.node_ids,
-            &shared.cfg.node_id_source_files,
+            &shared.cfg.filter.node_ids,
+            &shared.cfg.filter.node_id_source_files,
         );
 
         let expression = match &shared.command {
@@ -103,7 +103,7 @@ impl Pipeline<PreFilter> {
 
         // Last-failed filter (--failed=only / --failed=first).
         let total_before_failed_filter = items.len();
-        let items = match shared.cfg.failed {
+        let items = match shared.cfg.filter.failed {
             Some(config::FailedMode::Only) => {
                 let failed_ids = shared.cache.last_failed_ids();
                 if failed_ids.is_empty() {
