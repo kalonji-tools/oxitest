@@ -33,6 +33,27 @@ impl FixtureTimingEntry {
     }
 }
 
+/// Timing record for a single test execution.
+#[derive(Clone, Debug)]
+pub(crate) struct TimingEntry {
+    pub(crate) node_id: String,
+    pub(crate) duration_ms: f64,
+}
+
+/// A print() call inside a passing test (potential debugging leftover).
+#[derive(Clone, Debug)]
+pub(crate) struct TipLine {
+    pub(crate) file: String,
+    pub(crate) lineno: usize,
+}
+
+/// A warning captured during session setup/teardown.
+#[derive(Clone, Debug)]
+pub(crate) struct WarningEntry {
+    pub(crate) context: String,
+    pub(crate) message: String,
+}
+
 #[derive(Clone)]
 pub(crate) struct RunStats {
     pub(crate) passed: usize,
@@ -46,9 +67,9 @@ pub(crate) struct RunStats {
     pub(crate) timeout: usize,
     pub(crate) flaky: usize,
     pub(crate) strict_suite: usize,
-    pub(crate) tip_lines: Vec<(String, usize)>,
-    pub(crate) warning_msgs: Vec<(String, String)>,
-    pub(crate) timings: Vec<(String, f64)>,
+    pub(crate) tip_lines: Vec<TipLine>,
+    pub(crate) warning_msgs: Vec<WarningEntry>,
+    pub(crate) timings: Vec<TimingEntry>,
     pub(crate) fixture_cache_hits: usize,
     pub(crate) fixture_cache_misses: usize,
     pub(crate) fixture_cache_breakdown: Vec<FixtureCacheEntry>,
@@ -122,8 +143,10 @@ impl RunStats {
         no_message_lines: &[usize],
     ) {
         self.warned += 1;
-        self.warning_msgs
-            .push((item.fn_name.clone(), reason.to_string()));
+        self.warning_msgs.push(WarningEntry {
+            context: item.fn_name.clone(),
+            message: reason.to_string(),
+        });
         self.collect_tips(item, no_message_lines);
     }
 
@@ -163,17 +186,23 @@ impl RunStats {
     }
 
     pub(crate) fn record_timing(&mut self, node_id: &str, duration_ms: DurationMs) {
-        self.timings
-            .push((node_id.to_string(), duration_ms.as_f64()));
+        self.timings.push(TimingEntry {
+            node_id: node_id.to_string(),
+            duration_ms: duration_ms.as_f64(),
+        });
     }
 
     /// Returns the N slowest tests, sorted by duration descending.
-    pub(crate) fn slowest(&self, n: usize) -> Vec<(String, f64)> {
+    pub(crate) fn slowest(&self, n: usize) -> Vec<TimingEntry> {
         if n == 0 {
             return vec![];
         }
         let mut sorted = self.timings.clone();
-        sorted.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_unstable_by(|a, b| {
+            b.duration_ms
+                .partial_cmp(&a.duration_ms)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         sorted.truncate(n);
         sorted
     }
@@ -217,7 +246,10 @@ impl RunStats {
         if !lines.is_empty() {
             let file = item.module_path.to_string();
             for &ln in lines {
-                self.tip_lines.push((file.clone(), ln));
+                self.tip_lines.push(TipLine {
+                    file: file.clone(),
+                    lineno: ln,
+                });
             }
         }
     }
@@ -258,8 +290,8 @@ mod tests {
         stats.record_timing("test_slow", DurationMs::new(200.0));
         stats.record_timing("test_medium", DurationMs::new(50.0));
         let top2 = stats.slowest(2);
-        assert_eq!(top2[0].0, "test_slow");
-        assert_eq!(top2[1].0, "test_medium");
+        assert_eq!(top2[0].node_id, "test_slow");
+        assert_eq!(top2[1].node_id, "test_medium");
     }
 
     #[test]

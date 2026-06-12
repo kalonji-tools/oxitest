@@ -232,8 +232,8 @@ mod tests {
         stats.record_timing("tests/test_foo.py::test_fast", DurationMs::new(10.0));
         let slowest = stats.slowest(1);
         assert_eq!(slowest.len(), 1);
-        assert_eq!(slowest[0].0, "tests/test_foo.py::test_slow");
-        assert!((slowest[0].1 - 500.0).abs() < 0.01);
+        assert_eq!(slowest[0].node_id, "tests/test_foo.py::test_slow");
+        assert!((slowest[0].duration_ms - 500.0).abs() < 0.01);
     }
 
     // ── StandardReporter / standard_finish ─────────────────────────────────────

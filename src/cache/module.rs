@@ -122,7 +122,10 @@ mod tests {
                 lineno: LineNo::new(10),
                 markers: vec![],
                 param_id: Some("x0".to_string()),
-                param_values: vec![("x".to_string(), "0".to_string())],
+                param_values: vec![crate::types::ParamPair {
+                    name: "x".to_string(),
+                    value: "0".to_string(),
+                }],
                 is_async: false,
                 fixture_names: vec![],
                 fixref_names: vec![],
@@ -139,7 +142,10 @@ mod tests {
         assert_eq!(cached[1].param_id, Some("x0".to_string()));
         assert_eq!(
             cached[1].param_values,
-            vec![("x".to_string(), "0".to_string())]
+            vec![crate::types::ParamPair {
+                name: "x".to_string(),
+                value: "0".to_string()
+            }]
         );
     }
 
