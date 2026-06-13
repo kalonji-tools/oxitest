@@ -8,7 +8,7 @@
 
 use camino::Utf8PathBuf;
 
-use crate::types::{self, FailureDiagnostic, Frame, LineNo};
+use crate::types::{self, FailureDiagnostic, FieldDiff, Frame, LineNo, LocalVar};
 
 /// Wire protocol version for the worker ↔ coordinator JSON channel.
 ///
@@ -53,7 +53,7 @@ pub(crate) struct RawFrame {
     pub name: String,
     pub line: String,
     #[serde(default)]
-    pub locals: Vec<(String, String)>,
+    pub locals: Vec<LocalVar>,
 }
 
 impl From<RawFrame> for Frame {
@@ -63,7 +63,7 @@ impl From<RawFrame> for Frame {
             lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
             name: f.name,
             line: f.line,
-            locals: f.locals.into_iter().map(Into::into).collect(),
+            locals: f.locals,
         }
     }
 }
@@ -106,7 +106,7 @@ pub(crate) struct WireResult {
     #[serde(default)]
     pub frames: Vec<RawFrame>,
     #[serde(default)]
-    pub field_diffs: Vec<(String, String, String)>,
+    pub field_diffs: Vec<FieldDiff>,
 }
 
 impl WireResult {
@@ -138,7 +138,7 @@ impl WireResult {
                 right: self.right.unwrap_or_default(),
                 op: self.op.unwrap_or_default(),
                 frames,
-                field_diffs: self.field_diffs.into_iter().map(Into::into).collect(),
+                field_diffs: self.field_diffs,
             })),
             types::OutcomeKind::Error => {
                 types::TestOutcome::Error(Box::new(FailureDiagnostic::error(
