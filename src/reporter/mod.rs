@@ -227,13 +227,20 @@ mod tests {
     #[test]
     fn test_slowest_block_included_when_show_durations_set() {
         use crate::reporter::stats::RunStats;
+        use crate::types::NodeId;
         let mut stats = RunStats::new();
-        stats.record_timing("tests/test_foo.py::test_slow", DurationMs::new(500.0));
-        stats.record_timing("tests/test_foo.py::test_fast", DurationMs::new(10.0));
+        stats.record_timing(
+            &NodeId::from_raw("tests/test_foo.py::test_slow"),
+            DurationMs::new(500.0),
+        );
+        stats.record_timing(
+            &NodeId::from_raw("tests/test_foo.py::test_fast"),
+            DurationMs::new(10.0),
+        );
         let slowest = stats.slowest(1);
         assert_eq!(slowest.len(), 1);
-        assert_eq!(slowest[0].node_id, "tests/test_foo.py::test_slow");
-        assert!((slowest[0].duration_ms - 500.0).abs() < 0.01);
+        assert_eq!(slowest[0].node_id.as_ref(), "tests/test_foo.py::test_slow");
+        assert!((slowest[0].duration_ms.as_f64() - 500.0).abs() < 0.01);
     }
 
     // ── StandardReporter / standard_finish ─────────────────────────────────────
