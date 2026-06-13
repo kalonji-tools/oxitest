@@ -188,18 +188,6 @@ pub struct LocalVar {
     pub repr: String,
 }
 
-impl From<(String, String)> for LocalVar {
-    fn from((name, repr): (String, String)) -> Self {
-        Self { name, repr }
-    }
-}
-
-impl From<LocalVar> for (String, String) {
-    fn from(l: LocalVar) -> Self {
-        (l.name, l.repr)
-    }
-}
-
 impl serde::Serialize for LocalVar {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         (&self.name, &self.repr).serialize(serializer)
@@ -221,18 +209,6 @@ pub struct FieldDiff {
     pub field: String,
     pub left: String,
     pub right: String,
-}
-
-impl From<(String, String, String)> for FieldDiff {
-    fn from((field, left, right): (String, String, String)) -> Self {
-        Self { field, left, right }
-    }
-}
-
-impl From<FieldDiff> for (String, String, String) {
-    fn from(d: FieldDiff) -> Self {
-        (d.field, d.left, d.right)
-    }
 }
 
 impl serde::Serialize for FieldDiff {
