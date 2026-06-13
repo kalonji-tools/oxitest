@@ -33,6 +33,22 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::worker_result::RawFrame {
     }
 }
 
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::types::LocalVar {
+    type Error = pyo3::PyErr;
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        let (name, repr): (String, String) = ob.extract()?;
+        Ok(Self { name, repr })
+    }
+}
+
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::types::FieldDiff {
+    type Error = pyo3::PyErr;
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        let (field, left, right): (String, String, String) = ob.extract()?;
+        Ok(Self { field, left, right })
+    }
+}
+
 /// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
 #[derive(FromPyObject)]
 struct TestResult {
@@ -49,7 +65,7 @@ struct TestResult {
     #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
     exc_type: String,
     frames: Vec<crate::worker_result::RawFrame>,
-    field_diffs: Vec<(String, String, String)>,
+    field_diffs: Vec<crate::types::FieldDiff>,
 }
 
 /// Long-lived Python fixture session held across the test loop.
@@ -503,7 +519,7 @@ fn convert_test_result(r: TestResult) -> TestOutcome {
             right: r.right,
             op: r.op,
             frames,
-            field_diffs: r.field_diffs.into_iter().map(Into::into).collect(),
+            field_diffs: r.field_diffs,
         })),
         "skipped" => TestOutcome::Skipped { reason: r.message },
         "xfailed" => TestOutcome::XFailed { reason: r.message },
