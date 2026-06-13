@@ -510,29 +510,30 @@ fn convert_test_result(r: TestResult) -> TestOutcome {
             reason: r.message,
             no_message_lines: r.no_message_lines,
         },
-        "failed" => TestOutcome::Failed(Box::new(crate::types::FailureDiagnostic {
-            message: r.message,
-            file,
-            lineno,
-            source_line: r.source_line,
-            frames,
-            comparison: Some(crate::types::ComparisonDetail {
-                left: r.left,
-                right: r.right,
-                op: r.op,
-                field_diffs: r.field_diffs,
-            }),
-        })),
-        "skipped" => TestOutcome::Skipped { reason: r.message },
-        "xfailed" => TestOutcome::XFailed { reason: r.message },
-        "xpassed" => TestOutcome::XPassed { strict: r.strict },
-        "timeout" => TestOutcome::Timeout { message: r.message },
-        _ => TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::error(
+        "failed" => TestOutcome::Failed(Box::new(crate::worker_result::build_diagnostic(
             r.message,
             file,
             lineno,
             r.source_line,
             frames,
+            Some(crate::types::ComparisonDetail {
+                left: r.left,
+                right: r.right,
+                op: r.op,
+                field_diffs: r.field_diffs,
+            }),
+        ))),
+        "skipped" => TestOutcome::Skipped { reason: r.message },
+        "xfailed" => TestOutcome::XFailed { reason: r.message },
+        "xpassed" => TestOutcome::XPassed { strict: r.strict },
+        "timeout" => TestOutcome::Timeout { message: r.message },
+        _ => TestOutcome::Error(Box::new(crate::worker_result::build_diagnostic(
+            r.message,
+            file,
+            lineno,
+            r.source_line,
+            frames,
+            None,
         ))),
     }
 }

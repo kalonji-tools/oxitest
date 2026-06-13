@@ -136,24 +136,23 @@ impl WireResult {
                     op: self.op.unwrap_or_default(),
                     field_diffs: self.field_diffs,
                 });
-                types::TestOutcome::Failed(Box::new(FailureDiagnostic {
-                    message: self.message.unwrap_or_default(),
-                    file,
-                    lineno,
-                    source_line,
-                    frames,
-                    comparison,
-                }))
-            }
-            types::OutcomeKind::Error => {
-                types::TestOutcome::Error(Box::new(FailureDiagnostic::error(
+                types::TestOutcome::Failed(Box::new(build_diagnostic(
                     self.message.unwrap_or_default(),
                     file,
                     lineno,
                     source_line,
                     frames,
+                    comparison,
                 )))
             }
+            types::OutcomeKind::Error => types::TestOutcome::Error(Box::new(build_diagnostic(
+                self.message.unwrap_or_default(),
+                file,
+                lineno,
+                source_line,
+                frames,
+                None,
+            ))),
             types::OutcomeKind::Skipped => types::TestOutcome::Skipped {
                 reason: self.failure_repr.unwrap_or_default(),
             },
@@ -177,17 +176,40 @@ impl WireResult {
                         "Unknown outcome string from worker — treating as error"
                     );
                 }
-                types::TestOutcome::Error(Box::new(FailureDiagnostic::error(
+                types::TestOutcome::Error(Box::new(build_diagnostic(
                     self.message.unwrap_or_default(),
                     file,
                     lineno,
                     source_line,
                     frames,
+                    None,
                 )))
             }
         };
 
         (self.node_id, self.duration_ms, outcome)
+    }
+}
+
+/// Shared construction of `FailureDiagnostic` from raw fields.
+///
+/// Used by both the JSON worker path (`into_outcome`) and the PyO3 bridge
+/// path (`convert_test_result`) to prevent drift between the two.
+pub(crate) fn build_diagnostic(
+    message: String,
+    file: Utf8PathBuf,
+    lineno: LineNo,
+    source_line: String,
+    frames: Vec<Frame>,
+    comparison: Option<types::ComparisonDetail>,
+) -> FailureDiagnostic {
+    FailureDiagnostic {
+        message,
+        file,
+        lineno,
+        source_line,
+        frames,
+        comparison,
     }
 }
 
