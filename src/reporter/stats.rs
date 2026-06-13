@@ -1,4 +1,4 @@
-use crate::types::{DurationMs, TestItem, TestOutcome};
+use crate::types::{DurationMs, NodeId, TestItem, TestOutcome};
 
 /// Per-fixture cache hit/miss entry.
 #[derive(Clone, Debug)]
@@ -14,6 +14,18 @@ pub(crate) struct FixtureCacheStats {
     pub(crate) hits: usize,
     pub(crate) misses: usize,
     pub(crate) breakdown: Vec<FixtureCacheEntry>,
+}
+
+impl FixtureCacheStats {
+    /// Format the fixture cache summary line.
+    pub(crate) fn summary(&self) -> String {
+        let total = self.hits + self.misses;
+        let pct = 100 * self.hits / total;
+        format!(
+            "shared fixture cache: {}/{} hits ({}%)",
+            self.hits, total, pct
+        )
+    }
 }
 
 /// Per-fixture timing aggregate returned by the Python bridge.
@@ -36,8 +48,8 @@ impl FixtureTimingEntry {
 /// Timing record for a single test execution.
 #[derive(Clone, Debug)]
 pub(crate) struct TimingEntry {
-    pub(crate) node_id: String,
-    pub(crate) duration_ms: f64,
+    pub(crate) node_id: NodeId,
+    pub(crate) duration_ms: DurationMs,
 }
 
 /// A print() call inside a passing test (potential debugging leftover).
@@ -82,9 +94,7 @@ pub(crate) struct DiagnosticBag {
 pub(crate) struct RunStats {
     pub(crate) counts: OutcomeCounters,
     pub(crate) diagnostics: DiagnosticBag,
-    pub(crate) fixture_cache_hits: usize,
-    pub(crate) fixture_cache_misses: usize,
-    pub(crate) fixture_cache_breakdown: Vec<FixtureCacheEntry>,
+    pub(crate) fixture_cache: Option<FixtureCacheStats>,
     pub(crate) fixture_timings: Vec<FixtureTimingEntry>,
 }
 
@@ -93,9 +103,7 @@ impl RunStats {
         Self {
             counts: OutcomeCounters::default(),
             diagnostics: DiagnosticBag::default(),
-            fixture_cache_hits: 0,
-            fixture_cache_misses: 0,
-            fixture_cache_breakdown: Vec::new(),
+            fixture_cache: None,
             fixture_timings: Vec::new(),
         }
     }
@@ -185,10 +193,10 @@ impl RunStats {
         self.counts.strict_suite += count;
     }
 
-    pub(crate) fn record_timing(&mut self, node_id: &str, duration_ms: DurationMs) {
+    pub(crate) fn record_timing(&mut self, node_id: &NodeId, duration_ms: DurationMs) {
         self.diagnostics.timings.push(TimingEntry {
-            node_id: node_id.to_string(),
-            duration_ms: duration_ms.as_f64(),
+            node_id: node_id.clone(),
+            duration_ms,
         });
     }
 
@@ -205,21 +213,6 @@ impl RunStats {
         });
         sorted.truncate(n);
         sorted
-    }
-
-    /// Format the fixture cache stats summary line.
-    ///
-    /// Returns `None` if no shared fixtures were used.
-    pub(crate) fn fixture_cache_summary(&self) -> Option<String> {
-        let total = self.fixture_cache_hits + self.fixture_cache_misses;
-        if total == 0 {
-            return None;
-        }
-        let pct = 100 * self.fixture_cache_hits / total;
-        Some(format!(
-            "shared fixture cache: {}/{} hits ({}%)",
-            self.fixture_cache_hits, total, pct
-        ))
     }
 
     #[cfg(test)]
@@ -278,26 +271,32 @@ mod tests {
     #[test]
     fn test_record_timing_accumulates_entries() {
         let mut stats = RunStats::new();
-        stats.record_timing("tests/test_foo.py::test_a", DurationMs::new(42.5));
-        stats.record_timing("tests/test_foo.py::test_b", DurationMs::new(10.0));
+        stats.record_timing(
+            &NodeId::from_raw("tests/test_foo.py::test_a"),
+            DurationMs::new(42.5),
+        );
+        stats.record_timing(
+            &NodeId::from_raw("tests/test_foo.py::test_b"),
+            DurationMs::new(10.0),
+        );
         assert_eq!(stats.diagnostics.timings.len(), 2);
     }
 
     #[test]
     fn test_slowest_returns_sorted_descending() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_fast", DurationMs::new(5.0));
-        stats.record_timing("test_slow", DurationMs::new(200.0));
-        stats.record_timing("test_medium", DurationMs::new(50.0));
+        stats.record_timing(&NodeId::from_raw("test_fast"), DurationMs::new(5.0));
+        stats.record_timing(&NodeId::from_raw("test_slow"), DurationMs::new(200.0));
+        stats.record_timing(&NodeId::from_raw("test_medium"), DurationMs::new(50.0));
         let top2 = stats.slowest(2);
-        assert_eq!(top2[0].node_id, "test_slow");
-        assert_eq!(top2[1].node_id, "test_medium");
+        assert_eq!(top2[0].node_id.as_ref(), "test_slow");
+        assert_eq!(top2[1].node_id.as_ref(), "test_medium");
     }
 
     #[test]
     fn test_slowest_n_greater_than_count_returns_all() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_a", DurationMs::new(10.0));
+        stats.record_timing(&NodeId::from_raw("test_a"), DurationMs::new(10.0));
         let top10 = stats.slowest(10);
         assert_eq!(top10.len(), 1);
     }
@@ -305,7 +304,7 @@ mod tests {
     #[test]
     fn test_slowest_zero_returns_empty() {
         let mut stats = RunStats::new();
-        stats.record_timing("test_a", DurationMs::new(10.0));
+        stats.record_timing(&NodeId::from_raw("test_a"), DurationMs::new(10.0));
         assert!(stats.slowest(0).is_empty());
     }
 

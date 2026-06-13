@@ -53,7 +53,7 @@ pub(crate) fn print_summary_section(
                 colors::color_dim(&format!("slowest {} tests", slowest.len()), opts.use_color)
             );
             for entry in &slowest {
-                println!("  {:>8.2}ms  {}", entry.duration_ms, entry.node_id);
+                println!("  {:>8.2}ms  {}", entry.duration_ms.as_f64(), entry.node_id);
             }
         }
         let slowest_fx = stats.slowest_fixtures(n);
@@ -90,10 +90,10 @@ pub(crate) fn print_summary_section(
         }
     }
     // Fixture cache stats — always shown when shared fixtures were used.
-    if let Some(summary) = stats.fixture_cache_summary() {
-        println!("\n{}", colors::color_dim(&summary, opts.use_color));
+    if let Some(cache) = &stats.fixture_cache {
+        println!("\n{}", colors::color_dim(&cache.summary(), opts.use_color));
         if opts.verbosity >= crate::config::Verbosity::Detailed {
-            let mut entries = stats.fixture_cache_breakdown.clone();
+            let mut entries = cache.breakdown.clone();
             entries.sort_by_key(|e| std::cmp::Reverse(e.hits + e.misses));
             for e in &entries {
                 let total = e.hits + e.misses;

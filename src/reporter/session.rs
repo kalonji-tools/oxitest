@@ -22,7 +22,7 @@ impl ReporterSession {
         duration_ms: DurationMs,
     ) {
         self.stats.record(item, outcome);
-        self.stats.record_timing(item.node_id.as_ref(), duration_ms);
+        self.stats.record_timing(&item.node_id, duration_ms);
     }
 
     pub(crate) fn record_strict_suite(&mut self) {
@@ -39,9 +39,11 @@ impl ReporterSession {
         misses: usize,
         breakdown: Vec<stats::FixtureCacheEntry>,
     ) {
-        self.stats.fixture_cache_hits = hits;
-        self.stats.fixture_cache_misses = misses;
-        self.stats.fixture_cache_breakdown = breakdown;
+        self.stats.fixture_cache = Some(stats::FixtureCacheStats {
+            hits,
+            misses,
+            breakdown,
+        });
     }
 
     pub(crate) fn set_fixture_timings(&mut self, timings: Vec<stats::FixtureTimingEntry>) {
@@ -88,8 +90,8 @@ mod tests {
     fn set_fixture_cache_stats_stores_values() {
         let mut session = ReporterSession::new(0);
         session.set_fixture_cache_stats(5, 2, vec![]);
-        assert_eq!(session.stats().fixture_cache_hits, 5);
-        assert_eq!(session.stats().fixture_cache_misses, 2);
+        assert_eq!(session.stats().fixture_cache.as_ref().unwrap().hits, 5);
+        assert_eq!(session.stats().fixture_cache.as_ref().unwrap().misses, 2);
     }
 
     #[test]
