@@ -365,10 +365,21 @@ pub struct Frame {
     pub locals: Vec<LocalVar>,
 }
 
+/// Comparison operands and field diffs for assertion failures.
+///
+/// Present only in `Failed` outcomes — `Error` outcomes have `comparison: None`.
+#[derive(Debug, Clone)]
+pub struct ComparisonDetail {
+    pub left: String,
+    pub right: String,
+    pub op: String,
+    pub field_diffs: Vec<FieldDiff>,
+}
+
 /// Structured diagnostic payload for Failed and Error outcomes.
 ///
-/// Comparison fields (`left`, `right`, `op`, `field_diffs`) are populated
-/// for assertion failures and empty for unhandled errors.
+/// `comparison` is `Some` for assertion failures and `None` for unhandled errors,
+/// making the shape of the diagnostic honest about the outcome kind.
 #[derive(Debug, Clone)]
 pub struct FailureDiagnostic {
     pub message: String,
@@ -376,14 +387,8 @@ pub struct FailureDiagnostic {
     pub lineno: LineNo,
     pub source_line: String,
     pub frames: Vec<Frame>,
-    /// Left operand of the comparison (empty for Error outcomes).
-    pub left: String,
-    /// Right operand of the comparison (empty for Error outcomes).
-    pub right: String,
-    /// Comparison operator (empty for Error outcomes).
-    pub op: String,
-    /// Per-field diffs for dataclass/object comparisons (empty for Error outcomes).
-    pub field_diffs: Vec<FieldDiff>,
+    /// Comparison operands for assertion failures; `None` for errors.
+    pub comparison: Option<ComparisonDetail>,
 }
 
 impl FailureDiagnostic {
@@ -401,10 +406,7 @@ impl FailureDiagnostic {
             lineno,
             source_line,
             frames,
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            field_diffs: vec![],
+            comparison: None,
         }
     }
 
@@ -511,6 +513,7 @@ impl TestOutcome {
     }
 
     /// True if this is an Error variant (not Failed).
+    #[allow(dead_code)]
     pub fn is_error(&self) -> bool {
         matches!(self, Self::Error(..))
     }
@@ -703,17 +706,20 @@ mod tests {
             file: Utf8PathBuf::from("test_foo.py"),
             lineno: LineNo::new(7),
             source_line: "assert x == 1".to_string(),
-            left: "0".to_string(),
-            right: "1".to_string(),
-            op: "==".to_string(),
             frames: vec![],
-            field_diffs: vec![],
+            comparison: Some(ComparisonDetail {
+                left: "0".to_string(),
+                right: "1".to_string(),
+                op: "==".to_string(),
+                field_diffs: vec![],
+            }),
         }));
         if let TestOutcome::Failed(d) = o {
             assert_eq!(d.lineno, LineNo::new(7));
-            assert_eq!(d.left, "0");
-            assert_eq!(d.right, "1");
-            assert_eq!(d.op, "==");
+            let cmp = d.comparison.as_ref().expect("expected comparison");
+            assert_eq!(cmp.left, "0");
+            assert_eq!(cmp.right, "1");
+            assert_eq!(cmp.op, "==");
         } else {
             panic!("wrong variant");
         }
@@ -1146,11 +1152,8 @@ mod tests {
                 assert_eq!(d.file.as_str(), "tests/test_foo.py");
                 assert_eq!(d.lineno, LineNo::new(1));
                 assert_eq!(d.source_line, "");
-                assert_eq!(d.left, "");
-                assert_eq!(d.right, "");
-                assert_eq!(d.op, "");
                 assert!(d.frames.is_empty());
-                assert!(d.field_diffs.is_empty());
+                assert!(d.comparison.is_none());
             }
             other => panic!("expected Failed, got {}", other.as_str()),
         }
@@ -1166,9 +1169,10 @@ mod tests {
             .build();
         match outcome {
             TestOutcome::Failed(d) => {
-                assert_eq!(d.left, "41");
-                assert_eq!(d.op, "==");
-                assert_eq!(d.right, "42");
+                let cmp = d.comparison.as_ref().expect("expected comparison");
+                assert_eq!(cmp.left, "41");
+                assert_eq!(cmp.op, "==");
+                assert_eq!(cmp.right, "42");
                 assert_eq!(d.file.as_str(), "test.py");
                 assert_eq!(d.lineno, LineNo::new(8));
             }
@@ -1369,20 +1373,23 @@ mod diagnostic_tests {
             file: Utf8PathBuf::from("tests/test_foo.py"),
             lineno: LineNo::new(8),
             source_line: "assert add(1, 2) == 4".to_string(),
-            left: "3".to_string(),
-            right: "4".to_string(),
-            op: "==".to_string(),
             frames: vec![],
-            field_diffs: vec![],
+            comparison: Some(ComparisonDetail {
+                left: "3".to_string(),
+                right: "4".to_string(),
+                op: "==".to_string(),
+                field_diffs: vec![],
+            }),
         }));
         let diag = outcome.diagnostic().expect("Failed should return Some");
         assert_eq!(diag.file.as_str(), "tests/test_foo.py");
         assert_eq!(diag.lineno, LineNo::new(8));
         assert_eq!(diag.source_line, "assert add(1, 2) == 4");
         assert_eq!(diag.message, "expected 4");
-        assert_eq!(diag.left, "3");
-        assert_eq!(diag.right, "4");
-        assert_eq!(diag.op, "==");
+        let cmp = diag.comparison.as_ref().expect("expected comparison");
+        assert_eq!(cmp.left, "3");
+        assert_eq!(cmp.right, "4");
+        assert_eq!(cmp.op, "==");
         assert!(diag.frames.is_empty());
     }
 
@@ -1399,9 +1406,7 @@ mod diagnostic_tests {
         assert_eq!(diag.file.as_str(), "tests/test_foo.py");
         assert_eq!(diag.lineno, LineNo::new(22));
         assert_eq!(diag.message, "ValueError: bad");
-        assert!(diag.left.is_empty());
-        assert!(diag.right.is_empty());
-        assert!(diag.op.is_empty());
+        assert!(diag.comparison.is_none());
     }
 
     #[test]

@@ -8,7 +8,7 @@
 
 use camino::Utf8PathBuf;
 
-use crate::types::{self, FailureDiagnostic, FieldDiff, Frame, LineNo, LocalVar};
+use crate::types::{self, ComparisonDetail, FailureDiagnostic, FieldDiff, Frame, LineNo, LocalVar};
 
 /// Wire protocol version for the worker ↔ coordinator JSON channel.
 ///
@@ -129,17 +129,22 @@ impl WireResult {
 
         let outcome = match self.outcome {
             types::OutcomeKind::Passed => types::TestOutcome::Passed { no_message_lines },
-            types::OutcomeKind::Failed => types::TestOutcome::Failed(Box::new(FailureDiagnostic {
-                message: self.message.unwrap_or_default(),
-                file,
-                lineno,
-                source_line,
-                left: self.left.unwrap_or_default(),
-                right: self.right.unwrap_or_default(),
-                op: self.op.unwrap_or_default(),
-                frames,
-                field_diffs: self.field_diffs,
-            })),
+            types::OutcomeKind::Failed => {
+                let comparison = Some(ComparisonDetail {
+                    left: self.left.unwrap_or_default(),
+                    right: self.right.unwrap_or_default(),
+                    op: self.op.unwrap_or_default(),
+                    field_diffs: self.field_diffs,
+                });
+                types::TestOutcome::Failed(Box::new(FailureDiagnostic {
+                    message: self.message.unwrap_or_default(),
+                    file,
+                    lineno,
+                    source_line,
+                    frames,
+                    comparison,
+                }))
+            }
             types::OutcomeKind::Error => {
                 types::TestOutcome::Error(Box::new(FailureDiagnostic::error(
                     self.message.unwrap_or_default(),
@@ -818,9 +823,10 @@ mod wire_conversion_tests {
                 assert_eq!(d.message, "assert 1 == 2");
                 assert_eq!(d.file, "t.py");
                 assert_eq!(d.lineno, LineNo::new(10));
-                assert_eq!(d.left, "1");
-                assert_eq!(d.right, "2");
-                assert_eq!(d.op, "==");
+                let cmp = d.comparison.as_ref().expect("expected comparison");
+                assert_eq!(cmp.left, "1");
+                assert_eq!(cmp.right, "2");
+                assert_eq!(cmp.op, "==");
             }
             other => panic!("expected Failed, got {other:?}"),
         }
