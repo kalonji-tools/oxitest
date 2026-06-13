@@ -267,21 +267,13 @@ pub(crate) fn fmt_diagnostic_block(
         None => return String::new(),
     };
 
-    let is_error = outcome.is_error();
     let mut out = String::new();
 
     render_where(&mut out, diag.file.as_str(), diag.lineno, use_color);
     render_params(&mut out, &item.param_values, use_color);
     render_source(&mut out, diag, show_locals, use_color);
-    if !is_error {
-        render_values(
-            &mut out,
-            &diag.left,
-            &diag.right,
-            &diag.op,
-            &diag.field_diffs,
-            use_color,
-        );
+    if let Some(cmp) = &diag.comparison {
+        render_values(&mut out, cmp, use_color);
     }
     render_trace(&mut out, diag, show_locals, use_color);
     render_hint(&mut out, outcome, use_color);
@@ -291,14 +283,12 @@ pub(crate) fn fmt_diagnostic_block(
 }
 
 /// Render the VALUES section (diff lines without a section label).
-fn render_values(
-    out: &mut String,
-    left: &str,
-    right: &str,
-    op: &str,
-    field_diffs: &[crate::types::FieldDiff],
-    use_color: bool,
-) {
+fn render_values(out: &mut String, comparison: &crate::types::ComparisonDetail, use_color: bool) {
+    let left = &comparison.left;
+    let right = &comparison.right;
+    let op = &comparison.op;
+    let field_diffs = &comparison.field_diffs;
+
     if !op.is_empty() && !left.is_empty() && !right.is_empty() {
         let diff = fmt_diff(left, right, op, use_color);
         if !diff.is_empty() {

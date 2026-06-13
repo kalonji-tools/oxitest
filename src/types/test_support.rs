@@ -3,6 +3,7 @@
 //!
 //! Extracted from `types/mod.rs` so the domain model is free of test scaffolding.
 
+use super::ComparisonDetail;
 use super::*;
 
 /// Builder for [`TestItem`], used exclusively in tests.
@@ -154,16 +155,23 @@ impl FailedOutcomeBuilder {
         self
     }
     pub(crate) fn build(self) -> TestOutcome {
+        let comparison = if self.op.is_empty() && self.left.is_empty() && self.right.is_empty() {
+            None
+        } else {
+            Some(ComparisonDetail {
+                left: self.left,
+                right: self.right,
+                op: self.op,
+                field_diffs: self.field_diffs,
+            })
+        };
         TestOutcome::Failed(Box::new(FailureDiagnostic {
             message: self.message,
             file: self.file,
             lineno: self.lineno,
             source_line: self.source_line,
-            left: self.left,
-            right: self.right,
-            op: self.op,
             frames: self.frames,
-            field_diffs: self.field_diffs,
+            comparison,
         }))
     }
 }
