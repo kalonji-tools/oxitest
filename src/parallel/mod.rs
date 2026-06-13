@@ -331,9 +331,10 @@ mod worker_count_tests {
                 assert_eq!(d.file, "test_mod.py");
                 assert_eq!(d.lineno, crate::types::LineNo::new(10));
                 assert_eq!(d.source_line, "assert x == y");
-                assert_eq!(d.left, "1");
-                assert_eq!(d.right, "2");
-                assert_eq!(d.op, "==");
+                let cmp = d.comparison.as_ref().expect("expected comparison");
+                assert_eq!(cmp.left, "1");
+                assert_eq!(cmp.right, "2");
+                assert_eq!(cmp.op, "==");
             }
             other => panic!("Expected Failed, got {:?}", other),
         }
