@@ -168,9 +168,7 @@ mod tests {
     fn test_ci_reporter_all_pass_dots() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(0.1), None);
         reporter.test_started(&item);
@@ -183,7 +181,7 @@ mod tests {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let outcome = TestOutcome::Passed {
-            no_message_lines: vec![5],
+            tips: Some(vec![5].into_boxed_slice()),
         };
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(0.1), None);
@@ -240,9 +238,7 @@ mod tests {
                 .build(),
         );
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         let mut session = crate::reporter::ReporterSession::new(0);
         session.record_outcome(&item, &outcome, DurationMs::ZERO);
         reporter.test_completed(&item, &outcome, DurationMs::ZERO, None);

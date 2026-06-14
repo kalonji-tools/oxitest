@@ -38,6 +38,12 @@ impl NodeId {
     }
 }
 
+impl Default for NodeId {
+    fn default() -> Self {
+        NodeId(Arc::from(""))
+    }
+}
+
 impl std::fmt::Display for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -272,17 +278,22 @@ impl std::fmt::Display for ExitCode {
 ///
 /// Produced by `bridge::collect_module` after Python imports the test file.
 /// Fields are `pub(crate)` — external code interacts with tests via [`NodeId`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TestItem {
+    #[serde(skip, default)]
     pub(crate) node_id: NodeId,
+    #[serde(skip, default)]
     pub(crate) module_path: Utf8PathBuf,
     pub(crate) fn_name: String,
     pub(crate) lineno: LineNo,
     pub(crate) markers: Vec<String>,
     pub(crate) param_id: Option<String>,
     pub(crate) param_values: Vec<ParamPair>,
+    #[serde(default)]
     pub(crate) is_async: bool,
+    #[serde(default)]
     pub(crate) fixture_names: Vec<String>,
+    #[serde(default)]
     pub(crate) fixref_names: Vec<String>,
 }
 
@@ -435,7 +446,7 @@ impl FailureDiagnostic {
 #[derive(Debug, Clone)]
 pub enum TestOutcome {
     Passed {
-        no_message_lines: Vec<usize>,
+        tips: Option<Box<[usize]>>,
     },
     Failed(Box<FailureDiagnostic>),
     Error(Box<FailureDiagnostic>),
@@ -444,7 +455,7 @@ pub enum TestOutcome {
     },
     Warned {
         reason: String,
-        no_message_lines: Vec<usize>,
+        tips: Option<Box<[usize]>>,
     },
     XFailed {
         reason: String,
@@ -680,9 +691,7 @@ mod failure_accumulator_tests {
     fn test_maxfail_stops_at_threshold() {
         let mut acc = FailureAccumulator::new(2);
         let fail = TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())));
-        let pass = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let pass = TestOutcome::Passed { tips: None };
         assert!(!acc.record(&pass));
         assert!(!acc.record(&fail));
         assert!(acc.record(&fail)); // 2nd failure = stop
@@ -694,12 +703,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_outcome_passed_carries_no_message_lines() {
+    fn test_outcome_passed_carries_tips() {
         let o = TestOutcome::Passed {
-            no_message_lines: vec![5, 10],
+            tips: Some(vec![5, 10].into_boxed_slice()),
         };
-        if let TestOutcome::Passed { no_message_lines } = o {
-            assert_eq!(no_message_lines, vec![5, 10]);
+        if let TestOutcome::Passed { tips } = o {
+            assert_eq!(tips.as_deref(), Some([5, 10].as_slice()));
         } else {
             panic!("wrong variant");
         }
@@ -735,15 +744,11 @@ mod tests {
     fn test_outcome_warned_carries_reason() {
         let o = TestOutcome::Warned {
             reason: "DeprecationWarning: old api".to_string(),
-            no_message_lines: vec![3],
+            tips: Some(vec![3].into_boxed_slice()),
         };
-        if let TestOutcome::Warned {
-            reason,
-            no_message_lines,
-        } = o
-        {
+        if let TestOutcome::Warned { reason, tips } = o {
             assert!(reason.contains("DeprecationWarning"));
-            assert_eq!(no_message_lines, vec![3]);
+            assert_eq!(tips.as_deref(), Some([3].as_slice()));
         } else {
             panic!("wrong variant");
         }
@@ -914,12 +919,7 @@ mod tests {
     #[test]
     fn as_str_all_variants() {
         let cases: Vec<(TestOutcome, &str)> = vec![
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                "passed",
-            ),
+            (TestOutcome::Passed { tips: None }, "passed"),
             (
                 TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 "failed",
@@ -937,7 +937,7 @@ mod tests {
             (
                 TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 "warned",
             ),
@@ -991,15 +991,13 @@ mod tests {
         }
 
         let not_hard: Vec<TestOutcome> = vec![
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             TestOutcome::Skipped {
                 reason: String::new(),
             },
             TestOutcome::Warned {
                 reason: String::new(),
-                no_message_lines: vec![],
+                tips: None,
             },
             TestOutcome::XFailed {
                 reason: String::new(),
@@ -1239,9 +1237,7 @@ mod tests {
 
         // Exclude Flaky — it is synthesised by Rust, not emitted by workers.
         let outcome_strings: HashSet<&str> = [
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
             TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(String::new()))),
             TestOutcome::Skipped {
@@ -1249,7 +1245,7 @@ mod tests {
             },
             TestOutcome::Warned {
                 reason: String::new(),
-                no_message_lines: vec![],
+                tips: None,
             },
             TestOutcome::XFailed {
                 reason: String::new(),
@@ -1279,12 +1275,7 @@ mod message_tests {
     #[test]
     fn message_populated_variants() {
         let cases: Vec<(TestOutcome, Option<&str>)> = vec![
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                None,
-            ),
+            (TestOutcome::Passed { tips: None }, None),
             (TestOutcome::XPassed { strict: true }, None),
             (TestOutcome::XPassed { strict: false }, None),
             (
@@ -1308,7 +1299,7 @@ mod message_tests {
             (
                 TestOutcome::Warned {
                     reason: "DeprecationWarning".to_string(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 Some("DeprecationWarning"),
             ),
@@ -1351,7 +1342,7 @@ mod message_tests {
             },
             TestOutcome::Warned {
                 reason: String::new(),
-                no_message_lines: vec![],
+                tips: None,
             },
             TestOutcome::XFailed {
                 reason: String::new(),
@@ -1423,15 +1414,13 @@ mod diagnostic_tests {
     #[test]
     fn non_diagnostic_variants_return_none() {
         let cases: Vec<TestOutcome> = vec![
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             TestOutcome::Skipped {
                 reason: "not ready".to_string(),
             },
             TestOutcome::Warned {
                 reason: String::new(),
-                no_message_lines: vec![],
+                tips: None,
             },
             TestOutcome::XFailed {
                 reason: String::new(),

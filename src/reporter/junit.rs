@@ -249,9 +249,7 @@ mod snapshot_tests {
         for (name, status) in items {
             let item = TestItem::builder("tests/test_foo.py", name).arc();
             let outcome = match *status {
-                "passed" => TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
+                "passed" => TestOutcome::Passed { tips: None },
                 "failed" => {
                     TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())))
                 }
@@ -265,7 +263,7 @@ mod snapshot_tests {
                 "xpassed" => TestOutcome::XPassed { strict: false },
                 "warned" => TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 "timeout" => TestOutcome::Timeout {
                     message: String::new(),
@@ -320,9 +318,7 @@ mod tests {
     fn test_passed_produces_empty_testcase() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_add").arc(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
         )]);
         assert!(xml.contains("<testcase"), "must contain testcase element");
         assert!(
@@ -390,9 +386,7 @@ mod tests {
     fn test_classname_converts_path_separators() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/unit/test_math.py", "test_fn").arc(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
         )]);
         assert!(
             xml.contains("tests.unit.test_math"),
@@ -404,9 +398,7 @@ mod tests {
     fn test_xml_has_declaration_and_root() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_a").arc(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
         )]);
         assert!(xml.contains("<?xml"), "must have XML declaration");
         assert!(
@@ -460,9 +452,7 @@ mod tests {
         let mut rep = JunitReporter::new(path);
         rep.test_completed(
             &TestItem::builder("tests/test_foo.py", "test_a").arc(),
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
             None,
         );
@@ -478,9 +468,7 @@ mod tests {
     fn test_time_in_seconds() {
         let xml = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_a").arc(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
         )]);
         // 42ms → 0.042 seconds
         assert!(

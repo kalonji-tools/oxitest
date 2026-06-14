@@ -322,8 +322,8 @@ impl Config {
     /// Canonicalize node IDs so their file paths match the canonical form used by collected items.
     ///
     /// Resolves relative paths in node IDs against rootdir, then canonicalizes via
-    /// `std::fs::canonicalize`. Also populates `node_id_source_files` with the
-    /// canonical file paths.
+    /// `std::fs::canonicalize`. Source files are computed on-demand via
+    /// [`FilterConfig::source_files()`].
     fn canonicalize_node_ids(&mut self, raw_ids: &[crate::types::NodeId]) {
         use crate::types::NodeId;
 
@@ -355,16 +355,6 @@ impl Config {
                     Err(_) => id.clone(),
                 }
             })
-            .collect();
-
-        // Only populate source files from non-glob node IDs.
-        self.filter.node_id_source_files = self
-            .filter
-            .node_ids
-            .iter()
-            .filter(|id| !crate::filter::contains_glob_chars(id.as_ref()))
-            .filter_map(|id| id.module_path())
-            .map(Utf8PathBuf::from)
             .collect();
     }
 

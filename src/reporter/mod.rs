@@ -118,9 +118,7 @@ mod json_tests {
         rep.test_started(&item);
         rep.test_completed(
             &item,
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(12.5),
             None,
         );
@@ -184,18 +182,14 @@ mod json_tests {
         rep.test_started(&b);
         rep.test_completed(
             &b,
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(5.0),
             None,
         );
         rep.test_started(&a);
         rep.test_completed(
             &a,
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(5.0),
             None,
         );
@@ -472,9 +466,7 @@ mod tests {
         let plugins: Vec<Box<dyn Reporter>> = vec![Box::new(CountingStub(Arc::clone(&calls)))];
         let mut reporter = make_reporter(opts, true, None, None, plugins);
         let item = TestItem::builder("tests/test_foo.py", "test_x").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         reporter.test_started(&item);
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0), None);
         assert!(
@@ -553,9 +545,7 @@ mod tests {
 
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let mut deferred = vec!["tests/test_foo.py::test_a".to_string()];
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         super::remove_if_flaky(&mut deferred, &outcome, &item, |d, target| {
             d.contains(target)
         });
@@ -576,16 +566,12 @@ mod tests {
         let mut deferred: Vec<(Arc<TestItem>, TestOutcome, DurationMs)> = vec![
             (
                 Arc::clone(&item_a),
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
+                TestOutcome::Passed { tips: None },
                 DurationMs::new(1.0),
             ),
             (
                 Arc::clone(&item_b),
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
+                TestOutcome::Passed { tips: None },
                 DurationMs::new(2.0),
             ),
         ];

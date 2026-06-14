@@ -133,9 +133,7 @@ mod snapshot_tests {
         for (name, status) in items {
             let item = TestItem::builder("tests/test_foo.py", name).arc();
             let outcome = match *status {
-                "passed" => TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
+                "passed" => TestOutcome::Passed { tips: None },
                 "failed" => {
                     TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new())))
                 }
@@ -149,7 +147,7 @@ mod snapshot_tests {
                 "xpassed" => TestOutcome::XPassed { strict: false },
                 "warned" => TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 "timeout" => TestOutcome::Timeout {
                     message: String::new(),
@@ -238,9 +236,7 @@ mod tests {
     fn test_json_omits_message_for_passed_outcome() {
         let json = run_reporter(vec![(
             TestItem::builder("tests/test_foo.py", "test_pass").arc(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
         )]);
         assert!(
             !json.contains("\"message\""),
@@ -280,9 +276,7 @@ mod tests {
         let mut rep = JsonReporter::new(path);
         rep.test_completed(
             &TestItem::builder("tests/test_foo.py", "test_a").arc(),
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
             None,
         );
@@ -301,9 +295,7 @@ mod tests {
         let mut rep = JsonReporter::new(path.clone());
         rep.test_completed(
             &TestItem::builder("tests/test_foo.py", "test_a").arc(),
-            &TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            &TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
             None,
         );

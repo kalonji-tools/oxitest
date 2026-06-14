@@ -22,7 +22,7 @@ pub use timing::TimingCache;
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::types::{LineNo, OutcomeKind, ParamPair};
+use crate::types::OutcomeKind;
 
 const CACHE_VERSION: u32 = 1;
 
@@ -40,46 +40,18 @@ pub(super) struct CacheEntry {
     flaky_count: u32,
 }
 
-/// Serialized representation of a single TestItem (module_path and node_id are derived).
-#[derive(Debug, ::serde::Serialize, ::serde::Deserialize, Clone)]
-pub(super) struct CachedItemData {
-    fn_name: String,
-    lineno: LineNo,
-    markers: Vec<String>,
-    param_id: Option<String>,
-    param_values: Vec<ParamPair>,
-    #[serde(default)]
-    is_async: bool,
-    #[serde(default)]
-    fixture_names: Vec<String>,
-    #[serde(default)]
-    fixref_names: Vec<String>,
-}
-
-impl From<&crate::types::TestItem> for CachedItemData {
-    fn from(item: &crate::types::TestItem) -> Self {
-        Self {
-            fn_name: item.fn_name.clone(),
-            lineno: item.lineno,
-            markers: item.markers.clone(),
-            param_id: item.param_id.clone(),
-            param_values: item.param_values.clone(),
-            is_async: item.is_async,
-            fixture_names: item.fixture_names.clone(),
-            fixref_names: item.fixref_names.clone(),
-        }
-    }
-}
-
 /// Per-module collection cache keyed by file path.
 ///
-/// Stores the list of [`CachedItemData`] items collected from a module, tagged
+/// Stores the list of [`TestItem`](crate::types::TestItem) collected from a module, tagged
 /// with the file's mtime at collection time. When `mtime_secs` no longer matches
 /// the file on disk, the cache entry is stale and Python collection runs again.
+///
+/// `node_id` and `module_path` are reconstructed from the map key on deserialization
+/// (they are `#[serde(skip)]` on `TestItem`).
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub(super) struct ModuleCacheEntry {
     mtime_secs: u64,
-    items: Vec<CachedItemData>,
+    items: Vec<crate::types::TestItem>,
 }
 
 /// On-disk representation of the timing cache, written to `.oxitest_cache/timings.json`.

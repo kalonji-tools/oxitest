@@ -32,7 +32,7 @@ impl TestOutcome {
     /// Single character for CI dot-progress output.
     pub(crate) fn dot_char(&self) -> char {
         match self {
-            Self::Passed { no_message_lines } if no_message_lines.is_empty() => '.',
+            Self::Passed { tips: None } => '.',
             Self::Passed { .. } => '\u{00B7}', // middot — bare assert passed
             Self::Failed(..) => 'F',
             Self::Error(..) => 'E',
@@ -117,15 +117,10 @@ mod tests {
     #[test]
     fn dot_char_all_variants() {
         let cases: Vec<(TestOutcome, char)> = vec![
+            (TestOutcome::Passed { tips: None }, '.'),
             (
                 TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                '.',
-            ),
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![5],
+                    tips: Some(vec![5].into_boxed_slice()),
                 },
                 '\u{00B7}',
             ),
@@ -146,7 +141,7 @@ mod tests {
             (
                 TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 '.',
             ),
@@ -186,15 +181,10 @@ mod tests {
     #[test]
     fn label_all_variants() {
         let cases: Vec<(TestOutcome, &str)> = vec![
+            (TestOutcome::Passed { tips: None }, ""),
             (
                 TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                "",
-            ),
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![5],
+                    tips: Some(vec![5].into_boxed_slice()),
                 },
                 "",
             ),
@@ -215,7 +205,7 @@ mod tests {
             (
                 TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 "WARN ",
             ),
@@ -252,12 +242,7 @@ mod tests {
     #[test]
     fn color_category_all_variants() {
         let cases: Vec<(TestOutcome, ColorCategory)> = vec![
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                ColorCategory::Pass,
-            ),
+            (TestOutcome::Passed { tips: None }, ColorCategory::Pass),
             (
                 TestOutcome::Failed(Box::new(FailureDiagnostic::sentinel(String::new()))),
                 ColorCategory::Fail,
@@ -276,7 +261,7 @@ mod tests {
             (
                 TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 ColorCategory::Warn,
             ),
@@ -315,16 +300,11 @@ mod tests {
     #[test]
     fn junit_category_all_variants() {
         let cases: Vec<(TestOutcome, JunitCategory)> = vec![
-            (
-                TestOutcome::Passed {
-                    no_message_lines: vec![],
-                },
-                JunitCategory::Passed,
-            ),
+            (TestOutcome::Passed { tips: None }, JunitCategory::Passed),
             (
                 TestOutcome::Warned {
                     reason: String::new(),
-                    no_message_lines: vec![],
+                    tips: None,
                 },
                 JunitCategory::Passed,
             ),

@@ -9,6 +9,7 @@ struct FilterPredicates<'a> {
     node_ids: &'a [String],
     expression: Option<&'a str>,
     failed_ids: &'a std::collections::HashSet<String>,
+    node_id_source_files: &'a std::collections::HashSet<camino::Utf8PathBuf>,
     has_node_ids: bool,
     has_failed_filter: bool,
 }
@@ -57,11 +58,13 @@ impl Pipeline<Prescanned> {
             .iter()
             .map(|n| n.to_string())
             .collect();
+        let source_files = self.cfg.filter.source_files();
 
         let preds = FilterPredicates {
             node_ids: &node_ids,
             expression: expression.as_deref(),
             failed_ids: &failed_ids,
+            node_id_source_files: &source_files,
             has_node_ids,
             has_failed_filter,
         };
@@ -113,8 +116,8 @@ impl Pipeline<Prescanned> {
         if preds.has_node_ids {
             // Only apply node ID filtering to files that came from node ID args,
             // not bare path args. Files from bare paths pass through unconditionally.
-            let is_node_id_source = self.cfg.filter.node_id_source_files.is_empty()
-                || self.cfg.filter.node_id_source_files.contains(path);
+            let is_node_id_source =
+                preds.node_id_source_files.is_empty() || preds.node_id_source_files.contains(path);
             if is_node_id_source
                 && !filter::file_matches_node_ids(items, path.as_str(), preds.node_ids)
             {
