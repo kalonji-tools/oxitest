@@ -995,4 +995,30 @@ mod tests {
         let cfg = Config::default();
         assert!(cfg.paths.use_gitignore);
     }
+
+    /// `source_files()` extracts module paths from node IDs for targeted collection.
+    /// Glob-containing IDs (e.g. `tests/test_*.py::test_foo`) must be excluded because
+    /// they don't map to a single source file.
+    #[test]
+    fn source_files_excludes_glob_node_ids() {
+        use crate::types::NodeId;
+
+        let cfg = FilterConfig {
+            node_ids: vec![
+                NodeId::new("tests/test_math.py", "test_add", None),
+                NodeId::new("tests/test_str.py", "test_upper", None),
+                // This one contains a glob — must be excluded
+                NodeId::from_raw("tests/test_*.py::test_foo"),
+            ],
+            ..FilterConfig::default()
+        };
+        let files = cfg.source_files();
+        assert!(files.contains(&Utf8PathBuf::from("tests/test_math.py")));
+        assert!(files.contains(&Utf8PathBuf::from("tests/test_str.py")));
+        assert_eq!(
+            files.len(),
+            2,
+            "glob-containing node IDs must not produce source files"
+        );
+    }
 }

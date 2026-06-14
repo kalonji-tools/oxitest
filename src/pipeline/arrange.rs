@@ -22,7 +22,7 @@ pub(super) fn partition_inprocess_groups(
     for ModuleGroup { module_path, items } in groups {
         let (inp, par): (Vec<_>, Vec<_>) = items
             .into_iter()
-            .partition(|item| item.markers.iter().any(|m| m == "inprocess"));
+            .partition(|item| item.markers.has_inprocess());
 
         if !inp.is_empty() {
             inprocess.push(ModuleGroup::new(module_path.clone(), inp));

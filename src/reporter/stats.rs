@@ -264,6 +264,33 @@ mod tests {
         assert_eq!(stats.counts.failed, 0);
     }
 
+    /// When a timed-out test passes on retry, the timeout counter must be decremented —
+    /// not the failed counter. This was a real bug before #936: the old priority heuristic
+    /// would decrement `failed` if it was non-zero, even when the original was a timeout.
+    #[test]
+    fn record_flaky_decrements_correct_counter_for_timeout() {
+        let mut stats = RunStats::new();
+        stats.record_failed(); // unrelated failure from another test
+        stats.record_timeout(); // THIS test timed out, then passed on retry
+        stats.record_flaky(crate::types::OutcomeKind::Timeout);
+        // Timeout decremented, failed left alone
+        assert_eq!(stats.counts.timeout, 0);
+        assert_eq!(stats.counts.failed, 1); // must NOT be decremented
+        assert_eq!(stats.counts.flaky, 1);
+    }
+
+    /// Same scenario for Error — an errored test passes on retry, with a concurrent failure.
+    #[test]
+    fn record_flaky_decrements_correct_counter_for_error() {
+        let mut stats = RunStats::new();
+        stats.record_failed(); // unrelated failure
+        stats.record_errored(); // THIS test errored, then passed on retry
+        stats.record_flaky(crate::types::OutcomeKind::Error);
+        assert_eq!(stats.counts.errored, 0);
+        assert_eq!(stats.counts.failed, 1); // untouched
+        assert_eq!(stats.counts.flaky, 1);
+    }
+
     #[test]
     fn test_record_timeout_increments_counter() {
         let mut stats = RunStats::new();

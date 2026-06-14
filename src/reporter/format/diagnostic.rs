@@ -347,7 +347,7 @@ fn render_values(out: &mut String, comparison: &crate::types::ComparisonDetail, 
 mod tests {
     use super::*;
     use crate::types::TestItem;
-    use crate::types::{LineNo, TestOutcome};
+    use crate::types::{LineNo, MarkerSet, TestOutcome};
     use camino::Utf8PathBuf;
 
     #[test]
@@ -538,7 +538,7 @@ mod tests {
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
             lineno: LineNo::ZERO,
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: Some("basic".to_string()),
             param_values: vec![
                 crate::types::ParamPair {
@@ -581,7 +581,7 @@ mod tests {
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
             lineno: LineNo::ZERO,
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: Some("basic".to_string()),
             param_values: vec![crate::types::ParamPair {
                 name: "x".to_string(),
@@ -656,7 +656,7 @@ mod tests {
             module_path: "test_foo.py".into(),
             fn_name: "test_check".to_string(),
             lineno: LineNo::new(10),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -705,7 +705,7 @@ mod tests {
             module_path: "t.py".into(),
             fn_name: "test_direct".to_string(),
             lineno: LineNo::new(3),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
