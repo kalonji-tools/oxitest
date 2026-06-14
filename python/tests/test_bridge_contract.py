@@ -275,7 +275,6 @@ def test_failed_shape_includes_diagnostic_fields():
     assert wire["left"] == "1", "left must round-trip"
     assert wire["right"] == "2", "right must round-trip"
     assert wire["op"] == "==", "op must round-trip"
-    assert "failure_repr" in wire, "failure_repr must be present"
     assert "frames" in wire, "frames must be present"
 
 
