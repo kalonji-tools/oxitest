@@ -13,6 +13,7 @@ use camino::Utf8PathBuf;
 use indexmap::IndexMap;
 
 use crate::prescan::PrescanItem;
+use crate::scheduler::ModuleGroup;
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
@@ -185,7 +186,7 @@ pub fn filter_by_node_ids(
 
 /// Group items by module path, preserving insertion order within each group.
 #[must_use = "returns grouped items; original is consumed"]
-pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> {
+pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<ModuleGroup> {
     let mut groups: IndexMap<Utf8PathBuf, Vec<Arc<TestItem>>> = IndexMap::new();
     for item in items {
         groups
@@ -193,7 +194,10 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<(Utf8PathBuf, Vec<Arc<Tes
             .or_default()
             .push(Arc::clone(item));
     }
-    groups.into_iter().collect()
+    groups
+        .into_iter()
+        .map(|(module_path, items)| ModuleGroup::new(module_path, items))
+        .collect()
 }
 
 // ── Prescan-level filtering ───────────────────────────────────────────────────
@@ -417,7 +421,7 @@ mod tests {
         ];
         let groups = group_by_module(&items);
         assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].1.len(), 2);
+        assert_eq!(groups[0].items.len(), 2);
     }
 
     #[test]
@@ -429,10 +433,10 @@ mod tests {
         ];
         let groups = group_by_module(&items);
         assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/test_x.py"));
-        assert_eq!(groups[0].1.len(), 2);
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/test_y.py"));
-        assert_eq!(groups[1].1.len(), 1);
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/test_x.py"));
+        assert_eq!(groups[0].items.len(), 2);
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/test_y.py"));
+        assert_eq!(groups[1].items.len(), 1);
     }
 
     #[test]
@@ -442,13 +446,13 @@ mod tests {
             TestItem::builder("tests/test_y.py", "test_b").arc(),
         ];
         let groups = group_by_module(&items);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/test_x.py"));
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/test_y.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/test_x.py"));
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/test_y.py"));
     }
 
     #[test]
     fn test_group_by_module_empty_input() {
-        let groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = group_by_module(&[]);
+        let groups = group_by_module(&[]);
         assert!(groups.is_empty());
     }
 

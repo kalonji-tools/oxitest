@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 use super::arrange::{self, ExecutionStrategy};
 use super::traits::ExecutionHarness;
 use crate::cache::{OutcomeCache, TimingCache};
+use crate::scheduler::ModuleGroup;
 use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
 
 pub(super) struct ExecutionContext<'a> {
@@ -91,15 +92,15 @@ impl<'a> SerialHarness<'a> {
 impl ExecutionHarness for SerialHarness<'_> {
     fn execute_groups(
         &self,
-        groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+        groups: Vec<ModuleGroup>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
         let mut acc = types::FailureAccumulator::new(self.maxfail);
         let mut interrupted = false;
-        let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
+        let total: usize = groups.iter().map(|g| g.items.len()).sum();
         let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-        'run: for (module_path, items) in &groups {
+        'run: for ModuleGroup { module_path, items } in &groups {
             for item in items {
                 rep.test_started(item);
                 let timeout =
@@ -158,7 +159,7 @@ pub(super) struct ParallelHarness<'a> {
 impl ExecutionHarness for ParallelHarness<'_> {
     fn execute_groups(
         &self,
-        groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+        groups: Vec<ModuleGroup>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
         parallel::run_phase_parallel(
@@ -185,13 +186,13 @@ fn emit_scheduling_diagnostics(
         .inprocess_groups
         .iter()
         .chain(plan.parallel_groups.iter())
-        .map(|(_, items)| items.len())
+        .map(|g| g.items.len())
         .sum::<usize>()
         + plan
             .arranged_groups
             .iter()
             .flat_map(|g| g.iter())
-            .map(|(_, items)| items.len())
+            .map(|g| g.items.len())
             .sum::<usize>();
 
     match &plan.strategy {
@@ -219,7 +220,7 @@ fn emit_scheduling_diagnostics(
                         .arranged_groups
                         .iter()
                         .flat_map(|g| g.iter())
-                        .map(|(_, items)| items.len())
+                        .map(|g| g.items.len())
                         .sum();
                     // If there are inprocess groups but no arranged groups, this was a
                     // threshold fallback. Recalculate ratio for diagnostic.
@@ -278,7 +279,7 @@ fn emit_scheduling_diagnostics(
                 let arranged_count: usize = plan
                     .arranged_groups
                     .iter()
-                    .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
+                    .map(|g| g.iter().map(|g| g.items.len()).sum::<usize>())
                     .sum();
                 eprintln!(
                     "scheduling: auto-arranged {arranged_count} tests by shared fixtures ({list})",
@@ -404,16 +405,8 @@ pub(super) fn execute(
         }
     } else {
         if ctx.cfg.output.verbosity >= config::Verbosity::Detailed {
-            let inprocess_count: usize = plan
-                .inprocess_groups
-                .iter()
-                .map(|(_, items)| items.len())
-                .sum();
-            let parallel_count: usize = plan
-                .parallel_groups
-                .iter()
-                .map(|(_, items)| items.len())
-                .sum();
+            let inprocess_count: usize = plan.inprocess_groups.iter().map(|g| g.items.len()).sum();
+            let parallel_count: usize = plan.parallel_groups.iter().map(|g| g.items.len()).sum();
             if inprocess_count > 0 {
                 eprintln!(
                     "scheduling: {inprocess_count} inprocess tests (main), {parallel_count} parallel",
