@@ -71,9 +71,6 @@ impl Pipeline<PreFilter> {
         let (
             shared,
             PreFilter {
-                test_files,
-                conftest_files,
-                session,
                 clean_items: items,
                 violated_items,
                 all_violations,
@@ -130,9 +127,6 @@ impl Pipeline<PreFilter> {
         };
 
         Ok(shared.into_pipeline(Ready {
-            test_files,
-            conftest_files,
-            session,
             clean_items: items,
             violated_items,
             all_violations,

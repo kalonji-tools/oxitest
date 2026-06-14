@@ -8,10 +8,9 @@ impl Pipeline<Empty> {
             eprintln!("error: invalid glob pattern in python_files: {e}");
             ExitCode::UsageError
         })?;
-        let (shared, _) = self.into_parts();
-        Ok(shared.into_pipeline(FilesCollected {
-            test_files,
-            conftest_files,
-        }))
+        let (mut shared, _) = self.into_parts();
+        shared.test_files = test_files;
+        shared.conftest_files = conftest_files;
+        Ok(shared.into_pipeline(FilesCollected))
     }
 }

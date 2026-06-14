@@ -18,11 +18,16 @@ impl Pipeline<Executed> {
             return Ok(self);
         }
 
+        let session = self
+            .shared
+            .session
+            .as_ref()
+            .expect("session initialized at SessionReady");
         let retry_ctx = retry::RetryContext {
             py,
             max_retries: self.cfg.exec.retries,
             delay_secs: self.cfg.exec.retries_delay_secs,
-            session: &self.state.session,
+            session,
             timeout_secs: self.cfg.exec.timeout_secs,
             opts: DebugOptions {
                 debug_mode: None,
@@ -55,7 +60,11 @@ impl Pipeline<Executed> {
             mut reporter,
         } = state.execution_results;
 
-        if let Ok(ft) = reporter::bridge::get_fixture_timings(&state.session, py) {
+        let session = shared
+            .session
+            .as_ref()
+            .expect("session initialized at SessionReady");
+        if let Ok(ft) = reporter::bridge::get_fixture_timings(session, py) {
             if !ft.is_empty() {
                 reporter.set_fixture_timings(ft);
             }
@@ -68,7 +77,7 @@ impl Pipeline<Executed> {
             &shared.rootdir,
         );
 
-        if let Ok(stats) = reporter::bridge::get_cache_stats(&state.session, py) {
+        if let Ok(stats) = reporter::bridge::get_cache_stats(session, py) {
             if stats.hits + stats.misses > 0 {
                 reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
             }

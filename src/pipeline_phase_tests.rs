@@ -80,16 +80,14 @@ mod pipeline_shared_round_trip_tests {
         let p = make_pipeline(Empty);
         let original_rootdir = p.rootdir.clone();
 
-        let (shared, _empty) = p.into_parts();
-        let files_pipeline = shared.into_pipeline(FilesCollected {
-            test_files: vec![camino::Utf8PathBuf::from("tests/test_a.py")],
-            conftest_files: vec![],
-        });
+        let (mut shared, _empty) = p.into_parts();
+        shared.test_files = vec![camino::Utf8PathBuf::from("tests/test_a.py")];
+        let files_pipeline = shared.into_pipeline(FilesCollected);
 
         assert_eq!(files_pipeline.rootdir, original_rootdir);
-        assert_eq!(files_pipeline.state.test_files.len(), 1);
+        assert_eq!(files_pipeline.shared.test_files.len(), 1);
         assert_eq!(
-            files_pipeline.state.test_files[0].as_str(),
+            files_pipeline.shared.test_files[0].as_str(),
             "tests/test_a.py"
         );
     }
@@ -102,29 +100,20 @@ mod pipeline_shared_round_trip_tests {
 
         // Empty -> FilesCollected
         let (shared, _) = p.into_parts();
-        let p2 = shared.into_pipeline(FilesCollected {
-            test_files: vec![],
-            conftest_files: vec![],
-        });
+        let p2 = shared.into_pipeline(FilesCollected);
         assert_eq!(p2.rootdir, original_rootdir);
         assert_eq!(p2.python_bin, original_python_bin);
 
         // FilesCollected -> (decompose and rebuild with PreFilter)
         let (shared2, _) = p2.into_parts();
-        Python::initialize();
-        Python::attach(|py| {
-            let p3 = shared2.into_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
-                clean_items: vec![],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
-            });
-            assert_eq!(p3.rootdir, original_rootdir);
-            assert_eq!(p3.python_bin, original_python_bin);
+        let p3 = shared2.into_pipeline(PreFilter {
+            clean_items: vec![],
+            violated_items: vec![],
+            all_violations: vec![],
+            suite_lines: vec![],
         });
+        assert_eq!(p3.rootdir, original_rootdir);
+        assert_eq!(p3.python_bin, original_python_bin);
     }
 }
 
@@ -137,10 +126,7 @@ mod strict_or_skip_disabled_tests {
     fn strict_none_all_items_become_clean() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -149,6 +135,7 @@ mod strict_or_skip_disabled_tests {
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // cfg.markers.strict is None by default
 
             let result = p.strict_or_skip(py);
@@ -165,10 +152,7 @@ mod strict_or_skip_disabled_tests {
     fn strict_none_ignores_raw_violations() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(Collected {
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_one").arc()],
                 raw_violations: vec![crate::bridge::RawViolation {
                     node_id: "tests/test_a.py::test_one".to_string(),
@@ -177,6 +161,7 @@ mod strict_or_skip_disabled_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // strict is None — violations should be ignored entirely
 
             let result = p.strict_or_skip(py);
@@ -192,14 +177,12 @@ mod strict_or_skip_disabled_tests {
     fn strict_none_with_empty_items() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(Collected {
                 items: vec![],
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -223,9 +206,6 @@ mod strict_enforce_detailed_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_clean").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad_1").arc(),
@@ -245,6 +225,7 @@ mod strict_enforce_detailed_tests {
                 ],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
@@ -265,9 +246,6 @@ mod strict_enforce_detailed_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_one").arc()],
                 raw_violations: vec![RawViolation {
                     node_id: "tests/test_a.py::test_one".to_string(),
@@ -276,6 +254,7 @@ mod strict_enforce_detailed_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
@@ -290,20 +269,20 @@ mod strict_enforce_detailed_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![camino::Utf8PathBuf::from("tests/test_x.py")],
-                conftest_files: vec![camino::Utf8PathBuf::from("tests/conftest.py")],
-                session: crate::bridge::FixtureSession::stub(py),
-                items: vec![TestItem::builder_raw("tests/test_x.py::test_fn").arc()],
+                items: vec![crate::types::TestItem::builder_raw("tests/test_x.py::test_fn").arc()],
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.test_files = vec![camino::Utf8PathBuf::from("tests/test_x.py")];
+            p.shared.conftest_files = vec![camino::Utf8PathBuf::from("tests/conftest.py")];
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
-            assert_eq!(p.state.test_files.len(), 1);
-            assert_eq!(p.state.test_files[0].as_str(), "tests/test_x.py");
-            assert_eq!(p.state.conftest_files.len(), 1);
-            assert_eq!(p.state.conftest_files[0].as_str(), "tests/conftest.py");
+            assert_eq!(p.shared.test_files.len(), 1);
+            assert_eq!(p.shared.test_files[0].as_str(), "tests/test_x.py");
+            assert_eq!(p.shared.conftest_files.len(), 1);
+            assert_eq!(p.shared.conftest_files[0].as_str(), "tests/conftest.py");
         });
     }
 }
@@ -319,9 +298,6 @@ mod filter_last_failed_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 clean_items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -330,6 +306,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.filter.failed = Some(FailedMode::Only);
 
             let result = p.filter(py);
@@ -345,9 +322,6 @@ mod filter_last_failed_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 clean_items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -356,6 +330,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.filter.failed = Some(FailedMode::First);
 
             let result = p.filter(py);
@@ -369,10 +344,7 @@ mod filter_last_failed_tests {
     fn no_failed_mode_passes_all() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(PreFilter {
                 clean_items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -382,6 +354,7 @@ mod filter_last_failed_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // cfg.filter.failed is None by default
 
             let result = p.filter(py);
@@ -406,15 +379,13 @@ mod filter_preserves_violations_tests {
                 node_id: NodeId::from_raw("tests/test_a.py::test_bad"),
                 lines: vec![5],
             })];
-            let p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(PreFilter {
                 clean_items: vec![TestItem::builder_raw("tests/test_a.py::test_good").arc()],
                 violated_items: vec![TestItem::builder_raw("tests/test_a.py::test_bad").arc()],
                 all_violations: violations,
                 suite_lines: vec!["some warning".to_string()],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
 
             let p = p.filter(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 1);
@@ -449,29 +420,26 @@ mod state_construction_tests {
 
     #[test]
     fn pipeline_files_collected_state() {
-        let p = make_pipeline(FilesCollected {
-            test_files: vec![
-                camino::Utf8PathBuf::from("tests/test_a.py"),
-                camino::Utf8PathBuf::from("tests/test_b.py"),
-            ],
-            conftest_files: vec![camino::Utf8PathBuf::from("tests/conftest.py")],
-        });
-        assert_eq!(p.state.test_files.len(), 2);
-        assert_eq!(p.state.conftest_files.len(), 1);
+        let mut p = make_pipeline(FilesCollected);
+        p.shared.test_files = vec![
+            camino::Utf8PathBuf::from("tests/test_a.py"),
+            camino::Utf8PathBuf::from("tests/test_b.py"),
+        ];
+        p.shared.conftest_files = vec![camino::Utf8PathBuf::from("tests/conftest.py")];
+        assert_eq!(p.shared.test_files.len(), 2);
+        assert_eq!(p.shared.conftest_files.len(), 1);
     }
 
     #[test]
     fn pipeline_collected_state_with_items() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(Collected {
                 items: vec![crate::types::TestItem::builder_raw("tests/test_a.py::test_fn").arc()],
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             assert_eq!(p.state.items.len(), 1);
             assert!(p.state.raw_violations.is_empty());
         });

@@ -6,22 +6,19 @@ use crate::types::ExitCode;
 impl Pipeline<MetadataFiltered> {
     pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
         let (session, fixture_violations) =
-            helpers::init_session(py, &self.state.conftest_files, &self.cfg, || {
+            helpers::init_session(py, &self.shared.conftest_files, &self.cfg, || {
                 self.make_error_reporter()
             })?;
         let (
-            shared,
+            mut shared,
             MetadataFiltered {
-                test_files: _,
-                conftest_files,
-                modules_to_import,
-                is_filtered: _,
+                modules_to_import, ..
             },
         ) = self.into_parts();
+        // Replace test_files with the filtered modules to import.
+        shared.test_files = modules_to_import;
+        shared.session = Some(session);
         Ok(shared.into_pipeline(SessionReady {
-            test_files: modules_to_import,
-            conftest_files,
-            session,
             session_violations: fixture_violations,
         }))
     }

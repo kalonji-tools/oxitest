@@ -32,17 +32,8 @@ impl Pipeline<Prescanned> {
                 .iter()
                 .map(|(path, _, _)| path.clone())
                 .collect();
-            let (
-                shared,
-                Prescanned {
-                    test_files,
-                    conftest_files,
-                    ..
-                },
-            ) = self.into_parts();
+            let (shared, _) = self.into_parts();
             return Ok(shared.into_pipeline(MetadataFiltered {
-                test_files,
-                conftest_files,
                 modules_to_import: all_modules,
                 is_filtered: false,
             }));
@@ -91,7 +82,7 @@ impl Pipeline<Prescanned> {
             .collect();
 
         let filtered_conftests =
-            collector::conftests_for_modules(&self.state.conftest_files, &modules_to_import);
+            collector::conftests_for_modules(&self.shared.conftest_files, &modules_to_import);
 
         tracing::info!(
             total_files = self.state.prescan_data.len(),
@@ -100,10 +91,9 @@ impl Pipeline<Prescanned> {
             "lazy collection: filtered by prescan metadata"
         );
 
-        let (shared, Prescanned { test_files, .. }) = self.into_parts();
+        let (mut shared, _) = self.into_parts();
+        shared.conftest_files = filtered_conftests;
         Ok(shared.into_pipeline(MetadataFiltered {
-            test_files,
-            conftest_files: filtered_conftests,
             modules_to_import,
             is_filtered: true,
         }))
