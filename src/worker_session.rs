@@ -234,7 +234,7 @@ fn run_worker_loop(
                 let _ = tx.send(crate::parallel::WorkerResult {
                     resolved: types::ResolvedOutcome {
                         node_id: item.node_id.clone(),
-                        duration_ms: types::DurationMs::new(0.0),
+                        duration_ms: types::DurationMs::ZERO,
                         outcome: types::TestOutcome::crashed_sentinel(),
                     },
                     worker_id,
