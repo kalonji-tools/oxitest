@@ -74,7 +74,6 @@ def make_fixture_def(
     is_async: bool = False,
     conftest_path: str = "",
     doc: str = "",
-    params: tuple | None = None,
 ) -> FixtureDef:
     """Create a ``FixtureDef`` with sensible defaults.
 
@@ -95,7 +94,6 @@ def make_fixture_def(
         name=name,
         func=factory,
         autouse=autouse,
-        params=params,
         conftest_path=conftest_path,
         shared=shared,
         namespace=namespace,
