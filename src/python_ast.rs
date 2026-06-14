@@ -50,7 +50,6 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    #[allow(dead_code)] // consumed by doctest.rs/prescan.rs in a later task
     pub(crate) fn body(&self) -> &[ast::Stmt] {
         match self {
             Self::Sync(f) => &f.body,
@@ -65,7 +64,6 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    #[allow(dead_code)] // consumed by prescan.rs in a later task
     pub(crate) fn args(&self) -> &ast::Arguments {
         match self {
             Self::Sync(f) => &f.args,
@@ -73,7 +71,6 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    #[allow(dead_code)] // consumed by prescan.rs in a later task
     pub(crate) fn range(&self) -> rustpython_parser::text_size::TextRange {
         match self {
             Self::Sync(f) => f.range,
@@ -81,7 +78,6 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    #[allow(dead_code)] // consumed by prescan.rs and tests
     pub(crate) fn is_async(&self) -> bool {
         matches!(self, Self::Async(_))
     }
@@ -116,6 +112,7 @@ pub(crate) fn walk_test_defs(
 }
 
 /// Check whether a statement is a sync or async `test_*` function definition.
+#[allow(dead_code)] // convenience wrapper; used in unit tests
 pub(crate) fn is_test_function(stmt: &ast::Stmt) -> bool {
     FnDef::try_from_stmt(stmt).is_some_and(|d| is_test_fn(d.name()))
 }
