@@ -263,7 +263,7 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
             items.push(Arc::new(types::TestItem {
                 node_id,
                 module_path: file.clone(),
-                fn_name,
+                fn_name: Arc::from(fn_name.as_str()),
                 lineno: types::LineNo::new(loc.lineno),
                 markers: types::MarkerSet::from(vec!["doctest".to_string()]),
                 param_id: None,

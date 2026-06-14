@@ -385,7 +385,7 @@ mod drain_tests {
             Arc::new(TestItem {
                 node_id: NodeId::new(path, fn_name, None),
                 module_path: Utf8PathBuf::from(path),
-                fn_name: fn_name.to_string(),
+                fn_name: Arc::from(fn_name),
                 lineno: crate::types::LineNo::new(1),
                 markers: crate::types::MarkerSet::new(),
                 param_id: None,

@@ -78,7 +78,7 @@ impl TestItemBuilder {
         TestItem {
             node_id,
             module_path: self.module_path,
-            fn_name: self.fn_name,
+            fn_name: Arc::from(self.fn_name.as_str()),
             lineno: self.lineno,
             markers: self.markers,
             param_id: self.param_id,

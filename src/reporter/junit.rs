@@ -53,7 +53,7 @@ fn to_classname(module_path: &str) -> String {
 fn to_testname(item: &TestItem) -> String {
     match &item.param_id {
         Some(pid) => format!("{}[{}]", item.fn_name, pid),
-        None => item.fn_name.clone(),
+        None => item.fn_name.to_string(),
     }
 }
 

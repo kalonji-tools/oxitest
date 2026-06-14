@@ -86,7 +86,7 @@ mod tests {
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_a", None),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
-                fn_name: "test_a".to_string(),
+                fn_name: Arc::from("test_a"),
                 lineno: LineNo::new(5),
                 markers: MarkerSet::from(vec!["slow".to_string()]),
                 param_id: None,
@@ -98,7 +98,7 @@ mod tests {
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
-                fn_name: "test_b".to_string(),
+                fn_name: Arc::from("test_b"),
                 lineno: LineNo::new(10),
                 markers: MarkerSet::new(),
                 param_id: Some("x0".to_string()),
@@ -115,10 +115,10 @@ mod tests {
 
         let cached = cache.cached_module_items(module_path, 12345).unwrap();
         assert_eq!(cached.len(), 2);
-        assert_eq!(cached[0].fn_name, "test_a");
+        assert_eq!(&*cached[0].fn_name, "test_a");
         assert_eq!(cached[0].lineno, LineNo::new(5));
         assert_eq!(cached[0].markers.to_vec(), vec!["slow".to_string()]);
-        assert_eq!(cached[1].fn_name, "test_b");
+        assert_eq!(&*cached[1].fn_name, "test_b");
         assert_eq!(cached[1].param_id, Some("x0".to_string()));
         assert_eq!(
             cached[1].param_values,
@@ -136,7 +136,7 @@ mod tests {
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: "test_a".to_string(),
+            fn_name: Arc::from("test_a"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
             param_id: None,
@@ -217,7 +217,7 @@ mod tests {
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: "test_a".to_string(),
+            fn_name: Arc::from("test_a"),
             lineno: LineNo::new(3),
             markers: MarkerSet::new(),
             param_id: None,
@@ -232,7 +232,7 @@ mod tests {
 
         let loaded = TestCache::load(utf8_dir);
         let cached = loaded.cached_module_items(module_path, 9999).unwrap();
-        assert_eq!(cached[0].fn_name, "test_a");
+        assert_eq!(&*cached[0].fn_name, "test_a");
         assert_eq!(cached[0].lineno, LineNo::new(3));
     }
 }

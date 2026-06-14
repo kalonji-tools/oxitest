@@ -17,7 +17,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 thiserror = "2"
 globset = "0.4"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["raw_value"] }
 console = "0.16"
 indicatif = "0.18"

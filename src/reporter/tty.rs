@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::config::Verbosity;
 use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
@@ -57,7 +58,7 @@ pub struct TtyReporter {
         DurationMs,
         Option<crate::parallel_context::ParallelContext>,
     )>,
-    running_tests: Vec<String>,
+    running_tests: Vec<Arc<str>>,
 }
 
 impl TtyReporter {
@@ -163,7 +164,7 @@ impl TtyReporter {
                 .running_tests
                 .iter()
                 .take(max_names)
-                .map(|s| s.as_str())
+                .map(|s| &**s)
                 .collect();
             format!(
                 "{}, +{} more",
@@ -666,7 +667,7 @@ mod tests {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_math").arc();
         let outcome = TestOutcome::Passed { tips: None };
-        let mut group = ParametrizeBuffer::new("test_math".to_string());
+        let mut group = ParametrizeBuffer::new(Arc::from("test_math"));
         group.push((*item).clone(), outcome.clone(), DurationMs::new(2.0));
         group.push((*item).clone(), outcome.clone(), DurationMs::new(2.6));
         // flush_param_group consumes group and prints via pb — capture output by
@@ -702,7 +703,7 @@ mod tests {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_single").arc();
         let outcome = TestOutcome::Passed { tips: None };
-        let mut group = ParametrizeBuffer::new("test_single".to_string());
+        let mut group = ParametrizeBuffer::new(Arc::from("test_single"));
         group.push((*item).clone(), outcome, DurationMs::new(3.0));
 
         let w = reporter.opts.name_width;
@@ -797,7 +798,7 @@ mod tests {
         let outcome = TestOutcome::Passed { tips: None };
         reporter.test_completed(&item_a, &outcome, DurationMs::new(10.0), None);
         assert_eq!(reporter.running_tests.len(), 1);
-        assert_eq!(reporter.running_tests[0], "test_signup");
+        assert_eq!(&*reporter.running_tests[0], "test_signup");
     }
 
     #[test]
@@ -818,7 +819,7 @@ mod tests {
     fn test_parametrize_buffer_total_ms_sums_all_durations() {
         use crate::types::TestItem;
 
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        let mut buf = ParametrizeBuffer::new(Arc::from("test_add"));
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed { tips: None },
@@ -841,7 +842,7 @@ mod tests {
         use crate::types::TestItem;
         use crate::types::TestOutcome;
 
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        let mut buf = ParametrizeBuffer::new(Arc::from("test_add"));
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed { tips: None },
@@ -865,7 +866,7 @@ mod tests {
     fn test_parametrize_buffer_any_failed_false_when_all_pass_or_skip() {
         use crate::types::TestItem;
 
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        let mut buf = ParametrizeBuffer::new(Arc::from("test_add"));
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed { tips: None },
@@ -917,7 +918,7 @@ mod tests {
         use crate::types::TestItem;
         use crate::types::TestOutcome;
 
-        let mut buf = ParametrizeBuffer::new("test_add".to_string());
+        let mut buf = ParametrizeBuffer::new(Arc::from("test_add"));
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
             TestOutcome::Passed { tips: None },
