@@ -252,7 +252,7 @@ pub struct ExecConfig {
     /// Multiplier applied to all test timeouts (e.g. 2.0 doubles them).
     pub timeout_multiplier: Option<f64>,
     /// Estimated per-worker subprocess spawn overhead in milliseconds.
-    pub spawn_overhead_ms: f64,
+    pub spawn_overhead: crate::types::DurationMs,
     /// Minimum number of tests required before enabling parallel execution.
     pub min_parallel_tests: usize,
     /// Number of times to retry failed tests.
@@ -270,7 +270,7 @@ impl Default for ExecConfig {
             maxfail: 0,
             timeout_secs: None,
             timeout_multiplier: None,
-            spawn_overhead_ms: 250.0,
+            spawn_overhead: crate::types::DurationMs::new(250.0),
             min_parallel_tests: 100,
             retries: 0,
             retries_delay_secs: 0,
@@ -821,7 +821,10 @@ mod tests {
     #[test]
     fn config_spawn_overhead_ms_defaults_to_250() {
         let cfg = Config::default();
-        assert_eq!(cfg.exec.spawn_overhead_ms, 250.0_f64);
+        assert_eq!(
+            cfg.exec.spawn_overhead,
+            crate::types::DurationMs::new(250.0)
+        );
     }
 
     #[test]

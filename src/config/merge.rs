@@ -129,7 +129,10 @@ impl Config {
         self.exec.min_parallel_tests = tc
             .min_parallel_tests
             .unwrap_or(self.exec.min_parallel_tests);
-        self.exec.spawn_overhead_ms = tc.spawn_overhead_ms.unwrap_or(self.exec.spawn_overhead_ms);
+        self.exec.spawn_overhead = tc
+            .spawn_overhead_ms
+            .map(crate::types::DurationMs::new)
+            .unwrap_or(self.exec.spawn_overhead);
         self.exec.timeout_secs = tc.timeout;
         self.exec.timeout_multiplier = tc.timeout_multiplier;
 
@@ -714,7 +717,10 @@ mod tests {
 spawn_overhead_ms = 100.0
 "#;
         let cfg = Config::from_str(toml).unwrap();
-        assert_eq!(cfg.exec.spawn_overhead_ms, 100.0_f64);
+        assert_eq!(
+            cfg.exec.spawn_overhead,
+            crate::types::DurationMs::new(100.0)
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 
 use super::stats::{FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry};
 use crate::bridge::FixtureSession;
+use crate::types::DurationMs;
 
 #[derive(FromPyObject)]
 struct BridgeCacheEntry {
@@ -65,9 +66,9 @@ pub(crate) fn get_fixture_timings(
         .into_iter()
         .map(|e| FixtureTimingEntry {
             name: e.name,
-            total_setup_ms: e.total_setup_ms,
+            total_setup: DurationMs::new(e.total_setup_ms),
             setup_count: e.setup_count,
-            total_teardown_ms: e.total_teardown_ms,
+            total_teardown: DurationMs::new(e.total_teardown_ms),
             teardown_count: e.teardown_count,
         })
         .collect())

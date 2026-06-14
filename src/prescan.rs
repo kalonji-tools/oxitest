@@ -22,7 +22,7 @@ pub(crate) struct PrescanMarker {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PrescanItem {
     pub(crate) fn_name: String,
-    pub(crate) lineno: u32,
+    pub(crate) lineno: crate::types::LineNo,
     pub(crate) is_async: bool,
     pub(crate) markers: Vec<PrescanMarker>,
     pub(crate) param_ids: Vec<String>,
@@ -30,7 +30,7 @@ pub(crate) struct PrescanItem {
     pub(crate) is_class_method: bool,
     pub(crate) class_name: Option<String>,
     /// Estimated execution time in milliseconds, derived from AST analysis.
-    pub(crate) body_weight_ms: f64,
+    pub(crate) body_weight: crate::types::DurationMs,
 }
 
 /// Per-module prescan result used in the pipeline state.
@@ -584,13 +584,16 @@ macro_rules! build_prescan_item {
             .collect();
         let param_ids = extract_parametrize_kwarg_names(&$f.decorator_list);
         let fixture_params = extract_fixture_param_names(&$f.args);
-        let lineno = python_ast::offset_to_line($line_index, $f.range.start().to_u32());
-        let body_weight_ms = compute_body_weight(
+        let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
+            $line_index,
+            $f.range.start().to_u32(),
+        ));
+        let body_weight = crate::types::DurationMs::new(compute_body_weight(
             &$f.body,
             $is_async,
             fixture_params.len(),
             $heavy_import_weight,
-        );
+        ));
         PrescanItem {
             fn_name: $f.name.to_string(),
             lineno,
@@ -600,7 +603,7 @@ macro_rules! build_prescan_item {
             fixture_params,
             is_class_method: $is_class_method,
             class_name: $class_name,
-            body_weight_ms,
+            body_weight,
         }
     }};
 }
@@ -929,7 +932,7 @@ def test_it():
         match result {
             PrescanResult::HasTests(p) => {
                 assert!(!p.items.is_empty(), "expected at least one test item");
-                p.items[0].body_weight_ms
+                p.items[0].body_weight.as_f64()
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -1033,7 +1036,7 @@ def test_it():
         match result {
             PrescanResult::HasTests(p) => {
                 // base(2) + async(10) + sleep(500) + 2 stmts / 10 = 512.2
-                assert!((p.items[0].body_weight_ms - 512.2).abs() < 0.01);
+                assert!((p.items[0].body_weight.as_f64() - 512.2).abs() < 0.01);
             }
             _ => panic!("expected HasTests"),
         }
