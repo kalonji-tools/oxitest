@@ -28,46 +28,17 @@ pub(crate) fn extract_test_entries(test_files: &[Utf8PathBuf]) -> Vec<QueryEntry
             continue;
         };
 
-        for stmt in &stmts {
-            match stmt {
-                ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                    let marks = collect_fn_marks(&f.decorator_list);
-                    entries.push(make_test_entry(file, &f.name, None, false, &marks));
-                }
-                ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                    let marks = collect_fn_marks(&f.decorator_list);
-                    entries.push(make_test_entry(file, &f.name, None, true, &marks));
-                }
-                ast::Stmt::ClassDef(cls) if python_ast::is_test_class(&cls.name) => {
-                    for method in &cls.body {
-                        match method {
-                            ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                                let marks = collect_fn_marks(&f.decorator_list);
-                                entries.push(make_test_entry(
-                                    file,
-                                    &f.name,
-                                    Some(&cls.name),
-                                    false,
-                                    &marks,
-                                ));
-                            }
-                            ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                                let marks = collect_fn_marks(&f.decorator_list);
-                                entries.push(make_test_entry(
-                                    file,
-                                    &f.name,
-                                    Some(&cls.name),
-                                    true,
-                                    &marks,
-                                ));
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        python_ast::walk_test_defs(&stmts, |def, class| {
+            let marks = collect_fn_marks(def.decorator_list());
+            let class_name = class.map(|c| c.name.as_str());
+            entries.push(make_test_entry(
+                file,
+                def.name(),
+                class_name,
+                def.is_async(),
+                &marks,
+            ));
+        });
     }
 
     entries
