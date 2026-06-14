@@ -75,7 +75,13 @@ mod tests {
         let outcome = TestOutcome::Passed { tips: None };
         session.record_outcome(&item, &outcome, DurationMs::new(42.5));
 
-        assert_eq!(session.stats().counts.passed, 1);
+        assert_eq!(
+            session
+                .stats()
+                .counts
+                .get(crate::types::OutcomeKind::Passed),
+            1
+        );
         assert_eq!(session.stats().diagnostics.timings.len(), 1);
     }
 

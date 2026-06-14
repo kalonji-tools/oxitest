@@ -1,4 +1,5 @@
 use crate::reporter::stats::RunStats;
+use crate::types::OutcomeKind;
 
 use crate::colors::{
     color_cyan, color_dim, color_error_token, color_fail, color_pass, color_skip, color_timeout,
@@ -49,20 +50,21 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
     let mut parts: Vec<String> = Vec::new();
     push_stat(
         &mut parts,
-        stats.counts.failed,
+        stats.counts.get(OutcomeKind::Failed),
         "failed",
         color_fail,
         use_color,
     );
     push_stat_plural(
         &mut parts,
-        stats.counts.errored,
+        stats.counts.get(OutcomeKind::Error),
         "error",
         color_error_token,
         use_color,
     );
-    if stats.counts.xpassed > 0 {
-        let xpassed_str = format!("{} xpassed", stats.counts.xpassed);
+    let xpassed = stats.counts.get(OutcomeKind::XPassed);
+    if xpassed > 0 {
+        let xpassed_str = format!("{xpassed} xpassed");
         if stats.counts.xpassed_strict > 0 {
             parts.push(color_fail(&xpassed_str, use_color));
         } else {
@@ -71,42 +73,42 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
     }
     push_stat_plural(
         &mut parts,
-        stats.counts.timeout,
+        stats.counts.get(OutcomeKind::Timeout),
         "timeout",
         color_timeout,
         use_color,
     );
     push_stat(
         &mut parts,
-        stats.counts.passed,
+        stats.counts.get(OutcomeKind::Passed),
         "passed",
         color_pass,
         use_color,
     );
     push_stat(
         &mut parts,
-        stats.counts.skipped,
+        stats.counts.get(OutcomeKind::Skipped),
         "skipped",
         color_skip,
         use_color,
     );
     push_stat(
         &mut parts,
-        stats.counts.xfailed,
+        stats.counts.get(OutcomeKind::XFailed),
         "xfailed",
         color_dim,
         use_color,
     );
     push_stat_plural(
         &mut parts,
-        stats.counts.warned,
+        stats.counts.get(OutcomeKind::Warned),
         "warning",
         color_warn,
         use_color,
     );
     push_stat(
         &mut parts,
-        stats.counts.flaky,
+        stats.counts.get(OutcomeKind::Flaky),
         "flaky",
         color_warn,
         use_color,
@@ -215,19 +217,18 @@ mod tests {
         xpassed_strict: usize,
     ) -> RunStats {
         use crate::reporter::stats::OutcomeCounters;
+        use crate::types::OutcomeKind;
+        let mut counts = OutcomeCounters::default();
+        counts.by_kind[OutcomeKind::Passed as usize] = passed;
+        counts.by_kind[OutcomeKind::Failed as usize] = failed;
+        counts.by_kind[OutcomeKind::Error as usize] = errored;
+        counts.by_kind[OutcomeKind::Skipped as usize] = skipped;
+        counts.by_kind[OutcomeKind::Warned as usize] = warned;
+        counts.by_kind[OutcomeKind::XFailed as usize] = xfailed;
+        counts.by_kind[OutcomeKind::XPassed as usize] = xpassed;
+        counts.xpassed_strict = xpassed_strict;
         RunStats {
-            counts: OutcomeCounters {
-                passed,
-                failed,
-                errored,
-                skipped,
-                warned,
-                xfailed,
-                xpassed,
-                xpassed_strict,
-                flaky: 0,
-                ..OutcomeCounters::default()
-            },
+            counts,
             ..RunStats::new()
         }
     }
@@ -390,12 +391,11 @@ mod tests {
 
     #[test]
     fn test_summary_flaky_appears_when_nonzero() {
+        let mut counts = crate::reporter::stats::OutcomeCounters::default();
+        counts.by_kind[crate::types::OutcomeKind::Flaky as usize] = 2;
         let s = fmt_summary(
             &RunStats {
-                counts: crate::reporter::stats::OutcomeCounters {
-                    flaky: 2,
-                    ..Default::default()
-                },
+                counts,
                 ..RunStats::new()
             },
             0,
@@ -412,12 +412,11 @@ mod tests {
 
     #[test]
     fn test_summary_timeout_appears_when_nonzero() {
+        let mut counts = crate::reporter::stats::OutcomeCounters::default();
+        counts.by_kind[crate::types::OutcomeKind::Timeout as usize] = 2;
         let s = fmt_summary(
             &RunStats {
-                counts: crate::reporter::stats::OutcomeCounters {
-                    timeout: 2,
-                    ..Default::default()
-                },
+                counts,
                 ..RunStats::new()
             },
             0,
@@ -471,13 +470,12 @@ mod tests {
 
         #[test]
         fn summary_with_warnings_and_flaky() {
+            let mut counts = crate::reporter::stats::OutcomeCounters::default();
+            counts.by_kind[crate::types::OutcomeKind::Passed as usize] = 15;
+            counts.by_kind[crate::types::OutcomeKind::Warned as usize] = 2;
+            counts.by_kind[crate::types::OutcomeKind::Flaky as usize] = 1;
             let stats = RunStats {
-                counts: crate::reporter::stats::OutcomeCounters {
-                    passed: 15,
-                    warned: 2,
-                    flaky: 1,
-                    ..Default::default()
-                },
+                counts,
                 ..RunStats::new()
             };
             assert_snapshot!(fmt_summary(&stats, 0, false));
