@@ -11,7 +11,7 @@ use crate::types::TestItem;
 /// Called *before* `Scheduler::new()` — the scheduler itself always
 /// processes groups in insertion order, so the ordering happens here.
 pub(crate) fn apply_schedule_strategy(
-    groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    groups: &mut Vec<ModuleGroup>,
     strategy: ScheduleStrategy,
     cache: &impl TimingCache,
     failed_ids: &std::collections::HashSet<String>,
@@ -22,8 +22,8 @@ pub(crate) fn apply_schedule_strategy(
         }
         ScheduleStrategy::FailedFirst => {
             cache.sort_groups(groups);
-            groups.sort_by_key(|(_, items)| {
-                !items
+            groups.sort_by_key(|g| {
+                !g.items
                     .iter()
                     .any(|item| failed_ids.contains(item.node_id.as_ref()))
             });
@@ -66,12 +66,8 @@ pub(crate) struct Scheduler {
 }
 
 impl Scheduler {
-    /// Build from a list of (path, items) groups. Preserves insertion order (cache already sorted by duration).
-    pub(crate) fn new(groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) -> Self {
-        let groups: Vec<ModuleGroup> = groups
-            .into_iter()
-            .map(|(p, items)| ModuleGroup::new(p, items))
-            .collect();
+    /// Build from a list of module groups. Preserves insertion order (cache already sorted by duration).
+    pub(crate) fn new(groups: Vec<ModuleGroup>) -> Self {
         Self {
             queue: parking_lot::Mutex::new(std::collections::VecDeque::from(groups)),
         }
@@ -94,7 +90,7 @@ impl Scheduler {
 mod tests {
     use super::*;
 
-    fn make_group(path: &str, count: usize) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
+    fn make_group(path: &str, count: usize) -> ModuleGroup {
         let p = Utf8PathBuf::from(path);
         let items = (0..count)
             .map(|i| {
@@ -105,7 +101,7 @@ mod tests {
                 )
             })
             .collect();
-        (p, items)
+        ModuleGroup::new(p, items)
     }
 
     #[test]
@@ -166,7 +162,7 @@ mod tests {
         let failed: HashSet<String> = HashSet::new();
 
         apply_schedule_strategy(&mut groups, ScheduleStrategy::LongestFirst, &cache, &failed);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("slow.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("slow.py"));
     }
 
     #[test]
@@ -181,7 +177,7 @@ mod tests {
         failed.insert("broken.py::test_0".to_string());
 
         apply_schedule_strategy(&mut groups, ScheduleStrategy::FailedFirst, &cache, &failed);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("broken.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("broken.py"));
     }
 
     #[test]

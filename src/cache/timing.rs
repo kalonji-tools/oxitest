@@ -2,9 +2,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use camino::Utf8PathBuf;
-
 use super::{CacheEntry, TestCache};
+use crate::scheduler::ModuleGroup;
 use crate::types::TestItem;
 
 /// Cache for test timing data (scheduling, timeout suggestions, duration estimates).
@@ -24,7 +23,7 @@ pub trait TimingCache {
         ast_fallback_ms: Option<f64>,
     ) -> Option<Duration>;
     fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64>;
-    fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>);
+    fn sort_groups(&self, groups: &mut Vec<ModuleGroup>);
     fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32);
     fn invalidate(&mut self, items: &[Arc<TestItem>]);
 }
@@ -104,20 +103,18 @@ impl TimingCache for TestCache {
     /// durations. Uncached groups fall back to descending item count. Assigning
     /// the heaviest module to the first worker minimises tail latency by ensuring
     /// the longest-running work starts immediately.
-    fn sort_groups(&self, groups: &mut Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>) {
+    fn sort_groups(&self, groups: &mut Vec<ModuleGroup>) {
         // Pre-compute (duration_sum, item_count) for each group once — O(N*M) total.
         // Avoids re-running module_duration_sum inside the comparator, which would be
         // O(N log N * M) because the comparator fires once per sort comparison.
-        #[allow(clippy::type_complexity)]
-        let mut keyed: Vec<(Option<f64>, usize, Utf8PathBuf, Vec<Arc<TestItem>>)> =
-            std::mem::take(groups)
-                .into_iter()
-                .map(|(path, items)| {
-                    let sum = self.module_duration_sum(&items);
-                    let len = items.len();
-                    (sum, len, path, items)
-                })
-                .collect();
+        let mut keyed: Vec<(Option<f64>, usize, ModuleGroup)> = std::mem::take(groups)
+            .into_iter()
+            .map(|g| {
+                let sum = self.module_duration_sum(&g.items);
+                let len = g.items.len();
+                (sum, len, g)
+            })
+            .collect();
 
         keyed.sort_by(
             |(sum_a, len_a, ..), (sum_b, len_b, ..)| match (sum_a, sum_b) {
@@ -128,10 +125,7 @@ impl TimingCache for TestCache {
             },
         );
 
-        *groups = keyed
-            .into_iter()
-            .map(|(_, _, path, items)| (path, items))
-            .collect();
+        *groups = keyed.into_iter().map(|(_, _, g)| g).collect();
     }
 
     /// Merge test timings directly from `&[TestTiming]`, avoiding intermediate allocations.
@@ -192,12 +186,12 @@ mod tests {
     use crate::types::{OutcomeKind, TestItem};
     use std::sync::Arc;
 
-    fn make_group(module: &str, names: &[&str]) -> (Utf8PathBuf, Vec<Arc<TestItem>>) {
+    fn make_group(module: &str, names: &[&str]) -> crate::scheduler::ModuleGroup {
         let items = names
             .iter()
             .map(|n| TestItem::builder(module, n).arc())
             .collect();
-        (Utf8PathBuf::from(module), items)
+        crate::scheduler::ModuleGroup::new(Utf8PathBuf::from(module), items)
     }
 
     #[test]
@@ -257,8 +251,8 @@ mod tests {
             make_group("tests/slow.py", &["test_x", "test_y"]),
         ];
         cache.sort_groups(&mut groups);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/slow.py"));
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/fast.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/slow.py"));
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/fast.py"));
     }
 
     #[test]
@@ -269,8 +263,8 @@ mod tests {
             make_group("tests/known.py", &["test_a"]),
         ];
         cache.sort_groups(&mut groups);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/known.py"));
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/unknown.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/known.py"));
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/unknown.py"));
     }
 
     #[test]
@@ -281,8 +275,8 @@ mod tests {
             make_group("tests/large.py", &["test_x", "test_y", "test_z"]),
         ];
         cache.sort_groups(&mut groups);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/large.py"));
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/small.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/large.py"));
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/small.py"));
     }
 
     #[test]
@@ -296,8 +290,8 @@ mod tests {
             make_group("tests/slow.py", &["test_x", "test_uncached"]),
         ];
         cache.sort_groups(&mut groups);
-        assert_eq!(groups[0].0, Utf8PathBuf::from("tests/slow.py"));
-        assert_eq!(groups[1].0, Utf8PathBuf::from("tests/fast.py"));
+        assert_eq!(groups[0].module_path, Utf8PathBuf::from("tests/slow.py"));
+        assert_eq!(groups[1].module_path, Utf8PathBuf::from("tests/fast.py"));
     }
 
     #[test]

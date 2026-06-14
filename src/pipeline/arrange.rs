@@ -5,8 +5,7 @@
 
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
-
+use crate::scheduler::ModuleGroup;
 use crate::types::TestItem;
 
 /// Partition module groups into inprocess (main-process) and parallel-eligible groups.
@@ -14,26 +13,22 @@ use crate::types::TestItem;
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
-#[allow(clippy::type_complexity)]
 pub(super) fn partition_inprocess_groups(
-    groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-) -> (
-    Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-    Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-) {
+    groups: Vec<ModuleGroup>,
+) -> (Vec<ModuleGroup>, Vec<ModuleGroup>) {
     let mut inprocess = Vec::new();
     let mut parallel = Vec::new();
 
-    for (module_path, items) in groups {
+    for ModuleGroup { module_path, items } in groups {
         let (inp, par): (Vec<_>, Vec<_>) = items
             .into_iter()
             .partition(|item| item.markers.iter().any(|m| m == "inprocess"));
 
         if !inp.is_empty() {
-            inprocess.push((module_path.clone(), inp));
+            inprocess.push(ModuleGroup::new(module_path.clone(), inp));
         }
         if !par.is_empty() {
-            parallel.push((module_path, par));
+            parallel.push(ModuleGroup::new(module_path, par));
         }
     }
 
@@ -48,23 +43,18 @@ pub(super) fn partition_inprocess_groups(
 ///
 /// Returns `(arranged, remaining)` where `arranged[i]` contains the
 /// module groups for fixture component `i`.
-#[allow(clippy::type_complexity)]
 pub(super) fn partition_by_fixture_groups(
-    groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    groups: Vec<ModuleGroup>,
     fixture_groups: &[Vec<String>],
-) -> (
-    Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>>,
-    Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-) {
+) -> (Vec<Vec<ModuleGroup>>, Vec<ModuleGroup>) {
     if fixture_groups.is_empty() {
         return (vec![], groups);
     }
 
-    let mut arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>> =
-        vec![vec![]; fixture_groups.len()];
+    let mut arranged: Vec<Vec<ModuleGroup>> = vec![vec![]; fixture_groups.len()];
     let mut remaining = Vec::new();
 
-    for (module_path, items) in groups {
+    for ModuleGroup { module_path, items } in groups {
         let mut group_buckets: Vec<Vec<Arc<TestItem>>> = vec![vec![]; fixture_groups.len()];
         let mut unassigned: Vec<Arc<TestItem>> = Vec::new();
 
@@ -84,11 +74,11 @@ pub(super) fn partition_by_fixture_groups(
 
         for (gi, bucket) in group_buckets.into_iter().enumerate() {
             if !bucket.is_empty() {
-                arranged[gi].push((module_path.clone(), bucket));
+                arranged[gi].push(ModuleGroup::new(module_path.clone(), bucket));
             }
         }
         if !unassigned.is_empty() {
-            remaining.push((module_path, unassigned));
+            remaining.push(ModuleGroup::new(module_path, unassigned));
         }
     }
 
@@ -107,24 +97,20 @@ pub(super) enum ArrangeDecision {
 /// Evaluate whether auto-arrangement should proceed based on the threshold.
 ///
 /// Pure function: no I/O, no PyO3. Testable in isolation.
-#[allow(clippy::type_complexity)]
 pub(super) fn evaluate_arrange_threshold(
-    arranged: &[Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>],
-    remaining: &[(Utf8PathBuf, Vec<Arc<TestItem>>)],
+    arranged: &[Vec<ModuleGroup>],
+    remaining: &[ModuleGroup],
     threshold: u8,
 ) -> ArrangeDecision {
     let total_parallel: usize = arranged
         .iter()
         .flat_map(|g| g.iter())
-        .map(|(_, items)| items.len())
+        .map(|g| g.items.len())
         .sum::<usize>()
-        + remaining
-            .iter()
-            .map(|(_, items)| items.len())
-            .sum::<usize>();
+        + remaining.iter().map(|g| g.items.len()).sum::<usize>();
     let largest_group: usize = arranged
         .iter()
-        .map(|g| g.iter().map(|(_, items)| items.len()).sum::<usize>())
+        .map(|g| g.iter().map(|g| g.items.len()).sum::<usize>())
         .max()
         .unwrap_or(0);
     let ratio = if total_parallel > 0 {
@@ -154,25 +140,24 @@ pub(super) enum ExecutionStrategy {
 /// Produced by [`plan_execution`] — no I/O, no PyO3.  The caller in
 /// `execution.rs` dispatches based on this plan, spawning workers only
 /// after the plan is finalised.
-#[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub(super) struct ExecutionPlan {
     pub strategy: ExecutionStrategy,
     /// Tests marked `inprocess` — always run on the main process.
-    pub inprocess_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    pub inprocess_groups: Vec<ModuleGroup>,
     /// Fixture-arranged groups that must run serially on the main process.
-    pub arranged_groups: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>>,
+    pub arranged_groups: Vec<Vec<ModuleGroup>>,
     /// Remaining groups dispatched according to `strategy`.
-    pub parallel_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    pub parallel_groups: Vec<ModuleGroup>,
 }
 
 /// Build an [`ExecutionPlan`] from pre-computed inputs.
 ///
 /// Pure function: no I/O, no PyO3.  All PyO3-dependent data (fixture groups,
 /// estimated duration) must be resolved by the caller.
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn plan_execution(
-    groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    groups: Vec<ModuleGroup>,
     mode: &crate::config::ExecutionMode,
     worker_count_cfg: usize,
     spawn_overhead_ms: f64,
@@ -182,7 +167,7 @@ pub(super) fn plan_execution(
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
 ) -> ExecutionPlan {
-    let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
+    let total_tests: usize = groups.iter().map(|g| g.items.len()).sum();
 
     let is_serial = mode.is_serial();
     let force_parallel = matches!(
@@ -225,7 +210,7 @@ pub(super) fn plan_execution(
 
             if let ArrangeDecision::FallbackSerial { .. } = decision {
                 // Threshold exceeded — collapse everything back to serial.
-                let mut all_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = Vec::new();
+                let mut all_groups: Vec<ModuleGroup> = Vec::new();
                 for group_modules in arranged {
                     all_groups.extend(group_modules);
                 }
@@ -263,6 +248,7 @@ pub(super) fn plan_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheduler::ModuleGroup;
     use crate::types::TestItem;
     use camino::Utf8PathBuf;
     use std::sync::Arc;
@@ -273,27 +259,30 @@ mod tests {
         let inproc = TestItem::builder_raw("test_a.py::test_serial")
             .markers(vec!["inprocess".to_string()])
             .arc();
-        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![normal, inproc])];
+        let groups = vec![ModuleGroup::new(
+            Utf8PathBuf::from("test_a.py"),
+            vec![normal, inproc],
+        )];
 
         let (inp, par) = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1, "one module in inprocess");
-        assert_eq!(inp[0].1.len(), 1);
-        assert_eq!(inp[0].1[0].node_id.as_ref(), "test_a.py::test_serial");
+        assert_eq!(inp[0].items.len(), 1);
+        assert_eq!(inp[0].items[0].node_id.as_ref(), "test_a.py::test_serial");
         assert_eq!(par.len(), 1, "one module in parallel");
-        assert_eq!(par[0].1.len(), 1);
-        assert_eq!(par[0].1[0].node_id.as_ref(), "test_a.py::test_normal");
+        assert_eq!(par[0].items.len(), 1);
+        assert_eq!(par[0].items[0].node_id.as_ref(), "test_a.py::test_normal");
     }
 
     #[test]
     fn test_partition_inprocess_groups_no_inprocess() {
         let a = TestItem::builder_raw("test_a.py::test_a").arc();
         let b = TestItem::builder_raw("test_a.py::test_b").arc();
-        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
+        let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
         let (inp, par) = partition_inprocess_groups(groups);
         assert!(inp.is_empty());
         assert_eq!(par.len(), 1);
-        assert_eq!(par[0].1.len(), 2);
+        assert_eq!(par[0].items.len(), 2);
     }
 
     #[test]
@@ -304,11 +293,11 @@ mod tests {
         let b = TestItem::builder_raw("test_a.py::test_b")
             .markers(vec!["inprocess".to_string()])
             .arc();
-        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a, b])];
+        let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
         let (inp, par) = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1);
-        assert_eq!(inp[0].1.len(), 2);
+        assert_eq!(inp[0].items.len(), 2);
         assert!(par.is_empty());
     }
 
@@ -320,8 +309,8 @@ mod tests {
             .arc();
         let b_normal = TestItem::builder_raw("test_b.py::test_b").arc();
         let groups = vec![
-            (Utf8PathBuf::from("test_a.py"), vec![a_normal, a_inproc]),
-            (Utf8PathBuf::from("test_b.py"), vec![b_normal]),
+            ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a_normal, a_inproc]),
+            ModuleGroup::new(Utf8PathBuf::from("test_b.py"), vec![b_normal]),
         ];
 
         let (inp, par) = partition_inprocess_groups(groups);
@@ -332,7 +321,7 @@ mod tests {
     #[test]
     fn test_partition_by_fixture_groups_no_groups() {
         let a = TestItem::builder_raw("test_a.py::test_a").arc();
-        let groups = vec![(Utf8PathBuf::from("test_a.py"), vec![a])];
+        let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a])];
         let fixture_groups: Vec<Vec<String>> = vec![];
 
         let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
@@ -346,7 +335,7 @@ mod tests {
         a.fixture_names = vec!["db".to_string()];
         let mut b = TestItem::builder_raw("test_a.py::test_plain").build();
         b.fixture_names = vec![];
-        let groups = vec![(
+        let groups = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(a), Arc::new(b)],
         )];
@@ -355,11 +344,17 @@ mod tests {
         let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
         assert_eq!(arranged.len(), 1, "one fixture group");
         assert_eq!(arranged[0].len(), 1, "one module in fixture group");
-        assert_eq!(arranged[0][0].1.len(), 1, "one test in fixture group");
-        assert_eq!(arranged[0][0].1[0].node_id.as_ref(), "test_a.py::test_db");
+        assert_eq!(arranged[0][0].items.len(), 1, "one test in fixture group");
+        assert_eq!(
+            arranged[0][0].items[0].node_id.as_ref(),
+            "test_a.py::test_db"
+        );
         assert_eq!(remaining.len(), 1, "one module with remaining");
-        assert_eq!(remaining[0].1.len(), 1, "one test remaining");
-        assert_eq!(remaining[0].1[0].node_id.as_ref(), "test_a.py::test_plain");
+        assert_eq!(remaining[0].items.len(), 1, "one test remaining");
+        assert_eq!(
+            remaining[0].items[0].node_id.as_ref(),
+            "test_a.py::test_plain"
+        );
     }
 
     #[test]
@@ -370,7 +365,7 @@ mod tests {
         b.fixture_names = vec!["db".to_string()];
         let mut c = TestItem::builder_raw("test_a.py::test_plain").build();
         c.fixture_names = vec![];
-        let groups = vec![(
+        let groups = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(a), Arc::new(b), Arc::new(c)],
         )];
@@ -379,9 +374,9 @@ mod tests {
         let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
         assert_eq!(arranged.len(), 1);
         assert_eq!(arranged[0].len(), 1, "one module in fixture group 0");
-        assert_eq!(arranged[0][0].1.len(), 2, "two tests in that module");
+        assert_eq!(arranged[0][0].items.len(), 2, "two tests in that module");
         assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].1.len(), 1, "one plain test remaining");
+        assert_eq!(remaining[0].items.len(), 1, "one plain test remaining");
     }
 
     // ── evaluate_arrange_threshold ───────────────────────────────────────────
@@ -391,13 +386,13 @@ mod tests {
         // 2 arranged + 8 remaining = 20% ratio, threshold 70% → Arrange
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
-        let arranged = vec![vec![(
+        let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(item.clone()), Arc::new(item)],
         )]];
-        let remaining: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = (0..8)
+        let remaining: Vec<ModuleGroup> = (0..8)
             .map(|i| {
-                (
+                ModuleGroup::new(
                     Utf8PathBuf::from(format!("test_{i}.py")),
                     vec![TestItem::builder_raw(&format!("test_{i}.py::test")).arc()],
                 )
@@ -413,11 +408,11 @@ mod tests {
         // 9 arranged + 1 remaining = 90% ratio, threshold 70% → FallbackSerial
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
-        let arranged = vec![vec![(
+        let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             (0..9).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
         )]];
-        let remaining = vec![(
+        let remaining = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_b.py"),
             vec![TestItem::builder_raw("test_b.py::test_plain").arc()],
         )];
@@ -431,11 +426,11 @@ mod tests {
         // 7 arranged + 3 remaining = 70% ratio, threshold 70% → Arrange (not >)
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
         item.fixture_names = vec!["db".to_string()];
-        let arranged = vec![vec![(
+        let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             (0..7).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
         )]];
-        let remaining = vec![(
+        let remaining = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_b.py"),
             (0..3)
                 .map(|i| TestItem::builder_raw(&format!("test_b.py::test_{i}")).arc())
@@ -448,8 +443,8 @@ mod tests {
 
     #[test]
     fn test_threshold_empty_arranged_returns_arrange() {
-        let arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>> = vec![vec![]];
-        let remaining = vec![(
+        let arranged: Vec<Vec<ModuleGroup>> = vec![vec![]];
+        let remaining = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![TestItem::builder_raw("test_a.py::test_a").arc()],
         )];
@@ -460,8 +455,8 @@ mod tests {
 
     #[test]
     fn test_threshold_no_tests_returns_arrange() {
-        let arranged: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>> = vec![];
-        let remaining: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)> = vec![];
+        let arranged: Vec<Vec<ModuleGroup>> = vec![];
+        let remaining: Vec<ModuleGroup> = vec![];
 
         let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
         assert_eq!(decision, ArrangeDecision::Arrange);

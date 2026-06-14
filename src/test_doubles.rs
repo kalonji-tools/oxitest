@@ -5,13 +5,10 @@
 
 #[cfg(test)]
 pub(crate) mod doubles {
-    use std::sync::Arc;
-
-    use camino::Utf8PathBuf;
-
     use crate::parallel::PhaseResult;
     use crate::reporter::Reporter;
-    use crate::types::{TestItem, TestTiming};
+    use crate::scheduler::ModuleGroup;
+    use crate::types::TestTiming;
 
     // ─── StubHarness ─────────────────────────────────────────────────────────
 
@@ -24,7 +21,7 @@ pub(crate) mod doubles {
     impl crate::pipeline::traits::ExecutionHarness for StubHarness {
         fn execute_groups(
             &self,
-            _groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+            _groups: Vec<ModuleGroup>,
             _rep: &mut dyn Reporter,
         ) -> PhaseResult {
             PhaseResult {

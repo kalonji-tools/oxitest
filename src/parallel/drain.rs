@@ -404,12 +404,12 @@ mod drain_tests {
             make_test_item("tests/b.py", "test_gamma"),
         ];
 
-        let groups: Vec<(camino::Utf8PathBuf, Vec<Arc<TestItem>>)> = vec![
-            (
+        let groups = vec![
+            crate::scheduler::ModuleGroup::new(
                 camino::Utf8PathBuf::from("tests/a.py"),
                 vec![Arc::clone(&all_items[0]), Arc::clone(&all_items[1])],
             ),
-            (
+            crate::scheduler::ModuleGroup::new(
                 camino::Utf8PathBuf::from("tests/b.py"),
                 vec![Arc::clone(&all_items[2])],
             ),
