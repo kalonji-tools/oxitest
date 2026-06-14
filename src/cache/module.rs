@@ -56,16 +56,7 @@ impl ModuleCache for TestCache {
         let key = path.as_str().to_string();
         let cached_items = items
             .iter()
-            .map(|item| CachedItemData {
-                fn_name: item.fn_name.clone(),
-                lineno: item.lineno,
-                markers: item.markers.clone(),
-                param_id: item.param_id.clone(),
-                param_values: item.param_values.clone(),
-                is_async: item.is_async,
-                fixture_names: item.fixture_names.clone(),
-                fixref_names: item.fixref_names.clone(),
-            })
+            .map(|item| CachedItemData::from(item.as_ref()))
             .collect();
         self.inner.modules.insert(
             key,
