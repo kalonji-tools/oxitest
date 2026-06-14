@@ -127,16 +127,21 @@ impl RunStats {
 
     /// Record a flaky outcome, undoing the original failure count.
     ///
-    /// A flaky test was counted as a failure in the initial run. Since we
-    /// don't track which failure type, decrement in priority order.
-    pub(crate) fn record_flaky(&mut self) {
+    /// The `original` kind identifies which counter was incremented during
+    /// the initial run so we decrement the correct one.
+    pub(crate) fn record_flaky(&mut self, original: crate::types::OutcomeKind) {
         self.counts.flaky += 1;
-        if self.counts.failed > 0 {
-            self.counts.failed -= 1;
-        } else if self.counts.errored > 0 {
-            self.counts.errored -= 1;
-        } else if self.counts.timeout > 0 {
-            self.counts.timeout -= 1;
+        match original {
+            crate::types::OutcomeKind::Failed => {
+                self.counts.failed = self.counts.failed.saturating_sub(1);
+            }
+            crate::types::OutcomeKind::Error => {
+                self.counts.errored = self.counts.errored.saturating_sub(1);
+            }
+            crate::types::OutcomeKind::Timeout => {
+                self.counts.timeout = self.counts.timeout.saturating_sub(1);
+            }
+            _ => {}
         }
     }
 
@@ -178,7 +183,7 @@ impl RunStats {
             TestOutcome::XFailed { .. } => self.record_xfailed(),
             TestOutcome::XPassed { strict } => self.record_xpassed(*strict),
             TestOutcome::Timeout { .. } => self.record_timeout(),
-            TestOutcome::Flaky { .. } => self.record_flaky(),
+            TestOutcome::Flaky { original, .. } => self.record_flaky(*original),
         }
     }
 
@@ -255,7 +260,7 @@ mod tests {
     #[test]
     fn test_record_flaky_increments_counter() {
         let mut stats = RunStats::new();
-        stats.record_flaky();
+        stats.record_flaky(crate::types::OutcomeKind::Failed);
         assert_eq!(stats.counts.flaky, 1);
         assert_eq!(stats.counts.failed, 0);
     }

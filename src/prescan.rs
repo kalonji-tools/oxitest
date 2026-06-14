@@ -46,15 +46,9 @@ pub(crate) struct PrescanModule {
 pub(crate) struct PrescanPayload {
     pub(crate) source: String,
     pub(crate) stmts: Vec<ast::Stmt>,
-    #[allow(dead_code)]
-    pub(crate) test_count: usize,
-    #[allow(dead_code)]
-    pub(crate) adjusted_test_count: usize,
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
     pub(crate) module_markers: Vec<String>,
-    #[expect(dead_code)]
-    pub(crate) heavy_import_weight_ms: f64,
 }
 
 /// Result of pre-scanning a Python file for test functions.
@@ -627,7 +621,6 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
 
     let line_index = python_ast::build_line_index(&parsed.0);
     let mut test_count = 0;
-    let mut adjusted_test_count = 0;
     let mut items = Vec::new();
 
     let heavy_import_weight = detect_heavy_imports(&parsed.1);
@@ -635,7 +628,6 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     for stmt in &parsed.1 {
         if python_ast::is_test_function(stmt) {
             test_count += 1;
-            adjusted_test_count += python_ast::count_parametrize_cases(stmt);
             match stmt {
                 ast::Stmt::FunctionDef(f) => {
                     items.push(build_prescan_item!(
@@ -665,7 +657,6 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
                 for method in &cls.body {
                     if python_ast::is_test_function(method) {
                         test_count += 1;
-                        adjusted_test_count += python_ast::count_parametrize_cases(method);
                         match method {
                             ast::Stmt::FunctionDef(f) => {
                                 items.push(build_prescan_item!(
@@ -706,23 +697,17 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
         PrescanResult::HasTests(PrescanPayload {
             source: parsed.0,
             stmts: parsed.1,
-            test_count,
-            adjusted_test_count,
             items,
             has_dynamic_collection,
             module_markers,
-            heavy_import_weight_ms: heavy_import_weight,
         })
     } else {
         PrescanResult::HasTests(PrescanPayload {
             source: String::new(),
             stmts: Vec::new(),
-            test_count,
-            adjusted_test_count,
             items,
             has_dynamic_collection,
             module_markers,
-            heavy_import_weight_ms: heavy_import_weight,
         })
     }
 }
@@ -731,58 +716,6 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
 mod tests {
     use super::*;
     use crate::python_ast::tests::{temp_path, write_temp_py};
-
-    // ── prescan_with_ast test_count ─────────────────────────────────
-
-    #[test]
-    fn prescan_with_ast_populates_test_count() {
-        let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\ndef helper(): pass\n");
-        let result = prescan_with_ast(&temp_path(&f), false);
-        match result {
-            PrescanResult::HasTests(p) => assert_eq!(p.test_count, 2),
-            other => panic!("expected HasTests, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn prescan_with_ast_test_count_includes_class_methods() {
-        let f = write_temp_py(
-            "def test_top(): pass\nclass TestGroup:\n    def test_a(self): pass\n    def test_b(self): pass\n",
-        );
-        let result = prescan_with_ast(&temp_path(&f), false);
-        match result {
-            PrescanResult::HasTests(p) => assert_eq!(p.test_count, 3),
-            other => panic!("expected HasTests, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn prescan_with_ast_adjusted_count_with_parametrize() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n\ndef test_plain(): pass\n",
-        );
-        let result = prescan_with_ast(&temp_path(&f), false);
-        match result {
-            PrescanResult::HasTests(p) => {
-                assert_eq!(p.test_count, 2);
-                assert_eq!(p.adjusted_test_count, 4); // 3 param cases + 1 plain
-            }
-            other => panic!("expected HasTests, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn prescan_with_ast_adjusted_count_no_parametrize() {
-        let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\n");
-        let result = prescan_with_ast(&temp_path(&f), false);
-        match result {
-            PrescanResult::HasTests(p) => {
-                assert_eq!(p.test_count, 2);
-                assert_eq!(p.adjusted_test_count, 2);
-            }
-            other => panic!("expected HasTests, got {other:?}"),
-        }
-    }
 
     // ── prescan items ──────────────────────────────────────────────────────
 

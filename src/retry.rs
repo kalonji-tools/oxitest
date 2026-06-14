@@ -31,19 +31,25 @@ pub(crate) struct RetryContext<'a> {
 }
 
 /// Identify test items whose timings show a failure outcome.
+///
+/// Returns each failed item paired with its original outcome kind so the
+/// retry logic can thread it into `TestOutcome::Flaky`.
 pub(crate) fn identify_failed_items(
     items: &[Arc<TestItem>],
     timings: &[TestTiming],
-) -> Vec<Arc<TestItem>> {
-    let failed_ids: std::collections::HashSet<&str> = timings
+) -> Vec<(Arc<TestItem>, OutcomeKind)> {
+    let failed_map: std::collections::HashMap<&str, OutcomeKind> = timings
         .iter()
         .filter(|t| t.outcome.is_failure())
-        .map(|t| t.node_id.as_ref())
+        .map(|t| (t.node_id.as_ref(), t.outcome))
         .collect();
     items
         .iter()
-        .filter(|i| failed_ids.contains(i.node_id.as_ref()))
-        .cloned()
+        .filter_map(|i| {
+            failed_map
+                .get(i.node_id.as_ref())
+                .map(|&kind| (i.clone(), kind))
+        })
         .collect()
 }
 
@@ -70,13 +76,13 @@ pub(crate) fn merge_flaky_timings(
 /// Tests that fail all retries are NOT re-reported (original failure stands).
 pub(crate) fn run_retries(
     ctx: &RetryContext<'_>,
-    failed_items: &[Arc<TestItem>],
+    failed_items: &[(Arc<TestItem>, OutcomeKind)],
     rep: &mut dyn Reporter,
 ) -> RetryResult {
     let mut flaky_ids = Vec::new();
     let mut retry_timings = Vec::new();
 
-    for item in failed_items {
+    for (item, original_kind) in failed_items {
         let mut passed = false;
 
         for attempt in 1..=ctx.max_retries {
@@ -94,6 +100,7 @@ pub(crate) fn run_retries(
             if !outcome.is_hard_failure() {
                 let flaky_outcome = TestOutcome::Flaky {
                     message: format!("passed on retry {} of {}", attempt, ctx.max_retries),
+                    original: *original_kind,
                 };
                 rep.test_started(item);
                 rep.test_completed(item, &flaky_outcome, duration_ms, None);
@@ -150,8 +157,8 @@ mod tests {
         ];
         let failed = identify_failed_items(&items, &timings);
         assert_eq!(failed.len(), 2);
-        assert!(failed.iter().any(|i| i.node_id.contains("test_fail")));
-        assert!(failed.iter().any(|i| i.node_id.contains("test_err")));
+        assert!(failed.iter().any(|(i, _)| i.node_id.contains("test_fail")));
+        assert!(failed.iter().any(|(i, _)| i.node_id.contains("test_err")));
     }
 
     #[test]

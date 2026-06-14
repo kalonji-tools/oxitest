@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn test_remove_if_flaky_removes_matching_entry() {
-        use crate::types::{TestItem, TestOutcome};
+        use crate::types::{OutcomeKind, TestItem, TestOutcome};
 
         let item = TestItem::builder("tests/test_foo.py", "test_a").arc();
         let mut deferred = vec![
@@ -539,6 +539,7 @@ mod tests {
         ];
         let outcome = TestOutcome::Flaky {
             message: "flaky".to_string(),
+            original: OutcomeKind::Failed,
         };
         super::remove_if_flaky(&mut deferred, &outcome, &item, |d, target| {
             d.contains(target)
@@ -567,7 +568,7 @@ mod tests {
 
     #[test]
     fn test_remove_if_flaky_works_with_tuple_vec() {
-        use crate::types::{TestItem, TestOutcome};
+        use crate::types::{OutcomeKind, TestItem, TestOutcome};
         use std::sync::Arc;
 
         let item_a = TestItem::builder("tests/test_foo.py", "test_a").arc();
@@ -590,6 +591,7 @@ mod tests {
         ];
         let outcome = TestOutcome::Flaky {
             message: "flaky".to_string(),
+            original: OutcomeKind::Failed,
         };
         super::remove_if_flaky(&mut deferred, &outcome, &item_a, |entry, target| {
             entry.0.node_id.as_ref() == target
