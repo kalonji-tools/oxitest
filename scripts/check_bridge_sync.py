@@ -17,9 +17,18 @@ ROOT = Path(__file__).resolve().parent.parent
 RUST_PATH = ROOT / "src" / "bridge.rs"
 PYTHON_PATH = ROOT / "python" / "oxitest" / "_bridge" / "result.py"
 
-# Rust struct name -> Python class name
-PAIRS = {
-    "TestResult": "TestResult",
+# Rust struct name -> Python class name (or list of class names for union types)
+PAIRS: dict[str, str | list[str]] = {
+    "TestResult": [
+        "PassedResult",
+        "FailedResult",
+        "ErrorResult",
+        "SkippedResult",
+        "WarnedResult",
+        "XFailedResult",
+        "XPassedResult",
+        "TimeoutResult",
+    ],
     "CollectedItem": "CollectedItem",
     "RawViolation": "CollectedViolation",
 }
@@ -54,6 +63,15 @@ def parse_python_classes(path: Path) -> dict[str, set[str]]:
         is_dataclass = any(
             (isinstance(d, ast.Name) and d.id == "dataclass")
             or (isinstance(d, ast.Attribute) and d.attr == "dataclass")
+            or (
+                isinstance(d, ast.Call)
+                and (
+                    (isinstance(d.func, ast.Name) and d.func.id == "dataclass")
+                    or (
+                        isinstance(d.func, ast.Attribute) and d.func.attr == "dataclass"
+                    )
+                )
+            )
             for d in node.decorator_list
         )
         if not is_dataclass:
@@ -137,25 +155,28 @@ def parse_worker_item_reads(path: Path) -> set[str]:
 
 
 def parse_to_wire_fields(path: Path) -> set[str]:
-    """Extract field names emitted by TestResult.to_wire().
+    """Extract wire field names from per-outcome to_wire() methods and helpers.
 
-    Parses the output dict literal and optional dict in to_wire().
+    Collects:
+    - Dict keys from _wire_base (required fields)
+    - Keyword argument names from _wire_optional calls (optional fields)
+    - Direct output[...] assignments (frames, field_diffs)
     """
     text = path.read_text()
     fields: set[str] = set()
-    # Match quoted keys in dict literals within to_wire method
-    # Required: "node_id", "outcome", "duration_ms"
-    # Optional: "failure_repr", "message", "file", etc.
-    in_to_wire = False
-    for line in text.splitlines():
-        if "def to_wire" in line:
-            in_to_wire = True
-            continue
-        if in_to_wire:
-            if line and not line[0].isspace() and not line.strip().startswith("#"):
-                break  # next top-level def/class
-            for m in re.finditer(r'"(\w+)":', line):
-                fields.add(m.group(1))
+    # Required fields from _wire_base dict literal
+    for m in re.finditer(r'"(\w+)"\s*:', text):
+        key = m.group(1)
+        if key in ("node_id", "outcome", "duration_ms", "protocol_version"):
+            fields.add(key)
+    # Optional fields from _wire_optional keyword args
+    for m in re.finditer(r"_wire_optional\([^)]+\)", text, re.DOTALL):
+        call = m.group(0)
+        for kw in re.finditer(r"(\w+)\s*=\s*self\.", call):
+            fields.add(kw.group(1))
+    # Direct output[...] assignments (e.g., output["frames"] = ...)
+    for m in re.finditer(r'output\["(\w+)"\]', text):
+        fields.add(m.group(1))
     return fields
 
 
@@ -166,19 +187,39 @@ def main() -> int:
 
     for rust_name, py_name in PAIRS.items():
         rust_fields = rust.get(rust_name)
-        py_fields = python.get(py_name)
         if rust_fields is None:
             print(f"ERROR: Rust struct '{rust_name}' not found in {RUST_PATH}")
             errors += 1
             continue
-        if py_fields is None:
-            print(f"ERROR: Python class '{py_name}' not found in {PYTHON_PATH}")
-            errors += 1
-            continue
+        if isinstance(py_name, list):
+            # Union type: collect fields from all per-outcome dataclasses + "status"
+            py_fields: set[str] = {"status"}
+            missing_classes = []
+            for cls_name in py_name:
+                cls_fields = python.get(cls_name)
+                if cls_fields is None:
+                    missing_classes.append(cls_name)
+                else:
+                    py_fields |= cls_fields
+            if missing_classes:
+                print(
+                    f"ERROR: Python classes {missing_classes} not found "
+                    f"in {PYTHON_PATH}"
+                )
+                errors += 1
+                continue
+        else:
+            cls_fields = python.get(py_name)
+            if cls_fields is None:
+                print(f"ERROR: Python class '{py_name}' not found in {PYTHON_PATH}")
+                errors += 1
+                continue
+            py_fields = cls_fields
         rust_only = rust_fields - py_fields
         py_only = py_fields - rust_fields
+        label = py_name if isinstance(py_name, str) else "per-outcome union"
         if rust_only or py_only:
-            print(f"MISMATCH: {rust_name} (Rust) vs {py_name} (Python)")
+            print(f"MISMATCH: {rust_name} (Rust) vs {label} (Python)")
             if rust_only:
                 print(f"  Rust-only fields: {sorted(rust_only)}")
             if py_only:
@@ -189,7 +230,7 @@ def main() -> int:
     reporter_rust = parse_rust_structs(REPORTER_RUST_PATH)
     for rust_name, py_name in REPORTER_PAIRS.items():
         rust_fields = reporter_rust.get(rust_name)
-        py_fields = python.get(py_name)
+        py_fields = python.get(py_name)  # ty: ignore[invalid-assignment]
         if rust_fields is None:
             print(f"ERROR: Rust struct '{rust_name}' not found in {REPORTER_RUST_PATH}")
             errors += 1

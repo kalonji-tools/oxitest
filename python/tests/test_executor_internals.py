@@ -10,7 +10,11 @@ from oxitest._bridge._diagnostics import (
     _handle_runtime_exception,
 )
 from oxitest._bridge._middleware import _compose
-from oxitest._bridge.result import StatusKind, TestResult
+from oxitest._bridge.result import (
+    FailedResult,
+    PassedResult,
+    WarnedResult,
+)
 
 
 def test_plain_assertion_returns_failed():
@@ -70,8 +74,8 @@ def test_skipped_exception_returns_skipped():
     assert result.status == "skipped", (
         f"Skipped exception should produce status='skipped', got {result.status!r}"
     )
-    assert result.message == "skip reason", (
-        f"skipped result message should be 'skip reason', got {result.message!r}"
+    assert result.message == "skip reason", (  # ty: ignore[unresolved-attribute]
+        f"skipped result message should be 'skip reason', got {result.message!r}"  # ty: ignore[unresolved-attribute]
     )
 
 
@@ -96,8 +100,8 @@ def test_regular_exception_returns_error():
     assert result.status == "error", (
         f"ValueError should produce status='error', got {result.status!r}"
     )
-    assert "ValueError" in result.message, (
-        f"error message should contain 'ValueError', got {result.message!r}"
+    assert "ValueError" in result.message, (  # ty: ignore[unresolved-attribute]
+        f"error message should contain 'ValueError', got {result.message!r}"  # ty: ignore[unresolved-attribute]
     )
 
 
@@ -116,11 +120,11 @@ def test_compose_wraps_inner():
     """wrapper sees inner's result and can transform it."""
 
     def inner():
-        return TestResult(status=StatusKind.PASSED)
+        return PassedResult()
 
     def transform(next_fn):
         next_fn()
-        return TestResult(status=StatusKind.WARNED, message="wrapped")
+        return WarnedResult(message="wrapped")
 
     composed = _compose(transform, inner)
     result = composed()
@@ -131,7 +135,7 @@ def test_compose_wraps_inner():
 
 def test_compose_passes_through():
     def inner():
-        return TestResult(status=StatusKind.FAILED)
+        return FailedResult()
 
     def wrapper(next_fn):
         return next_fn()
@@ -156,7 +160,7 @@ def test_compose_chains_left_to_right():
         return next_fn()
 
     def base():
-        return TestResult(status=StatusKind.PASSED)
+        return PassedResult()
 
     # Simulates: for wrapper in reversed([w1, w2]):
     #   execute = _compose(wrapper, execute)
@@ -227,11 +231,11 @@ def test_frames_captured_on_runtime_exception():
 
     assert result is not None, "runtime exception should return a result"
     assert result.status == "error", f"expected error, got {result.status!r}"
-    assert len(result.frames) >= 2, (
-        f"Expected at least 2 frames, got {len(result.frames)}"
+    assert len(result.frames) >= 2, (  # ty: ignore[unresolved-attribute]
+        f"Expected at least 2 frames, got {len(result.frames)}"  # ty: ignore[unresolved-attribute]
     )
-    assert result.frames[-1].name == "blow_up", (
-        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"
+    assert result.frames[-1].name == "blow_up", (  # ty: ignore[unresolved-attribute]
+        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"  # ty: ignore[unresolved-attribute]
     )
 
 
@@ -241,7 +245,7 @@ def test_frames_empty_when_no_traceback():
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
     assert result is not None, "should return a result even without traceback"
-    assert result.frames == (), f"expected empty frames, got {result.frames!r}"
+    assert result.frames == (), f"expected empty frames, got {result.frames!r}"  # ty: ignore[unresolved-attribute]
 
 
 def test_bad_module_path_returns_error(tmp: TempDir):

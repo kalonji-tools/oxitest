@@ -24,7 +24,13 @@ from typing import Any
 from oxitest._bridge._fixture_session import _SessionProtocol
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._timeout import make_timeout_wrapper
-from oxitest._bridge.result import StatusKind, TestResult
+from oxitest._bridge.result import (
+    SkippedResult,
+    StatusKind,
+    TestResult,
+    XFailedResult,
+    XPassedResult,
+)
 
 MarkWrapper = Callable[[Callable[[], TestResult]], TestResult]
 
@@ -87,7 +93,7 @@ class _SkipHandler(MarkHandler):
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         """Short-circuit test execution with a `skipped` result."""
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
-        return MarkEvalResult(short_circuit=TestResult.skipped(str(reason)))
+        return MarkEvalResult(short_circuit=SkippedResult(message=str(reason)))
 
 
 class _XFailHandler(MarkHandler):
@@ -104,10 +110,10 @@ class _XFailHandler(MarkHandler):
             if result.status is StatusKind.SKIPPED:
                 return result
             if result.status in (StatusKind.PASSED, StatusKind.WARNED):
-                return TestResult.xpassed(strict=bool(strict))
+                return XPassedResult(strict=bool(strict))
             if raises is not None and result.exc_type != raises.__name__:  # ty: ignore[unresolved-attribute]
                 return result
-            return TestResult.xfailed(str(reason))
+            return XFailedResult(message=str(reason))
 
         return MarkEvalResult(wrapper=xfail_wrapper)
 

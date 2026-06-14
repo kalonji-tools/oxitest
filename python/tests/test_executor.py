@@ -69,16 +69,6 @@ def test_passing_function(tmp: TempDir):
     assert result.status == "passed", (
         f"passing test should have status='passed', got {result.status!r}"
     )
-    assert result.message == "", (
-        f"passing test should have empty message, got {result.message!r}"
-    )
-    assert result.file == "", (
-        f"passing test should have empty file, got {result.file!r}"
-    )
-    assert result.lineno == 0, f"passing test should have lineno=0, got {result.lineno}"
-    assert result.source_line == "", (
-        f"passing test should have empty source_line, got {result.source_line!r}"
-    )
     assert result.no_message_lines == (1,), (
         f"bare assert on line 1 should appear in no_message_lines, got "
         f"{result.no_message_lines}"
@@ -169,10 +159,6 @@ def test_error_exception(tmp: TempDir):
         f"{result.message!r}"
     )
     assert result.lineno == 2, f"error lineno should be 2, got {result.lineno}"
-    assert result.no_message_lines == (), (
-        f"error result should have empty no_message_lines, got "
-        f"{result.no_message_lines}"
-    )
 
 
 def test_skipped_via_unittest(tmp: TempDir):
@@ -186,10 +172,6 @@ def test_skipped_via_unittest(tmp: TempDir):
     )
     assert result.message == "reason", (
         f"skip message should be 'reason', got {result.message!r}"
-    )
-    assert result.no_message_lines == (), (
-        f"skipped result should have empty no_message_lines, got "
-        f"{result.no_message_lines}"
     )
 
 
@@ -288,13 +270,16 @@ def test_assertion_operands(
         f"expected status={expected_status!r}, got {result.status!r} "
         f"(message={result.message!r})"
     )
-    assert result.left == expected_left, (
-        f"expected left={expected_left!r}, got {result.left!r}"
+    actual_left = getattr(result, "left", "")
+    actual_right = getattr(result, "right", "")
+    actual_op = getattr(result, "op", "")
+    assert actual_left == expected_left, (
+        f"expected left={expected_left!r}, got {actual_left!r}"
     )
-    assert result.right == expected_right, (
-        f"expected right={expected_right!r}, got {result.right!r}"
+    assert actual_right == expected_right, (
+        f"expected right={expected_right!r}, got {actual_right!r}"
     )
-    assert result.op == expected_op, f"expected op={expected_op!r}, got {result.op!r}"
+    assert actual_op == expected_op, f"expected op={expected_op!r}, got {actual_op!r}"
     if expected_message:
         assert result.message == expected_message, (
             f"expected message={expected_message!r}, got {result.message!r}"

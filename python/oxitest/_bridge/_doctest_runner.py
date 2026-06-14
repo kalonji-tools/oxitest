@@ -8,7 +8,7 @@ import importlib.util
 import sys
 from typing import TYPE_CHECKING
 
-from oxitest._bridge.result import StatusKind, TestResult
+from oxitest._bridge.result import ErrorResult, FailedResult, PassedResult, TestResult
 
 if TYPE_CHECKING:
     pass
@@ -40,8 +40,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     unique_name = f"_oxitest_doctest_{id(module_path)}"
     spec = importlib.util.spec_from_file_location(unique_name, module_path)
     if spec is None or spec.loader is None:
-        return TestResult(
-            status=StatusKind.ERROR,
+        return ErrorResult(
             message=f"Cannot import {module_path}",
             file=module_path,
         )
@@ -51,8 +50,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     try:
         spec.loader.exec_module(module)
     except Exception as exc:
-        return TestResult(
-            status=StatusKind.ERROR,
+        return ErrorResult(
             message=f"Import error: {exc}",
             file=module_path,
         )
@@ -61,8 +59,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     try:
         obj = _resolve_object(module, name)
     except AttributeError as exc:
-        return TestResult(
-            status=StatusKind.ERROR,
+        return ErrorResult(
             message=f"Cannot resolve {name}: {exc}",
             file=module_path,
         )
@@ -72,14 +69,13 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     try:
         tests = finder.find(obj, name)
     except Exception as exc:
-        return TestResult(
-            status=StatusKind.ERROR,
+        return ErrorResult(
             message=f"DocTestFinder error: {exc}",
             file=module_path,
         )
 
     if not tests:
-        return TestResult(status=StatusKind.PASSED)
+        return PassedResult()
 
     # Run the first test (there's typically one per object)
     runner = doctest.DocTestRunner(verbose=False)
@@ -109,11 +105,10 @@ def run_doctest(module_path: str, name: str) -> TestResult:
             message = "Doctest failed"
 
         lineno = tests[0].lineno or 0
-        return TestResult(
-            status=StatusKind.FAILED,
+        return FailedResult(
             message=message,
             file=module_path,
             lineno=lineno + 1,  # 0-indexed to 1-indexed
         )
 
-    return TestResult(status=StatusKind.PASSED)
+    return PassedResult()

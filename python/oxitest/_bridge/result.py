@@ -3,17 +3,22 @@ from __future__ import annotations
 __all__ = [
     "CacheEntry",
     "CacheStats",
+    "ErrorResult",
+    "FailedResult",
     "Frame",
     "FixtureTiming",
+    "PassedResult",
+    "SkippedResult",
     "TestResult",
-    "CollectedItem",
-    "ViolationKind",
-    "CollectedViolation",
+    "TimeoutResult",
+    "WarnedResult",
+    "XFailedResult",
+    "XPassedResult",
     "_error_result",
     "PROTOCOL_VERSION",
 ]
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -60,24 +65,42 @@ _NON_FAILURE_STATUSES = frozenset(
 
 PROTOCOL_VERSION: int = 2
 
-_WIRE_EXCLUDE_ATTRS: frozenset[str] = frozenset(
-    {
-        "status",  # serialized as "outcome"
-        "exc_type",  # not sent over the wire
-        "frames",  # needs asdict() transformation
-        "field_diffs",  # needs list-of-list transformation
+
+def _wire_base(outcome: str, node_id: str, duration_ms: float) -> dict[str, Any]:
+    """Build the required wire fields shared by all outcome types."""
+    return {
+        "node_id": node_id,
+        "outcome": outcome,
+        "duration_ms": duration_ms,
+        "protocol_version": PROTOCOL_VERSION,
     }
-)
 
 
-@dataclass
-class TestResult:
-    """Bridge result returned by executor.run_test and consumed by Rust bridge.
+def _wire_optional(output: dict[str, Any], **kwargs: Any) -> None:
+    """Add non-falsy optional fields to the wire dict."""
+    output.update({k: v for k, v in kwargs.items() if v})
 
-    Field names must match the Rust TestResult struct in src/bridge.rs.
-    """
 
-    status: StatusKind
+@dataclass(frozen=True)
+class PassedResult:
+    """Result for a passing test."""
+
+    no_message_lines: tuple[int, ...] = ()
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.PASSED
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("passed", node_id, duration_ms)
+        _wire_optional(output, no_message_lines=self.no_message_lines)
+        return output
+
+
+@dataclass(frozen=True)
+class FailedResult:
+    """Result for a failed assertion."""
+
     message: str = ""
     file: str = ""
     lineno: int = 0
@@ -86,16 +109,17 @@ class TestResult:
     left: str = ""
     right: str = ""
     op: str = ""
-    strict: bool = True
     exc_type: str = ""
     frames: tuple[Frame, ...] = ()
     field_diffs: tuple[tuple[str, str, str], ...] = ()
 
     @property
+    def status(self) -> StatusKind:
+        return StatusKind.FAILED
+
+    @property
     def failure_repr(self) -> str | None:
-        """Human-readable failure string, or None for non-failure outcomes."""
-        if self.status in _NON_FAILURE_STATUSES:
-            return None
+        """Human-readable failure string."""
         parts: list[str] = []
         if self.message:
             parts.append(self.message)
@@ -112,77 +136,168 @@ class TestResult:
         return "\n".join(parts) if parts else f"Test {self.status}"
 
     def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
-        """Serialize for the worker JSON protocol.
-
-        Produces a compact dict: only non-falsy optional fields are included.
-        The Rust `WorkerResult` uses `#[serde(default)]` on all optional
-        fields, so missing keys deserialize correctly.
-        """
-        # Fields the worker computes (not on TestResult)
-        output: dict[str, Any] = {
-            "node_id": node_id,
-            "outcome": self.status,
-            "duration_ms": duration_ms,
-            "protocol_version": PROTOCOL_VERSION,
-        }
-        # Optional fields — omit falsy values for compact JSON
-        # Wire fields: "message": "file": "lineno": "source_line":
-        # "no_message_lines": "left": "right": "op": "strict":
-        # "frames": "field_diffs":
-        for f in fields(self):
-            if f.name not in _WIRE_EXCLUDE_ATTRS and (value := getattr(self, f.name)):
-                output[f.name] = value
+        output = _wire_base("failed", node_id, duration_ms)
+        _wire_optional(
+            output,
+            message=self.message,
+            file=self.file,
+            lineno=self.lineno,
+            source_line=self.source_line,
+            no_message_lines=self.no_message_lines,
+            left=self.left,
+            right=self.right,
+            op=self.op,
+        )
         if self.frames:
             output["frames"] = [asdict(f) for f in self.frames]
         if self.field_diffs:
             output["field_diffs"] = [list(fd) for fd in self.field_diffs]
         return output
 
-    @classmethod
-    def passed(cls, *, no_message_lines: tuple[int, ...] | None = None) -> TestResult:
-        """Factory for a passing test result."""
-        return cls(
-            status=StatusKind.PASSED,
-            no_message_lines=no_message_lines or (),
+
+@dataclass(frozen=True)
+class ErrorResult:
+    """Result for an uncaught exception (non-assertion)."""
+
+    message: str = ""
+    file: str = ""
+    lineno: int = 0
+    source_line: str = ""
+    exc_type: str = ""
+    frames: tuple[Frame, ...] = ()
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.ERROR
+
+    @property
+    def failure_repr(self) -> str | None:
+        """Human-readable failure string."""
+        parts: list[str] = []
+        if self.message:
+            parts.append(self.message)
+        if self.file:
+            location = f"{self.file}:{self.lineno}"
+            if self.source_line:
+                location += f"  {self.source_line}"
+            parts.append(location)
+        return "\n".join(parts) if parts else f"Test {self.status}"
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("error", node_id, duration_ms)
+        _wire_optional(
+            output,
+            message=self.message,
+            file=self.file,
+            lineno=self.lineno,
+            source_line=self.source_line,
         )
+        if self.frames:
+            output["frames"] = [asdict(f) for f in self.frames]
+        return output
 
-    @classmethod
-    def warned(
-        cls, message: str, *, no_message_lines: tuple[int, ...] | None = None
-    ) -> TestResult:
-        """Factory for a test that passed with warnings."""
-        return cls(
-            status=StatusKind.WARNED,
-            message=message,
-            no_message_lines=no_message_lines or (),
+
+@dataclass(frozen=True)
+class SkippedResult:
+    """Result for a skipped test."""
+
+    message: str = ""
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.SKIPPED
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("skipped", node_id, duration_ms)
+        _wire_optional(output, message=self.message)
+        return output
+
+
+@dataclass(frozen=True)
+class WarnedResult:
+    """Result for a test that passed with warnings."""
+
+    message: str = ""
+    no_message_lines: tuple[int, ...] = ()
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.WARNED
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("warned", node_id, duration_ms)
+        _wire_optional(
+            output,
+            message=self.message,
+            no_message_lines=self.no_message_lines,
         )
+        return output
 
-    @classmethod
-    def skipped(cls, message: str) -> TestResult:
-        """Factory for a skipped test result."""
-        return cls(status=StatusKind.SKIPPED, message=message)
 
-    @classmethod
-    def xfailed(cls, message: str = "") -> TestResult:
-        """Factory for an expected failure result."""
-        return cls(status=StatusKind.XFAILED, message=message)
+@dataclass(frozen=True)
+class XFailedResult:
+    """Result for an expected failure."""
 
-    @classmethod
-    def xpassed(cls, *, strict: bool = True) -> TestResult:
-        """Factory for an unexpected pass result."""
-        return cls(status=StatusKind.XPASSED, strict=strict)
+    message: str = ""
 
-    @classmethod
-    def timeout(cls, message: str) -> TestResult:
-        """Factory for a timed-out test result."""
-        return cls(status=StatusKind.TIMEOUT, message=message)
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.XFAILED
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("xfailed", node_id, duration_ms)
+        _wire_optional(output, message=self.message)
+        return output
+
+
+@dataclass(frozen=True)
+class XPassedResult:
+    """Result for an unexpected pass (xfail test that passed)."""
+
+    strict: bool = True
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.XPASSED
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("xpassed", node_id, duration_ms)
+        _wire_optional(output, strict=self.strict)
+        return output
+
+
+@dataclass(frozen=True)
+class TimeoutResult:
+    """Result for a timed-out test."""
+
+    message: str = ""
+
+    @property
+    def status(self) -> StatusKind:
+        return StatusKind.TIMEOUT
+
+    def to_wire(self, node_id: str, duration_ms: float) -> dict[str, Any]:
+        output = _wire_base("timeout", node_id, duration_ms)
+        _wire_optional(output, message=self.message)
+        return output
+
+
+TestResult = (
+    PassedResult
+    | FailedResult
+    | ErrorResult
+    | SkippedResult
+    | WarnedResult
+    | XFailedResult
+    | XPassedResult
+    | TimeoutResult
+)
 
 
 def _error_result(
     msg: str, file: str = "", lineno: int = 0, source_line: str = ""
-) -> TestResult:
-    return TestResult(
-        status=StatusKind.ERROR,
+) -> ErrorResult:
+    return ErrorResult(
         message=msg,
         file=file,
         lineno=lineno,

@@ -134,7 +134,7 @@ def test_tempdir_fixture_teardown_removes_directory():
 
 def test_tempdir_keep_tmp_failed_preserves_on_failure():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
-    from oxitest._bridge.result import StatusKind, TestResult
+    from oxitest._bridge.result import FailedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
@@ -144,7 +144,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure():
     assert path.is_dir(), "TempDir should create a directory"
 
     # Simulate a failed test result
-    result_cell[0] = TestResult(status=StatusKind.FAILED, message="assertion error")
+    result_cell[0] = FailedResult(message="assertion error")
 
     # Run teardown — should NOT remove the directory
     teardowns[0]()
@@ -159,7 +159,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure():
 
 def test_tempdir_keep_tmp_failed_cleans_on_pass():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
-    from oxitest._bridge.result import TestResult
+    from oxitest._bridge.result import PassedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="failed")
@@ -168,7 +168,7 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass():
     path = tmp.path
 
     # Simulate a passed test result
-    result_cell[0] = TestResult.passed()
+    result_cell[0] = PassedResult()
 
     teardowns[0]()
     assert not path.exists(), (
@@ -178,7 +178,7 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass():
 
 def test_tempdir_keep_tmp_always_preserves_on_pass():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
-    from oxitest._bridge.result import TestResult
+    from oxitest._bridge.result import PassedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="always")
@@ -186,7 +186,7 @@ def test_tempdir_keep_tmp_always_preserves_on_pass():
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
-    result_cell[0] = TestResult.passed()
+    result_cell[0] = PassedResult()
 
     teardowns[0]()
     assert path.exists(), (
@@ -199,7 +199,7 @@ def test_tempdir_keep_tmp_always_preserves_on_pass():
 
 def test_tempdir_keep_tmp_failed_preserves_on_error():
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
-    from oxitest._bridge.result import StatusKind, TestResult
+    from oxitest._bridge.result import ErrorResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(fn_name="err_test", keep_tmp="failed")
@@ -207,7 +207,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_error():
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
-    result_cell[0] = TestResult(status=StatusKind.ERROR, message="boom")
+    result_cell[0] = ErrorResult(message="boom")
 
     teardowns[0]()
     assert path.exists(), (
@@ -228,7 +228,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
     from contextlib import redirect_stderr
 
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
-    from oxitest._bridge.result import StatusKind, TestResult
+    from oxitest._bridge.result import FailedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
@@ -236,7 +236,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
-    result_cell[0] = TestResult(status=StatusKind.FAILED, message="oops")
+    result_cell[0] = FailedResult(message="oops")
 
     buf = io.StringIO()
     with redirect_stderr(buf):
