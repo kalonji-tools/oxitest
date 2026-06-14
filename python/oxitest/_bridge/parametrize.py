@@ -8,6 +8,9 @@ __all__ = [
     "resolve_parametrize",
     "ParametrizeError",
     "ResolvedCases",
+    "DictCases",
+    "DataclassCases",
+    "ComposedCases",
     "_Partial",
 ]
 
@@ -132,83 +135,79 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
     return False, ""
 
 
-@dataclass
-class ResolvedCases:
-    """Unified parametrize case representation.
-
-    Replaces the former ``_DictCases``, ``_DataclassCases``, and
-    ``_PartialCases`` with a single type that all callers use through
-    two methods:
-
-    * ``items()`` — yields ``(case_id, [(key, repr_value), ...])``
-      for collection.
-    * ``resolve(fn, param_id)`` — returns ``(kwargs_dict, fixref_names)``
-      for execution.
-
-    Three modes, determined by construction:
-
-    ``dict``
-        ``param_type is None``, ``is_composed is False``.
-        Cases are ``dict[str, dict[str, Any]]``.
-
-    ``dataclass``
-        ``param_type is not None``, ``is_composed is False``.
-        Cases are ``dict[str, <frozen dataclass instance>]``.
-
-    ``partial`` (composition)
-        ``param_type is not None``, ``is_composed is True``.
-        Cases are ``dict[str, _Partial]``.
-        ``provided_fields`` tracks which fields this layer covers.
-    """
+@dataclass(frozen=True)
+class DictCases:
+    """Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``."""
 
     cases: dict[str, Any]
-    param_type: type | None = None
-    fixref_fields: tuple[str, ...] = ()
-    is_composed: bool = False
-    provided_fields: frozenset[str] = frozenset()
 
     @property
     def is_dict_mode(self) -> bool:
-        """True when this layer represents dict-mode parametrize."""
-        return self.param_type is None and not self.is_composed
+        """Always True for dict-mode cases."""
+        return True
+
+    @property
+    def is_composed(self) -> bool:
+        """Always False for dict-mode cases."""
+        return False
+
+    @property
+    def fixref_fields(self) -> tuple[str, ...]:
+        return ()
+
+    @property
+    def fixref_names(self) -> frozenset[str]:
+        return frozenset()
+
+    def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
+        """Yield ``(case_id, [(key, repr_value), ...])`` for collection."""
+        for case_id, case in self.cases.items():
+            yield case_id, [(str(k), repr(v)) for k, v in case.items()]
+
+    def resolve(
+        self, fn: Callable[..., Any], param_id: str
+    ) -> tuple[dict[str, Any], frozenset[str]]:
+        """Resolve a single dict case into ``(kwargs_dict, frozenset())``."""
+        return dict(self.cases[param_id]), frozenset()
+
+
+@dataclass(frozen=True)
+class DataclassCases:
+    """Dataclass-mode parametrize: cases are ``dict[str, <frozen dataclass>]``."""
+
+    cases: dict[str, Any]
+    param_type: type
+    fixref_fields: tuple[str, ...] = ()
+
+    @property
+    def is_dict_mode(self) -> bool:
+        """Always False for dataclass-mode cases."""
+        return False
+
+    @property
+    def is_composed(self) -> bool:
+        """Always False for dataclass-mode cases."""
+        return False
 
     @property
     def fixref_names(self) -> frozenset[str]:
         return frozenset(self.fixref_fields)
 
     def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
-        """Yield ``(case_id, [(key, repr_value), ...])`` for collection."""
-        if self.param_type is None:
-            # dict mode
-            for case_id, case in self.cases.items():
-                yield case_id, [(str(k), repr(v)) for k, v in case.items()]
-        elif self.is_composed:
-            # partial/composition mode — cases hold _Partial instances
-            for case_id, p in self.cases.items():
-                yield (
-                    case_id,
-                    [(k, repr(v)) for k, v in p.fields.items()],
-                )
-        else:
-            # dataclass mode
-            for case_id, case in self.cases.items():
-                yield (
-                    case_id,
-                    [
-                        (f.name, repr(getattr(case, f.name)))
-                        for f in dataclasses.fields(case)  # type: ignore[arg-type]
-                    ],
-                )
+        """Yield ``(case_id, [(field, repr_value), ...])`` for collection."""
+        for case_id, case in self.cases.items():
+            yield (
+                case_id,
+                [
+                    (f.name, repr(getattr(case, f.name)))
+                    for f in dataclasses.fields(case)  # type: ignore[arg-type]
+                ],
+            )
 
     def resolve(
         self, fn: Callable[..., Any], param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
-        """Resolve a single case into ``(kwargs_dict, fixref_names)``."""
-        if self.param_type is None:
-            # dict mode — no compact detection, no fixrefs
-            return dict(self.cases[param_id]), frozenset()
-
-        # dataclass mode — compact detection + fixref handling
+        """Resolve a single dataclass case into ``(kwargs_dict, fixref_names)``."""
         case = self.cases[param_id]
         fixref_names = self.fixref_names
         is_compact, compact_param = _detect_compact_mode(fn, case)
@@ -228,8 +227,52 @@ class ResolvedCases:
         return param_kwargs, fixref_names
 
 
+@dataclass(frozen=True)
+class ComposedCases:
+    """Composition-mode parametrize: cases are ``dict[str, _Partial]``."""
+
+    cases: dict[str, Any]
+    param_type: type
+    fixref_fields: tuple[str, ...] = ()
+    provided_fields: frozenset[str] = frozenset()
+
+    @property
+    def is_dict_mode(self) -> bool:
+        """Always False for composition-mode cases."""
+        return False
+
+    @property
+    def is_composed(self) -> bool:
+        """Always True for composition-mode cases."""
+        return True
+
+    @property
+    def fixref_names(self) -> frozenset[str]:
+        return frozenset(self.fixref_fields)
+
+    def items(self) -> Iterable[tuple[str, list[tuple[str, str]]]]:
+        """Yield ``(case_id, [(field, repr_value), ...])`` for collection."""
+        for case_id, p in self.cases.items():
+            yield (
+                case_id,
+                [(k, repr(v)) for k, v in p.fields.items()],
+            )
+
+    def resolve(
+        self, fn: Callable[..., Any], param_id: str
+    ) -> tuple[dict[str, Any], frozenset[str]]:
+        """Not for direct use — goes through ``_resolve_composed``."""
+        raise ParametrizeError(
+            "ComposedCases.resolve() must not be called directly."
+            " Use _resolve_composed() for composition layers."
+        )
+
+
+ResolvedCases = DictCases | DataclassCases | ComposedCases
+
+
 def _resolve_composed(
-    layers: tuple[ResolvedCases, ...],
+    layers: tuple[ComposedCases, ...],
     fn: Callable[..., Any],
     param_id: str,
 ) -> tuple[dict[str, Any], frozenset[str]]:
@@ -274,8 +317,8 @@ def _resolve_composed(
     return param_kwargs, fixref_names
 
 
-def _build_partial_cases(cases: dict[str, Any]) -> ResolvedCases:
-    """Validate and build a ResolvedCases object from Partial values."""
+def _build_partial_cases(cases: dict[str, Any]) -> ComposedCases:
+    """Validate and build a ComposedCases object from Partial values."""
     if not cases:
         raise TypeError("parametrize requires at least one case")
     first = next(iter(cases.values()))
@@ -297,17 +340,16 @@ def _build_partial_cases(cases: dict[str, Any]) -> ResolvedCases:
             )
     provided = first.provided_fields
     fixref = first.fixref_fields
-    return ResolvedCases(
+    return ComposedCases(
         cases=cases,
         param_type=target_type,
         provided_fields=provided,
         fixref_fields=fixref,
-        is_composed=True,
     )
 
 
-def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> ResolvedCases:
-    """Validate and build a ResolvedCases object for dict mode."""
+def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> DictCases:
+    """Validate and build a DictCases object for dict mode."""
     hints = _get_hints(fn)
     valid_keys = frozenset(
         name
@@ -335,11 +377,11 @@ def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> Resolved
                 f" {sorted(missing)!r}\n"
                 f"provided: {sorted(case.keys())!r}"
             )
-    return ResolvedCases(cases=cases)
+    return DictCases(cases=cases)
 
 
-def _build_dataclass_cases(cases: dict[str, Any]) -> ResolvedCases:
-    """Validate and build a ResolvedCases object for dataclass mode."""
+def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
+    """Validate and build a DataclassCases object for dataclass mode."""
     if not cases:
         raise TypeError("parametrize requires at least one case")
     first = next(iter(cases.values()))
@@ -369,7 +411,7 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> ResolvedCases:
                     f" FixtureRef[...] but got {type(value)!r}"
                     f" — pass a fixture function, e.g. {field_name}=my_fixture."
                 )
-    return ResolvedCases(
+    return DataclassCases(
         cases=cases, param_type=values_type, fixref_fields=fixref_fields
     )
 
@@ -435,7 +477,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
                 meta.param_cases = (new_layer,)
             elif isinstance(existing, tuple):
                 for layer in existing:
-                    if not isinstance(layer, ResolvedCases) or not layer.is_composed:
+                    if not isinstance(layer, ComposedCases):
                         raise TypeError(
                             "parametrize: cannot mix partial() with"
                             " full dataclass or dict cases."
@@ -513,6 +555,6 @@ def resolve_parametrize(
             " Use @oxitest.parametrize to register cases."
         )
     layers = cast(tuple, layers)
-    if len(layers) == 1 and not layers[0].is_composed:
+    if len(layers) == 1 and not isinstance(layers[0], ComposedCases):
         return layers[0].resolve(fn, param_id)
     return _resolve_composed(layers, fn, param_id)
