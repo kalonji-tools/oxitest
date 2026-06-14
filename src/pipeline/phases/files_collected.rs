@@ -100,9 +100,9 @@ impl Pipeline<FilesCollected> {
             helpers::init_session(py, &self.shared.conftest_files, &self.cfg, || {
                 self.make_error_reporter()
             })?;
-        let (mut shared, _) = self.into_parts();
-        shared.session = Some(session);
+        let (shared, _) = self.into_parts();
         Ok(shared.into_pipeline(SessionReady {
+            session,
             session_violations: fixture_violations,
         }))
     }

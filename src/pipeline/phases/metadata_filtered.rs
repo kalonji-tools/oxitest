@@ -17,8 +17,8 @@ impl Pipeline<MetadataFiltered> {
         ) = self.into_parts();
         // Replace test_files with the filtered modules to import.
         shared.test_files = modules_to_import;
-        shared.session = Some(session);
         Ok(shared.into_pipeline(SessionReady {
+            session,
             session_violations: fixture_violations,
         }))
     }

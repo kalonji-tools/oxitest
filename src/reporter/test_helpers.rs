@@ -35,7 +35,6 @@ pub(crate) fn make_pipeline<S>(state: S) -> crate::pipeline::Pipeline<S> {
             ast_weight: None,
             test_files: vec![],
             conftest_files: vec![],
-            session: None,
         },
         state,
     }

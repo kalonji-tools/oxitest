@@ -7,17 +7,19 @@ use crate::{bridge, collector, config, filter, query};
 
 impl Pipeline<SessionReady> {
     pub(crate) fn collect(self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
-        let (mut shared, SessionReady { session_violations }) = self.into_parts();
+        let (
+            mut shared,
+            SessionReady {
+                session,
+                session_violations,
+            },
+        ) = self.into_parts();
         shared.cache.invalidate_modules();
-        let session = shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
         let (mut items, errors, raw_violations, profile) = collection::collect_items(
             py,
             &shared.test_files,
             &shared.cfg,
-            session,
+            &session,
             &mut shared.cache,
         );
 
@@ -45,7 +47,7 @@ impl Pipeline<SessionReady> {
 
         // Detect unused fixtures when strict mode is enabled.
         if shared.cfg.markers.strict.is_some() && !shared.cfg.filter.has_explicit_paths {
-            if let Ok(unused) = bridge::find_unused_fixtures(py, session, &items) {
+            if let Ok(unused) = bridge::find_unused_fixtures(py, &session, &items) {
                 merged_violations.extend(unused);
             }
         }
@@ -62,6 +64,7 @@ impl Pipeline<SessionReady> {
         }
 
         Ok(shared.into_pipeline(Collected {
+            session,
             items,
             raw_violations: merged_violations,
             collection_profile: profile,
@@ -73,11 +76,7 @@ impl Pipeline<SessionReady> {
             unreachable!("query only called for Query command");
         };
 
-        let session = self
-            .shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
+        let session = &self.state.session;
 
         if args.tree {
             if args.resource != query::resource::ResourceKind::Fixtures {
