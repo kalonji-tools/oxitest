@@ -15,7 +15,7 @@ pub(crate) struct TestItemBuilder {
     pub(super) module_path: Utf8PathBuf,
     pub(super) fn_name: String,
     pub(super) lineno: LineNo,
-    pub(super) markers: Vec<String>,
+    pub(super) markers: MarkerSet,
     pub(super) param_id: Option<String>,
     pub(super) param_values: Vec<ParamPair>,
     pub(super) is_async: bool,
@@ -30,7 +30,7 @@ impl TestItemBuilder {
     }
 
     pub(crate) fn markers(mut self, m: Vec<String>) -> Self {
-        self.markers = m;
+        self.markers = MarkerSet::from(m);
         self
     }
 

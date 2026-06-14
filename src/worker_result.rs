@@ -41,7 +41,7 @@ pub(crate) struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
     pub param_id: Option<&'a str>,
     pub node_id: &'a str,
-    pub markers: &'a [String],
+    pub markers: Vec<&'a str>,
 }
 
 /// Unified intermediate frame type used by both the JSON worker path

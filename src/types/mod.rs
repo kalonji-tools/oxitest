@@ -4,6 +4,7 @@
 //! [`TestOutcome`] (the eight possible results of running a test), [`CollectError`],
 //! and [`TestTiming`].
 
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -234,6 +235,136 @@ impl<'de> serde::Deserialize<'de> for FieldDiff {
     }
 }
 
+// Builtin marker bitflags
+const MARKER_SKIP: u8 = 1;
+const MARKER_XFAIL: u8 = 2;
+const MARKER_USEFIXTURES: u8 = 4;
+const MARKER_TIMEOUT: u8 = 8;
+const MARKER_INPROCESS: u8 = 16;
+
+/// Type-safe marker set with O(1) access for builtin markers.
+///
+/// Stores the 5 builtin markers as bitflags and custom markers in a HashSet.
+/// Replaces `Vec<String>` for marker storage in `TestItem`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkerSet {
+    builtins: u8,
+    custom: HashSet<Arc<str>>,
+}
+
+#[allow(dead_code)]
+impl MarkerSet {
+    pub fn new() -> Self {
+        Self {
+            builtins: 0,
+            custom: HashSet::new(),
+        }
+    }
+
+    pub fn has_skip(&self) -> bool {
+        self.builtins & MARKER_SKIP != 0
+    }
+    pub fn has_xfail(&self) -> bool {
+        self.builtins & MARKER_XFAIL != 0
+    }
+    pub fn has_usefixtures(&self) -> bool {
+        self.builtins & MARKER_USEFIXTURES != 0
+    }
+    pub fn has_timeout(&self) -> bool {
+        self.builtins & MARKER_TIMEOUT != 0
+    }
+    pub fn has_inprocess(&self) -> bool {
+        self.builtins & MARKER_INPROCESS != 0
+    }
+
+    /// Check if any marker with the given name exists (O(1) for builtins, O(1) avg for custom).
+    pub fn has(&self, name: &str) -> bool {
+        match name {
+            "skip" => self.has_skip(),
+            "xfail" => self.has_xfail(),
+            "usefixtures" => self.has_usefixtures(),
+            "timeout" => self.has_timeout(),
+            "inprocess" => self.has_inprocess(),
+            _ => self.custom.contains(name),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.builtins == 0 && self.custom.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.builtins.count_ones() as usize + self.custom.len()
+    }
+
+    /// Iterate all marker names (builtins first, then custom).
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        let builtins = [
+            (MARKER_SKIP, "skip"),
+            (MARKER_XFAIL, "xfail"),
+            (MARKER_USEFIXTURES, "usefixtures"),
+            (MARKER_TIMEOUT, "timeout"),
+            (MARKER_INPROCESS, "inprocess"),
+        ];
+        let b = self.builtins;
+        builtins
+            .into_iter()
+            .filter(move |(bit, _)| b & bit != 0)
+            .map(|(_, name)| name)
+            .chain(self.custom.iter().map(|s| s.as_ref()))
+    }
+
+    /// Convert to Vec<String> for serialization/wire compat.
+    pub fn to_vec(&self) -> Vec<String> {
+        self.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Join all marker names with a separator.
+    pub fn join(&self, sep: &str) -> String {
+        let parts: Vec<&str> = self.iter().collect();
+        parts.join(sep)
+    }
+}
+
+impl Default for MarkerSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<Vec<String>> for MarkerSet {
+    fn from(names: Vec<String>) -> Self {
+        let mut set = Self::new();
+        for name in names {
+            match name.as_str() {
+                "skip" => set.builtins |= MARKER_SKIP,
+                "xfail" => set.builtins |= MARKER_XFAIL,
+                "usefixtures" => set.builtins |= MARKER_USEFIXTURES,
+                "timeout" => set.builtins |= MARKER_TIMEOUT,
+                "inprocess" => set.builtins |= MARKER_INPROCESS,
+                _ => {
+                    set.custom.insert(Arc::from(name.as_str()));
+                }
+            }
+        }
+        set
+    }
+}
+
+// Serde: serialize as Vec<String> for cache compatibility
+impl serde::Serialize for MarkerSet {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_vec().serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MarkerSet {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let names = Vec::<String>::deserialize(deserializer)?;
+        Ok(Self::from(names))
+    }
+}
+
 /// Process exit code with named variants for each documented exit status.
 ///
 /// - `Success` (0) — all tests passed (or were skipped / xfailed).
@@ -286,7 +417,7 @@ pub struct TestItem {
     pub(crate) module_path: Utf8PathBuf,
     pub(crate) fn_name: String,
     pub(crate) lineno: LineNo,
-    pub(crate) markers: Vec<String>,
+    pub(crate) markers: MarkerSet,
     pub(crate) param_id: Option<String>,
     pub(crate) param_values: Vec<ParamPair>,
     #[serde(default)]
@@ -313,7 +444,7 @@ impl TestItem {
             module_path: Utf8PathBuf::from(module_path),
             fn_name: fn_name.to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -330,7 +461,7 @@ impl TestItem {
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: node_id.to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -786,7 +917,7 @@ mod tests {
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_add".to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: Some("basic".to_string()),
             param_values: vec![ParamPair {
                 name: "x".to_string(),
@@ -807,7 +938,7 @@ mod tests {
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_foo".to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -825,7 +956,7 @@ mod tests {
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_sync".to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -839,7 +970,7 @@ mod tests {
             module_path: Utf8PathBuf::from("test.py"),
             fn_name: "test_async".to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: true,
@@ -1104,7 +1235,7 @@ mod tests {
             .fixref_names(vec!["backend".to_string()])
             .build();
         assert_eq!(item.lineno, LineNo::new(42));
-        assert_eq!(item.markers, vec!["slow"]);
+        assert_eq!(item.markers.to_vec(), vec!["slow"]);
         assert!(item.is_async);
         assert_eq!(item.fixture_names, vec!["db"]);
         assert_eq!(item.fixref_names, vec!["backend"]);
@@ -1482,5 +1613,113 @@ mod duration_ms_tests {
         let a = DurationMs::new(30.0);
         let b = DurationMs::new(10.0);
         assert_eq!((a - b).as_f64(), 20.0);
+    }
+}
+
+#[cfg(test)]
+mod marker_set_tests {
+    use super::*;
+
+    /// Builtins are stored as bitflags and custom markers in HashSet — both
+    /// must be correctly partitioned from a single input Vec.
+    #[test]
+    fn from_vec_partitions_builtins_and_custom() {
+        let set = MarkerSet::from(vec![
+            "skip".to_string(),
+            "timeout".to_string(),
+            "slow".to_string(),
+            "integration".to_string(),
+        ]);
+        // Builtins detected
+        assert!(set.has_skip());
+        assert!(set.has_timeout());
+        // Non-builtins NOT in bitflags
+        assert!(!set.has_xfail());
+        assert!(!set.has_inprocess());
+        // Custom markers stored
+        assert!(set.has("slow"));
+        assert!(set.has("integration"));
+        // Total count correct
+        assert_eq!(set.len(), 4);
+    }
+
+    /// The `has()` method must route to bitflags for builtins and HashSet for custom,
+    /// returning false for markers not present in either.
+    #[test]
+    fn has_returns_false_for_absent_markers() {
+        let set = MarkerSet::from(vec!["xfail".to_string()]);
+        assert!(set.has("xfail"));
+        assert!(!set.has("skip"));
+        assert!(!set.has("nonexistent"));
+    }
+
+    /// Serde roundtrip must preserve all markers — this is the cache compatibility contract.
+    /// If this breaks, existing `.oxitest_cache/timings.json` files become unreadable.
+    #[test]
+    fn serde_roundtrip_preserves_all_markers() {
+        let original = MarkerSet::from(vec![
+            "skip".to_string(),
+            "inprocess".to_string(),
+            "custom_mark".to_string(),
+        ]);
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: MarkerSet = serde_json::from_str(&json).unwrap();
+        // Must contain same markers regardless of ordering
+        assert_eq!(original.len(), deserialized.len());
+        assert!(deserialized.has_skip());
+        assert!(deserialized.has_inprocess());
+        assert!(deserialized.has("custom_mark"));
+    }
+
+    /// Serde format must be a JSON array of strings — this is the wire/cache format contract.
+    #[test]
+    fn serde_format_is_string_array() {
+        let set = MarkerSet::from(vec!["timeout".to_string()]);
+        let json = serde_json::to_string(&set).unwrap();
+        // Must deserialize as a plain JSON array, not an object
+        let raw: Vec<String> = serde_json::from_str(&json).unwrap();
+        assert_eq!(raw, vec!["timeout"]);
+    }
+
+    /// iter() is consumed by filter.rs for marker validation — it must yield all markers
+    /// and builtins must come first (before custom) for deterministic output.
+    #[test]
+    fn iter_yields_builtins_before_custom() {
+        let set = MarkerSet::from(vec![
+            "slow".to_string(),
+            "skip".to_string(),
+            "xfail".to_string(),
+        ]);
+        let names: Vec<&str> = set.iter().collect();
+        // Builtins (skip, xfail) must appear before custom (slow)
+        let skip_pos = names.iter().position(|&n| n == "skip").unwrap();
+        let xfail_pos = names.iter().position(|&n| n == "xfail").unwrap();
+        let slow_pos = names.iter().position(|&n| n == "slow").unwrap();
+        assert!(skip_pos < slow_pos);
+        assert!(xfail_pos < slow_pos);
+    }
+
+    /// Duplicate builtins in input must not inflate the count — bitflags are idempotent.
+    #[test]
+    fn duplicate_builtins_are_deduplicated() {
+        let set = MarkerSet::from(vec![
+            "skip".to_string(),
+            "skip".to_string(),
+            "skip".to_string(),
+        ]);
+        assert_eq!(set.len(), 1);
+        assert!(set.has_skip());
+    }
+
+    /// Empty marker set is the default for most tests — must behave correctly.
+    #[test]
+    fn empty_set_has_nothing() {
+        let set = MarkerSet::new();
+        assert!(set.is_empty());
+        assert_eq!(set.len(), 0);
+        assert!(!set.has("skip"));
+        assert!(!set.has("anything"));
+        assert_eq!(set.join(","), "");
+        assert_eq!(set.to_vec(), Vec::<String>::new());
     }
 }

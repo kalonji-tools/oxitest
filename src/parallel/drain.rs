@@ -389,7 +389,7 @@ mod drain_tests {
                 module_path: Utf8PathBuf::from(path),
                 fn_name: fn_name.to_string(),
                 lineno: crate::types::LineNo::new(1),
-                markers: vec![],
+                markers: crate::types::MarkerSet::new(),
                 param_id: None,
                 param_values: vec![],
                 is_async: false,

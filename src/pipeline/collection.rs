@@ -265,7 +265,7 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
                 module_path: file.clone(),
                 fn_name,
                 lineno: types::LineNo::new(loc.lineno),
-                markers: vec!["doctest".to_string()],
+                markers: types::MarkerSet::from(vec!["doctest".to_string()]),
                 param_id: None,
                 param_values: vec![],
                 is_async: false,

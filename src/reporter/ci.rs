@@ -152,8 +152,8 @@ impl Reporter for CiReporter {
 mod tests {
     use super::*;
     use crate::config::TbStyle;
-    use crate::types::TestItem;
     use crate::types::TestOutcome;
+    use crate::types::{MarkerSet, TestItem};
 
     fn make_ci_reporter(tb: TbStyle) -> CiReporter {
         CiReporter::new(
@@ -358,7 +358,7 @@ mod tests {
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_add".to_string(),
             lineno: LineNo::new(5),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: Some("neg".to_string()),
             param_values: vec![crate::types::ParamPair {
                 name: "x".to_string(),
