@@ -22,6 +22,9 @@ impl FixtureCacheStats {
     /// Format the fixture cache summary line.
     pub(crate) fn summary(&self) -> String {
         let total = self.hits + self.misses;
+        if total == 0 {
+            return "shared fixture cache: no fixtures used".to_string();
+        }
         let pct = 100 * self.hits / total;
         format!(
             "shared fixture cache: {}/{} hits ({}%)",
@@ -389,6 +392,17 @@ mod tests {
             teardown_count: 0,
         });
         assert!(stats.slowest_fixtures(0).is_empty());
+    }
+
+    #[test]
+    fn fixture_cache_summary_zero_total_does_not_panic() {
+        let stats = FixtureCacheStats {
+            hits: 0,
+            misses: 0,
+            breakdown: vec![],
+        };
+        let s = stats.summary();
+        assert!(!s.is_empty());
     }
 
     #[test]
