@@ -104,9 +104,9 @@ mod pipeline_shared_round_trip_tests {
         assert_eq!(p2.rootdir, original_rootdir);
         assert_eq!(p2.python_bin, original_python_bin);
 
-        // FilesCollected -> (decompose and rebuild with PreFilter)
+        // FilesCollected -> (decompose and rebuild with Ready)
         let (shared2, _) = p2.into_parts();
-        let p3 = shared2.into_pipeline(PreFilter {
+        let p3 = shared2.into_pipeline(Ready {
             clean_items: vec![],
             violated_items: vec![],
             all_violations: vec![],
@@ -297,19 +297,18 @@ mod filter_last_failed_tests {
     fn failed_only_with_no_cache_runs_all() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![
+            let mut p = make_pipeline(Collected {
+                items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
+                raw_violations: vec![],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.filter.failed = Some(FailedMode::Only);
 
-            let result = p.filter(py);
+            let result = p.strict_or_skip(py);
             assert!(result.is_ok());
             let p = result.unwrap();
             // No cached failures -> all items pass through
@@ -321,19 +320,18 @@ mod filter_last_failed_tests {
     fn failed_first_with_no_cache_preserves_order() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![
+            let mut p = make_pipeline(Collected {
+                items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
+                raw_violations: vec![],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.filter.failed = Some(FailedMode::First);
 
-            let result = p.filter(py);
+            let result = p.strict_or_skip(py);
             assert!(result.is_ok());
             let p = result.unwrap();
             assert_eq!(p.state.clean_items.len(), 2);
@@ -344,20 +342,19 @@ mod filter_last_failed_tests {
     fn no_failed_mode_passes_all() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![
+            let mut p = make_pipeline(Collected {
+                items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_three").arc(),
                 ],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
+                raw_violations: vec![],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // cfg.filter.failed is None by default
 
-            let result = p.filter(py);
+            let result = p.strict_or_skip(py);
             assert!(result.is_ok());
             let p = result.unwrap();
             assert_eq!(p.state.clean_items.len(), 3);
@@ -367,32 +364,34 @@ mod filter_last_failed_tests {
 
 mod filter_preserves_violations_tests {
     use super::*;
+    use crate::bridge::{RawViolation, ViolationKind};
+    use crate::config::StrictMode;
     use crate::reporter::test_helpers::make_pipeline;
-    use crate::strict::{PerTestViolation, StrictViolation};
-    use crate::types::{NodeId, TestItem};
+    use crate::types::TestItem;
 
     #[test]
-    fn filter_carries_violated_items_and_violations_through() {
+    fn strict_then_filter_carries_violations_through() {
         Python::initialize();
         Python::attach(|py| {
-            let violations = vec![StrictViolation::PerTest(PerTestViolation::BareAssert {
-                node_id: NodeId::from_raw("tests/test_a.py::test_bad"),
-                lines: vec![5],
-            })];
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![TestItem::builder_raw("tests/test_a.py::test_good").arc()],
-                violated_items: vec![TestItem::builder_raw("tests/test_a.py::test_bad").arc()],
-                all_violations: violations,
-                suite_lines: vec!["some warning".to_string()],
+            let mut p = make_pipeline(Collected {
+                items: vec![
+                    TestItem::builder_raw("tests/test_a.py::test_good").arc(),
+                    TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
+                ],
+                raw_violations: vec![RawViolation {
+                    node_id: "tests/test_a.py::test_bad".to_string(),
+                    kind: ViolationKind::BareAssert,
+                    detail: "line 5".to_string(),
+                }],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
+            p.cfg.markers.strict = Some(StrictMode::Enforce);
 
-            let p = p.filter(py).unwrap();
+            let p = p.strict_or_skip(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 1);
             assert_eq!(p.state.violated_items.len(), 1);
             assert_eq!(p.state.all_violations.len(), 1);
-            assert_eq!(p.state.suite_lines.len(), 1);
-            assert_eq!(p.state.suite_lines[0], "some warning");
         });
     }
 }
