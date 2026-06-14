@@ -55,16 +55,11 @@ impl Pipeline<FilesCollected> {
 
         for (file, result) in file_results {
             match result {
-                crate::prescan::PrescanResult::HasTests {
-                    items,
-                    has_dynamic_collection,
-                    module_markers: file_marks,
-                    ..
-                } => {
-                    ast_weight_sum += items.iter().map(|i| i.body_weight_ms).sum::<f64>();
-                    prescan_data.push((file.clone(), items, has_dynamic_collection));
-                    if !file_marks.is_empty() {
-                        module_markers.insert(file, file_marks);
+                crate::prescan::PrescanResult::HasTests(p) => {
+                    ast_weight_sum += p.items.iter().map(|i| i.body_weight_ms).sum::<f64>();
+                    prescan_data.push((file.clone(), p.items, p.has_dynamic_collection));
+                    if !p.module_markers.is_empty() {
+                        module_markers.insert(file, p.module_markers);
                     }
                 }
                 crate::prescan::PrescanResult::NoTests => {
