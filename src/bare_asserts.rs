@@ -46,54 +46,16 @@ pub(crate) fn collect_bare_asserts_from_ast(
 fn find_bare_asserts(path: &Utf8Path, stmts: &[ast::Stmt], line_index: &[u32]) -> Vec<BareAssert> {
     let mut found = Vec::new();
 
-    for stmt in stmts {
-        match stmt {
-            ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                let lines = walk_bare_asserts(&f.body, line_index);
-                if !lines.is_empty() {
-                    found.push(BareAssert {
-                        node_id: format!("{path}::{}", f.name),
-                        lines,
-                    });
-                }
-            }
-            ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                let lines = walk_bare_asserts(&f.body, line_index);
-                if !lines.is_empty() {
-                    found.push(BareAssert {
-                        node_id: format!("{path}::{}", f.name),
-                        lines,
-                    });
-                }
-            }
-            ast::Stmt::ClassDef(cls) if python_ast::is_test_class(&cls.name) => {
-                for item in &cls.body {
-                    match item {
-                        ast::Stmt::FunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                            let lines = walk_bare_asserts(&f.body, line_index);
-                            if !lines.is_empty() {
-                                found.push(BareAssert {
-                                    node_id: format!("{path}::{}::{}", cls.name, f.name),
-                                    lines,
-                                });
-                            }
-                        }
-                        ast::Stmt::AsyncFunctionDef(f) if python_ast::is_test_fn(&f.name) => {
-                            let lines = walk_bare_asserts(&f.body, line_index);
-                            if !lines.is_empty() {
-                                found.push(BareAssert {
-                                    node_id: format!("{path}::{}::{}", cls.name, f.name),
-                                    lines,
-                                });
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
+    python_ast::walk_test_defs(stmts, |def, class| {
+        let lines = walk_bare_asserts(def.body(), line_index);
+        if !lines.is_empty() {
+            let node_id = match class {
+                Some(cls) => format!("{path}::{}::{}", cls.name, def.name()),
+                None => format!("{path}::{}", def.name()),
+            };
+            found.push(BareAssert { node_id, lines });
         }
-    }
+    });
 
     found
 }
