@@ -36,7 +36,6 @@ impl Pipeline<Prescanned> {
             let (shared, _) = self.into_parts();
             return Ok(shared.into_pipeline(MetadataFiltered {
                 modules_to_import: all_modules,
-                is_filtered: false,
             }));
         }
 
@@ -98,10 +97,7 @@ impl Pipeline<Prescanned> {
 
         let (mut shared, _) = self.into_parts();
         shared.conftest_files = filtered_conftests;
-        Ok(shared.into_pipeline(MetadataFiltered {
-            modules_to_import,
-            is_filtered: true,
-        }))
+        Ok(shared.into_pipeline(MetadataFiltered { modules_to_import }))
     }
 
     /// Returns true if the file should be imported given the active filters.

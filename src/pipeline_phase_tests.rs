@@ -137,7 +137,6 @@ mod strict_or_skip_disabled_tests {
                     TestItem::builder_raw("tests/test_a.py::test_three").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             // cfg.markers.strict is None by default
@@ -163,7 +162,6 @@ mod strict_or_skip_disabled_tests {
                     kind: crate::bridge::ViolationKind::BareAssert,
                     detail: "line 10".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             // strict is None — violations should be ignored entirely
@@ -184,7 +182,6 @@ mod strict_or_skip_disabled_tests {
             let p = make_pipeline(Collected {
                 items: vec![],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
 
@@ -227,7 +224,6 @@ mod strict_enforce_detailed_tests {
                         detail: "line 10".to_string(),
                     },
                 ],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -256,7 +252,6 @@ mod strict_enforce_detailed_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 3".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -275,7 +270,6 @@ mod strict_enforce_detailed_tests {
             let mut p = make_pipeline(Collected {
                 items: vec![crate::types::TestItem::builder_raw("tests/test_x.py::test_fn").arc()],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.shared.test_files = vec![camino::Utf8PathBuf::from("tests/test_x.py")];
@@ -307,7 +301,6 @@ mod filter_last_failed_tests {
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.filter.failed = Some(FailedMode::Only);
@@ -330,7 +323,6 @@ mod filter_last_failed_tests {
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.filter.failed = Some(FailedMode::First);
@@ -353,7 +345,6 @@ mod filter_last_failed_tests {
                     TestItem::builder_raw("tests/test_a.py::test_three").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             // cfg.filter.failed is None by default
@@ -387,7 +378,6 @@ mod filter_preserves_violations_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 5".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -440,7 +430,6 @@ mod state_construction_tests {
             let p = make_pipeline(Collected {
                 items: vec![crate::types::TestItem::builder_raw("tests/test_a.py::test_fn").arc()],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             assert_eq!(p.state.items.len(), 1);

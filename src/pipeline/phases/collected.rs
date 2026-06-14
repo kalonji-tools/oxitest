@@ -91,7 +91,6 @@ impl Pipeline<Collected> {
                 session,
                 items,
                 raw_violations,
-                collection_profile: _,
             },
         ) = self.into_parts();
 
