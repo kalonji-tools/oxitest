@@ -65,15 +65,7 @@ pub(crate) struct Collected {
     pub(crate) collection_profile: Option<collection::CollectionProfile>,
 }
 
-/// Strict-mode violations split out; holds clean items, violated items, and suite header lines.
-pub(crate) struct PreFilter {
-    pub(crate) clean_items: Vec<Arc<types::TestItem>>,
-    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
-    pub(crate) all_violations: Vec<strict::StrictViolation>,
-    pub(crate) suite_lines: Vec<String>,
-}
-
-/// Keyword/marker filtering applied; items are ready for execution.
+/// Strict-mode + item-level filtering applied; items are ready for execution.
 pub(crate) struct Ready {
     pub(crate) clean_items: Vec<Arc<types::TestItem>>,
     pub(crate) violated_items: Vec<Arc<types::TestItem>>,
@@ -305,7 +297,6 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
     let p = p.collect(py)?;
     let p = p.validate(py)?;
     let p = p.strict_or_skip(py)?;
-    let p = p.filter(py)?;
     let p = p.execute(py)?;
     let p = p.retry(py)?;
     let result = p.finalize(py);
@@ -332,9 +323,8 @@ fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, 
     let p = p.session(py)?;
     let p = p.collect(py)?;
     let p = p.validate(py)?;
-    // Debug mode skips strict, goes straight to filter
+    // Debug mode skips strict, goes straight to ready
     let p = p.strict_or_skip(py)?;
-    let p = p.filter(py)?;
     let p = p.execute(py)?;
     // No retry in debug mode
     p.finalize(py)

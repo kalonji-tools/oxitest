@@ -94,14 +94,13 @@ mod filter_phase_contract_tests {
     fn expression_filter_reduces_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![
+            let mut p = make_pipeline(Collected {
+                items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
                 ],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
+                raw_violations: vec![],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             match &mut p.command {
@@ -111,7 +110,7 @@ mod filter_phase_contract_tests {
                 _ => {}
             }
 
-            let result = p.filter(py);
+            let result = p.strict_or_skip(py);
             assert!(result.is_ok());
             let p = result.unwrap();
             assert_eq!(p.state.clean_items.len(), 1);
@@ -123,18 +122,17 @@ mod filter_phase_contract_tests {
     fn no_filters_passes_all_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(PreFilter {
-                clean_items: vec![
+            let mut p = make_pipeline(Collected {
+                items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
-                violated_items: vec![],
-                all_violations: vec![],
-                suite_lines: vec![],
+                raw_violations: vec![],
+                collection_profile: None,
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
 
-            let result = p.filter(py);
+            let result = p.strict_or_skip(py);
             assert!(result.is_ok());
             let p = result.unwrap();
             assert_eq!(p.state.clean_items.len(), 2);
@@ -168,19 +166,15 @@ mod context_threading_tests {
             });
             p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
-
-            let p = p.strict_or_skip(py).unwrap();
-            assert_eq!(p.state.clean_items.len(), 2);
-            assert_eq!(p.state.violated_items.len(), 1);
-
-            let mut p = p;
             match &mut p.command {
                 crate::config::Command::Run(a) => {
                     a.filter.expression = Some("name(alpha)".to_string())
                 }
                 _ => {}
             }
-            let p = p.filter(py).unwrap();
+
+            // strict_or_skip now does strict-mode split AND filtering in one step
+            let p = p.strict_or_skip(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 1);
             assert!(p.state.clean_items[0].node_id.as_ref().contains("alpha"));
             assert_eq!(p.state.violated_items.len(), 1);
@@ -203,7 +197,6 @@ mod context_threading_tests {
             // strict is None by default
 
             let p = p.strict_or_skip(py).unwrap();
-            let p = p.filter(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 2);
         });
     }
@@ -235,7 +228,6 @@ mod context_threading_tests {
             }
 
             let p = p.strict_or_skip(py).unwrap();
-            let p = p.filter(py).unwrap();
             assert_eq!(p.state.clean_items.len(), 1);
             assert_eq!(
                 p.state.clean_items[0].node_id.as_ref(),

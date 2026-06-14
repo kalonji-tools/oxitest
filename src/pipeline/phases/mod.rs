@@ -8,7 +8,6 @@ mod empty;
 mod executed;
 mod files_collected;
 mod metadata_filtered;
-mod pre_filter;
 mod prescanned;
 mod ready;
 mod session_ready;
