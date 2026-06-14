@@ -191,12 +191,17 @@ def _build_execution_chain(
     show_internals: bool = False,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
+    # Resolve bare-assert lines (was BareAssertMiddleware)
+    _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
+    _simple_fn_name = fn_name.split("::")[-1]
+    no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
+
     plan = ExecutionPlan(
         fn=fn,
         fn_name=fn_name,
         kwargs=all_kwargs,
         marks=marks,
-        no_message_lines=(),
+        no_message_lines=no_message_lines,
         is_async=inspect.iscoroutinefunction(fn),
         default_timeout=default_timeout,
         backend=getattr(session, "_async_backend", None),
@@ -215,7 +220,7 @@ def _build_execution_chain(
             show_internals=show_internals,
         )
 
-    execute = MiddlewareBuilder().build(plan, _base, module, default_timeout)
+    execute = MiddlewareBuilder().build(plan, _base, default_timeout)
 
     # Apply mark wrappers (from evaluate_marks) around the pipeline result
     for wrapper in reversed(wrappers):

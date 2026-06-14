@@ -3,7 +3,6 @@ from __future__ import annotations
 __all__ = [
     "AsyncBridgeMiddleware",
     "AsyncDepGuardMiddleware",
-    "BareAssertMiddleware",
     "ExecutionPlan",
     "Middleware",
     "MiddlewareBuilder",
@@ -34,7 +33,7 @@ def _compose(
     return lambda: wrapper(inner)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExecutionPlan:
     """Immutable context passed through the middleware stack."""
 
@@ -84,23 +83,6 @@ class TimeoutMiddleware:
             m.name == "timeout" for m in plan.marks
         ):
             return _compose(make_timeout_wrapper(self._default), next_fn)
-        return next_fn
-
-
-class BareAssertMiddleware:
-    """Resolves bare-assert line map from the module."""
-
-    def __init__(self, module: Any) -> None:
-        self._module = module
-
-    def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
-    ) -> Callable[[], TestResult]:
-        _bare_map: dict[str, list[int]] = getattr(
-            self._module, "_oxitest_bare_asserts", {}
-        )
-        _simple_fn_name = plan.fn_name.split("::")[-1]
-        plan.no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
         return next_fn
 
 
@@ -218,15 +200,14 @@ class MiddlewareBuilder:
 
     The default pipeline is::
 
-        BareAssertMiddleware -> AsyncDepGuardMiddleware
-        -> TimeoutMiddleware -> AsyncBridgeMiddleware
+        AsyncDepGuardMiddleware -> TimeoutMiddleware -> AsyncBridgeMiddleware
 
     Plugins can customise ordering via ``insert_after``, ``insert_before``,
     and ``remove`` before calling ``build()``.
 
     Ordering constraints (enforced):
 
-    - ``BareAssertMiddleware`` must remain **first** in the pipeline.
+    - ``AsyncDepGuardMiddleware`` must remain **first** in the pipeline.
       It cannot be removed or have another middleware inserted before it.
     - ``AsyncBridgeMiddleware`` must remain **last** in the pipeline.
       It cannot be removed or have another middleware inserted after it.
@@ -234,7 +215,6 @@ class MiddlewareBuilder:
 
     def __init__(self) -> None:
         self._pipeline: list[type[Middleware]] = [
-            BareAssertMiddleware,
             AsyncDepGuardMiddleware,
             TimeoutMiddleware,
             AsyncBridgeMiddleware,
@@ -250,24 +230,24 @@ class MiddlewareBuilder:
         self._pipeline.insert(idx + 1, new)
 
     def insert_before(self, target: type, new: type) -> None:
-        if target is BareAssertMiddleware:
+        if target is AsyncDepGuardMiddleware:
             raise ValueError(
-                "Cannot insert before BareAssertMiddleware"
+                "Cannot insert before AsyncDepGuardMiddleware"
                 " — it must remain first in the pipeline"
             )
         idx = self._pipeline.index(target)
         self._pipeline.insert(idx, new)
 
     def remove(self, target: type) -> None:
-        if target is BareAssertMiddleware:
-            raise ValueError(
-                "BareAssertMiddleware cannot be removed"
-                " — it must remain first in the pipeline"
-            )
         if target is AsyncBridgeMiddleware:
             raise ValueError(
                 "AsyncBridgeMiddleware cannot be removed"
                 " — it must remain last in the pipeline"
+            )
+        if target is AsyncDepGuardMiddleware:
+            raise ValueError(
+                "AsyncDepGuardMiddleware cannot be removed"
+                " — it must remain first in the pipeline"
             )
         self._pipeline.remove(target)
 
@@ -275,11 +255,9 @@ class MiddlewareBuilder:
         self,
         plan: ExecutionPlan,
         base: Callable[[], TestResult],
-        module: Any,
         default_timeout: int | None,
     ) -> Callable[[], TestResult]:
         mw_args: dict[type, dict[str, Any]] = {
-            BareAssertMiddleware: {"module": module},
             TimeoutMiddleware: {"default_timeout": default_timeout},
         }
         instances: list[Any] = [cls(**mw_args.get(cls, {})) for cls in self._pipeline]
