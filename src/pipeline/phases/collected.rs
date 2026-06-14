@@ -68,11 +68,7 @@ fn item_to_query_entry(item: &types::TestItem) -> query::resource::QueryEntry {
 
 impl Pipeline<Collected> {
     pub(crate) fn validate(self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
-        let session = self
-            .shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
+        let session = &self.state.session;
         let errors = bridge::validate_fixture_names(py, session, &self.state.items)
             .map_err(|_| ExitCode::CollectError)?;
 
@@ -92,6 +88,7 @@ impl Pipeline<Collected> {
         let (
             shared,
             Collected {
+                session,
                 items,
                 raw_violations,
                 collection_profile: _,
@@ -152,6 +149,7 @@ impl Pipeline<Collected> {
         };
 
         Ok(shared.into_pipeline(Ready {
+            session,
             clean_items: items,
             violated_items: result.violated_items,
             all_violations: result.all_violations,

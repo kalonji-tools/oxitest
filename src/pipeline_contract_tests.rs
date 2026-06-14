@@ -22,8 +22,8 @@ mod strict_phase_contract_tests {
                     detail: "line 5".to_string(),
                 }],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
@@ -54,8 +54,8 @@ mod strict_phase_contract_tests {
                     detail: "line 3".to_string(),
                 }],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Abort);
 
             let result = p.strict_or_skip(py);
@@ -72,8 +72,8 @@ mod strict_phase_contract_tests {
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_clean").arc()],
                 raw_violations: vec![],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
@@ -101,8 +101,8 @@ mod filter_phase_contract_tests {
                 ],
                 raw_violations: vec![],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             match &mut p.command {
                 crate::config::Command::Run(a) => {
                     a.filter.expression = Some("name(alpha)".to_string())
@@ -122,15 +122,15 @@ mod filter_phase_contract_tests {
     fn no_filters_passes_all_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let p = make_pipeline(Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
 
             let result = p.strict_or_skip(py);
             assert!(result.is_ok());
@@ -163,8 +163,8 @@ mod context_threading_tests {
                     detail: "line 5".to_string(),
                 }],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
             match &mut p.command {
                 crate::config::Command::Run(a) => {
@@ -185,15 +185,15 @@ mod context_threading_tests {
     fn strict_skipped_preserves_all_items_for_filter() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let p = make_pipeline(Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // strict is None by default
 
             let p = p.strict_or_skip(py).unwrap();
@@ -217,8 +217,8 @@ mod context_threading_tests {
                     detail: "line 3".to_string(),
                 }],
                 collection_profile: None,
+                session: crate::bridge::FixtureSession::stub(py),
             });
-            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
             match &mut p.command {
                 crate::config::Command::Run(a) => {
