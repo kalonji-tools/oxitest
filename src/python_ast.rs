@@ -142,66 +142,6 @@ pub(crate) fn count_tests(stmts: &[ast::Stmt]) -> usize {
 ///
 /// Inspects decorator lists for `oxi.parametrize(...)`, `oxi.mark.parametrize(...)`,
 /// or `oxitest.mark.parametrize(...)` calls. When the second argument is a list
-/// or tuple literal, returns the product of all detected case counts. Falls back
-/// to 1 per undetectable decorator (dynamic expressions, name references).
-///
-/// Returns 1 if the function has no parametrize decorators.
-pub(crate) fn count_parametrize_cases(stmt: &ast::Stmt) -> usize {
-    let decorators = match stmt {
-        ast::Stmt::FunctionDef(f) => &f.decorator_list,
-        ast::Stmt::AsyncFunctionDef(f) => &f.decorator_list,
-        _ => return 1,
-    };
-
-    let mut product = 1;
-    for dec in decorators {
-        if let ast::Expr::Call(call) = &dec {
-            if is_parametrize_call(&call.func) {
-                let cases = extract_case_count(&call.args);
-                product *= cases;
-            }
-        }
-    }
-    product
-}
-
-/// Check if a call target is one of the recognized parametrize forms.
-fn is_parametrize_call(func: &ast::Expr) -> bool {
-    if let ast::Expr::Attribute(attr) = func {
-        if attr.attr.as_str() == "parametrize" {
-            if let ast::Expr::Name(n) = &*attr.value {
-                let s = n.id.as_str();
-                if s == "oxi" || s == "oxitest" {
-                    return true;
-                }
-            }
-            if let ast::Expr::Attribute(inner) = &*attr.value {
-                if inner.attr.as_str() == "mark" {
-                    if let ast::Expr::Name(n) = &*inner.value {
-                        let s = n.id.as_str();
-                        if s == "oxi" || s == "oxitest" {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    false
-}
-
-/// Extract the case count from parametrize arguments.
-fn extract_case_count(args: &[ast::Expr]) -> usize {
-    if args.len() < 2 {
-        return 1;
-    }
-    match &args[1] {
-        ast::Expr::List(list) => list.elts.len().max(1),
-        ast::Expr::Tuple(tuple) => tuple.elts.len().max(1),
-        _ => 1,
-    }
-}
-
 /// Extract the mark name from a single decorator expression.
 ///
 /// Recognises `oxi.mark.NAME` and `oxitest.mark.NAME` in both bare decorator
@@ -612,68 +552,6 @@ pub(crate) mod tests {
         let f = write_temp_py("def helper(): pass\ndef setup(): pass\n");
         let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
         assert_eq!(count_tests(&stmts), 0);
-    }
-
-    // ── count_parametrize_cases ─────────────────────────────────────
-
-    #[test]
-    fn parametrize_list_literal() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n",
-        );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[1]), 3);
-    }
-
-    #[test]
-    fn parametrize_tuple_literal() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", (1, 2))\ndef test_it(x): pass\n",
-        );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[1]), 2);
-    }
-
-    #[test]
-    fn parametrize_dynamic_fallback() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.parametrize(\"x\", MY_CASES)\ndef test_it(x): pass\n",
-        );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[1]), 1);
-    }
-
-    #[test]
-    fn parametrize_stacked_product() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.parametrize(\"a\", [1, 2])\n@oxi.parametrize(\"b\", [10, 20, 30])\ndef test_it(a, b): pass\n",
-        );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        // stmts[0] = import, stmts[1] = decorated function
-        assert_eq!(count_parametrize_cases(&stmts[1]), 6);
-    }
-
-    #[test]
-    fn parametrize_no_decorator() {
-        let f = write_temp_py("def test_plain(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[0]), 1);
-    }
-
-    #[test]
-    fn parametrize_non_parametrize_decorator_ignored() {
-        let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[1]), 1);
-    }
-
-    #[test]
-    fn parametrize_mark_parametrize_form() {
-        let f = write_temp_py(
-            "import oxitest as oxi\n\n@oxi.mark.parametrize(\"x\", [1, 2, 3])\ndef test_it(x): pass\n",
-        );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(count_parametrize_cases(&stmts[1]), 3);
     }
 
     // ── extract_decorator_marks ──────────────────────────────────────────────
