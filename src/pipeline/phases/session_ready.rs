@@ -64,7 +64,6 @@ impl Pipeline<SessionReady> {
             session,
             items,
             raw_violations: merged_violations,
-            collection_profile: profile,
         }))
     }
 
