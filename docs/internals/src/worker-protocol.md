@@ -62,47 +62,64 @@ Each line on stdin is a JSON object:
 
 ## Result Schema (stdout)
 
-For each test item, the worker writes exactly one JSON line to stdout:
+For each test item, the worker writes exactly one JSON line to stdout. The `outcome`
+field determines which additional fields are present -- each outcome carries only its
+relevant fields (compact JSON, falsy fields omitted).
 
-```json
-{
-    "node_id": "tests/test_math.py::test_add",
-    "outcome": "passed",
-    "duration_ms": 12.5,
-    "failure_repr": null,
-    "message": null,
-    "file": null,
-    "lineno": null,
-    "source_line": null,
-    "no_message_lines": [],
-    "left": null,
-    "right": null,
-    "op": null,
-    "strict": false,
-    "frames": [],
-    "field_diffs": [["name", "\"alice\"", "\"Alice\""]],
-    "protocol_version": 1
-}
-```
+**Common fields** (present on every outcome):
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `node_id` | string | Full test identifier: `module_path::fn_name[param_id]` |
-| `outcome` | string | Test result status (see below) |
+| `outcome` | string | Test result status -- drives variant selection (see below) |
 | `duration_ms` | float | Wall-clock execution time in milliseconds |
-| `failure_repr` | string \| null | Human-readable failure summary (for skipped/xfailed/timeout/warned) |
-| `message` | string \| null | Primary diagnostic message (assertion message, error text) |
-| `file` | string \| null | Source file where the failure occurred |
-| `lineno` | int \| null | Line number of the failure |
-| `source_line` | string \| null | Source code at the failure line |
-| `no_message_lines` | array of int | Line numbers of bare assert statements (no message) |
-| `left` | string \| null | Left operand repr for comparison assertions |
-| `right` | string \| null | Right operand repr for comparison assertions |
-| `op` | string \| null | Comparison operator (e.g. `"=="`, `"!="`, `"in"`) |
-| `strict` | bool | Whether the test was in strict xfail mode |
-| `frames` | `array \| null` | Optional. Stack frames for failures. Each frame has `file`, `lineno`, `name`, `line`, and optionally `locals` (array of `[name, repr]` pairs when `show_locals` is enabled). |
-| `field_diffs` | `array \| null` | Optional. Per-field diffs for dataclass comparisons. Each entry is `[field_name, left_value, right_value]`. |
-| `protocol_version` | `int` | Wire format version (currently `1`). The coordinator warns once per drain call on version mismatch. |
+| `protocol_version` | int | Wire format version (currently `2`). The coordinator warns once per drain call on mismatch. |
+
+**Per-outcome fields:**
+
+| Outcome | Fields | Description |
+|---------|--------|-------------|
+| `passed` | `no_message_lines` | Line numbers of bare `print()` calls in the test body |
+| `failed` | `message`, `file`, `lineno`, `source_line`, `left`, `right`, `op`, `frames`, `field_diffs` | Full assertion diagnostic |
+| `error` | `message`, `file`, `lineno`, `source_line`, `frames` | Unhandled exception diagnostic (no comparison fields) |
+| `skipped` | `message` | Skip reason |
+| `xfailed` | `message` | Expected-failure reason |
+| `xpassed` | `strict` | Whether the xfail was strict mode |
+| `warned` | `message`, `no_message_lines` | Warning text and print() line numbers |
+| `timeout` | `message` | Timeout description |
+
+**Examples:**
+
+```json
+{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 2}
+```
+
+```json
+{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 2,
+ "message": "assert 1 / 0", "file": "tests/test_math.py", "lineno": 8, "source_line": "assert 1 / 0 == 0",
+ "left": "ZeroDivisionError", "right": "0", "op": "=="}
+```
+
+```json
+{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 2,
+ "message": "needs network"}
+```
+
+**Diagnostic field reference:**
+
+| Field | Type | Present on | Description |
+|-------|------|------------|-------------|
+| `message` | string | failed, error, skipped, xfailed, warned, timeout | Primary diagnostic or reason text |
+| `file` | string | failed, error | Source file where the failure occurred |
+| `lineno` | int | failed, error | Line number of the failure |
+| `source_line` | string | failed, error | Source code at the failure line |
+| `no_message_lines` | array of int | passed, warned | Line numbers of bare `print()` statements |
+| `left` | string | failed | Left operand repr for comparison assertions |
+| `right` | string | failed | Right operand repr for comparison assertions |
+| `op` | string | failed | Comparison operator (e.g. `"=="`, `"!="`, `"in"`) |
+| `strict` | bool | xpassed | Whether the test was in strict xfail mode |
+| `frames` | array | failed, error | Stack frames. Each frame has `file`, `lineno`, `name`, `line`, and optionally `locals` (array of `[name, repr]` pairs when `show_locals` is enabled). |
+| `field_diffs` | array | failed | Per-field diffs for dataclass comparisons. Each entry is `[field_name, left_value, right_value]`. |
 
 ## Outcome Values
 
@@ -119,6 +136,15 @@ For each test item, the worker writes exactly one JSON line to stdout:
 | `flaky` | Test failed initially but passed on retry |
 
 ## Error Handling
+
+### Unknown outcome strings
+
+If a worker emits an outcome string that Rust does not recognise (e.g. a future
+outcome added by a newer Python worker), the `WireResult` enum deserialization fails.
+The drain loop catches this and attempts a `WireMinimal` fallback deserialization to
+extract `node_id` and `duration_ms`. If successful, it synthesises an Error sentinel
+so the test is still recorded in results. If even `WireMinimal` fails, the line is
+logged as bad output.
 
 ### Malformed JSON from worker
 
@@ -202,57 +228,59 @@ Steps:
 
 ### Adding a field to results (worker -> Rust)
 
-The result schema is defined by `WireResult` in `src/worker_result.rs` (deserialized
-by `serde`) and produced by `TestResult.to_wire()` in `python/oxitest/_bridge/result.py`.
+`WireResult` in `src/worker_result.rs` is an internally-tagged enum
+(`#[serde(tag = "outcome")]`). Each variant carries only the fields relevant to
+that outcome. `TestResult.to_wire()` in `python/oxitest/_bridge/result.py` produces
+the JSON.
 
 ```rust
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct WireResult {
-    pub node_id: String,
-    pub outcome: types::OutcomeKind,
-    pub duration_ms: f64,
-    #[serde(default)]
-    pub protocol_version: u32,
-    #[serde(default)]
-    pub failure_repr: Option<String>,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub file: Option<String>,
-    #[serde(default)]
-    pub lineno: Option<u64>,
-    // ... additional optional fields ...
+#[serde(tag = "outcome")]
+pub(crate) enum WireResult {
+    #[serde(rename = "passed")]
+    Passed {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        no_message_lines: Vec<i64>,
+    },
+    #[serde(rename = "failed")]
+    Failed { node_id: String, duration_ms: f64, /* ... diagnostic fields */ },
+    // ... one variant per outcome kind
 }
 ```
 
 Steps:
 
 1. Add the field to `TestResult` in `python/oxitest/_bridge/result.py` with a
-   default value. If the field should be sent over the wire, make sure it is not
-   in `_WIRE_EXCLUDE_ATTRS` (or handle it explicitly in `to_wire()`).
+   default value. Emit it in the appropriate outcome branch of `to_wire()`.
 
-2. Add the field to `WireResult` in `src/worker_result.rs`. **Always** use
-   `#[serde(default)]` so that messages from older workers (which omit the field)
-   still deserialize:
+2. Add the field to the relevant `WireResult` variant in `src/worker_result.rs`.
+   **Always** use `#[serde(default)]` so messages from older workers (which omit
+   the field) still deserialize:
 
    ```rust
-   #[serde(default)]
-   pub new_field: Option<String>,
+   #[serde(rename = "failed")]
+   Failed {
+       // ... existing fields ...
+       #[serde(default)]
+       new_field: Option<String>,
+   },
    ```
 
-3. Wire the field through `WireResult::into_worker_outcome()` into the appropriate
-   `WorkerOutcome` variant. Then update `From<WorkerOutcome> for TestOutcome` if
-   the field affects the domain.
+3. Wire the field through `WireResult::into_outcome()` into the appropriate
+   `TestOutcome` variant.
 
 4. If the field is also used by the in-process PyO3 path (serial execution), add
-   it to the `TestResult` struct in `src/bridge.rs` and handle it in
-   `convert_test_result()`.
+   it to the `extract_outcome()` function in `src/bridge.rs`.
 
 ### Backwards compatibility
 
-- Use `#[serde(default)]` on every new `WireResult` field so older workers work.
+- Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `1`) in both `src/worker_result.rs` and
+- The `PROTOCOL_VERSION` constant (currently `2`) in both `src/worker_result.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
