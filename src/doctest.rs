@@ -3,6 +3,8 @@
 use camino::Utf8Path;
 use rustpython_parser::ast;
 
+use crate::python_ast;
+
 /// A single doctest found in a docstring.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DoctestExample {
@@ -115,6 +117,28 @@ fn extract_docstring(body: &[ast::Stmt]) -> Option<&str> {
     None
 }
 
+/// If `body` has a docstring with `>>>` examples, push a `DoctestLocation`.
+fn try_push_doctest(
+    locations: &mut Vec<DoctestLocation>,
+    name: String,
+    body: &[ast::Stmt],
+    range: rustpython_parser::text_size::TextRange,
+    line_index: &[u32],
+) {
+    if let Some(doc) = extract_docstring(body) {
+        let count = parse_docstring_examples(doc).len();
+        if count > 0 {
+            let lineno =
+                crate::python_ast::offset_to_line(line_index, range.start().into()) as usize;
+            locations.push(DoctestLocation {
+                name,
+                lineno,
+                example_count: count,
+            });
+        }
+    }
+}
+
 /// Scan a Python file's AST for all docstrings containing `>>>` examples.
 ///
 /// Returns a `DoctestLocation` per docstring that has at least one example.
@@ -142,91 +166,35 @@ pub(crate) fn scan_doctests(path: &Utf8Path) -> Vec<DoctestLocation> {
     }
 
     for stmt in &stmts {
-        match stmt {
-            ast::Stmt::FunctionDef(f) => {
-                if let Some(doc) = extract_docstring(&f.body) {
-                    let count = parse_docstring_examples(doc).len();
-                    if count > 0 {
-                        let lineno =
-                            crate::python_ast::offset_to_line(&line_index, f.range.start().into())
-                                as usize;
-                        locations.push(DoctestLocation {
-                            name: format!("{}.{}", module_name, f.name),
-                            lineno,
-                            example_count: count,
-                        });
-                    }
+        if let Some(def) = python_ast::FnDef::try_from_stmt(stmt) {
+            try_push_doctest(
+                &mut locations,
+                format!("{}.{}", module_name, def.name()),
+                def.body(),
+                def.range(),
+                &line_index,
+            );
+        } else if let ast::Stmt::ClassDef(cls) = stmt {
+            // Class-level docstring
+            try_push_doctest(
+                &mut locations,
+                format!("{}.{}", module_name, cls.name),
+                &cls.body,
+                cls.range,
+                &line_index,
+            );
+            // Method docstrings
+            for method in &cls.body {
+                if let Some(def) = python_ast::FnDef::try_from_stmt(method) {
+                    try_push_doctest(
+                        &mut locations,
+                        format!("{}.{}.{}", module_name, cls.name, def.name()),
+                        def.body(),
+                        def.range(),
+                        &line_index,
+                    );
                 }
             }
-            ast::Stmt::AsyncFunctionDef(f) => {
-                if let Some(doc) = extract_docstring(&f.body) {
-                    let count = parse_docstring_examples(doc).len();
-                    if count > 0 {
-                        let lineno =
-                            crate::python_ast::offset_to_line(&line_index, f.range.start().into())
-                                as usize;
-                        locations.push(DoctestLocation {
-                            name: format!("{}.{}", module_name, f.name),
-                            lineno,
-                            example_count: count,
-                        });
-                    }
-                }
-            }
-            ast::Stmt::ClassDef(cls) => {
-                if let Some(doc) = extract_docstring(&cls.body) {
-                    let count = parse_docstring_examples(doc).len();
-                    if count > 0 {
-                        let lineno = crate::python_ast::offset_to_line(
-                            &line_index,
-                            cls.range.start().into(),
-                        ) as usize;
-                        locations.push(DoctestLocation {
-                            name: format!("{}.{}", module_name, cls.name),
-                            lineno,
-                            example_count: count,
-                        });
-                    }
-                }
-                for method in &cls.body {
-                    match method {
-                        ast::Stmt::FunctionDef(m) => {
-                            if let Some(doc) = extract_docstring(&m.body) {
-                                let count = parse_docstring_examples(doc).len();
-                                if count > 0 {
-                                    let lineno = crate::python_ast::offset_to_line(
-                                        &line_index,
-                                        m.range.start().into(),
-                                    ) as usize;
-                                    locations.push(DoctestLocation {
-                                        name: format!("{}.{}.{}", module_name, cls.name, m.name),
-                                        lineno,
-                                        example_count: count,
-                                    });
-                                }
-                            }
-                        }
-                        ast::Stmt::AsyncFunctionDef(m) => {
-                            if let Some(doc) = extract_docstring(&m.body) {
-                                let count = parse_docstring_examples(doc).len();
-                                if count > 0 {
-                                    let lineno = crate::python_ast::offset_to_line(
-                                        &line_index,
-                                        m.range.start().into(),
-                                    ) as usize;
-                                    locations.push(DoctestLocation {
-                                        name: format!("{}.{}.{}", module_name, cls.name, m.name),
-                                        lineno,
-                                        example_count: count,
-                                    });
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
         }
     }
 
