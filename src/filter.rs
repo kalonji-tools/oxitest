@@ -41,8 +41,7 @@ pub fn validate_markers(
         .iter()
         .flat_map(|item| {
             item.markers.iter().filter_map(|name| {
-                let s = name.as_str();
-                if !BUILTIN_MARKERS.contains(&s) && !registered.contains(s) {
+                if !BUILTIN_MARKERS.contains(&name) && !registered.contains(name) {
                     Some(CollectError::PyError(format!(
                         "unknown marker '{}' on {}\nHint: register it in pyproject.toml:\n  [tool.oxitest]\n  markers = [\"{}: <description>\"]",
                         name, item.node_id, name

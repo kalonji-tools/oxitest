@@ -75,7 +75,7 @@ mod tests {
     use camino::{Utf8Path, Utf8PathBuf};
 
     use super::*;
-    use crate::types::LineNo;
+    use crate::types::{LineNo, MarkerSet};
 
     #[test]
     fn update_and_retrieve_module_cache_roundtrip() {
@@ -88,7 +88,7 @@ mod tests {
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_a".to_string(),
                 lineno: LineNo::new(5),
-                markers: vec!["slow".to_string()],
+                markers: MarkerSet::from(vec!["slow".to_string()]),
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
@@ -100,7 +100,7 @@ mod tests {
                 module_path: Utf8PathBuf::from("tests/test_foo.py"),
                 fn_name: "test_b".to_string(),
                 lineno: LineNo::new(10),
-                markers: vec![],
+                markers: MarkerSet::new(),
                 param_id: Some("x0".to_string()),
                 param_values: vec![crate::types::ParamPair {
                     name: "x".to_string(),
@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(cached.len(), 2);
         assert_eq!(cached[0].fn_name, "test_a");
         assert_eq!(cached[0].lineno, LineNo::new(5));
-        assert_eq!(cached[0].markers, vec!["slow".to_string()]);
+        assert_eq!(cached[0].markers.to_vec(), vec!["slow".to_string()]);
         assert_eq!(cached[1].fn_name, "test_b");
         assert_eq!(cached[1].param_id, Some("x0".to_string()));
         assert_eq!(
@@ -138,7 +138,7 @@ mod tests {
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
             lineno: LineNo::new(1),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,
@@ -219,7 +219,7 @@ mod tests {
             module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: "test_a".to_string(),
             lineno: LineNo::new(3),
-            markers: vec![],
+            markers: MarkerSet::new(),
             param_id: None,
             param_values: vec![],
             is_async: false,

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
-use crate::types::{CollectError, Frame, LineNo, NodeId, TestItem, TestOutcome};
+use crate::types::{CollectError, Frame, LineNo, MarkerSet, NodeId, TestItem, TestOutcome};
 
 fn py_collect_err(e: PyErr) -> CollectError {
     CollectError::PyError(e.to_string())
@@ -282,7 +282,7 @@ pub(crate) fn collect_module_with_session_obj(
             module_path: path.to_owned(),
             fn_name: item.fn_name,
             lineno: LineNo::new(item.lineno),
-            markers: item.markers,
+            markers: MarkerSet::from(item.markers),
             param_id: item.param_id,
             param_values: item.param_values.into_iter().map(Into::into).collect(),
             is_async: item.is_async,
@@ -442,7 +442,7 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let markers_list = pyo3::types::PyList::new(py, &item.markers)?;
+    let markers_list = pyo3::types::PyList::new(py, item.markers.to_vec())?;
     let markers_frozen = pyo3::types::PyFrozenSet::new(py, markers_list)?;
 
     let node_id_str: &str = &item.node_id;

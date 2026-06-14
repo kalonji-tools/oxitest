@@ -214,7 +214,7 @@ fn run_worker_loop(
                     fn_name: &item.fn_name,
                     param_id: item.param_id.as_deref(),
                     node_id: &item.node_id,
-                    markers: &item.markers,
+                    markers: item.markers.iter().collect(),
                 })
                 .collect(),
             conftest_paths: &conftest_json,
@@ -376,7 +376,7 @@ mod worker_session_tests {
                 fn_name: "test_add",
                 param_id: None,
                 node_id: "tests/test_example.py::test_add",
-                markers: &[],
+                markers: vec![],
             }],
             conftest_paths: conftest,
             timeout_secs: None,
@@ -422,14 +422,13 @@ mod worker_session_tests {
         // Arrange
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let markers = vec!["slow".to_string()];
         let task = WorkerTask {
             module_path: "tests/test_math.py",
             items: vec![WorkerTaskItem {
                 fn_name: "test_mul",
                 param_id: Some("x=2-y=3"),
                 node_id: "tests/test_math.py::test_mul[x=2-y=3]",
-                markers: &markers,
+                markers: vec!["slow"],
             }],
             conftest_paths: &conftest,
             timeout_secs: Some(30),
