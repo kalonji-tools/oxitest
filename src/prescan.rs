@@ -33,31 +33,27 @@ pub(crate) struct PrescanItem {
     pub(crate) body_weight_ms: f64,
 }
 
+/// Payload extracted from a Python file that has test functions.
+#[derive(Debug)]
+pub(crate) struct PrescanPayload {
+    pub(crate) source: String,
+    pub(crate) stmts: Vec<ast::Stmt>,
+    #[allow(dead_code)]
+    pub(crate) test_count: usize,
+    #[allow(dead_code)]
+    pub(crate) adjusted_test_count: usize,
+    pub(crate) items: Vec<PrescanItem>,
+    pub(crate) has_dynamic_collection: bool,
+    pub(crate) module_markers: Vec<String>,
+    #[expect(dead_code)]
+    pub(crate) heavy_import_weight_ms: f64,
+}
+
 /// Result of pre-scanning a Python file for test functions.
 #[derive(Debug)]
 pub(crate) enum PrescanResult {
     /// File has test functions; the parsed AST is available for reuse.
-    HasTests {
-        source: String,
-        stmts: Vec<ast::Stmt>,
-        /// Raw test function count (without parametrize expansion). Only read in tests.
-        #[allow(dead_code)]
-        test_count: usize,
-        /// Test count adjusted for static parametrize multipliers.
-        #[allow(dead_code)]
-        adjusted_test_count: usize,
-        /// Per-item metadata extracted from the AST.
-        items: Vec<PrescanItem>,
-        /// Whether the module uses dynamic patterns that prevent lazy collection.
-        has_dynamic_collection: bool,
-        /// Module-level marks from `oxi_mark = mark.NAME` assignments.
-        module_markers: Vec<String>,
-        /// Sum of heavy-import weight for this module (20.0 per heavy package detected).
-        /// Propagated into each test's `body_weight_ms` during prescan; retained here
-        /// for diagnostic inspection in tests and future per-module heuristics.
-        #[expect(dead_code)]
-        heavy_import_weight_ms: f64,
-    },
+    HasTests(PrescanPayload),
     /// File has no test functions.
     NoTests,
     /// File could not be read or parsed (caller should fall through to Python).
@@ -699,7 +695,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     let module_markers = extract_module_marks(&parsed.1);
 
     if keep_ast {
-        PrescanResult::HasTests {
+        PrescanResult::HasTests(PrescanPayload {
             source: parsed.0,
             stmts: parsed.1,
             test_count,
@@ -708,9 +704,9 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             has_dynamic_collection,
             module_markers,
             heavy_import_weight_ms: heavy_import_weight,
-        }
+        })
     } else {
-        PrescanResult::HasTests {
+        PrescanResult::HasTests(PrescanPayload {
             source: String::new(),
             stmts: Vec::new(),
             test_count,
@@ -719,7 +715,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             has_dynamic_collection,
             module_markers,
             heavy_import_weight_ms: heavy_import_weight,
-        }
+        })
     }
 }
 
@@ -735,7 +731,7 @@ mod tests {
         let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\ndef helper(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { test_count, .. } => assert_eq!(test_count, 2),
+            PrescanResult::HasTests(p) => assert_eq!(p.test_count, 2),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -747,7 +743,7 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { test_count, .. } => assert_eq!(test_count, 3),
+            PrescanResult::HasTests(p) => assert_eq!(p.test_count, 3),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -759,13 +755,9 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                test_count,
-                adjusted_test_count,
-                ..
-            } => {
-                assert_eq!(test_count, 2);
-                assert_eq!(adjusted_test_count, 4); // 3 param cases + 1 plain
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.test_count, 2);
+                assert_eq!(p.adjusted_test_count, 4); // 3 param cases + 1 plain
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -776,13 +768,9 @@ mod tests {
         let f = write_temp_py("def test_a(): pass\ndef test_b(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                test_count,
-                adjusted_test_count,
-                ..
-            } => {
-                assert_eq!(test_count, 2);
-                assert_eq!(adjusted_test_count, 2);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.test_count, 2);
+                assert_eq!(p.adjusted_test_count, 2);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -797,22 +785,22 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert_eq!(items.len(), 2);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 2);
                 // sync function
-                assert_eq!(items[0].fn_name, "test_sync");
-                assert!(!items[0].is_async);
-                assert!(!items[0].is_class_method);
-                assert_eq!(items[0].markers.len(), 1);
-                assert_eq!(items[0].markers[0].name, "slow");
-                assert!(!items[0].markers[0].has_dynamic_args);
+                assert_eq!(p.items[0].fn_name, "test_sync");
+                assert!(!p.items[0].is_async);
+                assert!(!p.items[0].is_class_method);
+                assert_eq!(p.items[0].markers.len(), 1);
+                assert_eq!(p.items[0].markers[0].name, "slow");
+                assert!(!p.items[0].markers[0].has_dynamic_args);
                 // async function
-                assert_eq!(items[1].fn_name, "test_async");
-                assert!(items[1].is_async);
-                assert_eq!(items[1].markers.len(), 1);
-                assert_eq!(items[1].markers[0].name, "xfail");
+                assert_eq!(p.items[1].fn_name, "test_async");
+                assert!(p.items[1].is_async);
+                assert_eq!(p.items[1].markers.len(), 1);
+                assert_eq!(p.items[1].markers[0].name, "xfail");
                 // reason="wip" is a literal string constant
-                assert!(!items[1].markers[0].has_dynamic_args);
+                assert!(!p.items[1].markers[0].has_dynamic_args);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -825,17 +813,17 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert_eq!(items.len(), 2);
-                assert_eq!(items[0].fn_name, "test_a");
-                assert!(items[0].is_class_method);
-                assert_eq!(items[0].class_name, Some("TestGroup".to_string()));
-                assert!(!items[0].is_async);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 2);
+                assert_eq!(p.items[0].fn_name, "test_a");
+                assert!(p.items[0].is_class_method);
+                assert_eq!(p.items[0].class_name, Some("TestGroup".to_string()));
+                assert!(!p.items[0].is_async);
 
-                assert_eq!(items[1].fn_name, "test_b");
-                assert!(items[1].is_class_method);
-                assert_eq!(items[1].class_name, Some("TestGroup".to_string()));
-                assert!(items[1].is_async);
+                assert_eq!(p.items[1].fn_name, "test_b");
+                assert!(p.items[1].is_class_method);
+                assert_eq!(p.items[1].class_name, Some("TestGroup".to_string()));
+                assert!(p.items[1].is_async);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -848,9 +836,9 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert_eq!(items.len(), 1);
-                assert_eq!(items[0].param_ids, vec!["positive", "negative"]);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 1);
+                assert_eq!(p.items[0].param_ids, vec!["positive", "negative"]);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -863,9 +851,9 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert_eq!(items.len(), 1);
-                assert_eq!(items[0].fixture_params, vec!["db"]);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 1);
+                assert_eq!(p.items[0].fixture_params, vec!["db"]);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -878,11 +866,11 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert_eq!(items.len(), 1);
-                assert_eq!(items[0].markers.len(), 1);
-                assert_eq!(items[0].markers[0].name, "skip");
-                assert!(items[0].markers[0].has_dynamic_args);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 1);
+                assert_eq!(p.items[0].markers.len(), 1);
+                assert_eq!(p.items[0].markers[0].name, "skip");
+                assert!(p.items[0].markers[0].has_dynamic_args);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -893,10 +881,7 @@ mod tests {
         let f = write_temp_py("exec('x = 1')\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -906,10 +891,7 @@ mod tests {
         let f = write_temp_py("def __getattr__(name): ...\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -919,10 +901,7 @@ mod tests {
         let f = write_temp_py("from mylib import *\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -932,10 +911,7 @@ mod tests {
         let f = write_temp_py("import os\nfrom typing import *\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(!has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(!p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -945,10 +921,7 @@ mod tests {
         let f = write_temp_py("globals()['test_dynamic'] = lambda: None\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -960,10 +933,7 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests {
-                has_dynamic_collection,
-                ..
-            } => assert!(has_dynamic_collection),
+            PrescanResult::HasTests(p) => assert!(p.has_dynamic_collection),
             other => panic!("expected HasTests, got {other:?}"),
         }
     }
@@ -975,8 +945,8 @@ mod tests {
         );
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { module_markers, .. } => {
-                assert_eq!(module_markers, vec!["slow", "integration"]);
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.module_markers, vec!["slow", "integration"]);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -988,10 +958,10 @@ mod tests {
             "import oxitest as oxi\nfrom oxitest import mark\n\noxi_mark = mark.slow()\n\ndef test_something():\n    pass\n",
         );
         let result = prescan_with_ast(&temp_path(&f), true);
-        let PrescanResult::HasTests { module_markers, .. } = result else {
+        let PrescanResult::HasTests(p) = result else {
             panic!("expected HasTests");
         };
-        assert_eq!(module_markers, vec!["slow"]);
+        assert_eq!(p.module_markers, vec!["slow"]);
     }
 
     #[test]
@@ -1004,14 +974,10 @@ def test_it():
 "#;
         let f = write_temp_py(content);
         let result = prescan_with_ast(&temp_path(&f), true);
-        let PrescanResult::HasTests {
-            has_dynamic_collection,
-            ..
-        } = result
-        else {
+        let PrescanResult::HasTests(p) = result else {
             panic!("expected HasTests");
         };
-        assert!(has_dynamic_collection);
+        assert!(p.has_dynamic_collection);
     }
 
     // ── body_weight_ms ──────────────────────────────────────────────
@@ -1020,9 +986,9 @@ def test_it():
         let f = write_temp_py(content);
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
-                assert!(!items.is_empty(), "expected at least one test item");
-                items[0].body_weight_ms
+            PrescanResult::HasTests(p) => {
+                assert!(!p.items.is_empty(), "expected at least one test item");
+                p.items[0].body_weight_ms
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
@@ -1124,9 +1090,9 @@ def test_it():
         let path = temp_path(&f);
         let result = prescan_with_ast(&path, false);
         match result {
-            PrescanResult::HasTests { items, .. } => {
+            PrescanResult::HasTests(p) => {
                 // base(2) + async(10) + sleep(500) + 2 stmts / 10 = 512.2
-                assert!((items[0].body_weight_ms - 512.2).abs() < 0.01);
+                assert!((p.items[0].body_weight_ms - 512.2).abs() < 0.01);
             }
             _ => panic!("expected HasTests"),
         }

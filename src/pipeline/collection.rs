@@ -161,9 +161,9 @@ pub(super) fn collect_items(
                 continue;
             }
             crate::prescan::PrescanResult::Unavailable => None,
-            crate::prescan::PrescanResult::HasTests { source, stmts, .. } => {
-                if collect_violations && !source.is_empty() {
-                    Some((source, stmts))
+            crate::prescan::PrescanResult::HasTests(p) => {
+                if collect_violations && !p.source.is_empty() {
+                    Some((p.source, p.stmts))
                 } else {
                     None
                 }
