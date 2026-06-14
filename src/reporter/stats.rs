@@ -103,6 +103,27 @@ pub(crate) struct RunStats {
     pub(crate) fixture_timings: Vec<FixtureTimingEntry>,
 }
 
+/// Return the `n` items with the largest key, sorted descending.
+///
+/// Uses `select_nth_unstable_by` for O(n) partitioning, then sorts
+/// only the top N for deterministic output.
+fn top_n_by_key<T: Clone, K: PartialOrd>(items: &[T], n: usize, key: impl Fn(&T) -> K) -> Vec<T> {
+    if n == 0 || items.is_empty() {
+        return vec![];
+    }
+    let n = n.min(items.len());
+    let mut indices: Vec<usize> = (0..items.len()).collect();
+    let cmp = |&a: &usize, &b: &usize| {
+        key(&items[b])
+            .partial_cmp(&key(&items[a]))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    };
+    indices.select_nth_unstable_by(n - 1, cmp);
+    indices.truncate(n);
+    indices.sort_unstable_by(cmp);
+    indices.iter().map(|&i| items[i].clone()).collect()
+}
+
 impl RunStats {
     pub(crate) fn new() -> Self {
         Self {
@@ -211,30 +232,7 @@ impl RunStats {
 
     /// Returns the N slowest tests, sorted by duration descending.
     pub(crate) fn slowest(&self, n: usize) -> Vec<TimingEntry> {
-        if n == 0 || self.diagnostics.timings.is_empty() {
-            return vec![];
-        }
-        let timings = &self.diagnostics.timings;
-        let len = timings.len();
-        let n = n.min(len);
-
-        // Build index array, partial-sort to find top N, then sort those N
-        let mut indices: Vec<usize> = (0..len).collect();
-        indices.select_nth_unstable_by(n - 1, |&a, &b| {
-            timings[b]
-                .duration_ms
-                .partial_cmp(&timings[a].duration_ms)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        indices.truncate(n);
-        // Sort the top N for deterministic output order
-        indices.sort_unstable_by(|&a, &b| {
-            timings[b]
-                .duration_ms
-                .partial_cmp(&timings[a].duration_ms)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        indices.iter().map(|&i| timings[i].clone()).collect()
+        top_n_by_key(&self.diagnostics.timings, n, |t| t.duration_ms)
     }
 
     #[cfg(test)]
@@ -244,28 +242,7 @@ impl RunStats {
 
     /// Returns the N slowest fixtures, sorted by total time (setup + teardown) descending.
     pub(crate) fn slowest_fixtures(&self, n: usize) -> Vec<FixtureTimingEntry> {
-        if n == 0 || self.fixture_timings.is_empty() {
-            return vec![];
-        }
-        let timings = &self.fixture_timings;
-        let len = timings.len();
-        let n = n.min(len);
-
-        let mut indices: Vec<usize> = (0..len).collect();
-        indices.select_nth_unstable_by(n - 1, |&a, &b| {
-            timings[b]
-                .total()
-                .partial_cmp(&timings[a].total())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        indices.truncate(n);
-        indices.sort_unstable_by(|&a, &b| {
-            timings[b]
-                .total()
-                .partial_cmp(&timings[a].total())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        indices.iter().map(|&i| timings[i].clone()).collect()
+        top_n_by_key(&self.fixture_timings, n, |t| t.total())
     }
 
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
