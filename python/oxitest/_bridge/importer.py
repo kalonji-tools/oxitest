@@ -18,7 +18,7 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._violation_checkers import check_fn_violations
-from oxitest._bridge.parametrize import ResolvedCases
+from oxitest._bridge.parametrize import ComposedCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
 
@@ -145,8 +145,8 @@ def _apply_module_marks(
                 _append_mark(cast(Any, fn), mark)
 
 
-def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
-    """Validate composition rules for composed ResolvedCases layers.
+def _validate_composition(layers: tuple[ComposedCases, ...]) -> None:
+    """Validate composition rules for ComposedCases layers.
 
     Raises TypeError if:
     - Only 1 partial layer (needs 2+)
@@ -172,7 +172,7 @@ def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
 
 
 def _expand_composed(
-    layers: tuple[ResolvedCases, ...],
+    layers: tuple[ComposedCases, ...],
     fn_name: str,
     lineno: int,
     marker_names: list[str],
@@ -204,7 +204,7 @@ def _expand_composed(
     return items
 
 
-def _get_fixref_names(layer: ResolvedCases) -> tuple[str, ...]:
+def _get_fixref_names(layer: ComposedCases) -> tuple[str, ...]:
     """Extract fixture-ref field names from a parametrize layer."""
     return layer.fixref_fields
 
@@ -232,8 +232,8 @@ def _expand_item(
             )
         ]
     layers = cast(tuple, raw)
-    # Composition: all layers are composed (partial) ResolvedCases
-    if len(layers) > 1 or layers[0].is_composed:
+    # Composition: all layers are ComposedCases (partial)
+    if len(layers) > 1 or isinstance(layers[0], ComposedCases):
         # Merge fixref_fields from all composition layers
         all_fixrefs: set[str] = set()
         for layer in layers:

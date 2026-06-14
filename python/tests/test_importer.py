@@ -16,7 +16,7 @@ from oxitest._bridge.importer import (
     _propagate_class_marks,
     collect_module,
 )
-from oxitest._bridge.parametrize import ResolvedCases
+from oxitest._bridge.parametrize import DictCases
 from oxitest._bridge.result import CollectedItem, ViolationKind
 
 
@@ -367,7 +367,7 @@ def test_check_fn_violations_class_method_dict_parametrize():
     from oxitest._bridge._fn_metadata import get_or_create
 
     get_or_create(test_method).param_cases = (
-        ResolvedCases(cases={"basic": {"x": 1}, "extra": {"x": 2}}),
+        DictCases(cases={"basic": {"x": 1}, "extra": {"x": 2}}),
     )
 
     path = "tests/test_cls.py"
