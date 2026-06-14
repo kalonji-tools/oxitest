@@ -167,29 +167,26 @@ pub(crate) fn run_phase_parallel(
 
 #[cfg(test)]
 mod worker_count_tests {
-    use crate::config::{self, WorkerCount};
+    use crate::config::{self, ExecutionMode, WorkerCount};
     use crate::worker_result::WireResult;
     use std::time::Duration;
 
     #[test]
     fn explicit_workers_bypasses_auto_scale() {
         // Fixed(8) is returned directly — estimated duration is ignored.
-        let count = config::compute_optimal_workers(
-            Some(WorkerCount::Fixed(8)),
-            false,
-            16,
-            Some(Duration::from_millis(100)),
-            250.0,
-        );
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Fixed(8),
+        };
+        let count =
+            config::compute_optimal_workers(&mode, 16, Some(Duration::from_millis(100)), 250.0);
         assert_eq!(count, 8);
     }
 
     #[test]
     fn serial_returns_1() {
-        // serial=true always returns 1, regardless of other params.
+        // Serial always returns 1, regardless of other params.
         let count = config::compute_optimal_workers(
-            None,
-            true,
+            &ExecutionMode::Serial,
             8,
             Some(Duration::from_millis(5000)),
             250.0,
@@ -204,9 +201,11 @@ mod worker_count_tests {
         let cpu_count = 8;
         // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(8, 2) = 2
         let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         let count = config::compute_optimal_workers(
-            None,
-            false,
+            &mode,
             cpu_count,
             Some(Duration::from_millis(est_ms as u64)),
             overhead_ms,
@@ -221,9 +220,11 @@ mod worker_count_tests {
         let cpu_count = 4;
         // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(4, 40) = 4
         let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         let count = config::compute_optimal_workers(
-            None,
-            false,
+            &mode,
             cpu_count,
             Some(Duration::from_millis(est_ms as u64)),
             overhead_ms,
@@ -234,7 +235,10 @@ mod worker_count_tests {
     #[test]
     fn cold_cache_returns_cpu_count() {
         // No timing estimate (cold cache) → fall back to cpu_count.
-        let count = config::compute_optimal_workers(None, false, 6, None, 250.0);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
+        let count = config::compute_optimal_workers(&mode, 6, None, 250.0);
         assert_eq!(count, 6);
     }
 
@@ -245,9 +249,11 @@ mod worker_count_tests {
         let cpu_count = 8;
         // Formula: min(cpu_count, ceil(est_ms / overhead_ms)).max(1) = min(8, 1).max(1) = 1
         let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize).max(1);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         let count = config::compute_optimal_workers(
-            None,
-            false,
+            &mode,
             cpu_count,
             Some(Duration::from_millis(est_ms as u64)),
             overhead_ms,
@@ -257,9 +263,8 @@ mod worker_count_tests {
 
     #[test]
     fn serial_overrides_explicit_workers() {
-        // serial=true takes priority even when workers is explicitly Fixed(4).
-        let count =
-            config::compute_optimal_workers(Some(WorkerCount::Fixed(4)), true, 8, None, 250.0);
+        // Serial mode always returns 1.
+        let count = config::compute_optimal_workers(&ExecutionMode::Serial, 8, None, 250.0);
         assert_eq!(count, 1);
     }
 
@@ -270,9 +275,11 @@ mod worker_count_tests {
         let cpu_count = 8;
         // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(8, 2) = 2
         let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         let count = config::compute_optimal_workers(
-            Some(WorkerCount::Auto),
-            false,
+            &mode,
             cpu_count,
             Some(Duration::from_millis(est_ms as u64)),
             overhead_ms,
@@ -287,9 +294,11 @@ mod worker_count_tests {
         let cpu_count = 4;
         // Formula: min(cpu_count, ceil(est_ms / overhead_ms)) = min(4, 40) = 4
         let expected = cpu_count.min((est_ms / overhead_ms).ceil() as usize);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         let count = config::compute_optimal_workers(
-            Some(WorkerCount::Auto),
-            false,
+            &mode,
             cpu_count,
             Some(Duration::from_millis(est_ms as u64)),
             overhead_ms,
@@ -300,7 +309,10 @@ mod worker_count_tests {
     #[test]
     fn auto_cold_cache_returns_cpu_count() {
         // WorkerCount::Auto + cold cache (None) → fall back to cpu_count.
-        let count = config::compute_optimal_workers(Some(WorkerCount::Auto), false, 6, None, 250.0);
+        let mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
+        let count = config::compute_optimal_workers(&mode, 6, None, 250.0);
         assert_eq!(count, 6);
     }
 

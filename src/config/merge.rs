@@ -36,7 +36,6 @@ struct Overrides {
     schedule: Option<ScheduleStrategy>,
     retries: Option<usize>,
     retries_delay_secs: Option<u64>,
-    workers: Option<WorkerCount>,
     failed: Option<FailedMode>,
     tb: Option<TbStyle>,
     color: Option<ColorMode>,
@@ -45,7 +44,7 @@ struct Overrides {
     keep_tmp: Option<KeepTmpMode>,
     show_locals: Option<bool>,
     show_internals: Option<bool>,
-    auto_arrange_threshold: Option<Option<u8>>,
+    auto_arrange_threshold: Option<u8>,
 }
 
 /// Resolve testpaths relative to a root directory.
@@ -83,12 +82,13 @@ impl Config {
         apply_if_some!(self.filter, schedule, ovr.schedule);
         apply_if_some!(self.exec, retries, ovr.retries);
         apply_if_some!(self.exec, retries_delay_secs, ovr.retries_delay_secs);
-        apply_if_some!(self.exec, workers, ovr.workers, wrap);
         apply_if_some!(self.filter, failed, ovr.failed, wrap);
         apply_if_some!(self.output, keep_tmp, ovr.keep_tmp, wrap);
-        if let Some(v) = ovr.auto_arrange_threshold {
-            self.exec.auto_arrange_threshold = v;
-        }
+        apply_if_some!(
+            self.exec,
+            auto_arrange_threshold,
+            ovr.auto_arrange_threshold
+        );
 
         // ── Output ─────────────────────────────────────────────────────
         apply_if_some!(self.output, tb, ovr.tb);
@@ -121,7 +121,9 @@ impl Config {
 
         // ── Execution (unique to TOML) ──────────────────────────────────
         apply_if_some!(self.exec, maxfail, tc.maxfail);
-        apply_if_some!(self.exec, serial, tc.serial);
+        if tc.serial == Some(true) {
+            self.exec.mode = ExecutionMode::Serial;
+        }
         apply_if_some!(self.features, async_backend, tc.async_backend);
         self.features.cache_max_age = tc.cache_max_age.unwrap_or(self.features.cache_max_age);
         self.exec.min_parallel_tests = tc
@@ -150,7 +152,6 @@ impl Config {
             schedule: tc.schedule,
             retries: tc.retries,
             retries_delay_secs: tc.retries_delay,
-            workers: tc.workers,
             failed: tc.failed,
             tb: tc.tb,
             color: tc.color,
@@ -160,11 +161,16 @@ impl Config {
             show_locals: tc.show_locals,
             show_internals: tc.show_internals,
             auto_arrange_threshold: tc.auto_arrange.map(|v| match v {
-                AutoArrangeToml::Threshold(n) => Some(n),
-                AutoArrangeToml::Disabled(false) => None,
-                AutoArrangeToml::Disabled(true) => Some(70),
+                AutoArrangeToml::Threshold(n) => n,
+                AutoArrangeToml::Disabled(false) => 0,
+                AutoArrangeToml::Disabled(true) => 70,
             }),
         });
+
+        // Apply workers after overrides (workers is no longer in Overrides).
+        if let Some(w) = tc.workers {
+            self.exec.mode = ExecutionMode::Parallel { workers: w };
+        }
 
         self
     }
@@ -188,7 +194,7 @@ impl Config {
             }
         }
         if args.serial {
-            self.exec.serial = true;
+            self.exec.mode = ExecutionMode::Serial;
         }
         apply_if_some!(self.exec, timeout_secs, args.timeout, wrap);
         if args.doctest_modules {
@@ -215,7 +221,6 @@ impl Config {
             schedule: args.schedule,
             retries: args.retries,
             retries_delay_secs: None,
-            workers: args.workers,
             failed: args.failed_filter.resolve(),
             tb: args.tb.clone(),
             color: args.color,
@@ -231,6 +236,11 @@ impl Config {
             auto_arrange_threshold: None,
         });
 
+        // Apply workers after overrides (workers is no longer in Overrides).
+        if let Some(w) = args.workers {
+            self.exec.mode = ExecutionMode::Parallel { workers: w };
+        }
+
         self
     }
 
@@ -243,7 +253,16 @@ impl Config {
         }
 
         // ── Debug mode ──────────────────────────────────────────────────
-        args.mode().apply_to(&mut self, args.tb.as_ref());
+        let mode = args.mode();
+        self.exec.mode = ExecutionMode::Debug(mode.clone());
+        self.exec.timeout_secs = None;
+        self.output.show_internals = true;
+        if args.tb.is_none() {
+            self.output.tb = TbStyle::Detail;
+        }
+        if matches!(mode, DebugMode::PostMortem) {
+            self.exec.maxfail = 1;
+        }
 
         // ── Filtering (unique to CLI) ───────────────────────────────────
         self.merge_affected(&args.filter.affected);
@@ -258,7 +277,6 @@ impl Config {
             schedule: None,
             retries: None,
             retries_delay_secs: None,
-            workers: None,
             failed: args.failed_filter.resolve(),
             tb: args.tb.clone(),
             color: args.color,
@@ -514,7 +532,7 @@ mod tests {
     #[test]
     fn test_serial_from_pyproject() {
         let cfg = Config::from_str("[tool.oxitest]\nserial = true\n").unwrap();
-        assert!(cfg.exec.serial);
+        assert!(cfg.exec.mode.is_serial());
     }
 
     #[test]
@@ -787,7 +805,12 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.exec.workers, Some(WorkerCount::Auto));
+        assert_eq!(
+            config.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Auto
+            }
+        );
     }
 
     #[test]
@@ -799,11 +822,16 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.exec.workers, Some(WorkerCount::Fixed(4)));
+        assert_eq!(
+            config.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Fixed(4)
+            }
+        );
     }
 
     #[test]
-    fn test_toml_workers_absent_is_none() {
+    fn test_toml_workers_absent_is_default() {
         let config = Config::from_str(
             r#"
         [tool.oxitest]
@@ -811,7 +839,12 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert!(config.exec.workers.is_none());
+        assert_eq!(
+            config.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Auto
+            }
+        );
     }
 
     #[test]
@@ -834,11 +867,21 @@ spawn_overhead_ms = 100.0
         "#,
         )
         .unwrap();
-        assert_eq!(config.exec.workers, Some(WorkerCount::Auto));
+        assert_eq!(
+            config.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Auto
+            }
+        );
 
         let args = parse_run(&["--workers", "2"]);
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.exec.workers, Some(WorkerCount::Fixed(2)));
+        assert_eq!(
+            merged.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Fixed(2)
+            }
+        );
     }
 
     #[test]
@@ -852,13 +895,20 @@ spawn_overhead_ms = 100.0
         .unwrap();
         let args = base_run_args();
         let merged = config.merge_run_args(&args);
-        assert_eq!(merged.exec.workers, Some(WorkerCount::Fixed(8)));
+        assert_eq!(
+            merged.exec.mode,
+            ExecutionMode::Parallel {
+                workers: WorkerCount::Fixed(8)
+            }
+        );
     }
 
     #[test]
     fn test_config_worker_count_auto_is_cpu_count() {
         let mut config = Config::default();
-        config.exec.workers = Some(WorkerCount::Auto);
+        config.exec.mode = ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        };
         assert!(config.worker_count() >= 1);
     }
 
@@ -1138,63 +1188,46 @@ async_backend = "trio"
         assert!(no_desc.is_empty());
     }
 
-    // ── DebugMode::apply_to tests ───────────────────────────────────────
+    // ── Debug mode merge tests ─────────────────────────────────────────
 
     #[test]
-    fn test_debug_post_mortem_apply_to() {
-        let mut cfg = Config::default();
-        DebugMode::PostMortem.apply_to(&mut cfg, None);
-        assert!(cfg.exec.serial, "debug should imply serial");
-        assert_eq!(cfg.exec.maxfail, 1, "post-mortem should imply maxfail=1");
+    fn test_debug_post_mortem_merge() {
+        let dir = TempDir::new().unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let args = DebugArgs::default_for_test(); // defaults to PostMortem
+        let merged = config.merge_debug_args(&args);
+        assert!(merged.exec.mode.is_serial(), "debug should imply serial");
+        assert_eq!(merged.exec.maxfail, 1, "post-mortem should imply maxfail=1");
         assert_eq!(
-            cfg.output.tb,
+            merged.output.tb,
             TbStyle::Detail,
             "debug should imply tb=detail"
         );
-        assert!(cfg.exec.debug.is_some(), "debug should be stored on config");
-        assert_eq!(cfg.exec.timeout_secs, None, "debug should clear timeout");
         assert!(
-            cfg.output.show_internals,
+            merged.exec.mode.debug_mode().is_some(),
+            "debug should be stored on config"
+        );
+        assert_eq!(merged.exec.timeout_secs, None, "debug should clear timeout");
+        assert!(
+            merged.output.show_internals,
             "debug should imply show_internals"
         );
     }
 
     #[test]
     fn test_debug_post_mortem_clears_pyproject_timeout() {
-        let mut cfg = Config::default();
-        cfg.exec.timeout_secs = Some(30);
-        DebugMode::PostMortem.apply_to(&mut cfg, None);
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\ntimeout = 30\n",
+        )
+        .unwrap();
+        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let args = DebugArgs::default_for_test();
+        let merged = config.merge_debug_args(&args);
         assert_eq!(
-            cfg.exec.timeout_secs, None,
+            merged.exec.timeout_secs, None,
             "debug should clear pyproject timeout"
-        );
-    }
-
-    #[test]
-    fn test_debug_always_does_not_imply_maxfail() {
-        let mut cfg = Config::default();
-        DebugMode::Always.apply_to(&mut cfg, None);
-        assert!(cfg.exec.serial, "always should imply serial");
-        assert_eq!(cfg.exec.maxfail, 0, "always should NOT imply maxfail=1");
-        assert_eq!(
-            cfg.output.tb,
-            TbStyle::Detail,
-            "always should imply tb=detail"
-        );
-        assert_eq!(cfg.exec.timeout_secs, None, "always should clear timeout");
-    }
-
-    #[test]
-    fn test_debug_does_not_override_explicit_tb() {
-        // When cli_tb is Some, apply_to should NOT override tb to Detail.
-        // The caller sets cfg.output.tb via the override mechanism after apply_to.
-        let mut cfg = Config::default();
-        cfg.output.tb = TbStyle::No; // User chose --tb=no explicitly
-        DebugMode::PostMortem.apply_to(&mut cfg, Some(&TbStyle::No));
-        assert_eq!(
-            cfg.output.tb,
-            TbStyle::No,
-            "explicit --tb should not be overridden"
         );
     }
 
@@ -1204,9 +1237,9 @@ async_backend = "trio"
         let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = DebugArgs::default_for_test();
         let merged = config.merge_debug_args(&args);
-        assert!(merged.exec.serial);
+        assert!(merged.exec.mode.is_serial());
         assert_eq!(merged.exec.maxfail, 1);
-        assert!(merged.exec.debug.is_some());
+        assert!(merged.exec.mode.debug_mode().is_some());
     }
 
     // ── keep_tmp tests ──────────────────────────────────────────────────
@@ -1270,13 +1303,13 @@ async_backend = "trio"
     #[test]
     fn test_auto_arrange_from_pyproject_custom() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = 50\n").unwrap();
-        assert_eq!(cfg.exec.auto_arrange_threshold, Some(50));
+        assert_eq!(cfg.exec.auto_arrange_threshold, 50);
     }
 
     #[test]
     fn test_auto_arrange_from_pyproject_false() {
         let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
-        assert_eq!(cfg.exec.auto_arrange_threshold, None);
+        assert_eq!(cfg.exec.auto_arrange_threshold, 0);
     }
 
     // ── use_gitignore tests ─────────────────────────────────────────────
