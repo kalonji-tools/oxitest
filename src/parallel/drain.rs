@@ -60,11 +60,11 @@ pub(crate) fn drain_worker_results(
                     Ok(r) => {
                         received += 1;
                         if !version_warned
-                            && r.protocol_version != crate::worker_result::PROTOCOL_VERSION
+                            && r.protocol_version() != crate::worker_result::PROTOCOL_VERSION
                         {
                             tracing::warn!(
                                 expected = crate::worker_result::PROTOCOL_VERSION,
-                                got = r.protocol_version,
+                                got = r.protocol_version(),
                                 "Worker protocol version mismatch — results may be unreliable"
                             );
                             version_warned = true;

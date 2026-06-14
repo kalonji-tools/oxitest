@@ -126,11 +126,9 @@ class TestResult:
             "protocol_version": PROTOCOL_VERSION,
         }
         # Optional fields — omit falsy values for compact JSON
-        # Wire fields: "failure_repr": "message": "file": "lineno":
-        # "source_line": "no_message_lines": "left": "right": "op": "strict":
+        # Wire fields: "message": "file": "lineno": "source_line":
+        # "no_message_lines": "left": "right": "op": "strict":
         # "frames": "field_diffs":
-        if failure_repr := self.failure_repr:
-            output["failure_repr"] = failure_repr
         for f in fields(self):
             if f.name not in _WIRE_EXCLUDE_ATTRS and (value := getattr(self, f.name)):
                 output[f.name] = value

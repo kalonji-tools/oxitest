@@ -92,8 +92,29 @@ def _parse_serde_struct_fields(text: str, struct_name: str) -> set[str]:
 
 
 def parse_worker_result_fields(path: Path) -> set[str]:
-    """Extract field names from the WireResult serde struct."""
-    return _parse_serde_struct_fields(path.read_text(), "WireResult")
+    """Extract field names from the WireResult serde enum (or struct fallback).
+
+    With internally-tagged enums, fields are distributed across variants.
+    We collect the union of all variant fields, plus the tag field ("outcome").
+    """
+    text = path.read_text()
+    # Try enum first (internally-tagged enum)
+    enum_pattern = re.compile(
+        r"enum\s+WireResult\s*\{(.+?)^}",
+        re.DOTALL | re.MULTILINE,
+    )
+    m = enum_pattern.search(text)
+    if m:
+        body = m.group(1)
+        field_pattern = re.compile(r"^\s+(\w+)\s*:", re.MULTILINE)
+        fields = set(field_pattern.findall(body))
+        # The tag field "outcome" drives variant selection but is not a Rust field
+        fields.add("outcome")
+        # Remove serde rename attributes that aren't actual field names
+        fields.discard("serde")
+        return fields
+    # Fall back to struct-based extraction
+    return _parse_serde_struct_fields(text, "WireResult")
 
 
 def parse_worker_task_item_fields(path: Path) -> set[str]:
