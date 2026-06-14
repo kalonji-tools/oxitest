@@ -265,8 +265,11 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
 
     let cache = cache::TestCache::load(&rootdir);
 
-    let is_tty = std::io::stdout().is_terminal() && cfg.exec.debug.is_none();
-    let use_color = cfg.output.color.resolve(is_tty || cfg.exec.debug.is_some());
+    let is_tty = std::io::stdout().is_terminal() && cfg.exec.mode.debug_mode().is_none();
+    let use_color = cfg
+        .output
+        .color
+        .resolve(is_tty || cfg.exec.mode.debug_mode().is_some());
 
     let python_bin = py
         .import("sys")?

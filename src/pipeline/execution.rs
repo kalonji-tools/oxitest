@@ -79,7 +79,7 @@ impl<'a> SerialHarness<'a> {
             timeout_multiplier: ctx.cfg.exec.timeout_multiplier,
             maxfail: ctx.cfg.exec.maxfail,
             opts: DebugOptions {
-                debug_mode: ctx.cfg.exec.debug.as_ref().map(|m| m.as_str()),
+                debug_mode: ctx.cfg.exec.mode.debug_mode().map(|m| m.as_str()),
                 keep_tmp: ctx.cfg.output.keep_tmp.as_ref().map(|m| m.as_str()),
                 show_locals: ctx.cfg.output.show_locals,
                 show_internals: ctx.cfg.output.show_internals,
@@ -196,7 +196,7 @@ fn emit_scheduling_diagnostics(
 
     match &plan.strategy {
         ExecutionStrategy::Serial => {
-            if ctx.cfg.exec.serial {
+            if ctx.cfg.exec.mode.is_serial() {
                 eprintln!("scheduling: serial (--serial flag)");
             } else if let Some(est) = estimated {
                 eprintln!(
@@ -212,8 +212,9 @@ fn emit_scheduling_diagnostics(
                 );
             }
             // Check if this was an auto-arrange fallback.
-            if !plan.inprocess_groups.is_empty() && ctx.cfg.exec.auto_arrange_threshold.is_some() {
-                if let Some(threshold) = ctx.cfg.exec.auto_arrange_threshold {
+            if !plan.inprocess_groups.is_empty() && ctx.cfg.exec.auto_arrange_threshold > 0 {
+                {
+                    let threshold = ctx.cfg.exec.auto_arrange_threshold;
                     let arranged_count: usize = plan
                         .arranged_groups
                         .iter()
@@ -231,7 +232,12 @@ fn emit_scheduling_diagnostics(
             }
         }
         ExecutionStrategy::Parallel { worker_count } => {
-            let force_parallel = ctx.cfg.exec.workers.is_some() && !ctx.cfg.exec.serial;
+            let force_parallel = matches!(
+                ctx.cfg.exec.mode,
+                config::ExecutionMode::Parallel {
+                    workers: config::WorkerCount::Fixed(_)
+                }
+            );
             if force_parallel {
                 eprintln!("scheduling: parallel (explicit --workers)");
             } else if let Some(est) = estimated {
@@ -248,7 +254,7 @@ fn emit_scheduling_diagnostics(
                 );
             }
 
-            if let Some(config::WorkerCount::Fixed(n)) = ctx.cfg.exec.workers {
+            if let Some(config::WorkerCount::Fixed(n)) = ctx.cfg.exec.mode.workers() {
                 eprintln!("scheduling: {n} workers (explicit --workers {n})");
             } else if let Some(est) = estimated {
                 eprintln!(
@@ -305,7 +311,7 @@ fn emit_shared_fixture_warning(
     cfg: &config::Config,
     worker_count: usize,
 ) {
-    if cfg.exec.auto_arrange_threshold.is_some() {
+    if cfg.exec.auto_arrange_threshold > 0 {
         return;
     }
     let shared_names = session.shared_fixture_names(py);
@@ -363,7 +369,7 @@ pub(super) fn execute(
     let cpu_count = config::cpu_count();
 
     // Resolve shared fixture groups before plan (requires PyO3).
-    let shared_fixture_groups = if ctx.cfg.exec.auto_arrange_threshold.is_some() {
+    let shared_fixture_groups = if ctx.cfg.exec.auto_arrange_threshold > 0 {
         ctx.session.shared_fixture_groups(py)
     } else {
         vec![]
@@ -372,8 +378,7 @@ pub(super) fn execute(
     // Build a pure execution plan — no I/O, no PyO3.
     let plan = arrange::plan_execution(
         groups,
-        ctx.cfg.exec.serial,
-        ctx.cfg.exec.workers,
+        &ctx.cfg.exec.mode,
         ctx.cfg.worker_count(),
         ctx.cfg.exec.spawn_overhead_ms,
         ctx.cfg.exec.min_parallel_tests,

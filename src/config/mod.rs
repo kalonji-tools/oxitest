@@ -16,22 +16,40 @@ impl DebugMode {
             DebugMode::Always => "always",
         }
     }
+}
 
-    /// Apply debug-mode side effects to a config.
-    ///
-    /// Debug modes force serial execution, disable timeouts, and may override
-    /// traceback style and maxfail. `cli_tb` should be `Some` only if the user
-    /// passed an explicit `--tb` flag (prevents overriding their choice).
-    pub fn apply_to(&self, cfg: &mut Config, cli_tb: Option<&TbStyle>) {
-        cfg.exec.debug = Some(self.clone());
-        cfg.exec.serial = true;
-        cfg.exec.timeout_secs = None;
-        cfg.output.show_internals = true;
-        if cli_tb.is_none() {
-            cfg.output.tb = TbStyle::Detail;
+/// How tests are dispatched: serial, under a debugger, or across parallel workers.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecutionMode {
+    Serial,
+    Debug(DebugMode),
+    Parallel { workers: WorkerCount },
+}
+
+impl Default for ExecutionMode {
+    fn default() -> Self {
+        ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
         }
-        if matches!(self, DebugMode::PostMortem) {
-            cfg.exec.maxfail = 1;
+    }
+}
+
+impl ExecutionMode {
+    pub fn is_serial(&self) -> bool {
+        matches!(self, Self::Serial | Self::Debug(_))
+    }
+
+    pub fn debug_mode(&self) -> Option<&DebugMode> {
+        match self {
+            Self::Debug(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn workers(&self) -> Option<&WorkerCount> {
+        match self {
+            Self::Parallel { workers } => Some(workers),
+            _ => None,
         }
     }
 }
@@ -225,14 +243,10 @@ impl Default for PathConfig {
 /// Execution control: parallelism, timeouts, retries, debug mode.
 #[derive(Debug)]
 pub struct ExecConfig {
+    /// Execution dispatch mode (serial, debug, or parallel).
+    pub mode: ExecutionMode,
     /// Stop the run after this many failures (0 = no limit).
     pub maxfail: usize,
-    /// Force serial (single-process) execution.
-    pub serial: bool,
-    /// PDB debugger mode (`PostMortem` or `Always`); `None` = disabled.
-    pub debug: Option<DebugMode>,
-    /// Number of parallel worker processes (`Auto` or a fixed count).
-    pub workers: Option<WorkerCount>,
     /// Default per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
     /// Multiplier applied to all test timeouts (e.g. 2.0 doubles them).
@@ -245,24 +259,22 @@ pub struct ExecConfig {
     pub retries: usize,
     /// Delay in seconds between retries.
     pub retries_delay_secs: u64,
-    /// Auto-arrange threshold: skip fixture arrangement when item count is below this.
-    pub auto_arrange_threshold: Option<u8>,
+    /// Auto-arrange threshold percentage (0 = disabled).
+    pub auto_arrange_threshold: u8,
 }
 
 impl Default for ExecConfig {
     fn default() -> Self {
         Self {
+            mode: ExecutionMode::default(),
             maxfail: 0,
-            serial: false,
-            debug: None,
-            workers: None,
             timeout_secs: None,
             timeout_multiplier: None,
             spawn_overhead_ms: 250.0,
             min_parallel_tests: 100,
             retries: 0,
             retries_delay_secs: 0,
-            auto_arrange_threshold: Some(70),
+            auto_arrange_threshold: 70,
         }
     }
 }
@@ -489,40 +501,44 @@ impl Config {
     /// On single-CPU machines `Auto` resolves to 1, which means `--workers auto`
     /// silently falls back to serial (no point spawning one subprocess worker).
     pub fn worker_count(&self) -> usize {
-        match self.exec.workers {
-            _ if self.exec.serial => 1,
-            Some(WorkerCount::Fixed(n)) => n,
-            Some(WorkerCount::Auto) | None => cpu_count(),
+        match &self.exec.mode {
+            ExecutionMode::Serial | ExecutionMode::Debug(_) => 1,
+            ExecutionMode::Parallel { workers } => match workers {
+                WorkerCount::Fixed(n) => *n,
+                WorkerCount::Auto => cpu_count(),
+            },
         }
     }
 }
 
 /// Choose the number of worker subprocesses for this run.
 ///
-/// Priority: serial flag → explicit `--workers N` → heuristic.
+/// Priority: serial/debug → explicit `--workers N` → heuristic.
 /// The heuristic caps at `cpu_count` and, when a timing estimate is available,
 /// avoids spawning more workers than the estimated total runtime warrants given
 /// the subprocess spawn overhead (`spawn_overhead_ms` per worker).
 pub(crate) fn compute_optimal_workers(
-    explicit_workers: Option<WorkerCount>,
-    serial: bool,
+    mode: &ExecutionMode,
     cpu_count: usize,
     estimated: Option<std::time::Duration>,
     spawn_overhead_ms: f64,
 ) -> usize {
-    if serial {
-        return 1;
-    }
-    match explicit_workers {
-        Some(WorkerCount::Fixed(n)) => return n,
-        Some(WorkerCount::Auto) | None => {}
-    }
-    if let Some(est) = estimated {
-        let est_ms = est.as_millis() as f64;
-        let needed = (est_ms / spawn_overhead_ms).ceil() as usize;
-        cpu_count.min(needed).max(1)
-    } else {
-        cpu_count
+    match mode {
+        ExecutionMode::Serial | ExecutionMode::Debug(_) => 1,
+        ExecutionMode::Parallel {
+            workers: WorkerCount::Fixed(n),
+        } => *n,
+        ExecutionMode::Parallel {
+            workers: WorkerCount::Auto,
+        } => {
+            if let Some(est) = estimated {
+                let est_ms = est.as_millis() as f64;
+                let needed = (est_ms / spawn_overhead_ms).ceil() as usize;
+                cpu_count.min(needed).max(1)
+            } else {
+                cpu_count
+            }
+        }
     }
 }
 
@@ -954,9 +970,9 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_arrange_default_is_some_70() {
+    fn test_auto_arrange_default_is_70() {
         let cfg = Config::default();
-        assert_eq!(cfg.exec.auto_arrange_threshold, Some(70));
+        assert_eq!(cfg.exec.auto_arrange_threshold, 70);
     }
 
     #[test]

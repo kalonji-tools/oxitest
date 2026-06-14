@@ -173,20 +173,25 @@ pub(super) struct ExecutionPlan {
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub(super) fn plan_execution(
     groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-    serial: bool,
-    workers: Option<crate::config::WorkerCount>,
+    mode: &crate::config::ExecutionMode,
     worker_count_cfg: usize,
     spawn_overhead_ms: f64,
     min_parallel_tests: usize,
-    auto_arrange_threshold: Option<u8>,
+    auto_arrange_threshold: u8,
     shared_fixture_groups: &[Vec<String>],
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
 ) -> ExecutionPlan {
     let total_tests: usize = groups.iter().map(|(_, items)| items.len()).sum();
 
-    let force_parallel = workers.is_some() && !serial;
-    let use_parallel = !serial
+    let is_serial = mode.is_serial();
+    let force_parallel = matches!(
+        mode,
+        crate::config::ExecutionMode::Parallel {
+            workers: crate::config::WorkerCount::Fixed(_)
+        }
+    );
+    let use_parallel = !is_serial
         && worker_count_cfg > 1
         && (force_parallel
             || match estimated {
@@ -206,16 +211,12 @@ pub(super) fn plan_execution(
     // Partition inprocess-marked tests.
     let (inprocess_groups, parallel_groups) = partition_inprocess_groups(groups);
 
-    let optimal_worker_count = crate::config::compute_optimal_workers(
-        workers,
-        serial,
-        cpu_count,
-        estimated,
-        spawn_overhead_ms,
-    );
+    let optimal_worker_count =
+        crate::config::compute_optimal_workers(mode, cpu_count, estimated, spawn_overhead_ms);
 
     // Auto-arrange by shared fixture groups.
-    if let Some(threshold) = auto_arrange_threshold {
+    if auto_arrange_threshold > 0 {
+        let threshold = auto_arrange_threshold;
         if !shared_fixture_groups.is_empty() {
             let (arranged, remaining) =
                 partition_by_fixture_groups(parallel_groups, shared_fixture_groups);
