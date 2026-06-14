@@ -69,20 +69,21 @@ pub(crate) fn print_summary_section(
                 let detail = if entry.teardown_count > 0 {
                     format!(
                         "setup {:.2}ms ({}) + teardown {:.2}ms ({})",
-                        entry.total_setup_ms,
+                        entry.total_setup.as_f64(),
                         entry.setup_count,
-                        entry.total_teardown_ms,
+                        entry.total_teardown.as_f64(),
                         entry.teardown_count,
                     )
                 } else {
                     format!(
                         "setup {:.2}ms ({})",
-                        entry.total_setup_ms, entry.setup_count
+                        entry.total_setup.as_f64(),
+                        entry.setup_count
                     )
                 };
                 println!(
                     "  {:>8.2}ms  {} \u{2014} {}",
-                    entry.total_ms(),
+                    entry.total().as_f64(),
                     entry.name,
                     detail,
                 );

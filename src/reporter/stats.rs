@@ -32,16 +32,16 @@ impl FixtureCacheStats {
 #[derive(Clone, Debug)]
 pub(crate) struct FixtureTimingEntry {
     pub(crate) name: String,
-    pub(crate) total_setup_ms: f64,
+    pub(crate) total_setup: DurationMs,
     pub(crate) setup_count: usize,
-    pub(crate) total_teardown_ms: f64,
+    pub(crate) total_teardown: DurationMs,
     pub(crate) teardown_count: usize,
 }
 
 impl FixtureTimingEntry {
     /// Total time (setup + teardown) for sorting.
-    pub(crate) fn total_ms(&self) -> f64 {
-        self.total_setup_ms + self.total_teardown_ms
+    pub(crate) fn total(&self) -> DurationMs {
+        self.total_setup + self.total_teardown
     }
 }
 
@@ -55,8 +55,8 @@ pub(crate) struct TimingEntry {
 /// A print() call inside a passing test (potential debugging leftover).
 #[derive(Clone, Debug)]
 pub(crate) struct TipLine {
-    pub(crate) file: String,
-    pub(crate) lineno: usize,
+    pub(crate) file: camino::Utf8PathBuf,
+    pub(crate) lineno: crate::types::LineNo,
 }
 
 /// A warning captured during session setup/teardown.
@@ -232,8 +232,8 @@ impl RunStats {
         }
         let mut sorted = self.fixture_timings.clone();
         sorted.sort_unstable_by(|a, b| {
-            b.total_ms()
-                .partial_cmp(&a.total_ms())
+            b.total()
+                .partial_cmp(&a.total())
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         sorted.truncate(n);
@@ -242,11 +242,11 @@ impl RunStats {
 
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
         if !lines.is_empty() {
-            let file = item.module_path.to_string();
+            let file = item.module_path.clone();
             for &ln in lines {
                 self.diagnostics.tip_lines.push(TipLine {
                     file: file.clone(),
-                    lineno: ln,
+                    lineno: crate::types::LineNo::new(ln),
                 });
             }
         }
@@ -333,16 +333,16 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_fixture_timing(FixtureTimingEntry {
             name: "fast_fx".into(),
-            total_setup_ms: 5.0,
+            total_setup: DurationMs::new(5.0),
             setup_count: 1,
-            total_teardown_ms: 0.0,
+            total_teardown: DurationMs::new(0.0),
             teardown_count: 0,
         });
         stats.record_fixture_timing(FixtureTimingEntry {
             name: "slow_fx".into(),
-            total_setup_ms: 200.0,
+            total_setup: DurationMs::new(200.0),
             setup_count: 1,
-            total_teardown_ms: 50.0,
+            total_teardown: DurationMs::new(50.0),
             teardown_count: 1,
         });
         let top = stats.slowest_fixtures(2);
@@ -355,9 +355,9 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_fixture_timing(FixtureTimingEntry {
             name: "fx".into(),
-            total_setup_ms: 10.0,
+            total_setup: DurationMs::new(10.0),
             setup_count: 1,
-            total_teardown_ms: 0.0,
+            total_teardown: DurationMs::new(0.0),
             teardown_count: 0,
         });
         assert!(stats.slowest_fixtures(0).is_empty());
@@ -368,9 +368,9 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_fixture_timing(FixtureTimingEntry {
             name: "fx".into(),
-            total_setup_ms: 10.0,
+            total_setup: DurationMs::new(10.0),
             setup_count: 1,
-            total_teardown_ms: 0.0,
+            total_teardown: DurationMs::new(0.0),
             teardown_count: 0,
         });
         let top = stats.slowest_fixtures(10);

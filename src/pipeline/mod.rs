@@ -132,7 +132,7 @@ pub(crate) struct PipelineShared {
     pub(crate) cache: cache::TestCache,
     pub(crate) python_bin: String,
     /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
-    pub(crate) ast_weight_ms: Option<f64>,
+    pub(crate) ast_weight: Option<types::DurationMs>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
     pub(crate) session: Option<bridge::FixtureSession>,
@@ -262,7 +262,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         use_color,
         python_bin,
         base,
-        ast_weight_ms: None,
+        ast_weight: None,
         test_files: vec![],
         conftest_files: vec![],
         session: None,

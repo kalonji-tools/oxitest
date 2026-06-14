@@ -307,8 +307,8 @@ mod tests {
     fn test_tip_block_collapsed_shows_count_and_hint() {
         use crate::reporter::stats::TipLine;
         let tips = vec![TipLine {
-            file: "tests/test_foo.py".to_string(),
-            lineno: 12,
+            file: camino::Utf8PathBuf::from("tests/test_foo.py"),
+            lineno: crate::types::LineNo::new(12),
         }];
         let s = fmt_tip_block(&tips, false, false);
         assert!(s.contains("1 assertions without messages"));
@@ -321,12 +321,12 @@ mod tests {
         use crate::reporter::stats::TipLine;
         let tips = vec![
             TipLine {
-                file: "tests/test_foo.py".to_string(),
-                lineno: 12,
+                file: camino::Utf8PathBuf::from("tests/test_foo.py"),
+                lineno: crate::types::LineNo::new(12),
             },
             TipLine {
-                file: "tests/test_bar.py".to_string(),
-                lineno: 7,
+                file: camino::Utf8PathBuf::from("tests/test_bar.py"),
+                lineno: crate::types::LineNo::new(7),
             },
         ];
         let s = fmt_tip_block(&tips, true, false);
