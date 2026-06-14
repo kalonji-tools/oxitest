@@ -585,7 +585,6 @@ def test_fixtures_bare_decorator_registers_def():
     assert defn.autouse is False, (
         f"default autouse should be False, got {defn.autouse!r}"
     )
-    assert defn.params is None, f"default params should be None, got {defn.params!r}"
     assert defn.conftest_path == "", (
         f"default conftest_path should be '', got {defn.conftest_path!r}"
     )

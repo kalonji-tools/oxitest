@@ -41,7 +41,6 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
                 name=name,
                 func=_stub,
                 autouse=False,
-                params=None,
                 conftest_path=_BUILTIN_CONFTEST,
                 shared=getattr(impl_cls, "scope", "function") == "session",
                 is_async=False,

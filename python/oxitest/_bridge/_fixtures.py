@@ -200,7 +200,6 @@ class Fixtures:
                 name=fixture_name,
                 func=f,
                 autouse=autouse,
-                params=None,
                 conftest_path="",
                 shared=shared,
                 is_async=(

@@ -269,7 +269,6 @@ class FixtureSession:
                 name="task_group",
                 func=_task_group_factory,
                 autouse=False,
-                params=None,
                 conftest_path="<builtin>",
                 is_async=True,
             )
