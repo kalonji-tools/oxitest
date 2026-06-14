@@ -99,9 +99,9 @@ mod tests {
         let mut session = ReporterSession::new(0);
         let entry = stats::FixtureTimingEntry {
             name: "db".into(),
-            total_setup_ms: 100.0,
+            total_setup: crate::types::DurationMs::new(100.0),
             setup_count: 1,
-            total_teardown_ms: 10.0,
+            total_teardown: crate::types::DurationMs::new(10.0),
             teardown_count: 1,
         };
         session.set_fixture_timings(vec![entry]);

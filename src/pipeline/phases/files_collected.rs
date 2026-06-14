@@ -51,12 +51,14 @@ impl Pipeline<FilesCollected> {
         // Phase 2: sequential accumulation — cheap, preserves deterministic order.
         let mut prescan_data = Vec::with_capacity(file_results.len());
         let mut module_markers = std::collections::HashMap::new();
-        let mut ast_weight_sum = 0.0f64;
+        let mut ast_weight_sum = crate::types::DurationMs::ZERO;
 
         for (file, result) in file_results {
             match result {
                 crate::prescan::PrescanResult::HasTests(p) => {
-                    ast_weight_sum += p.items.iter().map(|i| i.body_weight_ms).sum::<f64>();
+                    for i in &p.items {
+                        ast_weight_sum += i.body_weight;
+                    }
                     if !p.module_markers.is_empty() {
                         module_markers.insert(file.clone(), p.module_markers);
                     }
@@ -81,7 +83,7 @@ impl Pipeline<FilesCollected> {
 
         let (mut shared, _) = self.into_parts();
 
-        shared.ast_weight_ms = if ast_weight_sum > 0.0 {
+        shared.ast_weight = if ast_weight_sum > crate::types::DurationMs::ZERO {
             Some(ast_weight_sum)
         } else {
             None

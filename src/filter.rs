@@ -796,14 +796,14 @@ mod tests {
     fn make_item(fn_name: &str) -> PrescanItem {
         PrescanItem {
             fn_name: fn_name.to_string(),
-            lineno: 1,
+            lineno: crate::types::LineNo::new(1),
             is_async: false,
             markers: vec![],
             param_ids: vec![],
             fixture_params: vec![],
             is_class_method: false,
             class_name: None,
-            body_weight_ms: 0.0,
+            body_weight: crate::types::DurationMs::ZERO,
         }
     }
 
@@ -915,14 +915,14 @@ mod tests {
         fn make_prescan_item(fn_name: &str) -> PrescanItem {
             PrescanItem {
                 fn_name: fn_name.to_string(),
-                lineno: 1,
+                lineno: crate::types::LineNo::new(1),
                 is_async: false,
                 markers: vec![],
                 param_ids: vec![],
                 fixture_params: vec![],
                 is_class_method: false,
                 class_name: None,
-                body_weight_ms: 1.0,
+                body_weight: crate::types::DurationMs::new(1.0),
             }
         }
 

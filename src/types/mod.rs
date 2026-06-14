@@ -126,6 +126,10 @@ impl LineNo {
         LineNo(n)
     }
 
+    pub fn from_u32(n: u32) -> Self {
+        LineNo(n as usize)
+    }
+
     #[allow(dead_code)]
     pub fn as_usize(self) -> usize {
         self.0

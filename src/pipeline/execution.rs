@@ -18,7 +18,7 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) conftest_files: &'a [Utf8PathBuf],
     pub(super) python_bin: &'a str,
     /// Sum of AST-derived body weights from prescan; used as fallback for cold-cache estimation.
-    pub(super) ast_weight_ms: Option<f64>,
+    pub(super) ast_weight: Option<crate::types::DurationMs>,
 }
 
 /// Debug and display options passed through the execution pipeline.
@@ -203,7 +203,7 @@ fn emit_scheduling_diagnostics(
                 eprintln!(
                     "scheduling: serial (est. {}ms <= spawn overhead {}ms x {} workers)",
                     est.as_millis(),
-                    ctx.cfg.exec.spawn_overhead_ms as u64,
+                    ctx.cfg.exec.spawn_overhead.as_f64() as u64,
                     ctx.cfg.worker_count(),
                 );
             } else {
@@ -245,7 +245,7 @@ fn emit_scheduling_diagnostics(
                 eprintln!(
                     "scheduling: parallel (est. {}ms > spawn overhead {}ms x {} workers)",
                     est.as_millis(),
-                    ctx.cfg.exec.spawn_overhead_ms as u64,
+                    ctx.cfg.exec.spawn_overhead.as_f64() as u64,
                     ctx.cfg.worker_count(),
                 );
             } else {
@@ -261,7 +261,7 @@ fn emit_scheduling_diagnostics(
                 eprintln!(
                     "scheduling: {worker_count} workers (est. {}ms / {}ms overhead, capped to {cpu_count} CPUs)",
                     est.as_millis(),
-                    ctx.cfg.exec.spawn_overhead_ms as u64,
+                    ctx.cfg.exec.spawn_overhead.as_f64() as u64,
                 );
             } else {
                 eprintln!(
@@ -352,7 +352,9 @@ pub(super) fn execute(
     // Immediately report violated items as Error outcomes (no worker dispatch).
     report_violations(&violated_items, &all_violations, rep);
 
-    let estimated = ctx.cache.estimated_duration(clean_items, ctx.ast_weight_ms);
+    let estimated = ctx
+        .cache
+        .estimated_duration(clean_items, ctx.ast_weight.map(|d| d.as_f64()));
 
     let mut groups = filter::group_by_module(clean_items);
     let failed_ids = ctx.cache.last_failed_ids();
@@ -381,7 +383,7 @@ pub(super) fn execute(
         groups,
         &ctx.cfg.exec.mode,
         ctx.cfg.worker_count(),
-        ctx.cfg.exec.spawn_overhead_ms,
+        ctx.cfg.exec.spawn_overhead.as_f64(),
         ctx.cfg.exec.min_parallel_tests,
         ctx.cfg.exec.auto_arrange_threshold,
         &shared_fixture_groups,
