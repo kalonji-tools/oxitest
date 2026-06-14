@@ -30,7 +30,7 @@ impl Pipeline<Prescanned> {
                 .state
                 .prescan_data
                 .iter()
-                .map(|(path, _, _)| path.clone())
+                .map(|m| m.path.clone())
                 .collect();
             let (shared, _) = self.into_parts();
             return Ok(shared.into_pipeline(MetadataFiltered {
@@ -72,9 +72,11 @@ impl Pipeline<Prescanned> {
             .state
             .prescan_data
             .par_iter()
-            .filter_map(|(path, items, has_dynamic)| {
-                if *has_dynamic || self.file_passes_all_filters(path, items, &preds) {
-                    Some(path.clone())
+            .filter_map(|m| {
+                if m.has_dynamic_collection
+                    || self.file_passes_all_filters(&m.path, &m.items, &preds)
+                {
+                    Some(m.path.clone())
                 } else {
                     None
                 }

@@ -57,16 +57,24 @@ impl Pipeline<FilesCollected> {
             match result {
                 crate::prescan::PrescanResult::HasTests(p) => {
                     ast_weight_sum += p.items.iter().map(|i| i.body_weight_ms).sum::<f64>();
-                    prescan_data.push((file.clone(), p.items, p.has_dynamic_collection));
                     if !p.module_markers.is_empty() {
-                        module_markers.insert(file, p.module_markers);
+                        module_markers.insert(file.clone(), p.module_markers);
                     }
+                    prescan_data.push(crate::prescan::PrescanModule {
+                        path: file,
+                        items: p.items,
+                        has_dynamic_collection: p.has_dynamic_collection,
+                    });
                 }
                 crate::prescan::PrescanResult::NoTests => {
                     tracing::debug!(path = file.as_str(), "prescan: no tests, skipping");
                 }
                 crate::prescan::PrescanResult::Unavailable => {
-                    prescan_data.push((file, vec![], true));
+                    prescan_data.push(crate::prescan::PrescanModule {
+                        path: file,
+                        items: vec![],
+                        has_dynamic_collection: true,
+                    });
                 }
             }
         }
