@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::types::{DurationMs, NodeId, TestItem, TestOutcome};
+use crate::types::{DurationMs, NodeId, OutcomeKind, TestItem, TestOutcome};
 
 /// Per-fixture cache hit/miss entry.
 #[derive(Clone, Debug)]
@@ -71,20 +71,38 @@ pub(crate) struct WarningEntry {
     pub(crate) message: String,
 }
 
-/// Outcome counters incremented once per test.
-#[derive(Clone, Debug, Default)]
+/// Outcome counters indexed by [`OutcomeKind`].
+#[derive(Clone, Debug)]
 pub(crate) struct OutcomeCounters {
-    pub(crate) passed: usize,
-    pub(crate) failed: usize,
-    pub(crate) errored: usize,
-    pub(crate) skipped: usize,
-    pub(crate) warned: usize,
-    pub(crate) xfailed: usize,
-    pub(crate) xpassed: usize,
+    pub(crate) by_kind: [usize; OutcomeKind::COUNT],
+    /// Subset of xpassed where strict=true.
     pub(crate) xpassed_strict: usize,
-    pub(crate) timeout: usize,
-    pub(crate) flaky: usize,
+    /// Strict-mode suite violation count (not a test outcome).
     pub(crate) strict_suite: usize,
+}
+
+impl Default for OutcomeCounters {
+    fn default() -> Self {
+        Self {
+            by_kind: [0; OutcomeKind::COUNT],
+            xpassed_strict: 0,
+            strict_suite: 0,
+        }
+    }
+}
+
+impl OutcomeCounters {
+    pub(crate) fn get(&self, kind: OutcomeKind) -> usize {
+        self.by_kind[kind as usize]
+    }
+
+    fn increment(&mut self, kind: OutcomeKind) {
+        self.by_kind[kind as usize] += 1;
+    }
+
+    fn decrement(&mut self, kind: OutcomeKind) {
+        self.by_kind[kind as usize] = self.by_kind[kind as usize].saturating_sub(1);
+    }
 }
 
 /// Diagnostic data accumulated during a run.
@@ -135,44 +153,38 @@ impl RunStats {
     }
 
     pub(crate) fn record_passed(&mut self, item: &TestItem, no_message_lines: &[usize]) {
-        self.counts.passed += 1;
+        self.counts.increment(OutcomeKind::Passed);
         self.collect_tips(item, no_message_lines);
     }
 
     pub(crate) fn record_failed(&mut self) {
-        self.counts.failed += 1;
+        self.counts.increment(OutcomeKind::Failed);
     }
 
     pub(crate) fn record_errored(&mut self) {
-        self.counts.errored += 1;
+        self.counts.increment(OutcomeKind::Error);
     }
 
     pub(crate) fn record_timeout(&mut self) {
-        self.counts.timeout += 1;
+        self.counts.increment(OutcomeKind::Timeout);
     }
 
     /// Record a flaky outcome, undoing the original failure count.
     ///
     /// The `original` kind identifies which counter was incremented during
     /// the initial run so we decrement the correct one.
-    pub(crate) fn record_flaky(&mut self, original: crate::types::OutcomeKind) {
-        self.counts.flaky += 1;
+    pub(crate) fn record_flaky(&mut self, original: OutcomeKind) {
+        self.counts.increment(OutcomeKind::Flaky);
         match original {
-            crate::types::OutcomeKind::Failed => {
-                self.counts.failed = self.counts.failed.saturating_sub(1);
-            }
-            crate::types::OutcomeKind::Error => {
-                self.counts.errored = self.counts.errored.saturating_sub(1);
-            }
-            crate::types::OutcomeKind::Timeout => {
-                self.counts.timeout = self.counts.timeout.saturating_sub(1);
+            OutcomeKind::Failed | OutcomeKind::Error | OutcomeKind::Timeout => {
+                self.counts.decrement(original);
             }
             _ => {}
         }
     }
 
     pub(crate) fn record_skipped(&mut self) {
-        self.counts.skipped += 1;
+        self.counts.increment(OutcomeKind::Skipped);
     }
 
     pub(crate) fn record_warned(
@@ -181,7 +193,7 @@ impl RunStats {
         reason: &str,
         no_message_lines: &[usize],
     ) {
-        self.counts.warned += 1;
+        self.counts.increment(OutcomeKind::Warned);
         self.diagnostics.warning_msgs.push(WarningEntry {
             context: item.fn_name.clone(),
             message: reason.to_string(),
@@ -190,7 +202,7 @@ impl RunStats {
     }
 
     pub(crate) fn record_xfailed(&mut self) {
-        self.counts.xfailed += 1;
+        self.counts.increment(OutcomeKind::XFailed);
     }
 
     /// Single dispatch point — call this from reporters instead of the individual methods.
@@ -213,7 +225,7 @@ impl RunStats {
     }
 
     pub(crate) fn record_xpassed(&mut self, strict: bool) {
-        self.counts.xpassed += 1;
+        self.counts.increment(OutcomeKind::XPassed);
         if strict {
             self.counts.xpassed_strict += 1;
         }
@@ -265,9 +277,9 @@ mod tests {
     #[test]
     fn test_record_flaky_increments_counter() {
         let mut stats = RunStats::new();
-        stats.record_flaky(crate::types::OutcomeKind::Failed);
-        assert_eq!(stats.counts.flaky, 1);
-        assert_eq!(stats.counts.failed, 0);
+        stats.record_flaky(OutcomeKind::Failed);
+        assert_eq!(stats.counts.get(OutcomeKind::Flaky), 1);
+        assert_eq!(stats.counts.get(OutcomeKind::Failed), 0);
     }
 
     /// When a timed-out test passes on retry, the timeout counter must be decremented —
@@ -278,11 +290,11 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_failed(); // unrelated failure from another test
         stats.record_timeout(); // THIS test timed out, then passed on retry
-        stats.record_flaky(crate::types::OutcomeKind::Timeout);
+        stats.record_flaky(OutcomeKind::Timeout);
         // Timeout decremented, failed left alone
-        assert_eq!(stats.counts.timeout, 0);
-        assert_eq!(stats.counts.failed, 1); // must NOT be decremented
-        assert_eq!(stats.counts.flaky, 1);
+        assert_eq!(stats.counts.get(OutcomeKind::Timeout), 0);
+        assert_eq!(stats.counts.get(OutcomeKind::Failed), 1); // must NOT be decremented
+        assert_eq!(stats.counts.get(OutcomeKind::Flaky), 1);
     }
 
     /// Same scenario for Error — an errored test passes on retry, with a concurrent failure.
@@ -291,18 +303,18 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_failed(); // unrelated failure
         stats.record_errored(); // THIS test errored, then passed on retry
-        stats.record_flaky(crate::types::OutcomeKind::Error);
-        assert_eq!(stats.counts.errored, 0);
-        assert_eq!(stats.counts.failed, 1); // untouched
-        assert_eq!(stats.counts.flaky, 1);
+        stats.record_flaky(OutcomeKind::Error);
+        assert_eq!(stats.counts.get(OutcomeKind::Error), 0);
+        assert_eq!(stats.counts.get(OutcomeKind::Failed), 1); // untouched
+        assert_eq!(stats.counts.get(OutcomeKind::Flaky), 1);
     }
 
     #[test]
     fn test_record_timeout_increments_counter() {
         let mut stats = RunStats::new();
         stats.record_timeout();
-        assert_eq!(stats.counts.timeout, 1);
-        assert_eq!(stats.counts.errored, 0); // must NOT increment errored
+        assert_eq!(stats.counts.get(OutcomeKind::Timeout), 1);
+        assert_eq!(stats.counts.get(OutcomeKind::Error), 0); // must NOT increment errored
     }
 
     #[test]

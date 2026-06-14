@@ -709,24 +709,28 @@ pub enum CollectError {
 /// compatibility with the JSON cache and worker protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[repr(u8)]
 pub enum OutcomeKind {
-    Passed,
-    Failed,
-    Error,
-    Skipped,
-    Warned,
+    Passed = 0,
+    Failed = 1,
+    Error = 2,
+    Skipped = 3,
+    Warned = 4,
     #[serde(rename = "xfailed")]
-    XFailed,
+    XFailed = 5,
     #[serde(rename = "xpassed")]
-    XPassed,
-    Timeout,
-    Flaky,
+    XPassed = 6,
+    Timeout = 7,
+    Flaky = 8,
     /// Catch-all for unrecognised outcome strings from workers.
     #[serde(other)]
-    Unknown,
+    Unknown = 9,
 }
 
 impl OutcomeKind {
+    /// Number of variants in the enum (for array indexing).
+    pub const COUNT: usize = 10;
+
     /// True for outcomes that represent a definitive test failure.
     pub fn is_failure(&self) -> bool {
         matches!(self, Self::Failed | Self::Error | Self::Timeout)
