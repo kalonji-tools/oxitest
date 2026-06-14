@@ -672,12 +672,12 @@ impl TestOutcome {
     }
 
     /// Synthesise for an unresponsive worker subprocess.
-    pub fn timed_out_sentinel(watchdog: std::time::Duration) -> (Self, f64) {
+    pub fn timed_out_sentinel(watchdog: std::time::Duration) -> (Self, DurationMs) {
         let outcome = Self::error_sentinel(format!(
             "Worker subprocess unresponsive after {}s",
             watchdog.as_secs()
         ));
-        (outcome, watchdog.as_millis() as f64)
+        (outcome, DurationMs::new(watchdog.as_millis() as f64))
     }
 
     /// Synthesise for a crashed worker subprocess.
@@ -777,6 +777,17 @@ pub struct TestTiming {
     pub node_id: NodeId,
     pub duration_ms: DurationMs,
     pub outcome: OutcomeKind,
+}
+
+/// Typed result from wire deserialization or serial execution.
+///
+/// Replaces the `(String, f64, TestOutcome)` tuple from `WireResult::into_outcome()`.
+/// `WorkerResult` in the parallel path extends this with a `worker_id`.
+#[derive(Debug)]
+pub struct ResolvedOutcome {
+    pub node_id: NodeId,
+    pub duration_ms: DurationMs,
+    pub outcome: TestOutcome,
 }
 
 /// Tracks hard failures across the test run and implements the `--maxfail` stop condition.
