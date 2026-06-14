@@ -14,7 +14,7 @@ use crate::types::{self, ComparisonDetail, FailureDiagnostic, FieldDiff, Frame, 
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
-pub(crate) const PROTOCOL_VERSION: u32 = 1;
+pub(crate) const PROTOCOL_VERSION: u32 = 2;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///

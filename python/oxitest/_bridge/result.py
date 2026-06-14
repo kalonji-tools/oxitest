@@ -58,7 +58,7 @@ _NON_FAILURE_STATUSES = frozenset(
     }
 )
 
-PROTOCOL_VERSION: int = 1
+PROTOCOL_VERSION: int = 2
 
 _WIRE_EXCLUDE_ATTRS: frozenset[str] = frozenset(
     {
