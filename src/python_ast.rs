@@ -111,12 +111,6 @@ pub(crate) fn walk_test_defs(
     }
 }
 
-/// Check whether a statement is a sync or async `test_*` function definition.
-#[allow(dead_code)] // convenience wrapper; used in unit tests
-pub(crate) fn is_test_function(stmt: &ast::Stmt) -> bool {
-    FnDef::try_from_stmt(stmt).is_some_and(|d| is_test_fn(d.name()))
-}
-
 /// Build an index mapping byte offsets to 1-based line numbers.
 pub(crate) fn build_line_index(source: &str) -> Vec<u32> {
     let mut newlines = vec![0u32]; // line 1 starts at byte 0
@@ -350,36 +344,6 @@ pub(crate) mod tests {
         assert!(!is_test_class("test_foo"));
         assert!(!is_test_class("Helper"));
         assert!(!is_test_class(""));
-    }
-
-    // ── is_test_function ──────────────────────────────────────────────
-
-    #[test]
-    fn is_test_function_sync() {
-        let f = write_temp_py("def test_foo(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert!(is_test_function(&stmts[0]));
-    }
-
-    #[test]
-    fn is_test_function_async() {
-        let f = write_temp_py("async def test_bar(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert!(is_test_function(&stmts[0]));
-    }
-
-    #[test]
-    fn is_test_function_non_test() {
-        let f = write_temp_py("def helper(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert!(!is_test_function(&stmts[0]));
-    }
-
-    #[test]
-    fn is_test_function_class() {
-        let f = write_temp_py("class TestFoo: pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        assert!(!is_test_function(&stmts[0]));
     }
 
     // ── build_line_index / offset_to_line ────────────────────────────
