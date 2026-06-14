@@ -26,13 +26,98 @@ pub(crate) fn is_test_class(name: &str) -> bool {
     name.starts_with("Test")
 }
 
+/// Unified view of `FunctionDef` and `AsyncFunctionDef`.
+///
+/// Erases the sync/async distinction so callers don't need separate match arms.
+pub(crate) enum FnDef<'a> {
+    Sync(&'a ast::StmtFunctionDef),
+    Async(&'a ast::StmtAsyncFunctionDef),
+}
+
+impl<'a> FnDef<'a> {
+    pub(crate) fn try_from_stmt(stmt: &'a ast::Stmt) -> Option<Self> {
+        match stmt {
+            ast::Stmt::FunctionDef(f) => Some(Self::Sync(f)),
+            ast::Stmt::AsyncFunctionDef(f) => Some(Self::Async(f)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            Self::Sync(f) => &f.name,
+            Self::Async(f) => &f.name,
+        }
+    }
+
+    #[allow(dead_code)] // consumed by doctest.rs/prescan.rs in a later task
+    pub(crate) fn body(&self) -> &[ast::Stmt] {
+        match self {
+            Self::Sync(f) => &f.body,
+            Self::Async(f) => &f.body,
+        }
+    }
+
+    pub(crate) fn decorator_list(&self) -> &[ast::Expr] {
+        match self {
+            Self::Sync(f) => &f.decorator_list,
+            Self::Async(f) => &f.decorator_list,
+        }
+    }
+
+    #[allow(dead_code)] // consumed by prescan.rs in a later task
+    pub(crate) fn args(&self) -> &ast::Arguments {
+        match self {
+            Self::Sync(f) => &f.args,
+            Self::Async(f) => &f.args,
+        }
+    }
+
+    #[allow(dead_code)] // consumed by prescan.rs in a later task
+    pub(crate) fn range(&self) -> rustpython_parser::text_size::TextRange {
+        match self {
+            Self::Sync(f) => f.range,
+            Self::Async(f) => f.range,
+        }
+    }
+
+    #[allow(dead_code)] // consumed by prescan.rs and tests
+    pub(crate) fn is_async(&self) -> bool {
+        matches!(self, Self::Async(_))
+    }
+}
+
+/// Walk top-level test functions and test-class methods, calling `visit` for each.
+///
+/// Handles the common "top-level `test_*` functions + `Test*` class methods" pattern
+/// that every AST consumer repeats. Non-test functions, non-test classes, and
+/// non-test methods inside test classes are all skipped.
+pub(crate) fn walk_test_defs(
+    stmts: &[ast::Stmt],
+    mut visit: impl FnMut(&FnDef<'_>, Option<&ast::StmtClassDef>),
+) {
+    for stmt in stmts {
+        if let Some(def) = FnDef::try_from_stmt(stmt) {
+            if is_test_fn(def.name()) {
+                visit(&def, None);
+            }
+        } else if let ast::Stmt::ClassDef(cls) = stmt {
+            if is_test_class(&cls.name) {
+                for method in &cls.body {
+                    if let Some(def) = FnDef::try_from_stmt(method) {
+                        if is_test_fn(def.name()) {
+                            visit(&def, Some(cls));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Check whether a statement is a sync or async `test_*` function definition.
 pub(crate) fn is_test_function(stmt: &ast::Stmt) -> bool {
-    match stmt {
-        ast::Stmt::FunctionDef(f) => is_test_fn(&f.name),
-        ast::Stmt::AsyncFunctionDef(f) => is_test_fn(&f.name),
-        _ => false,
-    }
+    FnDef::try_from_stmt(stmt).is_some_and(|d| is_test_fn(d.name()))
 }
 
 /// Build an index mapping byte offsets to 1-based line numbers.
@@ -107,41 +192,19 @@ fn try_children<'a>(
 #[cfg(test)]
 pub(crate) fn has_test_functions(path: &Utf8Path) -> Option<bool> {
     let (_, stmts) = parse_file(path)?;
-
-    for stmt in &stmts {
-        if is_test_function(stmt) {
-            return Some(true);
-        }
-        if let ast::Stmt::ClassDef(cls) = stmt {
-            if is_test_class(&cls.name) && cls.body.iter().any(is_test_function) {
-                return Some(true);
-            }
-        }
-    }
-
-    Some(false)
+    let mut found = false;
+    walk_test_defs(&stmts, |_, _| found = true);
+    Some(found)
 }
 
 /// Count the number of test functions in a parsed module.
 #[cfg(test)]
 pub(crate) fn count_tests(stmts: &[ast::Stmt]) -> usize {
     let mut count = 0;
-    for stmt in stmts {
-        if is_test_function(stmt) {
-            count += 1;
-        } else if let ast::Stmt::ClassDef(cls) = stmt {
-            if is_test_class(&cls.name) {
-                count += cls.body.iter().filter(|s| is_test_function(s)).count();
-            }
-        }
-    }
+    walk_test_defs(stmts, |_, _| count += 1);
     count
 }
 
-/// Count the parametrize case multiplier for a single function statement.
-///
-/// Inspects decorator lists for `oxi.parametrize(...)`, `oxi.mark.parametrize(...)`,
-/// or `oxitest.mark.parametrize(...)` calls. When the second argument is a list
 /// Extract the mark name from a single decorator expression.
 ///
 /// Recognises `oxi.mark.NAME` and `oxitest.mark.NAME` in both bare decorator
@@ -183,58 +246,19 @@ pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
     Some(mark_name.to_string())
 }
 
-/// Collect mark names from a Test* class's method decorators into `marks`.
-fn collect_mark_names(stmt: &ast::Stmt, marks: &mut std::collections::BTreeSet<String>) {
-    let ast::Stmt::ClassDef(cls) = stmt else {
-        return;
-    };
-    if !is_test_class(&cls.name) {
-        return;
-    }
-    for method in &cls.body {
-        let decorators = match method {
-            ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => &f.decorator_list,
-            ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => &f.decorator_list,
-            _ => continue,
-        };
-        for dec in decorators {
-            if let Some(name) = extract_mark_name(dec) {
-                marks.insert(name);
-            }
-        }
-    }
-}
-
 /// Extract all unique mark names from test functions and Test* class methods
 /// in the given statement list.
 ///
 /// Skips `parametrize`. Returns a sorted, deduplicated `Vec<String>`.
 pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
     let mut marks = std::collections::BTreeSet::new();
-
-    for stmt in stmts {
-        match stmt {
-            ast::Stmt::FunctionDef(f) if is_test_fn(&f.name) => {
-                for dec in &f.decorator_list {
-                    if let Some(name) = extract_mark_name(dec) {
-                        marks.insert(name);
-                    }
-                }
+    walk_test_defs(stmts, |def, _| {
+        for dec in def.decorator_list() {
+            if let Some(name) = extract_mark_name(dec) {
+                marks.insert(name);
             }
-            ast::Stmt::AsyncFunctionDef(f) if is_test_fn(&f.name) => {
-                for dec in &f.decorator_list {
-                    if let Some(name) = extract_mark_name(dec) {
-                        marks.insert(name);
-                    }
-                }
-            }
-            cls @ ast::Stmt::ClassDef(_) => {
-                collect_mark_names(cls, &mut marks);
-            }
-            _ => {}
         }
-    }
-
+    });
     marks.into_iter().collect()
 }
 
@@ -247,22 +271,14 @@ pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
 /// Returns a sorted `Vec<String>`.
 pub(crate) fn extract_helpers(stmts: &[ast::Stmt]) -> Vec<String> {
     let mut names = std::collections::BTreeSet::new();
-
     for stmt in stmts {
-        let fn_name = match stmt {
-            ast::Stmt::FunctionDef(f) => f.name.as_str(),
-            ast::Stmt::AsyncFunctionDef(f) => f.name.as_str(),
-            _ => continue,
-        };
-        if fn_name.starts_with('_') {
-            continue;
+        if let Some(def) = FnDef::try_from_stmt(stmt) {
+            let fn_name = def.name();
+            if !fn_name.starts_with('_') && !is_test_fn(fn_name) {
+                names.insert(fn_name.to_string());
+            }
         }
-        if is_test_fn(fn_name) {
-            continue;
-        }
-        names.insert(fn_name.to_string());
     }
-
     names.into_iter().collect()
 }
 
@@ -648,5 +664,97 @@ pub(crate) mod tests {
         let helpers = extract_helpers(&stmts);
         assert!(!helpers.contains(&"__helpers_namespace__".to_string()));
         assert!(helpers.contains(&"public_fn".to_string()));
+    }
+
+    // ── FnDef ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn fn_def_from_sync_function() {
+        let f = write_temp_py("def foo(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let def = FnDef::try_from_stmt(&stmts[0]).unwrap();
+        assert_eq!(def.name(), "foo");
+        assert!(!def.is_async());
+    }
+
+    #[test]
+    fn fn_def_from_async_function() {
+        let f = write_temp_py("async def bar(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let def = FnDef::try_from_stmt(&stmts[0]).unwrap();
+        assert_eq!(def.name(), "bar");
+        assert!(def.is_async());
+    }
+
+    #[test]
+    fn fn_def_from_non_function_returns_none() {
+        let f = write_temp_py("x = 1\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(FnDef::try_from_stmt(&stmts[0]).is_none());
+    }
+
+    #[test]
+    fn fn_def_from_class_returns_none() {
+        let f = write_temp_py("class Foo: pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(FnDef::try_from_stmt(&stmts[0]).is_none());
+    }
+
+    // ── walk_test_defs ─────────────────────────────────────────────────
+
+    #[test]
+    fn walk_test_defs_top_level_functions() {
+        let f = write_temp_py("def test_a(): pass\nasync def test_b(): pass\ndef helper(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let mut visited = vec![];
+        walk_test_defs(&stmts, |def, cls| {
+            visited.push((def.name().to_string(), def.is_async(), cls.is_some()));
+        });
+        assert_eq!(
+            visited,
+            vec![
+                ("test_a".into(), false, false),
+                ("test_b".into(), true, false),
+            ]
+        );
+    }
+
+    #[test]
+    fn walk_test_defs_class_methods() {
+        let f = write_temp_py(
+            "class TestGroup:\n    def test_a(self): pass\n    async def test_b(self): pass\n    def helper(self): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let mut visited = vec![];
+        walk_test_defs(&stmts, |def, cls| {
+            visited.push((def.name().to_string(), cls.unwrap().name.to_string()));
+        });
+        assert_eq!(
+            visited,
+            vec![
+                ("test_a".into(), "TestGroup".into()),
+                ("test_b".into(), "TestGroup".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn walk_test_defs_skips_non_test_class() {
+        let f = write_temp_py("class Helper:\n    def test_method(self): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let mut count = 0;
+        walk_test_defs(&stmts, |_, _| count += 1);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn walk_test_defs_mixed() {
+        let f = write_temp_py(
+            "def test_top(): pass\nclass TestGroup:\n    def test_inner(self): pass\ndef not_a_test(): pass\n",
+        );
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let mut names = vec![];
+        walk_test_defs(&stmts, |def, _| names.push(def.name().to_string()));
+        assert_eq!(names, vec!["test_top", "test_inner"]);
     }
 }
