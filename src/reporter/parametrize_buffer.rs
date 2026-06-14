@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::types::{DurationMs, TestItem, TestOutcome};
 
 // ─── ParametrizeBuffer ───────────────────────────────────────────────────────
@@ -11,7 +13,7 @@ use crate::types::{DurationMs, TestItem, TestOutcome};
 /// Statistics are computed incrementally on each `push()` to avoid repeated
 /// iteration over the results vector.
 pub(crate) struct ParametrizeBuffer {
-    pub fn_name: String,
+    pub fn_name: Arc<str>,
     pub results: Vec<(TestItem, TestOutcome, DurationMs)>,
     total_ms: DurationMs,
     has_failure: bool,
@@ -19,7 +21,7 @@ pub(crate) struct ParametrizeBuffer {
 }
 
 impl ParametrizeBuffer {
-    pub fn new(fn_name: String) -> Self {
+    pub fn new(fn_name: Arc<str>) -> Self {
         Self {
             fn_name,
             results: Vec::new(),

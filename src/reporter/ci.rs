@@ -150,6 +150,8 @@ impl Reporter for CiReporter {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::config::TbStyle;
     use crate::types::TestOutcome;
@@ -356,7 +358,7 @@ mod tests {
         let item = TestItem {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("neg")),
             module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
-            fn_name: "test_add".to_string(),
+            fn_name: Arc::from("test_add"),
             lineno: LineNo::new(5),
             markers: MarkerSet::new(),
             param_id: Some("neg".to_string()),

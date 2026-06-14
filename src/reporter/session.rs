@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::types::{DurationMs, TestItem, TestOutcome};
 
 use super::stats::{self, RunStats};
@@ -55,7 +57,7 @@ impl ReporterSession {
             .diagnostics
             .warning_msgs
             .push(stats::WarningEntry {
-                context: context.to_string(),
+                context: Arc::from(context),
                 message: error.to_string(),
             });
     }
@@ -113,7 +115,7 @@ mod tests {
         session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
         assert_eq!(session.stats().diagnostics.warning_msgs.len(), 1);
         assert_eq!(
-            session.stats().diagnostics.warning_msgs[0].context,
+            &*session.stats().diagnostics.warning_msgs[0].context,
             "end_module(test.py)"
         );
         assert_eq!(

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::types::{DurationMs, NodeId, TestItem, TestOutcome};
 
 /// Per-fixture cache hit/miss entry.
@@ -62,7 +64,7 @@ pub(crate) struct TipLine {
 /// A warning captured during session setup/teardown.
 #[derive(Clone, Debug)]
 pub(crate) struct WarningEntry {
-    pub(crate) context: String,
+    pub(crate) context: Arc<str>,
     pub(crate) message: String,
 }
 
