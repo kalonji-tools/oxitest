@@ -18,11 +18,7 @@ impl Pipeline<Executed> {
             return Ok(self);
         }
 
-        let session = self
-            .shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
+        let session = &self.state.session;
         let retry_ctx = retry::RetryContext {
             py,
             max_retries: self.cfg.exec.retries,
@@ -54,17 +50,13 @@ impl Pipeline<Executed> {
 
     pub(crate) fn finalize(self, py: Python<'_>) -> Result<ExitCode, ExitCode> {
         let (mut shared, state) = self.into_parts();
+        let session = state.session;
         let ExecutionResults {
             timings,
             interrupted,
             mut reporter,
         } = state.execution_results;
-
-        let session = shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
-        if let Ok(ft) = reporter::bridge::get_fixture_timings(session, py) {
+        if let Ok(ft) = reporter::bridge::get_fixture_timings(&session, py) {
             if !ft.is_empty() {
                 reporter.set_fixture_timings(ft);
             }
@@ -77,7 +69,7 @@ impl Pipeline<Executed> {
             &shared.rootdir,
         );
 
-        if let Ok(stats) = reporter::bridge::get_cache_stats(session, py) {
+        if let Ok(stats) = reporter::bridge::get_cache_stats(&session, py) {
             if stats.hits + stats.misses > 0 {
                 reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
             }

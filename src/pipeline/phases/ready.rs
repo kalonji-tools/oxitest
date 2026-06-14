@@ -10,6 +10,7 @@ impl Pipeline<Ready> {
         let (
             mut shared,
             Ready {
+                session,
                 clean_items,
                 violated_items,
                 all_violations,
@@ -35,13 +36,9 @@ impl Pipeline<Ready> {
         shared.cache.invalidate(&clean_items);
 
         // Fetch plugin reporters from Python registry.
-        let session = shared
-            .session
-            .as_ref()
-            .expect("session initialized at SessionReady");
         let plugin_reporters: Vec<Box<dyn reporter::Reporter>> =
             if !shared.cfg.features.plugins.is_empty() {
-                bridge::get_plugin_reporters(py, session)
+                bridge::get_plugin_reporters(py, &session)
                     .unwrap_or_default()
                     .into_iter()
                     .map(|obj| {
@@ -77,7 +74,7 @@ impl Pipeline<Ready> {
         let exec_ctx = execution::ExecutionContext {
             cfg: &shared.cfg,
             cache: &shared.cache,
-            session,
+            session: &session,
             conftest_files: &shared.conftest_files,
             python_bin: &shared.python_bin,
             ast_weight: shared.ast_weight,
@@ -96,6 +93,7 @@ impl Pipeline<Ready> {
         );
 
         Ok(shared.into_pipeline(Executed {
+            session,
             items: clean_items,
             execution_results: ExecutionResults {
                 timings,

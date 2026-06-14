@@ -54,11 +54,13 @@ pub(crate) struct MetadataFiltered {
 
 /// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
 pub(crate) struct SessionReady {
+    pub(crate) session: bridge::FixtureSession,
     pub(crate) session_violations: Vec<bridge::RawViolation>,
 }
 
 /// Test items collected via Python import; holds the full `TestItem` list and any violations.
 pub(crate) struct Collected {
+    pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
     pub(crate) raw_violations: Vec<bridge::RawViolation>,
     #[allow(dead_code)]
@@ -67,6 +69,7 @@ pub(crate) struct Collected {
 
 /// Strict-mode + item-level filtering applied; items are ready for execution.
 pub(crate) struct Ready {
+    pub(crate) session: bridge::FixtureSession,
     pub(crate) clean_items: Vec<Arc<types::TestItem>>,
     pub(crate) violated_items: Vec<Arc<types::TestItem>>,
     pub(crate) all_violations: Vec<strict::StrictViolation>,
@@ -75,6 +78,7 @@ pub(crate) struct Ready {
 
 /// All tests executed; holds final items, timings, and the reporter.
 pub(crate) struct Executed {
+    pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
     pub(crate) execution_results: ExecutionResults,
 }
@@ -135,7 +139,6 @@ pub(crate) struct PipelineShared {
     pub(crate) ast_weight: Option<types::DurationMs>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: Option<bridge::FixtureSession>,
 }
 
 impl PipelineShared {
@@ -265,7 +268,6 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         ast_weight: None,
         test_files: vec![],
         conftest_files: vec![],
-        session: None,
     }))
 }
 
