@@ -71,11 +71,9 @@ pub(crate) fn drain_worker_results(
                         }
                         // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
-                        let (node_id, dur, outcome) = r.into_outcome();
+                        let resolved = r.into_outcome();
                         let _ = tx.send(WorkerResult {
-                            node_id,
-                            duration_ms: dur,
-                            outcome,
+                            resolved,
                             worker_id,
                         });
                     }
@@ -123,11 +121,13 @@ pub(crate) fn handle_drain_outcome(
             );
             let _ = ctx.child.kill();
             for item in ctx.items.iter().skip(received) {
-                let (outcome, dur) = types::TestOutcome::timed_out_sentinel(ctx.watchdog);
+                let (outcome, duration_ms) = types::TestOutcome::timed_out_sentinel(ctx.watchdog);
                 let _ = ctx.tx.send(WorkerResult {
-                    node_id: item.node_id.to_string(),
-                    duration_ms: dur,
-                    outcome,
+                    resolved: types::ResolvedOutcome {
+                        node_id: item.node_id.clone(),
+                        duration_ms,
+                        outcome,
+                    },
                     worker_id: ctx.worker_id,
                 });
             }
@@ -136,9 +136,11 @@ pub(crate) fn handle_drain_outcome(
         DrainOutcome::Disconnected => {
             for item in ctx.items.iter().skip(received) {
                 let _ = ctx.tx.send(WorkerResult {
-                    node_id: item.node_id.to_string(),
-                    duration_ms: 0.0,
-                    outcome: types::TestOutcome::crashed_sentinel(),
+                    resolved: types::ResolvedOutcome {
+                        node_id: item.node_id.clone(),
+                        duration_ms: types::DurationMs::new(0.0),
+                        outcome: types::TestOutcome::crashed_sentinel(),
+                    },
                     worker_id: ctx.worker_id,
                 });
             }
@@ -154,34 +156,33 @@ pub(crate) fn handle_drain_outcome(
 /// recognised (worker bug or protocol mismatch); the caller should skip the
 /// result in that case.
 pub(super) fn handle_worker_result(
-    node_id_str: &str,
-    duration_ms: f64,
-    outcome: types::TestOutcome,
+    resolved: &types::ResolvedOutcome,
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
     parallel_ctx: Option<&crate::parallel_context::ParallelContext>,
 ) -> Option<types::TestOutcome> {
-    let item = match item_lookup.get(node_id_str).map(std::sync::Arc::clone) {
+    let item = match item_lookup
+        .get(resolved.node_id.as_ref())
+        .map(std::sync::Arc::clone)
+    {
         Some(item) => item,
         None => {
             tracing::warn!(
-                node_id = %node_id_str,
+                node_id = %resolved.node_id,
                 "worker sent unknown node_id — skipping result"
             );
             return None;
         }
     };
-    let node_id = types::NodeId::from_raw(node_id_str);
-    let duration_ms = types::DurationMs::new(duration_ms);
     rep.test_started(&item);
-    rep.test_completed(&item, &outcome, duration_ms, parallel_ctx);
+    rep.test_completed(&item, &resolved.outcome, resolved.duration_ms, parallel_ctx);
     timings.push(types::TestTiming {
-        node_id,
-        duration_ms,
-        outcome: types::OutcomeKind::from(&outcome),
+        node_id: resolved.node_id.clone(),
+        duration_ms: resolved.duration_ms,
+        outcome: types::OutcomeKind::from(&resolved.outcome),
     });
-    Some(outcome)
+    Some(resolved.outcome.clone())
 }
 
 /// Drain any groups still queued in `sched` after all workers have exited and
@@ -199,15 +200,12 @@ pub(super) fn drain_remaining_into_crashed(
 ) {
     while let Some(group) = sched.pop() {
         for item in &group.items {
-            handle_worker_result(
-                item.node_id.as_ref(),
-                0.0,
-                types::TestOutcome::crashed_sentinel(),
-                item_lookup,
-                rep,
-                timings,
-                None,
-            );
+            let resolved = types::ResolvedOutcome {
+                node_id: item.node_id.clone(),
+                duration_ms: types::DurationMs::new(0.0),
+                outcome: types::TestOutcome::crashed_sentinel(),
+            };
+            handle_worker_result(&resolved, item_lookup, rep, timings, None);
         }
     }
 }
@@ -564,7 +562,7 @@ mod result_handler_tests {
         }
     }
 
-    fn make_worker_result(node_id: &str) -> (String, f64, types::TestOutcome) {
+    fn make_resolved(node_id: &str) -> types::ResolvedOutcome {
         let json = format!(r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":0.0}}"#);
         serde_json::from_str::<WireResult>(&json)
             .unwrap()
@@ -589,16 +587,8 @@ mod result_handler_tests {
         };
         let mut timings: Vec<types::TestTiming> = vec![];
 
-        let (node_id, duration_ms, worker_outcome) = make_worker_result("unknown::test_fn");
-        let outcome = handle_worker_result(
-            &node_id,
-            duration_ms,
-            worker_outcome,
-            &lookup,
-            &mut rep,
-            &mut timings,
-            None,
-        );
+        let resolved = make_resolved("unknown::test_fn");
+        let outcome = handle_worker_result(&resolved, &lookup, &mut rep, &mut timings, None);
 
         assert!(outcome.is_none(), "should return None for unknown node_id");
         assert_eq!(rep.started, 0, "reporter.test_started must not be called");
@@ -623,16 +613,8 @@ mod result_handler_tests {
         };
         let mut timings: Vec<types::TestTiming> = vec![];
 
-        let (node_id, duration_ms, worker_outcome) = make_worker_result("my_mod::test_fn");
-        let outcome = handle_worker_result(
-            &node_id,
-            duration_ms,
-            worker_outcome,
-            &lookup,
-            &mut rep,
-            &mut timings,
-            None,
-        );
+        let resolved = make_resolved("my_mod::test_fn");
+        let outcome = handle_worker_result(&resolved, &lookup, &mut rep, &mut timings, None);
 
         assert!(outcome.is_some(), "should return Some for known node_id");
         assert_eq!(rep.started, 1, "reporter.test_started must be called once");

@@ -232,9 +232,11 @@ fn run_worker_loop(
             );
             for item in &group.items {
                 let _ = tx.send(crate::parallel::WorkerResult {
-                    node_id: item.node_id.to_string(),
-                    duration_ms: 0.0,
-                    outcome: types::TestOutcome::crashed_sentinel(),
+                    resolved: types::ResolvedOutcome {
+                        node_id: item.node_id.clone(),
+                        duration_ms: types::DurationMs::new(0.0),
+                        outcome: types::TestOutcome::crashed_sentinel(),
+                    },
                     worker_id,
                 });
             }
