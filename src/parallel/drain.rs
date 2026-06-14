@@ -78,9 +78,30 @@ pub(crate) fn drain_worker_results(
                         });
                     }
                     Err(e) => {
-                        tracing::warn!(error = %e, output = %trimmed, "bad worker output");
                         received += 1;
                         result_deadline = Instant::now() + watchdog;
+                        // Try to salvage node_id + duration_ms for an error sentinel
+                        if let Ok(minimal) =
+                            serde_json::from_str::<crate::worker_result::WireMinimal>(trimmed)
+                        {
+                            tracing::warn!(
+                                error = %e,
+                                node_id = %minimal.node_id,
+                                "Unknown outcome from worker — treating as error"
+                            );
+                            let _ = tx.send(WorkerResult {
+                                resolved: types::ResolvedOutcome {
+                                    node_id: types::NodeId::from_raw(&minimal.node_id),
+                                    duration_ms: types::DurationMs::new(minimal.duration_ms),
+                                    outcome: types::TestOutcome::error_sentinel(format!(
+                                        "Unknown wire result: {e}"
+                                    )),
+                                },
+                                worker_id,
+                            });
+                        } else {
+                            tracing::warn!(error = %e, output = %trimmed, "bad worker output");
+                        }
                     }
                 }
             }
@@ -505,6 +526,36 @@ mod drain_tests {
     }
 
     // ── Test 9 ──────────────────────────────────────────────────────────────────
+    // Unknown outcome strings fail WireResult deserialization. The drain loop
+    // must salvage node_id + duration_ms via WireMinimal and emit an Error sentinel.
+    #[test]
+    fn unknown_outcome_produces_error_sentinel() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded();
+
+        line_tx
+            .send(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.5}"#.to_string())
+            .unwrap();
+        drop(line_tx);
+
+        let (status, received) = drain_worker_results(
+            &line_rx,
+            1,
+            std::time::Duration::from_secs(5),
+            &result_tx,
+            0,
+        );
+        assert_eq!(received, 1);
+        let result = result_rx.try_recv().expect("should have received a result");
+        assert_eq!(result.resolved.node_id.as_ref(), "t");
+        assert!(matches!(
+            result.resolved.outcome,
+            crate::types::TestOutcome::Error(..)
+        ));
+        let _ = status;
+    }
+
+    // ── Test 10 ─────────────────────────────────────────────────────────────────
     // A result with a mismatched protocol_version must still be forwarded (not
     // dropped).  The runner warns about the mismatch but the result is valid.
     #[test]
