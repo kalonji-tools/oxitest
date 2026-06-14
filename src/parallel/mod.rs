@@ -38,7 +38,7 @@ pub(crate) struct PhaseResult {
 }
 
 pub(crate) fn run_phase_parallel(
-    groups: Vec<(camino::Utf8PathBuf, Vec<std::sync::Arc<types::TestItem>>)>,
+    groups: Vec<scheduler::ModuleGroup>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
     conftest_paths: &[camino::Utf8PathBuf],
@@ -50,12 +50,12 @@ pub(crate) fn run_phase_parallel(
     use std::sync::Arc;
 
     let worker_count = worker_count.max(1).min(groups.len().max(1));
-    let total: usize = groups.iter().map(|(_, items)| items.len()).sum();
+    let total: usize = groups.iter().map(|g| g.items.len()).sum();
     // Build node_id → Arc<TestItem> before groups are consumed by the scheduler.
     // Items are already Arc-wrapped from collection — no deep clone needed.
     let item_lookup: ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>> = groups
         .iter()
-        .flat_map(|(_, items)| items.iter())
+        .flat_map(|g| g.items.iter())
         .map(|item| (item.node_id.clone(), Arc::clone(item)))
         .collect();
     let in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>> =

@@ -1,10 +1,6 @@
 //! Trait seams for pipeline testability.
 
-use std::sync::Arc;
-
-use camino::Utf8PathBuf;
-
-use crate::{parallel, types};
+use crate::{parallel, scheduler};
 
 /// Abstraction over test execution strategies (serial, parallel).
 ///
@@ -12,7 +8,7 @@ use crate::{parallel, types};
 pub(crate) trait ExecutionHarness {
     fn execute_groups(
         &self,
-        groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
+        groups: Vec<scheduler::ModuleGroup>,
         rep: &mut dyn crate::reporter::Reporter,
     ) -> parallel::PhaseResult;
 }
