@@ -22,7 +22,7 @@ pub use timing::TimingCache;
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::types::OutcomeKind;
+use crate::types::{DurationMs, OutcomeKind};
 
 const CACHE_VERSION: u32 = 1;
 
@@ -32,7 +32,7 @@ const CACHE_VERSION: u32 = 1;
 /// Entries with `age > cache_max_age` are pruned during [`TestCache::merge_timings`].
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub(super) struct CacheEntry {
-    duration_ms: f64,
+    duration_ms: DurationMs,
     age: u32,
     #[serde(default)]
     last_outcome: Option<OutcomeKind>,
@@ -203,7 +203,14 @@ mod tests {
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::load(utf8_dir);
         assert_eq!(cache.inner.timings.len(), 1);
-        assert!((cache.inner.timings["tests/test_foo.py::test_a"].duration_ms - 42.5).abs() < 0.01);
+        assert!(
+            (cache.inner.timings["tests/test_foo.py::test_a"]
+                .duration_ms
+                .as_f64()
+                - 42.5)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
@@ -248,7 +255,12 @@ mod tests {
 
         let loaded = TestCache::load(utf8_dir);
         assert!(
-            (loaded.inner.timings["tests/test_foo.py::test_a"].duration_ms - 77.5).abs() < 0.01
+            (loaded.inner.timings["tests/test_foo.py::test_a"]
+                .duration_ms
+                .as_f64()
+                - 77.5)
+                .abs()
+                < 0.01
         );
     }
 
@@ -274,7 +286,7 @@ mod tests {
         timings.insert(
             "z_test".to_string(),
             CacheEntry {
-                duration_ms: 10.0,
+                duration_ms: DurationMs::new(10.0),
                 age: 0,
                 last_outcome: None,
                 flaky_count: 0,
@@ -283,7 +295,7 @@ mod tests {
         timings.insert(
             "a_test".to_string(),
             CacheEntry {
-                duration_ms: 20.0,
+                duration_ms: DurationMs::new(20.0),
                 age: 1,
                 last_outcome: None,
                 flaky_count: 0,
@@ -292,7 +304,7 @@ mod tests {
         timings.insert(
             "m_test".to_string(),
             CacheEntry {
-                duration_ms: 30.0,
+                duration_ms: DurationMs::new(30.0),
                 age: 2,
                 last_outcome: None,
                 flaky_count: 0,
