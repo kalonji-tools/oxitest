@@ -318,16 +318,13 @@ mod worker_count_tests {
             "node_id": "test_mod::test_fn",
             "outcome": "failed",
             "duration_ms": 42.0,
-            "failure_repr": null,
-            "message": null,
+            "message": "assert x == y",
             "file": "test_mod.py",
             "lineno": 10,
             "source_line": "assert x == y",
-            "no_message_lines": [],
             "left": "1",
             "right": "2",
-            "op": "==",
-            "strict": false
+            "op": "=="
         }"#;
         let result: WireResult = serde_json::from_str(json).unwrap();
         let resolved = result.into_outcome();
@@ -370,7 +367,7 @@ mod worker_count_tests {
 
     fn make_wire_result(status: &str) -> crate::types::ResolvedOutcome {
         let wire: WireResult = serde_json::from_str(&format!(
-            r#"{{"node_id":"t::f","outcome":"{status}","duration_ms":1.0,"failure_repr":"reason"}}"#
+            r#"{{"node_id":"t::f","outcome":"{status}","duration_ms":1.0,"message":"reason"}}"#
         ))
         .expect("test JSON must be valid");
         wire.into_outcome()
@@ -415,14 +412,10 @@ mod worker_count_tests {
     }
 
     #[test]
-    fn worker_result_unknown_status_falls_back_to_error() {
-        use crate::types::TestOutcome;
-        // Any unrecognised status string must become Error, not panic.
-        let resolved = make_wire_result("flaky");
-        assert!(
-            matches!(resolved.outcome, TestOutcome::Error { .. }),
-            "unknown status must map to Error"
-        );
+    fn unknown_status_is_deser_error() {
+        // With internally-tagged enum, unknown outcome values fail deserialization.
+        let json = r#"{"node_id":"t::f","outcome":"flaky","duration_ms":1.0}"#;
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
