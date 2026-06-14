@@ -56,6 +56,21 @@ pub(super) struct CachedItemData {
     fixref_names: Vec<String>,
 }
 
+impl From<&crate::types::TestItem> for CachedItemData {
+    fn from(item: &crate::types::TestItem) -> Self {
+        Self {
+            fn_name: item.fn_name.clone(),
+            lineno: item.lineno,
+            markers: item.markers.clone(),
+            param_id: item.param_id.clone(),
+            param_values: item.param_values.clone(),
+            is_async: item.is_async,
+            fixture_names: item.fixture_names.clone(),
+            fixref_names: item.fixref_names.clone(),
+        }
+    }
+}
+
 /// Per-module collection cache keyed by file path.
 ///
 /// Stores the list of [`CachedItemData`] items collected from a module, tagged
