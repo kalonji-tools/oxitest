@@ -74,7 +74,7 @@ impl From<RawFrame> for Frame {
 /// diagnostic fields use `#[serde(default)]` so compact wire messages (which
 /// omit falsy fields) deserialize without error. Use
 /// [`into_outcome`](WireResult::into_outcome) to convert into a
-/// typed `(node_id, duration_ms, TestOutcome)` tuple.
+/// typed [`ResolvedOutcome`](types::ResolvedOutcome).
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct WireResult {
     pub node_id: String,
@@ -110,11 +110,12 @@ pub(crate) struct WireResult {
 }
 
 impl WireResult {
-    /// Convert the flat wire representation into a typed [`TestOutcome`](types::TestOutcome).
+    /// Convert the flat wire representation into a typed [`ResolvedOutcome`](types::ResolvedOutcome).
     ///
     /// Consumes self — `WireResult` is a transient deserialization target.
-    /// Returns `(node_id, duration_ms, outcome)`.
-    pub(crate) fn into_outcome(self) -> (String, f64, types::TestOutcome) {
+    pub(crate) fn into_outcome(self) -> types::ResolvedOutcome {
+        let raw_node_id = self.node_id;
+        let raw_duration_ms = self.duration_ms;
         let no_message_lines: Vec<usize> = self
             .no_message_lines
             .iter()
@@ -192,7 +193,11 @@ impl WireResult {
             }
         };
 
-        (self.node_id, self.duration_ms, outcome)
+        types::ResolvedOutcome {
+            node_id: types::NodeId::from_raw(&raw_node_id),
+            duration_ms: types::DurationMs::new(raw_duration_ms),
+            outcome,
+        }
     }
 }
 
@@ -262,7 +267,7 @@ mod frame_tests {
             ]
         }"#;
         let r: WireResult = serde_json::from_str(json).unwrap();
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Failed(d) => {
                 assert_eq!(d.frames.len(), 2);
@@ -296,7 +301,7 @@ mod frame_tests {
         let json = r#"{"node_id":"t","outcome":"failed","duration_ms":0.0}"#;
         let r: WireResult = serde_json::from_str(json).unwrap();
         assert!(r.frames.is_empty());
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Failed(d) => assert!(d.frames.is_empty()),
             other => panic!("expected Failed, got {other:?}"),
@@ -334,7 +339,7 @@ mod lineno_cast_tests {
                 "lineno":42,"file":"t.py","source_line":"assert x"}"#,
         )
         .unwrap();
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Failed(d) => {
                 assert_eq!(d.lineno, LineNo::new(42));
@@ -629,7 +634,7 @@ mod outcome_conversion_tests {
         let r = make_result(
             r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
         );
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Passed { tips } => {
                 assert_eq!(tips.as_deref(), Some([3usize, 7].as_slice()));
@@ -648,7 +653,7 @@ mod outcome_conversion_tests {
             "failure_repr": "fallback repr"
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Failed(d) => {
                 assert_eq!(d.message, "structured message");
@@ -667,7 +672,7 @@ mod outcome_conversion_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Skipped { reason } => {
                 assert_eq!(reason, "Skipped: no network");
@@ -686,7 +691,7 @@ mod outcome_conversion_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::XFailed { reason } => {
                 assert_eq!(reason, "known bug #99");
@@ -704,7 +709,7 @@ mod outcome_conversion_tests {
             "strict": true
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::XPassed { strict } => {
                 assert!(strict);
@@ -723,7 +728,7 @@ mod outcome_conversion_tests {
             "message": "should not be used"
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Timeout { message } => {
                 assert_eq!(message, "Test timed out after 5s");
@@ -741,7 +746,7 @@ mod outcome_conversion_tests {
             "message": "DeprecationWarning: use new_api instead"
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Warned { reason, .. } => {
                 assert_eq!(reason, "DeprecationWarning: use new_api instead");
@@ -763,7 +768,7 @@ mod outcome_conversion_tests {
             ]
         }"#;
         let r = make_result(json);
-        let (_, _, outcome) = r.into_outcome();
+        let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Error(d) => {
                 assert_eq!(d.message, "ImportError: no module");
@@ -803,7 +808,7 @@ mod sentinel_tests {
             TestOutcome::Error(d) => assert!(d.message.contains("30")),
             other => panic!("expected Error, got {other:?}"),
         }
-        assert!((dur - 30_000.0).abs() < 1e-9);
+        assert!((dur.as_f64() - 30_000.0).abs() < 1e-9);
     }
 
     #[test]
@@ -842,10 +847,10 @@ mod wire_conversion_tests {
             "op": "=="
         }"#,
         );
-        let (node_id, duration_ms, outcome) = wire.into_outcome();
-        assert_eq!(node_id, "t.py::test_b");
-        assert!((duration_ms - 5.0).abs() < 1e-9);
-        match outcome {
+        let resolved = wire.into_outcome();
+        assert_eq!(resolved.node_id.as_ref(), "t.py::test_b");
+        assert!((resolved.duration_ms.as_f64() - 5.0).abs() < 1e-9);
+        match resolved.outcome {
             TestOutcome::Failed(d) => {
                 assert_eq!(d.message, "assert 1 == 2");
                 assert_eq!(d.file, "t.py");
@@ -864,7 +869,7 @@ mod wire_conversion_tests {
         let wire = deser(
             r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::Passed { tips } => {
                 assert_eq!(tips.as_deref(), Some([3usize, 7].as_slice()));
@@ -884,7 +889,7 @@ mod wire_conversion_tests {
             "message": "should not be used"
         }"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::Skipped { reason } => assert_eq!(reason, "Skipped: needs network"),
             other => panic!("expected Skipped, got {other:?}"),
@@ -901,7 +906,7 @@ mod wire_conversion_tests {
             "failure_repr": "known bug #99"
         }"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::XFailed { reason } => assert_eq!(reason, "known bug #99"),
             other => panic!("expected XFailed, got {other:?}"),
@@ -918,7 +923,7 @@ mod wire_conversion_tests {
             "failure_repr": "Test timed out after 5s"
         }"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::Timeout { message } => assert_eq!(message, "Test timed out after 5s"),
             other => panic!("expected Timeout, got {other:?}"),
@@ -935,7 +940,7 @@ mod wire_conversion_tests {
             "message": "DeprecationWarning: use new_api"
         }"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::Warned { reason, .. } => {
                 assert_eq!(reason, "DeprecationWarning: use new_api");
@@ -957,7 +962,7 @@ mod wire_conversion_tests {
             ]
         }"#,
         );
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::Error(d) => {
                 assert_eq!(d.message, "ImportError: no module");
@@ -971,14 +976,14 @@ mod wire_conversion_tests {
     #[test]
     fn wire_unknown_outcome_maps_to_error() {
         let wire = deser(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.0}"#);
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         assert!(matches!(outcome, TestOutcome::Error(..)));
     }
 
     #[test]
     fn wire_xpassed_strict() {
         let wire = deser(r#"{"node_id":"t","outcome":"xpassed","duration_ms":0.0,"strict":true}"#);
-        let (_, _, outcome) = wire.into_outcome();
+        let outcome = wire.into_outcome().outcome;
         match outcome {
             TestOutcome::XPassed { strict } => assert!(strict),
             other => panic!("expected XPassed, got {other:?}"),
