@@ -453,6 +453,8 @@ pub enum TestOutcome {
     },
     Flaky {
         message: String,
+        /// The outcome kind from the initial failure (before retry passed).
+        original: OutcomeKind,
     },
 }
 
@@ -492,7 +494,7 @@ impl TestOutcome {
         let s = match self {
             Self::Passed { .. } | Self::XPassed { .. } => return None,
             Self::Failed(d) | Self::Error(d) => d.message.as_str(),
-            Self::Timeout { message } | Self::Flaky { message } => message.as_str(),
+            Self::Timeout { message } | Self::Flaky { message, .. } => message.as_str(),
             Self::Skipped { reason } | Self::Warned { reason, .. } | Self::XFailed { reason } => {
                 reason.as_str()
             }
@@ -951,6 +953,7 @@ mod tests {
             (
                 TestOutcome::Flaky {
                     message: String::new(),
+                    original: OutcomeKind::Failed,
                 },
                 "flaky",
             ),
@@ -1000,6 +1003,7 @@ mod tests {
             TestOutcome::XPassed { strict: false },
             TestOutcome::Flaky {
                 message: String::new(),
+                original: OutcomeKind::Failed,
             },
         ];
         for outcome in &not_hard {
@@ -1014,6 +1018,7 @@ mod tests {
     fn test_flaky_outcome_kind() {
         let outcome = TestOutcome::Flaky {
             message: "flaky".to_string(),
+            original: OutcomeKind::Failed,
         };
         assert_eq!(OutcomeKind::from(&outcome), OutcomeKind::Flaky);
     }
@@ -1318,6 +1323,7 @@ mod message_tests {
             (
                 TestOutcome::Flaky {
                     message: "flaky test".to_string(),
+                    original: OutcomeKind::Failed,
                 },
                 Some("flaky test"),
             ),
@@ -1351,6 +1357,7 @@ mod message_tests {
             },
             TestOutcome::Flaky {
                 message: String::new(),
+                original: OutcomeKind::Failed,
             },
         ];
         for outcome in cases {
@@ -1432,6 +1439,7 @@ mod diagnostic_tests {
             },
             TestOutcome::Flaky {
                 message: "flaky".to_string(),
+                original: OutcomeKind::Failed,
             },
         ];
         for outcome in cases {

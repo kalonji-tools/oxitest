@@ -110,7 +110,7 @@ impl TestOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{FailureDiagnostic, TestOutcome};
+    use crate::types::{FailureDiagnostic, OutcomeKind, TestOutcome};
 
     // ── dot_char ─────────────────────────────────────────────────────────────
 
@@ -167,6 +167,7 @@ mod tests {
             (
                 TestOutcome::Flaky {
                     message: String::new(),
+                    original: OutcomeKind::Failed,
                 },
                 'f',
             ),
@@ -236,6 +237,7 @@ mod tests {
             (
                 TestOutcome::Flaky {
                     message: String::new(),
+                    original: OutcomeKind::Failed,
                 },
                 "FLAKY",
             ),
@@ -282,6 +284,7 @@ mod tests {
             (
                 TestOutcome::Flaky {
                     message: String::new(),
+                    original: OutcomeKind::Failed,
                 },
                 ColorCategory::Warn,
             ),
@@ -332,6 +335,7 @@ mod tests {
             (
                 TestOutcome::Flaky {
                     message: String::new(),
+                    original: OutcomeKind::Failed,
                 },
                 JunitCategory::Passed,
             ),
