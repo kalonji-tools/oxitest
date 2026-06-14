@@ -54,13 +54,20 @@ pub fn validate_markers(
         .collect()
 }
 
+/// Result of splitting items by last-run failure status.
+struct FailedPartition {
+    failed: Vec<Arc<TestItem>>,
+    remaining: Vec<Arc<TestItem>>,
+}
+
 fn partition_by_failed(
     items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
-) -> (Vec<Arc<TestItem>>, Vec<Arc<TestItem>>) {
-    items
+) -> FailedPartition {
+    let (failed, remaining) = items
         .into_iter()
-        .partition(|item| failed_ids.contains(item.node_id.as_ref()))
+        .partition(|item| failed_ids.contains(item.node_id.as_ref()));
+    FailedPartition { failed, remaining }
 }
 
 /// Keep only items whose node_id is in `failed_ids`.
@@ -70,7 +77,7 @@ pub fn filter_last_failed(
     items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
 ) -> Vec<Arc<TestItem>> {
-    partition_by_failed(items, failed_ids).0
+    partition_by_failed(items, failed_ids).failed
 }
 
 /// Move items whose node_id is in `failed_ids` to the front; preserve relative order within each group.
@@ -80,8 +87,11 @@ pub fn sort_failed_first(
     items: Vec<Arc<TestItem>>,
     failed_ids: &std::collections::HashSet<String>,
 ) -> Vec<Arc<TestItem>> {
-    let (mut failed, rest) = partition_by_failed(items, failed_ids);
-    failed.extend(rest);
+    let FailedPartition {
+        mut failed,
+        remaining,
+    } = partition_by_failed(items, failed_ids);
+    failed.extend(remaining);
     failed
 }
 

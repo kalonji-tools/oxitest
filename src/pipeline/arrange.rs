@@ -8,14 +8,20 @@ use std::sync::Arc;
 use crate::scheduler::ModuleGroup;
 use crate::types::TestItem;
 
+/// Result of splitting module groups into main-process and parallel-eligible sets.
+pub(super) struct InprocessPartition {
+    /// Tests marked `@oxi.mark.inprocess` — always run on the main process.
+    pub inprocess: Vec<ModuleGroup>,
+    /// Remaining tests eligible for parallel dispatch.
+    pub parallel: Vec<ModuleGroup>,
+}
+
 /// Partition module groups into inprocess (main-process) and parallel-eligible groups.
 ///
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
-pub(super) fn partition_inprocess_groups(
-    groups: Vec<ModuleGroup>,
-) -> (Vec<ModuleGroup>, Vec<ModuleGroup>) {
+pub(super) fn partition_inprocess_groups(groups: Vec<ModuleGroup>) -> InprocessPartition {
     let mut inprocess = Vec::new();
     let mut parallel = Vec::new();
 
@@ -32,7 +38,18 @@ pub(super) fn partition_inprocess_groups(
         }
     }
 
-    (inprocess, parallel)
+    InprocessPartition {
+        inprocess,
+        parallel,
+    }
+}
+
+/// Result of splitting module groups by shared fixture affinity.
+pub(super) struct FixturePartition {
+    /// Groups co-located by shared fixture connected component.
+    pub arranged: Vec<Vec<ModuleGroup>>,
+    /// Groups with no shared fixture dependency.
+    pub remaining: Vec<ModuleGroup>,
 }
 
 /// Partition test groups by shared fixture affinity.
@@ -41,14 +58,17 @@ pub(super) fn partition_inprocess_groups(
 /// `shared_fixture_groups()` are grouped together (one group per component).
 /// Tests with no shared fixture dependency stay in `remaining`.
 ///
-/// Returns `(arranged, remaining)` where `arranged[i]` contains the
+/// Returns a [`FixturePartition`] where `arranged[i]` contains the
 /// module groups for fixture component `i`.
 pub(super) fn partition_by_fixture_groups(
     groups: Vec<ModuleGroup>,
     fixture_groups: &[Vec<String>],
-) -> (Vec<Vec<ModuleGroup>>, Vec<ModuleGroup>) {
+) -> FixturePartition {
     if fixture_groups.is_empty() {
-        return (vec![], groups);
+        return FixturePartition {
+            arranged: vec![],
+            remaining: groups,
+        };
     }
 
     let mut arranged: Vec<Vec<ModuleGroup>> = vec![vec![]; fixture_groups.len()];
@@ -82,7 +102,10 @@ pub(super) fn partition_by_fixture_groups(
         }
     }
 
-    (arranged, remaining)
+    FixturePartition {
+        arranged,
+        remaining,
+    }
 }
 
 /// Result of evaluating whether auto-arrangement should proceed, fall back, or skip.
@@ -194,7 +217,10 @@ pub(super) fn plan_execution(
     }
 
     // Partition inprocess-marked tests.
-    let (inprocess_groups, parallel_groups) = partition_inprocess_groups(groups);
+    let InprocessPartition {
+        inprocess: inprocess_groups,
+        parallel: parallel_groups,
+    } = partition_inprocess_groups(groups);
 
     let optimal_worker_count =
         crate::config::compute_optimal_workers(mode, cpu_count, estimated, spawn_overhead_ms);
@@ -203,8 +229,10 @@ pub(super) fn plan_execution(
     if auto_arrange_threshold > 0 {
         let threshold = auto_arrange_threshold;
         if !shared_fixture_groups.is_empty() {
-            let (arranged, remaining) =
-                partition_by_fixture_groups(parallel_groups, shared_fixture_groups);
+            let FixturePartition {
+                arranged,
+                remaining,
+            } = partition_by_fixture_groups(parallel_groups, shared_fixture_groups);
 
             let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
 
@@ -264,7 +292,10 @@ mod tests {
             vec![normal, inproc],
         )];
 
-        let (inp, par) = partition_inprocess_groups(groups);
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1, "one module in inprocess");
         assert_eq!(inp[0].items.len(), 1);
         assert_eq!(inp[0].items[0].node_id.as_ref(), "test_a.py::test_serial");
@@ -279,7 +310,10 @@ mod tests {
         let b = TestItem::builder_raw("test_a.py::test_b").arc();
         let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
-        let (inp, par) = partition_inprocess_groups(groups);
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups);
         assert!(inp.is_empty());
         assert_eq!(par.len(), 1);
         assert_eq!(par[0].items.len(), 2);
@@ -295,7 +329,10 @@ mod tests {
             .arc();
         let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a, b])];
 
-        let (inp, par) = partition_inprocess_groups(groups);
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1);
         assert_eq!(inp[0].items.len(), 2);
         assert!(par.is_empty());
@@ -313,7 +350,10 @@ mod tests {
             ModuleGroup::new(Utf8PathBuf::from("test_b.py"), vec![b_normal]),
         ];
 
-        let (inp, par) = partition_inprocess_groups(groups);
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups);
         assert_eq!(inp.len(), 1, "only test_a.py has inprocess items");
         assert_eq!(par.len(), 2, "both modules have parallel items");
     }
@@ -324,7 +364,10 @@ mod tests {
         let groups = vec![ModuleGroup::new(Utf8PathBuf::from("test_a.py"), vec![a])];
         let fixture_groups: Vec<Vec<String>> = vec![];
 
-        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(groups, &fixture_groups);
         assert!(arranged.is_empty());
         assert_eq!(remaining.len(), 1);
     }
@@ -341,7 +384,10 @@ mod tests {
         )];
         let fixture_groups = vec![vec!["db".to_string()]];
 
-        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(groups, &fixture_groups);
         assert_eq!(arranged.len(), 1, "one fixture group");
         assert_eq!(arranged[0].len(), 1, "one module in fixture group");
         assert_eq!(arranged[0][0].items.len(), 1, "one test in fixture group");
@@ -371,7 +417,10 @@ mod tests {
         )];
         let fixture_groups = vec![vec!["db".to_string(), "repo".to_string()]];
 
-        let (arranged, remaining) = partition_by_fixture_groups(groups, &fixture_groups);
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(groups, &fixture_groups);
         assert_eq!(arranged.len(), 1);
         assert_eq!(arranged[0].len(), 1, "one module in fixture group 0");
         assert_eq!(arranged[0][0].items.len(), 2, "two tests in that module");
