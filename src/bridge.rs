@@ -50,7 +50,8 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::types::FieldDiff {
 }
 
 /// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
-#[derive(FromPyObject)]
+#[cfg(test)]
+#[derive(pyo3::FromPyObject)]
 struct TestResult {
     status: String,
     message: String,
@@ -476,27 +477,123 @@ fn try_run_test_with_session_obj(
         .to_owned()
         .into_any();
 
-    let r: TestResult = executor
-        .call_method1(
-            "run_test",
-            (
-                meta_obj,
-                session_obj,
-                &timeout_obj,
-                debug_obj,
-                keep_tmp_obj,
-                show_locals_obj,
-                show_internals_obj,
-            ),
-        )?
-        .extract()?;
+    let py_result = executor.call_method1(
+        "run_test",
+        (
+            meta_obj,
+            session_obj,
+            &timeout_obj,
+            debug_obj,
+            keep_tmp_obj,
+            show_locals_obj,
+            show_internals_obj,
+        ),
+    )?;
 
-    Ok(convert_test_result(r))
+    extract_outcome(&py_result)
+}
+
+/// Two-phase extraction: extract status first, then only the fields needed
+/// for that outcome kind. Passed tests (the majority) go from 13 PyO3
+/// getattr() calls to 2.
+fn extract_outcome(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
+    let status: String = py_result.getattr("status")?.extract()?;
+
+    match status.as_str() {
+        "passed" => {
+            let no_message_lines: Vec<usize> = py_result.getattr("no_message_lines")?.extract()?;
+            Ok(TestOutcome::Passed {
+                tips: if no_message_lines.is_empty() {
+                    None
+                } else {
+                    Some(no_message_lines.into_boxed_slice())
+                },
+            })
+        }
+        "skipped" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            Ok(TestOutcome::Skipped { reason: message })
+        }
+        "xfailed" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            Ok(TestOutcome::XFailed { reason: message })
+        }
+        "xpassed" => {
+            let strict: bool = py_result.getattr("strict")?.extract()?;
+            Ok(TestOutcome::XPassed { strict })
+        }
+        "timeout" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            Ok(TestOutcome::Timeout { message })
+        }
+        "warned" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            let no_message_lines: Vec<usize> = py_result.getattr("no_message_lines")?.extract()?;
+            Ok(TestOutcome::Warned {
+                reason: message,
+                tips: if no_message_lines.is_empty() {
+                    None
+                } else {
+                    Some(no_message_lines.into_boxed_slice())
+                },
+            })
+        }
+        "failed" => extract_failed(py_result),
+        _ => extract_error(py_result),
+    }
+}
+
+fn extract_failed(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
+    let message: String = py_result.getattr("message")?.extract()?;
+    let file: String = py_result.getattr("file")?.extract()?;
+    let lineno: usize = py_result.getattr("lineno")?.extract()?;
+    let source_line: String = py_result.getattr("source_line")?.extract()?;
+    let left: String = py_result.getattr("left")?.extract()?;
+    let right: String = py_result.getattr("right")?.extract()?;
+    let op: String = py_result.getattr("op")?.extract()?;
+    let raw_frames: Vec<crate::worker_result::RawFrame> = py_result.getattr("frames")?.extract()?;
+    let field_diffs: Vec<crate::types::FieldDiff> = py_result.getattr("field_diffs")?.extract()?;
+    let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
+    Ok(TestOutcome::Failed(Box::new(
+        crate::worker_result::build_diagnostic(
+            message,
+            Utf8PathBuf::from(file),
+            LineNo::new(lineno),
+            source_line,
+            frames,
+            Some(crate::types::ComparisonDetail {
+                left,
+                right,
+                op,
+                field_diffs,
+            }),
+        ),
+    )))
+}
+
+fn extract_error(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
+    let message: String = py_result.getattr("message")?.extract()?;
+    let file: String = py_result.getattr("file")?.extract()?;
+    let lineno: usize = py_result.getattr("lineno")?.extract()?;
+    let source_line: String = py_result.getattr("source_line")?.extract()?;
+    let raw_frames: Vec<crate::worker_result::RawFrame> = py_result.getattr("frames")?.extract()?;
+    let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
+    Ok(TestOutcome::Error(Box::new(
+        crate::worker_result::build_diagnostic(
+            message,
+            Utf8PathBuf::from(file),
+            LineNo::new(lineno),
+            source_line,
+            frames,
+            None,
+        ),
+    )))
 }
 
 /// Convert a Python [`TestResult`] into a [`TestOutcome`].
 ///
 /// Pure function — testable without a Python runtime.
+#[cfg(test)]
 fn convert_test_result(r: TestResult) -> TestOutcome {
     let frames: Vec<Frame> = r.frames.into_iter().map(Into::into).collect();
     let lineno = LineNo::new(r.lineno);
