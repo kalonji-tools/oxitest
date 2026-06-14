@@ -70,9 +70,7 @@ mod tests {
     fn record_outcome_updates_stats_and_timing() {
         let mut session = ReporterSession::new(0);
         let item = TestItem::builder("tests/test_foo.py", "test_a").build();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         session.record_outcome(&item, &outcome, DurationMs::new(42.5));
 
         assert_eq!(session.stats().counts.passed, 1);

@@ -101,10 +101,11 @@ impl Pipeline<Collected> {
         // ── Item-level filtering (formerly PreFilter::filter) ────────────
 
         // Node ID filter (positional node IDs).
+        let source_files = shared.cfg.filter.source_files();
         let items = filter::filter_by_node_ids(
             result.clean_items,
             &shared.cfg.filter.node_ids,
-            &shared.cfg.filter.node_id_source_files,
+            &source_files,
         );
 
         let expression = match &shared.command {

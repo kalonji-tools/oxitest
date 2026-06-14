@@ -119,9 +119,7 @@ mod tests {
 
     #[test]
     fn no_suggestion_for_passed() {
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         assert!(suggest_fix(&outcome).is_none());
     }
 }

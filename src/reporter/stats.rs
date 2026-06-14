@@ -170,15 +170,14 @@ impl RunStats {
     /// Single dispatch point — call this from reporters instead of the individual methods.
     pub(crate) fn record(&mut self, item: &TestItem, outcome: &TestOutcome) {
         match outcome {
-            TestOutcome::Passed { no_message_lines } => self.record_passed(item, no_message_lines),
+            TestOutcome::Passed { tips } => {
+                self.record_passed(item, tips.as_deref().map_or(&[], |v| v));
+            }
             TestOutcome::Failed(..) => self.record_failed(),
             TestOutcome::Error(..) => self.record_errored(),
             TestOutcome::Skipped { .. } => self.record_skipped(),
-            TestOutcome::Warned {
-                reason,
-                no_message_lines,
-            } => {
-                self.record_warned(item, reason, no_message_lines);
+            TestOutcome::Warned { reason, tips } => {
+                self.record_warned(item, reason, tips.as_deref().map_or(&[], |v| v));
             }
             TestOutcome::XFailed { .. } => self.record_xfailed(),
             TestOutcome::XPassed { strict } => self.record_xpassed(*strict),
