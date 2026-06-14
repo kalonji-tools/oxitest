@@ -70,134 +70,290 @@ impl From<RawFrame> for Frame {
 
 /// Deserialized JSON result for a single test, written by a worker subprocess.
 ///
-/// Workers print one `WireResult` line per test to stdout. All optional
-/// diagnostic fields use `#[serde(default)]` so compact wire messages (which
-/// omit falsy fields) deserialize without error. Use
-/// [`into_outcome`](WireResult::into_outcome) to convert into a
+/// Workers print one `WireResult` line per test to stdout. The `outcome` field
+/// drives serde variant selection via `#[serde(tag = "outcome")]`. Each variant
+/// carries only the fields relevant to that outcome kind.
+///
+/// Use [`into_outcome`](WireResult::into_outcome) to convert into a
 /// typed [`ResolvedOutcome`](types::ResolvedOutcome).
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct WireResult {
-    pub node_id: String,
-    pub outcome: types::OutcomeKind,
-    pub duration_ms: f64,
-    #[serde(default)]
-    pub protocol_version: u32,
-    #[serde(default)]
-    pub failure_repr: Option<String>,
-    // Structured diagnostic fields from worker JSON
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub file: Option<String>,
-    #[serde(default)]
-    pub lineno: Option<u64>, // u64 because JSON integers are u64; convert to usize in into_outcome()
-    #[serde(default)]
-    pub source_line: Option<String>,
-    #[serde(default)]
-    pub no_message_lines: Vec<i64>, // list[int] from Python — line numbers
-    #[serde(default)]
-    pub left: Option<String>,
-    #[serde(default)]
-    pub right: Option<String>,
-    #[serde(default)]
-    pub op: Option<String>,
-    #[serde(default)]
-    pub strict: bool,
-    #[serde(default)]
-    pub frames: Vec<RawFrame>,
-    #[serde(default)]
-    pub field_diffs: Vec<FieldDiff>,
+#[serde(tag = "outcome")]
+pub(crate) enum WireResult {
+    #[serde(rename = "passed")]
+    Passed {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        no_message_lines: Vec<i64>,
+    },
+    #[serde(rename = "failed")]
+    Failed {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+        #[serde(default)]
+        file: String,
+        #[serde(default)]
+        lineno: Option<u64>,
+        #[serde(default)]
+        source_line: String,
+        #[serde(default)]
+        frames: Vec<RawFrame>,
+        #[serde(default)]
+        left: String,
+        #[serde(default)]
+        right: String,
+        #[serde(default)]
+        op: String,
+        #[serde(default)]
+        field_diffs: Vec<FieldDiff>,
+    },
+    #[serde(rename = "error")]
+    Error {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+        #[serde(default)]
+        file: String,
+        #[serde(default)]
+        lineno: Option<u64>,
+        #[serde(default)]
+        source_line: String,
+        #[serde(default)]
+        frames: Vec<RawFrame>,
+    },
+    #[serde(rename = "skipped")]
+    Skipped {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+    },
+    #[serde(rename = "warned")]
+    Warned {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+        #[serde(default)]
+        no_message_lines: Vec<i64>,
+    },
+    #[serde(rename = "xfailed")]
+    XFailed {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+    },
+    #[serde(rename = "xpassed")]
+    XPassed {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        strict: bool,
+    },
+    #[serde(rename = "timeout")]
+    Timeout {
+        node_id: String,
+        duration_ms: f64,
+        #[serde(default)]
+        protocol_version: u32,
+        #[serde(default)]
+        message: String,
+    },
 }
 
 impl WireResult {
-    /// Convert the flat wire representation into a typed [`ResolvedOutcome`](types::ResolvedOutcome).
+    /// Extract the protocol version from any variant.
+    pub(crate) fn protocol_version(&self) -> u32 {
+        match self {
+            Self::Passed {
+                protocol_version, ..
+            }
+            | Self::Failed {
+                protocol_version, ..
+            }
+            | Self::Error {
+                protocol_version, ..
+            }
+            | Self::Skipped {
+                protocol_version, ..
+            }
+            | Self::Warned {
+                protocol_version, ..
+            }
+            | Self::XFailed {
+                protocol_version, ..
+            }
+            | Self::XPassed {
+                protocol_version, ..
+            }
+            | Self::Timeout {
+                protocol_version, ..
+            } => *protocol_version,
+        }
+    }
+
+    /// Convert the typed wire representation into a [`ResolvedOutcome`](types::ResolvedOutcome).
     ///
     /// Consumes self — `WireResult` is a transient deserialization target.
     pub(crate) fn into_outcome(self) -> types::ResolvedOutcome {
-        let raw_node_id = self.node_id;
-        let raw_duration_ms = self.duration_ms;
-        let no_message_lines: Vec<usize> = self
-            .no_message_lines
-            .iter()
-            .filter(|&&n| n > 0)
-            .map(|&n| usize::try_from(n).unwrap_or(0))
-            .collect();
-        let tips = if no_message_lines.is_empty() {
-            None
-        } else {
-            Some(no_message_lines.into_boxed_slice())
-        };
-
-        let frames: Vec<Frame> = self.frames.into_iter().map(Into::into).collect();
-        let lineno = LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)));
-        let file = Utf8PathBuf::from(self.file.unwrap_or_default());
-        let source_line = self.source_line.unwrap_or_default();
-
-        let outcome = match self.outcome {
-            types::OutcomeKind::Passed => types::TestOutcome::Passed { tips },
-            types::OutcomeKind::Failed => {
-                let comparison = Some(ComparisonDetail {
-                    left: self.left.unwrap_or_default(),
-                    right: self.right.unwrap_or_default(),
-                    op: self.op.unwrap_or_default(),
-                    field_diffs: self.field_diffs,
-                });
-                types::TestOutcome::Failed(Box::new(build_diagnostic(
-                    self.message.unwrap_or_default(),
-                    file,
-                    lineno,
-                    source_line,
-                    frames,
-                    comparison,
-                )))
+        match self {
+            Self::Passed {
+                node_id,
+                duration_ms,
+                no_message_lines,
+                ..
+            } => {
+                let tips = filter_tips(no_message_lines);
+                types::ResolvedOutcome {
+                    node_id: types::NodeId::from_raw(&node_id),
+                    duration_ms: types::DurationMs::new(duration_ms),
+                    outcome: types::TestOutcome::Passed { tips },
+                }
             }
-            types::OutcomeKind::Error => types::TestOutcome::Error(Box::new(build_diagnostic(
-                self.message.unwrap_or_default(),
+            Self::Failed {
+                node_id,
+                duration_ms,
+                message,
                 file,
                 lineno,
                 source_line,
                 frames,
-                None,
-            ))),
-            types::OutcomeKind::Skipped => types::TestOutcome::Skipped {
-                reason: self.failure_repr.unwrap_or_default(),
-            },
-            types::OutcomeKind::XFailed => types::TestOutcome::XFailed {
-                reason: self.failure_repr.unwrap_or_default(),
-            },
-            types::OutcomeKind::XPassed => types::TestOutcome::XPassed {
-                strict: self.strict,
-            },
-            types::OutcomeKind::Warned => types::TestOutcome::Warned {
-                reason: self.message.unwrap_or_default(),
-                tips,
-            },
-            types::OutcomeKind::Timeout => types::TestOutcome::Timeout {
-                message: self.failure_repr.unwrap_or_default(),
-            },
-            types::OutcomeKind::Flaky | types::OutcomeKind::Unknown => {
-                if self.outcome == types::OutcomeKind::Unknown {
-                    tracing::warn!(
-                        outcome = %self.outcome,
-                        "Unknown outcome string from worker — treating as error"
-                    );
+                left,
+                right,
+                op,
+                field_diffs,
+                ..
+            } => {
+                let comparison = Some(ComparisonDetail {
+                    left,
+                    right,
+                    op,
+                    field_diffs,
+                });
+                types::ResolvedOutcome {
+                    node_id: types::NodeId::from_raw(&node_id),
+                    duration_ms: types::DurationMs::new(duration_ms),
+                    outcome: types::TestOutcome::Failed(Box::new(build_diagnostic(
+                        message,
+                        Utf8PathBuf::from(file),
+                        LineNo::new(lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0))),
+                        source_line,
+                        frames.into_iter().map(Into::into).collect(),
+                        comparison,
+                    ))),
                 }
-                types::TestOutcome::Error(Box::new(build_diagnostic(
-                    self.message.unwrap_or_default(),
-                    file,
-                    lineno,
-                    source_line,
-                    frames,
-                    None,
-                )))
             }
-        };
-
-        types::ResolvedOutcome {
-            node_id: types::NodeId::from_raw(&raw_node_id),
-            duration_ms: types::DurationMs::new(raw_duration_ms),
-            outcome,
+            Self::Error {
+                node_id,
+                duration_ms,
+                message,
+                file,
+                lineno,
+                source_line,
+                frames,
+                ..
+            } => types::ResolvedOutcome {
+                node_id: types::NodeId::from_raw(&node_id),
+                duration_ms: types::DurationMs::new(duration_ms),
+                outcome: types::TestOutcome::Error(Box::new(build_diagnostic(
+                    message,
+                    Utf8PathBuf::from(file),
+                    LineNo::new(lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0))),
+                    source_line,
+                    frames.into_iter().map(Into::into).collect(),
+                    None,
+                ))),
+            },
+            Self::Skipped {
+                node_id,
+                duration_ms,
+                message,
+                ..
+            } => types::ResolvedOutcome {
+                node_id: types::NodeId::from_raw(&node_id),
+                duration_ms: types::DurationMs::new(duration_ms),
+                outcome: types::TestOutcome::Skipped { reason: message },
+            },
+            Self::Warned {
+                node_id,
+                duration_ms,
+                message,
+                no_message_lines,
+                ..
+            } => {
+                let tips = filter_tips(no_message_lines);
+                types::ResolvedOutcome {
+                    node_id: types::NodeId::from_raw(&node_id),
+                    duration_ms: types::DurationMs::new(duration_ms),
+                    outcome: types::TestOutcome::Warned {
+                        reason: message,
+                        tips,
+                    },
+                }
+            }
+            Self::XFailed {
+                node_id,
+                duration_ms,
+                message,
+                ..
+            } => types::ResolvedOutcome {
+                node_id: types::NodeId::from_raw(&node_id),
+                duration_ms: types::DurationMs::new(duration_ms),
+                outcome: types::TestOutcome::XFailed { reason: message },
+            },
+            Self::XPassed {
+                node_id,
+                duration_ms,
+                strict,
+                ..
+            } => types::ResolvedOutcome {
+                node_id: types::NodeId::from_raw(&node_id),
+                duration_ms: types::DurationMs::new(duration_ms),
+                outcome: types::TestOutcome::XPassed { strict },
+            },
+            Self::Timeout {
+                node_id,
+                duration_ms,
+                message,
+                ..
+            } => types::ResolvedOutcome {
+                node_id: types::NodeId::from_raw(&node_id),
+                duration_ms: types::DurationMs::new(duration_ms),
+                outcome: types::TestOutcome::Timeout { message },
+            },
         }
+    }
+}
+
+/// Filter no_message_lines into tips (positive values only).
+fn filter_tips(lines: Vec<i64>) -> Option<Box<[usize]>> {
+    let filtered: Vec<usize> = lines
+        .iter()
+        .filter(|&&n| n > 0)
+        .map(|&n| usize::try_from(n).unwrap_or(0))
+        .collect();
+    if filtered.is_empty() {
+        None
+    } else {
+        Some(filtered.into_boxed_slice())
     }
 }
 
@@ -211,7 +367,7 @@ pub(crate) fn build_diagnostic(
     lineno: LineNo,
     source_line: String,
     frames: Vec<Frame>,
-    comparison: Option<types::ComparisonDetail>,
+    comparison: Option<ComparisonDetail>,
 ) -> FailureDiagnostic {
     FailureDiagnostic {
         message,
@@ -244,12 +400,17 @@ mod frame_tests {
             ]
         }"#;
         let r: WireResult = serde_json::from_str(json).unwrap();
-        assert_eq!(r.frames.len(), 3);
-        assert_eq!(r.frames[0].file, "t.py");
-        assert_eq!(r.frames[0].lineno, 8);
-        assert_eq!(r.frames[0].name, "test_deep");
-        assert_eq!(r.frames[0].line, "compute(5)");
-        assert_eq!(r.frames[2].name, "helper");
+        match &r {
+            WireResult::Failed { frames, .. } => {
+                assert_eq!(frames.len(), 3);
+                assert_eq!(frames[0].file, "t.py");
+                assert_eq!(frames[0].lineno, 8);
+                assert_eq!(frames[0].name, "test_deep");
+                assert_eq!(frames[0].line, "compute(5)");
+                assert_eq!(frames[2].name, "helper");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -300,7 +461,10 @@ mod frame_tests {
     fn missing_frames_defaults_to_empty() {
         let json = r#"{"node_id":"t","outcome":"failed","duration_ms":0.0}"#;
         let r: WireResult = serde_json::from_str(json).unwrap();
-        assert!(r.frames.is_empty());
+        match &r {
+            WireResult::Failed { frames, .. } => assert!(frames.is_empty()),
+            other => panic!("expected Failed, got {other:?}"),
+        }
         let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Failed(d) => assert!(d.frames.is_empty()),
@@ -313,9 +477,10 @@ mod frame_tests {
 mod lineno_cast_tests {
     use super::*;
 
-    fn passed_result_with_lineno(lineno: Option<u64>) -> WireResult {
+    /// Build a Failed result with a given lineno (lineno only exists on Failed/Error variants).
+    fn failed_result_with_lineno(lineno: Option<u64>) -> WireResult {
         serde_json::from_str(&format!(
-            r#"{{"node_id":"t","outcome":"passed","duration_ms":0.0,"lineno":{}}}"#,
+            r#"{{"node_id":"t","outcome":"failed","duration_ms":0.0,"lineno":{}}}"#,
             match lineno {
                 Some(n) => n.to_string(),
                 None => "null".to_string(),
@@ -326,8 +491,11 @@ mod lineno_cast_tests {
 
     #[test]
     fn lineno_none_maps_to_zero() {
-        let result = passed_result_with_lineno(None);
-        assert_eq!(result.lineno, None);
+        let result = failed_result_with_lineno(None);
+        match &result {
+            WireResult::Failed { lineno, .. } => assert_eq!(*lineno, None),
+            other => panic!("expected Failed, got {other:?}"),
+        }
         // into_outcome() must not panic
         let _ = result.into_outcome();
     }
@@ -350,13 +518,13 @@ mod lineno_cast_tests {
 
     #[test]
     fn lineno_u32_max_does_not_panic() {
-        let result = passed_result_with_lineno(Some(u32::MAX as u64));
+        let result = failed_result_with_lineno(Some(u32::MAX as u64));
         let _ = result.into_outcome();
     }
 
     #[test]
     fn lineno_u64_max_does_not_panic() {
-        let result = passed_result_with_lineno(Some(u64::MAX));
+        let result = failed_result_with_lineno(Some(u64::MAX));
         let _ = result.into_outcome();
     }
 }
@@ -372,20 +540,19 @@ mod wire_round_trip_tests {
     #[test]
     fn passed_minimal() {
         let r = deser(r#"{"node_id":"t.py::test_a","outcome":"passed","duration_ms":1.2}"#);
-        assert_eq!(r.node_id, "t.py::test_a");
-        assert_eq!(r.outcome, types::OutcomeKind::Passed);
-        assert!((r.duration_ms - 1.2).abs() < 1e-9);
-        assert!(r.failure_repr.is_none());
-        assert!(r.message.is_none());
-        assert!(r.file.is_none());
-        assert!(r.lineno.is_none());
-        assert!(r.source_line.is_none());
-        assert!(r.no_message_lines.is_empty());
-        assert!(r.left.is_none());
-        assert!(r.right.is_none());
-        assert!(r.op.is_none());
-        assert!(!r.strict);
-        assert!(r.frames.is_empty());
+        match r {
+            WireResult::Passed {
+                ref node_id,
+                duration_ms,
+                no_message_lines,
+                ..
+            } => {
+                assert_eq!(node_id, "t.py::test_a");
+                assert!((duration_ms - 1.2).abs() < 1e-9);
+                assert!(no_message_lines.is_empty());
+            }
+            ref other => panic!("expected Passed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -394,7 +561,6 @@ mod wire_round_trip_tests {
             "node_id": "t.py::test_b",
             "outcome": "failed",
             "duration_ms": 5.0,
-            "failure_repr": "AssertionError: 1 != 2",
             "message": "assert 1 == 2",
             "file": "t.py",
             "lineno": 10,
@@ -404,15 +570,27 @@ mod wire_round_trip_tests {
             "op": "=="
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Failed);
-        assert_eq!(r.failure_repr.as_deref(), Some("AssertionError: 1 != 2"));
-        assert_eq!(r.message.as_deref(), Some("assert 1 == 2"));
-        assert_eq!(r.file.as_deref(), Some("t.py"));
-        assert_eq!(r.lineno, Some(10));
-        assert_eq!(r.source_line.as_deref(), Some("assert x == 2"));
-        assert_eq!(r.left.as_deref(), Some("1"));
-        assert_eq!(r.right.as_deref(), Some("2"));
-        assert_eq!(r.op.as_deref(), Some("=="));
+        match &r {
+            WireResult::Failed {
+                message,
+                file,
+                lineno,
+                source_line,
+                left,
+                right,
+                op,
+                ..
+            } => {
+                assert_eq!(message, "assert 1 == 2");
+                assert_eq!(file, "t.py");
+                assert_eq!(*lineno, Some(10));
+                assert_eq!(source_line, "assert x == 2");
+                assert_eq!(left, "1");
+                assert_eq!(right, "2");
+                assert_eq!(op, "==");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -429,12 +607,22 @@ mod wire_round_trip_tests {
             ]
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Error);
-        assert_eq!(r.message.as_deref(), Some("RuntimeError: boom"));
-        assert_eq!(r.file.as_deref(), Some("t.py"));
-        assert_eq!(r.lineno, Some(7));
-        assert_eq!(r.frames.len(), 1);
-        assert_eq!(r.frames[0].name, "test_c");
+        match &r {
+            WireResult::Error {
+                message,
+                file,
+                lineno,
+                frames,
+                ..
+            } => {
+                assert_eq!(message, "RuntimeError: boom");
+                assert_eq!(file, "t.py");
+                assert_eq!(*lineno, Some(7));
+                assert_eq!(frames.len(), 1);
+                assert_eq!(frames[0].name, "test_c");
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -443,11 +631,15 @@ mod wire_round_trip_tests {
             "node_id": "t.py::test_d",
             "outcome": "skipped",
             "duration_ms": 0.1,
-            "failure_repr": "Skipped: needs network"
+            "message": "needs network"
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Skipped);
-        assert_eq!(r.failure_repr.as_deref(), Some("Skipped: needs network"));
+        match &r {
+            WireResult::Skipped { message, .. } => {
+                assert_eq!(message, "needs network");
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
     }
 
     #[test]
@@ -456,11 +648,15 @@ mod wire_round_trip_tests {
             "node_id": "t.py::test_e",
             "outcome": "xfailed",
             "duration_ms": 0.3,
-            "failure_repr": "known bug #42"
+            "message": "known bug #42"
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::XFailed);
-        assert_eq!(r.failure_repr.as_deref(), Some("known bug #42"));
+        match &r {
+            WireResult::XFailed { message, .. } => {
+                assert_eq!(message, "known bug #42");
+            }
+            other => panic!("expected XFailed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -472,8 +668,10 @@ mod wire_round_trip_tests {
             "strict": true
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::XPassed);
-        assert!(r.strict);
+        match &r {
+            WireResult::XPassed { strict, .. } => assert!(*strict),
+            other => panic!("expected XPassed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -484,8 +682,10 @@ mod wire_round_trip_tests {
             "duration_ms": 0.4
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::XPassed);
-        assert!(!r.strict);
+        match &r {
+            WireResult::XPassed { strict, .. } => assert!(!*strict),
+            other => panic!("expected XPassed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -497,11 +697,12 @@ mod wire_round_trip_tests {
             "message": "DeprecationWarning: old_api is deprecated"
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Warned);
-        assert_eq!(
-            r.message.as_deref(),
-            Some("DeprecationWarning: old_api is deprecated")
-        );
+        match &r {
+            WireResult::Warned { message, .. } => {
+                assert_eq!(message, "DeprecationWarning: old_api is deprecated");
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
     }
 
     #[test]
@@ -510,22 +711,26 @@ mod wire_round_trip_tests {
             "node_id": "t.py::test_i",
             "outcome": "timeout",
             "duration_ms": 5000.0,
-            "failure_repr": "Test timed out after 5s"
+            "message": "Test timed out after 5s"
         }"#;
         let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Timeout);
-        assert_eq!(r.failure_repr.as_deref(), Some("Test timed out after 5s"));
+        match &r {
+            WireResult::Timeout { message, .. } => {
+                assert_eq!(message, "Test timed out after 5s");
+            }
+            other => panic!("expected Timeout, got {other:?}"),
+        }
     }
 
     #[test]
-    fn unknown_outcome() {
+    fn unknown_outcome_is_deser_error() {
+        // With internally-tagged enum, unknown outcome values fail deserialization.
         let json = r#"{
             "node_id": "t.py::test_j",
             "outcome": "completely_made_up",
             "duration_ms": 0.0
         }"#;
-        let r = deser(json);
-        assert_eq!(r.outcome, types::OutcomeKind::Unknown);
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 }
 
@@ -537,17 +742,14 @@ mod compact_and_error_tests {
     fn compact_passed_only_required_fields() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
         let r: WireResult = serde_json::from_str(json).expect("valid JSON");
-        assert!(r.failure_repr.is_none());
-        assert!(r.message.is_none());
-        assert!(r.file.is_none());
-        assert!(r.lineno.is_none());
-        assert!(r.source_line.is_none());
-        assert!(r.no_message_lines.is_empty());
-        assert!(r.left.is_none());
-        assert!(r.right.is_none());
-        assert!(r.op.is_none());
-        assert!(!r.strict);
-        assert!(r.frames.is_empty());
+        match &r {
+            WireResult::Passed {
+                no_message_lines, ..
+            } => {
+                assert!(no_message_lines.is_empty());
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -559,7 +761,14 @@ mod compact_and_error_tests {
             "no_message_lines": [5, 10, 15]
         }"#;
         let r: WireResult = serde_json::from_str(json).expect("valid JSON");
-        assert_eq!(r.no_message_lines, vec![5_i64, 10_i64, 15_i64]);
+        match &r {
+            WireResult::Passed {
+                no_message_lines, ..
+            } => {
+                assert_eq!(*no_message_lines, vec![5_i64, 10_i64, 15_i64]);
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -602,22 +811,27 @@ mod compact_and_error_tests {
             "another_extra": 42
         }"#;
         let r: WireResult = serde_json::from_str(json).expect("extra fields should be ignored");
-        assert_eq!(r.outcome, types::OutcomeKind::Passed);
-        assert!((r.duration_ms - 0.5).abs() < 1e-9);
+        assert!(matches!(r, WireResult::Passed { .. }));
+        match &r {
+            WireResult::Passed { duration_ms, .. } => {
+                assert!((*duration_ms - 0.5).abs() < 1e-9);
+            }
+            _ => unreachable!(),
+        }
     }
 
     #[test]
     fn protocol_version_round_trips() {
-        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":1}"#;
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":2}"#;
         let r: WireResult = serde_json::from_str(json).expect("valid JSON");
-        assert_eq!(r.protocol_version, PROTOCOL_VERSION);
+        assert_eq!(r.protocol_version(), PROTOCOL_VERSION);
     }
 
     #[test]
     fn missing_protocol_version_defaults_to_zero() {
         let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0}"#;
         let r: WireResult = serde_json::from_str(json).expect("valid JSON");
-        assert_eq!(r.protocol_version, 0);
+        assert_eq!(r.protocol_version(), 0);
     }
 }
 
@@ -644,13 +858,12 @@ mod outcome_conversion_tests {
     }
 
     #[test]
-    fn failed_to_outcome_uses_message_not_failure_repr() {
+    fn failed_to_outcome_uses_message() {
         let json = r#"{
             "node_id": "t",
             "outcome": "failed",
             "duration_ms": 1.0,
-            "message": "structured message",
-            "failure_repr": "fallback repr"
+            "message": "structured message"
         }"#;
         let r = make_result(json);
         let outcome = r.into_outcome().outcome;
@@ -663,32 +876,30 @@ mod outcome_conversion_tests {
     }
 
     #[test]
-    fn skipped_to_outcome_uses_failure_repr() {
+    fn skipped_to_outcome_uses_message() {
         let json = r#"{
             "node_id": "t",
             "outcome": "skipped",
             "duration_ms": 0.0,
-            "failure_repr": "Skipped: no network",
-            "message": "should not be used"
+            "message": "needs network"
         }"#;
         let r = make_result(json);
         let outcome = r.into_outcome().outcome;
         match outcome {
             types::TestOutcome::Skipped { reason } => {
-                assert_eq!(reason, "Skipped: no network");
+                assert_eq!(reason, "needs network");
             }
             other => panic!("expected Skipped, got {other:?}"),
         }
     }
 
     #[test]
-    fn xfailed_to_outcome_uses_failure_repr() {
+    fn xfailed_to_outcome_uses_message() {
         let json = r#"{
             "node_id": "t",
             "outcome": "xfailed",
             "duration_ms": 0.0,
-            "failure_repr": "known bug #99",
-            "message": "should not be used"
+            "message": "known bug #99"
         }"#;
         let r = make_result(json);
         let outcome = r.into_outcome().outcome;
@@ -719,13 +930,12 @@ mod outcome_conversion_tests {
     }
 
     #[test]
-    fn timeout_to_outcome_uses_failure_repr() {
+    fn timeout_to_outcome_uses_message() {
         let json = r#"{
             "node_id": "t",
             "outcome": "timeout",
             "duration_ms": 5000.0,
-            "failure_repr": "Test timed out after 5s",
-            "message": "should not be used"
+            "message": "Test timed out after 5s"
         }"#;
         let r = make_result(json);
         let outcome = r.into_outcome().outcome;
@@ -879,31 +1089,30 @@ mod wire_conversion_tests {
     }
 
     #[test]
-    fn wire_skipped_uses_failure_repr() {
+    fn wire_skipped_uses_message() {
         let wire = deser(
             r#"{
             "node_id": "t",
             "outcome": "skipped",
             "duration_ms": 0.0,
-            "failure_repr": "Skipped: needs network",
-            "message": "should not be used"
+            "message": "needs network"
         }"#,
         );
         let outcome = wire.into_outcome().outcome;
         match outcome {
-            TestOutcome::Skipped { reason } => assert_eq!(reason, "Skipped: needs network"),
+            TestOutcome::Skipped { reason } => assert_eq!(reason, "needs network"),
             other => panic!("expected Skipped, got {other:?}"),
         }
     }
 
     #[test]
-    fn wire_xfailed_uses_failure_repr() {
+    fn wire_xfailed_uses_message() {
         let wire = deser(
             r#"{
             "node_id": "t",
             "outcome": "xfailed",
             "duration_ms": 0.0,
-            "failure_repr": "known bug #99"
+            "message": "known bug #99"
         }"#,
         );
         let outcome = wire.into_outcome().outcome;
@@ -914,13 +1123,13 @@ mod wire_conversion_tests {
     }
 
     #[test]
-    fn wire_timeout_uses_failure_repr() {
+    fn wire_timeout_uses_message() {
         let wire = deser(
             r#"{
             "node_id": "t",
             "outcome": "timeout",
             "duration_ms": 5000.0,
-            "failure_repr": "Test timed out after 5s"
+            "message": "Test timed out after 5s"
         }"#,
         );
         let outcome = wire.into_outcome().outcome;
@@ -974,10 +1183,9 @@ mod wire_conversion_tests {
     }
 
     #[test]
-    fn wire_unknown_outcome_maps_to_error() {
-        let wire = deser(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.0}"#);
-        let outcome = wire.into_outcome().outcome;
-        assert!(matches!(outcome, TestOutcome::Error(..)));
+    fn wire_unknown_outcome_is_deser_error() {
+        let json = r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.0}"#;
+        assert!(serde_json::from_str::<WireResult>(json).is_err());
     }
 
     #[test]
@@ -987,6 +1195,48 @@ mod wire_conversion_tests {
         match outcome {
             TestOutcome::XPassed { strict } => assert!(strict),
             other => panic!("expected XPassed, got {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod regression_955_tests {
+    use super::*;
+
+    #[test]
+    fn skipped_reason_from_message_field() {
+        // Regression test for #955: Python to_wire() emits reason in "message",
+        // not "failure_repr". The old flat struct read failure_repr, losing the reason.
+        let json =
+            r#"{"node_id":"t","outcome":"skipped","duration_ms":0.0,"message":"needs network"}"#;
+        let r: WireResult = serde_json::from_str(json).unwrap();
+        let outcome = r.into_outcome().outcome;
+        match outcome {
+            types::TestOutcome::Skipped { reason } => assert_eq!(reason, "needs network"),
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xfailed_reason_from_message_field() {
+        let json =
+            r#"{"node_id":"t","outcome":"xfailed","duration_ms":0.0,"message":"known bug #42"}"#;
+        let r: WireResult = serde_json::from_str(json).unwrap();
+        let outcome = r.into_outcome().outcome;
+        match outcome {
+            types::TestOutcome::XFailed { reason } => assert_eq!(reason, "known bug #42"),
+            other => panic!("expected XFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn timeout_reason_from_message_field() {
+        let json = r#"{"node_id":"t","outcome":"timeout","duration_ms":5000.0,"message":"Timed out after 5s"}"#;
+        let r: WireResult = serde_json::from_str(json).unwrap();
+        let outcome = r.into_outcome().outcome;
+        match outcome {
+            types::TestOutcome::Timeout { message } => assert_eq!(message, "Timed out after 5s"),
+            other => panic!("expected Timeout, got {other:?}"),
         }
     }
 }
