@@ -4,7 +4,7 @@
 //! ([`PrescanItem`]) that the pipeline uses for filtering before import.
 //! Heavy work lives here; leaf AST utilities live in [`crate::python_ast`].
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use rustpython_parser::ast;
 
 use crate::python_ast;
@@ -31,6 +31,14 @@ pub(crate) struct PrescanItem {
     pub(crate) class_name: Option<String>,
     /// Estimated execution time in milliseconds, derived from AST analysis.
     pub(crate) body_weight_ms: f64,
+}
+
+/// Per-module prescan result used in the pipeline state.
+#[derive(Debug)]
+pub(crate) struct PrescanModule {
+    pub(crate) path: Utf8PathBuf,
+    pub(crate) items: Vec<PrescanItem>,
+    pub(crate) has_dynamic_collection: bool,
 }
 
 /// Payload extracted from a Python file that has test functions.

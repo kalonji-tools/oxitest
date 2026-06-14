@@ -36,8 +36,8 @@ pub(crate) struct FilesCollected;
 
 /// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
 pub(crate) struct Prescanned {
-    /// Per-file prescan results: (path, items, has_dynamic).
-    pub(crate) prescan_data: Vec<(Utf8PathBuf, Vec<crate::prescan::PrescanItem>, bool)>,
+    /// Per-file prescan results.
+    pub(crate) prescan_data: Vec<crate::prescan::PrescanModule>,
     /// Module-level markers per file.
     #[allow(dead_code)]
     pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
