@@ -179,6 +179,16 @@ pub(crate) enum WireResult {
     },
 }
 
+/// Minimal deserialization target for unknown/malformed wire results.
+///
+/// Used by the drain loop to extract node_id and duration_ms from results
+/// that fail full `WireResult` deserialization (e.g., unknown outcome strings).
+#[derive(serde::Deserialize)]
+pub(crate) struct WireMinimal {
+    pub node_id: String,
+    pub duration_ms: f64,
+}
+
 impl WireResult {
     /// Extract the protocol version from any variant.
     pub(crate) fn protocol_version(&self) -> u32 {

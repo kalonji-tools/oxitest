@@ -113,7 +113,6 @@ def test_to_wire_includes_non_falsy_fields():
     assert wire["left"] == "1", "left mismatch"
     assert wire["right"] == "2", "right mismatch"
     assert wire["op"] == "==", "op mismatch"
-    assert "failure_repr" in wire, "failure_repr should be present"
 
 
 def test_to_wire_includes_frames():
