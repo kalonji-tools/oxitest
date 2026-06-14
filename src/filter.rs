@@ -518,7 +518,7 @@ mod tests {
         failed.insert("tests/test_x.py::test_a".to_string());
         let filtered = filter_last_failed(items, &failed);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_a");
+        assert_eq!(&*filtered[0].fn_name, "test_a");
     }
 
     #[test]
@@ -539,7 +539,7 @@ mod tests {
         let mut failed: HashSet<String> = HashSet::new();
         failed.insert("tests/test_x.py::test_b".to_string());
         let sorted = sort_failed_first(items, &failed);
-        assert_eq!(sorted[0].fn_name, "test_b");
+        assert_eq!(&*sorted[0].fn_name, "test_b");
     }
 
     #[test]
@@ -550,8 +550,8 @@ mod tests {
         ];
         let failed: HashSet<String> = HashSet::new();
         let sorted = sort_failed_first(items, &failed);
-        assert_eq!(sorted[0].fn_name, "test_a");
-        assert_eq!(sorted[1].fn_name, "test_b");
+        assert_eq!(&*sorted[0].fn_name, "test_a");
+        assert_eq!(&*sorted[1].fn_name, "test_b");
     }
 
     #[test]
@@ -565,7 +565,7 @@ mod tests {
         let source_files = std::collections::HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_foo");
+        assert_eq!(&*filtered[0].fn_name, "test_foo");
     }
 
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         let source_files = std::collections::HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered.iter().all(|i| i.fn_name == "test_foo"));
+        assert!(filtered.iter().all(|i| &*i.fn_name == "test_foo"));
     }
 
     #[test]
@@ -629,7 +629,7 @@ mod tests {
         source_files.insert(Utf8PathBuf::from("tests/test_a.py"));
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        let names: Vec<_> = filtered.iter().map(|i| &*i.fn_name).collect();
         assert!(names.contains(&"test_foo"));
         assert!(names.contains(&"test_baz"));
         assert!(!names.contains(&"test_bar"));
@@ -672,7 +672,7 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_add");
+        assert_eq!(&*filtered[0].fn_name, "test_add");
     }
 
     #[test]
@@ -755,7 +755,7 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        let names: Vec<_> = filtered.iter().map(|i| &*i.fn_name).collect();
         assert!(names.contains(&"test_add"));
         assert!(names.contains(&"test_mul"));
     }
@@ -913,7 +913,7 @@ mod tests {
         failed.insert("tests/test_a.py::test_param[case1]".to_string());
         let filtered = filter_prescan_last_failed(&items, "tests/test_a.py", &failed);
         assert_eq!(filtered.len(), 2);
-        let names: Vec<_> = filtered.iter().map(|i| i.fn_name.as_str()).collect();
+        let names: Vec<_> = filtered.iter().map(|i| &*i.fn_name).collect();
         assert!(names.contains(&"test_fail"));
         assert!(names.contains(&"test_param"));
     }

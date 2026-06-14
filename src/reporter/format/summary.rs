@@ -198,6 +198,8 @@ pub(crate) fn fmt_warning_block(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::reporter::stats::RunStats;
 
@@ -347,11 +349,11 @@ mod tests {
         use crate::reporter::stats::WarningEntry;
         let warnings = vec![
             WarningEntry {
-                context: "tests/test_foo.py::test_a".to_string(),
+                context: Arc::from("tests/test_foo.py::test_a"),
                 message: "DeprecationWarning".to_string(),
             },
             WarningEntry {
-                context: "tests/test_foo.py::test_b".to_string(),
+                context: Arc::from("tests/test_foo.py::test_b"),
                 message: "DeprecationWarning".to_string(),
             },
         ];
@@ -365,7 +367,7 @@ mod tests {
     fn test_warning_block_collapsed_singular() {
         use crate::reporter::stats::WarningEntry;
         let warnings = vec![WarningEntry {
-            context: "tests/test_foo.py::test_a".to_string(),
+            context: Arc::from("tests/test_foo.py::test_a"),
             message: "DeprecationWarning".to_string(),
         }];
         let s = fmt_warning_block(&warnings, false, false);
@@ -377,7 +379,7 @@ mod tests {
     fn test_warning_block_expanded_shows_node_and_reason() {
         use crate::reporter::stats::WarningEntry;
         let warnings = vec![WarningEntry {
-            context: "tests/test_foo.py::test_a".to_string(),
+            context: Arc::from("tests/test_foo.py::test_a"),
             message: "use new_api() instead".to_string(),
         }];
         let s = fmt_warning_block(&warnings, true, false);
