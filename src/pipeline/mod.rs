@@ -38,8 +38,7 @@ pub(crate) struct FilesCollected;
 pub(crate) struct Prescanned {
     /// Per-file prescan results.
     pub(crate) prescan_data: Vec<crate::prescan::PrescanModule>,
-    /// Module-level markers per file.
-    #[allow(dead_code)]
+    /// Module-level markers per file, used by expression-based filtering.
     pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
 }
 
@@ -47,9 +46,6 @@ pub(crate) struct Prescanned {
 pub(crate) struct MetadataFiltered {
     /// Modules that need Python import (matched + dynamic fallback).
     pub(crate) modules_to_import: Vec<Utf8PathBuf>,
-    /// Whether any filter was active.
-    #[allow(dead_code)]
-    pub(crate) is_filtered: bool,
 }
 
 /// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
@@ -63,8 +59,6 @@ pub(crate) struct Collected {
     pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
     pub(crate) raw_violations: Vec<bridge::RawViolation>,
-    #[allow(dead_code)]
-    pub(crate) collection_profile: Option<collection::CollectionProfile>,
 }
 
 /// Strict-mode + item-level filtering applied; items are ready for execution.

@@ -21,7 +21,6 @@ mod strict_phase_contract_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 5".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -53,7 +52,6 @@ mod strict_phase_contract_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 3".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Abort);
@@ -71,7 +69,6 @@ mod strict_phase_contract_tests {
             let mut p = make_pipeline(Collected {
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_clean").arc()],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -100,7 +97,6 @@ mod filter_phase_contract_tests {
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             match &mut p.command {
@@ -128,7 +124,6 @@ mod filter_phase_contract_tests {
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
 
@@ -162,7 +157,6 @@ mod context_threading_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 5".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
@@ -191,7 +185,6 @@ mod context_threading_tests {
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
                 ],
                 raw_violations: vec![],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             // strict is None by default
@@ -216,7 +209,6 @@ mod context_threading_tests {
                     kind: ViolationKind::BareAssert,
                     detail: "line 3".to_string(),
                 }],
-                collection_profile: None,
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
