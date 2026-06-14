@@ -71,6 +71,13 @@ pub(super) fn partition_by_fixture_groups(
         };
     }
 
+    // Build fixture→group_index map: O(total fixtures across all groups)
+    let fixture_to_group: std::collections::HashMap<&str, usize> = fixture_groups
+        .iter()
+        .enumerate()
+        .flat_map(|(gi, fg)| fg.iter().map(move |f| (f.as_str(), gi)))
+        .collect();
+
     let mut arranged: Vec<Vec<ModuleGroup>> = vec![vec![]; fixture_groups.len()];
     let mut remaining = Vec::new();
 
@@ -79,16 +86,13 @@ pub(super) fn partition_by_fixture_groups(
         let mut unassigned: Vec<Arc<TestItem>> = Vec::new();
 
         for item in items {
-            let mut assigned = false;
-            for (gi, fg) in fixture_groups.iter().enumerate() {
-                if item.fixture_names.iter().any(|f| fg.contains(f)) {
-                    group_buckets[gi].push(Arc::clone(&item));
-                    assigned = true;
-                    break;
-                }
-            }
-            if !assigned {
-                unassigned.push(item);
+            let group = item
+                .fixture_names
+                .iter()
+                .find_map(|f| fixture_to_group.get(f.as_str()).copied());
+            match group {
+                Some(gi) => group_buckets[gi].push(Arc::clone(&item)),
+                None => unassigned.push(item),
             }
         }
 
