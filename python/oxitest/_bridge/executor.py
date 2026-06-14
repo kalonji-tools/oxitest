@@ -326,7 +326,7 @@ def run_test(
     backend = _resolve_debugger_backend(effective_session, debug_mode)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
-    if isinstance(resolved, TestResult):
+    if not isinstance(resolved, _ResolvedTest):
         return resolved
     module = resolved.module
     fn_raw = resolved.fn_raw

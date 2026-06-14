@@ -24,7 +24,7 @@ from oxitest._bridge._diagnostics import (
     is_debuggable,
 )
 from oxitest._bridge._timeout import OxitestTimeoutError
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import PassedResult, TestResult, WarnedResult
 
 if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
@@ -131,8 +131,8 @@ def _call_with_warnings(
         fn(**all_kwargs)
     has_warnings, warning_msg = check_warnings(w, all_kwargs)
     if has_warnings:
-        return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
-    return TestResult.passed(no_message_lines=no_message_lines)
+        return WarnedResult(message=warning_msg, no_message_lines=no_message_lines)
+    return PassedResult(no_message_lines=no_message_lines)
 
 
 def run_base(
@@ -186,8 +186,8 @@ async def run_base_async(
             await fn(**all_kwargs)
         has_warnings, warning_msg = check_warnings(w, all_kwargs)
         if has_warnings:
-            return TestResult.warned(warning_msg, no_message_lines=no_message_lines)
-        return TestResult.passed(no_message_lines=no_message_lines)
+            return WarnedResult(message=warning_msg, no_message_lines=no_message_lines)
+        return PassedResult(no_message_lines=no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:

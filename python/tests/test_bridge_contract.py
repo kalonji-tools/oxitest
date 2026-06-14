@@ -24,10 +24,17 @@ from oxitest._bridge.result import (
     PROTOCOL_VERSION,
     CollectedItem,
     CollectedViolation,
+    ErrorResult,
+    FailedResult,
     Frame,
-    StatusKind,
+    PassedResult,
+    SkippedResult,
     TestResult,
+    TimeoutResult,
     ViolationKind,
+    WarnedResult,
+    XFailedResult,
+    XPassedResult,
 )
 
 # ── Paths to Rust source files ────────────────────────────────────────────────
@@ -77,14 +84,31 @@ def _wire(
 
 
 def test_test_result_fields_match_rust():
+    """The Rust #[cfg(test)] TestResult struct in bridge.rs is a flat superset.
+
+    Since Python TestResult is now a union of per-outcome types, we verify
+    the Rust struct covers the union of all per-outcome fields.
+    """
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "TestResult")
-    python_fields = _python_fields(TestResult)
-    assert rust_fields == python_fields, (
-        "Field mismatch between TestResult (src/bridge.rs) and TestResult"
+    # Union of all per-outcome dataclass fields + status (Rust has it as a field)
+    all_python_fields: set[str] = {"status"}
+    for cls in (
+        PassedResult,
+        FailedResult,
+        ErrorResult,
+        SkippedResult,
+        WarnedResult,
+        XFailedResult,
+        XPassedResult,
+        TimeoutResult,
+    ):
+        all_python_fields |= _python_fields(cls)
+    assert rust_fields == frozenset(all_python_fields), (
+        "Field mismatch between TestResult (src/bridge.rs) and per-outcome types"
         " (python/oxitest/_bridge/result.py).\n"
-        f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
-        f"  Only in Python: {sorted(python_fields - rust_fields)}"
+        f"  Only in Rust:   {sorted(rust_fields - all_python_fields)}\n"
+        f"  Only in Python: {sorted(all_python_fields - rust_fields)}"
     )
 
 
@@ -115,10 +139,9 @@ def test_raw_violation_fields_match_rust():
 # ── PyO3 manual construction (catch TypeError on rename) ─────────────────────
 
 
-def test_test_result_manual_construction():
-    """Constructing TestResult with all fields catches renames at import time."""
-    result = TestResult(
-        status=StatusKind.PASSED,
+def test_failed_result_manual_construction():
+    """Constructing FailedResult with all fields catches renames at import time."""
+    result = FailedResult(
         message="",
         file="",
         lineno=0,
@@ -127,13 +150,11 @@ def test_test_result_manual_construction():
         left="",
         right="",
         op="",
-        strict=True,
         exc_type="",
         frames=(),
         field_diffs=(),
     )
     expected_fields = {
-        "status",
         "message",
         "file",
         "lineno",
@@ -142,17 +163,15 @@ def test_test_result_manual_construction():
         "left",
         "right",
         "op",
-        "strict",
         "exc_type",
         "frames",
         "field_diffs",
     }
     actual_fields = {f.name for f in dataclasses.fields(result)}
     assert actual_fields == expected_fields, (
-        f"TestResult fields differ from Rust TestResult.\n"
-        f"  Missing from Python: {expected_fields - actual_fields}\n"
-        f"  Extra in Python:     {actual_fields - expected_fields}\n"
-        f"  Update src/bridge.rs TestResult to match, or update result.py."
+        f"FailedResult fields mismatch.\n"
+        f"  Missing: {expected_fields - actual_fields}\n"
+        f"  Extra:   {actual_fields - expected_fields}"
     )
 
 
@@ -204,7 +223,7 @@ def test_violation_kind_variants_match_rust():
 
 
 def test_required_fields_passed_has_required_fields():
-    wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
+    wire = _wire(PassedResult())
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
     assert "duration_ms" in wire, "duration_ms must be present"
@@ -214,7 +233,7 @@ def test_required_fields_passed_has_required_fields():
 
 
 def test_required_fields_failed_has_required_fields():
-    wire = _wire(TestResult(status=StatusKind.FAILED, message="boom"))
+    wire = _wire(FailedResult(message="boom"))
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
     assert "duration_ms" in wire, "duration_ms must be present"
@@ -224,7 +243,7 @@ def test_required_fields_failed_has_required_fields():
 
 
 def test_compact_passed_omits_all_optional_fields():
-    wire = _wire(TestResult(status=StatusKind.PASSED, strict=False))
+    wire = _wire(PassedResult())
     optional_keys = {
         "failure_repr",
         "message",
@@ -243,14 +262,13 @@ def test_compact_passed_omits_all_optional_fields():
 
 
 def test_compact_strict_true_is_included():
-    wire = _wire(TestResult(status=StatusKind.XPASSED, strict=True))
+    wire = _wire(XPassedResult(strict=True))
     assert "strict" in wire, "strict=True must be present"
     assert wire["strict"] is True, "strict must be True"
 
 
 def test_failed_shape_includes_diagnostic_fields():
-    result = TestResult(
-        status=StatusKind.FAILED,
+    result = FailedResult(
         message="AssertionError: values differ",
         file="tests/test_foo.py",
         lineno=12,
@@ -279,8 +297,7 @@ def test_failed_shape_includes_diagnostic_fields():
 
 
 def test_failed_shape_error_includes_message_and_frames():
-    result = TestResult(
-        status=StatusKind.ERROR,
+    result = ErrorResult(
         message="ImportError: no module named foo",
         frames=(
             Frame(
@@ -303,43 +320,32 @@ class StatusCase:
 
     status: str
     expected: str
-    message: str = ""
-    strict: bool = True
 
 
 @oxi.parametrize(
-    passed=StatusCase(status=StatusKind.PASSED, expected="passed", strict=False),
-    failed=StatusCase(status=StatusKind.FAILED, expected="failed", message="oops"),
-    error=StatusCase(status=StatusKind.ERROR, expected="error", message="err"),
-    skipped=StatusCase(
-        status=StatusKind.SKIPPED,
-        expected="skipped",
-        message="reason",
-        strict=False,
-    ),
-    xfailed=StatusCase(
-        status=StatusKind.XFAILED,
-        expected="xfailed",
-        message="expected",
-        strict=False,
-    ),
-    xpassed=StatusCase(status=StatusKind.XPASSED, expected="xpassed", strict=False),
-    warned=StatusCase(
-        status=StatusKind.WARNED,
-        expected="warned",
-        message="DeprecationWarning",
-        strict=False,
-    ),
-    timeout=StatusCase(
-        status=StatusKind.TIMEOUT,
-        expected="timeout",
-        message="timed out",
-        strict=False,
-    ),
+    passed=StatusCase(status="passed", expected="passed"),
+    failed=StatusCase(status="failed", expected="failed"),
+    error=StatusCase(status="error", expected="error"),
+    skipped=StatusCase(status="skipped", expected="skipped"),
+    xfailed=StatusCase(status="xfailed", expected="xfailed"),
+    xpassed=StatusCase(status="xpassed", expected="xpassed"),
+    warned=StatusCase(status="warned", expected="warned"),
+    timeout=StatusCase(status="timeout", expected="timeout"),
 )
-def test_status_round_trip(status, expected, message, strict):
-    """Each StatusKind maps to the correct outcome string in the wire payload."""
-    wire = _wire(TestResult(status=status, message=message, strict=strict))
+def test_status_round_trip(status, expected):
+    """Each per-outcome type maps to the correct outcome string in the wire payload."""
+    _factories: dict[str, TestResult] = {
+        "passed": PassedResult(),
+        "failed": FailedResult(message="oops"),
+        "error": ErrorResult(message="err"),
+        "skipped": SkippedResult(message="reason"),
+        "xfailed": XFailedResult(message="expected"),
+        "xpassed": XPassedResult(strict=False),
+        "warned": WarnedResult(message="DeprecationWarning"),
+        "timeout": TimeoutResult(message="timed out"),
+    }
+    result = _factories[status]
+    wire = _wire(result)
     got = wire["outcome"]
     assert got == expected, f"expected {expected!r}, got {got!r}"
 
@@ -348,8 +354,7 @@ def test_status_round_trip(status, expected, message, strict):
 
 
 def test_frame_keys():
-    result = TestResult(
-        status=StatusKind.FAILED,
+    result = FailedResult(
         message="err",
         frames=(
             Frame(file="src/foo.py", lineno=5, name="test_bar", line="assert val"),
@@ -363,8 +368,7 @@ def test_frame_keys():
 
 
 def test_frame_multiple_frames_preserved():
-    result = TestResult(
-        status=StatusKind.FAILED,
+    result = FailedResult(
         message="err",
         frames=(
             Frame(file="src/a.py", lineno=1, name="helper", line="raise ValueError"),
@@ -382,7 +386,7 @@ def test_frame_multiple_frames_preserved():
 
 
 def test_protocol_version_always_present():
-    result = TestResult(status=StatusKind.PASSED)
+    result = PassedResult()
     wire = _wire(result, "t.py::test_a", 1.0)
     assert "protocol_version" in wire, "protocol_version must always be in wire output"
     assert wire["protocol_version"] == PROTOCOL_VERSION, (

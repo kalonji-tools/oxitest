@@ -25,7 +25,13 @@ from oxitest._bridge._assert_error import (
 )
 from oxitest._bridge._builtins._warncapture import _WarnCapture
 from oxitest._bridge._fixture_context import FixtureTeardownWarning
-from oxitest._bridge.result import Frame, StatusKind, TestResult
+from oxitest._bridge.result import (
+    ErrorResult,
+    FailedResult,
+    Frame,
+    SkippedResult,
+    TestResult,
+)
 
 _REPR_MAX = 80
 
@@ -148,7 +154,7 @@ def _handle_assertion_error(
     *,
     show_internals: bool = False,
     show_locals: bool = False,
-) -> TestResult:
+) -> FailedResult:
     """Map an AssertionError to a failed TestResult."""
     file, lineno, source_line = _get_location(exc)
     if isinstance(exc, _OxitestAssertionError):
@@ -161,8 +167,7 @@ def _handle_assertion_error(
         msg = str(exc) if str(exc) else ""
         left_repr = right_repr = op = ""
         field_diffs = ()
-    return TestResult(
-        status=StatusKind.FAILED,
+    return FailedResult(
         message=msg,
         file=file,
         lineno=lineno,
@@ -185,11 +190,10 @@ def _handle_runtime_exception(
     """Map a non-assertion BaseException to a TestResult, or None to re-raise."""
     exc_type = type(exc).__name__
     if exc_type in ("Skipped", "SkipTest"):
-        return TestResult.skipped(str(exc))
+        return SkippedResult(message=str(exc))
     if isinstance(exc, Exception):
         file, lineno, source_line = _get_location(exc)
-        return TestResult(
-            status=StatusKind.ERROR,
+        return ErrorResult(
             message=f"{type(exc).__name__}: {exc}",
             file=file,
             lineno=lineno,
