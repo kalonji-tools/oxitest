@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use super::{CacheEntry, TestCache};
 use crate::scheduler::ModuleGroup;
-use crate::types::TestItem;
+use crate::types::{DurationMs, TestItem};
 
 /// Cache for test timing data (scheduling, timeout suggestions, duration estimates).
 pub trait TimingCache {
@@ -35,7 +35,7 @@ impl TestCache {
         let mut count = 0usize;
         for item in items {
             if let Some(entry) = self.inner.timings.get(item.node_id.as_ref()) {
-                total += entry.duration_ms;
+                total += entry.duration_ms.as_f64();
                 count += 1;
             }
         }
@@ -93,7 +93,7 @@ impl TimingCache for TestCache {
     /// Result is `ceil(cached_duration_secs * multiplier)`, minimum 1 second.
     fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
         let entry = self.inner.timings.get(item.node_id.as_ref())?;
-        let scaled_secs = (entry.duration_ms / 1000.0) * multiplier;
+        let scaled_secs = (entry.duration_ms.as_f64() / 1000.0) * multiplier;
         Some((scaled_secs.ceil() as u64).max(1))
     }
 
@@ -138,12 +138,12 @@ impl TimingCache for TestCache {
                 .timings
                 .entry(t.node_id.to_string())
                 .or_insert(CacheEntry {
-                    duration_ms: 0.0,
+                    duration_ms: DurationMs::ZERO,
                     age: 0,
                     last_outcome: None,
                     flaky_count: 0,
                 });
-            entry.duration_ms = t.duration_ms.as_f64();
+            entry.duration_ms = t.duration_ms;
             entry.age = 0;
         }
 
@@ -387,7 +387,7 @@ mod tests {
         )];
         cache.merge_timings(&timings, 50);
         let entry = &cache.inner.timings["tests/test_foo.py::test_a"];
-        assert!((entry.duration_ms - 42.0).abs() < 0.01);
+        assert!((entry.duration_ms.as_f64() - 42.0).abs() < 0.01);
         assert_eq!(entry.age, 0);
     }
 

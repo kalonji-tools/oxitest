@@ -10,7 +10,7 @@ pub(super) fn cache_with_entries(entries: &[(&str, f64)]) -> TestCache {
             (
                 id.to_string(),
                 CacheEntry {
-                    duration_ms: *ms,
+                    duration_ms: DurationMs::new(*ms),
                     age: 0,
                     last_outcome: None,
                     flaky_count: 0,
