@@ -39,7 +39,7 @@ def skip(reason: str = "") -> None:
 # ── Mark system ───────────────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True)
 class MarkInfo:
     """Metadata attached to a test function by a mark decorator.
 

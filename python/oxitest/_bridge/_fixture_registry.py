@@ -32,7 +32,7 @@ class FixtureShadowWarning(UserWarning):
     """Emitted when a child conftest shadows a parent conftest fixture."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class FixtureDef(Generic[T]):
     name: str
     func: Callable[..., T]
