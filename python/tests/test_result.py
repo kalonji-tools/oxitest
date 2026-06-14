@@ -1,63 +1,71 @@
-"""Unit tests for TestResult.failure_repr and TestResult.to_wire."""
+"""Unit tests for per-outcome result types: failure_repr and to_wire."""
 
 from __future__ import annotations
 
-from oxitest._bridge.result import Frame, StatusKind, TestResult
+from oxitest._bridge.result import (
+    ErrorResult,
+    FailedResult,
+    Frame,
+    PassedResult,
+    SkippedResult,
+    TimeoutResult,
+    WarnedResult,
+    XFailedResult,
+    XPassedResult,
+)
 
 # ── failure_repr ─────────────────────────────────────────────────────────
 
 
-def test_failure_repr_returns_none_for_all_non_failure_statuses():
-    for status in (
-        StatusKind.PASSED,
-        StatusKind.SKIPPED,
-        StatusKind.WARNED,
-        StatusKind.XFAILED,
-        StatusKind.XPASSED,
-        StatusKind.TIMEOUT,
+def test_failure_repr_not_present_on_non_failure_types():
+    for r in (
+        PassedResult(),
+        SkippedResult(),
+        WarnedResult(),
+        XFailedResult(),
+        XPassedResult(),
+        TimeoutResult(),
     ):
-        r = TestResult(status=status)
-        assert r.failure_repr is None, f"{status} should be None"
+        assert not hasattr(r, "failure_repr"), (
+            f"{type(r).__name__} should not have failure_repr"
+        )
 
 
 def test_failure_repr_includes_message():
-    r = TestResult(status=StatusKind.FAILED, message="oops")
+    r = FailedResult(message="oops")
     assert r.failure_repr == "oops", "failure_repr should be the message"
 
 
 def test_failure_repr_includes_file_and_lineno():
-    r = TestResult(status=StatusKind.FAILED, file="test.py", lineno=7)
+    r = FailedResult(file="test.py", lineno=7)
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "test.py:7" in repr_, "should contain file:lineno"
 
 
 def test_failure_repr_includes_source_line():
-    r = TestResult(
-        status=StatusKind.FAILED, file="test.py", lineno=7, source_line="assert x"
-    )
+    r = FailedResult(file="test.py", lineno=7, source_line="assert x")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "test.py:7  assert x" in repr_, "should contain file:lineno  source_line"
 
 
 def test_failure_repr_includes_left_right_op():
-    r = TestResult(status=StatusKind.FAILED, left="1", right="2", op="==")
+    r = FailedResult(left="1", right="2", op="==")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "assert 1 == 2" in repr_, "should contain assert left op right"
 
 
 def test_failure_repr_left_only_without_right():
-    r = TestResult(status=StatusKind.FAILED, left="False")
+    r = FailedResult(left="False")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "assert False" in repr_, "should contain assert left"
 
 
 def test_failure_repr_all_fields():
-    r = TestResult(
-        status=StatusKind.FAILED,
+    r = FailedResult(
         message="AssertionError",
         file="test.py",
         lineno=10,
@@ -74,7 +82,7 @@ def test_failure_repr_all_fields():
 
 
 def test_failure_repr_no_fields_falls_back_to_status():
-    r = TestResult(status=StatusKind.ERROR)
+    r = ErrorResult()
     assert r.failure_repr == "Test error", "empty error should fall back to status"
 
 
@@ -82,7 +90,7 @@ def test_failure_repr_no_fields_falls_back_to_status():
 
 
 def test_to_wire_passing_test_is_compact():
-    r = TestResult(status=StatusKind.PASSED)
+    r = PassedResult()
     wire = r.to_wire("test.py::test_a", 1.5)
     assert wire["node_id"] == "test.py::test_a", "node_id mismatch"
     assert wire["outcome"] == "passed", "outcome mismatch"
@@ -95,8 +103,7 @@ def test_to_wire_passing_test_is_compact():
 
 
 def test_to_wire_includes_non_falsy_fields():
-    r = TestResult(
-        status=StatusKind.FAILED,
+    r = FailedResult(
         message="oops",
         file="test.py",
         lineno=5,
@@ -116,8 +123,7 @@ def test_to_wire_includes_non_falsy_fields():
 
 
 def test_to_wire_includes_frames():
-    r = TestResult(
-        status=StatusKind.FAILED,
+    r = FailedResult(
         message="err",
         frames=(Frame(file="t.py", lineno=3, name="test_f", line="assert x"),),
     )
@@ -133,30 +139,30 @@ def test_to_wire_includes_frames():
 
 
 def test_to_wire_omits_empty_frames():
-    r = TestResult(status=StatusKind.PASSED)
+    r = PassedResult()
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "frames" not in wire, "empty frames should be omitted"
 
 
 def test_to_wire_includes_strict_when_true():
-    r = TestResult(status=StatusKind.FAILED, message="x", strict=True)
+    r = XPassedResult(strict=True)
     wire = r.to_wire("t.py::test_a", 1.0)
     assert wire["strict"] is True, "strict=True should be included"
 
 
 def test_to_wire_omits_strict_when_false():
-    r = TestResult(status=StatusKind.PASSED, strict=False)
+    r = XPassedResult(strict=False)
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "strict" not in wire, "strict=False should be omitted"
 
 
 def test_to_wire_includes_no_message_lines():
-    r = TestResult(status=StatusKind.PASSED, no_message_lines=(5, 10))
+    r = PassedResult(no_message_lines=(5, 10))
     wire = r.to_wire("t.py::test_a", 1.0)
     assert wire["no_message_lines"] == (5, 10), "no_message_lines mismatch"
 
 
 def test_to_wire_omits_empty_no_message_lines():
-    r = TestResult(status=StatusKind.PASSED)
+    r = PassedResult()
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "no_message_lines" not in wire, "empty no_message_lines should be omitted"

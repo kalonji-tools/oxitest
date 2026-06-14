@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import dataclasses
+
 from oxitest._bridge._middleware import (
     ExecutionPlan,
     build_pipeline,
 )
-from oxitest._bridge.result import StatusKind, TestResult
+from oxitest._bridge.result import StatusKind, WarnedResult
 
 
 class _UppercaseMiddleware:
@@ -13,7 +15,7 @@ class _UppercaseMiddleware:
     def apply(self, plan: ExecutionPlan, next_fn):
         def wrapped():
             result = next_fn()
-            return TestResult(status=result.status, message=result.message.upper())
+            return dataclasses.replace(result, message=result.message.upper())
 
         return wrapped
 
@@ -39,12 +41,12 @@ def test_build_pipeline_no_middlewares():
     )
 
     def base():
-        return TestResult(status=StatusKind.PASSED, message="ok")
+        return WarnedResult(message="ok")
 
     execute = build_pipeline([], plan, base)
     result = execute()
-    assert result.status == StatusKind.PASSED, f"expected PASSED, got {result.status}"
-    assert result.message == "ok", f"expected 'ok', got {result.message!r}"
+    assert result.status == StatusKind.WARNED, f"expected WARNED, got {result.status}"
+    assert result.message == "ok", f"expected 'ok', got {result.message!r}"  # ty: ignore[unresolved-attribute]
 
 
 def test_build_pipeline_single_middleware():
@@ -61,11 +63,11 @@ def test_build_pipeline_single_middleware():
     )
 
     def base():
-        return TestResult(status=StatusKind.PASSED, message="hello")
+        return WarnedResult(message="hello")
 
     execute = build_pipeline([_UppercaseMiddleware()], plan, base)
     result = execute()
-    assert result.message == "HELLO", f"expected 'HELLO', got {result.message!r}"
+    assert result.message == "HELLO", f"expected 'HELLO', got {result.message!r}"  # ty: ignore[unresolved-attribute]
 
 
 def test_build_pipeline_ordering():
@@ -83,13 +85,13 @@ def test_build_pipeline_ordering():
     )
 
     def base():
-        return TestResult(status=StatusKind.PASSED, message="base")
+        return WarnedResult(message="base")
 
     mws = [_SkipMiddleware(), _UppercaseMiddleware()]
     execute = build_pipeline(mws, plan, base)
     result = execute()
-    assert result.message == "BASE", (
-        f"uppercase middleware should wrap the base, got {result.message!r}"
+    assert result.message == "BASE", (  # ty: ignore[unresolved-attribute]
+        f"uppercase middleware should wrap the base, got {result.message!r}"  # ty: ignore[unresolved-attribute]
     )
 
 
@@ -107,10 +109,10 @@ def test_build_pipeline_skip_middleware_is_noop():
     )
 
     def base():
-        return TestResult(status=StatusKind.PASSED, message="unchanged")
+        return WarnedResult(message="unchanged")
 
     execute = build_pipeline([_SkipMiddleware()], plan, base)
     result = execute()
-    assert result.message == "unchanged", (
-        f"skip middleware should not change result, got {result.message!r}"
+    assert result.message == "unchanged", (  # ty: ignore[unresolved-attribute]
+        f"skip middleware should not change result, got {result.message!r}"  # ty: ignore[unresolved-attribute]
     )

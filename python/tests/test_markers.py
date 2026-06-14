@@ -19,7 +19,12 @@ from oxitest._bridge._mark_registry import (
     _XFailHandler,
     evaluate_marks,
 )
-from oxitest._bridge.result import StatusKind, TestResult
+from oxitest._bridge.result import (
+    FailedResult,
+    PassedResult,
+    SkippedResult,
+    WarnedResult,
+)
 
 
 def test_mark_info_stores_name_args_kwargs():
@@ -433,9 +438,9 @@ def test_skip_handler_returns_short_circuit():
         f"_SkipHandler short_circuit status should be 'skipped', got "
         f"{result.short_circuit.status!r}"
     )
-    assert result.short_circuit.message == "not ready", (
+    assert result.short_circuit.message == "not ready", (  # ty: ignore[unresolved-attribute]
         f"_SkipHandler message should be 'not ready', got "
-        f"{result.short_circuit.message!r}"
+        f"{result.short_circuit.message!r}"  # ty: ignore[unresolved-attribute]
     )
     assert result.wrapper is None, "_SkipHandler should not produce a wrapper"
 
@@ -466,7 +471,7 @@ def test_xfail_wrapper_converts_failed_to_xfailed():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known bug"}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    failed_result = TestResult(status=StatusKind.FAILED, message="oops")
+    failed_result = FailedResult(message="oops")
     assert wrapper(lambda: failed_result).status == "xfailed", (
         "xfail wrapper should convert 'failed' result to 'xfailed'"
     )
@@ -477,7 +482,7 @@ def test_xfail_wrapper_converts_passed_to_xpassed():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known"}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    passed_result = TestResult(status=StatusKind.PASSED)
+    passed_result = PassedResult()
     assert wrapper(lambda: passed_result).status == "xpassed", (
         "xfail wrapper should convert unexpectedly 'passed' result to 'xpassed'"
     )
@@ -488,7 +493,7 @@ def test_xfail_wrapper_passes_through_skipped():
     result = _XFailHandler().handle(MarkInfo("xfail", (), {}), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
-    skipped_result = TestResult(status=StatusKind.SKIPPED, message="not my test")
+    skipped_result = SkippedResult(message="not my test")
     final = wrapper(lambda: skipped_result)
     assert final.status == "skipped", (
         f"xfail wrapper should pass through 'skipped' result unchanged, got "
@@ -569,11 +574,14 @@ def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
     )
 
 
-def test_exc_type_empty_on_pass(tmp: TempDir) -> None:
+def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "import oxitest\ndef test_foo(): pass\n", "test_foo"
     )
-    assert result.exc_type == "", f"expected exc_type='', got {result.exc_type!r}"
+    assert not hasattr(result, "exc_type"), (
+        f"PassedResult should not have exc_type, got "
+        f"{getattr(result, 'exc_type', None)!r}"
+    )
 
 
 class _FakePluginWrapper:
@@ -603,11 +611,11 @@ def test_plugin_mark_handler_wraps_correctly():
     assert result.wrapper is not None, "handler should produce a wrapper"
     assert result.short_circuit is None, "handler should not short-circuit"
 
-    # Execute the wrapper
-    inner_result = TestResult(status=StatusKind.PASSED)
+    # Execute the wrapper — use WarnedResult since it has a message field
+    inner_result = WarnedResult(message="original")
     wrapped_result = result.wrapper(lambda: inner_result)
-    assert "wrapped:" in wrapped_result.message, (
-        f"wrapper should modify message, got {wrapped_result.message!r}"
+    assert "wrapped:" in wrapped_result.message, (  # ty: ignore[unresolved-attribute]
+        f"wrapper should modify message, got {wrapped_result.message!r}"  # ty: ignore[unresolved-attribute]
     )
 
 
@@ -625,8 +633,8 @@ def test_marker_composition_skip_takes_precedence_over_others():
     assert sc.status == "skipped", (
         f"skip should take precedence; expected status='skipped', got {sc.status!r}"
     )
-    assert sc.message == "not ready", (
-        f"skip message should be 'not ready', got {sc.message!r}"
+    assert sc.message == "not ready", (  # ty: ignore[unresolved-attribute]
+        f"skip message should be 'not ready', got {sc.message!r}"  # ty: ignore[unresolved-attribute]
     )
     assert wrappers == [], (
         f"skip short-circuits before xfail/timeout wrappers are added, got {wrappers!r}"

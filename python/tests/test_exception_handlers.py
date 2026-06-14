@@ -97,7 +97,7 @@ def test_dispatch_assertion_error():
 
     assert result is not None, "AssertionError should return a result"
     assert result.status == StatusKind.FAILED, "expected FAILED status"
-    assert result.exc_type == "AssertionError", "expected AssertionError exc_type"
+    assert result.exc_type == "AssertionError", "expected AssertionError exc_type"  # ty: ignore[unresolved-attribute]
 
 
 def test_dispatch_runtime_exception():
@@ -108,7 +108,7 @@ def test_dispatch_runtime_exception():
 
     assert result is not None, "ValueError should return a result"
     assert result.status == StatusKind.ERROR, "expected ERROR status"
-    assert "ValueError" in result.message, "expected ValueError in message"
+    assert "ValueError" in result.message, "expected ValueError in message"  # ty: ignore[unresolved-attribute]
 
 
 def test_dispatch_skip_exception():

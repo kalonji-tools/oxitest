@@ -276,7 +276,7 @@ def _import_test_module(
     try:
         module = _load_module(path, unique_name)
     except _LoadError as e:
-        raise ImportError(e.result.message) from None
+        raise ImportError(e.result.message) from None  # ty: ignore[unresolved-attribute]
 
     # Store in session module cache if available — executor will reuse this module.
     if session is not None:
