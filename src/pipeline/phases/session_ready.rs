@@ -7,18 +7,19 @@ use crate::{bridge, collector, config, filter, query};
 
 impl Pipeline<SessionReady> {
     pub(crate) fn collect(self, py: Python<'_>) -> Result<Pipeline<Collected>, ExitCode> {
-        let (
-            mut shared,
-            SessionReady {
-                test_files,
-                conftest_files,
-                session,
-                session_violations,
-            },
-        ) = self.into_parts();
+        let (mut shared, SessionReady { session_violations }) = self.into_parts();
         shared.cache.invalidate_modules();
-        let (mut items, errors, raw_violations, profile) =
-            collection::collect_items(py, &test_files, &shared.cfg, &session, &mut shared.cache);
+        let session = shared
+            .session
+            .as_ref()
+            .expect("session initialized at SessionReady");
+        let (mut items, errors, raw_violations, profile) = collection::collect_items(
+            py,
+            &shared.test_files,
+            &shared.cfg,
+            session,
+            &mut shared.cache,
+        );
 
         // Collect doctest items if --doctest-modules is enabled.
         if shared.cfg.paths.doctest_modules {
@@ -44,7 +45,7 @@ impl Pipeline<SessionReady> {
 
         // Detect unused fixtures when strict mode is enabled.
         if shared.cfg.markers.strict.is_some() && !shared.cfg.filter.has_explicit_paths {
-            if let Ok(unused) = bridge::find_unused_fixtures(py, &session, &items) {
+            if let Ok(unused) = bridge::find_unused_fixtures(py, session, &items) {
                 merged_violations.extend(unused);
             }
         }
@@ -61,9 +62,6 @@ impl Pipeline<SessionReady> {
         }
 
         Ok(shared.into_pipeline(Collected {
-            test_files,
-            conftest_files,
-            session,
             items,
             raw_violations: merged_violations,
             collection_profile: profile,
@@ -75,19 +73,19 @@ impl Pipeline<SessionReady> {
             unreachable!("query only called for Query command");
         };
 
+        let session = self
+            .shared
+            .session
+            .as_ref()
+            .expect("session initialized at SessionReady");
+
         if args.tree {
             if args.resource != query::resource::ResourceKind::Fixtures {
                 eprintln!("error: --tree is only valid for the 'fixtures' resource");
                 return Ok(ExitCode::UsageError);
             }
             let verbosity = self.cfg.output.verbosity as i32;
-            match query::bridge::tree_fixtures(
-                &self.state.session,
-                py,
-                verbosity,
-                None,
-                self.use_color,
-            ) {
+            match query::bridge::tree_fixtures(session, py, verbosity, None, self.use_color) {
                 Ok(output) => {
                     if output.starts_with("error:") {
                         eprintln!("{output}");
@@ -109,9 +107,9 @@ impl Pipeline<SessionReady> {
             match crate::query::fzf::run_fzf(
                 py,
                 args,
-                &self.state.test_files,
-                &self.state.conftest_files,
-                Some(&self.state.session),
+                &self.shared.test_files,
+                &self.shared.conftest_files,
+                Some(session),
                 &self.cfg,
                 self.use_color,
             ) {
@@ -126,9 +124,9 @@ impl Pipeline<SessionReady> {
         match query::run_query(
             py,
             args,
-            &self.state.test_files,
-            &self.state.conftest_files,
-            Some(&self.state.session),
+            &self.shared.test_files,
+            &self.shared.conftest_files,
+            Some(session),
             &self.cfg,
             self.is_tty,
             self.use_color,
