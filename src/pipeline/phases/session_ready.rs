@@ -53,11 +53,8 @@ impl Pipeline<SessionReady> {
         }
 
         // Apply node ID filter early.
-        let items = filter::filter_by_node_ids(
-            items,
-            &shared.cfg.filter.node_ids,
-            &shared.cfg.filter.node_id_source_files,
-        );
+        let source_files = shared.cfg.filter.source_files();
+        let items = filter::filter_by_node_ids(items, &shared.cfg.filter.node_ids, &source_files);
 
         if let Some(ref prof) = profile {
             eprintln!("{}", collection::format_collection_profile(prof));

@@ -504,11 +504,19 @@ fn convert_test_result(r: TestResult) -> TestOutcome {
 
     match r.status.as_str() {
         "passed" => TestOutcome::Passed {
-            no_message_lines: r.no_message_lines,
+            tips: if r.no_message_lines.is_empty() {
+                None
+            } else {
+                Some(r.no_message_lines.into_boxed_slice())
+            },
         },
         "warned" => TestOutcome::Warned {
             reason: r.message,
-            no_message_lines: r.no_message_lines,
+            tips: if r.no_message_lines.is_empty() {
+                None
+            } else {
+                Some(r.no_message_lines.into_boxed_slice())
+            },
         },
         "failed" => TestOutcome::Failed(Box::new(crate::worker_result::build_diagnostic(
             r.message,

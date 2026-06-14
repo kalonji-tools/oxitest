@@ -117,7 +117,7 @@ fn escape_node_id_brackets(id: &str) -> String {
 /// For glob IDs (containing `*`, `?`, or `[`), uses `globset::GlobMatcher`
 /// with `literal_separator(false)` so `*` matches across `::` and `/`.
 ///
-/// Items from files NOT in `node_id_source_files` pass through unfiltered
+/// Items from files NOT in the source files set pass through unfiltered
 /// (they came from bare paths, not node IDs).
 ///
 /// Returns all items unchanged if `node_ids` is empty.

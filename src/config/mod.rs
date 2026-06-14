@@ -335,8 +335,6 @@ pub struct FilterConfig {
     pub failed: Option<FailedMode>,
     /// Specific node IDs to run (e.g. `path/test.py::test_name`).
     pub node_ids: Vec<crate::types::NodeId>,
-    /// Source files extracted from `node_ids` for targeted collection.
-    pub node_id_source_files: std::collections::HashSet<Utf8PathBuf>,
     /// True when the user specified explicit paths or node IDs on the CLI.
     /// Used to skip unused-fixture detection (which requires the full suite).
     pub has_explicit_paths: bool,
@@ -346,13 +344,27 @@ pub struct FilterConfig {
     pub affected_base: String,
 }
 
+impl FilterConfig {
+    /// Compute source files from non-glob node IDs for targeted collection.
+    ///
+    /// Items from files NOT in this set pass through unfiltered (they came from
+    /// bare paths, not node IDs).
+    pub fn source_files(&self) -> std::collections::HashSet<Utf8PathBuf> {
+        self.node_ids
+            .iter()
+            .filter(|id| !crate::filter::contains_glob_chars(id.as_ref()))
+            .filter_map(|id| id.module_path())
+            .map(Utf8PathBuf::from)
+            .collect()
+    }
+}
+
 impl Default for FilterConfig {
     fn default() -> Self {
         Self {
             schedule: ScheduleStrategy::LongestFirst,
             failed: None,
             node_ids: vec![],
-            node_id_source_files: std::collections::HashSet::new(),
             has_explicit_paths: false,
             affected: None,
             affected_base: "HEAD".to_string(),

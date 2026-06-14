@@ -121,6 +121,11 @@ impl WireResult {
             .filter(|&&n| n > 0)
             .map(|&n| usize::try_from(n).unwrap_or(0))
             .collect();
+        let tips = if no_message_lines.is_empty() {
+            None
+        } else {
+            Some(no_message_lines.into_boxed_slice())
+        };
 
         let frames: Vec<Frame> = self.frames.into_iter().map(Into::into).collect();
         let lineno = LineNo::new(self.lineno.map_or(0, |n| usize::try_from(n).unwrap_or(0)));
@@ -128,7 +133,7 @@ impl WireResult {
         let source_line = self.source_line.unwrap_or_default();
 
         let outcome = match self.outcome {
-            types::OutcomeKind::Passed => types::TestOutcome::Passed { no_message_lines },
+            types::OutcomeKind::Passed => types::TestOutcome::Passed { tips },
             types::OutcomeKind::Failed => {
                 let comparison = Some(ComparisonDetail {
                     left: self.left.unwrap_or_default(),
@@ -164,7 +169,7 @@ impl WireResult {
             },
             types::OutcomeKind::Warned => types::TestOutcome::Warned {
                 reason: self.message.unwrap_or_default(),
-                no_message_lines,
+                tips,
             },
             types::OutcomeKind::Timeout => types::TestOutcome::Timeout {
                 message: self.failure_repr.unwrap_or_default(),
@@ -626,8 +631,8 @@ mod outcome_conversion_tests {
         );
         let (_, _, outcome) = r.into_outcome();
         match outcome {
-            types::TestOutcome::Passed { no_message_lines } => {
-                assert_eq!(no_message_lines, vec![3usize, 7usize]);
+            types::TestOutcome::Passed { tips } => {
+                assert_eq!(tips.as_deref(), Some([3usize, 7].as_slice()));
             }
             other => panic!("expected Passed, got {other:?}"),
         }
@@ -855,14 +860,14 @@ mod wire_conversion_tests {
     }
 
     #[test]
-    fn wire_passed_converts_with_no_message_lines() {
+    fn wire_passed_converts_with_tips() {
         let wire = deser(
             r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"no_message_lines":[3,7]}"#,
         );
         let (_, _, outcome) = wire.into_outcome();
         match outcome {
-            TestOutcome::Passed { no_message_lines } => {
-                assert_eq!(no_message_lines, vec![3, 7]);
+            TestOutcome::Passed { tips } => {
+                assert_eq!(tips.as_deref(), Some([3usize, 7].as_slice()));
             }
             other => panic!("expected Passed, got {other:?}"),
         }

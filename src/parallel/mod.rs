@@ -493,10 +493,10 @@ mod worker_count_tests {
 
         let (_, _, outcome) = wr.into_outcome();
         match outcome {
-            TestOutcome::Passed { no_message_lines } => {
+            TestOutcome::Passed { tips } => {
                 assert_eq!(
-                    no_message_lines,
-                    vec![5, 10],
+                    tips.as_deref(),
+                    Some([5usize, 10].as_slice()),
                     "negative and zero values in no_message_lines must be filtered before usize cast"
                 );
             }

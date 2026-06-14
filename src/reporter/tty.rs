@@ -105,15 +105,13 @@ impl TtyReporter {
         let w = self.opts.name_width;
         let name_part = truncate_name(&item.fn_name, w);
         match outcome {
-            TestOutcome::Passed { no_message_lines } if no_message_lines.is_empty() => {
-                fmt_quiet_line(
-                    &color_dim_green("\u{2713}    ", c),
-                    &color_dim(
-                        &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
-                        c,
-                    ),
-                )
-            }
+            TestOutcome::Passed { tips: None } => fmt_quiet_line(
+                &color_dim_green("\u{2713}    ", c),
+                &color_dim(
+                    &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
+                    c,
+                ),
+            ),
             TestOutcome::Passed { .. } => fmt_quiet_line(
                 &color_dim("\u{00B7}    ", c),
                 &color_dim(
@@ -424,9 +422,7 @@ mod tests {
 
     #[test]
     fn test_outcome_label_passed_is_empty() {
-        let o = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let o = TestOutcome::Passed { tips: None };
         let label = outcome_label(&o, false);
         assert!(label.is_empty());
     }
@@ -524,9 +520,7 @@ mod tests {
     fn test_format_test_line_passed_contains_fn_name_and_duration() {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(42.0));
         assert!(
             line.contains("test_add"),
@@ -542,9 +536,7 @@ mod tests {
     fn test_format_test_line_passed_no_double_ms_suffix() {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(42.0));
         assert!(
             !line.contains("msms"),
@@ -557,7 +549,7 @@ mod tests {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_add").arc();
         let outcome = TestOutcome::Passed {
-            no_message_lines: vec![5],
+            tips: Some(vec![5].into_boxed_slice()),
         };
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(10.0));
         assert!(
@@ -587,7 +579,7 @@ mod tests {
         let item = TestItem::builder("tests/test_foo.py", "test_dep").arc();
         let outcome = TestOutcome::Warned {
             reason: "DeprecationWarning: use new_api".to_string(),
-            no_message_lines: vec![],
+            tips: None,
         };
         let line = reporter.format_test_line(&item, &outcome, DurationMs::new(5.0));
         assert!(line.contains("WARN"), "WARN label must appear: {line:?}");
@@ -673,9 +665,7 @@ mod tests {
     fn test_flush_param_group_all_passed_duration_before_cases() {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_math").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         let mut group = ParametrizeBuffer::new("test_math".to_string());
         group.push((*item).clone(), outcome.clone(), DurationMs::new(2.0));
         group.push((*item).clone(), outcome.clone(), DurationMs::new(2.6));
@@ -711,9 +701,7 @@ mod tests {
     fn test_flush_param_group_singular_case() {
         let reporter = make_tty_reporter();
         let item = TestItem::builder("tests/test_foo.py", "test_single").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         let mut group = ParametrizeBuffer::new("test_single".to_string());
         group.push((*item).clone(), outcome, DurationMs::new(3.0));
 
@@ -765,9 +753,7 @@ mod tests {
             .build();
         let mut reporter = TtyReporter::new(opts);
         let item = TestItem::builder("tests/test_foo.py", "test_passing").arc();
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         reporter.test_completed(&item, &outcome, DurationMs::new(10.0), None);
         assert!(
             reporter.deferred_failures.is_empty(),
@@ -808,9 +794,7 @@ mod tests {
         reporter.test_started(&item_b);
         assert_eq!(reporter.running_tests.len(), 2);
 
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         reporter.test_completed(&item_a, &outcome, DurationMs::new(10.0), None);
         assert_eq!(reporter.running_tests.len(), 1);
         assert_eq!(reporter.running_tests[0], "test_signup");
@@ -823,9 +807,7 @@ mod tests {
 
         let item = TestItem::builder("tests/test_foo.py", "test_foo").arc();
         reporter.test_started(&item);
-        let outcome = TestOutcome::Passed {
-            no_message_lines: vec![],
-        };
+        let outcome = TestOutcome::Passed { tips: None };
         reporter.test_completed(&item, &outcome, DurationMs::new(5.0), None);
         assert!(reporter.running_tests.is_empty());
     }
@@ -839,16 +821,12 @@ mod tests {
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(10.0),
         );
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(25.5),
         );
         assert!(
@@ -866,9 +844,7 @@ mod tests {
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
         );
         buf.push(
@@ -892,9 +868,7 @@ mod tests {
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
         );
         buf.push(
@@ -946,16 +920,12 @@ mod tests {
         let mut buf = ParametrizeBuffer::new("test_add".to_string());
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
         );
         buf.push(
             TestItem::builder("tests/test_foo.py", "test_add").build(),
-            TestOutcome::Passed {
-                no_message_lines: vec![],
-            },
+            TestOutcome::Passed { tips: None },
             DurationMs::new(1.0),
         );
         buf.push(

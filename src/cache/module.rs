@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use camino::Utf8Path;
 
-use super::{CachedItemData, ModuleCacheEntry, TestCache};
+use super::{ModuleCacheEntry, TestCache};
 use crate::types::{NodeId, TestItem};
 
 /// Cache for mtime-based module collection results.
@@ -33,18 +33,10 @@ impl ModuleCache for TestCache {
             .items
             .iter()
             .map(|d| {
-                Arc::new(TestItem {
-                    node_id: NodeId::new(key, &d.fn_name, d.param_id.as_deref()),
-                    module_path: path.to_owned(),
-                    fn_name: d.fn_name.clone(),
-                    lineno: d.lineno,
-                    markers: d.markers.clone(),
-                    param_id: d.param_id.clone(),
-                    param_values: d.param_values.clone(),
-                    is_async: d.is_async,
-                    fixture_names: d.fixture_names.clone(),
-                    fixref_names: d.fixref_names.clone(),
-                })
+                let mut item = d.clone();
+                item.node_id = NodeId::new(key, &item.fn_name, item.param_id.as_deref());
+                item.module_path = path.to_owned();
+                Arc::new(item)
             })
             .collect();
         Some(items)
@@ -54,10 +46,7 @@ impl ModuleCache for TestCache {
     /// Sets dirty = true.
     fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[Arc<TestItem>]) {
         let key = path.as_str().to_string();
-        let cached_items = items
-            .iter()
-            .map(|item| CachedItemData::from(item.as_ref()))
-            .collect();
+        let cached_items = items.iter().map(|item| item.as_ref().clone()).collect();
         self.inner.modules.insert(
             key,
             ModuleCacheEntry {
