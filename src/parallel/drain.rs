@@ -138,7 +138,7 @@ pub(crate) fn handle_drain_outcome(
                 let _ = ctx.tx.send(WorkerResult {
                     resolved: types::ResolvedOutcome {
                         node_id: item.node_id.clone(),
-                        duration_ms: types::DurationMs::new(0.0),
+                        duration_ms: types::DurationMs::ZERO,
                         outcome: types::TestOutcome::crashed_sentinel(),
                     },
                     worker_id: ctx.worker_id,
@@ -156,7 +156,7 @@ pub(crate) fn handle_drain_outcome(
 /// recognised (worker bug or protocol mismatch); the caller should skip the
 /// result in that case.
 pub(super) fn handle_worker_result(
-    resolved: &types::ResolvedOutcome,
+    resolved: types::ResolvedOutcome,
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
@@ -178,11 +178,11 @@ pub(super) fn handle_worker_result(
     rep.test_started(&item);
     rep.test_completed(&item, &resolved.outcome, resolved.duration_ms, parallel_ctx);
     timings.push(types::TestTiming {
-        node_id: resolved.node_id.clone(),
+        node_id: resolved.node_id,
         duration_ms: resolved.duration_ms,
         outcome: types::OutcomeKind::from(&resolved.outcome),
     });
-    Some(resolved.outcome.clone())
+    Some(resolved.outcome)
 }
 
 /// Drain any groups still queued in `sched` after all workers have exited and
@@ -202,10 +202,10 @@ pub(super) fn drain_remaining_into_crashed(
         for item in &group.items {
             let resolved = types::ResolvedOutcome {
                 node_id: item.node_id.clone(),
-                duration_ms: types::DurationMs::new(0.0),
+                duration_ms: types::DurationMs::ZERO,
                 outcome: types::TestOutcome::crashed_sentinel(),
             };
-            handle_worker_result(&resolved, item_lookup, rep, timings, None);
+            handle_worker_result(resolved, item_lookup, rep, timings, None);
         }
     }
 }
@@ -588,7 +588,7 @@ mod result_handler_tests {
         let mut timings: Vec<types::TestTiming> = vec![];
 
         let resolved = make_resolved("unknown::test_fn");
-        let outcome = handle_worker_result(&resolved, &lookup, &mut rep, &mut timings, None);
+        let outcome = handle_worker_result(resolved, &lookup, &mut rep, &mut timings, None);
 
         assert!(outcome.is_none(), "should return None for unknown node_id");
         assert_eq!(rep.started, 0, "reporter.test_started must not be called");
@@ -614,7 +614,7 @@ mod result_handler_tests {
         let mut timings: Vec<types::TestTiming> = vec![];
 
         let resolved = make_resolved("my_mod::test_fn");
-        let outcome = handle_worker_result(&resolved, &lookup, &mut rep, &mut timings, None);
+        let outcome = handle_worker_result(resolved, &lookup, &mut rep, &mut timings, None);
 
         assert!(outcome.is_some(), "should return Some for known node_id");
         assert_eq!(rep.started, 1, "reporter.test_started must be called once");

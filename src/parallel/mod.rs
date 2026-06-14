@@ -116,9 +116,10 @@ pub(crate) fn run_phase_parallel(
             worker_id,
         } = result;
         // Snapshot concurrent tests (excluding the one that just completed)
+        let node_id = resolved.node_id.clone(); // Arc refcount bump — cheap
         let concurrent_tests: Vec<String> = {
             let mut set = in_flight.lock().unwrap();
-            set.remove(resolved.node_id.as_ref());
+            set.remove(node_id.as_ref());
             set.iter().cloned().collect()
         };
 
@@ -128,7 +129,7 @@ pub(crate) fn run_phase_parallel(
         };
 
         let Some(outcome) = handle_worker_result(
-            &resolved,
+            resolved,
             &item_lookup,
             rep,
             &mut timings,
