@@ -211,17 +211,30 @@ impl RunStats {
 
     /// Returns the N slowest tests, sorted by duration descending.
     pub(crate) fn slowest(&self, n: usize) -> Vec<TimingEntry> {
-        if n == 0 {
+        if n == 0 || self.diagnostics.timings.is_empty() {
             return vec![];
         }
-        let mut sorted = self.diagnostics.timings.clone();
-        sorted.sort_unstable_by(|a, b| {
-            b.duration_ms
-                .partial_cmp(&a.duration_ms)
+        let timings = &self.diagnostics.timings;
+        let len = timings.len();
+        let n = n.min(len);
+
+        // Build index array, partial-sort to find top N, then sort those N
+        let mut indices: Vec<usize> = (0..len).collect();
+        indices.select_nth_unstable_by(n - 1, |&a, &b| {
+            timings[b]
+                .duration_ms
+                .partial_cmp(&timings[a].duration_ms)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        sorted.truncate(n);
-        sorted
+        indices.truncate(n);
+        // Sort the top N for deterministic output order
+        indices.sort_unstable_by(|&a, &b| {
+            timings[b]
+                .duration_ms
+                .partial_cmp(&timings[a].duration_ms)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        indices.iter().map(|&i| timings[i].clone()).collect()
     }
 
     #[cfg(test)]
@@ -231,17 +244,28 @@ impl RunStats {
 
     /// Returns the N slowest fixtures, sorted by total time (setup + teardown) descending.
     pub(crate) fn slowest_fixtures(&self, n: usize) -> Vec<FixtureTimingEntry> {
-        if n == 0 {
+        if n == 0 || self.fixture_timings.is_empty() {
             return vec![];
         }
-        let mut sorted = self.fixture_timings.clone();
-        sorted.sort_unstable_by(|a, b| {
-            b.total()
-                .partial_cmp(&a.total())
+        let timings = &self.fixture_timings;
+        let len = timings.len();
+        let n = n.min(len);
+
+        let mut indices: Vec<usize> = (0..len).collect();
+        indices.select_nth_unstable_by(n - 1, |&a, &b| {
+            timings[b]
+                .total()
+                .partial_cmp(&timings[a].total())
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        sorted.truncate(n);
-        sorted
+        indices.truncate(n);
+        indices.sort_unstable_by(|&a, &b| {
+            timings[b]
+                .total()
+                .partial_cmp(&timings[a].total())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        indices.iter().map(|&i| timings[i].clone()).collect()
     }
 
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
