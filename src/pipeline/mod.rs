@@ -31,16 +31,11 @@ use std::io::IsTerminal;
 /// Initial pipeline state before any work has been done.
 pub(crate) struct Empty;
 
-/// Files discovered on disk; holds test file and conftest paths.
-pub(crate) struct FilesCollected {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-}
+/// Files discovered on disk; test file and conftest paths live in `PipelineShared`.
+pub(crate) struct FilesCollected;
 
 /// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
 pub(crate) struct Prescanned {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
     /// Per-file prescan results: (path, items, has_dynamic).
     pub(crate) prescan_data: Vec<(Utf8PathBuf, Vec<crate::prescan::PrescanItem>, bool)>,
     /// Module-level markers per file.
@@ -50,11 +45,6 @@ pub(crate) struct Prescanned {
 
 /// Prescan metadata filtered; holds only modules that matched filters plus dynamic fallbacks.
 pub(crate) struct MetadataFiltered {
-    /// All test files (for fallback reference).
-    #[allow(dead_code)]
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    /// Only conftest files in the ancestor chain of matched modules.
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
     /// Modules that need Python import (matched + dynamic fallback).
     pub(crate) modules_to_import: Vec<Utf8PathBuf>,
     /// Whether any filter was active.
@@ -64,17 +54,11 @@ pub(crate) struct MetadataFiltered {
 
 /// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
 pub(crate) struct SessionReady {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: bridge::FixtureSession,
     pub(crate) session_violations: Vec<bridge::RawViolation>,
 }
 
 /// Test items collected via Python import; holds the full `TestItem` list and any violations.
 pub(crate) struct Collected {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
     pub(crate) raw_violations: Vec<bridge::RawViolation>,
     #[allow(dead_code)]
@@ -83,9 +67,6 @@ pub(crate) struct Collected {
 
 /// Strict-mode violations split out; holds clean items, violated items, and suite header lines.
 pub(crate) struct PreFilter {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: bridge::FixtureSession,
     pub(crate) clean_items: Vec<Arc<types::TestItem>>,
     pub(crate) violated_items: Vec<Arc<types::TestItem>>,
     pub(crate) all_violations: Vec<strict::StrictViolation>,
@@ -94,9 +75,6 @@ pub(crate) struct PreFilter {
 
 /// Keyword/marker filtering applied; items are ready for execution.
 pub(crate) struct Ready {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: bridge::FixtureSession,
     pub(crate) clean_items: Vec<Arc<types::TestItem>>,
     pub(crate) violated_items: Vec<Arc<types::TestItem>>,
     pub(crate) all_violations: Vec<strict::StrictViolation>,
@@ -105,11 +83,6 @@ pub(crate) struct Ready {
 
 /// All tests executed; holds final items, timings, and the reporter.
 pub(crate) struct Executed {
-    #[allow(dead_code)]
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    #[allow(dead_code)]
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
-    pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
     pub(crate) execution_results: ExecutionResults,
 }
@@ -168,6 +141,9 @@ pub(crate) struct PipelineShared {
     pub(crate) python_bin: String,
     /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
     pub(crate) ast_weight_ms: Option<f64>,
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) session: Option<bridge::FixtureSession>,
 }
 
 impl PipelineShared {
@@ -295,6 +271,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         python_bin,
         base,
         ast_weight_ms: None,
+        test_files: vec![],
+        conftest_files: vec![],
+        session: None,
     }))
 }
 

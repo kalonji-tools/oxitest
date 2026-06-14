@@ -12,9 +12,6 @@ mod strict_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
@@ -26,6 +23,7 @@ mod strict_phase_contract_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
@@ -49,9 +47,6 @@ mod strict_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_one").arc()],
                 raw_violations: vec![RawViolation {
                     node_id: "tests/test_a.py::test_one".to_string(),
@@ -60,6 +55,7 @@ mod strict_phase_contract_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Abort);
 
             let result = p.strict_or_skip(py);
@@ -73,13 +69,11 @@ mod strict_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_clean").arc()],
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
@@ -101,9 +95,6 @@ mod filter_phase_contract_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 clean_items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
@@ -112,6 +103,7 @@ mod filter_phase_contract_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             match &mut p.command {
                 crate::config::Command::Run(a) => {
                     a.filter.expression = Some("name(alpha)".to_string())
@@ -131,10 +123,7 @@ mod filter_phase_contract_tests {
     fn no_filters_passes_all_items() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(PreFilter {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(PreFilter {
                 clean_items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -143,6 +132,7 @@ mod filter_phase_contract_tests {
                 all_violations: vec![],
                 suite_lines: vec![],
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
 
             let result = p.filter(py);
             assert!(result.is_ok());
@@ -164,9 +154,6 @@ mod context_threading_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
@@ -179,6 +166,7 @@ mod context_threading_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
@@ -203,10 +191,7 @@ mod context_threading_tests {
     fn strict_skipped_preserves_all_items_for_filter() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
+            let mut p = make_pipeline(Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -214,6 +199,7 @@ mod context_threading_tests {
                 raw_violations: vec![],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             // strict is None by default
 
             let p = p.strict_or_skip(py).unwrap();
@@ -227,9 +213,6 @@ mod context_threading_tests {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(Collected {
-                test_files: vec![],
-                conftest_files: vec![],
-                session: crate::bridge::FixtureSession::stub(py),
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
@@ -242,6 +225,7 @@ mod context_threading_tests {
                 }],
                 collection_profile: None,
             });
+            p.shared.session = Some(crate::bridge::FixtureSession::stub(py));
             p.cfg.markers.strict = Some(StrictMode::Enforce);
             match &mut p.command {
                 crate::config::Command::Run(a) => {

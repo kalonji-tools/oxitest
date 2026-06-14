@@ -33,6 +33,9 @@ pub(crate) fn make_pipeline<S>(state: S) -> crate::pipeline::Pipeline<S> {
             cache,
             python_bin: "python3".to_string(),
             ast_weight_ms: None,
+            test_files: vec![],
+            conftest_files: vec![],
+            session: None,
         },
         state,
     }

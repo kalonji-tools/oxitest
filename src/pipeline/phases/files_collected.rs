@@ -9,7 +9,7 @@ impl Pipeline<FilesCollected> {
     pub(crate) fn affected(mut self) -> Result<Pipeline<FilesCollected>, ExitCode> {
         if let Some(base_ref) = self.cfg.filter.affected.as_ref() {
             match affected::filter_affected_test_files(
-                &self.state.test_files,
+                &self.shared.test_files,
                 &self.cfg.rootdir,
                 base_ref,
             ) {
@@ -20,11 +20,11 @@ impl Pipeline<FilesCollected> {
                     }
                     tracing::info!(
                         affected = files.len(),
-                        total = self.state.test_files.len(),
+                        total = self.shared.test_files.len(),
                         base = base_ref.as_str(),
                         "running affected tests only"
                     );
-                    self.state.test_files = files;
+                    self.shared.test_files = files;
                 }
                 Ok(None) => {
                     tracing::info!("pyproject.toml changed — running all tests");
@@ -42,7 +42,7 @@ impl Pipeline<FilesCollected> {
 
         // Phase 1: parallel AST parse — CPU-bound, no shared state.
         let file_results: Vec<_> = self
-            .state
+            .shared
             .test_files
             .par_iter()
             .map(|file| (file.clone(), crate::prescan::prescan_with_ast(file, false)))
@@ -76,13 +76,7 @@ impl Pipeline<FilesCollected> {
             }
         }
 
-        let (
-            mut shared,
-            FilesCollected {
-                test_files,
-                conftest_files,
-            },
-        ) = self.into_parts();
+        let (mut shared, _) = self.into_parts();
 
         shared.ast_weight_ms = if ast_weight_sum > 0.0 {
             Some(ast_weight_sum)
@@ -91,8 +85,6 @@ impl Pipeline<FilesCollected> {
         };
 
         Ok(shared.into_pipeline(Prescanned {
-            test_files,
-            conftest_files,
             prescan_data,
             module_markers,
         }))
@@ -100,20 +92,12 @@ impl Pipeline<FilesCollected> {
 
     pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline<SessionReady>, ExitCode> {
         let (session, fixture_violations) =
-            helpers::init_session(py, &self.state.conftest_files, &self.cfg, || {
+            helpers::init_session(py, &self.shared.conftest_files, &self.cfg, || {
                 self.make_error_reporter()
             })?;
-        let (
-            shared,
-            FilesCollected {
-                test_files,
-                conftest_files,
-            },
-        ) = self.into_parts();
+        let (mut shared, _) = self.into_parts();
+        shared.session = Some(session);
         Ok(shared.into_pipeline(SessionReady {
-            test_files,
-            conftest_files,
-            session,
             session_violations: fixture_violations,
         }))
     }
@@ -127,8 +111,8 @@ impl Pipeline<FilesCollected> {
             match crate::query::fzf::run_fzf(
                 py,
                 args,
-                &self.state.test_files,
-                &self.state.conftest_files,
+                &self.shared.test_files,
+                &self.shared.conftest_files,
                 None,
                 &self.cfg,
                 self.use_color,
@@ -144,8 +128,8 @@ impl Pipeline<FilesCollected> {
         match query::run_query(
             py,
             args,
-            &self.state.test_files,
-            &self.state.conftest_files,
+            &self.shared.test_files,
+            &self.shared.conftest_files,
             None,
             &self.cfg,
             self.is_tty,
