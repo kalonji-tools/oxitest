@@ -187,19 +187,27 @@ class FixtureRegistry:
         if not shared_ancestors:
             return []
 
-        # Merge overlapping ancestor sets into connected components.
-        components: list[set[str]] = []
-        for name, ancestors in shared_ancestors.items():
-            new_component = {name} | ancestors
-            i = 0
-            while i < len(components):
-                if components[i] & new_component:
-                    new_component |= components.pop(i)
-                else:
-                    i += 1
-            components.append(new_component)
+        # Union-Find to merge overlapping ancestor sets into connected components.
+        parent: dict[str, str] = {}
 
-        return sorted(sorted(comp) for comp in components)
+        def find(x: str) -> str:
+            while parent.setdefault(x, x) != x:
+                parent[x] = parent[parent[x]]  # path compression
+                x = parent[x]
+            return x
+
+        def union(a: str, b: str) -> None:
+            parent[find(a)] = find(b)
+
+        for name, ancestors in shared_ancestors.items():
+            for ancestor in ancestors:
+                union(name, ancestor)
+
+        groups: dict[str, set[str]] = {}
+        for name in shared_ancestors:
+            groups.setdefault(find(name), set()).add(name)
+
+        return sorted(sorted(comp) for comp in groups.values())
 
     def has_shared(self) -> bool:
         """Return True if any effective fixture definition has shared=True."""
