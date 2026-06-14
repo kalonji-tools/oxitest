@@ -193,10 +193,9 @@ fn detect_dynamic_collection(stmts: &[ast::Stmt]) -> bool {
                     }
                 }
             }
-            ast::Stmt::FunctionDef(f) if f.name.as_str() == "__getattr__" => {
-                return true;
-            }
-            ast::Stmt::AsyncFunctionDef(f) if f.name.as_str() == "__getattr__" => {
+            _ if python_ast::FnDef::try_from_stmt(stmt)
+                .is_some_and(|d| d.name() == "__getattr__") =>
+            {
                 return true;
             }
             ast::Stmt::ImportFrom(imp)
@@ -571,33 +570,33 @@ pub(crate) fn detect_heavy_imports(stmts: &[ast::Stmt]) -> f64 {
 
 // ── build_prescan_item macro ────────────────────────────────────────────
 
-/// Build a [`PrescanItem`] from any function-def node (sync or async).
+/// Build a [`PrescanItem`] from a [`python_ast::FnDef`] adapter.
 ///
-/// `$f` must be either `ast::StmtFunctionDef` or `ast::StmtAsyncFunctionDef` — both
-/// expose `.name`, `.decorator_list`, `.args`, and `.range`.
+/// The adapter unifies sync/async function defs so callers don't need
+/// separate match arms.
 macro_rules! build_prescan_item {
-    ($f:expr, $is_async:expr, $is_class_method:expr, $class_name:expr, $line_index:expr, $heavy_import_weight:expr) => {{
-        let markers: Vec<PrescanMarker> = $f
-            .decorator_list
+    ($def:expr, $is_class_method:expr, $class_name:expr, $line_index:expr, $heavy_import_weight:expr) => {{
+        let markers: Vec<PrescanMarker> = $def
+            .decorator_list()
             .iter()
             .filter_map(extract_prescan_marker)
             .collect();
-        let param_ids = extract_parametrize_kwarg_names(&$f.decorator_list);
-        let fixture_params = extract_fixture_param_names(&$f.args);
+        let param_ids = extract_parametrize_kwarg_names($def.decorator_list());
+        let fixture_params = extract_fixture_param_names($def.args());
         let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
             $line_index,
-            $f.range.start().to_u32(),
+            $def.range().start().to_u32(),
         ));
         let body_weight = crate::types::DurationMs::new(compute_body_weight(
-            &$f.body,
-            $is_async,
+            $def.body(),
+            $def.is_async(),
             fixture_params.len(),
             $heavy_import_weight,
         ));
         PrescanItem {
-            fn_name: $f.name.to_string(),
+            fn_name: $def.name().to_string(),
             lineno,
-            is_async: $is_async,
+            is_async: $def.is_async(),
             markers,
             param_ids,
             fixture_params,
@@ -629,59 +628,31 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     let heavy_import_weight = detect_heavy_imports(&parsed.1);
 
     for stmt in &parsed.1 {
-        if python_ast::is_test_function(stmt) {
-            test_count += 1;
-            match stmt {
-                ast::Stmt::FunctionDef(f) => {
-                    items.push(build_prescan_item!(
-                        f,
-                        false,
-                        false,
-                        None,
-                        &line_index,
-                        heavy_import_weight
-                    ));
-                }
-                ast::Stmt::AsyncFunctionDef(f) => {
-                    items.push(build_prescan_item!(
-                        f,
-                        true,
-                        false,
-                        None,
-                        &line_index,
-                        heavy_import_weight
-                    ));
-                }
-                _ => {}
+        if let Some(def) = python_ast::FnDef::try_from_stmt(stmt) {
+            if python_ast::is_test_fn(def.name()) {
+                test_count += 1;
+                items.push(build_prescan_item!(
+                    def,
+                    false,
+                    None,
+                    &line_index,
+                    heavy_import_weight
+                ));
             }
         } else if let ast::Stmt::ClassDef(cls) = stmt {
             if python_ast::is_test_class(&cls.name) {
                 let class_name = cls.name.to_string();
                 for method in &cls.body {
-                    if python_ast::is_test_function(method) {
-                        test_count += 1;
-                        match method {
-                            ast::Stmt::FunctionDef(f) => {
-                                items.push(build_prescan_item!(
-                                    f,
-                                    false,
-                                    true,
-                                    Some(class_name.clone()),
-                                    &line_index,
-                                    heavy_import_weight
-                                ));
-                            }
-                            ast::Stmt::AsyncFunctionDef(f) => {
-                                items.push(build_prescan_item!(
-                                    f,
-                                    true,
-                                    true,
-                                    Some(class_name.clone()),
-                                    &line_index,
-                                    heavy_import_weight
-                                ));
-                            }
-                            _ => {}
+                    if let Some(def) = python_ast::FnDef::try_from_stmt(method) {
+                        if python_ast::is_test_fn(def.name()) {
+                            test_count += 1;
+                            items.push(build_prescan_item!(
+                                def,
+                                true,
+                                Some(class_name.clone()),
+                                &line_index,
+                                heavy_import_weight
+                            ));
                         }
                     }
                 }
