@@ -64,6 +64,12 @@ pub(crate) enum PrescanResult {
 
 // ── Marker helpers ──────────────────────────────────────────────────────
 
+/// Check if a call has any non-constant (dynamic) arguments or keyword values.
+fn has_dynamic_args(call: &ast::ExprCall) -> bool {
+    call.args.iter().any(|a| !is_literal_expr(a))
+        || call.keywords.iter().any(|kw| !is_literal_expr(&kw.value))
+}
+
 /// Extract a `PrescanMarker` from a single decorator expression.
 ///
 /// Reuses [`python_ast::extract_mark_name`] to identify the mark, then checks whether any
@@ -71,10 +77,7 @@ pub(crate) enum PrescanResult {
 fn extract_prescan_marker(dec: &ast::Expr) -> Option<PrescanMarker> {
     let name = python_ast::extract_mark_name(dec)?;
     let has_dynamic_args = match dec {
-        ast::Expr::Call(call) => {
-            call.args.iter().any(|a| !is_literal_expr(a))
-                || call.keywords.iter().any(|kw| !is_literal_expr(&kw.value))
-        }
+        ast::Expr::Call(call) => has_dynamic_args(call),
         _ => false,
     };
     Some(PrescanMarker {
