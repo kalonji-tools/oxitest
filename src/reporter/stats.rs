@@ -75,20 +75,25 @@ pub(crate) struct WarningEntry {
 #[derive(Clone, Debug)]
 pub(crate) struct OutcomeCounters {
     pub(crate) by_kind: [usize; OutcomeKind::COUNT],
-    /// Subset of xpassed where strict=true.
-    pub(crate) xpassed_strict: usize,
-    /// Strict-mode suite violation count (not a test outcome).
-    pub(crate) strict_suite: usize,
 }
 
 impl Default for OutcomeCounters {
     fn default() -> Self {
         Self {
             by_kind: [0; OutcomeKind::COUNT],
-            xpassed_strict: 0,
-            strict_suite: 0,
         }
     }
+}
+
+/// Strict-mode counters — separate from outcome counts because these
+/// are not test outcomes (xpassed_strict is a sub-count, suite_violations
+/// are collection-time violations).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct StrictCounts {
+    /// Subset of XPassed where the xfail mark was strict.
+    pub(crate) xpassed_strict: usize,
+    /// Strict-mode suite violations (not test outcomes).
+    pub(crate) suite_violations: usize,
 }
 
 impl OutcomeCounters {
@@ -110,13 +115,14 @@ impl OutcomeCounters {
 pub(crate) struct DiagnosticBag {
     pub(crate) tip_lines: Vec<TipLine>,
     pub(crate) warning_msgs: Vec<WarningEntry>,
-    pub(crate) timings: Vec<TimingEntry>,
 }
 
 #[derive(Clone)]
 pub(crate) struct RunStats {
     pub(crate) counts: OutcomeCounters,
+    pub(crate) strict: StrictCounts,
     pub(crate) diagnostics: DiagnosticBag,
+    pub(crate) timings: Vec<TimingEntry>,
     pub(crate) fixture_cache: Option<FixtureCacheStats>,
     pub(crate) fixture_timings: Vec<FixtureTimingEntry>,
 }
@@ -146,7 +152,9 @@ impl RunStats {
     pub(crate) fn new() -> Self {
         Self {
             counts: OutcomeCounters::default(),
+            strict: StrictCounts::default(),
             diagnostics: DiagnosticBag::default(),
+            timings: Vec::new(),
             fixture_cache: None,
             fixture_timings: Vec::new(),
         }
@@ -227,16 +235,16 @@ impl RunStats {
     pub(crate) fn record_xpassed(&mut self, strict: bool) {
         self.counts.increment(OutcomeKind::XPassed);
         if strict {
-            self.counts.xpassed_strict += 1;
+            self.strict.xpassed_strict += 1;
         }
     }
 
     pub(crate) fn record_strict_suite(&mut self, count: usize) {
-        self.counts.strict_suite += count;
+        self.strict.suite_violations += count;
     }
 
     pub(crate) fn record_timing(&mut self, node_id: &NodeId, duration_ms: DurationMs) {
-        self.diagnostics.timings.push(TimingEntry {
+        self.timings.push(TimingEntry {
             node_id: node_id.clone(),
             duration_ms,
         });
@@ -244,7 +252,7 @@ impl RunStats {
 
     /// Returns the N slowest tests, sorted by duration descending.
     pub(crate) fn slowest(&self, n: usize) -> Vec<TimingEntry> {
-        top_n_by_key(&self.diagnostics.timings, n, |t| t.duration_ms)
+        top_n_by_key(&self.timings, n, |t| t.duration_ms)
     }
 
     #[cfg(test)]
@@ -328,7 +336,7 @@ mod tests {
             &NodeId::from_raw("tests/test_foo.py::test_b"),
             DurationMs::new(10.0),
         );
-        assert_eq!(stats.diagnostics.timings.len(), 2);
+        assert_eq!(stats.timings.len(), 2);
     }
 
     #[test]
@@ -361,7 +369,7 @@ mod tests {
     fn test_record_strict_suite_increments_counter() {
         let mut stats = RunStats::new();
         stats.record_strict_suite(3);
-        assert_eq!(stats.counts.strict_suite, 3);
+        assert_eq!(stats.strict.suite_violations, 3);
     }
 
     #[test]
@@ -369,7 +377,7 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_strict_suite(3);
         stats.record_strict_suite(2);
-        assert_eq!(stats.counts.strict_suite, 5);
+        assert_eq!(stats.strict.suite_violations, 5);
     }
 
     #[test]

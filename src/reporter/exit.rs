@@ -21,9 +21,9 @@ pub(crate) fn compute_exit_code(
     }
     if stats.counts.get(OutcomeKind::Failed) > 0
         || stats.counts.get(OutcomeKind::Error) > 0
-        || stats.counts.xpassed_strict > 0
+        || stats.strict.xpassed_strict > 0
         || stats.counts.get(OutcomeKind::Timeout) > 0
-        || stats.counts.strict_suite > 0
+        || stats.strict.suite_violations > 0
     {
         return ExitCode::Failure;
     }
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn test_exit_code_one_when_xpassed_strict() {
         let mut stats = RunStats::new();
-        stats.counts.xpassed_strict = 1;
+        stats.strict.xpassed_strict = 1;
         assert_eq!(compute_exit_code(&stats, 0, false), ExitCode::Failure);
     }
 
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn test_exit_code_one_when_strict_suite_violations() {
         let mut stats = RunStats::new();
-        stats.counts.strict_suite = 2;
+        stats.strict.suite_violations = 2;
         assert_eq!(compute_exit_code(&stats, 0, false), ExitCode::Failure);
     }
 
