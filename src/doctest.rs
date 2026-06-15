@@ -85,15 +85,6 @@ pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
     examples
 }
 
-/// Quick check: does a docstring contain any `>>>` examples?
-#[allow(dead_code)]
-pub(crate) fn has_doctest_examples(docstring: &str) -> bool {
-    docstring.lines().any(|l| {
-        let t = l.trim();
-        t.starts_with(">>> ") || t == ">>>"
-    })
-}
-
 /// A location in a Python file where a docstring with `>>>` examples was found.
 #[derive(Debug, Clone)]
 pub(crate) struct DoctestLocation {
@@ -250,16 +241,6 @@ mod tests {
         assert_eq!(examples.len(), 2);
         assert_eq!(examples[0].source, "1 + 1\n");
         assert_eq!(examples[1].source, "2 + 2\n");
-    }
-
-    #[test]
-    fn has_doctest_examples_true() {
-        assert!(has_doctest_examples("    >>> 1 + 1\n    2\n"));
-    }
-
-    #[test]
-    fn has_doctest_examples_false() {
-        assert!(!has_doctest_examples("No examples here.\n"));
     }
 
     #[test]
