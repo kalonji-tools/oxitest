@@ -5,7 +5,7 @@ from __future__ import annotations
 __all__ = ["FixtureValidator"]
 
 import inspect
-from typing import Any
+from typing import Any, get_type_hints
 
 from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
@@ -13,6 +13,19 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge.plugin_loader import PluginRegistry
+
+
+def _parse_node_id(node_id: str) -> tuple[str, str] | None:
+    """Parse a node ID into ``(module_path, fn_part)`` stripping any param id.
+
+    Returns ``None`` if the node ID has no ``::`` separator.
+    """
+    parts = node_id.split("::", 1)
+    if len(parts) < 2:
+        return None
+    module_path = parts[0]
+    fn_part = parts[1].split("[", 1)[0]  # strip param_id
+    return module_path, fn_part
 
 
 class FixtureValidator:
@@ -129,35 +142,26 @@ class FixtureValidator:
             unused.append((defn.conftest_path, name))
         return sorted(unused)
 
-    def _can_plugin_resolve(
-        self,
-        node_id: str,
-        param_name: str,
-        plugin_types: set[type],
-    ) -> bool:
-        """Check if a parameter resolves to a plugin-provided fixture type."""
-        # node_id format: "path/to/test.py::test_fn" or "path/to/test.py::test_fn[case]"
-        parts = node_id.split("::", 1)
-        if len(parts) < 2:
-            return False
-        module_path = parts[0]
-        fn_part = parts[1].split("[", 1)[0]  # strip param_id
-        # Look up the cached module (already loaded during collection)
+    def _lookup_test_function(self, module_path: str, fn_part: str) -> Any | None:
+        """Resolve a test function from module cache, handling class::method syntax."""
         mod = self._module_cache.get(module_path)
         if mod is None:
-            return False
+            return None
         # Handle class::method syntax
         if "::" in fn_part:
             cls_name, method_name = fn_part.split("::", 1)
             cls = getattr(mod, cls_name, None)
-            fn = getattr(cls, method_name, None) if cls else None
-        else:
-            fn = getattr(mod, fn_part, None)
-        if fn is None:
-            return False
-        try:
-            from typing import get_type_hints
+            return getattr(cls, method_name, None) if cls else None
+        return getattr(mod, fn_part, None)
 
+    @staticmethod
+    def _type_matches_plugin(
+        fn: Any,  # noqa: ANN401
+        param_name: str,
+        plugin_types: set[type],
+    ) -> bool:
+        """Check if *param_name*'s hint on *fn* is a plugin Fixture type."""
+        try:
             hints = get_type_hints(fn, include_extras=True)
         except Exception:  # noqa: BLE001
             return False
@@ -166,3 +170,19 @@ class FixtureValidator:
             return False
         is_fx, inner = _fixture_inner_type(hint)
         return is_fx and inner in plugin_types
+
+    def _can_plugin_resolve(
+        self,
+        node_id: str,
+        param_name: str,
+        plugin_types: set[type],
+    ) -> bool:
+        """Check if a parameter resolves to a plugin-provided fixture type."""
+        parsed = _parse_node_id(node_id)
+        if parsed is None:
+            return False
+        module_path, fn_part = parsed
+        fn = self._lookup_test_function(module_path, fn_part)
+        if fn is None:
+            return False
+        return self._type_matches_plugin(fn, param_name, plugin_types)
