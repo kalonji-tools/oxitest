@@ -280,7 +280,6 @@ pub(crate) fn collect_module_with_session_obj(
         .into_iter()
         .map(|item| TestItem {
             node_id: NodeId::new(path_str, &item.fn_name, item.param_id.as_deref()),
-            module_path: path.to_owned(),
             fn_name: Arc::from(item.fn_name.as_str()),
             lineno: LineNo::new(item.lineno),
             markers: MarkerSet::from(item.markers),
@@ -448,7 +447,7 @@ fn try_run_test_with_session_obj(
 
     let node_id_str: &str = &item.node_id;
     let meta_obj = test_meta_cls.call1((
-        item.module_path.as_str(),
+        item.module_path(),
         &*item.fn_name,
         node_id_str,
         &param_id_obj,

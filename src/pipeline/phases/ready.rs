@@ -22,7 +22,7 @@ impl Pipeline<Ready> {
         let fn_count = {
             let mut seen = std::collections::HashSet::new();
             for item in clean_items.iter().chain(violated_items.iter()) {
-                seen.insert((&item.module_path, &item.fn_name));
+                seen.insert((item.module_path(), &item.fn_name));
             }
             seen.len()
         };

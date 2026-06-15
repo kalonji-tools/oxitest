@@ -60,7 +60,7 @@ fn apply_query_dsl_filter(
 fn item_to_query_entry(item: &types::TestItem) -> query::resource::QueryEntry {
     let mut fields = std::collections::HashMap::new();
     fields.insert("name".to_string(), item.node_id.to_string());
-    fields.insert("source".to_string(), item.module_path.to_string());
+    fields.insert("source".to_string(), item.module_path().to_string());
     fields.insert("mark".to_string(), item.markers.join(","));
     fields.insert("async".to_string(), item.is_async.to_string());
     query::resource::QueryEntry { fields }

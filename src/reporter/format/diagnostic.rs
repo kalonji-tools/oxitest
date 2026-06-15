@@ -537,7 +537,7 @@ mod tests {
     fn test_diagnostic_shows_inline_params() {
         let item = std::sync::Arc::new(TestItem {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
-            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
+
             fn_name: Arc::from("test_add"),
             lineno: LineNo::ZERO,
             markers: MarkerSet::new(),
@@ -580,7 +580,7 @@ mod tests {
     fn test_diagnostic_params_appear_between_path_and_source() {
         let item = std::sync::Arc::new(TestItem {
             node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
-            module_path: camino::Utf8PathBuf::from("tests/test_foo.py"),
+
             fn_name: Arc::from("test_add"),
             lineno: LineNo::ZERO,
             markers: MarkerSet::new(),
@@ -655,7 +655,7 @@ mod tests {
 
         let item = TestItem {
             node_id: crate::types::NodeId::from_raw("test_foo.py::test_check"),
-            module_path: "test_foo.py".into(),
+
             fn_name: Arc::from("test_check"),
             lineno: LineNo::new(10),
             markers: MarkerSet::new(),
@@ -704,7 +704,7 @@ mod tests {
 
         let item = TestItem {
             node_id: crate::types::NodeId::from_raw("t.py::test_direct"),
-            module_path: "t.py".into(),
+
             fn_name: Arc::from("test_direct"),
             lineno: LineNo::new(3),
             markers: MarkerSet::new(),
