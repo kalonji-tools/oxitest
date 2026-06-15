@@ -1,6 +1,32 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.0.0-beta.1] - 2026-06-15
+
+### Bug Fixes
+
+
+- Handle_worker_result takes ownership, use DurationMs::ZERO
+- Guard FixtureCacheStats::summary() against division by zero
+- Expand is_literal_expr to handle compound literals
+- Replace hardcoded is_stdlib_module with sys.stdlib_module_names
+- Needs_python returns true on parse failure instead of false
+
+### Features
+
+
+- Update compare for all tier categories (#904)
+- WireMinimal fallback for unknown outcomes in drain loop
+- Harden frozen dataclass immutability with MappingProxyType
+
+### Performance
+
+
+- Two-phase PyO3 extraction for serial bridge path
+- Partial sort for slowest(n) and slowest_fixtures(n)
+- Hoist format! out of inner loop in last-failed matching (#994)
+- Skip intermediate PyList in TestMeta marker construction
+
 ## [1.0.0-alpha.2] - 2026-06-11
 
 ### Features
