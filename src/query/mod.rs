@@ -21,11 +21,12 @@ pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bo
     match resource {
         ResourceKind::Fixtures | ResourceKind::Plugins => true,
         ResourceKind::Tests | ResourceKind::Marks | ResourceKind::Helpers => {
-            // Check if the expression references predicates that need Python
             if let Some(s) = expr_str {
-                if let Ok(tokens) = compile::lex(s) {
-                    if let Ok(expr) = compile::parse(tokens) {
-                        return expr_needs_python(&expr);
+                match compile::lex(s).and_then(compile::parse) {
+                    Ok(expr) => return expr_needs_python(&expr),
+                    Err(e) => {
+                        tracing::warn!(expr = s, error = %e, "DSL parse failed, assuming Python needed");
+                        return true;
                     }
                 }
             }
@@ -206,6 +207,11 @@ mod tests {
     #[test]
     fn needs_python_marks_without_expr_is_false() {
         assert!(!needs_python(ResourceKind::Marks, None));
+    }
+
+    #[test]
+    fn needs_python_with_invalid_expression_returns_true() {
+        assert!(needs_python(ResourceKind::Tests, Some("unclosed(")));
     }
 
     #[test]
