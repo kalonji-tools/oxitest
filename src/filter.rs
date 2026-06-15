@@ -100,6 +100,30 @@ pub(crate) fn contains_glob_chars(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[')
 }
 
+/// Pre-compile glob matchers from a slice of glob ID strings.
+///
+/// Escapes `[`/`]` brackets in each ID so globset treats them as literals
+/// (node IDs use brackets as structural delimiters, not character classes),
+/// then compiles each into a [`globset::GlobMatcher`].
+fn build_glob_matchers(glob_ids: &[impl AsRef<str>]) -> Vec<globset::GlobMatcher> {
+    glob_ids
+        .iter()
+        .filter_map(|id| {
+            let escaped = escape_node_id_brackets(id.as_ref());
+            match globset::GlobBuilder::new(&escaped)
+                .literal_separator(false)
+                .build()
+            {
+                Ok(glob) => Some(glob.compile_matcher()),
+                Err(e) => {
+                    eprintln!("warning: invalid glob pattern '{}': {e}", id.as_ref());
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 /// Escape `[` and `]` in a node ID so globset treats them as literals.
 ///
 /// Node IDs use `[param_id]` brackets as structural delimiters, not glob
@@ -115,6 +139,38 @@ fn escape_node_id_brackets(id: &str) -> String {
         }
     }
     out
+}
+
+/// Check whether a collected item matches any of the given node IDs.
+///
+/// Returns `true` if the item's node ID matches a literal ID (via prefix
+/// matching for parametrize/class) or any of the pre-compiled glob matchers.
+/// Items from bare-path files (not in `source_files`) always pass through.
+fn item_matches_node_ids(
+    item: &TestItem,
+    literal_ids: &[&crate::types::NodeId],
+    glob_matchers: &[globset::GlobMatcher],
+    source_files: &std::collections::HashSet<Utf8PathBuf>,
+) -> bool {
+    // Items from bare-path files (not node ID sources) pass through.
+    if !source_files.is_empty() && !source_files.contains(&item.module_path) {
+        return true;
+    }
+    let item_id: &str = item.node_id.as_ref();
+
+    // Check literal IDs (prefix logic).
+    let literal_match = literal_ids.iter().any(|target| {
+        let t: &str = target.as_ref();
+        item_id == t
+            || item_id.starts_with(&format!("{}[", t))
+            || item_id.starts_with(&format!("{}::", t))
+    });
+    if literal_match {
+        return true;
+    }
+
+    // Check glob IDs.
+    glob_matchers.iter().any(|m| m.is_match(item_id))
 }
 
 /// Keep only items matching the provided node IDs.
@@ -146,49 +202,12 @@ pub fn filter_by_node_ids(
         .partition(|id| contains_glob_chars(id.as_ref()));
 
     // Pre-compile glob matchers.
-    // Node IDs use `[param_id]` brackets as structural delimiters, not glob character
-    // classes. `escape_node_id_brackets` converts `[` → `[[]` and `]` → `[]]` so
-    // globset treats them as literals while preserving `*` and `?` as wildcards.
-    let glob_matchers: Vec<globset::GlobMatcher> = glob_ids
-        .iter()
-        .filter_map(|id| {
-            let escaped = escape_node_id_brackets(id.as_ref());
-            match globset::GlobBuilder::new(&escaped)
-                .literal_separator(false)
-                .build()
-            {
-                Ok(glob) => Some(glob.compile_matcher()),
-                Err(e) => {
-                    eprintln!("warning: invalid glob pattern '{}': {e}", id.as_ref());
-                    None
-                }
-            }
-        })
-        .collect();
+    let glob_matchers = build_glob_matchers(&glob_ids);
 
     items
         .into_iter()
         .filter(|item| {
-            // Items from bare-path files (not node ID sources) pass through.
-            if !node_id_source_files.is_empty() && !node_id_source_files.contains(&item.module_path)
-            {
-                return true;
-            }
-            let item_id: &str = item.node_id.as_ref();
-
-            // Check literal IDs (existing prefix logic).
-            let literal_match = literal_ids.iter().any(|target| {
-                let t: &str = target.as_ref();
-                item_id == t
-                    || item_id.starts_with(&format!("{}[", t))
-                    || item_id.starts_with(&format!("{}::", t))
-            });
-            if literal_match {
-                return true;
-            }
-
-            // Check glob IDs.
-            glob_matchers.iter().any(|m| m.is_match(item_id))
+            item_matches_node_ids(item, &literal_ids, &glob_matchers, node_id_source_files)
         })
         .collect()
 }
@@ -223,6 +242,35 @@ fn prescan_node_id(file_path: &str, item: &PrescanItem) -> String {
     }
 }
 
+/// Check whether a prescan item matches any of the given node IDs.
+///
+/// Returns `true` if the item's reconstructed node ID matches a literal ID
+/// (via bidirectional prefix matching for parametrize/class) or any of the
+/// pre-compiled glob matchers.
+fn prescan_item_matches_node_ids(
+    item: &PrescanItem,
+    file_path: &str,
+    literal_ids: &[&String],
+    glob_matchers: &[globset::GlobMatcher],
+) -> bool {
+    let id = prescan_node_id(file_path, item);
+    // Check literal node IDs with prefix matching in both directions.
+    let literal_match = literal_ids.iter().any(|target| {
+        id == **target
+            || id.starts_with(&format!("{target}["))
+            || id.starts_with(&format!("{target}::"))
+            // Target is a parametrized case of this item (e.g., target
+            // is "path::test_mul[case]" and prescan id is "path::test_mul")
+            || target.starts_with(&format!("{id}["))
+            || target.starts_with(&format!("{id}::"))
+    });
+    if literal_match {
+        return true;
+    }
+    // Check glob node IDs against the prescan ID.
+    glob_matchers.iter().any(|m| m.is_match(&id))
+}
+
 /// Filter prescan items by node ID prefixes.
 ///
 /// A node ID like `path::test_name` matches items with that fn_name.
@@ -243,40 +291,11 @@ fn filter_prescan_by_node_ids<'a>(
     let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids.iter().partition(|id| has_glob(id));
 
     // Pre-compile glob matchers for wildcard node IDs.
-    let glob_matchers: Vec<globset::GlobMatcher> = glob_ids
-        .iter()
-        .filter_map(|id| {
-            let escaped = escape_node_id_brackets(id);
-            match globset::GlobBuilder::new(&escaped)
-                .literal_separator(false)
-                .build()
-            {
-                Ok(glob) => Some(glob.compile_matcher()),
-                Err(_) => None,
-            }
-        })
-        .collect();
+    let glob_matchers = build_glob_matchers(&glob_ids);
 
     items
         .iter()
-        .filter(|item| {
-            let id = prescan_node_id(file_path, item);
-            // Check literal node IDs with prefix matching in both directions.
-            let literal_match = literal_ids.iter().any(|target| {
-                id == **target
-                    || id.starts_with(&format!("{target}["))
-                    || id.starts_with(&format!("{target}::"))
-                    // Target is a parametrized case of this item (e.g., target
-                    // is "path::test_mul[case]" and prescan id is "path::test_mul")
-                    || target.starts_with(&format!("{id}["))
-                    || target.starts_with(&format!("{id}::"))
-            });
-            if literal_match {
-                return true;
-            }
-            // Check glob node IDs against the prescan ID.
-            glob_matchers.iter().any(|m| m.is_match(&id))
-        })
+        .filter(|item| prescan_item_matches_node_ids(item, file_path, &literal_ids, &glob_matchers))
         .collect()
 }
 

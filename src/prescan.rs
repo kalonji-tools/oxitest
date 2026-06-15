@@ -164,6 +164,47 @@ fn is_fixture_annotation(expr: &ast::Expr) -> bool {
 
 // ── Dynamic collection detection ────────────────────────────────────────
 
+/// Check whether a statement contains a top-level `exec()` or `eval()` call.
+fn has_exec_eval_call(stmt: &ast::Stmt) -> bool {
+    match stmt {
+        ast::Stmt::Expr(expr) => is_dynamic_call(&expr.value),
+        ast::Stmt::Assign(assign) => is_dynamic_call(&assign.value),
+        _ => false,
+    }
+}
+
+/// Check whether a statement injects into `globals()[]`.
+fn has_globals_injection(stmt: &ast::Stmt) -> bool {
+    match stmt {
+        ast::Stmt::Expr(expr) => is_globals_subscript(&expr.value),
+        ast::Stmt::Assign(assign) => {
+            is_globals_subscript(&assign.value) || assign.targets.iter().any(is_globals_subscript)
+        }
+        _ => false,
+    }
+}
+
+/// Check whether a statement uses `type("Name", (bases,), {...})` metaclass creation.
+fn has_type_metaclass_creation(stmt: &ast::Stmt) -> bool {
+    matches!(stmt, ast::Stmt::Assign(assign) if is_type_metaclass_call(&assign.value))
+}
+
+/// Check whether a statement defines a module-level `__getattr__` function.
+fn has_getattr_definition(stmt: &ast::Stmt) -> bool {
+    python_ast::FnDef::try_from_stmt(stmt).is_some_and(|d| d.name() == "__getattr__")
+}
+
+/// Check whether a statement is a `from non_stdlib import *`.
+fn has_nonstdlib_star_import(stmt: &ast::Stmt) -> bool {
+    if let ast::Stmt::ImportFrom(imp) = stmt {
+        if imp.names.len() == 1 && imp.names[0].name.as_str() == "*" {
+            let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
+            return !is_stdlib_module(module);
+        }
+    }
+    false
+}
+
 /// Detect dynamic patterns that prevent lazy collection.
 ///
 /// Scans top-level statements for:
@@ -172,45 +213,13 @@ fn is_fixture_annotation(expr: &ast::Expr) -> bool {
 /// - star imports from non-stdlib modules
 /// - `type()` metaclass creation
 fn detect_dynamic_collection(stmts: &[ast::Stmt]) -> bool {
-    for stmt in stmts {
-        match stmt {
-            ast::Stmt::Expr(expr) => {
-                if is_dynamic_call(&expr.value) || is_globals_subscript(&expr.value) {
-                    return true;
-                }
-            }
-            ast::Stmt::Assign(assign) => {
-                if is_dynamic_call(&assign.value)
-                    || is_globals_subscript(&assign.value)
-                    || is_type_metaclass_call(&assign.value)
-                {
-                    return true;
-                }
-                // Check if any target is globals()[...]
-                for target in &assign.targets {
-                    if is_globals_subscript(target) {
-                        return true;
-                    }
-                }
-            }
-            _ if python_ast::FnDef::try_from_stmt(stmt)
-                .is_some_and(|d| d.name() == "__getattr__") =>
-            {
-                return true;
-            }
-            ast::Stmt::ImportFrom(imp)
-                if imp.names.len() == 1 && imp.names[0].name.as_str() == "*" =>
-            {
-                // Star import: from foo import *
-                let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
-                if !is_stdlib_module(module) {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
+    stmts.iter().any(|stmt| {
+        has_exec_eval_call(stmt)
+            || has_globals_injection(stmt)
+            || has_type_metaclass_creation(stmt)
+            || has_getattr_definition(stmt)
+            || has_nonstdlib_star_import(stmt)
+    })
 }
 
 /// Check if an expression is a call to `exec()` or `eval()`.
