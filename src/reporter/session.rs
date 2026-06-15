@@ -82,14 +82,14 @@ mod tests {
                 .get(crate::types::OutcomeKind::Passed),
             1
         );
-        assert_eq!(session.stats().diagnostics.timings.len(), 1);
+        assert_eq!(session.stats().timings.len(), 1);
     }
 
     #[test]
     fn record_strict_suite_delegates_to_stats() {
         let mut session = ReporterSession::new(3);
         session.record_strict_suite();
-        assert_eq!(session.stats().counts.strict_suite, 3);
+        assert_eq!(session.stats().strict.suite_violations, 3);
     }
 
     #[test]

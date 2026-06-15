@@ -65,7 +65,7 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
     let xpassed = stats.counts.get(OutcomeKind::XPassed);
     if xpassed > 0 {
         let xpassed_str = format!("{xpassed} xpassed");
-        if stats.counts.xpassed_strict > 0 {
+        if stats.strict.xpassed_strict > 0 {
             parts.push(color_fail(&xpassed_str, use_color));
         } else {
             parts.push(color_warn(&xpassed_str, use_color));
@@ -226,9 +226,11 @@ mod tests {
         counts.by_kind[OutcomeKind::Warned as usize] = warned;
         counts.by_kind[OutcomeKind::XFailed as usize] = xfailed;
         counts.by_kind[OutcomeKind::XPassed as usize] = xpassed;
-        counts.xpassed_strict = xpassed_strict;
+        let mut strict = crate::reporter::stats::StrictCounts::default();
+        strict.xpassed_strict = xpassed_strict;
         RunStats {
             counts,
+            strict,
             ..RunStats::new()
         }
     }
