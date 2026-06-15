@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from oxitest._bridge._fn_metadata import FunctionMetadata, get_metadata, get_or_create
 from oxitest._bridge._mark_api import MarkInfo
 
@@ -62,7 +64,7 @@ def test_get_metadata_returns_registered_metadata():
     def fn():
         pass
 
-    mark = MarkInfo("slow", (), {})
+    mark = MarkInfo("slow", (), MappingProxyType({}))
     get_or_create(fn).marks.append(mark)
 
     meta = get_metadata(fn)
@@ -78,7 +80,7 @@ def test_mutations_persist_across_calls():
     def fn():
         pass
 
-    mark = MarkInfo("integration", (), {})
+    mark = MarkInfo("integration", (), MappingProxyType({}))
     get_or_create(fn).marks.append(mark)
 
     assert get_metadata(fn).marks[0].name == "integration", (
@@ -94,7 +96,7 @@ def test_different_functions_get_independent_metadata():
     def fn_b():
         pass
 
-    get_or_create(fn_a).marks.append(MarkInfo("slow", (), {}))
+    get_or_create(fn_a).marks.append(MarkInfo("slow", (), MappingProxyType({})))
 
     meta_b = get_metadata(fn_b)
     assert meta_b.marks == [], (

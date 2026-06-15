@@ -25,6 +25,7 @@ import inspect
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -199,8 +200,8 @@ def _build_execution_chain(
     plan = ExecutionPlan(
         fn=fn,
         fn_name=fn_name,
-        kwargs=all_kwargs,
-        marks=marks,
+        kwargs=MappingProxyType(all_kwargs),
+        marks=tuple(marks),
         no_message_lines=no_message_lines,
         is_async=inspect.iscoroutinefunction(fn),
         default_timeout=default_timeout,

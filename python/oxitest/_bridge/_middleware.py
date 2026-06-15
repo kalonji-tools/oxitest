@@ -14,6 +14,7 @@ import inspect
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from oxitest._bridge._mark_api import MarkInfo
@@ -39,8 +40,8 @@ class ExecutionPlan:
 
     fn: Callable[..., Any]
     fn_name: str
-    kwargs: dict[str, Any]
-    marks: list[MarkInfo]
+    kwargs: MappingProxyType[str, Any]
+    marks: tuple[MarkInfo, ...]
     no_message_lines: tuple[int, ...]
     is_async: bool
     default_timeout: int | None

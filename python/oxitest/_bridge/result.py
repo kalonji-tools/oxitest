@@ -23,7 +23,7 @@ from enum import StrEnum
 from typing import Any
 
 
-@dataclass
+@dataclass(frozen=True)
 class Frame:
     """Single traceback frame for structured display."""
 
@@ -305,7 +305,7 @@ def _error_result(
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class CollectedItem:
     """Bridge result returned by importer.collect_module and consumed by Rust bridge.
 
@@ -339,7 +339,7 @@ class ViolationKind(StrEnum):
     UNUSED_FIXTURE = "unused_fixture"
 
 
-@dataclass
+@dataclass(frozen=True)
 class CollectedViolation:
     """Bridge result for a strict-mode violation detected at collection time.
 

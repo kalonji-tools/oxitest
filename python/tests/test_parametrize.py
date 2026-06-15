@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from conftest import helpers
 from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
@@ -826,7 +827,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
 
 
 def test_dict_cases_items_yields_repr_pairs():
-    dc = DictCases(cases={"basic": {"x": 1, "y": 2}})
+    dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     result = list(dc.items())
     assert result == [("basic", [("x", "1"), ("y", "2")])], (
         "ResolvedCases.items() (dict mode) should yield"
@@ -836,7 +837,7 @@ def test_dict_cases_items_yields_repr_pairs():
 
 
 def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs():
-    dc = DictCases(cases={"basic": {"x": 1, "y": 2}})
+    dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     kwargs, fixrefs = dc.resolve(lambda x, y: None, "basic")
     assert kwargs == {"x": 1, "y": 2}, f"resolve should return case dict, got {kwargs}"
     assert fixrefs == frozenset(), f"dict mode fixrefs should be empty, got {fixrefs}"
@@ -844,7 +845,7 @@ def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs():
 
 def test_dataclass_cases_items_yields_field_repr_pairs():
     dc = DataclassCases(
-        cases={"basic": AddCase(x=1, y=2, expected=3)},
+        cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
         fixref_fields=(),
     )
@@ -858,7 +859,7 @@ def test_dataclass_cases_items_yields_field_repr_pairs():
 
 def test_dataclass_cases_resolve_expanded_mode():
     dc = DataclassCases(
-        cases={"basic": AddCase(x=1, y=2, expected=3)},
+        cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
         fixref_fields=(),
     )
@@ -875,7 +876,7 @@ def test_dataclass_cases_resolve_expanded_mode():
 
 def test_dataclass_cases_resolve_compact_mode():
     dc = DataclassCases(
-        cases={"basic": AddCase(x=1, y=2, expected=3)},
+        cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
         fixref_fields=(),
     )

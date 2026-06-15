@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
+from types import MappingProxyType
 
 import oxitest
 import oxitest as oxi
@@ -110,7 +111,9 @@ def test_timeout_mark_stores_seconds():
 
 def test_timeout_handler_returns_wrapper():
     ctx = _timeout_ctx()
-    result = _TimeoutHandler().handle(MarkInfo("timeout", (), {"seconds": 3}), ctx)
+    result = _TimeoutHandler().handle(
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 3})), ctx
+    )
     assert result.wrapper is not None, (
         "TimeoutHandler.handle() should return a wrapper, got None"
     )
@@ -122,7 +125,9 @@ def test_timeout_handler_returns_wrapper():
 
 def test_timeout_handler_wrapper_passes_fast_test():
     ctx = _timeout_ctx()
-    result = _TimeoutHandler().handle(MarkInfo("timeout", (), {"seconds": 5}), ctx)
+    result = _TimeoutHandler().handle(
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 5})), ctx
+    )
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
     fast_result = PassedResult()
@@ -133,7 +138,9 @@ def test_timeout_handler_wrapper_passes_fast_test():
 
 def test_timeout_handler_wrapper_returns_timeout_on_expiry():
     ctx = _timeout_ctx()
-    result = _TimeoutHandler().handle(MarkInfo("timeout", (), {"seconds": 1}), ctx)
+    result = _TimeoutHandler().handle(
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 1})), ctx
+    )
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
 
