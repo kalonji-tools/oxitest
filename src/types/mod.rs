@@ -606,6 +606,9 @@ pub enum TestOutcome {
 
 impl TestOutcome {
     /// True for outcomes that increment the failure counter and produce exit code 1.
+    ///
+    /// Includes strict `XPassed` (unexpected pass in strict mode is a CI failure).
+    /// See also [`OutcomeKind::is_retryable_failure`] for retry-eligible failures.
     pub fn is_hard_failure(&self) -> bool {
         matches!(
             self,
@@ -658,12 +661,6 @@ impl TestOutcome {
             Self::Failed(d) | Self::Error(d) => Some(d),
             _ => None,
         }
-    }
-
-    /// True if this is an Error variant (not Failed).
-    #[allow(dead_code)]
-    pub fn is_error(&self) -> bool {
-        matches!(self, Self::Error(..))
     }
 
     /// Synthesise an error for a test that could not execute.
@@ -731,8 +728,12 @@ impl OutcomeKind {
     /// Number of variants in the enum (for array indexing).
     pub const COUNT: usize = 10;
 
-    /// True for outcomes that represent a definitive test failure.
-    pub fn is_failure(&self) -> bool {
+    /// True for outcomes eligible for retry — definitive test failures only.
+    ///
+    /// Excludes `XPassed` (retrying won't change the outcome) and `Unknown`
+    /// (protocol error, not a test failure).
+    /// See also [`TestOutcome::is_hard_failure`] for exit-code failures.
+    pub fn is_retryable_failure(&self) -> bool {
         matches!(self, Self::Failed | Self::Error | Self::Timeout)
     }
 
@@ -1172,8 +1173,8 @@ mod tests {
     }
 
     #[test]
-    fn test_flaky_outcome_kind_is_not_failure() {
-        assert!(!OutcomeKind::Flaky.is_failure());
+    fn test_flaky_outcome_kind_is_not_retryable_failure() {
+        assert!(!OutcomeKind::Flaky.is_retryable_failure());
     }
 
     #[test]
