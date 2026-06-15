@@ -4,7 +4,10 @@
 //! ([`PrescanItem`]) that the pipeline uses for filtering before import.
 //! Heavy work lives here; leaf AST utilities live in [`crate::python_ast`].
 
+use std::sync::OnceLock;
+
 use camino::{Utf8Path, Utf8PathBuf};
+use pyo3::types::PyAnyMethods as _;
 use rustpython_parser::ast;
 
 use crate::python_ast;
@@ -275,112 +278,33 @@ fn is_type_metaclass_call(expr: &ast::Expr) -> bool {
     false
 }
 
-/// Quick check whether a module name belongs to the Python standard library.
+/// Cached set of Python standard library top-level module names.
+///
+/// Populated once from `sys.stdlib_module_names` (Python 3.10+) via
+/// [`init_stdlib_names`]. When uninitialized (unit tests that skip init),
+/// `is_stdlib_module` returns `false` for all modules — conservative, since
+/// that triggers eager collection.
+static STDLIB_NAMES: OnceLock<std::collections::HashSet<String>> = OnceLock::new();
+
+/// Populate [`STDLIB_NAMES`] from the running Python interpreter.
+///
+/// Must be called once while the GIL is held, before prescan runs.
+/// Safe to call multiple times — `OnceLock` ignores subsequent calls.
+pub(crate) fn init_stdlib_names(py: pyo3::Python<'_>) {
+    STDLIB_NAMES.get_or_init(|| {
+        py.import("sys")
+            .expect("sys import")
+            .getattr("stdlib_module_names")
+            .expect("stdlib_module_names attr")
+            .extract::<std::collections::HashSet<String>>()
+            .expect("extract HashSet<String>")
+    });
+}
+
+/// Check whether a module name belongs to the Python standard library.
 fn is_stdlib_module(module: &str) -> bool {
-    // Top-level module name only
     let top = module.split('.').next().unwrap_or(module);
-    matches!(
-        top,
-        "os" | "sys"
-            | "io"
-            | "re"
-            | "json"
-            | "math"
-            | "time"
-            | "datetime"
-            | "pathlib"
-            | "collections"
-            | "functools"
-            | "itertools"
-            | "typing"
-            | "abc"
-            | "copy"
-            | "enum"
-            | "dataclasses"
-            | "contextlib"
-            | "subprocess"
-            | "threading"
-            | "multiprocessing"
-            | "unittest"
-            | "logging"
-            | "warnings"
-            | "traceback"
-            | "inspect"
-            | "textwrap"
-            | "string"
-            | "struct"
-            | "hashlib"
-            | "hmac"
-            | "secrets"
-            | "tempfile"
-            | "shutil"
-            | "glob"
-            | "fnmatch"
-            | "stat"
-            | "fileinput"
-            | "csv"
-            | "configparser"
-            | "argparse"
-            | "getopt"
-            | "socket"
-            | "http"
-            | "urllib"
-            | "email"
-            | "html"
-            | "xml"
-            | "pdb"
-            | "profile"
-            | "timeit"
-            | "dis"
-            | "ast"
-            | "types"
-            | "weakref"
-            | "array"
-            | "bisect"
-            | "heapq"
-            | "queue"
-            | "pprint"
-            | "decimal"
-            | "fractions"
-            | "random"
-            | "statistics"
-            | "operator"
-            | "pickle"
-            | "shelve"
-            | "sqlite3"
-            | "zlib"
-            | "gzip"
-            | "bz2"
-            | "lzma"
-            | "zipfile"
-            | "tarfile"
-            | "signal"
-            | "mmap"
-            | "ctypes"
-            | "concurrent"
-            | "asyncio"
-            | "token"
-            | "tokenize"
-            | "keyword"
-            | "difflib"
-            | "uuid"
-            | "base64"
-            | "binascii"
-            | "codecs"
-            | "locale"
-            | "gettext"
-            | "unicodedata"
-            | "stringprep"
-            | "readline"
-            | "rlcompleter"
-            | "platform"
-            | "errno"
-            | "faulthandler"
-            | "atexit"
-            | "builtins"
-            | "_thread"
-            | "__future__"
-    )
+    STDLIB_NAMES.get().map(|s| s.contains(top)).unwrap_or(false)
 }
 
 // ── Module marks ────────────────────────────────────────────────────────
@@ -879,6 +803,8 @@ mod tests {
 
     #[test]
     fn prescan_no_dynamic_flag_for_clean_file() {
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| init_stdlib_names(py));
         let f = write_temp_py("import os\nfrom typing import *\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
@@ -1124,5 +1050,26 @@ def test_it():
             range: Default::default(),
         });
         assert!(is_literal_expr(&expr));
+    }
+
+    #[test]
+    fn is_stdlib_module_recognizes_os() {
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            init_stdlib_names(py);
+        });
+        assert!(is_stdlib_module("os"));
+        assert!(is_stdlib_module("os.path"));
+        assert!(is_stdlib_module("importlib"));
+        assert!(is_stdlib_module("importlib.metadata"));
+    }
+
+    #[test]
+    fn is_stdlib_module_rejects_third_party() {
+        // OnceLock already initialized by the sibling test (process-global).
+        // If this runs first, the uninit fallback returns false — also correct.
+        assert!(!is_stdlib_module("requests"));
+        assert!(!is_stdlib_module("numpy"));
+        assert!(!is_stdlib_module("django.db"));
     }
 }
