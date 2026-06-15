@@ -7,6 +7,7 @@ from typing import Any
 
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._metadata import get_marks
+from oxitest._bridge.parametrize import DictCases
 from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 
@@ -17,10 +18,12 @@ def _check_dict_parametrize(
 ) -> list[CollectedViolation]:
     """Return a DICT_PARAMETRIZE violation if the function uses dict-mode parametrize.
 
-    Dict-parametrize: _oxitest_param_cases has ``is_dict_mode`` set.
+    Dict-parametrize: any layer is a ``DictCases`` instance.
     """
     layers = get_metadata(fn).param_cases
-    if isinstance(layers, tuple) and any(layer.is_dict_mode for layer in layers):
+    if isinstance(layers, tuple) and any(
+        isinstance(layer, DictCases) for layer in layers
+    ):
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",

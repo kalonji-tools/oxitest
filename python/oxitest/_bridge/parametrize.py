@@ -142,16 +142,6 @@ class DictCases:
     cases: dict[str, Any]
 
     @property
-    def is_dict_mode(self) -> bool:
-        """Always True for dict-mode cases."""
-        return True
-
-    @property
-    def is_composed(self) -> bool:
-        """Always False for dict-mode cases."""
-        return False
-
-    @property
     def fixref_fields(self) -> tuple[str, ...]:
         return ()
 
@@ -178,16 +168,6 @@ class DataclassCases:
     cases: dict[str, Any]
     param_type: type
     fixref_fields: tuple[str, ...] = ()
-
-    @property
-    def is_dict_mode(self) -> bool:
-        """Always False for dataclass-mode cases."""
-        return False
-
-    @property
-    def is_composed(self) -> bool:
-        """Always False for dataclass-mode cases."""
-        return False
 
     @property
     def fixref_names(self) -> frozenset[str]:
@@ -235,16 +215,6 @@ class ComposedCases:
     param_type: type
     fixref_fields: tuple[str, ...] = ()
     provided_fields: frozenset[str] = frozenset()
-
-    @property
-    def is_dict_mode(self) -> bool:
-        """Always False for composition-mode cases."""
-        return False
-
-    @property
-    def is_composed(self) -> bool:
-        """Always True for composition-mode cases."""
-        return True
 
     @property
     def fixref_names(self) -> frozenset[str]:

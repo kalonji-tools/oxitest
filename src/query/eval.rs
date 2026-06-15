@@ -10,14 +10,17 @@ use super::resource::ResourceKind;
 
 // ── Evaluator ─────────────────────────────────────────────────────────────────
 
+/// Split `field_value` on commas, trim each part, and return whether any part
+/// satisfies `predicate`.
+fn any_field_part(field_value: &str, predicate: impl Fn(&str) -> bool) -> bool {
+    field_value.split(',').any(|v| predicate(v.trim()))
+}
+
 /// Check whether any comma-separated value in `field_value` matches `pattern`.
 ///
 /// A value matches if it equals `pattern` exactly or contains it as a substring.
 fn match_field_value(field_value: &str, pattern: &str) -> bool {
-    field_value.split(',').any(|v| {
-        let v = v.trim();
-        v == pattern || v.contains(pattern)
-    })
+    any_field_part(field_value, |v| v == pattern || v.contains(pattern))
 }
 
 /// Evaluate an [`Expr`] against a [`crate::query::resource::QueryEntry`].
@@ -35,13 +38,13 @@ pub(crate) fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> b
             match matcher {
                 Matcher::Any => !field_val.is_empty() && field_val != "false",
                 Matcher::Contains(s) => match_field_value(field_val, s),
-                Matcher::Exact(s) => field_val.split(',').any(|v| v.trim() == s.as_str()),
+                Matcher::Exact(s) => any_field_part(field_val, |v| v == s.as_str()),
                 Matcher::Regex(pattern) => {
                     // Compile at eval time; errors are surfaced via validate_predicates
                     // before eval is called in production, so unwrap is safe here for
                     // patterns that passed validation.
                     match Regex::new(pattern) {
-                        Ok(re) => field_val.split(',').any(|v| re.is_match(v.trim())),
+                        Ok(re) => any_field_part(field_val, |v| re.is_match(v)),
                         Err(_) => false,
                     }
                 }
