@@ -572,45 +572,21 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     };
 
     let line_index = python_ast::build_line_index(&parsed.0);
-    let mut test_count = 0;
     let mut items = Vec::new();
 
     let heavy_import_weight = detect_heavy_imports(&parsed.1);
 
-    for stmt in &parsed.1 {
-        if let Some(def) = python_ast::FnDef::try_from_stmt(stmt) {
-            if python_ast::is_test_fn(def.name()) {
-                test_count += 1;
-                items.push(build_prescan_item!(
-                    def,
-                    false,
-                    None,
-                    &line_index,
-                    heavy_import_weight
-                ));
-            }
-        } else if let ast::Stmt::ClassDef(cls) = stmt {
-            if python_ast::is_test_class(&cls.name) {
-                let class_name = cls.name.to_string();
-                for method in &cls.body {
-                    if let Some(def) = python_ast::FnDef::try_from_stmt(method) {
-                        if python_ast::is_test_fn(def.name()) {
-                            test_count += 1;
-                            items.push(build_prescan_item!(
-                                def,
-                                true,
-                                Some(class_name.clone()),
-                                &line_index,
-                                heavy_import_weight
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    python_ast::walk_test_defs(&parsed.1, |def, class_opt| {
+        items.push(build_prescan_item!(
+            def,
+            class_opt.is_some(),
+            class_opt.map(|cls| cls.name.to_string()),
+            &line_index,
+            heavy_import_weight
+        ));
+    });
 
-    if test_count == 0 {
+    if items.is_empty() {
         return PrescanResult::NoTests;
     }
 
