@@ -680,40 +680,6 @@ def test_fixtures_multiple_registrations():
     )
 
 
-def test_fixture_ref_inner_type_helper_detects_fixture_ref():
-    from oxitest import FixtureRef
-    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
-
-    is_ref, inner = _fixture_ref_inner_type(FixtureRef[int])
-    assert is_ref is True, (
-        f"_fixture_ref_inner_type(FixtureRef[int]) should return is_ref=True, got "
-        f"{is_ref!r}"
-    )
-
-
-def test_fixture_ref_inner_type_rejects_plain_type():
-    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
-
-    is_ref, inner = _fixture_ref_inner_type(int)
-    assert is_ref is False, (
-        f"_fixture_ref_inner_type(int) should return is_ref=False, got {is_ref!r}"
-    )
-    assert inner is None, (
-        f"_fixture_ref_inner_type(int) should return inner=None, got {inner!r}"
-    )
-
-
-def test_fixture_ref_inner_type_rejects_fixture_type():
-    from oxitest import Fixture
-    from oxitest._bridge._fixture_registry import _fixture_ref_inner_type
-
-    is_ref, inner = _fixture_ref_inner_type(Fixture[int])
-    assert is_ref is False, (
-        f"_fixture_ref_inner_type(Fixture[int]) should return is_ref=False (not a "
-        f"FixtureRef), got {is_ref!r}"
-    )
-
-
 def test_resolve_for_test_skip_names_prevents_resolution():
     """skip_names prevents resolving Fixture[T] params by those names."""
     called: list[str] = []

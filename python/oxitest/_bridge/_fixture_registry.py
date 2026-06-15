@@ -5,7 +5,6 @@ __all__ = [
     "FixtureRegistry",
     "FixtureShadowWarning",
     "_fixture_inner_type",
-    "_fixture_ref_inner_type",
 ]
 
 import inspect
@@ -22,7 +21,7 @@ from typing import (
     get_type_hints,
 )
 
-from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
+from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 T = TypeVar("T")
@@ -56,8 +55,10 @@ class FixtureRegistry:
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
         self._defs: dict[str, list[FixtureDef[Any]]] = {}
         self._namespaces: set[str] = set()  # O(1) namespace existence check
+        self._has_shared_cache: bool | None = None
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
+        self._has_shared_cache = None
         existing = self._defs.get(defn.name)
         if existing and existing[-1].conftest_path != defn.conftest_path:
             parent = existing[-1]
@@ -211,7 +212,9 @@ class FixtureRegistry:
 
     def has_shared(self) -> bool:
         """Return True if any effective fixture definition has shared=True."""
-        return len(self.shared_fixture_groups()) > 0
+        if self._has_shared_cache is None:
+            self._has_shared_cache = len(self.shared_fixture_groups()) > 0
+        return self._has_shared_cache
 
     def shared_names(self) -> list[str]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
@@ -233,8 +236,3 @@ def _extract_annotated_type(hint: Any, marker_type: type) -> tuple[bool, Any]:
 def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
     """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
     return _extract_annotated_type(hint, _FixtureMarker)
-
-
-def _fixture_ref_inner_type(hint: Any) -> tuple[bool, Any]:
-    """Return (is_fixture_ref, inner_type). True iff hint is FixtureRef[T]."""
-    return _extract_annotated_type(hint, _FixtureRefMarker)
