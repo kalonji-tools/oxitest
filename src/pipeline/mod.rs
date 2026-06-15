@@ -236,6 +236,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         .color
         .resolve(is_tty || cfg.exec.mode.debug_mode().is_some());
 
+    crate::prescan::init_stdlib_names(py);
+
     let python_bin = py
         .import("sys")?
         .getattr("executable")?
