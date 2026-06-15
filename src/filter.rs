@@ -360,9 +360,10 @@ fn filter_prescan_last_failed<'a>(
         .iter()
         .filter(|item| {
             let id = prescan_node_id(file_path, item);
+            let prefix = format!("{id}[");
             failed_ids
                 .iter()
-                .any(|fid| fid == &id || fid.starts_with(&format!("{id}[")))
+                .any(|fid| fid == &id || fid.starts_with(&prefix))
         })
         .collect()
 }
@@ -417,9 +418,10 @@ pub(crate) fn file_matches_last_failed(
 ) -> bool {
     items.iter().any(|item| {
         let id = prescan_node_id(file_path, item);
+        let prefix = format!("{id}[");
         failed_ids
             .iter()
-            .any(|fid| fid == &id || fid.starts_with(&format!("{id}[")))
+            .any(|fid| fid == &id || fid.starts_with(&prefix))
     })
 }
 
