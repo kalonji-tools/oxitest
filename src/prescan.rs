@@ -83,9 +83,21 @@ fn extract_prescan_marker(dec: &ast::Expr) -> Option<PrescanMarker> {
     })
 }
 
-/// Check whether an expression is a literal (constant) value.
+/// Check whether an expression is a literal value (constant, or a collection of literals).
 fn is_literal_expr(expr: &ast::Expr) -> bool {
-    matches!(expr, ast::Expr::Constant(_))
+    match expr {
+        ast::Expr::Constant(_) => true,
+        ast::Expr::Tuple(t) => t.elts.iter().all(is_literal_expr),
+        ast::Expr::List(l) => l.elts.iter().all(is_literal_expr),
+        ast::Expr::Set(s) => s.elts.iter().all(is_literal_expr),
+        ast::Expr::Dict(d) => {
+            d.keys
+                .iter()
+                .all(|k| k.as_ref().is_some_and(is_literal_expr))
+                && d.values.iter().all(is_literal_expr)
+        }
+        _ => false,
+    }
 }
 
 /// Extract keyword argument names from `@oxi.parametrize(case1=..., case2=...)`.
@@ -1055,5 +1067,62 @@ def test_it():
             }
             _ => panic!("expected HasTests"),
         }
+    }
+
+    // ── is_literal_expr ──────────────────────────────────────────────────
+
+    #[test]
+    fn is_literal_expr_constant() {
+        let expr = ast::Expr::Constant(ast::ExprConstant {
+            value: ast::Constant::Str("hello".to_string()),
+            kind: None,
+            range: Default::default(),
+        });
+        assert!(is_literal_expr(&expr));
+    }
+
+    #[test]
+    fn is_literal_expr_tuple_of_constants() {
+        let expr = ast::Expr::Tuple(ast::ExprTuple {
+            elts: vec![
+                ast::Expr::Constant(ast::ExprConstant {
+                    value: ast::Constant::Str("a".to_string()),
+                    kind: None,
+                    range: Default::default(),
+                }),
+                ast::Expr::Constant(ast::ExprConstant {
+                    value: ast::Constant::Str("b".to_string()),
+                    kind: None,
+                    range: Default::default(),
+                }),
+            ],
+            ctx: ast::ExprContext::Load,
+            range: Default::default(),
+        });
+        assert!(is_literal_expr(&expr));
+    }
+
+    #[test]
+    fn is_literal_expr_list_with_name_is_false() {
+        let expr = ast::Expr::List(ast::ExprList {
+            elts: vec![ast::Expr::Name(ast::ExprName {
+                id: ast::Identifier::new("x"),
+                ctx: ast::ExprContext::Load,
+                range: Default::default(),
+            })],
+            ctx: ast::ExprContext::Load,
+            range: Default::default(),
+        });
+        assert!(!is_literal_expr(&expr));
+    }
+
+    #[test]
+    fn is_literal_expr_empty_tuple() {
+        let expr = ast::Expr::Tuple(ast::ExprTuple {
+            elts: vec![],
+            ctx: ast::ExprContext::Load,
+            range: Default::default(),
+        });
+        assert!(is_literal_expr(&expr));
     }
 }
