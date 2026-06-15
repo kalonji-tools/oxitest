@@ -400,7 +400,7 @@ const HEAVY_IMPORT_PACKAGES: &[&str] = &[
 /// - Literal float/int N → N × 1000 ms
 /// - Dynamic arg → 50 ms
 /// - No sleep call → 0 ms
-fn detect_sleep_call(expr: &ast::Expr) -> f64 {
+fn sleep_call_weight(expr: &ast::Expr) -> f64 {
     let call = match expr {
         ast::Expr::Call(c) => c,
         _ => return 0.0,
@@ -479,7 +479,7 @@ fn compute_body_weight(
                 ast::Expr::Await(aw) => &*aw.value,
                 other => other,
             };
-            sleep_weight += detect_sleep_call(call_expr);
+            sleep_weight += sleep_call_weight(call_expr);
         }
         queue.extend(python_ast::compound_children(stmt));
     }
@@ -494,7 +494,7 @@ fn compute_body_weight(
 /// Detect heavy third-party imports in the top-level module statements.
 ///
 /// Returns 20.0 if any heavy package is found, 0.0 otherwise.
-pub(crate) fn detect_heavy_imports(stmts: &[ast::Stmt]) -> f64 {
+pub(crate) fn heavy_import_weight(stmts: &[ast::Stmt]) -> f64 {
     for stmt in stmts {
         match stmt {
             ast::Stmt::Import(imp) => {
@@ -574,7 +574,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     let line_index = python_ast::build_line_index(&parsed.0);
     let mut items = Vec::new();
 
-    let heavy_import_weight = detect_heavy_imports(&parsed.1);
+    let heavy_import_wt = heavy_import_weight(&parsed.1);
 
     python_ast::walk_test_defs(&parsed.1, |def, class_opt| {
         items.push(build_prescan_item!(
@@ -582,7 +582,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             class_opt.is_some(),
             class_opt.map(|cls| cls.name.to_string()),
             &line_index,
-            heavy_import_weight
+            heavy_import_wt
         ));
     });
 
@@ -924,27 +924,27 @@ def test_it():
         assert!((w - 3.0).abs() < 0.01, "expected ~3.0, got {w}");
     }
 
-    // ── detect_heavy_imports ─────────────────────────────────────────
+    // ── heavy_import_weight ──────────────────────────────────────────
 
     #[test]
     fn heavy_imports_requests() {
         let f = write_temp_py("import requests\ndef test_it(): pass\n");
         let (_, stmts) = python_ast::parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(detect_heavy_imports(&stmts), 20.0);
+        assert_eq!(heavy_import_weight(&stmts), 20.0);
     }
 
     #[test]
     fn heavy_imports_sqlalchemy_from_import() {
         let f = write_temp_py("from sqlalchemy import create_engine\ndef test_it(): pass\n");
         let (_, stmts) = python_ast::parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(detect_heavy_imports(&stmts), 20.0);
+        assert_eq!(heavy_import_weight(&stmts), 20.0);
     }
 
     #[test]
     fn heavy_imports_no_heavy() {
         let f = write_temp_py("import os\nimport sys\ndef test_it(): pass\n");
         let (_, stmts) = python_ast::parse_file(&temp_path(&f)).unwrap();
-        assert_eq!(detect_heavy_imports(&stmts), 0.0);
+        assert_eq!(heavy_import_weight(&stmts), 0.0);
     }
 
     #[test]
