@@ -26,6 +26,11 @@ pub(crate) fn is_test_class(name: &str) -> bool {
     name.starts_with("Test")
 }
 
+/// Returns true for the `"oxi"` or `"oxitest"` namespace identifiers.
+pub(crate) fn is_oxitest_namespace(s: &str) -> bool {
+    s == "oxi" || s == "oxitest"
+}
+
 /// Unified view of `FunctionDef` and `AsyncFunctionDef`.
 ///
 /// Erases the sync/async distinction so callers don't need separate match arms.
@@ -229,8 +234,7 @@ pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
     let ast::Expr::Name(name_node) = &*inner.value else {
         return None;
     };
-    let ns = name_node.id.as_str();
-    if ns != "oxi" && ns != "oxitest" {
+    if !is_oxitest_namespace(name_node.id.as_str()) {
         return None;
     }
 

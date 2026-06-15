@@ -109,20 +109,26 @@ fn extract_parametrize_kwarg_names(decorators: &[ast::Expr]) -> Vec<String> {
 fn is_parametrize_call(func: &ast::Expr) -> bool {
     if let ast::Expr::Attribute(attr) = func {
         if attr.attr.as_str() == "parametrize" {
+            // oxi.parametrize or oxitest.parametrize
             if let ast::Expr::Name(n) = &*attr.value {
-                let s = n.id.as_str();
-                if s == "oxi" || s == "oxitest" {
+                if python_ast::is_oxitest_namespace(n.id.as_str()) {
                     return true;
                 }
             }
+            // oxi.mark.parametrize or oxitest.mark.parametrize
             if let ast::Expr::Attribute(inner) = &*attr.value {
                 if inner.attr.as_str() == "mark" {
                     if let ast::Expr::Name(n) = &*inner.value {
-                        let s = n.id.as_str();
-                        if s == "oxi" || s == "oxitest" {
+                        if python_ast::is_oxitest_namespace(n.id.as_str()) {
                             return true;
                         }
                     }
+                }
+            }
+            // bare mark.parametrize (from `from oxitest import mark`)
+            if let ast::Expr::Name(n) = &*attr.value {
+                if n.id.as_str() == "mark" {
+                    return true;
                 }
             }
         }
@@ -153,7 +159,7 @@ fn is_fixture_annotation(expr: &ast::Expr) -> bool {
                 // oxitest.Fixture[T]
                 ast::Expr::Attribute(attr) => {
                     attr.attr.as_str() == "Fixture"
-                        && matches!(&*attr.value, ast::Expr::Name(n) if n.id.as_str() == "oxitest")
+                        && matches!(&*attr.value, ast::Expr::Name(n) if python_ast::is_oxitest_namespace(n.id.as_str()))
                 }
                 _ => false,
             }
@@ -422,8 +428,7 @@ fn extract_mark_from_value(expr: &ast::Expr) -> Option<String> {
             // oxi.mark.NAME or oxitest.mark.NAME
             ast::Expr::Attribute(inner) if inner.attr.as_str() == "mark" => {
                 if let ast::Expr::Name(n) = &*inner.value {
-                    let ns = n.id.as_str();
-                    if ns == "oxi" || ns == "oxitest" {
+                    if python_ast::is_oxitest_namespace(n.id.as_str()) {
                         return Some(mark_name.to_string());
                     }
                 }
@@ -769,6 +774,21 @@ mod tests {
     }
 
     #[test]
+    fn prescan_items_extracts_bare_mark_parametrize() {
+        let f = write_temp_py(
+            "from oxitest import mark\n@mark.parametrize(case1=1, case2=2)\ndef test_it(case1, case2):\n    pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 1);
+                assert_eq!(p.items[0].param_ids, vec!["case1", "case2"]);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn prescan_items_extracts_fixture_param_annotations() {
         let f = write_temp_py(
             "from oxitest import Fixture\n\ndef test_it(db: Fixture[str], name: str): pass\n",
@@ -778,6 +798,21 @@ mod tests {
             PrescanResult::HasTests(p) => {
                 assert_eq!(p.items.len(), 1);
                 assert_eq!(p.items[0].fixture_params, vec!["db"]);
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prescan_items_extracts_oxi_fixture_annotation() {
+        let f = write_temp_py(
+            "import oxitest as oxi\nfrom pathlib import Path\ndef test_it(tmp: oxi.Fixture[Path]):\n    pass\n",
+        );
+        let result = prescan_with_ast(&temp_path(&f), false);
+        match result {
+            PrescanResult::HasTests(p) => {
+                assert_eq!(p.items.len(), 1);
+                assert_eq!(p.items[0].fixture_params, vec!["tmp"]);
             }
             other => panic!("expected HasTests, got {other:?}"),
         }
