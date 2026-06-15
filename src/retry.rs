@@ -40,7 +40,7 @@ pub(crate) fn identify_failed_items(
 ) -> Vec<(Arc<TestItem>, OutcomeKind)> {
     let failed_map: std::collections::HashMap<&str, OutcomeKind> = timings
         .iter()
-        .filter(|t| t.outcome.is_failure())
+        .filter(|t| t.outcome.is_retryable_failure())
         .map(|t| (t.node_id.as_ref(), t.outcome))
         .collect();
     items

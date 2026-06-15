@@ -19,7 +19,7 @@ impl OutcomeCache for TestCache {
                 entry
                     .last_outcome
                     .as_ref()
-                    .is_some_and(OutcomeKind::is_failure)
+                    .is_some_and(OutcomeKind::is_retryable_failure)
             })
             .map(|(id, _)| id.clone())
             .collect()
