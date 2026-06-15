@@ -413,8 +413,6 @@ impl std::fmt::Display for ExitCode {
 pub struct TestItem {
     #[serde(skip, default)]
     pub(crate) node_id: NodeId,
-    #[serde(skip, default)]
-    pub(crate) module_path: Utf8PathBuf,
     pub(crate) fn_name: Arc<str>,
     pub(crate) lineno: LineNo,
     pub(crate) markers: MarkerSet,
@@ -426,6 +424,16 @@ pub struct TestItem {
     pub(crate) fixture_names: Vec<String>,
     #[serde(default)]
     pub(crate) fixref_names: Vec<String>,
+}
+
+impl TestItem {
+    /// Derive the module path from the node_id.
+    ///
+    /// The node_id format is `"module_path::fn_name"` or
+    /// `"module_path::fn_name[param_id]"`. This extracts the prefix before `::`.
+    pub(crate) fn module_path(&self) -> &str {
+        self.node_id.module_path().unwrap_or("")
+    }
 }
 
 #[cfg(test)]
@@ -930,7 +938,7 @@ mod tests {
     fn test_item_has_param_fields() {
         let item = TestItem {
             node_id: NodeId::new("test.py", "test_add", Some("basic")),
-            module_path: Utf8PathBuf::from("test.py"),
+
             fn_name: Arc::from("test_add"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
@@ -951,7 +959,7 @@ mod tests {
     fn test_item_non_parametrize_has_none_param_id() {
         let item = TestItem {
             node_id: NodeId::new("test.py", "test_foo", None),
-            module_path: Utf8PathBuf::from("test.py"),
+
             fn_name: Arc::from("test_foo"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
@@ -969,7 +977,7 @@ mod tests {
     fn test_item_has_is_async_field() {
         let sync_item = TestItem {
             node_id: NodeId::new("test.py", "test_sync", None),
-            module_path: Utf8PathBuf::from("test.py"),
+
             fn_name: Arc::from("test_sync"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
@@ -983,7 +991,7 @@ mod tests {
 
         let async_item = TestItem {
             node_id: NodeId::new("test.py", "test_async", None),
-            module_path: Utf8PathBuf::from("test.py"),
+
             fn_name: Arc::from("test_async"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
@@ -1231,7 +1239,7 @@ mod tests {
     fn builder_defaults() {
         let item = TestItem::builder("tests/test_foo.py", "test_add").build();
         assert_eq!(item.node_id.to_string(), "tests/test_foo.py::test_add");
-        assert_eq!(item.module_path.as_str(), "tests/test_foo.py");
+        assert_eq!(item.module_path(), "tests/test_foo.py");
         assert_eq!(&*item.fn_name, "test_add");
         assert_eq!(item.lineno, LineNo::new(1));
         assert!(item.markers.is_empty());

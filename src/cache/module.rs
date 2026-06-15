@@ -35,7 +35,6 @@ impl ModuleCache for TestCache {
             .map(|d| {
                 let mut item = d.clone();
                 item.node_id = NodeId::new(key, &item.fn_name, item.param_id.as_deref());
-                item.module_path = path.to_owned();
                 Arc::new(item)
             })
             .collect();
@@ -72,7 +71,7 @@ impl ModuleCache for TestCache {
 
 #[cfg(test)]
 mod tests {
-    use camino::{Utf8Path, Utf8PathBuf};
+    use camino::Utf8Path;
 
     use super::*;
     use crate::types::{LineNo, MarkerSet};
@@ -85,7 +84,7 @@ mod tests {
         let items: Vec<Arc<TestItem>> = vec![
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_a", None),
-                module_path: Utf8PathBuf::from("tests/test_foo.py"),
+
                 fn_name: Arc::from("test_a"),
                 lineno: LineNo::new(5),
                 markers: MarkerSet::from(vec!["slow".to_string()]),
@@ -97,7 +96,7 @@ mod tests {
             }),
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
-                module_path: Utf8PathBuf::from("tests/test_foo.py"),
+
                 fn_name: Arc::from("test_b"),
                 lineno: LineNo::new(10),
                 markers: MarkerSet::new(),
@@ -135,7 +134,6 @@ mod tests {
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
-            module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: Arc::from("test_a"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
@@ -216,7 +214,6 @@ mod tests {
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
             node_id: NodeId::new("tests/test_foo.py", "test_a", None),
-            module_path: Utf8PathBuf::from("tests/test_foo.py"),
             fn_name: Arc::from("test_a"),
             lineno: LineNo::new(3),
             markers: MarkerSet::new(),
