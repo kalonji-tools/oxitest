@@ -153,7 +153,8 @@ fn item_matches_node_ids(
     source_files: &std::collections::HashSet<Utf8PathBuf>,
 ) -> bool {
     // Items from bare-path files (not node ID sources) pass through.
-    if !source_files.is_empty() && !source_files.contains(&item.module_path) {
+    if !source_files.is_empty() && !source_files.contains(camino::Utf8Path::new(item.module_path()))
+    {
         return true;
     }
     let item_id: &str = item.node_id.as_ref();
@@ -218,7 +219,7 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<ModuleGroup> {
     let mut groups: IndexMap<Utf8PathBuf, Vec<Arc<TestItem>>> = IndexMap::new();
     for item in items {
         groups
-            .entry(item.module_path.clone())
+            .entry(Utf8PathBuf::from(item.module_path()))
             .or_default()
             .push(Arc::clone(item));
     }
@@ -687,11 +688,10 @@ mod tests {
     }
 
     #[test]
-    fn module_path_as_str_does_not_require_unwrap() {
-        // Utf8PathBuf::as_str() returns &str directly — no Option, no unwrap.
-        // This fails to compile if module_path is PathBuf (PathBuf has no as_str()).
+    fn module_path_accessor_returns_str() {
+        // module_path() derives from node_id — no field, no unwrap.
         let item: Arc<TestItem> = TestItem::builder("tests/test_mod.py", "test_a").arc();
-        let _s: &str = item.module_path.as_str();
+        let _s: &str = item.module_path();
     }
 
     #[test]
@@ -745,7 +745,7 @@ mod tests {
         assert_eq!(filtered.len(), 2);
         assert!(filtered
             .iter()
-            .all(|i| i.module_path == Utf8PathBuf::from("tests/test_a.py")));
+            .all(|i| i.module_path() == "tests/test_a.py"));
     }
 
     #[test]
@@ -804,10 +804,7 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(
-            filtered[0].module_path,
-            Utf8PathBuf::from("tests/test_math.py")
-        );
+        assert_eq!(filtered[0].module_path(), "tests/test_math.py");
     }
 
     #[test]

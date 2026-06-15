@@ -74,7 +74,7 @@ impl Reporter for JunitReporter {
             _ => outcome.message().unwrap_or_default().to_owned(),
         };
         self.results.push(JunitResult {
-            classname: to_classname(item.module_path.as_str()),
+            classname: to_classname(item.module_path()),
             name: to_testname(item),
             time_secs: duration_ms.as_f64() / 1000.0,
             category: outcome.junit_category(),

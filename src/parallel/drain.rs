@@ -399,13 +399,11 @@ mod drain_tests {
     #[test]
     fn drain_remaining_into_crashed_emits_error_for_every_item() {
         use crate::types::{CollectError, NodeId, TestItem, TestOutcome};
-        use camino::Utf8PathBuf;
         use std::sync::Arc;
 
         fn make_test_item(path: &str, fn_name: &str) -> Arc<TestItem> {
             Arc::new(TestItem {
                 node_id: NodeId::new(path, fn_name, None),
-                module_path: Utf8PathBuf::from(path),
                 fn_name: Arc::from(fn_name),
                 lineno: crate::types::LineNo::new(1),
                 markers: crate::types::MarkerSet::new(),

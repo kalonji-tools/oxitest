@@ -267,7 +267,7 @@ impl RunStats {
 
     fn collect_tips(&mut self, item: &TestItem, lines: &[usize]) {
         if !lines.is_empty() {
-            let file = item.module_path.clone();
+            let file = camino::Utf8PathBuf::from(item.module_path());
             for &ln in lines {
                 self.diagnostics.tip_lines.push(TipLine {
                     file: file.clone(),
