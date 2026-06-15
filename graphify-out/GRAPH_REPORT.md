@@ -1,21 +1,20 @@
-# Graph Report - oxitest.main.update-graphify-setup  (2026-06-15)
+# Graph Report - oxitest.main  (2026-06-15)
 
 ## Corpus Check
-- 308 files · ~272,056 words
+- 308 files · ~272,248 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8856 nodes · 20009 edges · 381 communities (331 shown, 50 thin omitted)
-- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 3269 edges (avg confidence: 0.66)
+- 8864 nodes · 20029 edges · 500 communities (437 shown, 63 thin omitted)
+- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 3273 edges (avg confidence: 0.66)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e05ce66a`
+- Built from commit: `7d0ae97e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_Community 0|Community 0]]
 - [[_COMMUNITY_Community 1|Community 1]]
 - [[_COMMUNITY_Community 2|Community 2]]
 - [[_COMMUNITY_Community 3|Community 3]]
@@ -195,9 +194,11 @@
 - [[_COMMUNITY_Community 178|Community 178]]
 - [[_COMMUNITY_Community 179|Community 179]]
 - [[_COMMUNITY_Community 180|Community 180]]
+- [[_COMMUNITY_Community 181|Community 181]]
 - [[_COMMUNITY_Community 182|Community 182]]
 - [[_COMMUNITY_Community 183|Community 183]]
 - [[_COMMUNITY_Community 184|Community 184]]
+- [[_COMMUNITY_Community 185|Community 185]]
 - [[_COMMUNITY_Community 186|Community 186]]
 - [[_COMMUNITY_Community 187|Community 187]]
 - [[_COMMUNITY_Community 188|Community 188]]
@@ -212,6 +213,7 @@
 - [[_COMMUNITY_Community 197|Community 197]]
 - [[_COMMUNITY_Community 198|Community 198]]
 - [[_COMMUNITY_Community 199|Community 199]]
+- [[_COMMUNITY_Community 200|Community 200]]
 - [[_COMMUNITY_Community 201|Community 201]]
 - [[_COMMUNITY_Community 202|Community 202]]
 - [[_COMMUNITY_Community 203|Community 203]]
@@ -367,32 +369,148 @@
 - [[_COMMUNITY_Community 357|Community 357]]
 - [[_COMMUNITY_Community 358|Community 358]]
 - [[_COMMUNITY_Community 359|Community 359]]
+- [[_COMMUNITY_Community 360|Community 360]]
+- [[_COMMUNITY_Community 361|Community 361]]
 - [[_COMMUNITY_Community 362|Community 362]]
+- [[_COMMUNITY_Community 363|Community 363]]
+- [[_COMMUNITY_Community 364|Community 364]]
+- [[_COMMUNITY_Community 365|Community 365]]
+- [[_COMMUNITY_Community 366|Community 366]]
 - [[_COMMUNITY_Community 367|Community 367]]
+- [[_COMMUNITY_Community 374|Community 374]]
+- [[_COMMUNITY_Community 375|Community 375]]
 - [[_COMMUNITY_Community 376|Community 376]]
+- [[_COMMUNITY_Community 377|Community 377]]
+- [[_COMMUNITY_Community 378|Community 378]]
+- [[_COMMUNITY_Community 379|Community 379]]
 - [[_COMMUNITY_Community 380|Community 380]]
+- [[_COMMUNITY_Community 381|Community 381]]
+- [[_COMMUNITY_Community 382|Community 382]]
+- [[_COMMUNITY_Community 383|Community 383]]
+- [[_COMMUNITY_Community 384|Community 384]]
+- [[_COMMUNITY_Community 385|Community 385]]
 - [[_COMMUNITY_Community 386|Community 386]]
 - [[_COMMUNITY_Community 387|Community 387]]
+- [[_COMMUNITY_Community 388|Community 388]]
+- [[_COMMUNITY_Community 389|Community 389]]
+- [[_COMMUNITY_Community 390|Community 390]]
+- [[_COMMUNITY_Community 391|Community 391]]
 - [[_COMMUNITY_Community 392|Community 392]]
+- [[_COMMUNITY_Community 393|Community 393]]
 - [[_COMMUNITY_Community 394|Community 394]]
 - [[_COMMUNITY_Community 395|Community 395]]
+- [[_COMMUNITY_Community 396|Community 396]]
+- [[_COMMUNITY_Community 397|Community 397]]
+- [[_COMMUNITY_Community 398|Community 398]]
+- [[_COMMUNITY_Community 399|Community 399]]
+- [[_COMMUNITY_Community 400|Community 400]]
+- [[_COMMUNITY_Community 401|Community 401]]
+- [[_COMMUNITY_Community 402|Community 402]]
+- [[_COMMUNITY_Community 403|Community 403]]
+- [[_COMMUNITY_Community 404|Community 404]]
+- [[_COMMUNITY_Community 405|Community 405]]
+- [[_COMMUNITY_Community 406|Community 406]]
+- [[_COMMUNITY_Community 407|Community 407]]
+- [[_COMMUNITY_Community 408|Community 408]]
+- [[_COMMUNITY_Community 409|Community 409]]
 - [[_COMMUNITY_Community 410|Community 410]]
+- [[_COMMUNITY_Community 411|Community 411]]
 - [[_COMMUNITY_Community 412|Community 412]]
+- [[_COMMUNITY_Community 413|Community 413]]
+- [[_COMMUNITY_Community 414|Community 414]]
 - [[_COMMUNITY_Community 415|Community 415]]
+- [[_COMMUNITY_Community 416|Community 416]]
+- [[_COMMUNITY_Community 417|Community 417]]
+- [[_COMMUNITY_Community 418|Community 418]]
+- [[_COMMUNITY_Community 419|Community 419]]
+- [[_COMMUNITY_Community 420|Community 420]]
+- [[_COMMUNITY_Community 421|Community 421]]
 - [[_COMMUNITY_Community 422|Community 422]]
+- [[_COMMUNITY_Community 423|Community 423]]
+- [[_COMMUNITY_Community 424|Community 424]]
 - [[_COMMUNITY_Community 425|Community 425]]
 - [[_COMMUNITY_Community 426|Community 426]]
+- [[_COMMUNITY_Community 427|Community 427]]
+- [[_COMMUNITY_Community 428|Community 428]]
+- [[_COMMUNITY_Community 429|Community 429]]
+- [[_COMMUNITY_Community 430|Community 430]]
+- [[_COMMUNITY_Community 431|Community 431]]
+- [[_COMMUNITY_Community 432|Community 432]]
+- [[_COMMUNITY_Community 433|Community 433]]
+- [[_COMMUNITY_Community 434|Community 434]]
+- [[_COMMUNITY_Community 435|Community 435]]
+- [[_COMMUNITY_Community 436|Community 436]]
+- [[_COMMUNITY_Community 437|Community 437]]
+- [[_COMMUNITY_Community 438|Community 438]]
+- [[_COMMUNITY_Community 439|Community 439]]
+- [[_COMMUNITY_Community 440|Community 440]]
+- [[_COMMUNITY_Community 441|Community 441]]
+- [[_COMMUNITY_Community 442|Community 442]]
+- [[_COMMUNITY_Community 443|Community 443]]
+- [[_COMMUNITY_Community 444|Community 444]]
 - [[_COMMUNITY_Community 445|Community 445]]
+- [[_COMMUNITY_Community 446|Community 446]]
+- [[_COMMUNITY_Community 447|Community 447]]
+- [[_COMMUNITY_Community 448|Community 448]]
+- [[_COMMUNITY_Community 449|Community 449]]
+- [[_COMMUNITY_Community 450|Community 450]]
+- [[_COMMUNITY_Community 451|Community 451]]
+- [[_COMMUNITY_Community 452|Community 452]]
+- [[_COMMUNITY_Community 453|Community 453]]
+- [[_COMMUNITY_Community 454|Community 454]]
+- [[_COMMUNITY_Community 455|Community 455]]
+- [[_COMMUNITY_Community 456|Community 456]]
+- [[_COMMUNITY_Community 457|Community 457]]
+- [[_COMMUNITY_Community 458|Community 458]]
+- [[_COMMUNITY_Community 459|Community 459]]
+- [[_COMMUNITY_Community 460|Community 460]]
+- [[_COMMUNITY_Community 461|Community 461]]
+- [[_COMMUNITY_Community 462|Community 462]]
+- [[_COMMUNITY_Community 463|Community 463]]
+- [[_COMMUNITY_Community 464|Community 464]]
+- [[_COMMUNITY_Community 465|Community 465]]
+- [[_COMMUNITY_Community 466|Community 466]]
+- [[_COMMUNITY_Community 467|Community 467]]
+- [[_COMMUNITY_Community 468|Community 468]]
+- [[_COMMUNITY_Community 469|Community 469]]
+- [[_COMMUNITY_Community 470|Community 470]]
+- [[_COMMUNITY_Community 471|Community 471]]
+- [[_COMMUNITY_Community 472|Community 472]]
+- [[_COMMUNITY_Community 473|Community 473]]
+- [[_COMMUNITY_Community 474|Community 474]]
+- [[_COMMUNITY_Community 475|Community 475]]
+- [[_COMMUNITY_Community 476|Community 476]]
+- [[_COMMUNITY_Community 477|Community 477]]
+- [[_COMMUNITY_Community 478|Community 478]]
+- [[_COMMUNITY_Community 479|Community 479]]
+- [[_COMMUNITY_Community 480|Community 480]]
+- [[_COMMUNITY_Community 481|Community 481]]
+- [[_COMMUNITY_Community 482|Community 482]]
+- [[_COMMUNITY_Community 483|Community 483]]
+- [[_COMMUNITY_Community 484|Community 484]]
 - [[_COMMUNITY_Community 485|Community 485]]
+- [[_COMMUNITY_Community 486|Community 486]]
+- [[_COMMUNITY_Community 487|Community 487]]
+- [[_COMMUNITY_Community 488|Community 488]]
 - [[_COMMUNITY_Community 489|Community 489]]
+- [[_COMMUNITY_Community 490|Community 490]]
+- [[_COMMUNITY_Community 491|Community 491]]
+- [[_COMMUNITY_Community 492|Community 492]]
+- [[_COMMUNITY_Community 493|Community 493]]
+- [[_COMMUNITY_Community 494|Community 494]]
+- [[_COMMUNITY_Community 495|Community 495]]
+- [[_COMMUNITY_Community 496|Community 496]]
+- [[_COMMUNITY_Community 497|Community 497]]
+- [[_COMMUNITY_Community 498|Community 498]]
+- [[_COMMUNITY_Community 499|Community 499]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `push()` - 276 edges
-2. `write_temp_py()` - 104 edges
+2. `write_temp_py()` - 106 edges
 3. `get()` - 100 edges
 4. `FixtureRegistry` - 100 edges
 5. `FixtureSession` - 95 edges
-6. `temp_path()` - 90 edges
+6. `temp_path()` - 92 edges
 7. `PluginRegistry` - 83 edges
 8. `forEach()` - 82 edges
 9. `BuiltinFixture` - 81 edges
@@ -405,10 +523,10 @@
   python/oxitest/_bridge/_builtins/_patch.py → python/oxitest/_bridge/_builtins/_base.py
 - `_BuiltinContext` --uses--> `BuiltinFixture`  [INFERRED]
   python/oxitest/_bridge/_builtins/_warncapture.py → python/oxitest/_bridge/_builtins/_base.py
-- `test_fixture_not_found_error_with_namespace()` --calls--> `FixtureNotFoundError`  [INFERRED]
-  python/tests/test_fixtures.py → python/oxitest/_bridge/_errors.py
-- `test_fixture_not_found_error_without_namespace()` --calls--> `FixtureNotFoundError`  [INFERRED]
-  python/tests/test_fixtures.py → python/oxitest/_bridge/_errors.py
+- `test_stdlib_backend_captures_records()` --calls--> `StdlibLogBackend`  [INFERRED]
+  python/tests/test_builtins.py → python/oxitest/_bridge/_builtins/_logcapture.py
+- `test_stdlib_backend_set_level_filters_records()` --calls--> `StdlibLogBackend`  [INFERRED]
+  python/tests/test_builtins.py → python/oxitest/_bridge/_builtins/_logcapture.py
 
 ## Import Cycles
 - 1-file cycle: `src/pipeline/phases/empty.rs -> src/pipeline/phases/empty.rs`
@@ -432,75 +550,71 @@
 - 1-file cycle: `src/pipeline/execution.rs -> src/pipeline/execution.rs`
 - 1-file cycle: `src/pipeline/helpers.rs -> src/pipeline/helpers.rs`
 
-## Communities (381 total, 50 thin omitted)
-
-### Community 0 - "Community 0"
-Cohesion: 0.00
-Nodes (295): addEntry(), addPoints(), addToResyncTokens(), alternatives(), AT_LEAST_ONE(), AT_LEAST_ONE1(), AT_LEAST_ONE2(), AT_LEAST_ONE3() (+287 more)
+## Communities (500 total, 63 thin omitted)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.06
-Nodes (71): AsyncPolicy, FixtureCycleError, FixtureError, FixtureNotFoundError, FixtureSetupError, Consolidated error hierarchy for oxitest internals., Fixture-related errors., Raised when a requested fixture name cannot be found in the registry. (+63 more)
+Nodes (96): AsyncPolicy, FixtureCycleError, FixtureError, FixtureNotFoundError, FixtureSetupError, Consolidated error hierarchy for oxitest internals., Fixture-related errors., Raised when a requested fixture name cannot be found in the registry. (+88 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.01
-Nodes (233): $1(), _6e(), addAnnotation(), addAstNodeRegionWithAssignmentsTo(), addAttributes(), addClass(), addClassesToNamespace(), addCssStyles() (+225 more)
+Cohesion: 0.07
+Nodes (44): addAttributes(), addCssStyles(), addEntity(), addNamespace(), addNodeFromVertex(), addRelationship(), addStyleClass(), cacheForContext() (+36 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.07
-Nodes (29): CoveragePyProvider, Built-in coverage provider backed by coverage.py., Begin coverage collection., Stop collection, save data, combine parallel data files., Generate report in the given format., Find the coverage config file path., _FakeCovInstance, _make_fake_coverage_module() (+21 more)
+Cohesion: 0.06
+Nodes (44): AT_LEAST_ONE_SEP(), AT_LEAST_ONE_SEP1(), AT_LEAST_ONE_SEP2(), AT_LEAST_ONE_SEP3(), AT_LEAST_ONE_SEP4(), AT_LEAST_ONE_SEP5(), AT_LEAST_ONE_SEP6(), AT_LEAST_ONE_SEP7() (+36 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.08
-Nodes (32): CovReportFormat, Report format for coverage output., ConflictingCoverageError, Multiple plugins provide a CoverageProvider., load_plugins(), PluginEntry, Append a deferred (not yet imported) plugin entry., Check for conflicting plugin declarations.          Raises:             Conflict (+24 more)
+Cohesion: 0.07
+Nodes (37): a(), bl(), BOe(), buildLookaheadForAlternation(), buildLookaheadForOptional(), buildMismatchTokenMessage(), Eje(), FOe() (+29 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.05
-Nodes (138): _2(), aNe(), aOe(), Art(), bIe(), br(), children(), CIe() (+130 more)
+Cohesion: 0.13
+Nodes (31): Art(), dequeue(), dNe(), eIe(), F1(), filterNodes(), GS(), gve() (+23 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.03
-Nodes (90): $8e(), a2e(), A4(), a6e(), al(), autolink(), _be(), blockquote() (+82 more)
+Cohesion: 0.13
+Nodes (27): a2e(), A4(), a6e(), al(), c2e(), C4(), d2e(), $F() (+19 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.22
-Nodes (4): FnDef<'a>, Arguments, Expr, TextRange
+Cohesion: 0.11
+Nodes (27): ExceptHandler, FnMut, chain(), compound_children(), count_tests(), extract_decorator_marks(), extract_helpers(), extract_mark_name() (+19 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.08
 Nodes (40): TestResult, _python_fields(), Contract tests for the Rust-Python bridge.  Verifies that: - PyO3 FromPyObject s, Constructing FailedResult with all fields catches renames at import time., Constructing CollectedItem with all fields catches renames at import time., Every Python ViolationKind value has a Rust match arm (not Unknown)., Each per-outcome type maps to the correct outcome string in the wire payload., Python PROTOCOL_VERSION must equal Rust PROTOCOL_VERSION. (+32 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.10
-Nodes (36): DebuggerBackend, Protocol for debugger backends.      Plugins implement this to provide alternati, Enter the debugger for interactive stepping.          Called before test executi, ConflictingDebuggerError, Raised when multiple plugins provide a debugger backend., PluginLoadError, Plugin loading and registry management.  Called from Rust (via bridge.rs) at ses, All async backends from all plugins, as (module_name, backend) pairs. (+28 more)
+Cohesion: 0.02
+Nodes (140): AsyncBackend, Pluggable async runtime backend., Unique name for this backend (e.g. 'asyncio', 'trio')., CoveragePyProvider, CovReportFormat, Coverage integration for oxitest., Report format for coverage output., Built-in coverage provider backed by coverage.py. (+132 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.08
-Nodes (24): TempDir, _make_ctx(), usefixtures mark causes the fixture to run (side effects happen)., Minimal _HandlerContext for mark tests., When skip + xfail + timeout are all present, skip takes precedence., test_evaluate_marks_returns_tuple(), test_evaluate_marks_skip_returns_short_circuit(), test_exc_type_absent_on_pass() (+16 more)
+Cohesion: 0.05
+Nodes (52): FunctionMetadata, get_metadata(), get_or_create(), Centralized metadata registry for decorated test functions.  Replaces scattered, Return metadata for fn, or a default (empty) instance if none registered., Return metadata for fn, creating and registering it if needed., TempDir, test_fixtures_name_override_stamps_fixture_name() (+44 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.04
-Nodes (54): TempDir, Plain-typed params (no Fixture[T] annotation) must not be resolved., Fixture[T]-annotated params are resolved; plain-typed params are skipped., A param with a wrong annotation (e.g. int instead of Fixture[int]) whose name, param_id + session: param values injected, fixture resolved, no collision., FixtureRef[T] field is resolved via the fixture session per case., FixtureRef fields are incompatible with compact mode — must return error., Passing an unregistered fixture function as FixtureRef value → error result. (+46 more)
+Cohesion: 0.03
+Nodes (68): DataclassCases, Dataclass-mode parametrize: cases are ``dict[str, <frozen dataclass>]``., Yield ``(case_id, [(field, repr_value), ...])`` for collection., TempDir, AddCase, Plain-typed params (no Fixture[T] annotation) must not be resolved., Fixture[T]-annotated params are resolved; plain-typed params are skipped., A param with a wrong annotation (e.g. int instead of Fixture[int]) whose name (+60 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.03
 Nodes (5): test_fixture_not_found_error_with_namespace(), test_fixture_not_found_error_without_namespace(), test_register_duplicate_name_warns(), test_register_first_fixture_no_shadow_warning(), test_register_same_conftest_no_shadow_warning()
 
 ### Community 13 - "Community 13"
-Cohesion: 0.17
-Nodes (21): extract_fixture_param_names(), extract_mark_from_value(), extract_module_marks(), extract_parametrize_kwarg_names(), extract_prescan_marker(), is_fixture_annotation(), is_literal_expr(), is_parametrize_call() (+13 more)
+Cohesion: 0.06
+Nodes (36): addToResyncTokens(), BACKTRACK(), buildFullFollowKeyStack(), cstPostNonTerminal(), exportLexerState(), findReSyncTokenType(), flattenFollowSet(), getCurrFollowKey() (+28 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.12
-Nodes (10): PassedResult, Result for a passing test., Unit tests for per-outcome result types: failure_repr and to_wire., test_failure_repr_no_fields_falls_back_to_status(), test_to_wire_includes_no_message_lines(), test_to_wire_includes_strict_when_true(), test_to_wire_omits_empty_frames(), test_to_wire_omits_empty_no_message_lines() (+2 more)
+Cohesion: 0.07
+Nodes (21): Execute Python doctests via stdlib doctest module., Resolve a dotted name like 'module.Class.method' to the actual object., Run doctests for a single object identified by dotted name.      Args:         m, _resolve_object(), run_doctest(), _error_result(), ErrorResult, PassedResult (+13 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.33
 Nodes (12): make_tty_reporter(), test_flush_param_group_all_passed_duration_before_cases(), test_flush_param_group_singular_case(), test_format_test_line_failed_contains_fail_label(), test_format_test_line_passed_bare_assert_uses_middot(), test_format_test_line_passed_contains_fn_name_and_duration(), test_format_test_line_passed_no_double_ms_suffix(), test_format_test_line_skipped_contains_skip_label_and_reason() (+4 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.21
-Nodes (16): bGe(), gGe(), Ghe(), mGe(), qge(), S1(), setData(), TGe() (+8 more)
+Cohesion: 0.26
+Nodes (13): bGe(), gGe(), mGe(), qge(), setData(), TGe(), Uhe(), vGe() (+5 more)
 
 ### Community 17 - "Community 17"
 Cohesion: 0.07
@@ -508,11 +622,11 @@ Nodes (68): GlobMatcher, build_glob_matchers(), contains_glob_chars(), escape_no
 
 ### Community 18 - "Community 18"
 Cohesion: 0.05
-Nodes (52): AsyncioBackend, AsyncioSharedSession, Default async backend using `asyncio`., Wraps an asyncio event loop as a SharedAsyncSession., Drain async teardowns in LIFO order, then close the session., Manages shared async fixture lifecycle: session creation, resolution, teardown., The async backend used by this manager., Whether a shared async fixture was resolved for the current test. (+44 more)
+Nodes (53): AsyncioBackend, AsyncioSharedSession, Pluggable async backend for test execution.  Abstracts the async runtime so alte, Default async backend using `asyncio`., Wraps an asyncio event loop as a SharedAsyncSession., Drain async teardowns in LIFO order, then close the session., Manages shared async fixture lifecycle: session creation, resolution, teardown., The async backend used by this manager. (+45 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.08
-Nodes (66): acquireParserWorker(), addHiddenNodes(), beginGroup(), buildLeafNode(), buildRootNode(), callFunction(), consume(), consumeArg() (+58 more)
+Cohesion: 0.29
+Nodes (18): consume(), consumeSpaces(), expect(), fetch(), formatUnsupportedCmd(), handleSupSubscript(), isValidToken(), parseAtom() (+10 more)
 
 ### Community 20 - "Community 20"
 Cohesion: 0.05
@@ -531,16 +645,16 @@ Cohesion: 0.09
 Nodes (57): Borrowed, FromPyObject, PyErr, RawFrame, collect_module_with_session_obj(), convert_failed(), convert_passed(), convert_skipped() (+49 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.05
-Nodes (38): FunctionMetadata, get_metadata(), get_or_create(), Centralized metadata registry for decorated test functions.  Replaces scattered, Return metadata for fn, or a default (empty) instance if none registered., Return metadata for fn, creating and registering it if needed., test_fixtures_name_override_stamps_fixture_name(), test_fixtures_stamps_fixture_name_for_inject_compat() (+30 more)
+Cohesion: 0.08
+Nodes (33): A7e(), $ae(), Ag(), Bg(), build(), buildDocuments(), computeExports(), computeExportsForNode() (+25 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.07
-Nodes (68): ExceptHandler, FnMut, build_line_index(), chain(), compound_children(), compound_children_of_if(), compound_children_of_simple_stmt(), compound_children_of_try() (+60 more)
+Cohesion: 0.09
+Nodes (53): NamedTempFile, helper_entries_skips_dunder(), heavy_imports_no_heavy(), heavy_imports_requests(), heavy_imports_sqlalchemy_from_import(), build_line_index(), compound_children_of_if(), compound_children_of_simple_stmt() (+45 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.05
-Nodes (69): collect_module(), Import a Python file with AST rewriting and return items and violations.      If, TempDir, Class methods are returned as 'ClassName::method_name'., usefixtures on a class is propagated to each test method at collection time., skip on a class IS propagated to test methods., Write source code to a temp file and return its path as str., Bare-assert detection moved to Rust (bare_asserts.rs) — Python returns none. (+61 more)
+Cohesion: 0.07
+Nodes (56): collect_module(), Import a Python file with AST rewriting and return items and violations.      If, TempDir, Class methods are returned as 'ClassName::method_name'., usefixtures on a class is propagated to each test method at collection time., skip on a class IS propagated to test methods., Write source code to a temp file and return its path as str., Bare-assert detection moved to Rust (bare_asserts.rs) — Python returns none. (+48 more)
 
 ### Community 27 - "Community 27"
 Cohesion: 0.10
@@ -552,19 +666,19 @@ Nodes (39): is_bare_word_char(), lex(), lex_and_parse(), lex_boolean_operators()
 
 ### Community 29 - "Community 29"
 Cohesion: 0.06
-Nodes (38): TestItemBuilder, builder_arc_returns_arc_wrapped_item(), builder_defaults(), builder_defaults_lineno_to_one(), builder_raw_defaults_lineno_to_one(), builder_raw_node_id(), builder_with_overrides(), builder_with_param_id() (+30 more)
+Nodes (36): TestItemBuilder, builder_arc_returns_arc_wrapped_item(), builder_defaults(), builder_defaults_lineno_to_one(), builder_raw_defaults_lineno_to_one(), builder_raw_node_id(), builder_with_overrides(), builder_with_param_id() (+28 more)
 
 ### Community 30 - "Community 30"
-Cohesion: 0.10
-Nodes (46): NamedTempFile, body_weight_async_bonus(), body_weight_asyncio_sleep(), body_weight_base_only(), body_weight_fixture_params(), body_weight_heavy_import_adds_20(), body_weight_many_statements(), body_weight_sleep_dynamic_arg() (+38 more)
+Cohesion: 0.06
+Nodes (66): body_weight_async_bonus(), body_weight_asyncio_sleep(), body_weight_base_only(), body_weight_fixture_params(), body_weight_heavy_import_adds_20(), body_weight_many_statements(), body_weight_sleep_dynamic_arg(), body_weight_sleep_literal_float() (+58 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.06
-Nodes (77): aj(), am(), AMe(), bW(), CEe(), Ci(), cPe(), d9e() (+69 more)
+Cohesion: 0.22
+Nodes (26): am(), bW(), Ci(), cPe(), dAe(), DC(), fAe(), fD() (+18 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.07
-Nodes (31): Resolve the active backend by config name.      Raises:         BackendNotFoundE, Execute a coroutine on the persistent session., Run a coroutine to completion (per-test, fresh context)., Execute a coroutine on the persistent event loop and return its result., resolve_backend(), BackendNotFoundError, ConflictingBackendError, ExecutionError (+23 more)
+Cohesion: 0.08
+Nodes (24): Resolve the active backend by config name.      Raises:         BackendNotFoundE, Execute a coroutine on the persistent session., Run a coroutine to completion (per-test, fresh context)., Execute a coroutine on the persistent event loop and return its result., resolve_backend(), BackendNotFoundError, ConflictingBackendError, Raised when the configured async backend name matches no provider. (+16 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.08
@@ -572,7 +686,7 @@ Nodes (47): BoxChars, error_with_frames(), failed_assertion_with_diff(), failed_
 
 ### Community 35 - "Community 35"
 Cohesion: 0.09
-Nodes (46): create_session(), find_conftest_paths(), _has_helpers(), _load_conftest_module(), load_fixtures_from_conftest(), Build a FixtureRegistry from all conftest paths and return a FixtureSession., Return conftest.py paths from rootdir down to test file's directory.      Return, Load a conftest.py and register it as sys.modules['conftest']. (+38 more)
+Nodes (49): create_session(), _extract_fixtures(), find_conftest_paths(), _has_helpers(), _load_conftest_module(), load_fixtures_from_conftest(), Build a FixtureRegistry from all conftest paths and return a FixtureSession., Return conftest.py paths from rootdir down to test file's directory.      Return (+41 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.11
@@ -587,20 +701,20 @@ Cohesion: 0.08
 Nodes (40): K, DiagnosticBag, fixture_cache_summary_zero_total_does_not_panic(), FixtureCacheEntry, FixtureCacheStats, FixtureTimingEntry, OutcomeCounters, record_flaky_decrements_correct_counter_for_error() (+32 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.07
-Nodes (64): $0e(), alternative(), AR(), arc(), assertion(), atom(), atomEscape(), aZe() (+56 more)
+Cohesion: 0.12
+Nodes (46): alternative(), AR(), assertion(), atom(), atomEscape(), aZe(), characterClass(), characterClassEscape() (+38 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.15
-Nodes (9): Coverage integration for oxitest., Return the built-in coverage provider.      Plugin-based resolution happens at a, resolve_provider_standalone(), Enum, IntEnum, ExitCode, Process exit codes returned by oxitest runs., Exit codes returned by :func:`oxitest.main`.      Inherits from :class:`int`, so (+1 more)
+Cohesion: 0.09
+Nodes (32): AIe(), dMe(), e_(), eMe(), eNe(), every(), FRe(), GMe() (+24 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.07
 Nodes (25): char_diff_marker(), char_diff_marks_first_difference(), char_diff_not_shown_for_non_eq_op(), collection_diff_dict(), collection_diff_list(), collection_diff_nested(), collection_diff_set(), empty_values_returns_empty() (+17 more)
 
 ### Community 42 - "Community 42"
-Cohesion: 0.09
-Nodes (40): _FdCaptureFixture, _StdCaptureFixture, _PatcherFixture, _TempDirFixture, _make_builtin_ctx(), _make_session(), Unit and integration tests for oxitest built-in fixtures., # NOTE: This test uses stdlib redirect_stderr instead of dogfooding StdCapture (+32 more)
+Cohesion: 0.08
+Nodes (45): _FdCaptureFixture, _StdCaptureFixture, _PatcherFixture, _TempDirFixture, _make_builtin_ctx(), _make_session(), Unit and integration tests for oxitest built-in fixtures., # NOTE: This test uses stdlib redirect_stderr instead of dogfooding StdCapture (+37 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.06
@@ -615,11 +729,11 @@ Cohesion: 0.11
 Nodes (40): DebugOptions, emit_scheduling_diagnostics(), emit_shared_fixture_warning(), execute(), ExecutionContext, make_item(), multiplier_cold_cache_falls_back_to_global(), multiplier_with_no_global_and_no_cache_returns_none() (+32 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.06
-Nodes (56): _apply_module_marks(), _class_members(), _coerce_to_mark_info(), _collect_items(), _expand_composed(), _expand_item(), _extract_module_marks(), _get_fixref_names() (+48 more)
+Cohesion: 0.05
+Nodes (69): _apply_module_marks(), _class_members(), _coerce_to_mark_info(), _collect_items(), _expand_composed(), _expand_item(), _extract_module_marks(), _get_fixref_names() (+61 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.10
+Cohesion: 0.09
 Nodes (34): NamespaceProxy, OxiNamespaceProxy, Lazy proxy for a single user-defined Fixtures() namespace.      Attribute access, Lazy proxy for oxitest built-in fixtures under the reserved 'oxi' namespace., Any, FixtureSession, Fixture, FixtureSession (+26 more)
 
 ### Community 48 - "Community 48"
@@ -635,8 +749,8 @@ Cohesion: 0.10
 Nodes (17): MarkerSet, Arc, FieldDiff, Frame, LineNo, NodeId, Option, ParamPair (+9 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.12
-Nodes (36): evaluate_marks(), _HandlerContext, MarkEvalResult, MarkHandler, _PluginMarkHandler, Mark handler registry for skip/xfail/timeout/usefixtures evaluation.  Marker *co, Wrap execution to convert failures to `xfailed` and passes to `xpassed`., Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded. (+28 more)
+Cohesion: 0.08
+Nodes (50): evaluate_marks(), _HandlerContext, MarkEvalResult, MarkHandler, _PluginMarkHandler, Mark handler registry for skip/xfail/timeout/usefixtures evaluation.  Marker *co, Wrap execution to convert failures to `xfailed` and passes to `xpassed`., Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded. (+42 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.05
@@ -655,12 +769,12 @@ Cohesion: 0.06
 Nodes (7): BadInputCase, OrderingCase, Tests for oxi.approx() floating-point comparison., ReprCase, test_bad_input_raises(), test_ordering_raises(), test_repr()
 
 ### Community 56 - "Community 56"
-Cohesion: 0.06
-Nodes (35): DebugModeCase, _make_failing_fn(), Tests for --debug post-mortem debugging support., RecordingDebugger test double must be a valid DebuggerBackend., RecordingDebugger should count trace() calls., RecordingDebugger should record traceback objects., Debug mode matrix: verify trace/post_mortem calls for each mode × outcome., Skipped exceptions should not trigger post_mortem. (+27 more)
+Cohesion: 0.05
+Nodes (43): DebugModeCase, _make_failing_fn(), Tests for --debug post-mortem debugging support., RecordingDebugger test double must be a valid DebuggerBackend., RecordingDebugger should count trace() calls., RecordingDebugger should record traceback objects., Debug mode matrix: verify trace/post_mortem calls for each mode × outcome., Skipped exceptions should not trigger post_mortem. (+35 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.07
-Nodes (26): _CapturingHandler, _LogCapture, _LogCaptureFixture, All log records from all backends, sorted by creation time., Formatted log output — one `'LEVEL    message'` line per record., Set the minimum capture level, filtering out records below *level*.          Arg, Context manager that temporarily sets the log level then restores it.          A, Private handler that buffers records in memory instead of emitting them.      Re (+18 more)
+Cohesion: 0.08
+Nodes (21): _CapturingHandler, _LogCapture, _LogCaptureFixture, All log records from all backends, sorted by creation time., Formatted log output — one `'LEVEL    message'` line per record., Set the minimum capture level, filtering out records below *level*.          Arg, Context manager that temporarily sets the log level then restores it.          A, Private handler that buffers records in memory instead of emitting them.      Re (+13 more)
 
 ### Community 58 - "Community 58"
 Cohesion: 0.10
@@ -691,8 +805,8 @@ Cohesion: 0.14
 Nodes (18): test_deferred_failure_shows_parallel_context(), test_non_verbose_defers_failures(), test_non_verbose_does_not_defer_passes(), test_running_tests_empty_after_all_complete(), test_running_tests_tracks_in_flight(), test_verbose_does_not_defer(), TtyReporter, Arc (+10 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.13
-Nodes (10): Add, AddAssign, ErrorOutcomeBuilder, Duration, Self, Sub, DurationMs, FailureAccumulator (+2 more)
+Cohesion: 0.15
+Nodes (9): Add, AddAssign, Duration, Self, Sub, DurationMs, test_maxfail_stops_at_threshold(), test_no_maxfail_never_stops() (+1 more)
 
 ### Community 66 - "Community 66"
 Cohesion: 0.29
@@ -719,8 +833,8 @@ Cohesion: 0.14
 Nodes (21): fmt_summary(), make_stats(), summary_all_failed(), summary_all_passed(), summary_mixed_outcomes(), summary_xfail_and_xpass(), test_summary_all_passed(), test_summary_error_plural() (+13 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.14
-Nodes (29): collect_fn_marks(), extract_helper_entries(), extract_mark_entries(), extract_test_entries(), helper_entries_multiple_conftest_files(), helper_entries_nonexistent_file_skipped(), helper_entries_public_functions(), helper_entries_skips_dunder() (+21 more)
+Cohesion: 0.15
+Nodes (28): collect_fn_marks(), extract_helper_entries(), extract_mark_entries(), extract_test_entries(), helper_entries_multiple_conftest_files(), helper_entries_nonexistent_file_skipped(), helper_entries_public_functions(), helper_entries_skips_test_functions() (+20 more)
 
 ### Community 73 - "Community 73"
 Cohesion: 0.09
@@ -755,16 +869,16 @@ Cohesion: 0.15
 Nodes (21): collect_entries(), default_columns(), default_columns_fixtures(), default_columns_tests(), expr_needs_python(), extract_fixture_entries(), extract_plugin_entries(), needs_python() (+13 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.12
-Nodes (10): ABC, _CaptureBase, _FdCapture, Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).      Redire, Abstract base for stdout/stderr capture implementations., Restore original streams/fds (pause capturing)., Re-apply capture streams/fds (resume capturing)., Context manager: temporarily restore real output so it passes through. (+2 more)
+Cohesion: 0.08
+Nodes (15): ABC, _CaptureBase, CaptureResult, _FdCapture, Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).      Redire, r"""Captured stdout and stderr returned by `readouterr()`.      Attributes:, Abstract base for stdout/stderr capture implementations., Return and clear all captured output since the last call. (+7 more)
 
 ### Community 82 - "Community 82"
 Cohesion: 0.11
 Nodes (12): approx(), ApproxBase, ApproxMapping, ApproxScalar, ApproxSequence, Approximate floating-point comparison for assertions., Approximate comparison for mappings (dict)., Build an approximate-equality wrapper for use in ``assert`` statements.      Sup (+4 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.10
-Nodes (14): Plugin, Typed declaration of what a plugin provides.      Returned by the plugin's `oxit, _FakeBackend, test_plugin_accepts_async_backend(), test_plugin_async_backend_default_none(), test_registry_async_backends_property(), Tests for lazy plugin module import., test_deferred_entry_ensure_loaded_imports_module() (+6 more)
+Cohesion: 0.12
+Nodes (6): Tests for lazy plugin module import., test_deferred_entry_ensure_loaded_imports_module(), test_load_plugins_defers_lazy_only_plugin(), test_load_plugins_eager_imports_plugin_with_eager_protocol(), test_load_plugins_eager_imports_plugin_with_no_protocols_declared(), test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin()
 
 ### Community 84 - "Community 84"
 Cohesion: 0.09
@@ -779,8 +893,8 @@ Cohesion: 0.17
 Nodes (26): assert_inside_if(), assert_inside_try(), assert_with_message_not_flagged(), async_test_function(), BareAssert, class_method(), collect_bare_asserts(), collect_bare_asserts_from_ast() (+18 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.13
-Nodes (22): Assert that a block of code emits a warning of the expected category.      Args:, warns(), AssertionError, Any, _exec_rewritten(), Rust rewriter returns bare-assert-by-function map., Parse, rewrite via Rust, compile, and exec src with the given namespace., Bare asserts in nested functions attribute to outermost function. (+14 more)
+Cohesion: 0.11
+Nodes (30): bIe(), br(), DIe(), dR(), ef(), getTypeMetaData(), gIe(), GNe() (+22 more)
 
 ### Community 88 - "Community 88"
 Cohesion: 0.14
@@ -803,8 +917,8 @@ Cohesion: 0.11
 Nodes (24): Integration tests for positional node ID targeting (#720).  Verifies the full fl, Node ID without brackets matches all parametrized variants., Node ID with brackets matches only that parametrized case., ``oxitest run path::test_name`` runs exactly one test., Bare path runs all tests; node ID runs just one. Mixed works., Strict mode doesn't flag unused fixtures when targeting a file subset., Strict mode doesn't flag unused fixtures when targeting via node ID., Node ID targeting a file in a subdirectory loads all ancestor conftests. (+16 more)
 
 ### Community 93 - "Community 93"
-Cohesion: 0.04
-Nodes (83): aAe(), ace(), aFe(), aPe(), bF(), cAe(), Cce(), $Ce() (+75 more)
+Cohesion: 0.12
+Nodes (20): ace(), Cce(), $Ce(), Dce(), HOe(), isInstance(), jOe(), KOe() (+12 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.18
@@ -815,7 +929,7 @@ Cohesion: 0.14
 Nodes (21): Cow, color_test_lock(), outcome_label(), test_outcome_label_error_contains_error(), test_outcome_label_failed_contains_fail(), test_outcome_label_passed_is_empty(), test_outcome_label_skipped_contains_skip(), test_outcome_label_timeout_contains_time() (+13 more)
 
 ### Community 97 - "Community 97"
-Cohesion: 0.14
+Cohesion: 0.17
 Nodes (20): bare_prompt_no_space(), continuation_lines(), DoctestExample, DoctestLocation, example_without_output(), extract_docstring(), multiple_examples(), parse_docstring_examples() (+12 more)
 
 ### Community 98 - "Community 98"
@@ -843,16 +957,16 @@ Cohesion: 0.12
 Nodes (15): CompositeReporter, Box, CollectError, DurationMs, ExitVote, FixtureCacheEntry, FixtureTimingEntry, Option (+7 more)
 
 ### Community 104 - "Community 104"
-Cohesion: 0.06
-Nodes (42): _OxitestAssertionError, _OxitestNoRhs, Sentinel: this assertion had no right-hand operand (bool/value assert)., AssertionError subclass carrying operand info for enriched diagnostics., _compute_field_diffs(), dispatch_exception(), _get_location(), _handle_assertion_error() (+34 more)
+Cohesion: 0.05
+Nodes (54): _OxitestAssertionError, _OxitestNoRhs, Sentinel: this assertion had no right-hand operand (bool/value assert)., AssertionError subclass carrying operand info for enriched diagnostics., _compute_field_diffs(), _handle_assertion_error(), _handle_runtime_exception(), Compute field-level diffs for dataclass instances.      Returns tuple of (field_ (+46 more)
 
 ### Community 105 - "Community 105"
 Cohesion: 0.09
 Nodes (21): Async backend, Collector, Complete example, Configuration, Coverage provider, CoverageProvider, Debugger backend, ExecutionWrapper (+13 more)
 
 ### Community 106 - "Community 106"
-Cohesion: 0.15
-Nodes (22): CountingReporter, drain_remaining_into_crashed(), drain_remaining_into_crashed_emits_error_for_every_item(), drain_remaining_into_crashed_is_noop_on_empty_scheduler(), handle_worker_result(), known_node_id_returns_outcome_and_notifies_reporter(), make_item(), make_resolved() (+14 more)
+Cohesion: 0.12
+Nodes (25): CountingReporter, drain_remaining_into_crashed(), drain_remaining_into_crashed_emits_error_for_every_item(), drain_remaining_into_crashed_is_noop_on_empty_scheduler(), handle_worker_result(), known_node_id_returns_outcome_and_notifies_reporter(), make_item(), make_resolved() (+17 more)
 
 ### Community 107 - "Community 107"
 Cohesion: 0.14
@@ -863,8 +977,8 @@ Cohesion: 0.14
 Nodes (14): record_outcome_updates_stats_and_timing(), record_strict_suite_delegates_to_stats(), record_teardown_warning_appends_to_stats(), ReporterSession, set_fixture_cache_stats_stores_values(), set_fixture_timings_stores_values(), DurationMs, FixtureCacheEntry (+6 more)
 
 ### Community 109 - "Community 109"
-Cohesion: 0.14
-Nodes (15): _append_mark(), _Mark, _MarkNamespace, Decorator factory for @oxitest.mark.skip(when=True, reason="").      Validates k, Decorator namespace for built-in and custom test marks.      Access via `oxitest, Unconditionally skip the current test.      Equivalent to `@mark.skip` but calla, A mark factory for a single named mark.      Calling an instance decorates the t, Decorator factory for @oxitest.mark.timeout(seconds=N).      Validates that seco (+7 more)
+Cohesion: 0.16
+Nodes (13): _append_mark(), _Mark, _MarkNamespace, Decorator factory for @oxitest.mark.skip(when=True, reason="").      Validates k, Decorator namespace for built-in and custom test marks.      Access via `oxitest, Unconditionally skip the current test.      Equivalent to `@mark.skip` but calla, A mark factory for a single named mark.      Calling an instance decorates the t, Decorator factory for @oxitest.mark.timeout(seconds=N).      Validates that seco (+5 more)
 
 ### Community 110 - "Community 110"
 Cohesion: 0.14
@@ -895,8 +1009,8 @@ Cohesion: 0.10
 Nodes (19): Anatomy of a Rust test, CI enforcement, Conventions, Cross-language sync tests, Dev-dependencies, Example, Good candidates, Helper namespaces (+11 more)
 
 ### Community 117 - "Community 117"
-Cohesion: 0.10
-Nodes (20): _BaseExcCase, Tests for _check_warnings() and _dispatch_exception() helper functions., A normal Exception maps to an ERROR TestResult., Skip-type exceptions map to SKIPPED., Non-Exception BaseException returns None (signals re-raise)., All non-Exception BaseExceptions return None., Empty warning list returns (False, '')., A normal UserWarning is reported. (+12 more)
+Cohesion: 0.06
+Nodes (27): Captures all `warnings.warn()` calls issued during a test.      Installed automa, Clear all captured warnings, resetting `warn.list` to `[]`., _WarnCapture, _WarnCaptureFixture, _BuiltinContext, _BaseExcCase, Tests for _check_warnings() and _dispatch_exception() helper functions., A normal Exception maps to an ERROR TestResult. (+19 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.19
@@ -923,8 +1037,8 @@ Cohesion: 0.25
 Nodes (15): kill_pool(), kill_pool_on_empty_is_noop(), kill_pool_terminates_all_processes(), pool_guard_empty_drop_is_noop(), pool_guard_kills_on_drop(), pool_guard_take_prevents_kill_on_drop(), PoolGuard, prewarm_spawns_requested_count() (+7 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.02
-Nodes (178): a(), a8(), addAll(), af(), Aje(), ARe(), awe(), b() (+170 more)
+Cohesion: 0.07
+Nodes (32): Aje(), ARe(), b8(), BEe(), bje(), BRe(), bX(), CU() (+24 more)
 
 ### Community 125 - "Community 125"
 Cohesion: 0.11
@@ -935,7 +1049,7 @@ Cohesion: 0.27
 Nodes (6): D, Error, Formatter, Ok, Result, S
 
 ### Community 127 - "Community 127"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (12): Borrow, AsRef, Default, Deref, Display, Option, ExitCode, i32 (+4 more)
 
 ### Community 128 - "Community 128"
@@ -959,16 +1073,16 @@ Cohesion: 0.25
 Nodes (7): find_rootdir(), test_cache_max_age_default_is_50(), test_find_rootdir_falls_back_to_start(), test_find_rootdir_finds_pyproject(), test_find_rootdir_relative_subdir_returns_absolute(), test_min_parallel_tests_default_is_100(), Utf8Path
 
 ### Community 133 - "Community 133"
-Cohesion: 0.08
-Nodes (23): AsyncBridgeMiddleware, AsyncDepGuardMiddleware, build_pipeline(), _compose(), Middleware, MiddlewareBuilder, Replaces base runner with async bridge when fn is async., Configurable builder for the middleware pipeline.      The default pipeline is:: (+15 more)
+Cohesion: 0.07
+Nodes (49): _build_execution_chain(), _evaluate_marks_phase(), _exec_unique_name(), _load_and_resolve(), Test execution orchestration for the oxitest bridge.  Loads the target module, r, Load module, resolve function, parametrize, and fixtures.      Returns _Resolved, Build the composed execution callable via middleware pipeline., Evaluate marks and return (short_circuit, wrappers). (+41 more)
 
 ### Community 134 - "Community 134"
 Cohesion: 0.22
 Nodes (16): main(), parse_python_classes(), parse_rust_structs(), _parse_serde_struct_fields(), parse_to_wire_fields(), parse_worker_item_reads(), parse_worker_result_fields(), parse_worker_task_item_fields() (+8 more)
 
 ### Community 135 - "Community 135"
-Cohesion: 0.50
-Nodes (3): CollectError, ExitVote, ReporterSession
+Cohesion: 0.10
+Nodes (27): buildReference(), cFe(), dehydrate(), dehydrateAstNode(), dehydrateLexerReport(), entries(), entriesGroupedByKey(), fe() (+19 more)
 
 ### Community 136 - "Community 136"
 Cohesion: 0.13
@@ -979,8 +1093,8 @@ Cohesion: 0.24
 Nodes (7): test_toml_workers_positive_i64(), WorkerCount, Err, FromStr, Error, Result, Self
 
 ### Community 138 - "Community 138"
-Cohesion: 0.03
-Nodes (106): _extract_fixtures(), Extract fixture definitions from Fixtures instances in a module., _build_execution_chain(), _evaluate_marks_phase(), _exec_unique_name(), _load_and_resolve(), Test execution orchestration for the oxitest bridge.  Loads the target module, r, Load module, resolve function, parametrize, and fixtures.      Returns _Resolved (+98 more)
+Cohesion: 0.02
+Nodes (96): A long-lived async session for shared fixture resolution., Tear down the session and release resources., Create a long-lived session for shared fixture resolution., SharedAsyncSession, _ResolvedTest, Per-test transient state, set by executor around run_test., TestRunContext, _extract_annotated_type() (+88 more)
 
 ### Community 139 - "Community 139"
 Cohesion: 0.19
@@ -1011,8 +1125,8 @@ Cohesion: 0.17
 Nodes (11): _FixtureMarker, _FixtureRefMarker, _FixtureRefType, _FixtureType, Injection signal for oxitest fixtures.      Annotating a test or fixture paramet, Sentinel in Annotated metadata — signals fixture-ref field resolution., Annotation for fixture references inside `@oxitest.parametrize` kwargs.      Use, Return-type annotation for yield-based fixture teardown.      `Yields[T]` is sho (+3 more)
 
 ### Community 146 - "Community 146"
-Cohesion: 0.16
-Nodes (10): BuiltinFixture, CaptureResult, r"""Captured stdout and stderr returned by `readouterr()`.      Attributes:, Return and clear all captured output since the last call., Built-in fixtures for oxitest.  Importing this package registers all built-in fi, _TestContextFixture, LogBackend, Protocol for log-capture backends.      Implement this to integrate a custom log (+2 more)
+Cohesion: 0.22
+Nodes (7): BuiltinFixture, Built-in fixtures for oxitest.  Importing this package registers all built-in fi, _TestContextFixture, LogBackend, Protocol for log-capture backends.      Implement this to integrate a custom log, _BuiltinContext, _TestContext
 
 ### Community 147 - "Community 147"
 Cohesion: 0.12
@@ -1047,8 +1161,8 @@ Cohesion: 0.13
 Nodes (14): Architecture Overview, Compile-time enforcement, Module map, Module reference table, Pipeline typestate, PipelineShared and Deref, Python bridge, Rust core (+6 more)
 
 ### Community 155 - "Community 155"
-Cohesion: 0.08
-Nodes (36): ParametrizeError, Raised when parametrize case resolution fails due to misconfiguration., _extract_annotated_type(), _fixture_inner_type(), FixtureShadowWarning, Return (has_marker, inner_type) for an Annotated[T, marker, ...] hint., Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]., Emitted when a child conftest shadows a parent conftest fixture. (+28 more)
+Cohesion: 0.09
+Nodes (34): ExecutionError, LoadError, OxitestError, ParametrizeError, Raised when parametrize case resolution fails due to misconfiguration., Raised when a module cannot be loaded or a function cannot be resolved., Base for all oxitest internal errors., Test execution errors. (+26 more)
 
 ### Community 156 - "Community 156"
 Cohesion: 0.14
@@ -1075,8 +1189,8 @@ Cohesion: 0.18
 Nodes (14): WarnCapture, RuntimeError, Stray tasks from one test should not affect the next test., A RuntimeError raised inside fixture teardown must not change test status., Teardown exception in first fixture must not block teardown of second fixture., Teardown exception should warn, not crash., test_async_yield_fixture_teardown_error_warns(), test_shared_async_stray_task_cleanup() (+6 more)
 
 ### Community 162 - "Community 162"
-Cohesion: 0.04
-Nodes (139): _7(), a3(), Av(), b2(), bq(), buildAlternationAmbiguityError(), buildAlternationPrefixAmbiguityError(), bXe() (+131 more)
+Cohesion: 0.14
+Nodes (43): circle(), CQ(), cstPostRuleFull(), cstPostRuleOnlyOffset(), CZ(), du(), $Ee(), eZ() (+35 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.18
@@ -1095,8 +1209,8 @@ Cohesion: 0.24
 Nodes (12): FixtureCacheStats, BridgeCacheEntry, BridgeCacheStats, BridgeFixtureTiming, get_cache_stats(), get_fixture_timings(), FixtureSession, FixtureTimingEntry (+4 more)
 
 ### Community 169 - "Community 169"
-Cohesion: 0.29
-Nodes (8): fmt_tip_block(), push_stat(), push_stat_plural(), test_tip_block_collapsed_shows_count_and_hint(), test_tip_block_expanded_shows_locations(), String, Vec, TipLine
+Cohesion: 0.17
+Nodes (13): fmt_tip_block(), fmt_warning_block(), push_stat(), push_stat_plural(), test_tip_block_collapsed_shows_count_and_hint(), test_tip_block_expanded_shows_locations(), test_warning_block_collapsed_plural(), test_warning_block_collapsed_singular() (+5 more)
 
 ### Community 170 - "Community 170"
 Cohesion: 0.21
@@ -1139,20 +1253,28 @@ Cohesion: 0.21
 Nodes (12): builtin_markers(), _oxitest(), rewrite_asserts(), Bound, Py, PyAny, PyModule, PyResult (+4 more)
 
 ### Community 180 - "Community 180"
-Cohesion: 0.15
-Nodes (18): Serialize, Arc, Deserialize, From, HashSet, String, Utf8PathBuf, Vec (+10 more)
+Cohesion: 0.14
+Nodes (19): Serialize, Arc, Deserialize, From, HashSet, String, Utf8PathBuf, Vec (+11 more)
+
+### Community 181 - "Community 181"
+Cohesion: 0.09
+Nodes (27): canPerformInRuleRecovery(), canRecoverWithSingleTokenDeletion(), canRecoverWithSingleTokenInsertion(), canTokenTypeBeDeletedInRecovery(), canTokenTypeBeInsertedInRecovery(), CONSUME1(), CONSUME2(), CONSUME3() (+19 more)
 
 ### Community 182 - "Community 182"
 Cohesion: 0.23
 Nodes (8): _exc_name(), raises(), _RaisesContext, Context manager returned by raises(). Stores the caught exception in .value., Assert that a block of code raises the expected exception type.      Args:, _ExcType, Any, BaseException
 
 ### Community 183 - "Community 183"
-Cohesion: 0.19
-Nodes (13): main(), _maybe_start_coverage(), Worker entry point for the parallel test runner.  Reads a single JSON task from, Persistent worker: read newline-delimited JSON tasks from stdin until EOF., A single test item within a worker task., JSON task sent from the Rust coordinator to a worker subprocess.      Must stay, Activate coverage collection if the parent process requested it., run() (+5 more)
+Cohesion: 0.23
+Nodes (11): main(), _maybe_start_coverage(), Worker entry point for the parallel test runner.  Reads a single JSON task from, Persistent worker: read newline-delimited JSON tasks from stdin until EOF., A single test item within a worker task., JSON task sent from the Rust coordinator to a worker subprocess.      Must stay, Activate coverage collection if the parent process requested it., run() (+3 more)
 
 ### Community 184 - "Community 184"
-Cohesion: 0.40
-Nodes (5): fmt_warning_block(), test_warning_block_collapsed_plural(), test_warning_block_collapsed_singular(), test_warning_block_expanded_shows_node_and_reason(), WarningEntry
+Cohesion: 0.12
+Nodes (26): b2(), buildAlternationAmbiguityError(), buildAlternationPrefixAmbiguityError(), bz(), createDehyrationContext(), createHydrationContext(), endRegex(), FR() (+18 more)
+
+### Community 185 - "Community 185"
+Cohesion: 0.09
+Nodes (24): addMembers(), bCe(), bindFunctions(), Crt(), dashedLine(), defineClass(), Drt(), forEach() (+16 more)
 
 ### Community 186 - "Community 186"
 Cohesion: 0.17
@@ -1209,6 +1331,10 @@ Nodes (11): Tests for FixtureSession fixture timing instrumentation., Fixture se
 ### Community 199 - "Community 199"
 Cohesion: 0.18
 Nodes (7): _PdbBackend, Debugger backend abstraction.  Defines the ``DebuggerBackend`` protocol and the, Enter the debugger for post-mortem inspection of a failure.          Called afte, Default debugger backend wrapping stdlib ``pdb``., TracebackType, _PdbBackend must be a valid DebuggerBackend., test_pdb_backend_satisfies_protocol()
+
+### Community 200 - "Community 200"
+Cohesion: 0.16
+Nodes (24): Bn(), buildLeftRecursionError(), concat(), getGAstProductions(), getNextPossibleTokenTypes(), H0e(), hCe(), I5() (+16 more)
 
 ### Community 201 - "Community 201"
 Cohesion: 0.22
@@ -1291,8 +1417,8 @@ Cohesion: 0.18
 Nodes (10): Getting started, Prerequisites, Step 1 — Install oxitest, Step 2 — Create a project directory, Step 3 — Write a test file, Step 4 — Run oxitest, Step 5 — Make a test fail, Step 6 — Add a pyproject.toml for configuration (+2 more)
 
 ### Community 221 - "Community 221"
-Cohesion: 0.05
-Nodes (73): AsyncBackend, Pluggable async backend for test execution.  Abstracts the async runtime so alte, A long-lived async session for shared fixture resolution., Tear down the session and release resources., Pluggable async runtime backend., Unique name for this backend (e.g. 'asyncio', 'trio')., Create a long-lived session for shared fixture resolution., SharedAsyncSession (+65 more)
+Cohesion: 0.12
+Nodes (12): _parse_node_id(), Fixture validation and unused detection — extracted from FixtureSession., Resolve a test function from module cache, handling class::method syntax., Check if *param_name*'s hint on *fn* is a plugin Fixture type., Check if a parameter resolves to a plugin-provided fixture type., Parse a node ID into ``(module_path, fn_part)`` stripping any param id.      Ret, Return ``(node_id, fixture_name)`` pairs that cannot resolve.          Called by, Return (conftest_path, fixture_name) pairs for unused fixtures.          A fixtu (+4 more)
 
 ### Community 222 - "Community 222"
 Cohesion: 0.20
@@ -1579,8 +1705,8 @@ Cohesion: 0.40
 Nodes (4): Next steps, oxitest, Quick start, Why oxitest?
 
 ### Community 302 - "Community 302"
-Cohesion: 0.02
-Nodes (131): _9e(), a_e(), ACTION(), aD(), addParents(), addTokenUsingPush(), after(), AIe() (+123 more)
+Cohesion: 0.08
+Nodes (31): a_e(), addTokenUsingPush(), aK(), bK(), CK(), cstInvocationStateUpdate(), defineRule(), enqueue() (+23 more)
 
 ### Community 303 - "Community 303"
 Cohesion: 0.50
@@ -1646,93 +1772,505 @@ Nodes (4): ExecutionResults, Box, Reporter, TestTiming
 Cohesion: 0.36
 Nodes (5): Build the required wire fields shared by all outcome types., Add non-falsy optional fields to the wire dict., _wire_base(), _wire_optional(), Any
 
+### Community 360 - "Community 360"
+Cohesion: 0.09
+Nodes (23): AMe(), bM(), bU(), CEe(), d9e(), DEe(), finalize(), LW() (+15 more)
+
+### Community 361 - "Community 361"
+Cohesion: 0.12
+Nodes (22): $1(), all(), allElements(), ay(), b0e(), createScopeForNodes(), eI(), en() (+14 more)
+
 ### Community 362 - "Community 362"
-Cohesion: 0.03
-Nodes (99): aN(), ap(), bAe(), bM(), Bn(), BOe(), bU(), buildEarlyExitMessage() (+91 more)
+Cohesion: 0.09
+Nodes (29): bAe(), buildRuleNotFoundError(), checkIsTarget(), rN(), visit(), visitAlternation(), visitAlternative(), visitChildren() (+21 more)
+
+### Community 363 - "Community 363"
+Cohesion: 0.11
+Nodes (20): _7(), a3(), b(), C0(), dwe(), _ensureHSL(), g(), Ge() (+12 more)
+
+### Community 364 - "Community 364"
+Cohesion: 0.15
+Nodes (22): addAnnotation(), addClass(), addClassesToNamespace(), addDescription(), addInterface(), addMember(), addRelation(), addRelationObjs() (+14 more)
+
+### Community 365 - "Community 365"
+Cohesion: 0.10
+Nodes (15): b7e(), f7e(), _getExpansion(), H7e(), indexOf(), j3e(), lex(), m() (+7 more)
+
+### Community 366 - "Community 366"
+Cohesion: 0.13
+Nodes (21): $8e(), autolink(), codespan(), del(), emStrong(), escape(), Fj(), image() (+13 more)
 
 ### Community 367 - "Community 367"
 Cohesion: 0.09
-Nodes (31): check_warnings(), Filter caught warnings, excluding captured and teardown warnings., Result for a test that passed with warnings., WarnedResult, _call_with_warnings(), _debug_post_mortem(), _print_banner(), Test runner functions for sync and async execution.  Extracted from ``executor.p (+23 more)
+Nodes (37): _capture_locals(), check_warnings(), dispatch_exception(), _get_frames(), _get_location(), is_debuggable(), Diagnostic helpers for exception → TestResult mapping and warning checks.  Extra, Filter caught warnings, excluding captured and teardown warnings. (+29 more)
+
+### Community 374 - "Community 374"
+Cohesion: 0.12
+Nodes (21): _be(), cramp(), extend(), fontMetrics(), havingBaseSizing(), havingBaseStyle(), havingCrampedStyle(), havingSize() (+13 more)
+
+### Community 375 - "Community 375"
+Cohesion: 0.13
+Nodes (20): bZe(), FZe(), gB(), gZe(), iZe(), lge(), LZe(), mO() (+12 more)
 
 ### Community 376 - "Community 376"
-Cohesion: 0.04
-Nodes (64): addLink(), addSingleLink(), AGe(), build(), buildKeywordTokens(), buildTerminalToken(), buildTerminalTokens(), buildTokens() (+56 more)
+Cohesion: 0.25
+Nodes (15): calculateHorizontalSpace(), calculateSpace(), calculateSpaceIfDrawnHorizontally(), calculateSpaceIfDrawnVertical(), calculateVerticalSpace(), getLabelDimension(), getMaxDimension(), getRange() (+7 more)
+
+### Community 377 - "Community 377"
+Cohesion: 0.12
+Nodes (19): _5(), _5e(), activationCount(), addActor(), addBox(), addMessage(), addNote(), addSignal() (+11 more)
+
+### Community 378 - "Community 378"
+Cohesion: 0.17
+Nodes (19): ap(), db(), dPe(), ePe(), fPe(), GR(), hPe(), iU() (+11 more)
+
+### Community 379 - "Community 379"
+Cohesion: 0.25
+Nodes (18): _2(), aNe(), edge(), edges(), eOe(), hasEdge(), HL(), hNe() (+10 more)
 
 ### Community 380 - "Community 380"
-Cohesion: 0.15
-Nodes (14): DataclassCases, Dataclass-mode parametrize: cases are ``dict[str, <frozen dataclass>]``., Yield ``(case_id, [(field, repr_value), ...])`` for collection., AddCase, Dataclass mode: type inferred from first case value, no explicit type arg., test_dataclass_cases_items_yields_field_repr_pairs(), test_dataclass_cases_resolve_compact_mode(), test_dataclass_cases_resolve_expanded_mode() (+6 more)
+Cohesion: 0.13
+Nodes (18): Bi(), D0(), fwe(), gU(), gv(), gwe(), HA(), iwe() (+10 more)
+
+### Community 381 - "Community 381"
+Cohesion: 0.12
+Nodes (18): bXe(), createHTML(), createScriptURL(), Dh(), FXe(), getColor(), kN(), mathmlBuilder() (+10 more)
+
+### Community 382 - "Community 382"
+Cohesion: 0.14
+Nodes (17): addAstNodeRegionWithAssignmentsTo(), aU(), e7e(), e8e(), GCe(), getActorKeys(), ixe(), Iy() (+9 more)
+
+### Community 383 - "Community 383"
+Cohesion: 0.14
+Nodes (17): aN(), Av(), Dtt(), Eae(), errors(), FK(), i_e(), ic() (+9 more)
+
+### Community 384 - "Community 384"
+Cohesion: 0.17
+Nodes (17): aOe(), CIe(), H8e(), isLeaf(), n8(), _Ne(), neighbors(), node() (+9 more)
+
+### Community 385 - "Community 385"
+Cohesion: 0.16
+Nodes (17): bh(), cH(), Eh(), g5(), HHe(), Hwe(), i_(), m5() (+9 more)
 
 ### Community 386 - "Community 386"
 Cohesion: 0.18
 Nodes (14): _check_async_dep(), Async fixture orchestration — single source of truth for async fixture lifecycle, Run an async fixture, track teardowns, return the resolved value.          Creat, Reject an async dependency value with a descriptive error message., Sync fixtures cannot depend on async fixtures., Shared fixtures cannot depend on non-shared async fixtures., _reject_async_in_sync(), _reject_nonshared_async() (+6 more)
 
 ### Community 387 - "Community 387"
-Cohesion: 0.03
-Nodes (82): _5(), _5e(), A7e(), activationCount(), addActor(), addALink(), addBox(), addDetails() (+74 more)
+Cohesion: 0.11
+Nodes (23): addDocument(), createAsync(), createDocument(), createLangiumDocument(), createTextDocumentGetter(), fromString(), fromTextDocument(), fromUri() (+15 more)
+
+### Community 388 - "Community 388"
+Cohesion: 0.23
+Nodes (17): children(), dl(), Ec(), fIe(), graph(), hasNode(), HBe(), hIe() (+9 more)
+
+### Community 389 - "Community 389"
+Cohesion: 0.17
+Nodes (17): createDescription(), exportNode(), findAllReferences(), findReferences(), getAstNodePath(), getName(), getPathSegment(), getReferenceToSelf() (+9 more)
+
+### Community 390 - "Community 390"
+Cohesion: 0.17
+Nodes (16): arc(), dm(), dotsOnLines(), draw(), e_e(), ellipse(), fillPolygons(), fillSketch() (+8 more)
+
+### Community 391 - "Community 391"
+Cohesion: 0.15
+Nodes (16): bwe(), _ensureRGB(), h(), h8(), l(), PU(), RVe(), s5() (+8 more)
 
 ### Community 392 - "Community 392"
+Cohesion: 0.22
+Nodes (6): FailedOutcomeBuilder, Iterator, Item, outcome_failed_builder_defaults(), outcome_failed_builder_with_comparison(), test_outcome_failed_carries_location()
+
+### Community 393 - "Community 393"
 Cohesion: 0.17
-Nodes (8): FailedOutcomeBuilder, Iterator, Item, error_returns_some_with_empty_comparison_fields(), failed_returns_some_with_all_fields(), outcome_failed_builder_defaults(), outcome_failed_builder_with_comparison(), test_outcome_failed_carries_location()
+Nodes (16): computeContentAssist(), getBaseCstVisitorConstructor(), getBaseCstVisitorConstructorWithDefaults(), isCompound(), isDirected(), isMultigraph(), kRe(), pR() (+8 more)
 
 ### Community 394 - "Community 394"
-Cohesion: 0.12
-Nodes (9): Execute the test, applying marker-driven behaviour around it.          `test_fn`, Collect test items from an already-imported module.          Args:             p, Called immediately before a test begins executing.          Args:             it, Called immediately after a test finishes, whether it passed or failed., Called once after all tests have completed and teardown is done.          Args:, Begin coverage collection. Called before any test execution., Captured log records accumulated since the last `install` call.          Returns, Instantiate and return the fixture value for a single test.          Args: (+1 more)
+Cohesion: 0.19
+Nodes (15): $0e(), b0(), bezierCurveTo(), closePath(), _drawToContext(), fv(), HGe(), Hje() (+7 more)
 
 ### Community 395 - "Community 395"
+Cohesion: 0.10
+Nodes (19): DictCases, Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``., Yield ``(case_id, [(key, repr_value), ...])`` for collection., Resolve a single dict case into ``(kwargs_dict, frozenset())``., _check_dict_parametrize(), check_fn_violations(), _check_missing_mark_reason(), _check_single_case_parametrize() (+11 more)
+
+### Community 396 - "Community 396"
+Cohesion: 0.23
+Nodes (15): aAe(), cAe(), computeRuleType(), DK(), Dle(), fN(), Il(), J2() (+7 more)
+
+### Community 397 - "Community 397"
+Cohesion: 0.19
+Nodes (14): addALink(), addDetails(), addLinks(), addProperties(), deserialize(), fromModel(), getActor(), getRootFolder() (+6 more)
+
+### Community 398 - "Community 398"
+Cohesion: 0.13
+Nodes (15): addElement(), b9e(), clear(), G0(), getDefaultConfig(), getDefaultData(), getDefaultThemeConfig(), getInitialElement() (+7 more)
+
+### Community 399 - "Community 399"
+Cohesion: 0.20
+Nodes (15): assign(), createLinkingError(), createScope(), doLink(), flushLexingReport(), flushRemainingDedents(), G6(), getCandidate() (+7 more)
+
+### Community 400 - "Community 400"
+Cohesion: 0.14
+Nodes (15): awe(), cd(), clamp(), formatHsl(), getAttribute(), jA(), ld(), n8e() (+7 more)
+
+### Community 401 - "Community 401"
+Cohesion: 0.18
+Nodes (15): blockquote(), blockTokens(), code(), def(), f2(), fences(), heading(), inline() (+7 more)
+
+### Community 402 - "Community 402"
+Cohesion: 0.22
+Nodes (15): bq(), Bye(), eQ(), gq(), HQ(), html(), MC(), NA() (+7 more)
+
+### Community 403 - "Community 403"
+Cohesion: 0.15
+Nodes (15): calculate(), constructor(), feed(), getConfig(), init(), initContentAssist(), initGastRecorder(), initLexerAdapter() (+7 more)
+
+### Community 404 - "Community 404"
+Cohesion: 0.24
+Nodes (15): consumeArg(), consumeArgs(), countExpansion(), expandAfterFuture(), expandMacro(), expandMacroAsText(), expandNextToken(), expandOnce() (+7 more)
+
+### Community 405 - "Community 405"
+Cohesion: 0.20
+Nodes (15): Cr(), D2(), dve(), hr(), oIe(), RF(), rrt(), sf() (+7 more)
+
+### Community 406 - "Community 406"
+Cohesion: 0.19
+Nodes (12): _6e(), addAll(), bA(), _C(), copy(), iV(), l5e(), lV() (+4 more)
+
+### Community 407 - "Community 407"
+Cohesion: 0.19
+Nodes (13): acquireParserWorker(), beginGroup(), buildRootNode(), endGroup(), endGroups(), initializeWorkers(), lock(), onCancellationRequested() (+5 more)
+
+### Community 408 - "Community 408"
+Cohesion: 0.15
+Nodes (13): AT_LEAST_ONE(), AT_LEAST_ONE1(), AT_LEAST_ONE2(), AT_LEAST_ONE3(), AT_LEAST_ONE4(), AT_LEAST_ONE5(), AT_LEAST_ONE6(), AT_LEAST_ONE7() (+5 more)
+
+### Community 409 - "Community 409"
 Cohesion: 0.17
-Nodes (8): DictCases, Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``., Yield ``(case_id, [(key, repr_value), ...])`` for collection., Resolve a single dict case into ``(kwargs_dict, frozenset())``., Class method with dict-parametrize produces DICT_PARAMETRIZE violation., test_check_fn_violations_class_method_dict_parametrize(), test_dict_cases_items_yields_repr_pairs(), test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs()
+Nodes (13): buildKeywordTokens(), buildTerminalTokens(), buildTokens(), distinct(), findIndex(), flatMap(), head(), isEmpty() (+5 more)
 
 ### Community 410 - "Community 410"
-Cohesion: 0.09
-Nodes (31): _capture_locals(), _get_frames(), Capture non-private local variables from a frame object., Extract structured traceback frames from an exception.      Single-pass walk ove, Execute Python doctests via stdlib doctest module., Resolve a dotted name like 'module.Class.method' to the actual object., Run doctests for a single object identified by dotted name.      Args:         m, _resolve_object() (+23 more)
+Cohesion: 0.15
+Nodes (13): create(), CW(), IF(), k9e(), kCe(), Nt(), oNe(), PF() (+5 more)
+
+### Community 411 - "Community 411"
+Cohesion: 0.17
+Nodes (13): docTranslator(), extract(), getArrowMarker(), getData(), getDirection(), getDirectionStatement(), getEdges(), getRootDocV2() (+5 more)
 
 ### Community 412 - "Community 412"
-Cohesion: 0.07
-Nodes (51): AH(), ake(), bke(), Cl(), count(), dke(), ds(), DW() (+43 more)
+Cohesion: 0.08
+Nodes (35): AH(), ake(), bke(), count(), cy(), dke(), DW(), eke() (+27 more)
+
+### Community 413 - "Community 413"
+Cohesion: 0.15
+Nodes (13): option(), OPTION1(), OPTION2(), OPTION3(), OPTION4(), OPTION5(), OPTION6(), OPTION7() (+5 more)
+
+### Community 414 - "Community 414"
+Cohesion: 0.44
+Nodes (12): ds(), e6(), fs(), i6(), iFe(), _ke(), r6(), register() (+4 more)
 
 ### Community 415 - "Community 415"
-Cohesion: 0.06
-Nodes (68): a5e(), AA(), abe(), accept(), Ai(), aLe(), aSe(), bBe() (+60 more)
+Cohesion: 0.05
+Nodes (71): a5e(), AA(), abe(), accept(), Ai(), aLe(), aSe(), bBe() (+63 more)
+
+### Community 416 - "Community 416"
+Cohesion: 0.17
+Nodes (12): many(), MANY1(), MANY2(), MANY3(), MANY4(), MANY5(), MANY6(), MANY7() (+4 more)
+
+### Community 417 - "Community 417"
+Cohesion: 0.18
+Nodes (11): a8(), e8(), j5e(), Jy(), nv(), o8(), qV(), rv() (+3 more)
+
+### Community 418 - "Community 418"
+Cohesion: 0.27
+Nodes (11): ACTION(), after(), assignWithoutOverride(), before(), buildCompositeNode(), construct(), isRecording(), performSubruleAssignment() (+3 more)
+
+### Community 419 - "Community 419"
+Cohesion: 0.20
+Nodes (11): addHiddenNodes(), addParents(), buildLeafNode(), extractHiddenTokens(), formLigatures(), Gm(), j_(), splice() (+3 more)
+
+### Community 420 - "Community 420"
+Cohesion: 0.31
+Nodes (11): aj(), ij(), jAe(), KAe(), nj(), s2(), sj(), TW() (+3 more)
+
+### Community 421 - "Community 421"
+Cohesion: 0.22
+Nodes (11): cDe(), CGe(), lDe(), mDe(), po(), setConfig(), SGe(), vDe() (+3 more)
 
 ### Community 422 - "Community 422"
-Cohesion: 0.04
-Nodes (72): add(), addElement(), addRequirement(), AW(), b9e(), bPe(), bT(), clear() (+64 more)
+Cohesion: 0.15
+Nodes (16): AW(), bT(), consumeInternalRecord(), gA(), initErrorHandler(), initLooksAhead(), initPerformanceTracer(), initRecoverable() (+8 more)
+
+### Community 423 - "Community 423"
+Cohesion: 0.18
+Nodes (11): MANY_SEP(), MANY_SEP1(), MANY_SEP2(), MANY_SEP3(), MANY_SEP4(), MANY_SEP5(), MANY_SEP6(), MANY_SEP7() (+3 more)
+
+### Community 424 - "Community 424"
+Cohesion: 0.22
+Nodes (4): ErrorOutcomeBuilder, FailureAccumulator, ResolvedOutcome, TestOutcome
 
 ### Community 425 - "Community 425"
-Cohesion: 0.17
-Nodes (7): _flatten_protocol(), Flatten a list-valued protocol attribute across all loaded plugins., All log backends from all plugins., All fixture providers from all plugins., All execution wrappers from all plugins., All collectors from all plugins., All reporters from all plugins.
+Cohesion: 0.22
+Nodes (10): addLink(), addSingleLink(), checkbox(), hasAtLeastOneBoxWithTitle(), isAffected(), isLinkData(), list(), listitem() (+2 more)
 
 ### Community 426 - "Community 426"
-Cohesion: 0.18
-Nodes (7): Captures all `warnings.warn()` calls issued during a test.      Installed automa, Clear all captured warnings, resetting `warn.list` to `[]`., _WarnCapture, _WarnCaptureFixture, _BuiltinContext, Warnings already captured by _WarnCapture are filtered out., test_check_warnings_excludes_captured_ids()
+Cohesion: 0.22
+Nodes (10): AGe(), FGe(), HS(), kO(), nge(), OGe(), PGe(), RR() (+2 more)
+
+### Community 427 - "Community 427"
+Cohesion: 0.27
+Nodes (10): bp(), cN(), getSource(), processLexingErrors(), processLinkingErrors(), processParsingErrors(), toDiagnostic(), validateDocument() (+2 more)
+
+### Community 428 - "Community 428"
+Cohesion: 0.27
+Nodes (10): dFe(), eCe(), ensureBeforeEOL(), getLineOffsets(), GLe(), Ile(), jLe(), lineCount() (+2 more)
+
+### Community 429 - "Community 429"
+Cohesion: 0.24
+Nodes (10): getRule(), gp(), lFe(), MK(), oFe(), Rle(), sFe(), tFe() (+2 more)
+
+### Community 430 - "Community 430"
+Cohesion: 0.22
+Nodes (8): addVertex(), CM(), documentationLinkRenderer(), find(), findNameInPrecomputedScopes(), findNode(), getElement(), w2e()
+
+### Community 431 - "Community 431"
+Cohesion: 0.25
+Nodes (9): B4(), G8e(), jce(), Jj(), lexer(), Lrt(), Qce(), reduce() (+1 more)
+
+### Community 432 - "Community 432"
+Cohesion: 0.31
+Nodes (9): callFunction(), d4e(), handleInfixNodes(), handler(), p4e(), q7(), useStrictBehavior(), w3() (+1 more)
+
+### Community 433 - "Community 433"
+Cohesion: 0.28
+Nodes (9): createGrammarElementIdMap(), dehydrateCstNode(), getGrammarElement(), getGrammarElementId(), getKey(), hydrate(), hydrateCstNode(), Ll() (+1 more)
+
+### Community 434 - "Community 434"
+Cohesion: 0.22
+Nodes (9): j0e(), Ltt(), pXe(), rxe(), sxe(), WHe(), YHe(), ZP() (+1 more)
+
+### Community 435 - "Community 435"
+Cohesion: 0.32
+Nodes (7): Unpack a sync fixture call: plain value or generator., _unpack_sync(), WarnCapture, test_fixture_outcome_dataclass(), test_unpack_sync_generator(), test_unpack_sync_generator_teardown_captures_exception(), test_unpack_sync_plain_value()
+
+### Community 436 - "Community 436"
+Cohesion: 0.32
+Nodes (8): aFe(), iR(), LC(), lLe(), mR(), sinks(), UGe(), Vu()
+
+### Community 437 - "Community 437"
+Cohesion: 0.25
+Nodes (8): BD(), curve(), eK(), l_e(), _mergedShape(), vK(), wK(), y2()
+
+### Community 438 - "Community 438"
+Cohesion: 0.25
+Nodes (8): buildUnexpectedCharactersMessage(), chopInput(), computeNewColumn(), handleModes(), tokenize(), tokenizeInternal(), updateLastIndex(), updateTokenEndLineColumnLocation()
+
+### Community 439 - "Community 439"
+Cohesion: 0.32
+Nodes (8): createIndentationTokenInstance(), dedentMatcher(), getLineNumber(), getTokenToInsert(), indentMatcher(), isStartOfLine(), matchWhitespace(), $u()
+
+### Community 440 - "Community 440"
+Cohesion: 0.32
+Nodes (8): getAxisOuterPadding(), getDrawableElement(), getDrawableElements(), getDrawableElementsForBottomAxis(), getDrawableElementsForLeftAxis(), getDrawableElementsForTopAxis(), getTickValues(), setAxes()
+
+### Community 441 - "Community 441"
+Cohesion: 0.29
+Nodes (8): getQuadrantPoints(), gl(), L3(), R3(), uTe(), X_(), y0(), Zy()
+
+### Community 442 - "Community 442"
+Cohesion: 0.29
+Nodes (6): _fixture_scope(), ContextVar protocol for fixture resolution — stdlib-only leaf module.  Defines t, Scoped fixture context — handles parent lookup and guaranteed reset., _warn_teardown(), Any, Exception
+
+### Community 443 - "Community 443"
+Cohesion: 0.38
+Nodes (7): aD(), _D(), fromText(), getSerializedGastProductions(), remove(), sK(), W8e()
+
+### Community 444 - "Community 444"
+Cohesion: 0.33
+Nodes (7): af(), ER(), exists(), includeEntry(), includes(), parseMember(), setCssStyle()
 
 ### Community 445 - "Community 445"
-Cohesion: 0.08
-Nodes (31): Bc(), bMe(), bp(), cN(), getSource(), handleException(), IRe(), jEe() (+23 more)
+Cohesion: 0.17
+Nodes (12): Bc(), bMe(), handleException(), IRe(), notifyDocumentPhase(), qEe(), rj(), RRe() (+4 more)
+
+### Community 446 - "Community 446"
+Cohesion: 0.29
+Nodes (7): convert(), ep(), getAssignment(), runCommonConverter(), runConverter(), runCustomConverter(), tp()
+
+### Community 447 - "Community 447"
+Cohesion: 0.29
+Nodes (7): m2e(), o2e(), P2e(), s2e(), v6(), vO(), yC()
+
+### Community 448 - "Community 448"
+Cohesion: 0.43
+Nodes (7): parseArguments(), parseColorGroup(), parseGroupOfType(), parseSizeGroup(), parseStringGroup(), parseUrlGroup(), setCatcode()
+
+### Community 449 - "Community 449"
+Cohesion: 0.33
+Nodes (5): get_fixture_name(), get_type_hints_cached(), Return the registered fixture name for fn, falling back to fallback., Return get_type_hints(fn, include_extras=True), cached by object identity., Any
+
+### Community 450 - "Community 450"
+Cohesion: 0.33
+Nodes (6): _9e(), ej(), PJ(), QX(), sm(), xDe()
+
+### Community 451 - "Community 451"
+Cohesion: 0.33
+Nodes (6): add(), exclude(), JN(), onBuildPhase(), onDocumentPhase(), TT()
+
+### Community 452 - "Community 452"
+Cohesion: 0.33
+Nodes (6): addPoints(), dhe(), Do(), EGe(), kGe(), phe()
+
+### Community 453 - "Community 453"
+Cohesion: 0.33
+Nodes (6): Bs(), buildDuplicateFoundError(), buildEmptyRepetitionError(), ije(), lje(), sje()
+
+### Community 454 - "Community 454"
+Cohesion: 0.40
+Nodes (6): buildTerminalToken(), Dg(), Ng(), regexPatternFunction(), requiresCustomPattern(), Sn()
+
+### Community 455 - "Community 455"
+Cohesion: 0.33
+Nodes (6): cancel(), cancelWrite(), fire(), initialized(), unlock(), write()
+
+### Community 456 - "Community 456"
+Cohesion: 0.40
+Nodes (6): cTe(), jwe(), kv(), kwe(), s(), v_()
+
+### Community 457 - "Community 457"
+Cohesion: 0.40
+Nodes (5): addEntry(), computeIsSubtype(), getAllSubTypes(), getAllTypes(), isSubtype()
+
+### Community 458 - "Community 458"
+Cohesion: 0.40
+Nodes (5): bPe(), gPe(), Pg(), yPe(), ZO()
+
+### Community 459 - "Community 459"
+Cohesion: 0.40
+Nodes (5): cj(), g9e(), nFe(), rFe(), xM()
+
+### Community 460 - "Community 460"
+Cohesion: 0.40
+Nodes (5): computeLookaheadFunc(), disableRecording(), enableRecording(), TRACE_INIT(), tx()
+
+### Community 461 - "Community 461"
+Cohesion: 0.40
+Nodes (5): dv(), UU(), ywe(), z8(), zU()
+
+### Community 462 - "Community 462"
+Cohesion: 0.40
+Nodes (5): eFe(), K2(), kj(), Tae(), wAe()
+
+### Community 463 - "Community 463"
+Cohesion: 0.40
+Nodes (5): eqe(), iPe(), j8(), o_(), zwe()
+
+### Community 464 - "Community 464"
+Cohesion: 0.40
+Nodes (5): Ese(), jPe(), MVe(), of(), pve()
+
+### Community 466 - "Community 466"
+Cohesion: 0.50
+Nodes (4): bF(), Fhe(), Fi(), He()
+
+### Community 467 - "Community 467"
+Cohesion: 0.50
+Nodes (4): CA(), mRe(), q9e(), xh()
+
+### Community 468 - "Community 468"
+Cohesion: 0.50
+Nodes (4): countChar(), destructEndLink(), destructLink(), destructStartLink()
+
+### Community 469 - "Community 469"
+Cohesion: 0.83
+Nodes (4): Fw(), Mw(), nr(), WD()
+
+### Community 470 - "Community 470"
+Cohesion: 0.50
+Nodes (4): g2(), k3(), MU(), sAe()
+
+### Community 471 - "Community 471"
+Cohesion: 0.50
+Nodes (4): g7e(), v7e(), x7e(), y7e()
+
+### Community 472 - "Community 472"
+Cohesion: 0.67
+Nodes (4): Ghe(), S1(), Vhe(), zGe()
+
+### Community 473 - "Community 473"
+Cohesion: 0.50
+Nodes (4): Iye(), Mye(), Oye(), xtt()
+
+### Community 474 - "Community 474"
+Cohesion: 0.50
+Nodes (4): JS(), qB(), uje(), Zs()
+
+### Community 475 - "Community 475"
+Cohesion: 0.50
+Nodes (4): KLe(), toMarkdown(), toMarkdownDefault(), toString()
+
+### Community 476 - "Community 476"
+Cohesion: 0.67
+Nodes (3): addRequirement(), getInitialRequirement(), resetLatestRequirement()
+
+### Community 477 - "Community 477"
+Cohesion: 0.67
+Nodes (3): aPe(), Ho(), uN()
+
+### Community 478 - "Community 478"
+Cohesion: 0.67
+Nodes (3): buildKeywordPattern(), buildKeywordToken(), findLongerAlt()
+
+### Community 479 - "Community 479"
+Cohesion: 0.67
+Nodes (3): Cl(), GX(), ZX()
+
+### Community 480 - "Community 480"
+Cohesion: 0.67
+Nodes (3): Dje(), mje(), Pje()
+
+### Community 481 - "Community 481"
+Cohesion: 0.67
+Nodes (3): extractWrap(), parseBoxData(), parseMessage()
+
+### Community 482 - "Community 482"
+Cohesion: 0.67
+Nodes (3): getAllTags(), getTag(), getTags()
+
+### Community 483 - "Community 483"
+Cohesion: 0.67
+Nodes (3): getPosForId(), indexNodes(), indexNodes2()
+
+### Community 484 - "Community 484"
+Cohesion: 0.67
+Nodes (3): hj(), l9e(), o2()
+
+### Community 485 - "Community 485"
+Cohesion: 0.67
+Nodes (3): input(), reset(), resetLexerState()
 
 ### Community 489 - "Community 489"
 Cohesion: 0.67
 Nodes (3): [0.13.0] - 2026-06-08, Bug Fixes, Features
 
 ## Knowledge Gaps
-- **944 isolated node(s):** `profile.sh script`, `run.sh script`, `Any`, `_BuiltinContext`, `TestResult` (+939 more)
+- **945 isolated node(s):** `profile.sh script`, `run.sh script`, `Any`, `_BuiltinContext`, `TestResult` (+940 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **50 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **63 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `FixtureSession` connect `Community 138` to `Community 1`, `Community 161`, `Community 35`, `Community 8`, `Community 10`, `Community 11`, `Community 142`, `Community 47`, `Community 18`, `Community 51`, `Community 54`, `Community 410`, `Community 380`, `Community 221`?**
+- **Why does `FixtureSession` connect `Community 138` to `Community 1`, `Community 161`, `Community 35`, `Community 133`, `Community 8`, `Community 9`, `Community 10`, `Community 11`, `Community 142`, `Community 47`, `Community 18`, `Community 51`, `Community 54`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `PluginRegistry` connect `Community 221` to `Community 1`, `Community 33`, `Community 3`, `Community 4`, `Community 69`, `Community 485`, `Community 9`, `Community 138`, `Community 425`, `Community 18`, `Community 83`, `Community 114`?**
+- **Why does `PluginRegistry` connect `Community 9` to `Community 1`, `Community 33`, `Community 69`, `Community 138`, `Community 18`, `Community 114`, `Community 221`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `FixtureRegistry` connect `Community 138` to `Community 1`, `Community 161`, `Community 26`, `Community 8`, `Community 10`, `Community 11`, `Community 155`, `Community 46`, `Community 142`, `Community 47`, `Community 51`, `Community 54`, `Community 410`, `Community 91`, `Community 380`, `Community 221`?**
+- **Why does `FixtureRegistry` connect `Community 138` to `Community 1`, `Community 161`, `Community 35`, `Community 133`, `Community 8`, `Community 10`, `Community 11`, `Community 46`, `Community 142`, `Community 47`, `Community 51`, `Community 54`, `Community 26`, `Community 91`, `Community 221`?**
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
-- **Are the 61 inferred relationships involving `write_temp_py()` (e.g. with `helper_entries_multiple_conftest_files()` and `helper_entries_public_functions()`) actually correct?**
-  _`write_temp_py()` has 61 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 63 inferred relationships involving `write_temp_py()` (e.g. with `helper_entries_multiple_conftest_files()` and `helper_entries_public_functions()`) actually correct?**
+  _`write_temp_py()` has 63 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 85 inferred relationships involving `FixtureRegistry` (e.g. with `AsyncPolicy` and `_ResolvedTest`) actually correct?**
   _`FixtureRegistry` has 85 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 72 inferred relationships involving `FixtureSession` (e.g. with `_ResolvedTest` and `AsyncBackend`) actually correct?**
   _`FixtureSession` has 72 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Regression checker for multi-tier bench results.`, `Return list of result dicts from a hyperfine JSON export.`, `Return all result entries matching the given tier tag.` to the rest of the system?**
-  _1828 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1829 weakly-connected nodes found - possible documentation gaps or missing edges._
