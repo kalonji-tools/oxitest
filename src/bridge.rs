@@ -442,8 +442,8 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let markers_list = pyo3::types::PyList::new(py, item.markers.to_vec())?;
-    let markers_frozen = pyo3::types::PyFrozenSet::new(py, markers_list)?;
+    let marker_strs: Vec<String> = item.markers.iter().map(|s| s.to_string()).collect();
+    let markers_frozen = pyo3::types::PyFrozenSet::new(py, &marker_strs)?;
 
     let node_id_str: &str = &item.node_id;
     let meta_obj = test_meta_cls.call1((
