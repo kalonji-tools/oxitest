@@ -276,6 +276,7 @@ fn prescan_item_matches_node_ids(
 /// A node ID like `path::test_name` matches items with that fn_name.
 /// A node ID like `path::ClassName` matches all methods in that class.
 /// A node ID like `path::ClassName::test_name` matches a specific class method.
+#[allow(dead_code)]
 fn filter_prescan_by_node_ids<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
@@ -323,6 +324,7 @@ fn prescan_item_to_query_entry(
 ///
 /// Supports: `name(pattern)`, `mark(name)`, `source(pattern)`, `async()`.
 /// On parse error, returns all items (fall through to eager).
+#[allow(dead_code)]
 fn filter_prescan_by_expression<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
@@ -348,6 +350,7 @@ fn filter_prescan_by_expression<'a>(
 /// Filter prescan items by last-failed node IDs.
 ///
 /// Checks exact match and parametrize prefix match.
+#[allow(dead_code)]
 fn filter_prescan_last_failed<'a>(
     items: &'a [PrescanItem],
     file_path: &str,
@@ -370,36 +373,40 @@ pub(crate) fn file_matches_node_ids(
     file_path: &str,
     node_ids: &[String],
 ) -> bool {
-    !filter_prescan_by_node_ids(items, file_path, node_ids).is_empty()
+    if node_ids.is_empty() {
+        return true;
+    }
+    let has_glob = |s: &str| s.contains('*') || s.contains('?');
+    let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids.iter().partition(|id| has_glob(id));
+    let glob_matchers = build_glob_matchers(&glob_ids);
+    items
+        .iter()
+        .any(|item| prescan_item_matches_node_ids(item, file_path, &literal_ids, &glob_matchers))
 }
 
 /// Returns true if any prescan item in the file matches the expression.
 ///
 /// When `module_marks` is provided, each item is temporarily augmented with
-/// those marks before evaluation — avoiding a full clone of the items slice.
-/// When `module_marks` is `None`, delegates to [`filter_prescan_by_expression`].
+/// those marks before evaluation. Treats `None` as an empty mark list.
 pub(crate) fn file_matches_expression(
     items: &[PrescanItem],
     file_path: &str,
     expression: &str,
     module_marks: Option<&[String]>,
 ) -> bool {
-    if let Some(marks) = module_marks {
-        let tokens = match crate::query::compile::lex(expression) {
-            Ok(t) => t,
-            Err(_) => return true, // fall through to eager on parse error
-        };
-        let parsed = match crate::query::compile::parse(tokens) {
-            Ok(p) => p,
-            Err(_) => return true,
-        };
-        items.iter().any(|item| {
-            let entry = prescan_item_to_query_entry_with_module_marks(item, file_path, marks);
-            crate::query::eval::eval(&parsed, &entry)
-        })
-    } else {
-        !filter_prescan_by_expression(items, file_path, expression).is_empty()
-    }
+    let marks = module_marks.unwrap_or(&[]);
+    let tokens = match crate::query::compile::lex(expression) {
+        Ok(t) => t,
+        Err(_) => return true, // fall through to eager on parse error
+    };
+    let parsed = match crate::query::compile::parse(tokens) {
+        Ok(p) => p,
+        Err(_) => return true,
+    };
+    items.iter().any(|item| {
+        let entry = prescan_item_to_query_entry_with_module_marks(item, file_path, marks);
+        crate::query::eval::eval(&parsed, &entry)
+    })
 }
 
 /// Returns true if any prescan item in the file is in the last-failed set.
@@ -408,7 +415,12 @@ pub(crate) fn file_matches_last_failed(
     file_path: &str,
     failed_ids: &std::collections::HashSet<String>,
 ) -> bool {
-    !filter_prescan_last_failed(items, file_path, failed_ids).is_empty()
+    items.iter().any(|item| {
+        let id = prescan_node_id(file_path, item);
+        failed_ids
+            .iter()
+            .any(|fid| fid == &id || fid.starts_with(&format!("{id}[")))
+    })
 }
 
 /// Like [`prescan_item_to_query_entry`] but augments the mark field with module-level marks.
