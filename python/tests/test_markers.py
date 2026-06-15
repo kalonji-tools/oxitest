@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from types import MappingProxyType
 
 import oxitest
 from conftest import helpers
@@ -28,7 +29,7 @@ from oxitest._bridge.result import (
 
 
 def test_mark_info_stores_name_args_kwargs():
-    m = MarkInfo("slow", (), {})
+    m = MarkInfo("slow", (), MappingProxyType({}))
     assert m.name == "slow", f"expected name='slow', got {m.name!r}"
     assert m.args == (), f"expected args=(), got {m.args!r}"
     assert m.kwargs == {}, f"expected kwargs={{}}, got {m.kwargs!r}"
@@ -38,7 +39,7 @@ def test_append_mark_creates_list_on_first_call():
     def fn():
         pass
 
-    _append_mark(fn, MarkInfo("slow", (), {}))
+    _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
     from oxitest._bridge._fn_metadata import get_metadata
 
     meta = get_metadata(fn)
@@ -54,8 +55,8 @@ def test_append_mark_stacks_multiple_marks():
     def fn():
         pass
 
-    _append_mark(fn, MarkInfo("slow", (), {}))
-    _append_mark(fn, MarkInfo("integration", (), {}))
+    _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
+    _append_mark(fn, MarkInfo("integration", (), MappingProxyType({})))
     from oxitest._bridge._fn_metadata import get_metadata
 
     assert len(get_metadata(fn).marks) == 2, (
@@ -421,7 +422,9 @@ def test_handler_context_is_dataclass():
 
 def test_usefixtures_handler_always_returns_none():
     ctx = _make_ctx()
-    result = _UsefixturesHandler().handle(MarkInfo("usefixtures", (), {}), ctx)
+    result = _UsefixturesHandler().handle(
+        MarkInfo("usefixtures", (), MappingProxyType({})), ctx
+    )
     assert result.short_circuit is None, (
         "_UsefixturesHandler should never short-circuit"
     )
@@ -430,7 +433,9 @@ def test_usefixtures_handler_always_returns_none():
 
 def test_skip_handler_returns_short_circuit():
     ctx = _make_ctx()
-    result = _SkipHandler().handle(MarkInfo("skip", (), {"reason": "not ready"}), ctx)
+    result = _SkipHandler().handle(
+        MarkInfo("skip", (), MappingProxyType({"reason": "not ready"})), ctx
+    )
     assert result.short_circuit is not None, (
         "_SkipHandler should produce a short_circuit result"
     )
@@ -461,14 +466,18 @@ def test_skip_when_false_not_in_marks():
 
 def test_xfail_handler_returns_wrapper():
     ctx = _make_ctx()
-    result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known bug"}), ctx)
+    result = _XFailHandler().handle(
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})), ctx
+    )
     assert result.short_circuit is None, "_XFailHandler should not short-circuit"
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper function"
 
 
 def test_xfail_wrapper_converts_failed_to_xfailed():
     ctx = _make_ctx()
-    result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known bug"}), ctx)
+    result = _XFailHandler().handle(
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})), ctx
+    )
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
     failed_result = FailedResult(message="oops")
@@ -479,7 +488,9 @@ def test_xfail_wrapper_converts_failed_to_xfailed():
 
 def test_xfail_wrapper_converts_passed_to_xpassed():
     ctx = _make_ctx()
-    result = _XFailHandler().handle(MarkInfo("xfail", (), {"reason": "known"}), ctx)
+    result = _XFailHandler().handle(
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known"})), ctx
+    )
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
     passed_result = PassedResult()
@@ -490,7 +501,7 @@ def test_xfail_wrapper_converts_passed_to_xpassed():
 
 def test_xfail_wrapper_passes_through_skipped():
     ctx = _make_ctx()
-    result = _XFailHandler().handle(MarkInfo("xfail", (), {}), ctx)
+    result = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})), ctx)
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
     skipped_result = SkippedResult(message="not my test")
@@ -510,7 +521,9 @@ def test_evaluate_marks_returns_tuple():
 
 
 def test_evaluate_marks_skip_returns_short_circuit():
-    sc, wrappers = evaluate_marks([MarkInfo("skip", (), {"reason": "x"})], _make_ctx())
+    sc, wrappers = evaluate_marks(
+        [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))], _make_ctx()
+    )
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
         f"evaluate_marks skip short-circuit status should be 'skipped', got "
@@ -598,7 +611,7 @@ def test_plugin_mark_handler_wraps_correctly():
     assert handler.mark_name == "custom_mark", (
         f"expected mark_name='custom_mark', got {handler.mark_name!r}"
     )
-    mark = MarkInfo("custom_mark", ("arg1",), {"key": "val"})
+    mark = MarkInfo("custom_mark", ("arg1",), MappingProxyType({"key": "val"}))
     ctx = _HandlerContext(
         fn_raw=lambda: None,
         fn=lambda: None,
@@ -622,9 +635,9 @@ def test_plugin_mark_handler_wraps_correctly():
 def test_marker_composition_skip_takes_precedence_over_others():
     """When skip + xfail + timeout are all present, skip takes precedence."""
     marks = [
-        MarkInfo("skip", (), {"reason": "not ready"}),
-        MarkInfo("xfail", (), {"reason": "known bug"}),
-        MarkInfo("timeout", (), {"seconds": 5}),
+        MarkInfo("skip", (), MappingProxyType({"reason": "not ready"})),
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})),
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 5})),
     ]
     ctx = _make_ctx()
     sc, wrappers = evaluate_marks(marks, ctx)
@@ -644,7 +657,7 @@ def test_marker_composition_skip_takes_precedence_over_others():
 def test_evaluate_marks_dispatches_plugin_handlers():
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
-    marks = [MarkInfo("custom_mark", (), {})]
+    marks = [MarkInfo("custom_mark", (), MappingProxyType({}))]
     ctx = _HandlerContext(
         fn_raw=lambda: None,
         fn=lambda: None,

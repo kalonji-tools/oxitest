@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 
 import oxitest
 from conftest import helpers
@@ -367,7 +367,7 @@ def test_check_fn_violations_class_method_dict_parametrize():
     from oxitest._bridge._fn_metadata import get_or_create
 
     get_or_create(test_method).param_cases = (
-        DictCases(cases={"basic": {"x": 1}, "extra": {"x": 2}}),
+        DictCases(cases=MappingProxyType({"basic": {"x": 1}, "extra": {"x": 2}})),
     )
 
     path = "tests/test_cls.py"
@@ -551,7 +551,7 @@ def test_extract_module_marks_none_returns_empty():
 def test_extract_module_marks_single_mark():
     """oxi_mark = oxi.mark.slow → list with one MarkInfo."""
     module = ModuleType("test_single")
-    module.oxi_mark = MarkInfo("slow", (), {})  # ty: ignore[unresolved-attribute]
+    module.oxi_mark = MarkInfo("slow", (), MappingProxyType({}))  # ty: ignore[unresolved-attribute]
     marks, violations = _extract_module_marks(module, "/fake/test_single.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
     assert marks[0].name == "slow", f"expected mark name 'slow', got {marks[0].name!r}"
@@ -562,8 +562,8 @@ def test_extract_module_marks_list():
     """oxi_mark = [mark.slow, mark.timeout(10)] → list with two MarkInfos."""
     module = ModuleType("test_list")
     module.oxi_mark = [  # ty: ignore[unresolved-attribute]
-        MarkInfo("slow", (), {}),
-        MarkInfo("timeout", (), {"seconds": 10}),
+        MarkInfo("slow", (), MappingProxyType({})),
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 10})),
     ]
     marks, violations = _extract_module_marks(module, "/fake/test_list.py")
     assert len(marks) == 2, f"expected 2 marks, got {len(marks)}"
@@ -576,7 +576,7 @@ def test_extract_module_marks_list():
 def test_extract_module_marks_tuple():
     """oxi_mark as tuple is accepted."""
     module = ModuleType("test_tuple")
-    module.oxi_mark = (MarkInfo("slow", (), {}),)  # ty: ignore[unresolved-attribute]
+    module.oxi_mark = (MarkInfo("slow", (), MappingProxyType({})),)  # ty: ignore[unresolved-attribute]
     marks, violations = _extract_module_marks(module, "/fake/test_tuple.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
 
@@ -585,7 +585,7 @@ def test_extract_module_marks_invalid_entry():
     """Non-MarkInfo entries produce violations, valid entries still collected."""
     module = ModuleType("test_invalid")
     module.oxi_mark = [  # ty: ignore[unresolved-attribute]
-        MarkInfo("slow", (), {}),
+        MarkInfo("slow", (), MappingProxyType({})),
         42,
         "not_a_mark",
     ]
@@ -608,7 +608,7 @@ def test_apply_module_marks_prepends_to_unmarked_fn():
     def test_fn():
         pass
 
-    module_marks = [MarkInfo("slow", (), {})]
+    module_marks = [MarkInfo("slow", (), MappingProxyType({}))]
     _apply_module_marks([("test_fn", test_fn)], module_marks)
     marks = get_metadata(test_fn).marks
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
@@ -623,7 +623,7 @@ def test_apply_module_marks_per_test_overrides_same_name():
     def test_fn():
         pass
 
-    module_marks = [MarkInfo("timeout", (), {"seconds": 120})]
+    module_marks = [MarkInfo("timeout", (), MappingProxyType({"seconds": 120}))]
     _apply_module_marks([("test_fn", test_fn)], module_marks)
     marks = get_metadata(test_fn).marks
     timeout_marks = [m for m in marks if m.name == "timeout"]
@@ -644,7 +644,7 @@ def test_apply_module_marks_non_conflicting_added():
     def test_fn():
         pass
 
-    module_marks = [MarkInfo("slow", (), {})]
+    module_marks = [MarkInfo("slow", (), MappingProxyType({}))]
     _apply_module_marks([("test_fn", test_fn)], module_marks)
     marks = get_metadata(test_fn).marks
     names = [m.name for m in marks]
