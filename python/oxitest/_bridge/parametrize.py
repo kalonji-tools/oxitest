@@ -18,6 +18,7 @@ import dataclasses
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
@@ -60,7 +61,7 @@ class _Partial:
     """A partial set of fields for a dataclass, used in parametrize composition."""
 
     target_type: type
-    fields: dict[str, Any]
+    fields: MappingProxyType[str, Any]
     provided_fields: frozenset[str]
     fixref_fields: tuple[str, ...]
 
@@ -104,7 +105,7 @@ def partial(target_type: type, **fields: Any) -> _Partial:
 
     return _Partial(
         target_type=target_type,
-        fields=dict(fields),
+        fields=MappingProxyType(dict(fields)),
         provided_fields=frozenset(fields.keys()),
         fixref_fields=fixref_fields,
     )
@@ -139,7 +140,7 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
 class DictCases:
     """Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``."""
 
-    cases: dict[str, Any]
+    cases: MappingProxyType[str, Any]
 
     @property
     def fixref_fields(self) -> tuple[str, ...]:
@@ -165,7 +166,7 @@ class DictCases:
 class DataclassCases:
     """Dataclass-mode parametrize: cases are ``dict[str, <frozen dataclass>]``."""
 
-    cases: dict[str, Any]
+    cases: MappingProxyType[str, Any]
     param_type: type
     fixref_fields: tuple[str, ...] = ()
 
@@ -347,7 +348,7 @@ def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> DictCase
                 f" {sorted(missing)!r}\n"
                 f"provided: {sorted(case.keys())!r}"
             )
-    return DictCases(cases=cases)
+    return DictCases(cases=MappingProxyType(cases))
 
 
 def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
@@ -382,7 +383,9 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
                     f" — pass a fixture function, e.g. {field_name}=my_fixture."
                 )
     return DataclassCases(
-        cases=cases, param_type=values_type, fixref_fields=fixref_fields
+        cases=MappingProxyType(cases),
+        param_type=values_type,
+        fixref_fields=fixref_fields,
     )
 
 

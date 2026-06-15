@@ -5,6 +5,7 @@ __all__ = ["mark", "skip", "MarkInfo", "_append_mark"]
 import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, TypeVar
 
 from oxitest._bridge._fn_metadata import get_or_create
@@ -53,7 +54,7 @@ class MarkInfo:
 
     name: str
     args: tuple[object, ...]
-    kwargs: dict[str, object]
+    kwargs: MappingProxyType[str, object]
 
 
 def _append_mark(f: Callable[..., Any], info: MarkInfo) -> None:
@@ -73,9 +74,9 @@ class _Mark:
 
     def __call__(self, *args: Any, **kwargs: Any) -> _F | Callable[[_F], _F]:
         if len(args) == 1 and callable(args[0]) and not kwargs:
-            _append_mark(args[0], MarkInfo(self.name, (), {}))
+            _append_mark(args[0], MarkInfo(self.name, (), MappingProxyType({})))
             return args[0]  # type: ignore[return-value]
-        info = MarkInfo(self.name, args, kwargs)
+        info = MarkInfo(self.name, args, MappingProxyType(dict(kwargs)))
 
         def decorator(f: _F) -> _F:
             _append_mark(f, info)
@@ -97,7 +98,7 @@ class _TimeoutMark:
             raise ValueError(
                 f"@oxitest.mark.timeout requires an integer seconds > 0, got {seconds!r}"  # noqa: E501
             )
-        info = MarkInfo("timeout", (), {"seconds": seconds})
+        info = MarkInfo("timeout", (), MappingProxyType({"seconds": seconds}))
 
         def decorator(f: _F) -> _F:
             _append_mark(f, info)
@@ -116,7 +117,9 @@ class _SkipMark:
     def __call__(self, *args: Any, **kwargs: Any) -> _F | Callable[[_F], _F]:
         # Bare: @mark.skip (no parens — function is the single arg)
         if len(args) == 1 and callable(args[0]) and not kwargs:
-            _append_mark(args[0], MarkInfo("skip", (), {"reason": ""}))
+            _append_mark(
+                args[0], MarkInfo("skip", (), MappingProxyType({"reason": ""}))
+            )
             return args[0]  # type: ignore[return-value]
 
         if args:
@@ -143,7 +146,7 @@ class _SkipMark:
             identity._oxitest_noop_mark = True  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             return identity
 
-        info = MarkInfo("skip", (), {"reason": str(reason)})
+        info = MarkInfo("skip", (), MappingProxyType({"reason": str(reason)}))
 
         def decorator(f: _F) -> _F:
             _append_mark(f, info)

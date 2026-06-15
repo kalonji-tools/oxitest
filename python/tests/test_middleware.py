@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from types import MappingProxyType
 
 from oxitest._bridge._middleware import (
     ExecutionPlan,
@@ -31,8 +32,8 @@ def test_build_pipeline_no_middlewares():
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
-        kwargs={},
-        marks=[],
+        kwargs=MappingProxyType({}),
+        marks=(),
         no_message_lines=(),
         is_async=False,
         default_timeout=None,
@@ -53,8 +54,8 @@ def test_build_pipeline_single_middleware():
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
-        kwargs={},
-        marks=[],
+        kwargs=MappingProxyType({}),
+        marks=(),
         no_message_lines=(),
         is_async=False,
         default_timeout=None,
@@ -75,8 +76,8 @@ def test_build_pipeline_ordering():
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
-        kwargs={},
-        marks=[],
+        kwargs=MappingProxyType({}),
+        marks=(),
         no_message_lines=(),
         is_async=False,
         default_timeout=None,
@@ -99,8 +100,8 @@ def test_build_pipeline_skip_middleware_is_noop():
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
-        kwargs={},
-        marks=[],
+        kwargs=MappingProxyType({}),
+        marks=(),
         no_message_lines=(),
         is_async=False,
         default_timeout=None,
