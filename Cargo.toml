@@ -10,7 +10,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.28"
+pyo3 = "0.29"
 ignore = "0.4"
 toml = "1.1"
 clap = { version = "4", features = ["derive"] }
