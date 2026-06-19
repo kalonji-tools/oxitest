@@ -214,13 +214,6 @@ junit.xml
 .superpowers/
 docs/superpowers/
 
-# Graphify (knowledge graph)
-graphify-out/cost.json
-graphify-out/cache/
-graphify-out/graph.html
-graphify-out/.graphify_python
-graphify-out/.graphify_root
-
 # MkDocs build output
 docs/site/
 docs/internals/book/
