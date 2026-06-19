@@ -5,8 +5,8 @@
 [[repos]]
 repo = "builtin"
 hooks = [
-  { id = "trailing-whitespace", exclude = "^graphify-out/" },
-  { id = "end-of-file-fixer", exclude = "(\\.snap$|^graphify-out/)" },
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer", exclude = "\\.snap$" },
   { id = "check-toml" },
   { id = "check-yaml" },
   { id = "no-commit-to-branch", args = ["-b", "main"] },
@@ -42,7 +42,6 @@ id = "codespell"
 name = "codespell"
 language = "system"
 entry = "codespell"
-exclude = "^graphify-out/"
 
 [[repos.hooks]]
 id = "cargo-fmt"
