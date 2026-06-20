@@ -185,6 +185,7 @@ $RECYCLE.BIN/
 .devenv/
 .devenv.flake.nix
 .config/
+!.config/wt.toml
 result
 
 # Worktrees

@@ -1,0 +1,8 @@
+# Project-level worktrunk overrides.
+# Global config (~/.config/worktrunk/config.toml) provides defaults.
+
+# Reload direnv when switching worktrees (devenv environment)
+post-switch = "direnv reload"
+
+# Run full pre-push gate before merging
+pre-merge = "just preflight"
