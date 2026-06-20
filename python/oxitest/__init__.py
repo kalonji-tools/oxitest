@@ -147,6 +147,12 @@ from oxitest._bridge._mark_api import (
     mark as mark,
     skip as skip,
 )
+from oxitest._bridge._plugin_config import (
+    Both as Both,
+    Cli as Cli,
+    CliExtension as CliExtension,
+    Conf as Conf,
+)
 from oxitest._bridge._raises import raises as raises
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.parametrize import (
@@ -159,7 +165,11 @@ from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugi
 __all__ = [
     "approx",
     "AsyncBackend",
+    "Both",
     "CaptureResult",
+    "Cli",
+    "CliExtension",
+    "Conf",
     "CovReportFormat",
     "CoverageProvider",
     "DebuggerBackend",
