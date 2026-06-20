@@ -15,6 +15,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
+from oxitest._bridge._plugin_config import (
+    CliExtension,
+    FieldDescriptor,
+    IntrospectionError,
+    introspect_config,
+    merge_config,
+)
 from oxitest.plugin import Plugin
 
 if TYPE_CHECKING:
@@ -110,6 +117,9 @@ class PluginRegistry:
     """Holds all loaded plugin instances."""
 
     entries: list[PluginEntry] = field(default_factory=list)
+    cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = field(
+        default_factory=dict
+    )
 
     @functools.cached_property
     def log_backends(self) -> tuple[LogBackend, ...]:
@@ -166,6 +176,29 @@ class PluginRegistry:
     def register_deferred(self, entry: PluginEntry) -> None:
         """Append a deferred (not yet imported) plugin entry."""
         self.entries.append(entry)
+
+    def activate_plugin(
+        self,
+        module_name: str,
+        pyproject_values: dict[str, object],
+        cli_values: dict[str, object],
+    ) -> Plugin:
+        """Activate a plugin with typed config (phase 2 of two-phase loading)."""
+        mod = importlib.import_module(module_name)
+        entry_fn = getattr(mod, "oxitest_plugin", None)
+        if entry_fn is None:
+            raise PluginLoadError(
+                f"plugin '{module_name}' has no oxitest_plugin() function"
+            )
+
+        if module_name in self.cli_extensions:
+            ext, descriptors = self.cli_extensions[module_name]
+            config = merge_config(
+                ext.config_type, descriptors, pyproject_values, cli_values
+            )
+            return entry_fn(config=config)
+
+        return entry_fn()
 
     def resolve_fixture_providers(self) -> list:
         """Return all fixture providers, loading deferred fixture_provider plugins."""
@@ -257,6 +290,36 @@ def load_plugins(
             raise PluginLoadError(
                 f'plugin "{module_name}" oxitest_plugin is not callable'
             )
+
+        # Discover CLI extension if present
+        cli_ext = getattr(module, "oxitest_cli_extension", None)
+        if cli_ext is not None:
+            if not isinstance(cli_ext, CliExtension):
+                raise PluginLoadError(
+                    f'plugin "{module_name}" oxitest_cli_extension must be '
+                    f"CliExtension, got {type(cli_ext).__name__}"
+                )
+            settings = plugin_configs.get(module_name, {})
+            prefix: str = (
+                str(settings.get("cli_prefix", cli_ext.prefix))
+                if isinstance(settings, dict)
+                else cli_ext.prefix
+            )
+            try:
+                descriptors = introspect_config(cli_ext.config_type)
+            except IntrospectionError as e:
+                raise PluginLoadError(
+                    f'plugin "{module_name}" config dataclass error: {e}'
+                ) from e
+            overridden_ext = CliExtension(
+                prefix=prefix, config_type=cli_ext.config_type
+            )
+            registry.cli_extensions[module_name] = (overridden_ext, descriptors)
+            # Phase 1 complete — defer activation to activate_plugin()
+            registry.entries.append(
+                PluginEntry(module_name=module_name, plugin=None, is_loaded=False)
+            )
+            continue
 
         # Call the entry point with config
         config = plugin_configs.get(module_name)
