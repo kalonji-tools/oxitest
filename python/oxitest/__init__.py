@@ -157,7 +157,6 @@ from oxitest._exit_code import ExitCode as ExitCode
 from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugin
 
 __all__ = [
-    "ApproxBase",
     "approx",
     "AsyncBackend",
     "CaptureResult",
@@ -168,8 +167,6 @@ __all__ = [
     "FdCapture",
     "Fixture",
     "FixtureRef",
-    "FixtureShadowWarning",
-    "FixtureTeardownWarning",
     "Fixtures",
     "LogCapture",
     "Patcher",
@@ -177,7 +174,6 @@ __all__ = [
     "partial",
     "raises",
     "SharedAsyncSession",
-    "SharedFixtureMutationError",
     "StdCapture",
     "TempDir",
     "TempDirFactory",
