@@ -37,10 +37,8 @@ fn collect_imports(stmt: &ast::Stmt, modules: &mut HashSet<String>) {
         ast::Stmt::ImportFrom(node) => {
             // Only absolute imports (level == None or level == 0)
             let is_absolute = node.level.is_none_or(|l| l == 0u32);
-            if is_absolute {
-                if let Some(ref module) = node.module {
-                    modules.insert(module.to_string());
-                }
+            if is_absolute && let Some(ref module) = node.module {
+                modules.insert(module.to_string());
             }
         }
         _ => {}

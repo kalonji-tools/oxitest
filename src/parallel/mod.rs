@@ -11,12 +11,12 @@
 mod drain;
 mod pool;
 
-pub(crate) use drain::{drain_worker_results, handle_drain_outcome, DrainContext, DrainOutcome};
-pub(crate) use pool::{kill_pool, prewarm_workers, PoolGuard, PrewarmedWorker};
+pub(crate) use drain::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome};
+pub(crate) use pool::{PoolGuard, PrewarmedWorker, kill_pool, prewarm_workers};
 
 use crate::{
     config, reporter, scheduler, types,
-    worker_session::{spawn_worker, spawn_worker_with_process, WorkerParams},
+    worker_session::{WorkerParams, spawn_worker, spawn_worker_with_process},
 };
 
 use drain::{drain_remaining_into_crashed, handle_worker_result};
@@ -44,8 +44,8 @@ pub(crate) fn run_phase_parallel(
     rep: &mut dyn reporter::Reporter,
     pool: Option<Vec<PrewarmedWorker>>,
 ) -> PhaseResult {
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     let worker_count = worker_count.max(1).min(groups.len().max(1));
     let total: usize = groups.iter().map(|g| g.items.len()).sum();

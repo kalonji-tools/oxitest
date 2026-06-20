@@ -4,8 +4,8 @@ use std::sync::Arc;
 use crate::config::Verbosity;
 use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
-use super::parametrize_buffer::ParametrizeBuffer;
 use super::ColorCategory;
+use super::parametrize_buffer::ParametrizeBuffer;
 
 use super::colors::{
     color_bold_white, color_cyan, color_dim, color_dim_green, color_error_token, color_fail,

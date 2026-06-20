@@ -44,11 +44,7 @@ impl TestCache {
 
     pub(super) fn module_duration_sum(&self, items: &[Arc<TestItem>]) -> Option<f64> {
         let (total, count) = self.sum_and_count(items);
-        if count > 0 {
-            Some(total)
-        } else {
-            None
-        }
+        if count > 0 { Some(total) } else { None }
     }
 }
 
@@ -202,14 +198,18 @@ mod tests {
         ]);
         let items = vec![TestItem::builder_raw("tests/test_foo.py::test_a").arc()];
         cache.invalidate(&items);
-        assert!(!cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_b"));
-        assert!(cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_a"));
+        assert!(
+            !cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_b")
+        );
+        assert!(
+            cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_a")
+        );
     }
 
     #[test]
@@ -416,10 +416,12 @@ mod tests {
             .unwrap()
             .age = 50;
         cache.merge_timings(&[], 50);
-        assert!(!cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
+        assert!(
+            !cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_old")
+        );
     }
 
     #[test]
@@ -432,10 +434,12 @@ mod tests {
             .unwrap()
             .age = 49;
         cache.merge_timings(&[], 50);
-        assert!(cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
+        assert!(
+            cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_old")
+        );
     }
 
     #[test]
@@ -447,10 +451,12 @@ mod tests {
             OutcomeKind::Passed,
         )];
         cache.merge_timings(&timings, 50);
-        assert!(cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_new"));
+        assert!(
+            cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_new")
+        );
         assert_eq!(cache.inner.timings["tests/test_foo.py::test_new"].age, 0);
     }
 
@@ -476,10 +482,12 @@ mod tests {
             .unwrap()
             .age = 50;
         cache.merge_timings(&[], 50);
-        assert!(!cache
-            .inner
-            .timings
-            .contains_key("tests/test_foo.py::test_old"));
+        assert!(
+            !cache
+                .inner
+                .timings
+                .contains_key("tests/test_foo.py::test_old")
+        );
         assert!(cache.dirty);
     }
 

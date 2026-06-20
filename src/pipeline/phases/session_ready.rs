@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::super::{collection, helpers, Collected, Pipeline, SessionReady};
+use super::super::{Collected, Pipeline, SessionReady, collection, helpers};
 use crate::cache::ModuleCache;
 use crate::types::ExitCode;
 use crate::{bridge, collector, config, filter, query};
@@ -46,10 +46,11 @@ impl Pipeline<SessionReady> {
         merged_violations.extend(raw_violations);
 
         // Detect unused fixtures when strict mode is enabled.
-        if shared.cfg.markers.strict.is_some() && !shared.cfg.filter.has_explicit_paths {
-            if let Ok(unused) = bridge::find_unused_fixtures(py, &session, &items) {
-                merged_violations.extend(unused);
-            }
+        if shared.cfg.markers.strict.is_some()
+            && !shared.cfg.filter.has_explicit_paths
+            && let Ok(unused) = bridge::find_unused_fixtures(py, &session, &items)
+        {
+            merged_violations.extend(unused);
         }
 
         // Apply node ID filter early.

@@ -35,8 +35,8 @@ pub use ci::CiReporter;
 pub(crate) use composite::CompositeReporter;
 pub use options::{ReporterOpts, ReporterOptsBuilder};
 pub(crate) use print::{print_collected, print_strict_abort, print_strict_suite_section};
-pub(crate) use traits::{standard_finish, StandardReporter};
 pub use traits::{ExitVote, Reporter};
+pub(crate) use traits::{StandardReporter, standard_finish};
 pub use tty::TtyReporter;
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
@@ -440,8 +440,8 @@ mod tests {
     #[test]
     fn test_make_reporter_wraps_in_composite_when_plugin_reporters_given() {
         use crate::types::{TestItem, TestOutcome};
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         struct CountingStub(Arc<AtomicUsize>);
         impl Reporter for CountingStub {

@@ -359,7 +359,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let result = match &pipeline.command {
         config::Command::Run(_) => run_command(py, pipeline),
         config::Command::Debug(_) => debug_command(py, pipeline),
-        config::Command::Query(ref args) => {
+        config::Command::Query(args) => {
             let needs_session =
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
             query_command(py, pipeline, needs_session)

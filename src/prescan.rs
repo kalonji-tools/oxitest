@@ -107,12 +107,12 @@ fn is_literal_expr(expr: &ast::Expr) -> bool {
 fn extract_parametrize_kwarg_names(decorators: &[ast::Expr]) -> Vec<String> {
     let mut ids = Vec::new();
     for dec in decorators {
-        if let ast::Expr::Call(call) = dec {
-            if is_parametrize_call(&call.func) {
-                for kw in &call.keywords {
-                    if let Some(ref arg) = kw.arg {
-                        ids.push(arg.to_string());
-                    }
+        if let ast::Expr::Call(call) = dec
+            && is_parametrize_call(&call.func)
+        {
+            for kw in &call.keywords {
+                if let Some(ref arg) = kw.arg {
+                    ids.push(arg.to_string());
                 }
             }
         }
@@ -122,30 +122,28 @@ fn extract_parametrize_kwarg_names(decorators: &[ast::Expr]) -> Vec<String> {
 
 /// Check if a call target is one of the recognized parametrize forms.
 fn is_parametrize_call(func: &ast::Expr) -> bool {
-    if let ast::Expr::Attribute(attr) = func {
-        if attr.attr.as_str() == "parametrize" {
-            // oxi.parametrize or oxitest.parametrize
-            if let ast::Expr::Name(n) = &*attr.value {
-                if python_ast::is_oxitest_namespace(n.id.as_str()) {
-                    return true;
-                }
-            }
-            // oxi.mark.parametrize or oxitest.mark.parametrize
-            if let ast::Expr::Attribute(inner) = &*attr.value {
-                if inner.attr.as_str() == "mark" {
-                    if let ast::Expr::Name(n) = &*inner.value {
-                        if python_ast::is_oxitest_namespace(n.id.as_str()) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            // bare mark.parametrize (from `from oxitest import mark`)
-            if let ast::Expr::Name(n) = &*attr.value {
-                if n.id.as_str() == "mark" {
-                    return true;
-                }
-            }
+    if let ast::Expr::Attribute(attr) = func
+        && attr.attr.as_str() == "parametrize"
+    {
+        // oxi.parametrize or oxitest.parametrize
+        if let ast::Expr::Name(n) = &*attr.value
+            && python_ast::is_oxitest_namespace(n.id.as_str())
+        {
+            return true;
+        }
+        // oxi.mark.parametrize or oxitest.mark.parametrize
+        if let ast::Expr::Attribute(inner) = &*attr.value
+            && inner.attr.as_str() == "mark"
+            && let ast::Expr::Name(n) = &*inner.value
+            && python_ast::is_oxitest_namespace(n.id.as_str())
+        {
+            return true;
+        }
+        // bare mark.parametrize (from `from oxitest import mark`)
+        if let ast::Expr::Name(n) = &*attr.value
+            && n.id.as_str() == "mark"
+        {
+            return true;
         }
     }
     false
@@ -155,10 +153,10 @@ fn is_parametrize_call(func: &ast::Expr) -> bool {
 fn extract_fixture_param_names(args: &ast::Arguments) -> Vec<String> {
     let mut names = Vec::new();
     for arg_with_default in args.args.iter().chain(args.kwonlyargs.iter()) {
-        if let Some(ref annotation) = arg_with_default.def.annotation {
-            if is_fixture_annotation(annotation) {
-                names.push(arg_with_default.def.arg.to_string());
-            }
+        if let Some(ref annotation) = arg_with_default.def.annotation
+            && is_fixture_annotation(annotation)
+        {
+            names.push(arg_with_default.def.arg.to_string());
         }
     }
     names
@@ -217,11 +215,12 @@ fn has_getattr_definition(stmt: &ast::Stmt) -> bool {
 
 /// Check whether a statement is a `from non_stdlib import *`.
 fn has_nonstdlib_star_import(stmt: &ast::Stmt) -> bool {
-    if let ast::Stmt::ImportFrom(imp) = stmt {
-        if imp.names.len() == 1 && imp.names[0].name.as_str() == "*" {
-            let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
-            return !is_stdlib_module(module);
-        }
+    if let ast::Stmt::ImportFrom(imp) = stmt
+        && imp.names.len() == 1
+        && imp.names[0].name.as_str() == "*"
+    {
+        let module = imp.module.as_ref().map(|m| m.as_str()).unwrap_or("");
+        return !is_stdlib_module(module);
     }
     false
 }
@@ -245,35 +244,34 @@ fn detect_dynamic_collection(stmts: &[ast::Stmt]) -> bool {
 
 /// Check if an expression is a call to `exec()` or `eval()`.
 fn is_dynamic_call(expr: &ast::Expr) -> bool {
-    if let ast::Expr::Call(call) = expr {
-        if let ast::Expr::Name(n) = &*call.func {
-            let s = n.id.as_str();
-            return s == "exec" || s == "eval";
-        }
+    if let ast::Expr::Call(call) = expr
+        && let ast::Expr::Name(n) = &*call.func
+    {
+        let s = n.id.as_str();
+        return s == "exec" || s == "eval";
     }
     false
 }
 
 /// Check if an expression is `globals()[...]`.
 fn is_globals_subscript(expr: &ast::Expr) -> bool {
-    if let ast::Expr::Subscript(sub) = expr {
-        if let ast::Expr::Call(call) = &*sub.value {
-            if let ast::Expr::Name(n) = &*call.func {
-                return n.id.as_str() == "globals";
-            }
-        }
+    if let ast::Expr::Subscript(sub) = expr
+        && let ast::Expr::Call(call) = &*sub.value
+        && let ast::Expr::Name(n) = &*call.func
+    {
+        return n.id.as_str() == "globals";
     }
     false
 }
 
 /// Check if an expression is `type("Name", (bases,), {...})` — metaclass creation.
 fn is_type_metaclass_call(expr: &ast::Expr) -> bool {
-    if let ast::Expr::Call(call) = expr {
-        if let ast::Expr::Name(n) = &*call.func {
-            if n.id.as_str() == "type" && call.args.len() >= 3 {
-                return true;
-            }
-        }
+    if let ast::Expr::Call(call) = expr
+        && let ast::Expr::Name(n) = &*call.func
+        && n.id.as_str() == "type"
+        && call.args.len() >= 3
+    {
+        return true;
     }
     false
 }
@@ -316,28 +314,27 @@ fn extract_module_marks(stmts: &[ast::Stmt]) -> Vec<String> {
     for stmt in stmts {
         if let ast::Stmt::Assign(assign) = stmt {
             // Check target is `oxi_mark`
-            if assign.targets.len() == 1 {
-                if let ast::Expr::Name(n) = &assign.targets[0] {
-                    if n.id.as_str() == "oxi_mark" {
-                        // Handle single mark: oxi_mark = mark.slow
-                        if let Some(name) = extract_mark_from_value(&assign.value) {
+            if assign.targets.len() == 1
+                && let ast::Expr::Name(n) = &assign.targets[0]
+                && n.id.as_str() == "oxi_mark"
+            {
+                // Handle single mark: oxi_mark = mark.slow
+                if let Some(name) = extract_mark_from_value(&assign.value) {
+                    marks.push(name);
+                }
+                // Handle list form: oxi_mark = [mark.slow, mark.fast]
+                if let ast::Expr::List(list) = &*assign.value {
+                    for elt in &list.elts {
+                        if let Some(name) = extract_mark_from_value(elt) {
                             marks.push(name);
                         }
-                        // Handle list form: oxi_mark = [mark.slow, mark.fast]
-                        if let ast::Expr::List(list) = &*assign.value {
-                            for elt in &list.elts {
-                                if let Some(name) = extract_mark_from_value(elt) {
-                                    marks.push(name);
-                                }
-                            }
-                        }
-                        // Handle tuple form: oxi_mark = (mark.slow, mark.fast)
-                        if let ast::Expr::Tuple(tuple) = &*assign.value {
-                            for elt in &tuple.elts {
-                                if let Some(name) = extract_mark_from_value(elt) {
-                                    marks.push(name);
-                                }
-                            }
+                    }
+                }
+                // Handle tuple form: oxi_mark = (mark.slow, mark.fast)
+                if let ast::Expr::Tuple(tuple) = &*assign.value {
+                    for elt in &tuple.elts {
+                        if let Some(name) = extract_mark_from_value(elt) {
+                            marks.push(name);
                         }
                     }
                 }
@@ -363,10 +360,10 @@ fn extract_mark_from_value(expr: &ast::Expr) -> Option<String> {
             }
             // oxi.mark.NAME or oxitest.mark.NAME
             ast::Expr::Attribute(inner) if inner.attr.as_str() == "mark" => {
-                if let ast::Expr::Name(n) = &*inner.value {
-                    if python_ast::is_oxitest_namespace(n.id.as_str()) {
-                        return Some(mark_name.to_string());
-                    }
+                if let ast::Expr::Name(n) = &*inner.value
+                    && python_ast::is_oxitest_namespace(n.id.as_str())
+                {
+                    return Some(mark_name.to_string());
                 }
             }
             _ => {}

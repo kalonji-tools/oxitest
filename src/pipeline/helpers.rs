@@ -85,13 +85,12 @@ pub(super) fn init_session(
         }
     };
 
-    if !cfg.features.plugins.is_empty() {
-        if let Err(e) =
+    if !cfg.features.plugins.is_empty()
+        && let Err(e) =
             session.load_plugins(py, &cfg.features.plugins, &cfg.features.plugin_settings)
-        {
-            let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-            return Err(early_exit_with_error(&[err], &make_reporter));
-        }
+    {
+        let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+        return Err(early_exit_with_error(&[err], &make_reporter));
     }
 
     if let Err(e) = session.init_async_backend(py, &cfg.features.async_backend) {

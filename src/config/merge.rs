@@ -191,10 +191,10 @@ impl Config {
         if args.exitfirst {
             self.exec.maxfail = 1;
         }
-        if let Some(n) = args.maxfail {
-            if n > 0 {
-                self.exec.maxfail = n;
-            }
+        if let Some(n) = args.maxfail
+            && n > 0
+        {
+            self.exec.maxfail = n;
         }
         if args.serial {
             self.exec.mode = ExecutionMode::Serial;
@@ -360,7 +360,7 @@ impl Config {
 
     /// Merge the `--affected` flag into config, resolving empty sentinel to `affected_base`.
     fn merge_affected(&mut self, affected: &Option<String>) {
-        if let Some(ref val) = affected {
+        if let Some(val) = affected {
             self.filter.has_explicit_paths = true;
             if val.is_empty() {
                 self.filter.affected = Some(self.filter.affected_base.clone());
@@ -573,14 +573,18 @@ mod tests {
         )
         .unwrap();
         let config = Config::load(utf8_dir);
-        assert!(config
-            .markers
-            .registered_markers
-            .contains(&"slow".to_string()));
-        assert!(config
-            .markers
-            .registered_markers
-            .contains(&"integration".to_string()));
+        assert!(
+            config
+                .markers
+                .registered_markers
+                .contains(&"slow".to_string())
+        );
+        assert!(
+            config
+                .markers
+                .registered_markers
+                .contains(&"integration".to_string())
+        );
     }
 
     #[test]
