@@ -206,3 +206,22 @@ def test_internal_types_not_in_all():
         assert name not in oxitest.__all__, (
             f"{name} should not be in __all__ — it is an internal type"
         )
+
+
+def test_plugin_config_types_in_all():
+    expected = ["Cli", "Conf", "Both", "CliExtension"]
+    for name in expected:
+        assert name in oxitest.__all__, (
+            f"{name} should be in __all__ — it is a stable plugin config type"
+        )
+
+
+def test_plugin_config_types_importable():
+    from oxitest import Both, Cli, CliExtension, Conf
+
+    assert Cli(help="test").help == "test", "Cli should be constructable"
+    assert Conf(help="test").help == "test", "Conf should be constructable"
+    assert Both(help="test").help == "test", "Both should be constructable"
+    assert CliExtension(prefix="p", config_type=int).prefix == "p", (
+        "CliExtension should be constructable"
+    )
