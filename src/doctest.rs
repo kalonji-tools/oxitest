@@ -26,10 +26,9 @@ pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
     for (i, line) in docstring.lines().enumerate() {
         let trimmed = line.trim();
 
-        if let Some(rest) =
-            trimmed
-                .strip_prefix(">>> ")
-                .or_else(|| if trimmed == ">>>" { Some("") } else { None })
+        if let Some(rest) = trimmed
+            .strip_prefix(">>> ")
+            .or_else(|| if trimmed == ">>>" { Some("") } else { None })
         {
             if !source.is_empty() && !want.is_empty() {
                 examples.push(DoctestExample {
@@ -52,10 +51,9 @@ pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
             source.push_str(rest);
             source.push('\n');
             want.clear();
-        } else if let Some(rest) =
-            trimmed
-                .strip_prefix("... ")
-                .or_else(|| if trimmed == "..." { Some("") } else { None })
+        } else if let Some(rest) = trimmed
+            .strip_prefix("... ")
+            .or_else(|| if trimmed == "..." { Some("") } else { None })
         {
             if !source.is_empty() {
                 source.push_str(rest);
@@ -96,14 +94,13 @@ pub(crate) struct DoctestLocation {
 
 /// Extract a docstring (first statement is a string literal) from a body.
 fn extract_docstring(body: &[ast::Stmt]) -> Option<&str> {
-    if let Some(ast::Stmt::Expr(expr)) = body.first() {
-        if let ast::Expr::Constant(ast::ExprConstant {
+    if let Some(ast::Stmt::Expr(expr)) = body.first()
+        && let ast::Expr::Constant(ast::ExprConstant {
             value: ast::Constant::Str(s),
             ..
         }) = &*expr.value
-        {
-            return Some(s.as_str());
-        }
+    {
+        return Some(s.as_str());
     }
     None
 }

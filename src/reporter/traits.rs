@@ -2,10 +2,10 @@
 
 use crate::types::{CollectError, DurationMs, ExitCode};
 
+use super::ReporterOpts;
 use super::print::{print_collect_errors, print_summary_section};
 use super::session::ReporterSession;
 use super::stats;
-use super::ReporterOpts;
 
 // ─── ExitVote ────────────────────────────────────────────────────────────────
 

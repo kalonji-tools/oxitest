@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::super::{helpers, Collected, Pipeline, PipelineShared, Ready};
+use super::super::{Collected, Pipeline, PipelineShared, Ready, helpers};
 use crate::cache::OutcomeCache;
 use crate::types::ExitCode;
 use crate::{bridge, config, filter, query, reporter, types};

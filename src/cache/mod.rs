@@ -219,11 +219,12 @@ mod tests {
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::empty(); // dirty = false
         cache.save(utf8_dir);
-        assert!(!dir
-            .path()
-            .join(".oxitest_cache")
-            .join("timings.json")
-            .exists());
+        assert!(
+            !dir.path()
+                .join(".oxitest_cache")
+                .join("timings.json")
+                .exists()
+        );
     }
 
     #[test]
@@ -233,11 +234,12 @@ mod tests {
         let mut cache = TestCache::empty();
         cache.dirty = true;
         cache.save(utf8_dir);
-        assert!(dir
-            .path()
-            .join(".oxitest_cache")
-            .join("timings.json")
-            .exists());
+        assert!(
+            dir.path()
+                .join(".oxitest_cache")
+                .join("timings.json")
+                .exists()
+        );
     }
 
     #[test]

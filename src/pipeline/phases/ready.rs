@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::super::{execution, Executed, ExecutionResults, Pipeline, Ready};
+use super::super::{Executed, ExecutionResults, Pipeline, Ready, execution};
 use crate::cache::TimingCache;
 use crate::types::ExitCode;
 use crate::{bridge, parallel, reporter};

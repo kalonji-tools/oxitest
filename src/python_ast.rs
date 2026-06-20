@@ -4,7 +4,7 @@
 //! [`crate::import_graph`], [`crate::bare_asserts`], and [`crate::prescan`].
 
 use camino::Utf8Path;
-use rustpython_parser::{ast, Parse};
+use rustpython_parser::{Parse, ast};
 
 /// Read and parse a Python file into its AST statements.
 ///
@@ -102,14 +102,14 @@ pub(crate) fn walk_test_defs(
             if is_test_fn(def.name()) {
                 visit(&def, None);
             }
-        } else if let ast::Stmt::ClassDef(cls) = stmt {
-            if is_test_class(&cls.name) {
-                for method in &cls.body {
-                    if let Some(def) = FnDef::try_from_stmt(method) {
-                        if is_test_fn(def.name()) {
-                            visit(&def, Some(cls));
-                        }
-                    }
+        } else if let ast::Stmt::ClassDef(cls) = stmt
+            && is_test_class(&cls.name)
+        {
+            for method in &cls.body {
+                if let Some(def) = FnDef::try_from_stmt(method)
+                    && is_test_fn(def.name())
+                {
+                    visit(&def, Some(cls));
                 }
             }
         }

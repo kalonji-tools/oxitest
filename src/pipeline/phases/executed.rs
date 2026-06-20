@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::super::{helpers, Executed, ExecutionResults, Pipeline};
+use super::super::{Executed, ExecutionResults, Pipeline, helpers};
 use crate::pipeline::execution::DebugOptions;
 use crate::types::ExitCode;
 use crate::{reporter, retry};
@@ -56,10 +56,10 @@ impl Pipeline<Executed> {
             interrupted,
             mut reporter,
         } = state.execution_results;
-        if let Ok(ft) = reporter::bridge::get_fixture_timings(&session, py) {
-            if !ft.is_empty() {
-                reporter.set_fixture_timings(ft);
-            }
+        if let Ok(ft) = reporter::bridge::get_fixture_timings(&session, py)
+            && !ft.is_empty()
+        {
+            reporter.set_fixture_timings(ft);
         }
 
         helpers::finalize(
@@ -69,10 +69,10 @@ impl Pipeline<Executed> {
             &shared.rootdir,
         );
 
-        if let Ok(stats) = reporter::bridge::get_cache_stats(&session, py) {
-            if stats.hits + stats.misses > 0 {
-                reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
-            }
+        if let Ok(stats) = reporter::bridge::get_cache_stats(&session, py)
+            && stats.hits + stats.misses > 0
+        {
+            reporter.set_fixture_cache_stats(stats.hits, stats.misses, stats.breakdown);
         }
 
         let code = reporter

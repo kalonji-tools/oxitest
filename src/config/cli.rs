@@ -311,19 +311,17 @@ impl RunArgs {
         }
 
         // ── --show-locals / --show-internals require --tb=detail ──
-        if self.show_locals {
-            if let Some(ref tb) = self.tb {
-                if !matches!(tb, TbStyle::Detail) {
-                    return Err("--show-locals requires --tb=detail.".to_string());
-                }
-            }
+        if self.show_locals
+            && let Some(ref tb) = self.tb
+            && !matches!(tb, TbStyle::Detail)
+        {
+            return Err("--show-locals requires --tb=detail.".to_string());
         }
-        if self.show_internals {
-            if let Some(ref tb) = self.tb {
-                if !matches!(tb, TbStyle::Detail) {
-                    return Err("--show-internals requires --tb=detail.".to_string());
-                }
-            }
+        if self.show_internals
+            && let Some(ref tb) = self.tb
+            && !matches!(tb, TbStyle::Detail)
+        {
+            return Err("--show-internals requires --tb=detail.".to_string());
         }
 
         if self.cov_report.is_some() && !self.cov {
@@ -550,12 +548,12 @@ pub struct OxitestCli {
 /// Partition positional args into paths and node IDs for Run and Debug commands.
 fn partition_command(cmd: &mut Command) {
     match cmd {
-        Command::Run(ref mut args) => {
+        Command::Run(args) => {
             let (paths, node_ids) = partition_positionals(std::mem::take(&mut args.paths));
             args.paths = paths;
             args.node_ids = node_ids;
         }
-        Command::Debug(ref mut args) => {
+        Command::Debug(args) => {
             let (paths, node_ids) = partition_positionals(std::mem::take(&mut args.paths));
             args.paths = paths;
             args.node_ids = node_ids;

@@ -5,7 +5,7 @@
 //! state for a single worker thread.
 
 use crate::{
-    parallel::{drain_worker_results, handle_drain_outcome, DrainContext, DrainOutcome},
+    parallel::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome},
     scheduler, types,
     worker_result::{WorkerTask, WorkerTaskItem},
 };

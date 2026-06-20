@@ -682,9 +682,11 @@ mod tests {
         let source_files = std::collections::HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered
-            .iter()
-            .all(|i| i.fn_name.starts_with("TestSuite::")));
+        assert!(
+            filtered
+                .iter()
+                .all(|i| i.fn_name.starts_with("TestSuite::"))
+        );
     }
 
     #[test]
@@ -727,9 +729,11 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered
-            .iter()
-            .all(|i| i.param_id.as_ref().unwrap().starts_with("case")));
+        assert!(
+            filtered
+                .iter()
+                .all(|i| i.param_id.as_ref().unwrap().starts_with("case"))
+        );
     }
 
     #[test]
@@ -743,9 +747,11 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered
-            .iter()
-            .all(|i| i.module_path() == "tests/test_a.py"));
+        assert!(
+            filtered
+                .iter()
+                .all(|i| i.module_path() == "tests/test_a.py")
+        );
     }
 
     #[test]
@@ -896,9 +902,11 @@ mod tests {
         let ids = vec!["tests/test_a.py::TestSuite".to_string()];
         let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
         assert_eq!(filtered.len(), 2);
-        assert!(filtered
-            .iter()
-            .all(|i| i.class_name.as_deref() == Some("TestSuite")));
+        assert!(
+            filtered
+                .iter()
+                .all(|i| i.class_name.as_deref() == Some("TestSuite"))
+        );
     }
 
     #[test]
