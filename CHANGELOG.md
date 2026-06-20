@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.0.0-beta.2] - 2026-06-20
+
+### Bug Fixes
+
+
+- Apply edition 2024 migration fixes
+
+### Features
+
+
+- Remove internal types from __all__ (#1016)
+- Add typed plugin config system with source markers (#1017)
+- Add two-phase plugin loading with CLI extension discovery (#1019)
+- Add Rust-side plugin CLI extension infrastructure (#1018)
+
 ## [1.0.0-beta.1] - 2026-06-15
 
 ### Bug Fixes
