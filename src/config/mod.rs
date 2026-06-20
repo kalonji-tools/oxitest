@@ -387,6 +387,10 @@ pub struct FeatureConfig {
     pub cov_report: Option<cli::CovReportFormat>,
     /// Maximum age (in days) before a cache entry is evicted.
     pub cache_max_age: u32,
+    /// Plugin CLI values extracted from parsed command-line args.
+    #[allow(dead_code)] // Infrastructure for future two-phase CLI parsing (#1018)
+    pub plugin_cli_values:
+        std::collections::HashMap<String, std::collections::HashMap<String, toml::Value>>,
 }
 
 impl Default for FeatureConfig {
@@ -398,8 +402,39 @@ impl Default for FeatureConfig {
             cov: false,
             cov_report: None,
             cache_max_age: 50,
+            plugin_cli_values: std::collections::HashMap::new(),
         }
     }
+}
+
+/// CLI option descriptor extracted from a Python plugin's config dataclass.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
+pub struct PluginCliOption {
+    pub field_name: String,
+    pub long_flag: String,
+    pub short_flag: Option<char>,
+    pub help: String,
+    pub value_type: PluginValueType,
+    pub env: Option<String>,
+    pub has_default: bool,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
+pub enum PluginValueType {
+    String,
+    Bool,
+    Int,
+    Float,
+}
+
+/// All CLI extensions declared by plugins, keyed by module name.
+#[derive(Debug, Default)]
+#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
+pub struct PluginCliExtensions {
+    /// (prefix, options) per plugin module.
+    pub plugins: std::collections::HashMap<String, (String, Vec<PluginCliOption>)>,
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────

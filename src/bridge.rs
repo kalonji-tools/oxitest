@@ -424,6 +424,100 @@ pub fn stop_and_report_coverage(
     Ok(())
 }
 
+/// Phase 1: Import plugin modules and read oxitest_cli_extension attributes.
+/// Returns CLI option descriptors for dynamic clap building.
+#[allow(dead_code)] // Wired into setup() in a follow-up (#1018)
+pub fn discover_plugin_cli(
+    py: Python<'_>,
+    plugins: &[String],
+    plugin_settings: &std::collections::HashMap<String, toml::Value>,
+) -> PyResult<crate::config::PluginCliExtensions> {
+    let mut extensions = crate::config::PluginCliExtensions::default();
+    let introspect_mod = py.import("oxitest._bridge._plugin_config")?;
+    let introspect_fn = introspect_mod.getattr("introspect_config")?;
+    let dataclasses = py.import("dataclasses")?;
+    let missing = dataclasses.getattr("MISSING")?;
+
+    for module_name in plugins {
+        let module = match py.import(module_name.as_str()) {
+            Ok(m) => m,
+            Err(_) => continue, // Skip non-importable plugins (they'll fail later in load_plugins)
+        };
+
+        let ext = match module.getattr("oxitest_cli_extension") {
+            Ok(attr) if !attr.is_none() => attr,
+            _ => continue,
+        };
+
+        let prefix: String = ext.getattr("prefix")?.extract()?;
+        let config_type = ext.getattr("config_type")?;
+
+        // Check for user prefix override
+        let effective_prefix = plugin_settings
+            .get(module_name)
+            .and_then(|v| v.get("cli_prefix"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or(prefix);
+
+        // Introspect the config dataclass
+        let descriptors = introspect_fn.call1((config_type,))?;
+
+        let mut options = Vec::new();
+        for desc in descriptors.try_iter()? {
+            let desc: Bound<'_, PyAny> = desc?;
+            let name: String = desc.getattr("name")?.extract()?;
+            let source = desc.getattr("source")?;
+            let source_type = source.get_type().name()?.to_string();
+
+            // Skip Conf-only fields (no CLI flag)
+            if source_type == "Conf" {
+                continue;
+            }
+
+            let help: String = source.getattr("help")?.extract()?;
+            let short: Option<String> = source.getattr("short")?.extract()?;
+            let env: Option<String> = if source_type == "Both" {
+                source.getattr("env")?.extract()?
+            } else {
+                None
+            };
+
+            let py_type: String = desc
+                .getattr("python_type")?
+                .getattr("__name__")?
+                .extract()?;
+            let value_type = match py_type.as_str() {
+                "bool" => crate::config::PluginValueType::Bool,
+                "int" => crate::config::PluginValueType::Int,
+                "float" => crate::config::PluginValueType::Float,
+                _ => crate::config::PluginValueType::String,
+            };
+
+            let default = desc.getattr("default")?;
+            let has_default = !default.is(&missing);
+
+            options.push(crate::config::PluginCliOption {
+                field_name: name.clone(),
+                long_flag: format!("--{}-{}", effective_prefix, name.replace('_', "-")),
+                short_flag: short.and_then(|s: String| s.chars().next()),
+                help,
+                value_type,
+                env,
+                has_default,
+            });
+        }
+
+        if !options.is_empty() {
+            extensions
+                .plugins
+                .insert(module_name.clone(), (effective_prefix, options));
+        }
+    }
+
+    Ok(extensions)
+}
+
 fn try_run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,
