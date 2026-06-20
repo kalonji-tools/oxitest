@@ -20,7 +20,13 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class LogBackend(Protocol):
-    """Protocol for log-capture backends."""
+    """Protocol for log-capture backends.
+
+    .. provisional::
+        This protocol is provisional and may change in minor releases.
+        It is modeled on Python's logging.LogRecord and may not fit
+        structured logging libraries.
+    """
 
     def install(self) -> None:
         """Attach the log handler and begin capturing records.
@@ -130,7 +136,13 @@ class ExecutionWrapper(Protocol):
 
 @runtime_checkable
 class Collector(Protocol):
-    """Protocol for custom test collectors."""
+    """Protocol for custom test collectors.
+
+    .. provisional::
+        This protocol is provisional and may change in minor releases.
+        It has not yet been exercised by a real plugin. The method signature
+        may be expanded to include config or fixture registry access.
+    """
 
     def collect(self, path: str, module: object) -> list[Any]:
         """Collect test items from an already-imported module.
