@@ -5,9 +5,9 @@
 //! newlines) are emitted as-is.
 
 use crate::colors::{color_blue, color_bold_cyan, color_dim_cyan, color_green};
-use rustpython_parser::lexer;
 use rustpython_parser::Mode;
 use rustpython_parser::Tok;
+use rustpython_parser::lexer;
 
 /// Highlight Python source code with ANSI colors.
 ///

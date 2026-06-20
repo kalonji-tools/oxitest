@@ -7,8 +7,8 @@ use std::io::Write;
 use std::time::Instant;
 
 use camino::Utf8PathBuf;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 
 use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 

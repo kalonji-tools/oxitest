@@ -1,6 +1,6 @@
 use ahash::AHashMap;
 
-use super::{CacheEntry, CacheFile, TestCache, CACHE_VERSION};
+use super::{CACHE_VERSION, CacheEntry, CacheFile, TestCache};
 use crate::types::{DurationMs, NodeId, OutcomeKind, TestTiming};
 
 pub(super) fn cache_with_entries(entries: &[(&str, f64)]) -> TestCache {

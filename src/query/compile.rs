@@ -208,7 +208,7 @@ pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
             other => {
                 return Err(DslError::ParseError {
                     message: format!("unexpected character '{other}'"),
-                })
+                });
             }
         }
     }
@@ -328,7 +328,7 @@ impl Parser {
                     other => {
                         return Err(DslError::ParseError {
                             message: format!("expected string after '~', got {other:?}"),
-                        })
+                        });
                     }
                 }
             }
@@ -341,7 +341,7 @@ impl Parser {
                     other => {
                         return Err(DslError::ParseError {
                             message: format!("expected string after '=', got {other:?}"),
-                        })
+                        });
                     }
                 }
             }
@@ -361,7 +361,7 @@ impl Parser {
             other => {
                 return Err(DslError::ParseError {
                     message: format!("unexpected token in predicate argument: {other:?}"),
-                })
+                });
             }
         };
 

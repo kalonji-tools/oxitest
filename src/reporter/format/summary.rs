@@ -9,11 +9,7 @@ use crate::colors::{
 use super::diagnostic::sep_width;
 
 pub(crate) fn plural(n: usize) -> &'static str {
-    if n == 1 {
-        ""
-    } else {
-        "s"
-    }
+    if n == 1 { "" } else { "s" }
 }
 
 /// Push a colored stat entry into `parts` when `count > 0`.

@@ -8,7 +8,7 @@ use super::colors;
 use super::exit::compute_exit_code;
 use super::format::{fmt_summary, fmt_tip_block, fmt_warning_block};
 use super::stats::RunStats;
-use super::{sep_width, ReporterOpts};
+use super::{ReporterOpts, sep_width};
 
 pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize) {
     let suffix = if total == 1 { "" } else { "s" };

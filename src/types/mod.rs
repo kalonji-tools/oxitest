@@ -656,11 +656,7 @@ impl TestOutcome {
                 reason.as_str()
             }
         };
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
+        if s.is_empty() { None } else { Some(s) }
     }
 
     /// Returns the diagnostic payload for Failed and Error outcomes.

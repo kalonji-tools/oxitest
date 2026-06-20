@@ -128,10 +128,10 @@ fn collect_from(
     conftests: &mut HashSet<Utf8PathBuf>,
 ) {
     if path.is_file() {
-        if let Some(filename) = path.file_name() {
-            if glob_set.is_match(filename) {
-                out.push(normalize_path(path, &config.rootdir));
-            }
+        if let Some(filename) = path.file_name()
+            && glob_set.is_match(filename)
+        {
+            out.push(normalize_path(path, &config.rootdir));
         }
         // Walk from the file's directory up to rootdir, collecting conftest.py at each level.
         // This ensures intermediate conftests (e.g. tests/conftest.py between rootdir and
