@@ -39,7 +39,11 @@ class SharedAsyncSession(Protocol):
 
 
 class AsyncBackend(Protocol):
-    """Pluggable async runtime backend."""
+    """Pluggable async runtime backend.
+
+    .. provisional::
+        This protocol is provisional and may change in minor releases.
+    """
 
     @property
     def name(self) -> str:
