@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import inspect
 import itertools
+import warnings
 from collections.abc import Iterable
 from types import ModuleType
 from typing import Any, cast, get_type_hints
@@ -20,6 +21,10 @@ from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import ComposedCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
+
+
+class PluginCollectorWarning(UserWarning):
+    """Issued when a plugin collector raises or returns unexpected types."""
 
 
 def _get_fixture_names(fn: object) -> tuple[str, ...]:
@@ -377,15 +382,27 @@ def collect_module(
 
     if _plugin_registry is not None:
         for collector in _plugin_registry.collectors:  # pragma: no cover
+            collector_name = type(collector).__qualname__
             try:
                 plugin_items = collector.collect(path, module)
-                items.extend(
-                    item for item in plugin_items if isinstance(item, CollectedItem)
+                for item in plugin_items:
+                    if isinstance(item, CollectedItem):
+                        items.append(item)
+                    else:
+                        warnings.warn(
+                            f"Plugin collector {collector_name!r} returned "
+                            f"{type(item).__name__!r} instead of CollectedItem "
+                            f"while collecting {path!r} — item dropped",
+                            PluginCollectorWarning,
+                            stacklevel=1,
+                        )
+            except Exception as exc:
+                warnings.warn(
+                    f"Plugin collector {collector_name!r} raised "
+                    f"{type(exc).__name__}: {exc} while collecting {path!r}",
+                    PluginCollectorWarning,
+                    stacklevel=1,
                 )
-            except Exception:
-                import traceback
-
-                traceback.print_exc()
 
     # Bare-assert detection is now handled in Rust (bare_asserts.rs).
     items.sort(key=lambda x: x.lineno)

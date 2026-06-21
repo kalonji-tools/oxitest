@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
 
 import oxitest
 from conftest import helpers
-from oxitest import TempDir, raises
+from oxitest import TempDir, WarnCapture, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
+    PluginCollectorWarning,
     _apply_module_marks,
     _collect_items,
     _extract_module_marks,
@@ -912,4 +914,146 @@ def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir):
     )
     assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
         f"skip(when=False) in list should not be a violation: {violations}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Plugin collector warning tests
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeRegistry:
+    """Minimal stand-in for PluginRegistry with only collectors."""
+
+    collectors: list[object] = field(default_factory=list)
+
+
+@dataclass
+class _FakeSession:
+    """Minimal stand-in for a session object with a _plugin_registry."""
+
+    _plugin_registry: _FakeRegistry = field(default_factory=_FakeRegistry)
+
+
+class _RaisingCollector:
+    """Collector that always raises."""
+
+    def collect(self, path: str, module: object) -> list[object]:
+        msg = "collector went boom"
+        raise RuntimeError(msg)
+
+
+class _BadReturnCollector:
+    """Collector that returns non-CollectedItem values."""
+
+    def collect(self, path: str, module: object) -> list[object]:
+        return ["not-a-collected-item", 42]  # type: ignore[list-item]
+
+
+class _GoodCollector:
+    """Collector that returns a valid CollectedItem."""
+
+    def collect(self, path: str, module: object) -> list[CollectedItem]:
+        return [
+            CollectedItem(
+                fn_name="test_from_plugin",
+                lineno=1,
+                markers=(),
+                param_id=None,
+                param_values=(),
+            )
+        ]
+
+
+def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture):
+    """A collector that raises emits PluginCollectorWarning."""
+    path = helpers.common.write_test_module(
+        tmp, "def test_ok(): pass\n", name="test_col_err.py"
+    )
+    session = _FakeSession(
+        _plugin_registry=_FakeRegistry(collectors=[_RaisingCollector()])
+    )
+
+    items, _ = collect_module(path, session=session)
+
+    # The regular test item should still be collected despite the collector error
+    assert len(items) == 1, (
+        "base test should still be collected when a plugin "
+        f"collector fails, got {len(items)}"
+    )
+
+    collector_warnings = [
+        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+    ]
+    assert len(collector_warnings) == 1, (
+        "expected exactly 1 PluginCollectorWarning, "
+        f"got {len(collector_warnings)}: {warn.list}"
+    )
+    msg = str(collector_warnings[0].message)
+    assert "_RaisingCollector" in msg, (
+        f"warning should identify the collector class, got: {msg}"
+    )
+    assert "collector went boom" in msg, (
+        f"warning should include the original error message, got: {msg}"
+    )
+
+
+def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture):
+    """A collector returning non-CollectedItem values emits a warning per bad item."""
+    path = helpers.common.write_test_module(
+        tmp, "def test_ok(): pass\n", name="test_col_bad.py"
+    )
+    session = _FakeSession(
+        _plugin_registry=_FakeRegistry(collectors=[_BadReturnCollector()])
+    )
+
+    items, _ = collect_module(path, session=session)
+
+    # Only the base test should be collected; bad returns are dropped
+    assert len(items) == 1, (
+        f"non-CollectedItem returns should be dropped, got {len(items)} items"
+    )
+
+    collector_warnings = [
+        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+    ]
+    assert len(collector_warnings) == 2, (
+        "expected 2 warnings (one per bad item), "
+        f"got {len(collector_warnings)}: {warn.list}"
+    )
+    msg0 = str(collector_warnings[0].message)
+    assert "_BadReturnCollector" in msg0, (
+        f"warning should identify the collector class, got: {msg0}"
+    )
+    assert "str" in msg0, f"warning should identify the unexpected type, got: {msg0}"
+    msg1 = str(collector_warnings[1].message)
+    assert "int" in msg1, f"second warning should identify 'int' type, got: {msg1}"
+
+
+def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture):
+    """A well-behaved collector adds items and emits no warnings."""
+    path = helpers.common.write_test_module(
+        tmp, "def test_ok(): pass\n", name="test_col_good.py"
+    )
+    session = _FakeSession(
+        _plugin_registry=_FakeRegistry(collectors=[_GoodCollector()])
+    )
+
+    items, _ = collect_module(path, session=session)
+
+    assert len(items) == 2, (
+        f"expected 2 items (1 base + 1 from plugin), got {len(items)}"
+    )
+    plugin_item = [i for i in items if i.fn_name == "test_from_plugin"]
+    assert len(plugin_item) == 1, (
+        "plugin-collected item should be present, "
+        f"got names: {[i.fn_name for i in items]}"
+    )
+
+    collector_warnings = [
+        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+    ]
+    assert len(collector_warnings) == 0, (
+        f"a well-behaved collector should emit no warnings, got: {collector_warnings}"
     )

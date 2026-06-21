@@ -53,6 +53,18 @@ class LogBackend(Protocol):
         Returns a list of backend-specific record objects (e.g.
         `logging.LogRecord` for the stdlib backend).  The list is reset on
         each `install`.
+
+        .. important::
+            Each record object **must** provide the following attributes,
+            matching the shape of ``logging.LogRecord``:
+
+            - ``created`` (``float``) — timestamp (``time.time()`` epoch seconds)
+            - ``levelname`` (``str``) — severity name (e.g. ``"WARNING"``)
+            - ``getMessage()`` (``Callable[[], str]``) — formatted message text
+
+            The built-in ``_LogCapture`` consumer sorts by ``created`` and
+            formats output using ``levelname`` and ``getMessage()``.  Records
+            missing these attributes will raise ``AttributeError`` at runtime.
         """
         ...
 
