@@ -5,7 +5,7 @@ When you specify a filter (`-E`, `--failed=only`, node IDs, `--affected`),
 oxitest skips importing Python modules that don't contain matching tests.
 
 !!! info "Deep dive"
-    See [Pipeline Deep Dive](/internals/book/pipeline.html) for the prescan → filter_metadata phase sequence that enables lazy collection.
+    See [Pipeline Deep Dive](../../../internals/book/pipeline.html) for the prescan → filter_metadata phase sequence that enables lazy collection.
 
 ## How It Works
 

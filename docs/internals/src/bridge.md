@@ -4,7 +4,7 @@ The bridge is the narrow boundary between Rust orchestration and Python executio
 It lives in `src/bridge.rs` on the Rust side and `python/oxitest/_bridge/result.py`
 on the Python side.
 
-> **User guide:** See [Using Fixtures](/site/how-to/use-fixtures/) for practical usage and examples of the fixture system described here.
+> **User guide:** See [Using Fixtures](../../site/how-to/use-fixtures/) for practical usage and examples of the fixture system described here.
 
 ## Call directions
 
