@@ -1,4 +1,4 @@
-/* docs/shared/nav.js — Injects shared navigation bar into oxitest docs */
+/* docs/internals/nav.js — Injects shared navigation bar into oxitest docs */
 (function () {
   "use strict";
 
@@ -15,13 +15,13 @@
   )
     section = "user";
 
-  // Resolve base paths relative to current page
-  // These get overridden by each doc system's integration
+  // Auto-detect GitHub Pages prefix from URL
+  var prefix = window.location.pathname.match(/^\/oxitest/) ? "/oxitest" : "";
   var basePaths = window.oxiNavPaths || {
-    home: "/oxitest/",
-    user: "/oxitest/",
-    internals: "/oxitest/internals/",
-    map: "/oxitest/internals/architecture-map.html",
+    home: prefix + "/",
+    user: prefix + "/site/",
+    internals: prefix + "/internals/book/",
+    map: prefix + "/internals/architecture-map.html",
     github: "https://github.com/kalonji-tools/oxitest",
   };
 

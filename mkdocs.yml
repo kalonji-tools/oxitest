@@ -39,11 +39,10 @@ plugins:
             docstring_style: google
 
 extra_css:
-  - ../shared/nav.css
+  - assets/nav.css
 
 extra_javascript:
-  - assets/nav-paths.js
-  - ../shared/nav.js
+  - assets/nav.js
 
 markdown_extensions:
   - admonition
