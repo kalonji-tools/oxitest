@@ -5,7 +5,7 @@ site_dir: docs/site
 
 validation:
   links:
-    unrecognized_links: info  # cross-discipline links to mdBook internals are intentionally external
+    not_found: info  # cross-discipline links to mdBook internals are intentionally external
 
 theme:
   name: material
