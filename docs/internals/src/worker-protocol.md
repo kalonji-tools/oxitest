@@ -6,7 +6,7 @@ When oxitest runs tests in parallel, the Rust scheduler spawns one or more persi
 Python worker subprocesses. Each worker receives test tasks via **stdin** and emits
 results via **stdout**, using newline-delimited JSON.
 
-> **User guide:** See [Running Tests in Parallel](../../site/how-to/run-in-parallel/) for how to configure and use parallel execution.
+> **User guide:** See [Running Tests in Parallel](/site/how-to/run-in-parallel/) for how to configure and use parallel execution.
 
 ```mermaid
 graph LR
@@ -135,7 +135,8 @@ relevant fields (compact JSON, falsy fields omitted).
 | `xpassed` | Expected failure did NOT occur (unexpected pass) |
 | `warned` | Test passed but emitted warnings |
 | `timeout` | Test exceeded the configured timeout |
-| `flaky` | Test failed initially but passed on retry |
+
+> **Note:** Workers never emit `flaky` outcomes. The `Flaky` variant in `TestOutcome` is synthesized by the Rust coordinator after a retried test passes on a subsequent attempt.
 
 ## Error Handling
 

@@ -5,7 +5,7 @@
     execution wrappers using the plugin API.
 
 !!! info "Deep dive"
-    See [Extending oxitest](../../internals/book/extending.html) for the Rust-side extension points, plugin protocols, and how reporters are multiplexed.
+    See [Extending oxitest](/internals/book/extending.html) for the Rust-side extension points, plugin protocols, and how reporters are multiplexed.
 
 ## Overview
 

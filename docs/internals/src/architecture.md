@@ -43,73 +43,7 @@ Python is used only where it is unavoidable: executing user test code, resolving
 
 ## Module map
 
-The following diagram shows the current module structure of the Rust crate. Arrows indicate primary dependency direction (not exhaustive).
-
-### Rust core
-
-```mermaid
-graph LR
-    LIB["lib.rs"]
-
-    subgraph Discovery
-        COLLECT["collector.rs"]
-        PRESCAN["prescan.rs"]
-    end
-
-    subgraph Filtering
-        FILTER["filter.rs"]
-        QUERY["query/"]
-    end
-
-    subgraph Execution
-        PARALLEL["parallel/"]
-        SCHEDULER["scheduler.rs"]
-        WORKER["worker_session.rs"]
-    end
-
-    LIB --> PIPELINE["pipeline/"]
-    PIPELINE --> CONFIG["config/"]
-    PIPELINE --> Discovery
-    PIPELINE --> Filtering
-    PIPELINE --> BRIDGE["bridge.rs"]
-    PIPELINE --> Execution
-
-    CACHE["cache/"] -.-> PIPELINE
-    STRICT["strict.rs"] -.-> PIPELINE
-    REPORTER["reporter/"] -.-> PIPELINE
-    TYPES["types/"] -.-> PIPELINE
-
-    style LIB fill:#4CAF50,color:#fff
-```
-
-### Python bridge
-
-```mermaid
-graph TD
-    BRIDGE["bridge.rs — PyO3 boundary"]
-    WORKER["worker_session.rs — subprocess lifecycle"]
-
-    IMPORTER["importer.py — collect test functions"]
-    EXECUTOR["executor.py — run single test"]
-    PY_WORKER["worker.py — subprocess entry point"]
-    FIXTURES["fixture session + registry"]
-    MARKS["mark evaluation"]
-    RESULT["result.py — TestResult"]
-
-    BRIDGE -->|"in-process PyO3"| IMPORTER
-    BRIDGE -->|"in-process PyO3"| EXECUTOR
-    WORKER -->|"stdio JSON"| PY_WORKER
-    PY_WORKER --> EXECUTOR
-    EXECUTOR --> FIXTURES
-    EXECUTOR --> MARKS
-    EXECUTOR --> RESULT
-    RESULT -->|"JSON lines"| WORKER
-
-    style BRIDGE fill:#e67e22,color:#fff
-    style WORKER fill:#e67e22,color:#fff
-```
-
-> **Per-file detail** is in the [module reference table](#module-reference-table) below. These diagrams show subsystem-level relationships only.
+For a visual, clickable overview of module relationships and data flow, see the [interactive architecture diagram](/internals/architecture-map.html). The diagram covers the Rust core, Python bridge, pipeline states, and component interactions — click any node to jump to its documentation.
 
 ## Module reference table
 
@@ -120,14 +54,13 @@ Every `.rs` file in `src/`, with its responsibility:
 | `lib` | `src/lib.rs` | PyO3 module definition. Exposes `run()`, `rewrite_asserts()`, `builtin_markers()` to Python. |
 | **Pipeline** | | |
 | `pipeline` | `src/pipeline/mod.rs` | Orchestrator. Defines `Pipeline<S>`, `PipelineShared`, all state types, `setup()`, and command entry points (`run_command`, `debug_command`, `query_command`). |
-| `pipeline::phases` | `src/pipeline/phases/mod.rs` | Re-exports the 9 per-state phase modules. |
+| `pipeline::phases` | `src/pipeline/phases/mod.rs` | Re-exports the 8 per-state phase modules. |
 | `pipeline::phases::empty` | `src/pipeline/phases/empty.rs` | `Pipeline<Empty>` transitions: `collect_files()`. |
 | `pipeline::phases::files_collected` | `src/pipeline/phases/files_collected.rs` | `Pipeline<FilesCollected>` transitions: `affected()`, `prescan()`, `session()` (query fast-path). |
 | `pipeline::phases::prescanned` | `src/pipeline/phases/prescanned.rs` | `Pipeline<Prescanned>` transitions: `filter_metadata()`. |
 | `pipeline::phases::metadata_filtered` | `src/pipeline/phases/metadata_filtered.rs` | `Pipeline<MetadataFiltered>` transitions: `session()`. |
 | `pipeline::phases::session_ready` | `src/pipeline/phases/session_ready.rs` | `Pipeline<SessionReady>` transitions: `collect()`. |
 | `pipeline::phases::collected` | `src/pipeline/phases/collected.rs` | `Pipeline<Collected>` transitions: `validate()`, `strict_or_skip()`. |
-| `pipeline::phases::pre_filter` | `src/pipeline/phases/pre_filter.rs` | `Pipeline<PreFilter>` transitions: `filter()`. |
 | `pipeline::phases::ready` | `src/pipeline/phases/ready.rs` | `Pipeline<Ready>` transitions: `execute()`. |
 | `pipeline::phases::executed` | `src/pipeline/phases/executed.rs` | `Pipeline<Executed>` transitions: `retry()`, `finalize()`. |
 | `pipeline::arrange` | `src/pipeline/arrange.rs` | `ExecutionPlan` value object and `plan_execution()`. Partitions groups into inprocess, arranged (shared fixtures), and parallel. |
@@ -188,7 +121,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | **Core types and services** | | |
 | `types` | `src/types/mod.rs` | `NodeId`, `TestItem`, `TestOutcome`, `DurationMs`, `TestTiming`, `CollectError`, `ExitCode`. |
 | `bridge` | `src/bridge.rs` | PyO3 boundary: `TestResult`, `CollectedItem`, `RawViolation`, `FixtureSession`. Data contracts that must stay in sync with `python/oxitest/_bridge/result.py`. |
-| `filter` | `src/filter.rs` | `BUILTIN_MARKERS`, `validate_markers()`, keyword/marker filtering, module grouping. |
+| `filter` | `src/filter.rs` | `BUILTIN_MARKERS`, `validate_markers()`, query DSL (`-E`) filtering, module grouping. |
 | `collector` | `src/collector.rs` | Filesystem walk for test files and conftest files. |
 | `scheduler` | `src/scheduler.rs` | `apply_schedule_strategy()` -- sorts groups by timing, failure status, or round-robin. |
 | `strict` | `src/strict.rs` | `StrictViolation` -- strict-mode violation types and classification. |
@@ -212,14 +145,13 @@ All state types are defined in `src/pipeline/mod.rs`:
 | State | Holds | Transition |
 |-------|-------|-----------|
 | `Empty` | Nothing | `collect_files()` |
-| `FilesCollected` | `test_files`, `conftest_files` | `affected()`, `prescan()`, `session()` (query path) |
-| `Prescanned` | prescan data + module markers | `filter_metadata()` |
-| `MetadataFiltered` | `modules_to_import`, pruned conftest chain | `session()` |
+| `FilesCollected` | (unit -- files live in `PipelineShared`) | `affected()`, `prescan()`, `session()` (query path) |
+| `Prescanned` | `prescan_data`, `module_markers` | `filter_metadata()` |
+| `MetadataFiltered` | `modules_to_import` | `session()` |
 | `SessionReady` | `FixtureSession`, violations | `collect()` |
-| `Collected` | `Vec<Arc<TestItem>>`, violations | `validate()`, `strict_or_skip()` |
-| `PreFilter` | clean + violated items, suite lines | `filter()` |
-| `Ready` | final filtered items | `execute()` |
-| `Executed` | `ExecutionResults`, timings | `retry()`, `finalize()` |
+| `Collected` | `session`, `items`, `raw_violations` | `validate()`, `strict_or_skip()` |
+| `Ready` | `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `execute()` |
+| `Executed` | `session`, `items`, `execution_results` | `retry()`, `finalize()` |
 
 ### PipelineShared and Deref
 
@@ -270,7 +202,6 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
     let p = p.collect(py)?;
     let p = p.validate(py)?;
     let p = p.strict_or_skip(py)?;
-    let p = p.filter(py)?;
     let p = p.execute(py)?;
     let p = p.retry(py)?;
     let result = p.finalize(py);

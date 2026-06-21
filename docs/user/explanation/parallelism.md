@@ -5,7 +5,7 @@
     and the planned redesign once PyO3 gains free-threaded Python support.
 
 !!! info "Deep dive"
-    See [Worker Protocol](../../internals/book/worker-protocol.html) for the JSON wire format, subprocess pool management, and watchdog timeout mechanics.
+    See [Worker Protocol](/internals/book/worker-protocol.html) for the JSON wire format, subprocess pool management, and watchdog timeout mechanics.
 
 ## Why not threads?
 

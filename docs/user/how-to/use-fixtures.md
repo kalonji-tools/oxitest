@@ -4,7 +4,7 @@
     Share setup and teardown across tests using oxitest's typed fixture system.
 
 !!! info "Deep dive"
-    See [PyO3 Bridge Contract](../../internals/book/bridge.html) for how fixture lifecycle is managed across the Rust/Python boundary.
+    See [PyO3 Bridge Contract](/internals/book/bridge.html) for how fixture lifecycle is managed across the Rust/Python boundary.
 
 ## Declare a Fixtures registry
 

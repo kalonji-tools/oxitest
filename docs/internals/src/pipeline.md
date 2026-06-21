@@ -21,11 +21,10 @@ Each chains a different subset of phases.
 | `session()`        | `MetadataFiltered` -> `SessionReady` (or `FilesCollected` -> `SessionReady`) |   5   |    5    |           3\*          |          -           |
 | `collect()`        | `SessionReady` -> `Collected`        |   6   |    6    |           -            |          -           |
 | `validate()`       | `Collected` -> `Collected`           |   7   |    7    |           -            |          -           |
-| `strict_or_skip()` | `Collected` -> `PreFilter`           |   8   |    8    |           -            |          -           |
-| `filter()`         | `PreFilter` -> `Ready`               |   9   |    9    |           -            |          -           |
-| `execute()`        | `Ready` -> `Executed`                |  10   |   10    |           -            |          -           |
-| `retry()`          | `Executed` -> `Executed`             |  11   |    -    |           -            |          -           |
-| `finalize()`       | `Executed` -> `ExitCode`             |  12   |   11    |           -            |          -           |
+| `strict_or_skip()` | `Collected` -> `Ready`               |   8   |    8    |           -            |          -           |
+| `execute()`        | `Ready` -> `Executed`                |   9   |    9    |           -            |          -           |
+| `retry()`          | `Executed` -> `Executed`             |  10   |    -    |           -            |          -           |
+| `finalize()`       | `Executed` -> `ExitCode`             |  11   |   10    |           -            |          -           |
 | `query()`          | `SessionReady` -> `ExitCode`         |   -   |    -    |           4            |          -           |
 | `query_without_session()` | `FilesCollected` -> `ExitCode` |   -   |    -    |           -            |          3           |
 
@@ -43,7 +42,6 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
     let p = p.collect(py)?;
     let p = p.validate(py)?;
     let p = p.strict_or_skip(py)?;
-    let p = p.filter(py)?;
     let p = p.execute(py)?;
     let p = p.retry(py)?;
     let result = p.finalize(py);
@@ -99,7 +97,9 @@ pub(crate) struct PipelineShared {
     pub(crate) base: reporter::ReporterOptsBuilder,
     pub(crate) cache: cache::TestCache,
     pub(crate) python_bin: String,
-    pub(crate) ast_weight_ms: Option<f64>,
+    pub(crate) ast_weight: Option<types::DurationMs>,
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
 }
 ```
 
@@ -113,7 +113,9 @@ pub(crate) struct PipelineShared {
 | `base`          | Builder for reporter options, accumulated across phases |
 | `cache`         | Timing/outcome cache for `--lf`/`--ff` and parallel scheduling |
 | `python_bin`    | Path to the Python interpreter (`sys.executable`) |
-| `ast_weight_ms` | Sum of AST-derived body weights from prescan; `None` if prescan produced nothing |
+| `ast_weight`    | Sum of AST-derived body weights from prescan; `None` if prescan produced nothing |
+| `test_files`    | Discovered test file paths (persists across all phases) |
+| `conftest_files`| Discovered conftest.py paths (persists across all phases) |
 
 **Deref trick.** `Pipeline<S>` implements `Deref<Target = PipelineShared>` and `DerefMut`, so
 you can write `pipeline.cfg`, `pipeline.cache`, `pipeline.rootdir`, etc. directly on a
@@ -170,14 +172,13 @@ Each state type lives in `src/pipeline/mod.rs` and is a plain `pub(crate) struct
 | State              | Key fields                                           | Created by          |
 |--------------------|------------------------------------------------------|---------------------|
 | `Empty`            | (unit struct -- no fields)                            | `run()`             |
-| `FilesCollected`   | `test_files`, `conftest_files`                       | `collect_files()`   |
-| `Prescanned`       | `test_files`, `conftest_files`, `prescan_data`, `module_markers` | `prescan()` |
-| `MetadataFiltered` | `test_files`, `conftest_files`, `modules_to_import`, `is_filtered` | `filter_metadata()` |
-| `SessionReady`     | `test_files`, `conftest_files`, `session`, `session_violations` | `session()` |
-| `Collected`        | `test_files`, `conftest_files`, `session`, `items`, `raw_violations`, `collection_profile` | `collect()` |
-| `PreFilter`        | `test_files`, `conftest_files`, `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `strict_or_skip()` |
-| `Ready`            | `test_files`, `conftest_files`, `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `filter()` |
-| `Executed`         | `test_files`, `conftest_files`, `session`, `items`, `execution_results` | `execute()` |
+| `FilesCollected`   | (unit struct -- `test_files`/`conftest_files` live in `PipelineShared`) | `collect_files()` |
+| `Prescanned`       | `prescan_data`, `module_markers`                     | `prescan()`         |
+| `MetadataFiltered` | `modules_to_import`                                  | `filter_metadata()` |
+| `SessionReady`     | `session`, `session_violations`                      | `session()`         |
+| `Collected`        | `session`, `items`, `raw_violations`                 | `collect()`         |
+| `Ready`            | `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `strict_or_skip()` |
+| `Executed`         | `session`, `items`, `execution_results`              | `execute()`         |
 
 ## Phase Files
 
@@ -193,7 +194,6 @@ src/pipeline/phases/
   metadata_filtered.rs   -- Pipeline<MetadataFiltered>::session()
   session_ready.rs       -- Pipeline<SessionReady>::collect(), query()
   collected.rs           -- Pipeline<Collected>::validate(), strict_or_skip()
-  pre_filter.rs          -- Pipeline<PreFilter>::filter()
   ready.rs               -- Pipeline<Ready>::execute()
   executed.rs            -- Pipeline<Executed>::retry(), finalize()
 ```
@@ -238,14 +238,12 @@ use the same pattern.
 When the phase always transitions to a new state but the work is conditional, it fills the
 new state with empty/default data when the condition is not met.
 
-**Example -- `strict_or_skip()`** always transitions from `Collected` to `PreFilter`, but when
+**Example -- `strict_or_skip()`** always transitions from `Collected` to `Ready`, but when
 strict mode is off, it passes all items through as `clean_items` with empty violation lists:
 
 ```rust
 if shared.cfg.strict.is_none() {
-    return Ok(shared.into_pipeline(PreFilter {
-        test_files,
-        conftest_files,
+    return Ok(shared.into_pipeline(Ready {
         session,
         clean_items: items,
         violated_items: vec![],    // nothing violated
@@ -313,9 +311,9 @@ dispatches based on it.
 ```rust
 pub(super) struct ExecutionPlan {
     pub strategy: ExecutionStrategy,
-    pub inprocess_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
-    pub arranged_groups: Vec<Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>>,
-    pub parallel_groups: Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>,
+    pub inprocess_groups: Vec<ModuleGroup>,
+    pub arranged_groups: Vec<Vec<ModuleGroup>>,
+    pub parallel_groups: Vec<ModuleGroup>,
 }
 
 pub(super) enum ExecutionStrategy {
@@ -346,7 +344,7 @@ the test suite in `arrange.rs` exercises it extensively).
 
 ## How to Add a New Pipeline Phase
 
-Suppose you want to add a `Linted` phase between `Collected` and `PreFilter` that runs a
+Suppose you want to add a `Linted` phase between `Collected` and `Ready` that runs a
 lint pass over collected items.
 
 ### Step 1: Define the state type
@@ -355,10 +353,9 @@ In `src/pipeline/mod.rs`, add a new struct alongside the existing state types:
 
 ```rust
 pub(crate) struct Linted {
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
     pub(crate) session: bridge::FixtureSession,
     pub(crate) items: Vec<Arc<types::TestItem>>,
+    pub(crate) raw_violations: Vec<bridge::RawViolation>,
     pub(crate) lint_warnings: Vec<String>,
 }
 ```
@@ -371,17 +368,14 @@ Since this transition consumes `Collected`, add it to `src/pipeline/phases/colle
 ```rust
 impl Pipeline<Collected> {
     pub(crate) fn lint(self) -> Result<Pipeline<Linted>, ExitCode> {
-        let (shared, Collected {
-            test_files, conftest_files, session, items, ..
-        }) = self.into_parts();
+        let (shared, Collected { session, items, raw_violations }) = self.into_parts();
 
         let lint_warnings = my_lint_pass(&items);
 
         Ok(shared.into_pipeline(Linted {
-            test_files,
-            conftest_files,
             session,
             items,
+            raw_violations,
             lint_warnings,
         }))
     }
@@ -399,9 +393,9 @@ consume `Linted` instead. Update its `impl` block signature and destructuring:
 // Was: impl Pipeline<Collected>
 impl Pipeline<Linted> {
     pub(crate) fn strict_or_skip(self, _py: Python<'_>)
-        -> Result<Pipeline<PreFilter>, ExitCode>
+        -> Result<Pipeline<Ready>, ExitCode>
     {
-        let (shared, Linted { items, lint_warnings, .. }) = self.into_parts();
+        let (shared, Linted { session, items, lint_warnings, .. }) = self.into_parts();
         // ...
     }
 }

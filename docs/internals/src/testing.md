@@ -26,7 +26,7 @@ file.  56 source files contain test modules.  Use a Rust unit test when:
 | Scheduler | `src/scheduler.rs` | round-robin dispatch, empty-queue edge cases |
 | Config deserialization | `src/config/mod.rs`, `src/config/merge.rs` | TOML parsing, CLI-over-file merge |
 | Reporter formatting | `src/reporter/format/diff.rs` | colored diffs, summary lines |
-| Marker expression parser | `src/marker.rs` | lexing and boolean evaluation |
+| Query DSL compiler | `src/query/compile.rs` | expression parsing, token lexing |
 | Query DSL | `src/query/compile.rs`, `src/query/eval.rs` | expression compilation, evaluation |
 | Strict-mode checks | `src/strict.rs` | bare-assert detection, missing mark reason |
 
