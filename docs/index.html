@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>oxitest Documentation</title>
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+    }
+
+    .hero {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 80px 24px 48px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 span { color: #e8856a; }
+
+    .hero p {
+      font-size: 18px;
+      color: #8b949e;
+      line-height: 1.6;
+      margin-bottom: 48px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 28px 24px;
+      text-decoration: none;
+      color: #c9d1d9;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: #58a6ff;
+      box-shadow: 0 0 20px rgba(88,166,255,0.1);
+      transform: translateY(-2px);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      color: #f0f6fc;
+      margin-bottom: 8px;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: #8b949e;
+      line-height: 1.5;
+    }
+
+    .card .arrow {
+      display: inline-block;
+      margin-top: 12px;
+      color: #58a6ff;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    window.oxiNavPaths = {
+      home: ".",
+      user: "site/",
+      internals: "internals/book/",
+      map: "internals/architecture-map.html",
+      github: "https://github.com/kalonji-tools/oxitest"
+    };
+  </script>
+  <script src="shared/nav.js"></script>
+
+  <div class="hero">
+    <h1><span>oxi</span>test</h1>
+    <p>A fast, typed, and explicit Python test framework backed by a Rust runner.</p>
+  </div>
+
+  <div class="cards">
+    <a class="card" href="site/">
+      <h2>User Guide</h2>
+      <p>Tutorials, how-to guides, and API reference for writing and running tests with oxitest.</p>
+      <span class="arrow">Browse docs &rarr;</span>
+    </a>
+    <a class="card" href="internals/book/">
+      <h2>Internals</h2>
+      <p>Architecture, pipeline deep dive, PyO3 bridge contract, worker protocol, and extension points.</p>
+      <span class="arrow">Read internals &rarr;</span>
+    </a>
+    <a class="card" href="internals/architecture-map.html">
+      <h2>Architecture Map</h2>
+      <p>Interactive visual diagram of the typestate pipeline, data structures, design patterns, and component interactions.</p>
+      <span class="arrow">Explore map &rarr;</span>
+    </a>
+  </div>
+</body>
+</html>
