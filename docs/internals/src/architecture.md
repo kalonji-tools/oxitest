@@ -2,6 +2,8 @@
 
 This chapter describes the high-level structure of oxitest: where code lives, why the Rust/Python boundary is drawn where it is, and how the pipeline typestate pattern enforces phase ordering at compile time.
 
+> **Interactive map:** Open the [interactive architecture diagram](../architecture-map.html) for a visual, clickable overview of the pipeline, data structures, and design patterns. Each section links back to the relevant page in these docs.
+
 ## Two-layer design
 
 oxitest is split into a **Rust core** (`src/`) and a **Python bridge** (`python/oxitest/_bridge/`). The split follows one rule: anything that can be expressed without importing user code is implemented in Rust; anything that must execute arbitrary Python (importing test modules, calling fixtures, evaluating mark conditions) stays in Python behind a thin PyO3 interface.

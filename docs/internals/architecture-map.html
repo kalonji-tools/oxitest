@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>oxitest — Interactive Architecture Map</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared/nav.css">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #21262d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --text-bright: #f0f6fc;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-orange: #e8856a;
+      --accent-purple: #bc8cff;
+      --accent-yellow: #d29922;
+      --accent-red: #f85149;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .noise {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+    }
+    h1 span { color: var(--accent-orange); }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 48px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 24px 0 12px;
+    }
+
+    /* ── Pipeline stages ── */
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .pipe-stage {
+      display: grid;
+      grid-template-columns: 80px 140px 1fr 1fr;
+      align-items: center;
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 13px;
+    }
+
+    .pipe-stage:hover {
+      border-color: var(--accent-blue);
+      background: #1c2128;
+    }
+
+    .pipe-stage.active {
+      border-color: var(--accent-blue);
+      background: #1c2128;
+    }
+
+    .stage-idx {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-purple);
+      font-weight: 500;
+    }
+
+    .stage-name {
+      font-weight: 600;
+      color: var(--accent-green);
+    }
+
+    .stage-type {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .stage-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    /* ── Pipeline detail panels ── */
+    .pipe-details {
+      margin-top: 16px;
+    }
+
+    .pipe-detail {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+
+    .pipe-detail.active {
+      display: block;
+    }
+
+    .pipe-detail h4 {
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--accent-blue);
+      margin-bottom: 12px;
+    }
+
+    .fields {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: 160px 240px 1fr;
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .field:hover { background: rgba(255,255,255,0.04); }
+
+    .fname {
+      font-family: var(--mono);
+      color: var(--accent-orange);
+      font-weight: 500;
+    }
+
+    .ftype {
+      font-family: var(--mono);
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .fdesc {
+      color: var(--text-muted);
+    }
+
+    /* ── Data structures ── */
+    .structs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 12px;
+    }
+
+    .struct-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .struct-card:hover {
+      border-color: var(--accent-purple);
+    }
+
+    .struct-card.active {
+      border-color: var(--accent-purple);
+    }
+
+    .struct-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .struct-kind {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(188,140,255,0.15);
+      color: var(--accent-purple);
+    }
+
+    .struct-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+    .struct-loc {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .struct-summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .struct-fields {
+      display: none;
+    }
+
+    .struct-card.active .struct-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .struct-field {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      font-size: 11px;
+      padding: 4px 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .sf-name {
+      font-family: var(--mono);
+      color: var(--accent-orange);
+    }
+
+    .sf-type {
+      font-family: var(--mono);
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .sf-desc {
+      color: var(--text-muted);
+      grid-column: 1 / -1;
+      font-size: 11px;
+      padding-left: 12px;
+    }
+
+    .struct-connects {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .struct-connects span {
+      font-family: var(--mono);
+      color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    /* ── Pattern cards ── */
+    .patterns-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    .pattern-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .pattern-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 4px;
+    }
+
+    .pattern-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .pattern-impl {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-green);
+      background: rgba(63,185,80,0.08);
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+
+    .pattern-link {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--accent-blue);
+      text-decoration: none;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .pattern-link:hover { opacity: 1; }
+
+    /* ── Traits section ── */
+    .traits-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 12px;
+    }
+
+    .trait-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .trait-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent-yellow);
+    }
+
+    .trait-loc {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .trait-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .trait-methods {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .trait-method {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent-green);
+      padding: 4px 8px;
+      background: rgba(63,185,80,0.06);
+      border-radius: 3px;
+    }
+
+    /* ── SVG interaction map ── */
+    .svg-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    .svg-container svg {
+      display: block;
+      margin: 0 auto;
+    }
+
+    .node { cursor: pointer; }
+    .node rect { transition: stroke-width 0.15s; }
+    .node:hover rect { stroke-width: 2; }
+
+    .tooltip {
+      position: fixed;
+      max-width: 320px;
+      padding: 10px 14px;
+      background: #1c2128;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text);
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .pipe-stage {
+        grid-template-columns: 60px 100px 1fr;
+      }
+      .stage-desc { display: none; }
+      .field { grid-template-columns: 120px 1fr; }
+      .fdesc { grid-column: 1 / -1; padding-left: 12px; }
+    }
+  </style>
+</head>
+<body>
+<script>
+window.oxiNavPaths = {
+  home: "../../",
+  user: "../../site/",
+  internals: "book/",
+  map: ".",
+  github: "https://github.com/kalonji-tools/oxitest"
+};
+</script>
+<script src="../shared/nav.js"></script>
+
+<div class="noise">
+  <h1><span>oxi</span>test Architecture Map</h1>
+  <p class="subtitle">Interactive visual overview of the typestate pipeline, data structures, design patterns, and component interactions. Click any element to expand details.</p>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- PIPELINE STAGES                                            -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <h2>Pipeline Stages</h2>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Each stage is a distinct Rust type. Transitions consume the current type and produce the next — calling phases out of order is a compile error.</p>
+
+  <div class="pipeline" id="pipeline">
+    <div class="pipe-stage" data-stage="0">
+      <span class="stage-idx">Phase 0</span>
+      <span class="stage-name">Empty</span>
+      <span class="stage-type">Pipeline&lt;Empty&gt;</span>
+      <span class="stage-desc">Entry point; no data yet</span>
+    </div>
+    <div class="pipe-stage" data-stage="1">
+      <span class="stage-idx">Phase 1</span>
+      <span class="stage-name">FilesCollected</span>
+      <span class="stage-type">Pipeline&lt;FilesCollected&gt;</span>
+      <span class="stage-desc">Test files and conftest files discovered via globset</span>
+    </div>
+    <div class="pipe-stage" data-stage="2">
+      <span class="stage-idx">Phase 2</span>
+      <span class="stage-name">Prescanned</span>
+      <span class="stage-type">Pipeline&lt;Prescanned&gt;</span>
+      <span class="stage-desc">AST-based metadata extracted without importing Python</span>
+    </div>
+    <div class="pipe-stage" data-stage="3">
+      <span class="stage-idx">Phase 3</span>
+      <span class="stage-name">MetadataFiltered</span>
+      <span class="stage-type">Pipeline&lt;MetadataFiltered&gt;</span>
+      <span class="stage-desc">Modules pruned by -k/-m before Python import</span>
+    </div>
+    <div class="pipe-stage" data-stage="4">
+      <span class="stage-idx">Phase 4</span>
+      <span class="stage-name">SessionReady</span>
+      <span class="stage-type">Pipeline&lt;SessionReady&gt;</span>
+      <span class="stage-desc">FixtureSession built from conftest chain</span>
+    </div>
+    <div class="pipe-stage" data-stage="5">
+      <span class="stage-idx">Phase 5</span>
+      <span class="stage-name">Collected</span>
+      <span class="stage-type">Pipeline&lt;Collected&gt;</span>
+      <span class="stage-desc">Python modules imported; TestItems created</span>
+    </div>
+    <div class="pipe-stage" data-stage="6">
+      <span class="stage-idx">Phase 6</span>
+      <span class="stage-name">PreFilter</span>
+      <span class="stage-type">Pipeline&lt;PreFilter&gt;</span>
+      <span class="stage-desc">Strict violations partitioned; clean vs violated items separated</span>
+    </div>
+    <div class="pipe-stage" data-stage="7">
+      <span class="stage-idx">Phase 7</span>
+      <span class="stage-name">Ready</span>
+      <span class="stage-type">Pipeline&lt;Ready&gt;</span>
+      <span class="stage-desc">Final filtered items ready for execution</span>
+    </div>
+    <div class="pipe-stage" data-stage="8">
+      <span class="stage-idx">Phase 8</span>
+      <span class="stage-name">Executed</span>
+      <span class="stage-type">Pipeline&lt;Executed&gt;</span>
+      <span class="stage-desc">All tests run; results and timings collected</span>
+    </div>
+  </div>
+
+  <div class="pipe-details" id="pipeDetails">
+    <div class="pipe-detail" data-stage="0">
+      <h4>Empty &rarr; collect_files()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">(unit struct)</span><span class="ftype"></span><span class="fdesc">No fields — this is the entry point</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="1">
+      <h4>FilesCollected &rarr; affected(), prescan()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">test_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Discovered test file paths</span></div>
+        <div class="field"><span class="fname">conftest_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Discovered conftest.py paths</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="2">
+      <h4>Prescanned &rarr; filter_metadata()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">test_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Test file paths (possibly filtered by --affected)</span></div>
+        <div class="field"><span class="fname">conftest_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Conftest paths</span></div>
+        <div class="field"><span class="fname">prescan_data</span><span class="ftype"> : Vec&lt;PrescanResult&gt;</span><span class="fdesc">Per-file AST scan results (function names, markers, parametrize IDs)</span></div>
+        <div class="field"><span class="fname">module_markers</span><span class="ftype"> : HashMap&lt;...&gt;</span><span class="fdesc">Markers grouped by module for fast filtering</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="3">
+      <h4>MetadataFiltered &rarr; session()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">test_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Test file paths</span></div>
+        <div class="field"><span class="fname">conftest_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Pruned conftest chain</span></div>
+        <div class="field"><span class="fname">modules_to_import</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Only modules surviving metadata filtering</span></div>
+        <div class="field"><span class="fname">is_filtered</span><span class="ftype"> : bool</span><span class="fdesc">Whether any metadata filter was applied</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="4">
+      <h4>SessionReady &rarr; collect()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">test_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Test file paths</span></div>
+        <div class="field"><span class="fname">conftest_files</span><span class="ftype"> : Vec&lt;Utf8PathBuf&gt;</span><span class="fdesc">Conftest paths</span></div>
+        <div class="field"><span class="fname">session</span><span class="ftype"> : Py&lt;PyAny&gt;</span><span class="fdesc">Python FixtureSession object</span></div>
+        <div class="field"><span class="fname">session_violations</span><span class="ftype"> : Vec&lt;RawViolation&gt;</span><span class="fdesc">Violations from conftest loading</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="5">
+      <h4>Collected &rarr; validate(), strict_or_skip()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Collected test items from Python import</span></div>
+        <div class="field"><span class="fname">raw_violations</span><span class="ftype"> : Vec&lt;RawViolation&gt;</span><span class="fdesc">Combined session + collection violations</span></div>
+        <div class="field"><span class="fname">collection_profile</span><span class="ftype"> : CollectionProfile</span><span class="fdesc">Timing and counts from collection phase</span></div>
+        <div class="field"><span class="fname">session</span><span class="ftype"> : Py&lt;PyAny&gt;</span><span class="fdesc">Python FixtureSession object</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="6">
+      <h4>PreFilter &rarr; strict_or_skip()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">clean_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items passing strict-mode checks</span></div>
+        <div class="field"><span class="fname">violated_items</span><span class="ftype"> : Vec&lt;StrictViolation&gt;</span><span class="fdesc">Items with strict-mode violations</span></div>
+        <div class="field"><span class="fname">all_violations</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Combined violations from collection and strict phases</span></div>
+        <div class="field"><span class="fname">suite_lines</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Formatted strict violation output lines</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="7">
+      <h4>Ready &rarr; filter()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">clean_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items passing strict-mode and filter checks</span></div>
+        <div class="field"><span class="fname">violated_items</span><span class="ftype"> : Vec&lt;StrictViolation&gt;</span><span class="fdesc">Strict-mode violations</span></div>
+        <div class="field"><span class="fname">all_violations</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">All accumulated violations</span></div>
+        <div class="field"><span class="fname">suite_lines</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Formatted output lines</span></div>
+      </div>
+    </div>
+
+    <div class="pipe-detail" data-stage="8">
+      <h4>Executed &rarr; retry(), finalize()</h4>
+      <div class="fields">
+        <div class="field"><span class="fname">items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">All executed test items</span></div>
+        <div class="field"><span class="fname">execution_results</span><span class="ftype"> : ExecutionResults</span><span class="fdesc">Per-test outcomes, timings, and diagnostics</span></div>
+        <div class="field"><span class="fname">session</span><span class="ftype"> : Py&lt;PyAny&gt;</span><span class="fdesc">Python FixtureSession (for teardown)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- DATA STRUCTURES                                            -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <h2>Key Data Structures</h2>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Click a card to expand its fields. Connections show which other structures it references.</p>
+  <div class="structs-grid" id="structsGrid"></div>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- DESIGN PATTERNS                                            -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <h2>Design Patterns</h2>
+  <div class="patterns-grid">
+    <div class="pattern-card">
+      <div class="pattern-name">Typestate Machine</div>
+      <div class="pattern-desc">Pipeline&lt;S&gt; is generic over a state type S. Each state implements only valid transitions — wrong-order calls are compile errors.</div>
+      <div class="pattern-impl">Pipeline&lt;Empty&gt; → Pipeline&lt;FilesCollected&gt; → ... → Pipeline&lt;Executed&gt;</div>
+      <a href="book/pipeline.html#pipeline-s-and-pipelineshared" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+    <div class="pattern-card">
+      <div class="pattern-name">Trait-Based Plugin System</div>
+      <div class="pattern-desc">Reporter, FixtureProvider, ExecutionWrapper, and CoverageProvider traits define stable extension points. Provisional traits (Collector, LogBackend, AsyncBackend, DebuggerBackend) are unstable.</div>
+      <div class="pattern-impl">trait Reporter { fn on_test_start(); fn on_test_end(); ... }</div>
+      <a href="book/extending.html" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+    <div class="pattern-card">
+      <div class="pattern-name">Strategy Pattern</div>
+      <div class="pattern-desc">ExecutionHarness trait abstracts over serial vs parallel execution. SerialHarness and ParallelHarness implement the same interface with different strategies.</div>
+      <div class="pattern-impl">trait ExecutionHarness { fn run_groups(); fn collect_results(); }</div>
+      <a href="book/architecture.html#module-reference-table" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+    <div class="pattern-card">
+      <div class="pattern-name">Builder Pattern</div>
+      <div class="pattern-desc">ReporterOptsBuilder accumulates reporter configuration across pipeline phases before building the final ReporterOpts at execution time.</div>
+      <div class="pattern-impl">ReporterOptsBuilder → .with_total() → .with_timing() → .build()</div>
+      <a href="book/architecture.html#module-reference-table" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+    <div class="pattern-card">
+      <div class="pattern-name">PyO3 Bridge</div>
+      <div class="pattern-desc">Rust-Python boundary via PyO3. TestResult and CollectedItem are #[derive(FromPyObject)] structs that must stay in sync with Python counterparts in result.py.</div>
+      <div class="pattern-impl">bridge.rs ↔ python/oxitest/_bridge/result.py</div>
+      <a href="book/bridge.html" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+    <div class="pattern-card">
+      <div class="pattern-name">Newtype Wrappers</div>
+      <div class="pattern-desc">NodeId, DurationMs, ExitCode wrap primitives to prevent accidental mixing and provide domain-specific methods.</div>
+      <div class="pattern-impl">struct NodeId(String); struct DurationMs(f64);</div>
+      <a href="book/architecture.html#module-reference-table" class="pattern-link" target="_blank">Read docs &rarr;</a>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- KEY TRAITS                                                 -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <h2>Key Traits</h2>
+  <div class="traits-grid">
+    <div class="trait-card">
+      <a href="book/extending.html" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">Reporter</span></a>
+      <span class="trait-loc">src/reporter/traits.rs</span>
+      <div class="trait-desc">Receives lifecycle events during test execution. Multiple reporters are multiplexed. TTY, CI, JSON, JUnit, and plugin reporters implement this.</div>
+      <div class="trait-methods">
+        <span class="trait-method">fn on_session_start(&amp;mut self)</span>
+        <span class="trait-method">fn on_test_start(&amp;mut self, item: &amp;TestItem)</span>
+        <span class="trait-method">fn on_test_end(&amp;mut self, item: &amp;TestItem, outcome: &amp;TestOutcome)</span>
+        <span class="trait-method">fn on_session_end(&amp;mut self) → ExitVote</span>
+      </div>
+    </div>
+    <div class="trait-card">
+      <a href="book/pipeline.html#executionharness-trait" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">ExecutionHarness</span></a>
+      <span class="trait-loc">src/pipeline/traits.rs</span>
+      <div class="trait-desc">Abstraction over serial and parallel test execution strategies. The pipeline calls a single interface regardless of the chosen strategy.</div>
+      <div class="trait-methods">
+        <span class="trait-method">fn run_groups(&amp;mut self, groups: Vec&lt;...&gt;) → ExecutionResults</span>
+      </div>
+    </div>
+    <div class="trait-card">
+      <a href="book/architecture.html#module-reference-table" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">TimingCache</span></a>
+      <span class="trait-loc">src/cache/timing.rs</span>
+      <div class="trait-desc">Per-test duration lookup for heaviest-first scheduling. Used by the scheduler to balance work across parallel workers.</div>
+      <div class="trait-methods">
+        <span class="trait-method">fn estimated_duration(&amp;self, node_id: &amp;NodeId) → Option&lt;DurationMs&gt;</span>
+      </div>
+    </div>
+    <div class="trait-card">
+      <a href="book/architecture.html#module-reference-table" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">OutcomeCache</span></a>
+      <span class="trait-loc">src/cache/outcome.rs</span>
+      <div class="trait-desc">Last-outcome and flaky-count lookup. Powers --lf (last-failed) and --ff (failed-first) filtering.</div>
+      <div class="trait-methods">
+        <span class="trait-method">fn last_outcome(&amp;self, node_id: &amp;NodeId) → Option&lt;TestOutcome&gt;</span>
+        <span class="trait-method">fn flaky_count(&amp;self, node_id: &amp;NodeId) → u32</span>
+      </div>
+    </div>
+    <div class="trait-card">
+      <a href="book/bridge.html" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">FixtureSession</span></a>
+      <span class="trait-loc">python/oxitest/_bridge/_fixture_session.py</span>
+      <div class="trait-desc">Python-side fixture lifecycle management. Scope-based caching (function, module, session), yield teardown, autouse injection.</div>
+      <div class="trait-methods">
+        <span class="trait-method">def resolve(self, name: str, scope: Scope) → Any</span>
+        <span class="trait-method">def teardown(self, scope: Scope) → None</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- SVG INTERACTION MAP                                        -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <h2>Component Interaction Map</h2>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Hover over nodes for details. Click to navigate to the relevant documentation page.</p>
+  <div class="svg-container">
+    <svg width="720" height="780" viewBox="0 0 720 780" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#30363d"/>
+        </marker>
+        <marker id="arrow-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#58a6ff"/>
+        </marker>
+      </defs>
+
+      <!-- Background grid -->
+      <rect width="720" height="780" fill="#161b22" rx="8"/>
+
+      <!-- Labels -->
+      <text x="20" y="30" fill="#30363d" font-size="10" font-weight="700">RUST CORE</text>
+      <text x="20" y="650" fill="#30363d" font-size="10" font-weight="700">PYTHON BRIDGE</text>
+      <line x1="20" y1="635" x2="700" y2="635" stroke="#21262d" stroke-width="1" stroke-dasharray="4"/>
+
+      <!-- Config -->
+      <a href="book/config.html" target="_blank">
+        <g class="node" data-tip="Config: Merged configuration from pyproject.toml + CLI flags. Includes testpaths, markers, strict mode, parallelism settings.">
+          <rect x="20" y="50" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="90" y="74" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Config</text>
+        </g>
+      </a>
+
+      <!-- Pipeline -->
+      <a href="book/pipeline.html" target="_blank">
+        <g class="node" data-tip="Pipeline&lt;S&gt;: Typestate pipeline orchestrator. Each state type S enforces valid transitions at compile time.">
+          <rect x="250" y="50" width="220" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+          <text x="360" y="74" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="500">Pipeline&lt;S&gt;</text>
+        </g>
+      </a>
+
+      <!-- TestCache -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="TestCache: Facade over TimingCache, OutcomeCache, ModuleCache. Powers --lf/--ff and heaviest-first scheduling.">
+          <rect x="560" y="50" width="140" height="40" rx="5" fill="#161b22" stroke="#d29922" stroke-width="1"/>
+          <text x="630" y="74" text-anchor="middle" fill="#d29922" font-size="11" font-weight="500">TestCache</text>
+        </g>
+      </a>
+
+      <!-- Collector -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="Collector: Filesystem walk using ignore + globset. Discovers test files and conftest files without importing Python.">
+          <rect x="40" y="140" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="110" y="164" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Collector</text>
+        </g>
+      </a>
+
+      <!-- Prescan -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="Prescan: AST-based metadata extraction using rustpython-parser. Extracts test names, markers, parametrize IDs without importing Python modules.">
+          <rect x="220" y="140" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="290" y="164" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Prescan</text>
+        </g>
+      </a>
+
+      <!-- Query DSL -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="Query DSL: -E expression filtering. Compiles query text to AST, evaluates against test items. Supports name, marker, path predicates.">
+          <rect x="400" y="140" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="470" y="164" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Query DSL</text>
+        </g>
+      </a>
+
+      <!-- Filter -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="Filter: Keyword (-k) and marker (-m) filtering. Groups items by module for parallel dispatch.">
+          <rect x="560" y="140" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="630" y="164" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Filter</text>
+        </g>
+      </a>
+
+      <!-- TestItem -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="TestItem: Core test representation. Holds node_id, file path, markers, parametrize IDs, fixture requirements.">
+          <rect x="250" y="240" width="160" height="40" rx="5" fill="#161b22" stroke="#bc8cff" stroke-width="1"/>
+          <text x="330" y="264" text-anchor="middle" fill="#bc8cff" font-size="11" font-weight="500">TestItem</text>
+        </g>
+      </a>
+
+      <!-- Scheduler -->
+      <a href="book/pipeline.html#executionplan" target="_blank">
+        <g class="node" data-tip="Scheduler: Distributes module groups across workers. Uses TimingCache for heaviest-first scheduling.">
+          <rect x="80" y="340" width="160" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+          <text x="160" y="364" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="500">Scheduler</text>
+        </g>
+      </a>
+
+      <!-- ExecutionPlan -->
+      <a href="book/pipeline.html#executionplan" target="_blank">
+        <g class="node" data-tip="ExecutionPlan: Pure value object. Partitions groups into inprocess, arranged (shared fixtures), and parallel. Built by plan_execution().">
+          <rect x="280" y="340" width="180" height="40" rx="5" fill="#161b22" stroke="#bc8cff" stroke-width="1"/>
+          <text x="370" y="364" text-anchor="middle" fill="#bc8cff" font-size="9" font-weight="500">ExecutionPlan</text>
+        </g>
+      </a>
+
+      <!-- Reporter -->
+      <a href="book/extending.html" target="_blank">
+        <g class="node" data-tip="Reporter: Multiplexed lifecycle event sink. TTY, CI, JSON (CTRF), JUnit, and plugin reporters all implement the Reporter trait.">
+          <rect x="520" y="340" width="160" height="40" rx="5" fill="#161b22" stroke="#d29922" stroke-width="1"/>
+          <text x="600" y="364" text-anchor="middle" fill="#d29922" font-size="11" font-weight="500">Reporter</text>
+        </g>
+      </a>
+
+      <!-- SerialHarness -->
+      <a href="book/pipeline.html#executionharness-trait" target="_blank">
+        <g class="node" data-tip="SerialHarness: Runs all tests in the main Python process sequentially. Used when worker_count = 0 or test count is below parallel threshold.">
+          <rect x="60" y="440" width="160" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+          <text x="140" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">SerialHarness</text>
+        </g>
+      </a>
+
+      <!-- ParallelHarness -->
+      <a href="book/pipeline.html#executionharness-trait" target="_blank">
+        <g class="node" data-tip="ParallelHarness: Spawns N worker subprocesses. Dispatches groups via JSON stdin, drains results from stdout with per-result watchdog timeout.">
+          <rect x="280" y="440" width="180" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+          <text x="370" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">ParallelHarness</text>
+        </g>
+      </a>
+
+      <!-- TestOutcome -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="TestOutcome: 9 variants — Passed, Failed, Error, Skipped, Xfailed, Xpassed, Timeout, Interrupted, Flaky.">
+          <rect x="520" y="440" width="160" height="40" rx="5" fill="#161b22" stroke="#bc8cff" stroke-width="1"/>
+          <text x="600" y="464" text-anchor="middle" fill="#bc8cff" font-size="11" font-weight="500">TestOutcome</text>
+        </g>
+      </a>
+
+      <!-- Retry -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="Retry: Re-runs failed tests serially up to N times. Tests that pass on retry are marked Flaky.">
+          <rect x="520" y="530" width="160" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
+          <text x="600" y="554" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Retry</text>
+        </g>
+      </a>
+
+      <!-- ExitCode -->
+      <a href="book/architecture.html#module-reference-table" target="_blank">
+        <g class="node" data-tip="ExitCode: Newtype wrapping u8. Reporters vote on the final exit code via ExitVote.">
+          <rect x="300" y="570" width="140" height="40" rx="5" fill="#161b22" stroke="#f85149" stroke-width="1"/>
+          <text x="370" y="594" text-anchor="middle" fill="#f85149" font-size="11" font-weight="500">ExitCode</text>
+        </g>
+      </a>
+
+      <!-- Worker Process (below the line — Python side) -->
+      <a href="book/worker-protocol.html" target="_blank">
+        <g class="node" data-tip="Worker Process: Python subprocess entry point (worker.py). Reads JSON tasks from stdin, writes JSON result lines to stdout. Persistent within a run.">
+          <rect x="250" y="660" width="200" height="40" rx="5" fill="#161b22" stroke="#e8856a" stroke-width="1"/>
+          <text x="350" y="684" text-anchor="middle" fill="#e8856a" font-size="10" font-weight="500">Worker Process</text>
+        </g>
+      </a>
+
+      <!-- Bridge -->
+      <a href="book/bridge.html" target="_blank">
+        <g class="node" data-tip="Bridge: PyO3 boundary. TestResult, CollectedItem, RawViolation — data contracts synced between bridge.rs and result.py.">
+          <rect x="80" y="660" width="140" height="40" rx="5" fill="#161b22" stroke="#e8856a" stroke-width="1"/>
+          <text x="150" y="684" text-anchor="middle" fill="#e8856a" font-size="11" font-weight="500">Bridge</text>
+        </g>
+      </a>
+
+      <!-- FixtureSession -->
+      <a href="book/bridge.html" target="_blank">
+        <g class="node" data-tip="FixtureSession: Python-side fixture lifecycle. Scope-based caching (function, module, session), yield teardown, autouse injection.">
+          <rect x="500" y="660" width="180" height="40" rx="5" fill="#161b22" stroke="#e8856a" stroke-width="1"/>
+          <text x="590" y="684" text-anchor="middle" fill="#e8856a" font-size="10" font-weight="500">FixtureSession</text>
+        </g>
+      </a>
+
+      <!-- Python Side label -->
+      <a href="book/bridge.html" target="_blank">
+        <g class="node" data-tip="Python Side: executor.py, importer.py, conftest_loader.py, marks.py, parametrize.py — all test execution logic.">
+          <rect x="250" y="720" width="200" height="40" rx="5" fill="#161b22" stroke="#e8856a" stroke-width="1" stroke-dasharray="4"/>
+          <text x="350" y="744" text-anchor="middle" fill="#e8856a" font-size="10" font-weight="500">Python Side</text>
+        </g>
+      </a>
+
+      <!-- ── Connection lines ── -->
+      <!-- Config → Pipeline -->
+      <line x1="160" y1="70" x2="248" y2="70" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Pipeline → Collector -->
+      <line x1="300" y1="92" x2="140" y2="138" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Pipeline → Prescan -->
+      <line x1="340" y1="92" x2="300" y2="138" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Pipeline → Query DSL -->
+      <line x1="390" y1="92" x2="460" y2="138" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Pipeline → Filter -->
+      <line x1="420" y1="92" x2="610" y2="138" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Pipeline → TestCache -->
+      <line x1="472" y1="70" x2="558" y2="70" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Prescan → TestItem -->
+      <line x1="290" y1="182" x2="310" y2="238" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Filter → TestItem -->
+      <line x1="610" y1="182" x2="390" y2="248" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- TestItem → Scheduler -->
+      <line x1="290" y1="282" x2="180" y2="338" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Scheduler → ExecutionPlan -->
+      <line x1="242" y1="360" x2="278" y2="360" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- ExecutionPlan → SerialHarness -->
+      <line x1="320" y1="382" x2="170" y2="438" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- ExecutionPlan → ParallelHarness -->
+      <line x1="370" y1="382" x2="370" y2="438" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- TestItem → Reporter -->
+      <line x1="390" y1="262" x2="560" y2="348" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- ParallelHarness → Worker Process -->
+      <line x1="370" y1="482" x2="350" y2="658" stroke="#58a6ff" stroke-width="1" marker-end="url(#arrow-blue)" stroke-dasharray="6"/>
+
+      <!-- SerialHarness → Bridge -->
+      <line x1="130" y1="482" x2="145" y2="658" stroke="#58a6ff" stroke-width="1" marker-end="url(#arrow-blue)" stroke-dasharray="6"/>
+
+      <!-- Worker Process → FixtureSession -->
+      <line x1="452" y1="680" x2="498" y2="680" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Worker Process → Python Side -->
+      <line x1="350" y1="702" x2="350" y2="718" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- TestOutcome → Retry -->
+      <line x1="600" y1="482" x2="600" y2="528" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Reporter → ExitCode -->
+      <line x1="560" y1="382" x2="420" y2="578" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
+    </svg>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── Pipeline stage click handling ──
+  var stages = document.querySelectorAll('.pipe-stage');
+  var details = document.querySelectorAll('.pipe-detail');
+
+  stages.forEach(function(stage) {
+    stage.addEventListener('click', function() {
+      var idx = this.getAttribute('data-stage');
+      var wasActive = this.classList.contains('active');
+
+      stages.forEach(function(s) { s.classList.remove('active'); });
+      details.forEach(function(d) { d.classList.remove('active'); });
+
+      if (!wasActive) {
+        this.classList.add('active');
+        var detail = document.querySelector('.pipe-detail[data-stage="' + idx + '"]');
+        if (detail) detail.classList.add('active');
+      }
+    });
+  });
+
+  // ── Data structures ──
+  var structs = [
+    {
+      kind: 'struct', name: 'Config', loc: 'config/mod.rs',
+      summary: 'Merged configuration from pyproject.toml + CLI flags. Controls testpaths, markers, strict mode, parallelism, caching, timeouts.',
+      fields: [
+        ['testpaths', 'Vec<String>', 'Directories to search for tests'],
+        ['python_files', 'Vec<String>', 'Glob patterns for test files'],
+        ['markers', 'Vec<String>', 'Registered marker names'],
+        ['strict', 'Option<StrictMode>', 'Strict-mode enforcement level'],
+        ['retries', 'usize', 'Number of times to retry failed tests'],
+        ['timeout', 'Option<f64>', 'Per-test timeout in seconds'],
+        ['workers', 'WorkerCount', 'Parallel worker count (Auto or Fixed(n))'],
+      ],
+      connects: ['Pipeline', 'ExecutionStrategy']
+    },
+    {
+      kind: 'struct', name: 'TestItem', loc: 'types/mod.rs',
+      summary: 'Core test representation. One per collected test function (expanded by parametrize).',
+      fields: [
+        ['node_id', 'NodeId', 'Unique test identifier (file::function[param])'],
+        ['file', 'Utf8PathBuf', 'Source file path'],
+        ['name', 'String', 'Test function name'],
+        ['markers', 'Vec<Marker>', 'Applied markers (skip, xfail, timeout, custom)'],
+        ['parametrize_id', 'Option<String>', 'Parametrize case identifier'],
+        ['fixture_names', 'Vec<String>', 'Required fixture names'],
+      ],
+      connects: ['NodeId', 'TestOutcome', 'ExecutionPlan']
+    },
+    {
+      kind: 'enum', name: 'TestOutcome', loc: 'types/mod.rs',
+      summary: '9-variant enum representing the result of a single test execution.',
+      fields: [
+        ['Passed', '', 'Test passed'],
+        ['Failed', '', 'Test failed (assertion or exception)'],
+        ['Error', '', 'Test errored during setup/teardown'],
+        ['Skipped', '', 'Test was skipped'],
+        ['Xfailed', '', 'Expected failure — test failed as expected'],
+        ['Xpassed', '', 'Expected failure — test unexpectedly passed'],
+        ['Timeout', '', 'Test exceeded its timeout'],
+        ['Interrupted', '', 'Test was interrupted (Ctrl+C)'],
+        ['Flaky', '', 'Test failed initially but passed on retry'],
+      ],
+      connects: ['TestItem', 'Reporter', 'OutcomeCache']
+    },
+    {
+      kind: 'struct', name: 'NodeId', loc: 'types/mod.rs',
+      summary: 'Newtype wrapping String. Unique test identifier in the format file::function[param_id].',
+      fields: [
+        ['0', 'String', 'The identifier string'],
+      ],
+      connects: ['TestItem', 'TimingCache', 'OutcomeCache']
+    },
+    {
+      kind: 'struct', name: 'TestResult', loc: 'bridge.rs',
+      summary: '#[derive(FromPyObject)] struct. Must stay in sync with python/oxitest/_bridge/result.py.',
+      fields: [
+        ['outcome', 'String', 'Outcome variant name'],
+        ['duration_ms', 'f64', 'Execution duration'],
+        ['diagnostics', 'Option<FailureDiagnostic>', 'Failure details (message, traceback, diff)'],
+        ['stdout', 'Option<String>', 'Captured stdout'],
+        ['stderr', 'Option<String>', 'Captured stderr'],
+      ],
+      connects: ['TestOutcome', 'TestItem', 'Reporter']
+    },
+    {
+      kind: 'struct', name: 'CollectedItem', loc: 'bridge.rs',
+      summary: '#[derive(FromPyObject)] struct. Returned by Python collect_module(). Maps to TestItem on the Rust side.',
+      fields: [
+        ['name', 'String', 'Test function name'],
+        ['markers', 'Vec<...>', 'Marker data from Python'],
+        ['parametrize_ids', 'Vec<String>', 'Parametrize case IDs'],
+        ['fixture_names', 'Vec<String>', 'Fixture dependencies'],
+      ],
+      connects: ['TestItem']
+    },
+    {
+      kind: 'struct', name: 'PrescanResult', loc: 'prescan.rs',
+      summary: 'Per-file AST scan output. Extracted without importing Python — the key to lazy collection.',
+      fields: [
+        ['file', 'Utf8PathBuf', 'Source file path'],
+        ['items', 'Vec<PrescanItem>', 'Discovered test functions'],
+        ['module_markers', 'Vec<PrescanMarker>', 'Module-level markers'],
+      ],
+      connects: ['PrescanItem', 'TestItem']
+    },
+    {
+      kind: 'struct', name: 'StrictViolation', loc: 'strict.rs',
+      summary: 'Represents a strict-mode code quality violation. Types: bare assert, dict parametrize, missing mark reason.',
+      fields: [
+        ['kind', 'ViolationKind', 'Type of violation'],
+        ['file', 'Utf8PathBuf', 'File containing the violation'],
+        ['line', 'usize', 'Line number'],
+        ['message', 'String', 'Human-readable description'],
+      ],
+      connects: ['TestItem', 'Pipeline']
+    },
+    {
+      kind: 'struct', name: 'ModuleGroup', loc: 'filter.rs',
+      summary: 'A group of test items sharing the same module file. Unit of work for parallel dispatch.',
+      fields: [
+        ['file', 'Utf8PathBuf', 'Module file path'],
+        ['items', 'Vec<Arc<TestItem>>', 'Test items in this module'],
+      ],
+      connects: ['TestItem', 'Scheduler', 'ExecutionPlan']
+    },
+    {
+      kind: 'struct', name: 'ExecutionPlan', loc: 'pipeline/arrange.rs',
+      summary: 'Pure value object bundling all scheduling decisions before I/O. Built by plan_execution().',
+      fields: [
+        ['strategy', 'ExecutionStrategy', 'Serial or Parallel { worker_count }'],
+        ['inprocess_groups', 'Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>', 'Tests marked @oxi.mark.inprocess'],
+        ['arranged_groups', 'Vec<Vec<(...)>>', 'Groups sharing session-scoped fixtures (run serially)'],
+        ['parallel_groups', 'Vec<(Utf8PathBuf, Vec<Arc<TestItem>>)>', 'Everything else (dispatched to workers)'],
+      ],
+      connects: ['ExecutionStrategy', 'TestItem', 'ModuleGroup', 'Scheduler']
+    },
+    {
+      kind: 'enum', name: 'ExecutionStrategy', loc: 'pipeline/arrange.rs',
+      summary: 'Determines whether execution uses the main process or spawns worker subprocesses.',
+      fields: [
+        ['Serial', '', 'All tests run on the main Python process'],
+        ['Parallel { worker_count }', 'usize', 'Tests dispatched to N worker subprocesses'],
+      ],
+      connects: ['ExecutionPlan', 'Config']
+    },
+    {
+      kind: 'struct', name: 'TestTiming', loc: 'types/mod.rs',
+      summary: 'Duration measurement for a single test. Stored in TimingCache for scheduling.',
+      fields: [
+        ['node_id', 'NodeId', 'Test identifier'],
+        ['duration_ms', 'DurationMs', 'Execution duration'],
+      ],
+      connects: ['NodeId', 'TimingCache']
+    },
+    {
+      kind: 'struct', name: 'TestCache', loc: 'cache/mod.rs',
+      summary: 'Facade over TimingCache, OutcomeCache, ModuleCache. Loads/saves .oxitest_cache/ directory.',
+      fields: [
+        ['timing', 'TimingCacheImpl', 'Per-test duration data'],
+        ['outcome', 'OutcomeCacheImpl', 'Last-outcome and flaky counts'],
+        ['module', 'ModuleCacheImpl', 'Per-module item data for lazy revalidation'],
+      ],
+      connects: ['Pipeline', 'Scheduler']
+    },
+    {
+      kind: 'struct', name: 'ExitCode', loc: 'types/mod.rs',
+      summary: 'Newtype wrapping u8. Reporters vote on the final exit code via ExitVote.',
+      fields: [
+        ['0', 'u8', 'Exit status code'],
+      ],
+      connects: ['Reporter', 'Pipeline']
+    },
+    {
+      kind: 'struct', name: 'DurationMs', loc: 'types/mod.rs',
+      summary: 'Newtype wrapping f64. Prevents mixing raw floats with duration values.',
+      fields: [
+        ['0', 'f64', 'Milliseconds'],
+      ],
+      connects: ['TestTiming', 'TestResult']
+    },
+  ];
+
+  var grid = document.getElementById('structsGrid');
+
+  structs.forEach(function(s, i) {
+    var card = document.createElement('div');
+    card.className = 'struct-card';
+    card.setAttribute('data-struct', s.name);
+
+    var fieldsHtml = '';
+    s.fields.forEach(function(f) {
+      fieldsHtml += '<div class="struct-field">' +
+        '<span class="sf-name">' + f[0] + '</span>' +
+        (f[1] ? '<span class="sf-type"> : ' + escHtml(f[1]) + '</span>' : '') +
+        '<span class="sf-desc">' + f[2] + '</span>' +
+        '</div>';
+    });
+
+    var connectsHtml = '';
+    if (s.connects && s.connects.length) {
+      connectsHtml = '<div class="struct-connects">Connects: ' +
+        s.connects.map(function(c) { return '<span data-jump="' + c + '">' + c + '</span>'; }).join(', ') +
+        '</div>';
+    }
+
+    card.innerHTML =
+      '<div class="struct-header">' +
+        '<span class="struct-kind">' + s.kind + '</span>' +
+        '<span class="struct-name">' + s.name + '</span>' +
+        '<span class="struct-loc">' + s.loc + '</span>' +
+      '</div>' +
+      '<div class="struct-summary">' + s.summary + '</div>' +
+      '<div class="struct-fields">' + fieldsHtml + '</div>' +
+      connectsHtml;
+
+    card.addEventListener('click', function(e) {
+      if (e.target.hasAttribute('data-jump')) {
+        var target = document.querySelector('.struct-card[data-struct="' + e.target.getAttribute('data-jump') + '"]');
+        if (target) {
+          target.classList.add('active');
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+      }
+      this.classList.toggle('active');
+    });
+
+    grid.appendChild(card);
+  });
+
+  // ── SVG tooltip handling ──
+  var tooltip = document.getElementById('tooltip');
+  var nodes = document.querySelectorAll('.node');
+
+  nodes.forEach(function(node) {
+    node.addEventListener('mouseenter', function(e) {
+      var tip = this.getAttribute('data-tip');
+      if (tip) {
+        tooltip.textContent = tip;
+        tooltip.style.display = 'block';
+      }
+    });
+
+    node.addEventListener('mousemove', function(e) {
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+    });
+
+    node.addEventListener('mouseleave', function() {
+      tooltip.style.display = 'none';
+    });
+  });
+
+  function escHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+})();
+</script>
+</body>
+</html>
