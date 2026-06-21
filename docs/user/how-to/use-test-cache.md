@@ -3,6 +3,9 @@
 !!! abstract "How-to"
     Re-run failed tests first, skip passing tests, and inspect slow tests using oxitest's result cache.
 
+!!! info "Deep dive"
+    See [Architecture Overview — Cache](../../internals/book/architecture.html#module-reference-table) for the TimingCache, OutcomeCache, and ModuleCache trait implementations.
+
 ## Understand how the cache works
 
 oxitest writes timing and result data to `.oxitest_cache/timings.json` in the

@@ -4,6 +4,9 @@
     Run a targeted subset of your test suite using the query DSL,
     file paths, or node IDs.
 
+!!! info "Deep dive"
+    See [Architecture Overview — Query DSL](../../internals/book/architecture.html#module-reference-table) for the query DSL compiler and evaluator internals.
+
 A **node ID** is a test's unique address: `path/to/file.py::test_name`. For class methods: `path/to/file.py::ClassName::test_method`. For parametrized cases: `path/to/file.py::test_name[case_id]`.
 
 ## Filter by name

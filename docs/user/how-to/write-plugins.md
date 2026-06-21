@@ -4,6 +4,9 @@
     Extend oxitest with custom reporters, fixtures, collectors, log backends, and
     execution wrappers using the plugin API.
 
+!!! info "Deep dive"
+    See [Extending oxitest](../../internals/book/extending.html) for the Rust-side extension points, plugin protocols, and how reporters are multiplexed.
+
 ## Overview
 
 Plugins extend oxitest through eight protocols: **Reporter**, **LogBackend**,
