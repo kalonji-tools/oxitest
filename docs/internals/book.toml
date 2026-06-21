@@ -11,8 +11,8 @@ build-dir = "book"
 site-url = "/oxitest/internals/"
 git-repository-url = "https://github.com/kalonji-tools/oxitest"
 edit-url-template = "https://github.com/kalonji-tools/oxitest/edit/main/docs/internals/{path}"
-additional-css = ["../shared/nav.css"]
-additional-js = ["nav-paths.js", "../shared/nav.js", "mermaid.min.js", "mermaid-init.js"]
+additional-css = ["nav.css"]
+additional-js = ["nav.js", "mermaid.min.js", "mermaid-init.js"]
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"

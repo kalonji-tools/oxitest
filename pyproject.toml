@@ -59,7 +59,7 @@ parallel = true
 source = ["python/oxitest"]
 
 [tool.codespell]
-skip = "target,Cargo.lock,devenv.lock,*.min.js,graphify-out"
+skip = "target,Cargo.lock,devenv.lock,*.min.js,graphify-out,./docs/site,./docs/internals/book"
 ignore-words-list = "NotIn,ser,sotre"
 
 [dependency-groups]
