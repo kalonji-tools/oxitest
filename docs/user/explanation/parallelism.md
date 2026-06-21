@@ -4,6 +4,9 @@
     Why oxitest uses subprocess workers for parallel execution, the trade-offs that come with it,
     and the planned redesign once PyO3 gains free-threaded Python support.
 
+!!! info "Deep dive"
+    See [Worker Protocol](../../internals/book/worker-protocol.html) for the JSON wire format, subprocess pool management, and watchdog timeout mechanics.
+
 ## Why not threads?
 
 The obvious way to run tests in parallel is to use threads — create one thread per test, let the

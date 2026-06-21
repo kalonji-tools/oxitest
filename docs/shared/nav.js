@@ -59,4 +59,17 @@
 
   // Insert at the very top of body, before everything else
   document.body.insertBefore(nav, document.body.firstChild);
+
+  // Footer
+  var footer = document.createElement("div");
+  footer.className = "oxi-footer";
+  footer.innerHTML =
+    '<div class="oxi-footer-links">' +
+    '<a href="' + basePaths.user + '">User Guide</a>' +
+    '<a href="' + basePaths.internals + '">Internals</a>' +
+    '<a href="' + basePaths.map + '">Architecture Map</a>' +
+    '<a href="' + basePaths.github + '">GitHub</a>' +
+    "</div>" +
+    "<div>oxitest &mdash; A fast, typed Python test framework backed by Rust</div>";
+  document.body.appendChild(footer);
 })();

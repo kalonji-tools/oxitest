@@ -3,6 +3,9 @@
 !!! abstract "Reference"
     Complete reference for oxitest project configuration via `pyproject.toml`.
 
+!!! info "Deep dive"
+    See [Config System](../../internals/book/config.html) for how CLI flags, pyproject.toml, and compiled defaults are merged.
+
 Most keys can be overridden by CLI flags. See [CLI reference](cli.md) for the flag equivalents.
 
 ## Root directory detection
