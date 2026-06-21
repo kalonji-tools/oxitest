@@ -1,0 +1,66 @@
+/* docs/shared/nav.css — Shared navigation bar for oxitest docs */
+.oxi-nav {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 24px;
+  height: 40px;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.oxi-nav a {
+  color: #8b949e;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.oxi-nav a:hover {
+  color: #f0f6fc;
+}
+
+.oxi-nav a.active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+}
+
+.oxi-nav .oxi-nav-brand {
+  font-weight: 600;
+  color: #f0f6fc;
+  margin-right: 16px;
+  padding-left: 0;
+  font-size: 14px;
+}
+
+.oxi-nav .oxi-nav-brand span {
+  color: #e8856a;
+}
+
+.oxi-nav .oxi-nav-spacer {
+  flex: 1;
+}
+
+.oxi-nav .oxi-nav-github {
+  color: #8b949e;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.oxi-nav .oxi-nav-github:hover {
+  color: #f0f6fc;
+}
+
+.oxi-nav .oxi-nav-github svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}

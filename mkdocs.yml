@@ -38,6 +38,13 @@ plugins:
           options:
             docstring_style: google
 
+extra_css:
+  - ../shared/nav.css
+
+extra_javascript:
+  - assets/nav-paths.js
+  - ../shared/nav.js
+
 markdown_extensions:
   - admonition
   - pymdownx.details
