@@ -3,6 +3,9 @@
 !!! abstract "Reference"
     Complete reference for oxitest exit codes.
 
+!!! info "Deep dive"
+    See [Architecture Overview](../../internals/book/architecture.html#module-reference-table) for the ExitCode enum definition and how reporters vote on the final exit code.
+
 | Code | Meaning |
 |------|---------|
 | `0` | All tests passed (or no tests were collected). Also exits with 0 when `oxitest env` is used (no tests are run). Flaky tests (failed on first attempt, passed on retry) are not counted as failures and do not affect this code. |

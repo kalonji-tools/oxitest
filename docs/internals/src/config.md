@@ -5,6 +5,8 @@ oxitest configuration follows a three-layer merge chain:
 This chapter explains the merge mechanics, the data structures involved,
 and how to add a new config option end-to-end.
 
+> **User guide:** See [Configuration Reference](../../site/reference/configuration/) for the user-facing configuration options.
+
 ---
 
 ## Merge chain

@@ -3,6 +3,9 @@
 !!! abstract "How-to"
     Tag tests with marks to skip, xfail, set timeouts, or group by category.
 
+!!! info "Deep dive"
+    See [Pipeline Deep Dive](../../internals/book/pipeline.html) for how markers are extracted during the prescan phase without importing Python modules.
+
 ## Register custom markers
 
 Declare custom marker names in `pyproject.toml` before use. Unregistered marks abort the
