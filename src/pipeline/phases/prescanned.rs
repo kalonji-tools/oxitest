@@ -4,7 +4,7 @@ use crate::collector;
 use crate::types::ExitCode;
 use crate::{config, filter};
 
-/// Pre-computed filter state used by [`file_passes_all_filters`].
+/// Pre-computed filter state used by `file_passes_all_filters`.
 struct FilterPredicates<'a> {
     node_ids: &'a [String],
     expression: Option<&'a str>,
