@@ -314,7 +314,7 @@ impl MarkerSet {
             .chain(self.custom.iter().map(|s| s.as_ref()))
     }
 
-    /// Convert to Vec<String> for serialization/wire compat.
+    /// Convert to `Vec<String>` for serialization/wire compat.
     pub fn to_vec(&self) -> Vec<String> {
         self.iter().map(|s| s.to_string()).collect()
     }

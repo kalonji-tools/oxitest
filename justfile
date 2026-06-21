@@ -72,7 +72,7 @@ docs-build: (_log _green "Building all docs...")
     mdbook build docs/internals
     cargo doc --no-deps --document-private-items
 
-# Serve all docs in the background (user :8000, internals :3000, Rust API :3001)
+# Serve docs with live reload (hot-reload on save, but cross-discipline links 404)
 docs-serve: (_log _green "Starting doc servers...")
     cargo doc --no-deps --document-private-items
     mkdocs serve --dev-addr localhost:8000 &
@@ -83,11 +83,21 @@ docs-serve: (_log _green "Starting doc servers...")
     @just _log {{_green}} "Rust API docs:  http://localhost:3001/_oxitest"
     @just _log {{_green}} "Stop with: just docs-stop"
 
+# Serve all docs from a single origin (cross-links work, no live reload)
+docs-unified: docs-build (_log _green "Starting unified doc server...")
+    python3 -m http.server 9000 --directory docs &
+    @just _log {{_green}} "All docs:       http://localhost:9000/index.html"
+    @just _log {{_green}} "User docs:      http://localhost:9000/site/"
+    @just _log {{_green}} "Internals:      http://localhost:9000/internals/book/"
+    @just _log {{_green}} "Architecture:   http://localhost:9000/internals/architecture-map.html"
+    @just _log {{_green}} "Stop with: just docs-stop"
+
 # Stop all background doc servers
 docs-stop: (_log _red "Stopping doc servers...")
     -pkill -f "mkdocs serve"
     -pkill -f "mdbook serve"
     -pkill -f "http.server 3001"
+    -pkill -f "http.server 9000"
 
 # Remove build artifacts
 clean: (_log _red "Removing build artifacts...")
