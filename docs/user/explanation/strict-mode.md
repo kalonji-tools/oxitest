@@ -4,7 +4,7 @@
     What strict mode enforces, why each check exists, and how to choose between abort and enforce.
 
 !!! info "Deep dive"
-    See [Pipeline Deep Dive](/internals/book/pipeline.html) for the strict_or_skip phase that partitions items into clean and violated sets.
+    See [Pipeline Deep Dive](../../../internals/book/pipeline.html) for the strict_or_skip phase that partitions items into clean and violated sets.
 
 ## The problem strict mode solves
 

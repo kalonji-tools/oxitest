@@ -6,7 +6,7 @@ When oxitest runs tests in parallel, the Rust scheduler spawns one or more persi
 Python worker subprocesses. Each worker receives test tasks via **stdin** and emits
 results via **stdout**, using newline-delimited JSON.
 
-> **User guide:** See [Running Tests in Parallel](/site/how-to/run-in-parallel/) for how to configure and use parallel execution.
+> **User guide:** See [Running Tests in Parallel](../../site/how-to/run-in-parallel/) for how to configure and use parallel execution.
 
 ```mermaid
 graph LR

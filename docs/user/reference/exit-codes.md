@@ -4,7 +4,7 @@
     Complete reference for oxitest exit codes.
 
 !!! info "Deep dive"
-    See [Architecture Overview](/internals/book/architecture.html#module-reference-table) for the ExitCode enum definition and how reporters vote on the final exit code.
+    See [Architecture Overview](../../../internals/book/architecture.html#module-reference-table) for the ExitCode enum definition and how reporters vote on the final exit code.
 
 | Code | Meaning |
 |------|---------|

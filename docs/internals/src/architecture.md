@@ -43,7 +43,7 @@ Python is used only where it is unavoidable: executing user test code, resolving
 
 ## Module map
 
-For a visual, clickable overview of module relationships and data flow, see the [interactive architecture diagram](/internals/architecture-map.html). The diagram covers the Rust core, Python bridge, pipeline states, and component interactions — click any node to jump to its documentation.
+For a visual, clickable overview of module relationships and data flow, see the [interactive architecture diagram](../architecture-map.html). The diagram covers the Rust core, Python bridge, pipeline states, and component interactions — click any node to jump to its documentation.
 
 ## Module reference table
 
