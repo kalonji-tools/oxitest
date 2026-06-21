@@ -4,7 +4,7 @@
     How oxitest captures the left and right operands of a failing assertion and why that requires rewriting the AST before execution.
 
 !!! info "Deep dive"
-    See [PyO3 Bridge Contract](../../internals/book/bridge.html) for how TestResult and FailureDiagnostic are serialized across the Rust/Python boundary.
+    See [PyO3 Bridge Contract](/internals/book/bridge.html) for how TestResult and FailureDiagnostic are serialized across the Rust/Python boundary.
 
 ## The problem Python's AssertionError creates
 

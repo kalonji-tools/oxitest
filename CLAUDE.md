@@ -98,8 +98,8 @@ just
 - `config.rs` — CLI parsing (clap) and `pyproject.toml` config under `[tool.oxitest]`
 - `collector.rs` — file discovery based on `testpaths`/`python_files` patterns
 - `cache.rs` — timing cache for parallel scheduling decisions and `--lf`/`--ff` support
-- `filter.rs` — keyword (`-k`) and marker (`-m`) filtering, grouping by module
-- `marker.rs` — boolean marker expression parser (logos lexer)
+- `filter.rs` — query DSL (`-E`) filtering, `--lf`/`--ff`, grouping by module
+- `query/` — query DSL compiler, evaluator, and `oxitest query` subcommand
 - `parallel.rs` — spawns worker subprocesses; each worker runs `python/oxitest/_bridge/worker.py`
 - `scheduler.rs` — distributes test groups across workers
 - `reporter/` — TTY, CI, and JSON (CTRF) reporters
