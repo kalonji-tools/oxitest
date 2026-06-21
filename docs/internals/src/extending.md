@@ -4,7 +4,7 @@ This chapter walks through the five most common extension points:
 CLI flags, subcommands, reporters, plugin protocols, and markers.
 Each section follows the actual code paths with real examples from the codebase.
 
-> **User guide:** See [Writing Plugins](/site/how-to/write-plugins/) for a user-facing guide to authoring oxitest plugins.
+> **User guide:** See [Writing Plugins](../../site/how-to/write-plugins/) for a user-facing guide to authoring oxitest plugins.
 
 ---
 
