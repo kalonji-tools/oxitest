@@ -5,7 +5,7 @@ oxitest configuration follows a three-layer merge chain:
 This chapter explains the merge mechanics, the data structures involved,
 and how to add a new config option end-to-end.
 
-> **User guide:** See [Configuration Reference](../../site/reference/configuration/) for the user-facing configuration options.
+> **User guide:** See [Configuration Reference](/site/reference/configuration/) for the user-facing configuration options.
 
 ---
 
@@ -106,23 +106,28 @@ All fields are `Option<T>` with serde default -- absent TOML keys become `None`.
 
 For custom types, implement `serde::Deserialize`. See `WorkerCount` in `pyproject.rs` for a complex example (accepts both `"auto"` string and integer).
 
-#### 2. Add to `Config` in `src/config/mod.rs`
+#### 2. Add to the appropriate sub-config in `src/config/mod.rs`
+
+`Config` is composed of nested sub-structs: `PathConfig`, `ExecConfig`, `OutputConfig`, `MarkerConfig`, `FilterConfig`, `FeatureConfig`. Add your field to whichever sub-struct it belongs to:
 
 ```rust
-pub struct Config {
+// For an execution-related field, add to ExecConfig:
+pub struct ExecConfig {
     // ...existing fields...
     pub my_threshold: u32,
 }
 
-impl Default for Config {
+impl Default for ExecConfig {
     fn default() -> Self {
-        Config {
+        Self {
             // ...existing fields...
             my_threshold: 100,  // compiled default
         }
     }
 }
 ```
+
+Access it as `config.exec.my_threshold` (not `config.my_threshold`).
 
 #### 3. Add CLI flag in `src/config/cli.rs`
 
@@ -161,13 +166,13 @@ Add unit tests in `src/config/merge.rs` (for merge behavior) and `src/config/mod
 #[test]
 fn test_my_threshold_default() {
     let cfg = Config::default();
-    assert_eq!(cfg.my_threshold, 100);
+    assert_eq!(cfg.exec.my_threshold, 100);
 }
 
 #[test]
 fn test_my_threshold_from_pyproject() {
     let cfg = Config::from_str("[tool.oxitest]\nmy_threshold = 50\n").unwrap();
-    assert_eq!(cfg.my_threshold, 50);
+    assert_eq!(cfg.exec.my_threshold, 50);
 }
 
 #[test]
@@ -177,7 +182,7 @@ fn test_my_threshold_cli_overrides_pyproject() {
     let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
     let args = parse_run(&["--my-threshold", "200"]);
     let merged = cfg.merge_run_args(&args);
-    assert_eq!(merged.my_threshold, 200);
+    assert_eq!(merged.exec.my_threshold, 200);
 }
 ```
 
@@ -185,51 +190,48 @@ fn test_my_threshold_cli_overrides_pyproject() {
 
 ## Config struct fields
 
-All fields of the `Config` struct in `src/config/mod.rs`, their types, defaults, and corresponding CLI flags:
+`Config` is composed of nested sub-structs. Access fields as `config.<sub>.<field>` (e.g. `config.exec.maxfail`):
 
-| Field | Type | Default | CLI flag | TOML key |
-|-------|------|---------|----------|----------|
-| `rootdir` | `Utf8PathBuf` | `"."` | (auto-detected) | -- |
-| `testpaths` | `Vec<Utf8PathBuf>` | `["."]` | positional args | `testpaths` |
-| `python_files` | `Vec<String>` | `["test_*.py", "*_test.py"]` | -- | `python_files` |
-| `norecursedirs` | `Vec<String>` | `.git`, `__pycache__`, `.venv`, `venv`, `.tox`, `dist`, `build`, `node_modules` | -- | `norecursedirs` |
-| `maxfail` | `usize` | `0` (no limit) | `--maxfail N`, `-x` | `maxfail` |
-| `registered_markers` | `Vec<String>` | `[]` | -- | `markers` |
-| `timeout_secs` | `Option<u64>` | `None` | `--timeout SECS` | `timeout` |
-| `serial` | `bool` | `false` | `--serial` | `serial` |
-| `debug` | `Option<DebugMode>` | `None` | `debug` subcommand | -- |
-| `workers` | `Option<WorkerCount>` | `None` | `-n N`, `--workers N` | `workers` |
-| `cache_max_age` | `u32` | `50` | -- | `cache_max_age` |
-| `min_parallel_tests` | `usize` | `100` | -- | `min_parallel_tests` |
-| `timeout_multiplier` | `Option<f64>` | `None` | -- | `timeout_multiplier` |
-| `spawn_overhead_ms` | `f64` | `250.0` | -- | `spawn_overhead_ms` |
-| `strict` | `Option<StrictMode>` | `None` | `--strict[=MODE]` | `strict` |
-| `markers_without_description` | `Vec<String>` | `[]` | -- | (derived from `markers`) |
-| `schedule` | `ScheduleStrategy` | `LongestFirst` | `--schedule` | `schedule` |
-| `failed` | `Option<FailedMode>` | `None` | `--failed MODE`, `--lf`, `--ff` | `failed` |
-| `tb` | `TbStyle` | `Detail` | `--tb` | `tb` |
-| `show_locals` | `bool` | `false` | `--show-locals` | `show_locals` |
-| `show_internals` | `bool` | `false` | `--show-internals` | `show_internals` |
-| `verbosity` | `Verbosity` | `Normal` | `-v`, `-vv`, `--verbose[=LEVEL]` | `verbosity` |
-| `durations` | `Option<usize>` | `None` | `--durations N` | `durations` |
-| `color` | `ColorMode` | `Auto` | `--color` | `color` |
-| `plugins` | `Vec<String>` | `[]` | -- | `plugins` |
-| `plugin_settings` | `HashMap<String, toml::Value>` | `{}` | -- | `plugin_settings.*` |
-| `async_backend` | `String` | `"asyncio"` | -- | `async_backend` |
-| `affected` | `Option<String>` | `None` | `--affected[=REF]` | -- |
-| `affected_base` | `String` | `"HEAD"` | -- | `affected_base` |
-| `retries` | `usize` | `0` | `--retries N` | `retries` |
-| `retries_delay_secs` | `u64` | `0` | -- | `retries_delay` |
-| `keep_tmp` | `Option<KeepTmpMode>` | `None` | `--keep-tmp[=MODE]` | `keep_tmp` |
-| `auto_arrange_threshold` | `Option<u8>` | `Some(70)` | -- | `auto_arrange` |
-| `collection_profile` | `bool` | `false` | `--collection-profile` | -- |
-| `use_gitignore` | `bool` | `true` | `--no-use-gitignore` | `use_gitignore` |
-| `doctest_modules` | `bool` | `false` | `--doctest-modules` | `doctest_modules` |
-| `node_ids` | `Vec<NodeId>` | `[]` | positional (path::test) | -- |
-| `node_id_source_files` | `HashSet<Utf8PathBuf>` | `{}` | (derived) | -- |
-| `cov` | `bool` | `false` | `--cov` | -- |
-| `cov_report` | `Option<CovReportFormat>` | `None` | `--cov-report FORMAT` | -- |
-| `has_explicit_paths` | `bool` | `false` | (derived) | -- |
+| Sub-struct | Field | Type | Default | CLI flag | TOML key |
+|------------|-------|------|---------|----------|----------|
+| *(top)* | `rootdir` | `Utf8PathBuf` | `"."` | (auto-detected) | -- |
+| **`paths`** | `testpaths` | `Vec<Utf8PathBuf>` | `["."]` | positional args | `testpaths` |
+| | `python_files` | `Vec<String>` | `["test_*.py", "*_test.py"]` | -- | `python_files` |
+| | `norecursedirs` | `Vec<String>` | `.git`, `__pycache__`, `.venv`, etc. | -- | `norecursedirs` |
+| | `use_gitignore` | `bool` | `true` | `--no-use-gitignore` | `use_gitignore` |
+| | `doctest_modules` | `bool` | `false` | `--doctest-modules` | `doctest_modules` |
+| **`exec`** | `mode` | `ExecutionMode` | `Serial` | `--serial`, `-n N`, `debug` | -- |
+| | `maxfail` | `usize` | `0` (no limit) | `--maxfail N`, `-x` | `maxfail` |
+| | `timeout_secs` | `Option<u64>` | `None` | `--timeout SECS` | `timeout` |
+| | `timeout_multiplier` | `Option<f64>` | `None` | -- | `timeout_multiplier` |
+| | `spawn_overhead` | `DurationMs` | `250.0` | -- | `spawn_overhead_ms` |
+| | `min_parallel_tests` | `usize` | `100` | -- | `min_parallel_tests` |
+| | `retries` | `usize` | `0` | `--retries N` | `retries` |
+| | `retries_delay_secs` | `u64` | `0` | -- | `retries_delay` |
+| | `auto_arrange_threshold` | `u8` | `70` | -- | `auto_arrange` |
+| **`output`** | `tb` | `TbStyle` | `Detail` | `--tb` | `tb` |
+| | `show_locals` | `bool` | `false` | `--show-locals` | `show_locals` |
+| | `show_internals` | `bool` | `false` | `--show-internals` | `show_internals` |
+| | `verbosity` | `Verbosity` | `Normal` | `-v`, `-vv`, `--verbose[=LEVEL]` | `verbosity` |
+| | `durations` | `Option<usize>` | `None` | `--durations N` | `durations` |
+| | `color` | `ColorMode` | `Auto` | `--color` | `color` |
+| | `collection_profile` | `bool` | `false` | `--collection-profile` | -- |
+| | `keep_tmp` | `Option<KeepTmpMode>` | `None` | `--keep-tmp[=MODE]` | `keep_tmp` |
+| **`markers`** | `registered_markers` | `Vec<String>` | `[]` | -- | `markers` |
+| | `markers_without_description` | `Vec<String>` | `[]` | -- | (derived) |
+| | `strict` | `Option<StrictMode>` | `None` | `--strict[=MODE]` | `strict` |
+| **`filter`** | `schedule` | `ScheduleStrategy` | `LongestFirst` | `--schedule` | `schedule` |
+| | `failed` | `Option<FailedMode>` | `None` | `--failed MODE`, `--lf`, `--ff` | `failed` |
+| | `node_ids` | `Vec<NodeId>` | `[]` | positional (path::test) | -- |
+| | `has_explicit_paths` | `bool` | `false` | (derived) | -- |
+| | `affected` | `Option<String>` | `None` | `--affected[=REF]` | -- |
+| | `affected_base` | `String` | `"HEAD"` | -- | `affected_base` |
+| **`features`** | `plugins` | `Vec<String>` | `[]` | -- | `plugins` |
+| | `plugin_settings` | `HashMap<String, toml::Value>` | `{}` | -- | `plugin_settings.*` |
+| | `async_backend` | `String` | `"asyncio"` | -- | `async_backend` |
+| | `cov` | `bool` | `false` | `--cov` | -- |
+| | `cov_report` | `Option<CovReportFormat>` | `None` | `--cov-report FORMAT` | -- |
+| | `cache_max_age` | `u32` | `50` | -- | `cache_max_age` |
 
 ### Key enum types
 

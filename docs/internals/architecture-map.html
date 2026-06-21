@@ -436,10 +436,10 @@
 <body>
 <script>
 window.oxiNavPaths = {
-  home: "../../",
-  user: "../../site/",
-  internals: "book/",
-  map: ".",
+  home: "/",
+  user: "/site/",
+  internals: "/internals/book/",
+  map: "/internals/architecture-map.html",
   github: "https://github.com/kalonji-tools/oxitest"
 };
 </script>
@@ -478,7 +478,7 @@ window.oxiNavPaths = {
       <span class="stage-idx">Phase 3</span>
       <span class="stage-name">MetadataFiltered</span>
       <span class="stage-type">Pipeline&lt;MetadataFiltered&gt;</span>
-      <span class="stage-desc">Modules pruned by -k/-m before Python import</span>
+      <span class="stage-desc">Modules pruned by -E query DSL before Python import</span>
     </div>
     <div class="pipe-stage" data-stage="4">
       <span class="stage-idx">Phase 4</span>
@@ -494,18 +494,12 @@ window.oxiNavPaths = {
     </div>
     <div class="pipe-stage" data-stage="6">
       <span class="stage-idx">Phase 6</span>
-      <span class="stage-name">PreFilter</span>
-      <span class="stage-type">Pipeline&lt;PreFilter&gt;</span>
-      <span class="stage-desc">Strict violations partitioned; clean vs violated items separated</span>
+      <span class="stage-name">Ready</span>
+      <span class="stage-type">Pipeline&lt;Ready&gt;</span>
+      <span class="stage-desc">Strict validation + item-level filtering applied; ready for execution</span>
     </div>
     <div class="pipe-stage" data-stage="7">
       <span class="stage-idx">Phase 7</span>
-      <span class="stage-name">Ready</span>
-      <span class="stage-type">Pipeline&lt;Ready&gt;</span>
-      <span class="stage-desc">Final filtered items ready for execution</span>
-    </div>
-    <div class="pipe-stage" data-stage="8">
-      <span class="stage-idx">Phase 8</span>
       <span class="stage-name">Executed</span>
       <span class="stage-type">Pipeline&lt;Executed&gt;</span>
       <span class="stage-desc">All tests run; results and timings collected</span>
@@ -563,32 +557,22 @@ window.oxiNavPaths = {
       <div class="fields">
         <div class="field"><span class="fname">items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Collected test items from Python import</span></div>
         <div class="field"><span class="fname">raw_violations</span><span class="ftype"> : Vec&lt;RawViolation&gt;</span><span class="fdesc">Combined session + collection violations</span></div>
-        <div class="field"><span class="fname">collection_profile</span><span class="ftype"> : CollectionProfile</span><span class="fdesc">Timing and counts from collection phase</span></div>
-        <div class="field"><span class="fname">session</span><span class="ftype"> : Py&lt;PyAny&gt;</span><span class="fdesc">Python FixtureSession object</span></div>
+        <div class="field"><span class="fname">session</span><span class="ftype"> : FixtureSession</span><span class="fdesc">Python FixtureSession object</span></div>
       </div>
     </div>
 
     <div class="pipe-detail" data-stage="6">
-      <h4>PreFilter &rarr; strict_or_skip()</h4>
+      <h4>Ready &rarr; strict_or_skip()</h4>
       <div class="fields">
-        <div class="field"><span class="fname">clean_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items passing strict-mode checks</span></div>
-        <div class="field"><span class="fname">violated_items</span><span class="ftype"> : Vec&lt;StrictViolation&gt;</span><span class="fdesc">Items with strict-mode violations</span></div>
-        <div class="field"><span class="fname">all_violations</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Combined violations from collection and strict phases</span></div>
-        <div class="field"><span class="fname">suite_lines</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Formatted strict violation output lines</span></div>
+        <div class="field"><span class="fname">session</span><span class="ftype"> : FixtureSession</span><span class="fdesc">Python FixtureSession object</span></div>
+        <div class="field"><span class="fname">clean_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items passing strict-mode and filter checks</span></div>
+        <div class="field"><span class="fname">violated_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items with strict-mode violations</span></div>
+        <div class="field"><span class="fname">all_violations</span><span class="ftype"> : Vec&lt;StrictViolation&gt;</span><span class="fdesc">All accumulated violations</span></div>
+        <div class="field"><span class="fname">suite_lines</span><span class="ftype"> : Vec&lt;String&gt;</span><span class="fdesc">Formatted strict violation output lines</span></div>
       </div>
     </div>
 
     <div class="pipe-detail" data-stage="7">
-      <h4>Ready &rarr; filter()</h4>
-      <div class="fields">
-        <div class="field"><span class="fname">clean_items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">Items passing strict-mode and filter checks</span></div>
-        <div class="field"><span class="fname">violated_items</span><span class="ftype"> : Vec&lt;StrictViolation&gt;</span><span class="fdesc">Strict-mode violations</span></div>
-        <div class="field"><span class="fname">all_violations</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">All accumulated violations</span></div>
-        <div class="field"><span class="fname">suite_lines</span><span class="ftype"> : Vec&lt;...&gt;</span><span class="fdesc">Formatted output lines</span></div>
-      </div>
-    </div>
-
-    <div class="pipe-detail" data-stage="8">
       <h4>Executed &rarr; retry(), finalize()</h4>
       <div class="fields">
         <div class="field"><span class="fname">items</span><span class="ftype"> : Vec&lt;Arc&lt;TestItem&gt;&gt;</span><span class="fdesc">All executed test items</span></div>
@@ -774,7 +758,7 @@ window.oxiNavPaths = {
 
       <!-- Filter -->
       <a href="book/architecture.html#module-reference-table" target="_blank">
-        <g class="node" data-tip="Filter: Keyword (-k) and marker (-m) filtering. Groups items by module for parallel dispatch.">
+        <g class="node" data-tip="Filter: Query DSL (-E) filtering, --lf/--ff, node-ID selection. Groups items by module for parallel dispatch.">
           <rect x="560" y="140" width="140" height="40" rx="5" fill="#161b22" stroke="#58a6ff" stroke-width="1"/>
           <text x="630" y="164" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="500">Filter</text>
         </g>

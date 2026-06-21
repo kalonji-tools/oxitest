@@ -4,7 +4,7 @@
     Control how oxitest distributes tests across parallel worker processes.
 
 !!! info "Deep dive"
-    See [Worker Protocol](../../internals/book/worker-protocol.html) for the JSON wire format and subprocess management, and [Pipeline — ExecutionPlan](../../internals/book/pipeline.html#executionplan) for how tests are partitioned across workers.
+    See [Worker Protocol](/internals/book/worker-protocol.html) for the JSON wire format and subprocess management, and [Pipeline — ExecutionPlan](/internals/book/pipeline.html#executionplan) for how tests are partitioned across workers.
 
 ## Understand default behavior
 
