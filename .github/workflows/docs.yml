@@ -68,6 +68,7 @@ jobs:
       - name: Assemble deploy directory
         run: |
           mkdir -p deploy/internals
+          cp docs/index.html deploy/
           cp -r docs/site deploy/site
           cp -r docs/internals/book deploy/internals/book
           cp docs/internals/architecture-map.html deploy/internals/
