@@ -159,7 +159,8 @@ impl std::fmt::Display for LineNo {
 /// A single parameter name-value pair from `@parametrize`.
 ///
 /// Serializes as a JSON array `[name, value]` for wire/cache compatibility.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "(String, String)", from = "(String, String)")]
 pub struct ParamPair {
     pub name: String,
     pub value: String,
@@ -177,61 +178,48 @@ impl From<ParamPair> for (String, String) {
     }
 }
 
-impl serde::Serialize for ParamPair {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        (&self.name, &self.value).serialize(serializer)
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for ParamPair {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let (name, value) = <(String, String)>::deserialize(deserializer)?;
-        Ok(Self { name, value })
-    }
-}
-
 /// A local variable captured from a traceback frame.
 ///
 /// Serializes as a JSON array `[name, repr]` for wire compatibility.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "(String, String)", from = "(String, String)")]
 pub struct LocalVar {
     pub name: String,
     pub repr: String,
 }
 
-impl serde::Serialize for LocalVar {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        (&self.name, &self.repr).serialize(serializer)
+impl From<(String, String)> for LocalVar {
+    fn from((name, repr): (String, String)) -> Self {
+        Self { name, repr }
     }
 }
 
-impl<'de> serde::Deserialize<'de> for LocalVar {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let (name, repr) = <(String, String)>::deserialize(deserializer)?;
-        Ok(Self { name, repr })
+impl From<LocalVar> for (String, String) {
+    fn from(v: LocalVar) -> Self {
+        (v.name, v.repr)
     }
 }
 
 /// Per-field diff for dataclass/object comparison assertions.
 ///
 /// Serializes as a JSON array `[field, left, right]` for wire compatibility.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(into = "(String, String, String)", from = "(String, String, String)")]
 pub struct FieldDiff {
     pub field: String,
     pub left: String,
     pub right: String,
 }
 
-impl serde::Serialize for FieldDiff {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        (&self.field, &self.left, &self.right).serialize(serializer)
+impl From<(String, String, String)> for FieldDiff {
+    fn from((field, left, right): (String, String, String)) -> Self {
+        Self { field, left, right }
     }
 }
 
-impl<'de> serde::Deserialize<'de> for FieldDiff {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let (field, left, right) = <(String, String, String)>::deserialize(deserializer)?;
-        Ok(Self { field, left, right })
+impl From<FieldDiff> for (String, String, String) {
+    fn from(d: FieldDiff) -> Self {
+        (d.field, d.left, d.right)
     }
 }
 
@@ -1741,5 +1729,106 @@ mod marker_set_tests {
         assert!(!set.has("anything"));
         assert_eq!(set.join(","), "");
         assert_eq!(set.to_vec(), Vec::<String>::new());
+    }
+}
+
+#[cfg(test)]
+mod wire_format_tests {
+    use super::*;
+
+    /// ParamPair serializes as `[name, value]` — the Python bridge reads this format
+    /// from the wire and cache. Breaking this breaks parametrized test collection.
+    #[test]
+    fn param_pair_serde_format_is_two_element_array() {
+        let pair = ParamPair {
+            name: "x".to_string(),
+            value: "1".to_string(),
+        };
+        let json = serde_json::to_string(&pair).expect("ParamPair must be serializable to JSON");
+        assert_eq!(
+            json, r#"["x","1"]"#,
+            "ParamPair wire format must be a two-element JSON array [name, value]"
+        );
+    }
+
+    /// ParamPair round-trip: serialize then deserialize must yield the original value.
+    #[test]
+    fn param_pair_serde_roundtrip() {
+        let original = ParamPair {
+            name: "x".to_string(),
+            value: "1".to_string(),
+        };
+        let json = serde_json::to_string(&original).expect("ParamPair must be serializable");
+        let deserialized: ParamPair = serde_json::from_str(&json)
+            .expect("ParamPair must be deserializable from its own serialized form");
+        assert_eq!(
+            deserialized, original,
+            "ParamPair serde round-trip must preserve name and value"
+        );
+    }
+
+    /// LocalVar serializes as `[name, repr]` — the Python bridge sends locals in
+    /// traceback frames using this format. Breaking this breaks failure diagnostics.
+    #[test]
+    fn local_var_serde_format_is_two_element_array() {
+        let var = LocalVar {
+            name: "result".to_string(),
+            repr: "42".to_string(),
+        };
+        let json = serde_json::to_string(&var).expect("LocalVar must be serializable to JSON");
+        assert_eq!(
+            json, r#"["result","42"]"#,
+            "LocalVar wire format must be a two-element JSON array [name, repr]"
+        );
+    }
+
+    /// LocalVar round-trip: serialize then deserialize must yield the original value.
+    #[test]
+    fn local_var_serde_roundtrip() {
+        let original = LocalVar {
+            name: "result".to_string(),
+            repr: "42".to_string(),
+        };
+        let json = serde_json::to_string(&original).expect("LocalVar must be serializable");
+        let deserialized: LocalVar = serde_json::from_str(&json)
+            .expect("LocalVar must be deserializable from its own serialized form");
+        assert_eq!(
+            deserialized, original,
+            "LocalVar serde round-trip must preserve name and repr"
+        );
+    }
+
+    /// FieldDiff serializes as `[field, left, right]` — the Python bridge sends
+    /// per-field assertion diffs in this format. Breaking this breaks dataclass
+    /// comparison reporting.
+    #[test]
+    fn field_diff_serde_format_is_three_element_array() {
+        let diff = FieldDiff {
+            field: "email".to_string(),
+            left: "a@b".to_string(),
+            right: "c@d".to_string(),
+        };
+        let json = serde_json::to_string(&diff).expect("FieldDiff must be serializable to JSON");
+        assert_eq!(
+            json, r#"["email","a@b","c@d"]"#,
+            "FieldDiff wire format must be a three-element JSON array [field, left, right]"
+        );
+    }
+
+    /// FieldDiff round-trip: serialize then deserialize must yield the original value.
+    #[test]
+    fn field_diff_serde_roundtrip() {
+        let original = FieldDiff {
+            field: "email".to_string(),
+            left: "a@b".to_string(),
+            right: "c@d".to_string(),
+        };
+        let json = serde_json::to_string(&original).expect("FieldDiff must be serializable");
+        let deserialized: FieldDiff = serde_json::from_str(&json)
+            .expect("FieldDiff must be deserializable from its own serialized form");
+        assert_eq!(
+            deserialized, original,
+            "FieldDiff serde round-trip must preserve field, left, and right"
+        );
     }
 }
