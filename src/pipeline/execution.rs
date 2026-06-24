@@ -6,7 +6,6 @@ use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
 use super::arrange::{self, ExecutionStrategy};
-use super::traits::ExecutionHarness;
 use crate::cache::{OutcomeCache, TimingCache};
 use crate::scheduler::ModuleGroup;
 use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
@@ -59,20 +58,37 @@ pub(crate) fn run_timed(
     (outcome, duration_ms)
 }
 
-/// Serial execution harness — runs tests in-process, one at a time.
-pub(super) struct SerialHarness<'a> {
-    pub py: Python<'a>,
-    pub session: &'a bridge::FixtureSession,
-    pub cache: &'a dyn cache::TimingCache,
-    pub timeout_secs: Option<u64>,
-    pub timeout_multiplier: Option<f64>,
-    pub maxfail: usize,
-    pub opts: DebugOptions<'a>,
+/// Dispatch enum for serial vs. parallel execution.
+///
+/// Replaces the former `ExecutionHarness` trait and its two implementers
+/// (`SerialHarness`, `ParallelHarness`). Construct the appropriate variant
+/// and call `execute_groups` directly — no dynamic dispatch needed.
+pub(super) enum ExecutionDispatch<'a> {
+    /// Runs tests in-process, one at a time.
+    Serial {
+        py: Python<'a>,
+        session: &'a bridge::FixtureSession,
+        cache: &'a dyn cache::TimingCache,
+        timeout_secs: Option<u64>,
+        timeout_multiplier: Option<f64>,
+        maxfail: usize,
+        opts: DebugOptions<'a>,
+    },
+    /// Delegates to worker subprocesses.
+    Parallel {
+        cfg: &'a config::Config,
+        workers: usize,
+        conftest_files: &'a [Utf8PathBuf],
+        python_bin: &'a str,
+        /// Pre-warmed worker pool, consumed on first call.
+        pool: Option<Vec<parallel::PrewarmedWorker>>,
+    },
 }
 
-impl<'a> SerialHarness<'a> {
-    fn from_ctx(py: Python<'a>, ctx: &'a ExecutionContext<'a>) -> Self {
-        Self {
+impl<'a> ExecutionDispatch<'a> {
+    /// Build a `Serial` variant from an [`ExecutionContext`].
+    fn serial_from_ctx(py: Python<'a>, ctx: &'a ExecutionContext<'a>) -> Self {
+        ExecutionDispatch::Serial {
             py,
             session: ctx.session,
             cache: ctx.cache,
@@ -87,90 +103,85 @@ impl<'a> SerialHarness<'a> {
             },
         }
     }
-}
 
-impl ExecutionHarness for SerialHarness<'_> {
     fn execute_groups(
-        &self,
+        &mut self,
         groups: Vec<ModuleGroup>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
-        let mut acc = types::FailureAccumulator::new(self.maxfail);
-        let mut interrupted = false;
-        let total: usize = groups.iter().map(|g| g.items.len()).sum();
-        let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
+        match self {
+            ExecutionDispatch::Serial {
+                py,
+                session,
+                cache,
+                timeout_secs,
+                timeout_multiplier,
+                maxfail,
+                opts,
+            } => {
+                let mut acc = types::FailureAccumulator::new(*maxfail);
+                let mut interrupted = false;
+                let total: usize = groups.iter().map(|g| g.items.len()).sum();
+                let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-        'run: for ModuleGroup { module_path, items } in &groups {
-            for item in items {
-                rep.test_started(item);
-                let timeout =
-                    resolve_timeout(self.cache, item, self.timeout_secs, self.timeout_multiplier);
-                let (outcome, duration_ms) =
-                    run_timed(self.py, item, self.session, timeout, self.opts);
-                timings.push(types::TestTiming {
-                    node_id: item.node_id.clone(),
-                    duration_ms,
-                    outcome: types::OutcomeKind::from(&outcome),
-                });
-                rep.test_completed(item, &outcome, duration_ms, None);
-                if acc.record(&outcome) {
-                    interrupted = true;
-                    if let Err(e) = self.session.end_module(self.py, module_path) {
+                'run: for ModuleGroup { module_path, items } in &groups {
+                    for item in items {
+                        rep.test_started(item);
+                        let timeout =
+                            resolve_timeout(*cache, item, *timeout_secs, *timeout_multiplier);
+                        let (outcome, duration_ms) = run_timed(*py, item, session, timeout, *opts);
+                        timings.push(types::TestTiming {
+                            node_id: item.node_id.clone(),
+                            duration_ms,
+                            outcome: types::OutcomeKind::from(&outcome),
+                        });
+                        rep.test_completed(item, &outcome, duration_ms, None);
+                        if acc.record(&outcome) {
+                            interrupted = true;
+                            if let Err(e) = session.end_module(*py, module_path) {
+                                tracing::warn!(%e, module = %module_path, "teardown error in end_module");
+                                rep.record_teardown_warning(
+                                    &format!("end_module({})", module_path),
+                                    &e.to_string(),
+                                );
+                            }
+                            break 'run;
+                        }
+                    }
+                    if let Err(e) = session.end_module(*py, module_path) {
                         tracing::warn!(%e, module = %module_path, "teardown error in end_module");
                         rep.record_teardown_warning(
                             &format!("end_module({})", module_path),
                             &e.to_string(),
                         );
                     }
-                    break 'run;
+                }
+                if let Err(e) = session.end_session(*py) {
+                    tracing::warn!(%e, "teardown error in end_session");
+                    rep.record_teardown_warning("end_session", &e.to_string());
+                }
+
+                parallel::PhaseResult {
+                    interrupted,
+                    timings,
                 }
             }
-            if let Err(e) = self.session.end_module(self.py, module_path) {
-                tracing::warn!(%e, module = %module_path, "teardown error in end_module");
-                rep.record_teardown_warning(
-                    &format!("end_module({})", module_path),
-                    &e.to_string(),
-                );
-            }
+            ExecutionDispatch::Parallel {
+                cfg,
+                workers,
+                conftest_files,
+                python_bin,
+                pool,
+            } => parallel::run_phase_parallel(
+                groups,
+                cfg,
+                *workers,
+                conftest_files,
+                python_bin,
+                rep,
+                pool.take(),
+            ),
         }
-        if let Err(e) = self.session.end_session(self.py) {
-            tracing::warn!(%e, "teardown error in end_session");
-            rep.record_teardown_warning("end_session", &e.to_string());
-        }
-
-        parallel::PhaseResult {
-            interrupted,
-            timings,
-        }
-    }
-}
-
-/// Parallel execution harness — delegates to worker subprocesses.
-pub(super) struct ParallelHarness<'a> {
-    pub cfg: &'a config::Config,
-    pub workers: usize,
-    pub conftest_files: &'a [Utf8PathBuf],
-    pub python_bin: &'a str,
-    /// Pre-warmed worker pool; wrapped in `RefCell` so `execute_groups(&self)`
-    /// can move it out without requiring `&mut self`.
-    pub pool: std::cell::RefCell<Option<Vec<parallel::PrewarmedWorker>>>,
-}
-
-impl ExecutionHarness for ParallelHarness<'_> {
-    fn execute_groups(
-        &self,
-        groups: Vec<ModuleGroup>,
-        rep: &mut dyn reporter::Reporter,
-    ) -> parallel::PhaseResult {
-        parallel::run_phase_parallel(
-            groups,
-            self.cfg,
-            self.workers,
-            self.conftest_files,
-            self.python_bin,
-            rep,
-            self.pool.borrow_mut().take(),
-        )
     }
 }
 
@@ -415,8 +426,8 @@ pub(super) fn execute(
                 );
             }
         }
-        let harness = SerialHarness::from_ctx(py, ctx);
-        harness.execute_groups(plan.inprocess_groups, rep)
+        let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
+        mode.execute_groups(plan.inprocess_groups, rep)
     };
 
     if result.interrupted {
@@ -436,8 +447,8 @@ pub(super) fn execute(
                 return result;
             }
 
-            let harness = SerialHarness::from_ctx(py, ctx);
-            let serial_result = harness.execute_groups(all_groups, rep);
+            let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
+            let serial_result = mode.execute_groups(all_groups, rep);
             result.timings.extend(serial_result.timings);
             result.interrupted |= serial_result.interrupted;
             result
@@ -451,12 +462,12 @@ pub(super) fn execute(
             if !plan.arranged_groups.is_empty() {
                 // Auto-arrange disabled warning is not needed here because
                 // arranged_groups is only populated when auto_arrange is active.
-                let harness = SerialHarness::from_ctx(py, ctx);
+                let mut serial = ExecutionDispatch::serial_from_ctx(py, ctx);
                 for group_modules in plan.arranged_groups {
                     if result.interrupted {
                         return result;
                     }
-                    let phase = harness.execute_groups(group_modules, rep);
+                    let phase = serial.execute_groups(group_modules, rep);
                     result.timings.extend(phase.timings);
                     result.interrupted |= phase.interrupted;
                 }
@@ -469,14 +480,14 @@ pub(super) fn execute(
                 return result;
             }
 
-            let harness = ParallelHarness {
+            let mut parallel = ExecutionDispatch::Parallel {
                 cfg: ctx.cfg,
                 workers: worker_count,
                 conftest_files: ctx.conftest_files,
                 python_bin: ctx.python_bin,
-                pool: std::cell::RefCell::new(Some(pool_guard.take())),
+                pool: Some(pool_guard.take()),
             };
-            let parallel_result = harness.execute_groups(plan.parallel_groups, rep);
+            let parallel_result = parallel.execute_groups(plan.parallel_groups, rep);
 
             result.timings.extend(parallel_result.timings);
             result.interrupted |= parallel_result.interrupted;
