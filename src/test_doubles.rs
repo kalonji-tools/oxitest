@@ -1,37 +1,26 @@
 //! Test doubles for pipeline unit testing.
 //!
-//! Provides a [`StubHarness`] implementing [`ExecutionHarness`].
 //! All types are `#[cfg(test)]`-gated and live exclusively in the test binary.
 
 #[cfg(test)]
 pub(crate) mod doubles {
     use crate::parallel::PhaseResult;
-    use crate::reporter::Reporter;
-    use crate::scheduler::ModuleGroup;
     use crate::types::TestTiming;
 
-    // ─── StubHarness ─────────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    /// Stub harness that returns a configurable [`PhaseResult`].
-    #[allow(dead_code)] // Used by later tasks (execution harness contract tests).
-    pub(crate) struct StubHarness {
-        pub result: PhaseResult,
-    }
-
-    impl crate::pipeline::traits::ExecutionHarness for StubHarness {
-        fn execute_groups(
-            &self,
-            _groups: Vec<ModuleGroup>,
-            _rep: &mut dyn Reporter,
-        ) -> PhaseResult {
-            PhaseResult {
-                interrupted: self.result.interrupted,
-                timings: self.result.timings.clone(),
-            }
+    /// Return a canned [`PhaseResult`] for use in tests that need a stub execution outcome.
+    ///
+    /// Replaces the former `StubHarness` struct; since `ExecutionDispatch` is a concrete enum
+    /// (not a trait object), tests can supply canned results directly without a separate
+    /// harness abstraction.
+    #[allow(dead_code)] // Used by later tasks (execution contract tests).
+    pub(crate) fn stub_phase_result(interrupted: bool, timings: Vec<TestTiming>) -> PhaseResult {
+        PhaseResult {
+            interrupted,
+            timings,
         }
     }
-
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     /// Build a zero-duration [`TestTiming`] for a given node-id string.
     #[allow(dead_code)] // Used by later tasks (execution contract tests).

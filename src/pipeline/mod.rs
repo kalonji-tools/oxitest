@@ -9,7 +9,6 @@ mod arrange;
 mod collection;
 pub(crate) mod execution;
 mod helpers;
-pub(crate) mod traits;
 mod transitions;
 
 use std::sync::Arc;
