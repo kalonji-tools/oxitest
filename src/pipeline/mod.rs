@@ -4,17 +4,13 @@
 //! config → collect files → import tests → filter → schedule → execute → report → cache.
 //!
 //! Both serial and parallel execution paths converge through this module.
-//!
-//! Phase ordering is enforced at compile time via the typestate pattern:
-//! each pipeline stage is a distinct type, and transitions consume one type
-//! to produce the next. Illegal ordering is a compile error.
 
 mod arrange;
 mod collection;
 pub(crate) mod execution;
 mod helpers;
-pub(crate) mod phases;
 pub(crate) mod traits;
+mod transitions;
 
 use std::sync::Arc;
 
@@ -26,55 +22,47 @@ use helpers::env_string;
 use pyo3::prelude::*;
 use std::io::IsTerminal;
 
-// ─── State types ─────────────────────────────────────────────────────────────
+// ─── PipelinePhase enum ─────────────────────────────────────────────────────
 
-/// Initial pipeline state before any work has been done.
-pub(crate) struct Empty;
-
-/// Files discovered on disk; test file and conftest paths live in `PipelineShared`.
-pub(crate) struct FilesCollected;
-
-/// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
-pub(crate) struct Prescanned {
-    /// Per-file prescan results.
-    pub(crate) prescan_data: Vec<crate::prescan::PrescanModule>,
-    /// Module-level markers per file, used by expression-based filtering.
-    pub(crate) module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
-}
-
-/// Prescan metadata filtered; holds only modules that matched filters plus dynamic fallbacks.
-pub(crate) struct MetadataFiltered {
-    /// Modules that need Python import (matched + dynamic fallback).
-    pub(crate) modules_to_import: Vec<Utf8PathBuf>,
-}
-
-/// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
-pub(crate) struct SessionReady {
-    pub(crate) session: bridge::FixtureSession,
-    pub(crate) session_violations: Vec<bridge::RawViolation>,
-}
-
-/// Test items collected via Python import; holds the full `TestItem` list and any violations.
-pub(crate) struct Collected {
-    pub(crate) session: bridge::FixtureSession,
-    pub(crate) items: Vec<Arc<types::TestItem>>,
-    pub(crate) raw_violations: Vec<bridge::RawViolation>,
-}
-
-/// Strict-mode + item-level filtering applied; items are ready for execution.
-pub(crate) struct Ready {
-    pub(crate) session: bridge::FixtureSession,
-    pub(crate) clean_items: Vec<Arc<types::TestItem>>,
-    pub(crate) violated_items: Vec<Arc<types::TestItem>>,
-    pub(crate) all_violations: Vec<strict::StrictViolation>,
-    pub(crate) suite_lines: Vec<String>,
-}
-
-/// All tests executed; holds final items, timings, and the reporter.
-pub(crate) struct Executed {
-    pub(crate) session: bridge::FixtureSession,
-    pub(crate) items: Vec<Arc<types::TestItem>>,
-    pub(crate) execution_results: ExecutionResults,
+/// Runtime pipeline phase — each variant carries the data that was previously
+/// held by a separate typestate struct.
+pub(crate) enum PipelinePhase {
+    /// Initial pipeline state before any work has been done.
+    Empty,
+    /// Files discovered on disk; test file and conftest paths live in `PipelineShared`.
+    FilesCollected,
+    /// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
+    Prescanned {
+        prescan_data: Vec<crate::prescan::PrescanModule>,
+        module_markers: std::collections::HashMap<Utf8PathBuf, Vec<String>>,
+    },
+    /// Prescan metadata filtered; holds only modules that matched filters plus dynamic fallbacks.
+    MetadataFiltered { modules_to_import: Vec<Utf8PathBuf> },
+    /// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
+    SessionReady {
+        session: bridge::FixtureSession,
+        session_violations: Vec<bridge::RawViolation>,
+    },
+    /// Test items collected via Python import; holds the full `TestItem` list and any violations.
+    Collected {
+        session: bridge::FixtureSession,
+        items: Vec<Arc<types::TestItem>>,
+        raw_violations: Vec<bridge::RawViolation>,
+    },
+    /// Strict-mode + item-level filtering applied; items are ready for execution.
+    Ready {
+        session: bridge::FixtureSession,
+        clean_items: Vec<Arc<types::TestItem>>,
+        violated_items: Vec<Arc<types::TestItem>>,
+        all_violations: Vec<strict::StrictViolation>,
+        suite_lines: Vec<String>,
+    },
+    /// All tests executed; holds final items, timings, and the reporter.
+    Executed {
+        session: bridge::FixtureSession,
+        items: Vec<Arc<types::TestItem>>,
+        execution_results: ExecutionResults,
+    },
 }
 
 // ─── ExecutionResults ────────────────────────────────────────────────────────
@@ -85,14 +73,14 @@ pub(crate) struct ExecutionResults {
     pub(crate) reporter: Box<dyn reporter::Reporter>,
 }
 
-// ─── Pipeline<S> ─────────────────────────────────────────────────────────────
+// ─── Pipeline ────────────────────────────────────────────────────────────────
 
-pub(crate) struct Pipeline<S> {
+pub(crate) struct Pipeline {
     pub(crate) shared: PipelineShared,
-    pub(crate) state: S,
+    pub(crate) phase: PipelinePhase,
 }
 
-impl<S> std::fmt::Debug for Pipeline<S> {
+impl std::fmt::Debug for Pipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pipeline")
             .field("rootdir", &self.shared.rootdir)
@@ -100,26 +88,26 @@ impl<S> std::fmt::Debug for Pipeline<S> {
     }
 }
 
-impl<S> std::ops::Deref for Pipeline<S> {
+impl std::ops::Deref for Pipeline {
     type Target = PipelineShared;
     fn deref(&self) -> &PipelineShared {
         &self.shared
     }
 }
 
-impl<S> std::ops::DerefMut for Pipeline<S> {
+impl std::ops::DerefMut for Pipeline {
     fn deref_mut(&mut self) -> &mut PipelineShared {
         &mut self.shared
     }
 }
 
-impl<S> Pipeline<S> {
-    fn into_parts(self) -> (PipelineShared, S) {
-        (self.shared, self.state)
+impl Pipeline {
+    fn into_parts(self) -> (PipelineShared, PipelinePhase) {
+        (self.shared, self.phase)
     }
 }
 
-/// Data shared across all pipeline states, accessible via `Deref`/`DerefMut` on `Pipeline<S>`.
+/// Data shared across all pipeline phases, accessible via `Deref`/`DerefMut` on `Pipeline`.
 pub(crate) struct PipelineShared {
     pub(crate) cfg: config::Config,
     pub(crate) command: config::Command,
@@ -136,13 +124,6 @@ pub(crate) struct PipelineShared {
 }
 
 impl PipelineShared {
-    fn into_pipeline<T>(self, state: T) -> Pipeline<T> {
-        Pipeline {
-            shared: self,
-            state,
-        }
-    }
-
     fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
         reporter::make_reporter(
             self.base
@@ -269,7 +250,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
 
 // ─── Command entry points ────────────────────────────────────────────────────
 
-fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+fn run_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCode> {
     // Extract coverage config before pipeline consumes it
     let cov_enabled = pipeline.cfg.features.cov;
     let cov_report_format = pipeline.cfg.features.cov_report.clone();
@@ -313,7 +294,7 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
     result
 }
 
-fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+fn debug_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
     let p = p.prescan()?;
@@ -330,7 +311,7 @@ fn debug_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, 
 
 fn query_command(
     py: Python<'_>,
-    pipeline: Pipeline<Empty>,
+    pipeline: Pipeline,
     needs_session: bool,
 ) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
@@ -353,7 +334,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 
     let pipeline = Pipeline {
         shared,
-        state: Empty,
+        phase: PipelinePhase::Empty,
     };
 
     let result = match &pipeline.command {

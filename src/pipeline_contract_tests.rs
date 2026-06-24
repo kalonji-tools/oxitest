@@ -11,7 +11,7 @@ mod strict_phase_contract_tests {
     fn strict_enforce_partitions_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
@@ -26,17 +26,38 @@ mod strict_phase_contract_tests {
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
-            assert!(result.is_ok());
-            let p = result.unwrap();
-            assert_eq!(p.state.clean_items.len(), 1);
-            assert_eq!(
-                p.state.clean_items[0].node_id.as_ref(),
-                "tests/test_a.py::test_good"
+            assert!(
+                result.is_ok(),
+                "strict_or_skip should succeed in enforce mode"
             );
-            assert_eq!(p.state.violated_items.len(), 1);
+            let p = result.unwrap();
+            let PipelinePhase::Ready {
+                ref clean_items,
+                ref violated_items,
+                ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
             assert_eq!(
-                p.state.violated_items[0].node_id.as_ref(),
-                "tests/test_a.py::test_bad"
+                clean_items.len(),
+                1,
+                "one clean item expected after enforce partition"
+            );
+            assert_eq!(
+                clean_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_good",
+                "clean item should be test_good"
+            );
+            assert_eq!(
+                violated_items.len(),
+                1,
+                "one violated item expected after enforce partition"
+            );
+            assert_eq!(
+                violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad",
+                "violated item should be test_bad"
             );
         });
     }
@@ -45,7 +66,7 @@ mod strict_phase_contract_tests {
     fn strict_abort_with_violations_exits() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_one").arc()],
                 raw_violations: vec![RawViolation {
                     node_id: "tests/test_a.py::test_one".to_string(),
@@ -57,8 +78,15 @@ mod strict_phase_contract_tests {
             p.cfg.markers.strict = Some(StrictMode::Abort);
 
             let result = p.strict_or_skip(py);
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err(), ExitCode::CollectError);
+            assert!(
+                result.is_err(),
+                "strict_or_skip should fail in abort mode with violations"
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                ExitCode::CollectError,
+                "abort mode should return CollectError exit code"
+            );
         });
     }
 
@@ -66,7 +94,7 @@ mod strict_phase_contract_tests {
     fn strict_enforce_no_violations_passes_all_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![TestItem::builder_raw("tests/test_a.py::test_clean").arc()],
                 raw_violations: vec![],
                 session: crate::bridge::FixtureSession::stub(py),
@@ -74,10 +102,28 @@ mod strict_phase_contract_tests {
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let result = p.strict_or_skip(py);
-            assert!(result.is_ok());
+            assert!(
+                result.is_ok(),
+                "strict_or_skip should succeed with no violations"
+            );
             let p = result.unwrap();
-            assert_eq!(p.state.clean_items.len(), 1);
-            assert!(p.state.violated_items.is_empty());
+            let PipelinePhase::Ready {
+                ref clean_items,
+                ref violated_items,
+                ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(
+                clean_items.len(),
+                1,
+                "all items should be clean when no violations"
+            );
+            assert!(
+                violated_items.is_empty(),
+                "no items should be violated when no violations"
+            );
         });
     }
 }
@@ -91,7 +137,7 @@ mod filter_phase_contract_tests {
     fn expression_filter_reduces_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_beta").arc(),
@@ -107,10 +153,26 @@ mod filter_phase_contract_tests {
             }
 
             let result = p.strict_or_skip(py);
-            assert!(result.is_ok());
+            assert!(
+                result.is_ok(),
+                "strict_or_skip should succeed with expression filter"
+            );
             let p = result.unwrap();
-            assert_eq!(p.state.clean_items.len(), 1);
-            assert!(p.state.clean_items[0].node_id.as_ref().contains("alpha"));
+            let PipelinePhase::Ready {
+                ref clean_items, ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(
+                clean_items.len(),
+                1,
+                "expression filter should reduce to one item"
+            );
+            assert!(
+                clean_items[0].node_id.as_ref().contains("alpha"),
+                "filtered item should be the alpha test"
+            );
         });
     }
 
@@ -118,7 +180,7 @@ mod filter_phase_contract_tests {
     fn no_filters_passes_all_items() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
+            let p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -128,9 +190,22 @@ mod filter_phase_contract_tests {
             });
 
             let result = p.strict_or_skip(py);
-            assert!(result.is_ok());
+            assert!(
+                result.is_ok(),
+                "strict_or_skip should succeed with no filters"
+            );
             let p = result.unwrap();
-            assert_eq!(p.state.clean_items.len(), 2);
+            let PipelinePhase::Ready {
+                ref clean_items, ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(
+                clean_items.len(),
+                2,
+                "all items should pass through with no filters"
+            );
         });
     }
 }
@@ -146,7 +221,7 @@ mod context_threading_tests {
     fn strict_then_filter_threads_clean_items() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_alpha").arc(),
@@ -169,9 +244,28 @@ mod context_threading_tests {
 
             // strict_or_skip now does strict-mode split AND filtering in one step
             let p = p.strict_or_skip(py).unwrap();
-            assert_eq!(p.state.clean_items.len(), 1);
-            assert!(p.state.clean_items[0].node_id.as_ref().contains("alpha"));
-            assert_eq!(p.state.violated_items.len(), 1);
+            let PipelinePhase::Ready {
+                ref clean_items,
+                ref violated_items,
+                ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(
+                clean_items.len(),
+                1,
+                "only alpha should survive strict + expression filter"
+            );
+            assert!(
+                clean_items[0].node_id.as_ref().contains("alpha"),
+                "surviving item should be alpha"
+            );
+            assert_eq!(
+                violated_items.len(),
+                1,
+                "test_bad should be in violated items"
+            );
         });
     }
 
@@ -179,7 +273,7 @@ mod context_threading_tests {
     fn strict_skipped_preserves_all_items_for_filter() {
         Python::initialize();
         Python::attach(|py| {
-            let p = make_pipeline(Collected {
+            let p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_one").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_two").arc(),
@@ -190,7 +284,17 @@ mod context_threading_tests {
             // strict is None by default
 
             let p = p.strict_or_skip(py).unwrap();
-            assert_eq!(p.state.clean_items.len(), 2);
+            let PipelinePhase::Ready {
+                ref clean_items, ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(
+                clean_items.len(),
+                2,
+                "all items should pass through when strict is None"
+            );
         });
     }
 
@@ -198,7 +302,7 @@ mod context_threading_tests {
     fn full_pure_rust_chain_strict_filter() {
         Python::initialize();
         Python::attach(|py| {
-            let mut p = make_pipeline(Collected {
+            let mut p = make_pipeline(PipelinePhase::Collected {
                 items: vec![
                     TestItem::builder_raw("tests/test_a.py::test_good").arc(),
                     TestItem::builder_raw("tests/test_a.py::test_bad").arc(),
@@ -220,15 +324,25 @@ mod context_threading_tests {
             }
 
             let p = p.strict_or_skip(py).unwrap();
-            assert_eq!(p.state.clean_items.len(), 1);
+            let PipelinePhase::Ready {
+                ref clean_items,
+                ref violated_items,
+                ..
+            } = p.phase
+            else {
+                panic!("expected Ready phase after strict_or_skip")
+            };
+            assert_eq!(clean_items.len(), 1, "only test_good should survive");
             assert_eq!(
-                p.state.clean_items[0].node_id.as_ref(),
-                "tests/test_a.py::test_good"
+                clean_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_good",
+                "surviving clean item should be test_good"
             );
-            assert_eq!(p.state.violated_items.len(), 1);
+            assert_eq!(violated_items.len(), 1, "test_bad should be in violated");
             assert_eq!(
-                p.state.violated_items[0].node_id.as_ref(),
-                "tests/test_a.py::test_bad"
+                violated_items[0].node_id.as_ref(),
+                "tests/test_a.py::test_bad",
+                "violated item should be test_bad"
             );
         });
     }
