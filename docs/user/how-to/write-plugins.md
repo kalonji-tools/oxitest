@@ -132,18 +132,18 @@ at startup -- two plugins cannot share the same prefix.
 
 ## Protocols
 
-The `Plugin` dataclass has seven fields — five list-based protocol fields and
-two singleton fields (`async_backend` and `debugger_backend`). Each list field
+The `Plugin` dataclass has seven fields — five tuple-based protocol fields and
+two singleton fields (`async_backend` and `debugger_backend`). Each tuple field
 allows a single plugin to provide multiple implementations of the same protocol.
 
 ```python
-@dataclass
+@dataclass(frozen=True)
 class Plugin:
-    log_backends: list[LogBackend] = field(default_factory=list)
-    fixture_providers: list[FixtureProvider] = field(default_factory=list)
-    execution_wrappers: list[ExecutionWrapper] = field(default_factory=list)
-    collectors: list[Collector] = field(default_factory=list)
-    reporters: list[Reporter] = field(default_factory=list)
+    log_backends: tuple[LogBackend, ...] = ()
+    fixture_providers: tuple[FixtureProvider, ...] = ()
+    execution_wrappers: tuple[ExecutionWrapper, ...] = ()
+    collectors: tuple[Collector, ...] = ()
+    reporters: tuple[Reporter, ...] = ()
     async_backend: AsyncBackend | None = None
     debugger_backend: DebuggerBackend | None = None
 ```
@@ -192,7 +192,7 @@ class JsonReporter:
 
 
 def oxitest_plugin(config=None):
-    return Plugin(reporters=[JsonReporter(config["output"])])
+    return Plugin(reporters=(JsonReporter(config["output"]),))
 ```
 
 ### LogBackend
@@ -243,7 +243,7 @@ class TimestampBackend:
 
 
 def oxitest_plugin(config=None):
-    return Plugin(log_backends=[TimestampBackend()])
+    return Plugin(log_backends=(TimestampBackend(),))
 ```
 
 ### FixtureProvider
@@ -309,7 +309,7 @@ class PoolProvider:
 
 def oxitest_plugin(config=None):
     dsn = config["dsn"] if config else "localhost:5432/test"
-    return Plugin(fixture_providers=[PoolProvider(dsn)])
+    return Plugin(fixture_providers=(PoolProvider(dsn),))
 ```
 
 Tests inject the fixture using the provider's `name` and `fixture_type`:
@@ -362,7 +362,7 @@ class CheckCollector:
 
 
 def oxitest_plugin(config=None):
-    return Plugin(collectors=[CheckCollector()])
+    return Plugin(collectors=(CheckCollector(),))
 ```
 
 ### ExecutionWrapper
@@ -404,7 +404,7 @@ class RetryWrapper:
 
 
 def oxitest_plugin(config=None):
-    return Plugin(execution_wrappers=[RetryWrapper()])
+    return Plugin(execution_wrappers=(RetryWrapper(),))
 ```
 
 Register the marker in `pyproject.toml` and use it in tests:
@@ -473,7 +473,7 @@ class FileReporter:
 def oxitest_plugin(config=None):
     """Entry point called by oxitest at startup."""
     output = config["output"] if config else "test-events.json"
-    return Plugin(reporters=[FileReporter(output)])
+    return Plugin(reporters=(FileReporter(output),))
 ```
 
 ### Project configuration
