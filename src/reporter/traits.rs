@@ -42,7 +42,7 @@ impl ExitVote {
 /// [`PyPluginReporter`](super::plugin::PyPluginReporter),
 /// [`CompositeReporter`](super::composite::CompositeReporter).
 pub trait Reporter {
-    fn test_started(&mut self, item: &crate::types::TestItem);
+    fn test_started(&mut self, _item: &crate::types::TestItem) {}
     fn test_completed(
         &mut self,
         item: &crate::types::TestItem,

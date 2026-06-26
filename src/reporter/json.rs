@@ -67,8 +67,6 @@ impl JsonReporter {
 }
 
 impl Reporter for JsonReporter {
-    fn test_started(&mut self, _item: &TestItem) {}
-
     fn test_completed(
         &mut self,
         item: &TestItem,
