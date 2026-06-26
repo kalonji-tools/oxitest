@@ -560,7 +560,7 @@ _MARK_REGISTRY: dict[str, MarkHandler] = {
 
 ### 3. The cross-language sync test
 
-The integration test at `python/tests/integration/test_int_marker_sync.py` enforces that every Python handler name appears in the Rust `BUILTIN_MARKERS` constant:
+The integration test at `python/tests/integration/test_marker_sync.py` enforces that every Python handler name appears in the Rust `BUILTIN_MARKERS` constant:
 
 ```python
 def test_python_markers_are_subset_of_rust() -> None:
