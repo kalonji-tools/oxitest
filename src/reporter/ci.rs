@@ -114,8 +114,6 @@ impl StandardReporter for CiReporter {
 }
 
 impl Reporter for CiReporter {
-    fn test_started(&mut self, _item: &TestItem) {}
-
     fn test_completed(
         &mut self,
         item: &TestItem,

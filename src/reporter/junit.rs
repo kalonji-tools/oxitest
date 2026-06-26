@@ -58,8 +58,6 @@ fn to_testname(item: &TestItem) -> String {
 }
 
 impl Reporter for JunitReporter {
-    fn test_started(&mut self, _item: &TestItem) {}
-
     fn test_completed(
         &mut self,
         item: &TestItem,
