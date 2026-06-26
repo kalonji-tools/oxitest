@@ -241,7 +241,10 @@ All reporters implement the `Reporter` trait defined in `src/reporter/traits.rs`
 
 ```rust
 pub trait Reporter {
-    fn test_started(&mut self, item: &TestItem);
+    // Optional — override only if you need to react to test start events:
+    fn test_started(&mut self, _item: &TestItem) {}
+
+    // Required:
     fn test_completed(
         &mut self,
         item: &TestItem,
