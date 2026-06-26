@@ -67,6 +67,69 @@ def oxitest_plugin(config=None):
 
 If no `plugin_settings` table exists for the plugin, `config` is `None`.
 
+### Typed config with CLI extensions
+
+For richer configuration, plugins can declare a frozen dataclass as their config
+schema. oxitest introspects it to generate CLI flags, validate types, and merge
+values from multiple sources.
+
+```python
+# my_plugin/__init__.py
+from dataclasses import dataclass
+from typing import Annotated
+
+from oxitest import CliExtension, Both, Cli, Conf, Plugin
+
+
+@dataclass(frozen=True)
+class MyConfig:
+    host: Annotated[str, Both(help="Target host", short="H", env="MY_HOST")]
+    verbose: Annotated[bool, Cli(help="Verbose output")] = False
+    retries: Annotated[int, Conf(help="Retry count (config only)")] = 3
+
+
+# Declares CLI flags under the "myplugin" prefix
+oxitest_cli_extension = CliExtension(prefix="myplugin", config_type=MyConfig)
+
+
+def oxitest_plugin(*, config: MyConfig | None = None) -> Plugin:
+    # config is a fully typed MyConfig instance (not a dict)
+    return Plugin()
+```
+
+This generates CLI flags automatically:
+
+```
+plugin: myplugin:
+  -H, --myplugin-host HOST  Target host [env: MY_HOST]
+      --myplugin-verbose     Verbose output
+```
+
+#### Source markers
+
+Every field must be annotated with exactly one source marker:
+
+| Marker | CLI flag | pyproject.toml | env var |
+|--------|----------|----------------|---------|
+| `Cli`  | Yes      | No             | Optional |
+| `Conf` | No       | Yes            | No      |
+| `Both` | Yes      | Yes            | Optional |
+
+Precedence: **CLI > env > pyproject.toml > default**.
+
+#### Prefix customization
+
+All plugin CLI flags are namespaced by prefix (`--{prefix}-{field}`). Users can
+override the prefix in `pyproject.toml`:
+
+```toml
+[tool.oxitest.plugin_settings.my_plugin]
+cli_prefix = "mp"
+```
+
+This changes `--myplugin-host` to `--mp-host`. Prefix uniqueness is validated
+at startup -- two plugins cannot share the same prefix.
+
 ## Protocols
 
 The `Plugin` dataclass has seven fields — five list-based protocol fields and
