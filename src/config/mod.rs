@@ -476,6 +476,28 @@ impl Default for Config {
     }
 }
 
+/// Quick check whether a `pyproject.toml` at `rootdir` declares any plugins.
+///
+/// Reads only the `[tool.oxitest] plugins` key; intentionally cheap so the
+/// pipeline can decide whether Phase-2 plugin CLI discovery is worth
+/// attempting before a full `Config::load`.
+pub fn has_plugins_configured(rootdir: &Utf8Path) -> bool {
+    let path = rootdir.join("pyproject.toml");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let pyproject: Result<PyprojectToml, _> = toml::from_str(&content);
+    match pyproject {
+        Ok(p) => p
+            .tool
+            .and_then(|t| t.oxitest)
+            .and_then(|o| o.plugins)
+            .is_some_and(|plugins| !plugins.is_empty()),
+        Err(_) => false,
+    }
+}
+
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
     let start = start.unwrap_or(Utf8Path::new("."));
     let start = if start.is_file() {

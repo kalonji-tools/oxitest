@@ -1,17 +1,20 @@
 """Integration tests: plugin lifecycle, CLI extensions, multi-plugin interaction.
 
 Tests exercise the plugin system end-to-end via subprocess invocation.
-Plugins with CLI extensions are discovered (Phase 1) but NOT activated
-(no Phase 3 activation call exists yet), so tests that need protocol
-activation use inline plugins without CLI extensions.
+Plugins with CLI extensions are fully activated after session init via
+two-phase loading: Phase 1 discovers the plugin and defers entry-point
+construction; Phase 2 builds the typed config from CLI/env/pyproject
+and calls ``oxitest_plugin(config=...)``.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
+import oxitest
 from conftest import helpers
 from oxitest import TempDir
 
@@ -33,6 +36,33 @@ def _run(
     if env_extra:
         base_env.update(env_extra)
     return helpers.common.run_oxitest(None, *args, env=base_env, cwd=str(tmp))
+
+
+def _run_top_flag(
+    tmp: TempDir, flag: str, env_extra: dict[str, str] | None = None
+) -> tuple[str, str, int]:
+    """Run oxitest with a top-level flag (e.g. ``--help``) that must precede all others.
+
+    ``run_oxitest`` inserts ``--color never`` before extra args, which
+    causes clap to reject top-level flags like ``--help`` that exit
+    immediately.  This helper builds the subprocess directly so that
+    ``flag`` is the first argument, matching what a user would type.
+    """
+    import subprocess
+    import sys
+
+    base_env = {**os.environ, "PYTHONPATH": FIXTURES_DIR}
+    if env_extra:
+        base_env.update(env_extra)
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest", flag],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(tmp),
+        env=base_env,
+    )
+    return result.stdout, result.stderr, result.returncode
 
 
 def _run_sub(
@@ -263,18 +293,19 @@ def test_two_cli_extension_plugins_coexist(tmp: TempDir) -> None:
     helpers.integ.assert_passed(out, rc)
 
 
-def test_plugin_with_cli_extension_defers_activation(tmp: TempDir) -> None:
-    """Plugin with CLI extension is discovered but not activated during load.
+def test_plugin_with_cli_extension_activated_after_session(tmp: TempDir) -> None:
+    """Plugin with CLI extension is activated after session init.
 
-    The current two-phase loading defers activation for plugins with
-    CLI extensions.  This test verifies the deferred behavior by checking
-    that the config marker file is NOT written.
+    Two-phase loading defers plugin entry-point during ``load_plugins()``,
+    then ``activate_deferred_plugins()`` constructs the typed config and
+    calls ``oxitest_plugin(config=...)``.  The marker file proves activation
+    happened.
     """
     _write_infra_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run(tmp)
     helpers.integ.assert_passed(out, rc)
-    assert not (tmp / "infra_config_received.json").exists(), (
-        "plugin with CLI extension should be deferred (not activated) during load"
+    assert (tmp / "infra_config_received.json").exists(), (
+        "plugin with CLI extension should be activated after session init"
     )
 
 
@@ -503,29 +534,76 @@ def test_invalid_entrypoint_return_type_error(tmp: TempDir) -> None:
 # -- Lazy loading --------------------------------------------------------------
 
 
-def test_lazy_protocol_not_imported_until_needed(tmp: TempDir) -> None:
-    """Plugin with CLI extension is not activated during --help.
+def test_help_shows_plugin_flags(tmp: TempDir) -> None:
+    """``--help`` includes plugin CLI flags when plugins are configured.
 
-    The --help flag exits during Phase 1 (before plugin activation),
-    so oxitest_plugin() should never be called. We verify by checking
-    that the config marker file is NOT created.
+    Phase 1 defers the --help to Phase 2, which builds an extended parser
+    with plugin flags, so plugin options appear in the help output.
     """
     _write_infra_project(tmp, "def test_one(): pass\n")
-    # Use run_oxitest_subcmd with --help to avoid --color being rejected
-    # at the top level (--color is a subcommand flag, not a global flag).
-    import subprocess
-    import sys
-
-    base_env = {**os.environ, "PYTHONPATH": FIXTURES_DIR}
-    result = subprocess.run(
-        [sys.executable, "-m", "oxitest", "--help"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        cwd=str(tmp),
-        env=base_env,
+    out, err, rc = _run_top_flag(tmp, "--help")
+    combined = out + err
+    assert rc == 0, f"--help should exit 0, got {rc}\n{combined}"
+    assert "--infra-host" in combined, (
+        f"--help should show plugin flag --infra-host:\n{combined}"
     )
-    assert result.returncode == 0, f"--help should exit 0, got {result.returncode}"
+    assert "--infra-timeout" in combined, (
+        f"--help should show plugin flag --infra-timeout:\n{combined}"
+    )
     assert not (tmp / "infra_config_received.json").exists(), (
-        "plugin should not be activated during --help (lazy loading)"
+        "plugin should not be activated during --help"
+    )
+
+
+@dataclass(frozen=True)
+class CliPrecedenceCase:
+    cli_args: tuple[str, ...]
+    env_extra: dict[str, str]
+    expected_host: str
+
+
+@oxitest.parametrize(
+    default=CliPrecedenceCase(
+        cli_args=(),
+        env_extra={},
+        expected_host="default-host",
+    ),
+    cli_overrides_pyproject=CliPrecedenceCase(
+        cli_args=("--infra-host", "cli-host"),
+        env_extra={},
+        expected_host="cli-host",
+    ),
+    env_overrides_pyproject=CliPrecedenceCase(
+        cli_args=(),
+        env_extra={"OXITEST_INFRA_HOST": "env-host"},
+        expected_host="env-host",
+    ),
+    cli_overrides_env=CliPrecedenceCase(
+        cli_args=("--infra-host", "cli-host"),
+        env_extra={"OXITEST_INFRA_HOST": "env-host"},
+        expected_host="cli-host",
+    ),
+)
+def test_plugin_config_precedence(tmp: TempDir, case: CliPrecedenceCase) -> None:
+    """CLI > env > pyproject precedence for plugin config values."""
+    _write_infra_project(tmp, "def test_one(): pass\n")
+    out, err, rc = _run(tmp, *case.cli_args, env_extra=case.env_extra or None)
+    combined = out + err
+    helpers.integ.assert_passed(combined, rc)
+    config = json.loads((tmp / "infra_config_received.json").read_text())
+    assert config["host"] == case.expected_host, (
+        f"expected host={case.expected_host!r} with cli={case.cli_args} "
+        f"env={case.env_extra}, got {config['host']!r}"
+    )
+
+
+def test_unknown_flag_rejected_without_plugins(tmp: TempDir) -> None:
+    """Unknown flags still produce errors when no plugins are configured."""
+    (tmp / "pyproject.toml").write_text('[tool.oxitest]\ntestpaths = ["."]\n')
+    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    out, err, rc = _run(tmp, "--bogus-flag")
+    assert rc != 0, f"unknown flag should produce non-zero exit, got {rc}"
+    combined = (out + err).lower()
+    assert "bogus" in combined or "unexpected" in combined, (
+        f"error should mention the unknown flag:\n{out + err}"
     )
