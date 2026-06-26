@@ -31,7 +31,7 @@ def test_plugins_with_configured_plugin(tmp: TempDir):
         "    @property\n"
         "    def records(self): return []\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(log_backends=[_Log()])\n"
+        "    return Plugin(log_backends=(_Log(),))\n"
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n"
