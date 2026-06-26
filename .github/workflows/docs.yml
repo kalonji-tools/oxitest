@@ -73,7 +73,7 @@ jobs:
           cp -r docs/internals/book deploy/internals/book
           cp docs/internals/architecture-map.html deploy/internals/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: github.event_name == 'pull_request'
         with:
           name: docs-preview
