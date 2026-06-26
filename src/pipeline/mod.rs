@@ -154,27 +154,407 @@ fn validate_prefix_uniqueness(extensions: &config::PluginCliExtensions) -> Resul
     Ok(())
 }
 
+/// Extract plugin CLI values directly from argv without using clap.
+///
+/// This is needed for the plugin-recovery path where the extended clap
+/// parser cannot be used (it adds plugin args to the top-level command
+/// but subcommand args like `--color` are on the `run` subcommand).
+fn extract_plugin_values_from_argv(
+    argv: &[String],
+    extensions: &config::PluginCliExtensions,
+) -> std::collections::HashMap<String, std::collections::HashMap<String, toml::Value>> {
+    let mut result: std::collections::HashMap<
+        String,
+        std::collections::HashMap<String, toml::Value>,
+    > = std::collections::HashMap::new();
+
+    let mut i = 0;
+    while i < argv.len() {
+        let arg = &argv[i];
+
+        for (module, (_, opts)) in &extensions.plugins {
+            for opt in opts {
+                // Check long flag: --infra-host value or --infra-host=value
+                let (base, inline_val) = if let Some(pos) = arg.find('=') {
+                    (&arg[..pos], Some(&arg[pos + 1..]))
+                } else {
+                    (arg.as_str(), None)
+                };
+
+                if base == opt.long_flag {
+                    let values = result.entry(module.clone()).or_default();
+                    match opt.value_type {
+                        config::PluginValueType::Bool => {
+                            values.insert(opt.field_name.clone(), toml::Value::Boolean(true));
+                        }
+                        _ => {
+                            let val_str = if let Some(v) = inline_val {
+                                v.to_string()
+                            } else if i + 1 < argv.len() {
+                                i += 1;
+                                argv[i].clone()
+                            } else {
+                                continue;
+                            };
+
+                            let val = match opt.value_type {
+                                config::PluginValueType::Int => val_str
+                                    .parse::<i64>()
+                                    .map(toml::Value::Integer)
+                                    .unwrap_or(toml::Value::String(val_str)),
+                                config::PluginValueType::Float => val_str
+                                    .parse::<f64>()
+                                    .map(toml::Value::Float)
+                                    .unwrap_or(toml::Value::String(val_str)),
+                                _ => toml::Value::String(val_str),
+                            };
+                            values.insert(opt.field_name.clone(), val);
+                        }
+                    }
+                }
+
+                // Check short flag: -H value
+                if let Some(short) = opt.short_flag
+                    && *arg == format!("-{short}")
+                {
+                    let values = result.entry(module.clone()).or_default();
+                    match opt.value_type {
+                        config::PluginValueType::Bool => {
+                            values.insert(opt.field_name.clone(), toml::Value::Boolean(true));
+                        }
+                        _ => {
+                            if i + 1 < argv.len() {
+                                i += 1;
+                                let val_str = argv[i].clone();
+                                let val = match opt.value_type {
+                                    config::PluginValueType::Int => val_str
+                                        .parse::<i64>()
+                                        .map(toml::Value::Integer)
+                                        .unwrap_or(toml::Value::String(val_str)),
+                                    config::PluginValueType::Float => val_str
+                                        .parse::<f64>()
+                                        .map(toml::Value::Float)
+                                        .unwrap_or(toml::Value::String(val_str)),
+                                    _ => toml::Value::String(val_str),
+                                };
+                                values.insert(opt.field_name.clone(), val);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    result
+}
+
+/// Strip known plugin CLI flags from argv so that the core parser can succeed.
+///
+/// Plugin flags (`--infra-host myhost`) are not known to clap Phase 1.
+/// This helper removes them (and their values for non-bool types) so that
+/// `OxitestCli::resolve` can parse the remaining core args.
+fn strip_plugin_flags(argv: &[String], extensions: &config::PluginCliExtensions) -> Vec<String> {
+    let known_long: Vec<&str> = extensions
+        .plugins
+        .values()
+        .flat_map(|(_, opts)| opts.iter().map(|o| o.long_flag.as_str()))
+        .collect();
+
+    let mut filtered: Vec<String> = Vec::with_capacity(argv.len());
+    let mut skip_next = false;
+
+    for (i, arg) in argv.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        let base_flag = arg.split('=').next().unwrap_or(arg);
+
+        // Long plugin flags
+        if known_long.contains(&base_flag) {
+            if !arg.contains('=') {
+                let is_bool = extensions.plugins.values().any(|(_, opts)| {
+                    opts.iter().any(|o| {
+                        o.long_flag == base_flag
+                            && matches!(o.value_type, config::PluginValueType::Bool)
+                    })
+                });
+                if !is_bool && i + 1 < argv.len() {
+                    skip_next = true;
+                }
+            }
+            continue;
+        }
+
+        // Short plugin flags (-H, -o, etc.)
+        let is_short = arg.starts_with('-')
+            && !arg.starts_with("--")
+            && arg.len() == 2
+            && extensions.plugins.values().any(|(_, opts)| {
+                opts.iter()
+                    .any(|o| o.short_flag.is_some_and(|s| format!("-{s}") == *arg))
+            });
+        if is_short {
+            let is_bool = extensions.plugins.values().any(|(_, opts)| {
+                opts.iter().any(|o| {
+                    o.short_flag.is_some_and(|s| format!("-{s}") == *arg)
+                        && matches!(o.value_type, config::PluginValueType::Bool)
+                })
+            });
+            if !is_bool && i + 1 < argv.len() {
+                skip_next = true;
+            }
+            continue;
+        }
+
+        filtered.push(arg.clone());
+    }
+
+    filtered
+}
+
+/// Merge plugin CLI values into the config's `plugin_settings` and `plugin_cli_values`.
+fn merge_plugin_cli_values(
+    cfg: &mut config::Config,
+    plugin_values: std::collections::HashMap<
+        String,
+        std::collections::HashMap<String, toml::Value>,
+    >,
+) {
+    if plugin_values.is_empty() {
+        return;
+    }
+    for (module, values) in &plugin_values {
+        let settings_entry = cfg
+            .features
+            .plugin_settings
+            .entry(module.clone())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        if let Some(table) = settings_entry.as_table_mut() {
+            for (key, value) in values {
+                table.insert(key.clone(), value.clone());
+            }
+        } else {
+            tracing::warn!(
+                module = %module,
+                "plugin_settings entry for module is not a TOML table, skipping CLI merge"
+            );
+        }
+    }
+    cfg.features.plugin_cli_values = plugin_values;
+}
+
+/// Build a `PipelineShared` from resolved config, command, and rootdir.
+fn build_shared(
+    py: Python<'_>,
+    cfg: config::Config,
+    command: config::Command,
+    rootdir: Utf8PathBuf,
+) -> PyResult<PipelineShared> {
+    let cache = cache::TestCache::load(&rootdir);
+    let is_tty = std::io::stdout().is_terminal() && cfg.exec.mode.debug_mode().is_none();
+    let use_color = cfg
+        .output
+        .color
+        .resolve(is_tty || cfg.exec.mode.debug_mode().is_some());
+
+    crate::prescan::init_stdlib_names(py);
+
+    let python_bin = py
+        .import("sys")?
+        .getattr("executable")?
+        .extract::<String>()?;
+
+    let base =
+        reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.output.tb.clone());
+
+    let base = if let config::Command::Run(args) = &command {
+        base.show_tips(args.tips).show_warnings(args.warnings)
+    } else {
+        base
+    };
+
+    Ok(PipelineShared {
+        cfg,
+        cache,
+        command,
+        rootdir,
+        is_tty,
+        use_color,
+        python_bin,
+        base,
+        ast_weight: None,
+        test_files: vec![],
+        conftest_files: vec![],
+    })
+}
+
+/// Recovery path: Phase 1 failed (unknown flag or --help) but plugins are
+/// configured in pyproject.toml.  Discover plugin CLI extensions, build an
+/// extended parser, and re-parse.
+fn setup_with_plugin_recovery(
+    py: Python<'_>,
+    argv: &[String],
+    phase1_err: clap::Error,
+    rootdir: &Utf8PathBuf,
+) -> PyResult<Result<PipelineShared, ExitCode>> {
+    let cfg = config::Config::load(rootdir);
+    let extensions =
+        bridge::discover_plugin_cli(py, &cfg.features.plugins, &cfg.features.plugin_settings)?;
+
+    if extensions.plugins.is_empty() {
+        // No plugin CLI extensions — the deferred error is genuine.
+        use clap::error::ErrorKind;
+        if phase1_err.kind() == ErrorKind::DisplayHelp
+            || phase1_err.kind() == ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+        {
+            print!("{phase1_err}");
+            return Ok(Err(ExitCode::Success));
+        }
+        eprintln!("{phase1_err}");
+        return Ok(Err(ExitCode::UsageError));
+    }
+
+    // Validate prefix uniqueness
+    if let Err(msg) = validate_prefix_uniqueness(&extensions) {
+        eprintln!("error: {msg}");
+        return Ok(Err(ExitCode::UsageError));
+    }
+
+    // Build extended parser with plugin args
+    use clap::CommandFactory;
+    let base_cmd = config::OxitestCli::command();
+    let extended_cmd = config::cli::add_plugin_args(base_cmd, &extensions);
+
+    use clap::error::ErrorKind;
+    let is_help = phase1_err.kind() == ErrorKind::DisplayHelp
+        || phase1_err.kind() == ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand;
+
+    if is_help {
+        // Show help with plugin flags included, then exit.
+        let _ = extended_cmd.clone().print_help();
+        println!();
+        return Ok(Err(ExitCode::Success));
+    }
+
+    // Extract plugin CLI values directly from argv (without clap).
+    // We can't use the extended parser because plugin args are added to the
+    // top-level command while subcommand args (--color, etc.) live on `run`.
+    let plugin_values = extract_plugin_values_from_argv(argv, &extensions);
+
+    // Strip plugin flags and re-parse with core parser to get the real Command.
+    let filtered_argv = strip_plugin_flags(argv, &extensions);
+    let (command, use_gitignore) = match config::OxitestCli::resolve(&filtered_argv) {
+        Ok(pair) => pair,
+        Err(e) => {
+            // Core args are invalid even without plugin flags.
+            eprintln!("{e}");
+            return Ok(Err(ExitCode::UsageError));
+        }
+    };
+
+    // Validate command
+    match &command {
+        config::Command::Run(a) => {
+            if let Err(msg) = a.validate() {
+                eprintln!("error: {msg}");
+                return Ok(Err(ExitCode::UsageError));
+            }
+        }
+        config::Command::Debug(a) => {
+            if let Err(msg) = a.validate() {
+                eprintln!("error: {msg}");
+                return Ok(Err(ExitCode::UsageError));
+            }
+        }
+        _ => {}
+    }
+
+    // Build the real config from the re-parsed command.
+    let first_path = match &command {
+        config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Env | config::Command::Completions { .. } => None,
+    };
+    let rootdir = config::find_rootdir(first_path);
+    let mut cfg = match &command {
+        config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
+        config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
+        config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
+        config::Command::Env | config::Command::Completions { .. } => {
+            unreachable!("non-run commands handled before")
+        }
+    };
+
+    if !use_gitignore {
+        cfg.paths.use_gitignore = false;
+    }
+
+    merge_plugin_cli_values(&mut cfg, plugin_values);
+
+    Ok(Ok(build_shared(py, cfg, command, rootdir)?))
+}
+
 fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, ExitCode>> {
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
 
     // ── Phase 1: Core CLI parse ────────────────────────────────────
-    let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
-        Ok(pair) => pair,
+    //
+    // When plugins declare CLI extensions (e.g. `--infra-host`), Phase 1
+    // will reject them as unknown flags.  Similarly, `--help` would exit
+    // before Phase 2 adds plugin flags to the help text.
+    //
+    // Strategy: if Phase 1 fails with UnknownArgument or DisplayHelp *and*
+    // pyproject.toml has plugins configured, defer the error and proceed to
+    // Phase 2 where the extended parser may accept those flags.
+    match config::OxitestCli::resolve(&argv) {
+        Ok(_) => {} // handled below
         Err(e) => {
-            // --version and --help are display requests, not errors.
-            if e.kind() == clap::error::ErrorKind::DisplayVersion
-                || e.kind() == clap::error::ErrorKind::DisplayHelp
-                || e.kind() == clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-            {
-                print!("{}", e);
+            use clap::error::ErrorKind;
+            let is_version = e.kind() == ErrorKind::DisplayVersion;
+            let is_help = e.kind() == ErrorKind::DisplayHelp
+                || e.kind() == ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand;
+            let is_unknown = e.kind() == ErrorKind::UnknownArgument;
+
+            if is_version {
+                print!("{e}");
                 return Ok(Err(ExitCode::Success));
             }
-            eprintln!("{}", e);
+
+            if is_help || is_unknown {
+                // Check if plugins are configured — if so, try Phase 2 recovery.
+                let first_path = argv.get(1).and_then(|a| {
+                    if !a.starts_with('-') {
+                        Some(camino::Utf8Path::new(a))
+                    } else {
+                        None
+                    }
+                });
+                let rootdir = config::find_rootdir(first_path);
+                if config::has_plugins_configured(&rootdir) {
+                    return setup_with_plugin_recovery(py, &argv, e, &rootdir);
+                }
+            }
+
+            // No plugins or non-recoverable error — exit normally.
+            if is_help {
+                print!("{e}");
+                return Ok(Err(ExitCode::Success));
+            }
+            eprintln!("{e}");
             return Ok(Err(ExitCode::UsageError));
         }
-    };
+    }
+
+    // Phase 1 succeeded — normal path.
+    let (command, use_gitignore) = config::OxitestCli::resolve(&argv).unwrap();
 
     match &command {
         config::Command::Run(a) => {
@@ -273,69 +653,12 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
             // Extract plugin values from the extended matches
             if let Some(matches) = matches {
                 let plugin_values = config::cli::extract_plugin_values(&matches, &extensions);
-                if !plugin_values.is_empty() {
-                    // Merge CLI values into plugin_settings so they reach Python
-                    // via load_plugins()
-                    for (module, values) in &plugin_values {
-                        let settings_entry = cfg
-                            .features
-                            .plugin_settings
-                            .entry(module.clone())
-                            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-                        if let Some(table) = settings_entry.as_table_mut() {
-                            for (key, value) in values {
-                                table.insert(key.clone(), value.clone());
-                            }
-                        } else {
-                            tracing::warn!(
-                                module = %module,
-                                "plugin_settings entry for module is not a TOML table, skipping CLI merge"
-                            );
-                        }
-                    }
-                    cfg.features.plugin_cli_values = plugin_values;
-                }
+                merge_plugin_cli_values(&mut cfg, plugin_values);
             }
         }
     }
 
-    let cache = cache::TestCache::load(&rootdir);
-
-    let is_tty = std::io::stdout().is_terminal() && cfg.exec.mode.debug_mode().is_none();
-    let use_color = cfg
-        .output
-        .color
-        .resolve(is_tty || cfg.exec.mode.debug_mode().is_some());
-
-    crate::prescan::init_stdlib_names(py);
-
-    let python_bin = py
-        .import("sys")?
-        .getattr("executable")?
-        .extract::<String>()?;
-
-    let base =
-        reporter::ReporterOptsBuilder::from_config(&cfg, use_color).tb(cfg.output.tb.clone());
-
-    let base = if let config::Command::Run(args) = &command {
-        base.show_tips(args.tips).show_warnings(args.warnings)
-    } else {
-        base
-    };
-
-    Ok(Ok(PipelineShared {
-        cfg,
-        cache,
-        command,
-        rootdir,
-        is_tty,
-        use_color,
-        python_bin,
-        base,
-        ast_weight: None,
-        test_files: vec![],
-        conftest_files: vec![],
-    }))
+    Ok(Ok(build_shared(py, cfg, command, rootdir)?))
 }
 
 // ─── Command entry points ────────────────────────────────────────────────────

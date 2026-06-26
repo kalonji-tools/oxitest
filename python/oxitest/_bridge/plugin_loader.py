@@ -200,6 +200,56 @@ class PluginRegistry:
 
         return entry_fn()
 
+    def activate_deferred_plugins(
+        self,
+        plugin_settings_json: str,
+        cli_values_json: str,
+    ) -> None:
+        """Activate plugins with CLI extensions that were deferred during load.
+
+        Called from Rust after ``init_session()`` so that typed configs
+        (merged from pyproject + CLI + env) reach the plugin entry point.
+
+        Args:
+            plugin_settings_json: JSON dict of per-module pyproject settings.
+            cli_values_json: JSON dict of per-module CLI-provided values.
+        """
+        import json
+
+        plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
+        cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
+
+        for entry in self.entries:
+            if entry.is_loaded:
+                continue
+            if entry.module_name not in self.cli_extensions:
+                continue
+
+            pyproject_values = plugin_settings.get(entry.module_name, {})
+            plugin = self.activate_plugin(
+                entry.module_name,
+                pyproject_values=pyproject_values,
+                cli_values=cli_values.get(entry.module_name, {}),
+            )
+            entry.plugin = plugin
+            entry.is_loaded = True
+
+        # Invalidate cached protocol properties so they pick up new plugins.
+        import contextlib
+
+        for attr in (
+            "log_backends",
+            "fixture_providers",
+            "execution_wrappers",
+            "collectors",
+            "reporters",
+            "async_backends",
+            "debugger_backends",
+            "coverage_providers",
+        ):
+            with contextlib.suppress(AttributeError):
+                delattr(self, attr)
+
     def resolve_fixture_providers(self) -> list:
         """Return all fixture providers, loading deferred fixture_provider plugins."""
         providers = []

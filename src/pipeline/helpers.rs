@@ -84,12 +84,28 @@ pub(super) fn init_session(
         }
     };
 
-    if !cfg.features.plugins.is_empty()
-        && let Err(e) =
+    if !cfg.features.plugins.is_empty() {
+        if let Err(e) =
             session.load_plugins(py, &cfg.features.plugins, &cfg.features.plugin_settings)
-    {
-        let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
-        return Err(early_exit_with_error(&[err], &make_reporter));
+        {
+            let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+            return Err(early_exit_with_error(&[err], &make_reporter));
+        }
+
+        // Activate deferred plugins (those with CLI extensions that were
+        // discovered in Phase 1 but not constructed until now).
+        if let Err(e) = crate::bridge::activate_deferred_plugins(
+            py,
+            &session,
+            &cfg.features.plugin_settings,
+            &cfg.features.plugin_cli_values,
+        ) {
+            let err = crate::types::CollectError::PyError(format!(
+                "Deferred plugin activation failed: {}",
+                e
+            ));
+            return Err(early_exit_with_error(&[err], &make_reporter));
+        }
     }
 
     if let Err(e) = session.init_async_backend(py, &cfg.features.async_backend) {
