@@ -370,7 +370,7 @@ pub(crate) struct WorkerParams {
     pub show_locals: bool,
     pub show_internals: bool,
     pub tx: crossbeam_channel::Sender<WorkerResult>,
-    pub in_flight: Arc<Mutex<AHashSet<String>>>,
+    pub in_flight: Arc<parking_lot::Mutex<AHashSet<String>>>,
 }
 ```
 
