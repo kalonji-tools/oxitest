@@ -447,61 +447,61 @@ window.oxiNavPaths = {
 
 <div class="noise">
   <h1><span>oxi</span>test Architecture Map</h1>
-  <p class="subtitle">Interactive visual overview of the typestate pipeline, data structures, design patterns, and component interactions. Click any element to expand details.</p>
+  <p class="subtitle">Interactive visual overview of the pipeline, data structures, design patterns, and component interactions. Click any element to expand details.</p>
 
   <!-- ════════════════════════════════════════════════════════════ -->
   <!-- PIPELINE STAGES                                            -->
   <!-- ════════════════════════════════════════════════════════════ -->
   <h2>Pipeline Stages</h2>
-  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Each stage is a distinct Rust type. Transitions consume the current type and produce the next — calling phases out of order is a compile error.</p>
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Each stage is a variant of the PipelinePhase enum. Transitions consume the pipeline and produce a new one with the next variant — calling phases out of order triggers an unreachable! panic.</p>
 
   <div class="pipeline" id="pipeline">
     <div class="pipe-stage" data-stage="0">
       <span class="stage-idx">Phase 0</span>
       <span class="stage-name">Empty</span>
-      <span class="stage-type">Pipeline&lt;Empty&gt;</span>
+      <span class="stage-type">PipelinePhase::Empty</span>
       <span class="stage-desc">Entry point; no data yet</span>
     </div>
     <div class="pipe-stage" data-stage="1">
       <span class="stage-idx">Phase 1</span>
       <span class="stage-name">FilesCollected</span>
-      <span class="stage-type">Pipeline&lt;FilesCollected&gt;</span>
+      <span class="stage-type">PipelinePhase::FilesCollected</span>
       <span class="stage-desc">Test files and conftest files discovered via globset</span>
     </div>
     <div class="pipe-stage" data-stage="2">
       <span class="stage-idx">Phase 2</span>
       <span class="stage-name">Prescanned</span>
-      <span class="stage-type">Pipeline&lt;Prescanned&gt;</span>
+      <span class="stage-type">PipelinePhase::Prescanned</span>
       <span class="stage-desc">AST-based metadata extracted without importing Python</span>
     </div>
     <div class="pipe-stage" data-stage="3">
       <span class="stage-idx">Phase 3</span>
       <span class="stage-name">MetadataFiltered</span>
-      <span class="stage-type">Pipeline&lt;MetadataFiltered&gt;</span>
+      <span class="stage-type">PipelinePhase::MetadataFiltered</span>
       <span class="stage-desc">Modules pruned by -E query DSL before Python import</span>
     </div>
     <div class="pipe-stage" data-stage="4">
       <span class="stage-idx">Phase 4</span>
       <span class="stage-name">SessionReady</span>
-      <span class="stage-type">Pipeline&lt;SessionReady&gt;</span>
+      <span class="stage-type">PipelinePhase::SessionReady</span>
       <span class="stage-desc">FixtureSession built from conftest chain</span>
     </div>
     <div class="pipe-stage" data-stage="5">
       <span class="stage-idx">Phase 5</span>
       <span class="stage-name">Collected</span>
-      <span class="stage-type">Pipeline&lt;Collected&gt;</span>
+      <span class="stage-type">PipelinePhase::Collected</span>
       <span class="stage-desc">Python modules imported; TestItems created</span>
     </div>
     <div class="pipe-stage" data-stage="6">
       <span class="stage-idx">Phase 6</span>
       <span class="stage-name">Ready</span>
-      <span class="stage-type">Pipeline&lt;Ready&gt;</span>
+      <span class="stage-type">PipelinePhase::Ready</span>
       <span class="stage-desc">Strict validation + item-level filtering applied; ready for execution</span>
     </div>
     <div class="pipe-stage" data-stage="7">
       <span class="stage-idx">Phase 7</span>
       <span class="stage-name">Executed</span>
-      <span class="stage-type">Pipeline&lt;Executed&gt;</span>
+      <span class="stage-type">PipelinePhase::Executed</span>
       <span class="stage-desc">All tests run; results and timings collected</span>
     </div>
   </div>
@@ -595,10 +595,10 @@ window.oxiNavPaths = {
   <h2>Design Patterns</h2>
   <div class="patterns-grid">
     <div class="pattern-card">
-      <div class="pattern-name">Typestate Machine</div>
-      <div class="pattern-desc">Pipeline&lt;S&gt; is generic over a state type S. Each state implements only valid transitions — wrong-order calls are compile errors.</div>
-      <div class="pattern-impl">Pipeline&lt;Empty&gt; → Pipeline&lt;FilesCollected&gt; → ... → Pipeline&lt;Executed&gt;</div>
-      <a href="book/pipeline.html#pipeline-s-and-pipelineshared" class="pattern-link" target="_blank">Read docs &rarr;</a>
+      <div class="pattern-name">Phase Enum Machine</div>
+      <div class="pattern-desc">Pipeline holds a PipelinePhase enum. Each transition guards on the expected variant with let ... else { unreachable! } and produces the next variant.</div>
+      <div class="pattern-impl">Empty → FilesCollected → ... → Executed (variants of PipelinePhase)</div>
+      <a href="book/pipeline.html#pipeline-and-pipelineshared" class="pattern-link" target="_blank">Read docs &rarr;</a>
     </div>
     <div class="pattern-card">
       <div class="pattern-name">Trait-Based Plugin System</div>
@@ -608,8 +608,8 @@ window.oxiNavPaths = {
     </div>
     <div class="pattern-card">
       <div class="pattern-name">Strategy Pattern</div>
-      <div class="pattern-desc">ExecutionHarness trait abstracts over serial vs parallel execution. SerialHarness and ParallelHarness implement the same interface with different strategies.</div>
-      <div class="pattern-impl">trait ExecutionHarness { fn run_groups(); fn collect_results(); }</div>
+      <div class="pattern-desc">ExecutionDispatch enum abstracts over serial vs parallel execution. Serial and Parallel variants carry their own data and dispatch via match — no dynamic dispatch needed.</div>
+      <div class="pattern-impl">enum ExecutionDispatch { Serial { ... }, Parallel { ... } }</div>
       <a href="book/architecture.html#module-reference-table" class="pattern-link" target="_blank">Read docs &rarr;</a>
     </div>
     <div class="pattern-card">
@@ -649,11 +649,11 @@ window.oxiNavPaths = {
       </div>
     </div>
     <div class="trait-card">
-      <a href="book/pipeline.html#executionharness-trait" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">ExecutionHarness</span></a>
-      <span class="trait-loc">src/pipeline/traits.rs</span>
-      <div class="trait-desc">Abstraction over serial and parallel test execution strategies. The pipeline calls a single interface regardless of the chosen strategy.</div>
+      <a href="book/pipeline.html#executiondispatch-enum" target="_blank" style="text-decoration:none;color:inherit"><span class="trait-name">ExecutionDispatch</span></a>
+      <span class="trait-loc">src/pipeline/execution.rs</span>
+      <div class="trait-desc">Enum dispatching serial vs parallel test execution. Serial variant runs tests in-process; Parallel variant delegates to worker subprocesses. No dynamic dispatch needed.</div>
       <div class="trait-methods">
-        <span class="trait-method">fn run_groups(&amp;mut self, groups: Vec&lt;...&gt;) → ExecutionResults</span>
+        <span class="trait-method">fn execute_groups(&amp;mut self, groups: Vec&lt;ModuleGroup&gt;, rep: &amp;mut dyn Reporter) → PhaseResult</span>
       </div>
     </div>
     <div class="trait-card">
@@ -718,9 +718,9 @@ window.oxiNavPaths = {
 
       <!-- Pipeline -->
       <a href="book/pipeline.html" target="_blank">
-        <g class="node" data-tip="Pipeline&lt;S&gt;: Typestate pipeline orchestrator. Each state type S enforces valid transitions at compile time.">
+        <g class="node" data-tip="Pipeline: Non-generic pipeline orchestrator. PipelinePhase enum tracks the current phase at runtime.">
           <rect x="250" y="50" width="220" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
-          <text x="360" y="74" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="500">Pipeline&lt;S&gt;</text>
+          <text x="360" y="74" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="500">Pipeline</text>
         </g>
       </a>
 
@@ -796,19 +796,19 @@ window.oxiNavPaths = {
         </g>
       </a>
 
-      <!-- SerialHarness -->
-      <a href="book/pipeline.html#executionharness-trait" target="_blank">
-        <g class="node" data-tip="SerialHarness: Runs all tests in the main Python process sequentially. Used when worker_count = 0 or test count is below parallel threshold.">
+      <!-- ExecutionDispatch::Serial -->
+      <a href="book/pipeline.html#executiondispatch-enum" target="_blank">
+        <g class="node" data-tip="ExecutionDispatch::Serial: Runs all tests in the main Python process sequentially. Used when worker_count = 0 or test count is below parallel threshold.">
           <rect x="60" y="440" width="160" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
-          <text x="140" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">SerialHarness</text>
+          <text x="140" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">Serial</text>
         </g>
       </a>
 
-      <!-- ParallelHarness -->
-      <a href="book/pipeline.html#executionharness-trait" target="_blank">
-        <g class="node" data-tip="ParallelHarness: Spawns N worker subprocesses. Dispatches groups via JSON stdin, drains results from stdout with per-result watchdog timeout.">
+      <!-- ExecutionDispatch::Parallel -->
+      <a href="book/pipeline.html#executiondispatch-enum" target="_blank">
+        <g class="node" data-tip="ExecutionDispatch::Parallel: Spawns N worker subprocesses. Dispatches groups via JSON stdin, drains results from stdout with per-result watchdog timeout.">
           <rect x="280" y="440" width="180" height="40" rx="5" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
-          <text x="370" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">ParallelHarness</text>
+          <text x="370" y="464" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="500">Parallel</text>
         </g>
       </a>
 
@@ -899,19 +899,19 @@ window.oxiNavPaths = {
       <!-- Scheduler → ExecutionPlan -->
       <line x1="242" y1="360" x2="278" y2="360" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
 
-      <!-- ExecutionPlan → SerialHarness -->
+      <!-- ExecutionPlan → Serial -->
       <line x1="320" y1="382" x2="170" y2="438" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
 
-      <!-- ExecutionPlan → ParallelHarness -->
+      <!-- ExecutionPlan → Parallel -->
       <line x1="370" y1="382" x2="370" y2="438" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
 
       <!-- TestItem → Reporter -->
       <line x1="390" y1="262" x2="560" y2="348" stroke="#30363d" stroke-width="1" marker-end="url(#arrow)"/>
 
-      <!-- ParallelHarness → Worker Process -->
+      <!-- Parallel → Worker Process -->
       <line x1="370" y1="482" x2="350" y2="658" stroke="#58a6ff" stroke-width="1" marker-end="url(#arrow-blue)" stroke-dasharray="6"/>
 
-      <!-- SerialHarness → Bridge -->
+      <!-- Serial → Bridge -->
       <line x1="130" y1="482" x2="145" y2="658" stroke="#58a6ff" stroke-width="1" marker-end="url(#arrow-blue)" stroke-dasharray="6"/>
 
       <!-- Worker Process → FixtureSession -->

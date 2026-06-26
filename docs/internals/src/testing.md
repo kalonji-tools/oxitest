@@ -107,7 +107,7 @@ These rules are enforced by code review and documented in `CLAUDE.md`:
 ### Integration test anatomy
 
 ```python
-# python/tests/integration/test_int_basic.py
+# python/tests/integration/test_basic.py
 
 from conftest import helpers
 from oxitest import TempDir
@@ -264,7 +264,7 @@ Because oxitest splits built-in marker definitions between Rust
 `python/oxitest/_bridge/_mark_registry.py`), a dedicated integration test
 verifies the two sides stay in sync.
 
-The test lives at `python/tests/integration/test_int_marker_sync.py`:
+The test lives at `python/tests/integration/test_marker_sync.py`:
 
 ```python
 from oxitest._bridge._mark_registry import _BUILTIN_HANDLER_NAMES

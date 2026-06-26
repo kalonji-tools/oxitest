@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This chapter describes the high-level structure of oxitest: where code lives, why the Rust/Python boundary is drawn where it is, and how the pipeline typestate pattern enforces phase ordering at compile time.
+This chapter describes the high-level structure of oxitest: where code lives, why the Rust/Python boundary is drawn where it is, and how the pipeline uses a runtime `PipelinePhase` enum to track phase progression.
 
 > **Interactive map:** Open the [interactive architecture diagram](../architecture-map.html) for a visual, clickable overview of the pipeline, data structures, and design patterns. Each section links back to the relevant page in these docs.
 
@@ -53,20 +53,18 @@ Every `.rs` file in `src/`, with its responsibility:
 |--------|-----------|---------------|
 | `lib` | `src/lib.rs` | PyO3 module definition. Exposes `run()`, `rewrite_asserts()`, `builtin_markers()` to Python. |
 | **Pipeline** | | |
-| `pipeline` | `src/pipeline/mod.rs` | Orchestrator. Defines `Pipeline<S>`, `PipelineShared`, all state types, `setup()`, and command entry points (`run_command`, `debug_command`, `query_command`). |
-| `pipeline::phases` | `src/pipeline/phases/mod.rs` | Re-exports the 8 per-state phase modules. |
-| `pipeline::phases::empty` | `src/pipeline/phases/empty.rs` | `Pipeline<Empty>` transitions: `collect_files()`. |
-| `pipeline::phases::files_collected` | `src/pipeline/phases/files_collected.rs` | `Pipeline<FilesCollected>` transitions: `affected()`, `prescan()`, `session()` (query fast-path). |
-| `pipeline::phases::prescanned` | `src/pipeline/phases/prescanned.rs` | `Pipeline<Prescanned>` transitions: `filter_metadata()`. |
-| `pipeline::phases::metadata_filtered` | `src/pipeline/phases/metadata_filtered.rs` | `Pipeline<MetadataFiltered>` transitions: `session()`. |
-| `pipeline::phases::session_ready` | `src/pipeline/phases/session_ready.rs` | `Pipeline<SessionReady>` transitions: `collect()`. |
-| `pipeline::phases::collected` | `src/pipeline/phases/collected.rs` | `Pipeline<Collected>` transitions: `validate()`, `strict_or_skip()`. |
-| `pipeline::phases::ready` | `src/pipeline/phases/ready.rs` | `Pipeline<Ready>` transitions: `execute()`. |
-| `pipeline::phases::executed` | `src/pipeline/phases/executed.rs` | `Pipeline<Executed>` transitions: `retry()`, `finalize()`. |
+| `pipeline` | `src/pipeline/mod.rs` | Orchestrator. Defines `Pipeline`, `PipelineShared`, `PipelinePhase` enum, `setup()`, and command entry points (`run_command`, `debug_command`, `query_command`). |
+| `pipeline::transitions` | `src/pipeline/transitions/mod.rs` | Shared helpers and re-exports for the 7 per-phase transition modules. |
+| `pipeline::transitions::empty` | `src/pipeline/transitions/empty.rs` | Transitions from `PipelinePhase::Empty`: `collect_files()`. |
+| `pipeline::transitions::files_collected` | `src/pipeline/transitions/files_collected.rs` | Transitions from `PipelinePhase::FilesCollected`: `affected()`, `prescan()`, `session()` (query fast-path). |
+| `pipeline::transitions::prescanned` | `src/pipeline/transitions/prescanned.rs` | Transitions from `PipelinePhase::Prescanned`: `filter_metadata()`. |
+| `pipeline::transitions::session_ready` | `src/pipeline/transitions/session_ready.rs` | Transitions from `PipelinePhase::SessionReady`: `collect()`. |
+| `pipeline::transitions::collected` | `src/pipeline/transitions/collected.rs` | Transitions from `PipelinePhase::Collected`: `validate()`, `strict_or_skip()`. |
+| `pipeline::transitions::ready` | `src/pipeline/transitions/ready.rs` | Transitions from `PipelinePhase::Ready`: `execute()`. |
+| `pipeline::transitions::executed` | `src/pipeline/transitions/executed.rs` | Transitions from `PipelinePhase::Executed`: `retry()`, `finalize()`. |
 | `pipeline::arrange` | `src/pipeline/arrange.rs` | `ExecutionPlan` value object and `plan_execution()`. Partitions groups into inprocess, arranged (shared fixtures), and parallel. |
-| `pipeline::traits` | `src/pipeline/traits.rs` | `ExecutionHarness` trait -- abstraction over serial/parallel execution. |
 | `pipeline::collection` | `src/pipeline/collection.rs` | Collection helpers and `CollectionProfile`. |
-| `pipeline::execution` | `src/pipeline/execution.rs` | Dispatches test execution based on `ExecutionPlan`. |
+| `pipeline::execution` | `src/pipeline/execution.rs` | `ExecutionDispatch` enum -- serial vs. parallel execution dispatch without dynamic dispatch. Replaces the former `ExecutionHarness` trait. |
 | `pipeline::helpers` | `src/pipeline/helpers.rs` | Utility functions (e.g., `env_string()`). |
 | **Config** | | |
 | `config` | `src/config/mod.rs` | `Config` struct, `Command` enum, `Verbosity`, `WorkerCount`, `find_rootdir()`, `compute_optimal_workers()`. |
@@ -134,38 +132,38 @@ Every `.rs` file in `src/`, with its responsibility:
 | `edit_distance` | `src/edit_distance.rs` | Levenshtein distance for "did you mean?" suggestions. |
 | `parallel_context` | `src/parallel_context.rs` | `ParallelContext` -- worker ID and concurrent test list attached to failure output. |
 
-## Pipeline typestate
+## Pipeline phase enum
 
-The pipeline uses a **typestate pattern** to enforce phase ordering at compile time. `Pipeline<S>` is generic over a state type `S`; each state implements only the transitions that are valid from that state. Calling transitions in the wrong order is a compile error -- there is no runtime phase tracking.
+The pipeline uses a **runtime `PipelinePhase` enum** to track its current phase. `Pipeline` is a non-generic struct holding `shared: PipelineShared` and `phase: PipelinePhase`. Each transition method consumes the `Pipeline`, destructures the expected `PipelinePhase` variant with a `let ... else { unreachable!(...) }` guard, and returns a new `Pipeline` with the next phase variant.
 
-### State types
+### Phase variants
 
-All state types are defined in `src/pipeline/mod.rs`:
+`PipelinePhase` is defined in `src/pipeline/mod.rs`:
 
-| State | Holds | Transition |
-|-------|-------|-----------|
+| Variant | Holds | Transition |
+|---------|-------|-----------|
 | `Empty` | Nothing | `collect_files()` |
 | `FilesCollected` | (unit -- files live in `PipelineShared`) | `affected()`, `prescan()`, `session()` (query path) |
 | `Prescanned` | `prescan_data`, `module_markers` | `filter_metadata()` |
 | `MetadataFiltered` | `modules_to_import` | `session()` |
-| `SessionReady` | `FixtureSession`, violations | `collect()` |
+| `SessionReady` | `session`, `session_violations` | `collect()` |
 | `Collected` | `session`, `items`, `raw_violations` | `validate()`, `strict_or_skip()` |
 | `Ready` | `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `execute()` |
 | `Executed` | `session`, `items`, `execution_results` | `retry()`, `finalize()` |
 
 ### PipelineShared and Deref
 
-`Pipeline<S>` holds two fields: `shared: PipelineShared` and `state: S`. `PipelineShared` contains data that lives across all states -- the `Config`, `TestCache`, root directory, reporter options, and the resolved Python binary path.
+`Pipeline` holds two fields: `shared: PipelineShared` and `phase: PipelinePhase`. `PipelineShared` contains data that lives across all phases -- the `Config`, `TestCache`, root directory, reporter options, and the resolved Python binary path.
 
-`Pipeline<S>` implements `Deref<Target = PipelineShared>` and `DerefMut`, so phase methods can access shared fields directly through `self` without `self.shared.`:
+`Pipeline` implements `Deref<Target = PipelineShared>` and `DerefMut`, so transition methods can access shared fields directly through `self` without `self.shared.`:
 
 ```rust
-pub(crate) struct Pipeline<S> {
+pub(crate) struct Pipeline {
     pub(crate) shared: PipelineShared,
-    pub(crate) state: S,
+    pub(crate) phase: PipelinePhase,
 }
 
-impl<S> std::ops::Deref for Pipeline<S> {
+impl std::ops::Deref for Pipeline {
     type Target = PipelineShared;
     fn deref(&self) -> &PipelineShared {
         &self.shared
@@ -173,27 +171,30 @@ impl<S> std::ops::Deref for Pipeline<S> {
 }
 ```
 
-### Compile-time enforcement
+### Runtime phase guards
 
-Each transition consumes `Pipeline<CurrentState>` and produces `Result<Pipeline<NextState>, ExitCode>`. The consuming move means the old state is gone -- you cannot accidentally use a pipeline in the wrong state:
+Each transition consumes `Pipeline` and produces `Result<Pipeline, ExitCode>`. The transition destructures the expected `PipelinePhase` variant at runtime with a `let ... else { unreachable! }` guard:
 
 ```rust
-// In src/pipeline/phases/empty.rs
-impl Pipeline<Empty> {
-    pub(crate) fn collect_files(self) -> Result<Pipeline<FilesCollected>, ExitCode> {
+// In src/pipeline/transitions/empty.rs
+impl Pipeline {
+    pub(crate) fn collect_files(self) -> Result<Pipeline, ExitCode> {
+        let PipelinePhase::Empty = self.phase else {
+            unreachable!("collect_files called outside Empty phase");
+        };
         // ... discovers files ...
     }
 }
 ```
 
-A call like `pipeline.prescan()` on a `Pipeline<Empty>` would fail to compile because `Pipeline<Empty>` has no `prescan()` method -- only `Pipeline<FilesCollected>` does.
+Phase ordering is enforced by convention and by the `unreachable!` guards -- calling a transition in the wrong phase panics at runtime rather than failing at compile time. The sequential call chain in each command function makes incorrect ordering easy to spot in code review.
 
 ### The run chain
 
 The `run_command()` function in `src/pipeline/mod.rs` shows the full chain:
 
 ```rust
-fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+fn run_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
     let p = p.prescan()?;
@@ -209,4 +210,4 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
 }
 ```
 
-Each `let p = ...` rebinds `p` to a new type. The compiler verifies the entire chain at build time. Alternative command paths (debug, query) use different subsets of the same transitions.
+Each `let p = ...` rebinds `p` to the same `Pipeline` type with a different `PipelinePhase` variant inside. Alternative command paths (debug, query) use different subsets of the same transitions.
