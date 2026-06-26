@@ -1,6 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
-mod cli;
+pub(crate) mod cli;
 pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, QueryFormat, RunArgs};
 
 mod merge;
@@ -388,7 +388,6 @@ pub struct FeatureConfig {
     /// Maximum age (in days) before a cache entry is evicted.
     pub cache_max_age: u32,
     /// Plugin CLI values extracted from parsed command-line args.
-    #[allow(dead_code)] // Infrastructure for future two-phase CLI parsing (#1018)
     pub plugin_cli_values:
         std::collections::HashMap<String, std::collections::HashMap<String, toml::Value>>,
 }
@@ -409,7 +408,6 @@ impl Default for FeatureConfig {
 
 /// CLI option descriptor extracted from a Python plugin's config dataclass.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
 pub struct PluginCliOption {
     pub field_name: String,
     pub long_flag: String,
@@ -417,11 +415,14 @@ pub struct PluginCliOption {
     pub help: String,
     pub value_type: PluginValueType,
     pub env: Option<String>,
+    #[expect(
+        dead_code,
+        reason = "populated by bridge for future required-arg validation"
+    )]
     pub has_default: bool,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
 pub enum PluginValueType {
     String,
     Bool,
@@ -431,7 +432,6 @@ pub enum PluginValueType {
 
 /// All CLI extensions declared by plugins, keyed by module name.
 #[derive(Debug, Default)]
-#[allow(dead_code)] // Used in tests and bridge; wired into setup() in a follow-up (#1018)
 pub struct PluginCliExtensions {
     /// (prefix, options) per plugin module.
     pub plugins: std::collections::HashMap<String, (String, Vec<PluginCliOption>)>,

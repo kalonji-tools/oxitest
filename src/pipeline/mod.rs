@@ -137,11 +137,29 @@ impl PipelineShared {
     }
 }
 
+/// Validate that no two plugins claim the same CLI prefix.
+///
+/// Returns `Err` with a human-readable message if duplicate prefixes are found.
+fn validate_prefix_uniqueness(extensions: &config::PluginCliExtensions) -> Result<(), String> {
+    let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for (module, (prefix, _)) in &extensions.plugins {
+        if let Some(existing) = seen.get(prefix.as_str()) {
+            return Err(format!(
+                "plugin CLI prefix conflict: plugins '{}' and '{}' both use prefix '{}'",
+                existing, module, prefix
+            ));
+        }
+        seen.insert(prefix.as_str(), module.as_str());
+    }
+    Ok(())
+}
+
 fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, ExitCode>> {
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
 
+    // ── Phase 1: Core CLI parse ────────────────────────────────────
     let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
         Ok(pair) => pair,
         Err(e) => {
@@ -206,6 +224,79 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     let mut cfg = cfg;
     if !use_gitignore {
         cfg.paths.use_gitignore = false;
+    }
+
+    // ── Phase 2: Plugin CLI extension discovery ──────────────────────
+    if !cfg.features.plugins.is_empty() {
+        let extensions =
+            bridge::discover_plugin_cli(py, &cfg.features.plugins, &cfg.features.plugin_settings)?;
+
+        if !extensions.plugins.is_empty() {
+            // Validate prefix uniqueness across plugins
+            if let Err(msg) = validate_prefix_uniqueness(&extensions) {
+                eprintln!("error: {msg}");
+                return Ok(Err(ExitCode::UsageError));
+            }
+
+            // Build extended clap Command with plugin args
+            use clap::CommandFactory;
+            let base_cmd = config::OxitestCli::command();
+            let extended_cmd = config::cli::add_plugin_args(base_cmd, &extensions);
+
+            // Re-parse the original argv with the extended parser
+            let matches = match extended_cmd.try_get_matches_from(&argv) {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    use clap::error::ErrorKind;
+                    match e.kind() {
+                        // Benign: unknown args may belong to core clap parse
+                        // which already succeeded in Phase 1.
+                        ErrorKind::UnknownArgument
+                        | ErrorKind::InvalidSubcommand
+                        | ErrorKind::DisplayHelp
+                        | ErrorKind::DisplayVersion => {
+                            tracing::debug!(
+                                error = %e,
+                                "Phase 2 plugin CLI parse encountered non-fatal error, skipping"
+                            );
+                            None
+                        }
+                        // User-facing errors: missing value, wrong type, etc.
+                        _ => {
+                            eprintln!("{e}");
+                            return Ok(Err(ExitCode::UsageError));
+                        }
+                    }
+                }
+            };
+
+            // Extract plugin values from the extended matches
+            if let Some(matches) = matches {
+                let plugin_values = config::cli::extract_plugin_values(&matches, &extensions);
+                if !plugin_values.is_empty() {
+                    // Merge CLI values into plugin_settings so they reach Python
+                    // via load_plugins()
+                    for (module, values) in &plugin_values {
+                        let settings_entry = cfg
+                            .features
+                            .plugin_settings
+                            .entry(module.clone())
+                            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+                        if let Some(table) = settings_entry.as_table_mut() {
+                            for (key, value) in values {
+                                table.insert(key.clone(), value.clone());
+                            }
+                        } else {
+                            tracing::warn!(
+                                module = %module,
+                                "plugin_settings entry for module is not a TOML table, skipping CLI merge"
+                            );
+                        }
+                    }
+                    cfg.features.plugin_cli_values = plugin_values;
+                }
+            }
+        }
     }
 
     let cache = cache::TestCache::load(&rootdir);
@@ -374,6 +465,43 @@ pub(crate) fn format_fixture_errors(
         messages.push(msg);
     }
     format!("ERROR collecting tests\n{}", messages.join("\n"))
+}
+
+#[cfg(test)]
+mod prefix_uniqueness_tests {
+    use super::*;
+
+    fn make_extensions(entries: Vec<(&str, &str)>) -> config::PluginCliExtensions {
+        let mut plugins = std::collections::HashMap::new();
+        for (module, prefix) in entries {
+            plugins.insert(module.to_string(), (prefix.to_string(), vec![]));
+        }
+        config::PluginCliExtensions { plugins }
+    }
+
+    #[test]
+    fn unique_prefixes_pass_validation() {
+        let ext = make_extensions(vec![("plugin_a", "alpha"), ("plugin_b", "beta")]);
+        assert!(
+            validate_prefix_uniqueness(&ext).is_ok(),
+            "distinct prefixes should not conflict"
+        );
+    }
+
+    #[test]
+    fn duplicate_prefixes_return_error_with_both_modules() {
+        let ext = make_extensions(vec![("plugin_a", "shared"), ("plugin_b", "shared")]);
+        let err =
+            validate_prefix_uniqueness(&ext).expect_err("duplicate prefix should be rejected");
+        assert!(
+            err.contains("plugin_a") && err.contains("plugin_b"),
+            "error message should name both conflicting modules, got: {err}"
+        );
+        assert!(
+            err.contains("shared"),
+            "error message should name the conflicting prefix, got: {err}"
+        );
+    }
 }
 
 #[cfg(test)]

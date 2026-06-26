@@ -669,7 +669,7 @@ impl DebugArgs {
 
 #[cfg(test)]
 impl QueryArgs {
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "test helper not yet exercised by any test")]
     pub fn default_for_test() -> Self {
         OxitestCli::try_parse_from(["oxitest", "query", "tests"])
             .expect("default QueryArgs must parse")
@@ -1246,7 +1246,6 @@ mod tests {
 // ── Plugin CLI extension helpers ─────────────────────────────────────────────
 
 /// Append plugin-declared CLI args to an existing clap Command.
-#[allow(dead_code)] // Used in tests; wired into setup() in a follow-up (#1018)
 pub fn add_plugin_args(
     mut cmd: clap::Command,
     extensions: &super::PluginCliExtensions,
@@ -1286,7 +1285,6 @@ pub fn add_plugin_args(
 }
 
 /// Extract plugin CLI values from parsed matches.
-#[allow(dead_code)] // Used in tests; wired into setup() in a follow-up (#1018)
 pub fn extract_plugin_values(
     matches: &clap::ArgMatches,
     extensions: &super::PluginCliExtensions,
@@ -1303,7 +1301,21 @@ pub fn extract_plugin_values(
                         values.insert(opt.field_name.clone(), toml::Value::Boolean(true));
                     }
                 }
-                _ => {
+                super::PluginValueType::Int => {
+                    if let Some(s) = matches.get_one::<String>(&id)
+                        && let Ok(n) = s.parse::<i64>()
+                    {
+                        values.insert(opt.field_name.clone(), toml::Value::Integer(n));
+                    }
+                }
+                super::PluginValueType::Float => {
+                    if let Some(s) = matches.get_one::<String>(&id)
+                        && let Ok(n) = s.parse::<f64>()
+                    {
+                        values.insert(opt.field_name.clone(), toml::Value::Float(n));
+                    }
+                }
+                super::PluginValueType::String => {
                     if let Some(val) = matches.get_one::<String>(&id) {
                         values.insert(opt.field_name.clone(), toml::Value::String(val.clone()));
                     }
