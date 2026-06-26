@@ -426,7 +426,6 @@ pub fn stop_and_report_coverage(
 
 /// Phase 1: Import plugin modules and read oxitest_cli_extension attributes.
 /// Returns CLI option descriptors for dynamic clap building.
-#[allow(dead_code)] // Wired into setup() in a follow-up (#1018)
 pub fn discover_plugin_cli(
     py: Python<'_>,
     plugins: &[String],
