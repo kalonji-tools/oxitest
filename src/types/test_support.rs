@@ -39,12 +39,6 @@ impl TestItemBuilder {
         self
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn param_values(mut self, pv: Vec<ParamPair>) -> Self {
-        self.param_values = pv;
-        self
-    }
-
     pub(crate) fn async_fn(mut self, val: bool) -> Self {
         self.is_async = val;
         self
@@ -134,23 +128,12 @@ impl FailedOutcomeBuilder {
         self.left = l.to_string();
         self
     }
-    #[allow(dead_code)]
-    pub(crate) fn right(mut self, r: &str) -> Self {
-        self.right = r.to_string();
-        self
-    }
-    #[allow(dead_code)]
     pub(crate) fn op(mut self, o: &str) -> Self {
         self.op = o.to_string();
         self
     }
     pub(crate) fn frames(mut self, f: Vec<Frame>) -> Self {
         self.frames = f;
-        self
-    }
-    #[allow(dead_code)]
-    pub(crate) fn field_diffs(mut self, d: Vec<FieldDiff>) -> Self {
-        self.field_diffs = d;
         self
     }
     pub(crate) fn build(self) -> TestOutcome {
