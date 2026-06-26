@@ -514,8 +514,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     // Strategy: if Phase 1 fails with UnknownArgument or DisplayHelp *and*
     // pyproject.toml has plugins configured, defer the error and proceed to
     // Phase 2 where the extended parser may accept those flags.
-    match config::OxitestCli::resolve(&argv) {
-        Ok(_) => {} // handled below
+    let (command, use_gitignore) = match config::OxitestCli::resolve(&argv) {
+        Ok(result) => result,
         Err(e) => {
             use clap::error::ErrorKind;
             let is_version = e.kind() == ErrorKind::DisplayVersion;
@@ -551,10 +551,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
             eprintln!("{e}");
             return Ok(Err(ExitCode::UsageError));
         }
-    }
-
-    // Phase 1 succeeded — normal path.
-    let (command, use_gitignore) = config::OxitestCli::resolve(&argv).unwrap();
+    };
 
     match &command {
         config::Command::Run(a) => {
