@@ -310,12 +310,14 @@ pub(crate) fn validate_fixture_names(
         .map(|item| {
             let dict = pyo3::types::PyDict::new(py);
             let nid: &str = &item.node_id;
-            dict.set_item("node_id", nid).unwrap();
-            dict.set_item("fixture_names", &item.fixture_names).unwrap();
-            dict.set_item("fixref_names", &item.fixref_names).unwrap();
-            dict
+            dict.set_item("node_id", nid).map_err(py_collect_err)?;
+            dict.set_item("fixture_names", &item.fixture_names)
+                .map_err(py_collect_err)?;
+            dict.set_item("fixref_names", &item.fixref_names)
+                .map_err(py_collect_err)?;
+            Ok(dict)
         })
-        .collect();
+        .collect::<Result<Vec<_>, CollectError>>()?;
 
     let items_list = pyo3::types::PyList::new(py, &dicts).map_err(py_collect_err)?;
 
