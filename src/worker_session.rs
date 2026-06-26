@@ -154,7 +154,7 @@ pub(crate) struct WorkerParams {
     /// Channel for sending results back to the coordinator.
     pub tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
     /// Set of node IDs currently executing across all workers.
-    pub in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>>,
+    pub in_flight: std::sync::Arc<parking_lot::Mutex<ahash::AHashSet<String>>>,
 }
 
 /// Runs the task-dispatch loop for a single worker.
@@ -244,7 +244,7 @@ fn run_worker_loop(
         }
 
         {
-            let mut set = in_flight.lock().unwrap();
+            let mut set = in_flight.lock();
             for item in &group.items {
                 set.insert(item.node_id.to_string());
             }
