@@ -18,7 +18,6 @@ pub struct ReporterOpts {
     pub(crate) show_tips: bool,
     pub(crate) show_warnings: bool,
     pub(crate) show_locals: bool,
-    // Reserved for future use (e.g., --show-internals flag display in other reporters)
     #[allow(dead_code)]
     pub(crate) show_internals: bool,
     pub(crate) verbosity: Verbosity,
@@ -136,22 +135,6 @@ impl ReporterOptsBuilder {
 
     pub fn tb(self, tb: crate::config::TbStyle) -> Self {
         Self { tb, ..self }
-    }
-
-    #[allow(dead_code)]
-    pub fn show_locals(self, v: bool) -> Self {
-        Self {
-            show_locals: v,
-            ..self
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn show_internals(self, v: bool) -> Self {
-        Self {
-            show_internals: v,
-            ..self
-        }
     }
 
     pub fn strict_suite_lines(self, lines: Vec<String>) -> Self {
