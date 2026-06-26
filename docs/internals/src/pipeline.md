@@ -1,8 +1,10 @@
 # Pipeline Deep Dive
 
-The oxitest pipeline uses a **typestate pattern** to enforce phase ordering at compile time.
-Every pipeline stage is a distinct Rust type, and each transition method consumes one type
-to produce the next. Calling phases out of order is a compile error, not a runtime bug.
+The oxitest pipeline uses a **runtime `PipelinePhase` enum** to track its current phase.
+`Pipeline` is a non-generic struct; each transition method consumes the pipeline, guards on
+the expected `PipelinePhase` variant with `let ... else { unreachable!(...) }`, and returns
+a new `Pipeline` with the next variant. Calling phases out of order triggers a runtime panic
+via the `unreachable!` guard.
 
 This chapter covers the mechanics in enough detail that you can add a new phase yourself.
 
@@ -28,12 +30,12 @@ Each chains a different subset of phases.
 | `query()`          | `SessionReady` -> `ExitCode`         |   -   |    -    |           4            |          -           |
 | `query_without_session()` | `FilesCollected` -> `ExitCode` |   -   |    -    |           -            |          3           |
 
-**\*** The `query` command skips `prescan` and `filter_metadata`. When it needs a session (for fixture/plugin queries or `--tree`), it calls `session()` directly on `FilesCollected` -- note there is a separate `session()` impl on `Pipeline<FilesCollected>` in `files_collected.rs`. When it does not need a session, it calls `query_without_session()` and never enters the Python runtime for session setup.
+**\*** The `query` command skips `prescan` and `filter_metadata`. When it needs a session (for fixture/plugin queries or `--tree`), it calls `session()` directly from `FilesCollected` -- note there is a separate `session()` transition guarded by `PipelinePhase::FilesCollected` in `files_collected.rs`. When it does not need a session, it calls `query_without_session()` and never enters the Python runtime for session setup.
 
 Here is the exact code from `run_command`:
 
 ```rust
-fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+fn run_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
     let p = p.prescan()?;
@@ -55,7 +57,7 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
 ```rust
 fn query_command(
     py: Python<'_>,
-    pipeline: Pipeline<Empty>,
+    pipeline: Pipeline,
     needs_session: bool,
 ) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
@@ -69,23 +71,22 @@ fn query_command(
 }
 ```
 
-## Pipeline\<S\> and PipelineShared
+## Pipeline and PipelineShared
 
 The core type is a two-field struct:
 
 ```rust
-pub(crate) struct Pipeline<S> {
+pub(crate) struct Pipeline {
     pub(crate) shared: PipelineShared,
-    pub(crate) state: S,
+    pub(crate) phase: PipelinePhase,
 }
 ```
 
-`S` is the typestate marker (e.g., `Empty`, `FilesCollected`, `Prescanned`, ...).
-Each state type is a plain struct holding the data produced by the phase that created it.
+`PipelinePhase` is a runtime enum whose variants carry per-phase data (see below).
 
 ### PipelineShared
 
-`PipelineShared` carries data that lives for the entire pipeline run, regardless of which state the pipeline is in:
+`PipelineShared` carries data that lives for the entire pipeline run, regardless of which phase the pipeline is in:
 
 ```rust
 pub(crate) struct PipelineShared {
@@ -117,19 +118,19 @@ pub(crate) struct PipelineShared {
 | `test_files`    | Discovered test file paths (persists across all phases) |
 | `conftest_files`| Discovered conftest.py paths (persists across all phases) |
 
-**Deref trick.** `Pipeline<S>` implements `Deref<Target = PipelineShared>` and `DerefMut`, so
+**Deref trick.** `Pipeline` implements `Deref<Target = PipelineShared>` and `DerefMut`, so
 you can write `pipeline.cfg`, `pipeline.cache`, `pipeline.rootdir`, etc. directly on a
-`Pipeline<AnyState>` without going through `.shared`:
+`Pipeline` without going through `.shared`:
 
 ```rust
-impl<S> std::ops::Deref for Pipeline<S> {
+impl std::ops::Deref for Pipeline {
     type Target = PipelineShared;
     fn deref(&self) -> &PipelineShared {
         &self.shared
     }
 }
 
-impl<S> std::ops::DerefMut for Pipeline<S> {
+impl std::ops::DerefMut for Pipeline {
     fn deref_mut(&mut self) -> &mut PipelineShared {
         &mut self.shared
     }
@@ -137,42 +138,35 @@ impl<S> std::ops::DerefMut for Pipeline<S> {
 ```
 
 This keeps phase code concise. For example, `self.cfg.strict` reads the config through Deref,
-while `self.state.items` accesses state-specific data directly.
+while phase-specific data is accessed by destructuring the `PipelinePhase` variant.
 
 ### Transition helpers
 
-Two methods facilitate state transitions:
+One method facilitates phase transitions:
 
 ```rust
-// Decompose Pipeline<S> into its shared half and state half.
-impl<S> Pipeline<S> {
-    fn into_parts(self) -> (PipelineShared, S) {
-        (self.shared, self.state)
-    }
-}
-
-// Wrap shared state back into a Pipeline with a new state type.
-impl PipelineShared {
-    fn into_pipeline<T>(self, state: T) -> Pipeline<T> {
-        Pipeline { shared: self, state }
+// Decompose Pipeline into its shared half and phase half.
+impl Pipeline {
+    fn into_parts(self) -> (PipelineShared, PipelinePhase) {
+        (self.shared, self.phase)
     }
 }
 ```
 
-Every phase follows the same three-step pattern:
+Every transition follows the same three-step pattern:
 
-1. Call `self.into_parts()` to consume the current pipeline and get `(shared, old_state)`.
-2. Destructure `old_state` to extract what the next state needs, do the work.
-3. Call `shared.into_pipeline(NewState { ... })` to produce the next pipeline.
+1. Call `self.into_parts()` to consume the current pipeline and get `(shared, phase)`.
+2. Guard on the expected `PipelinePhase` variant with `let ... else { unreachable!(...) }`, destructure its fields, and do the work.
+3. Construct a new `Pipeline { shared, phase: PipelinePhase::NextVariant { ... } }`.
 
-## The State Types
+## The PipelinePhase Enum
 
-Each state type lives in `src/pipeline/mod.rs` and is a plain `pub(crate) struct`. Here is the full chain:
+All phase variants are defined in `src/pipeline/mod.rs` as variants of a single `pub(crate) enum PipelinePhase`. Each variant carries the data that was previously held by separate typestate structs:
 
-| State              | Key fields                                           | Created by          |
+| Variant            | Key fields                                           | Created by          |
 |--------------------|------------------------------------------------------|---------------------|
-| `Empty`            | (unit struct -- no fields)                            | `run()`             |
-| `FilesCollected`   | (unit struct -- `test_files`/`conftest_files` live in `PipelineShared`) | `collect_files()` |
+| `Empty`            | (unit -- no fields)                                   | `run()`             |
+| `FilesCollected`   | (unit -- `test_files`/`conftest_files` live in `PipelineShared`) | `collect_files()` |
 | `Prescanned`       | `prescan_data`, `module_markers`                     | `prescan()`         |
 | `MetadataFiltered` | `modules_to_import`                                  | `filter_metadata()` |
 | `SessionReady`     | `session`, `session_violations`                      | `session()`         |
@@ -180,32 +174,31 @@ Each state type lives in `src/pipeline/mod.rs` and is a plain `pub(crate) struct
 | `Ready`            | `session`, `clean_items`, `violated_items`, `all_violations`, `suite_lines` | `strict_or_skip()` |
 | `Executed`         | `session`, `items`, `execution_results`              | `execute()`         |
 
-## Phase Files
+## Transition Files
 
-Each phase is implemented in its own file under `src/pipeline/phases/`:
+Each transition is implemented in its own file under `src/pipeline/transitions/`:
 
 ```
-src/pipeline/phases/
-  mod.rs                 -- re-exports all phase modules
-  empty.rs               -- Pipeline<Empty>::collect_files()
-  files_collected.rs     -- Pipeline<FilesCollected>::affected(), prescan(),
+src/pipeline/transitions/
+  mod.rs                 -- shared helpers and module declarations
+  empty.rs               -- from Empty: collect_files()
+  files_collected.rs     -- from FilesCollected: affected(), prescan(),
                             session(), query_without_session()
-  prescanned.rs          -- Pipeline<Prescanned>::filter_metadata()
-  metadata_filtered.rs   -- Pipeline<MetadataFiltered>::session()
-  session_ready.rs       -- Pipeline<SessionReady>::collect(), query()
-  collected.rs           -- Pipeline<Collected>::validate(), strict_or_skip()
-  ready.rs               -- Pipeline<Ready>::execute()
-  executed.rs            -- Pipeline<Executed>::retry(), finalize()
+  prescanned.rs          -- from Prescanned: filter_metadata()
+  session_ready.rs       -- from SessionReady: collect(), query()
+  collected.rs           -- from Collected: validate(), strict_or_skip()
+  ready.rs               -- from Ready: execute()
+  executed.rs            -- from Executed: retry(), finalize()
 ```
 
-The convention is that the file is named after the **input state**, not the output state. For
+The convention is that the file is named after the **input phase**, not the output phase. For
 example, `empty.rs` contains the transition *from* `Empty` (to `FilesCollected`).
 
-Some states have multiple methods. `files_collected.rs` defines four methods on
-`Pipeline<FilesCollected>`: `affected()`, `prescan()`, `session()`, and
-`query_without_session()`. The `session()` on `FilesCollected` is a shortcut used by the
-`query` command to skip the prescan/filter_metadata phases, while `metadata_filtered.rs`
-defines the `session()` used by the `run` and `debug` commands.
+Some phases have multiple methods. `files_collected.rs` defines four methods on
+`Pipeline` guarded by `PipelinePhase::FilesCollected`: `affected()`, `prescan()`, `session()`,
+and `query_without_session()`. The `session()` from `FilesCollected` is a shortcut used by the
+`query` command to skip the prescan/filter_metadata phases, while `prescanned.rs`'s
+`filter_metadata()` feeds into the `session()` used by the `run` and `debug` commands.
 
 ## How Phases Skip or Abort
 
@@ -216,21 +209,23 @@ Phases do not use a "skip me" flag or Option wrapper. Instead, the codebase uses
 When a phase is conditional and the condition is not met, it returns the pipeline unchanged
 in the same state type. The caller does not know it was a no-op.
 
-**Example -- `affected()`** returns `Result<Pipeline<FilesCollected>, ExitCode>` regardless:
+**Example -- `affected()`** returns `Result<Pipeline, ExitCode>` with `PipelinePhase::FilesCollected` regardless:
 
 ```rust
-impl Pipeline<FilesCollected> {
-    pub(crate) fn affected(mut self) -> Result<Pipeline<FilesCollected>, ExitCode> {
+impl Pipeline {
+    pub(crate) fn affected(mut self) -> Result<Pipeline, ExitCode> {
+        let PipelinePhase::FilesCollected = self.phase else {
+            unreachable!("affected called outside FilesCollected phase");
+        };
         if let Some(base_ref) = self.cfg.affected.as_ref() {
             // ... filter test files based on git diff ...
-            self.state.test_files = files;
         }
-        Ok(self) // Same type whether or not --affected was active
+        Ok(self) // Same phase whether or not --affected was active
     }
 }
 ```
 
-`validate()` (returns `Pipeline<Collected>`) and `retry()` (returns `Pipeline<Executed>`)
+`validate()` (stays in `Collected`) and `retry()` (stays in `Executed`)
 use the same pattern.
 
 ### Pattern 2: Pass through empty data
@@ -243,19 +238,22 @@ strict mode is off, it passes all items through as `clean_items` with empty viol
 
 ```rust
 if shared.cfg.strict.is_none() {
-    return Ok(shared.into_pipeline(Ready {
-        session,
-        clean_items: items,
-        violated_items: vec![],    // nothing violated
-        all_violations: vec![],    // no violations
-        suite_lines: vec![],       // no strict lines
-    }));
+    return Ok(Pipeline {
+        shared,
+        phase: PipelinePhase::Ready {
+            session,
+            clean_items: items,
+            violated_items: vec![],    // nothing violated
+            all_violations: vec![],    // no violations
+            suite_lines: vec![],       // no strict lines
+        },
+    });
 }
 ```
 
 ### Pattern 3: Early abort via Err(ExitCode)
 
-All phase methods return `Result<Pipeline<NextState>, ExitCode>`. When a phase needs to abort
+All transition methods return `Result<Pipeline, ExitCode>`. When a phase needs to abort
 the pipeline entirely, it returns `Err(ExitCode::...)`:
 
 ```rust
@@ -347,55 +345,65 @@ the test suite in `arrange.rs` exercises it extensively).
 Suppose you want to add a `Linted` phase between `Collected` and `Ready` that runs a
 lint pass over collected items.
 
-### Step 1: Define the state type
+### Step 1: Add a variant to PipelinePhase
 
-In `src/pipeline/mod.rs`, add a new struct alongside the existing state types:
+In `src/pipeline/mod.rs`, add a new variant to the `PipelinePhase` enum:
 
 ```rust
-pub(crate) struct Linted {
-    pub(crate) session: bridge::FixtureSession,
-    pub(crate) items: Vec<Arc<types::TestItem>>,
-    pub(crate) raw_violations: Vec<bridge::RawViolation>,
-    pub(crate) lint_warnings: Vec<String>,
+pub(crate) enum PipelinePhase {
+    // ...existing variants...
+    /// Lint pass complete; holds lint warnings alongside collected data.
+    Linted {
+        session: bridge::FixtureSession,
+        items: Vec<Arc<types::TestItem>>,
+        raw_violations: Vec<bridge::RawViolation>,
+        lint_warnings: Vec<String>,
+    },
 }
 ```
 
 ### Step 2: Add the transition method
 
-The convention is that transition methods live in the phase file named after the **input state**.
-Since this transition consumes `Collected`, add it to `src/pipeline/phases/collected.rs`:
+The convention is that transition methods live in the file named after the **input phase**.
+Since this transition starts from `Collected`, add it to `src/pipeline/transitions/collected.rs`:
 
 ```rust
-impl Pipeline<Collected> {
-    pub(crate) fn lint(self) -> Result<Pipeline<Linted>, ExitCode> {
-        let (shared, Collected { session, items, raw_violations }) = self.into_parts();
+impl Pipeline {
+    pub(crate) fn lint(self) -> Result<Pipeline, ExitCode> {
+        let (shared, phase) = self.into_parts();
+        let PipelinePhase::Collected { session, items, raw_violations } = phase else {
+            unreachable!("lint called outside Collected phase");
+        };
 
         let lint_warnings = my_lint_pass(&items);
 
-        Ok(shared.into_pipeline(Linted {
-            session,
-            items,
-            raw_violations,
-            lint_warnings,
-        }))
+        Ok(Pipeline {
+            shared,
+            phase: PipelinePhase::Linted {
+                session,
+                items,
+                raw_violations,
+                lint_warnings,
+            },
+        })
     }
 }
 ```
 
-You will also need to add the import: `use super::super::Linted;` at the top of the file.
+### Step 3: Update the downstream transition
 
-### Step 3: Update the downstream phase
-
-The phase that previously consumed `Collected` -- in this case `strict_or_skip()` -- must now
-consume `Linted` instead. Update its `impl` block signature and destructuring:
+The transition that previously guarded on `Collected` -- in this case `strict_or_skip()` -- must
+now guard on `Linted` instead. Update its `let ... else` destructuring:
 
 ```rust
-// Was: impl Pipeline<Collected>
-impl Pipeline<Linted> {
+impl Pipeline {
     pub(crate) fn strict_or_skip(self, _py: Python<'_>)
-        -> Result<Pipeline<Ready>, ExitCode>
+        -> Result<Pipeline, ExitCode>
     {
-        let (shared, Linted { session, items, lint_warnings, .. }) = self.into_parts();
+        let (shared, phase) = self.into_parts();
+        let PipelinePhase::Linted { session, items, lint_warnings, .. } = phase else {
+            unreachable!("strict_or_skip called outside Linted phase");
+        };
         // ...
     }
 }
@@ -404,7 +412,7 @@ impl Pipeline<Linted> {
 ### Step 4: Register the module (if you created a new file)
 
 If you put the transition in a new file instead of `collected.rs`, add it to
-`src/pipeline/phases/mod.rs`:
+`src/pipeline/transitions/mod.rs`:
 
 ```rust
 mod linted;  // add this line
@@ -415,7 +423,7 @@ mod linted;  // add this line
 In `src/pipeline/mod.rs`, insert the call in the chain:
 
 ```rust
-fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, ExitCode> {
+fn run_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCode> {
     // ...
     let p = p.collect(py)?;
     let p = p.validate(py)?;
@@ -425,22 +433,38 @@ fn run_command(py: Python<'_>, pipeline: Pipeline<Empty>) -> Result<ExitCode, Ex
 }
 ```
 
-If the compiler complains about a type mismatch, that is the typestate pattern working as
-designed -- follow the error to find which transition needs its input type updated.
+If the `unreachable!` guard fires at runtime, that means the call chain is wrong --
+check which transition feeds into your new phase and ensure the ordering is correct.
 
-## ExecutionHarness Trait
+## ExecutionDispatch Enum
 
-`src/pipeline/traits.rs` defines a single trait seam used to abstract over execution strategies:
+`src/pipeline/execution.rs` defines an enum that dispatches serial vs. parallel execution
+without dynamic dispatch:
 
 ```rust
-pub(crate) trait ExecutionHarness {
-    fn execute_groups(
-        &self,
-        groups: Vec<(Utf8PathBuf, Vec<Arc<types::TestItem>>)>,
-        rep: &mut dyn crate::reporter::Reporter,
-    ) -> parallel::PhaseResult;
+pub(super) enum ExecutionDispatch<'a> {
+    /// Runs tests in-process, one at a time.
+    Serial {
+        py: Python<'a>,
+        session: &'a bridge::FixtureSession,
+        cache: &'a cache::TestCache,
+        timeout_secs: Option<u64>,
+        timeout_multiplier: Option<f64>,
+        maxfail: usize,
+        opts: DebugOptions<'a>,
+    },
+    /// Delegates to worker subprocesses.
+    Parallel {
+        cfg: &'a config::Config,
+        workers: usize,
+        conftest_files: &'a [Utf8PathBuf],
+        python_bin: &'a str,
+        pool: Option<Vec<parallel::PrewarmedWorker>>,
+    },
 }
 ```
 
-This lets tests swap in a mock harness that returns canned results without spawning real
-subprocess workers or touching the Python runtime.
+Each variant carries the data it needs directly. The `execute_groups()` method matches on the
+variant and runs the appropriate path -- `Serial` loops over tests in-process, `Parallel`
+delegates to `parallel::run_phase_parallel()`. This replaces the former `ExecutionHarness` trait
+and its `SerialHarness`/`ParallelHarness` implementers, eliminating dynamic dispatch overhead.
