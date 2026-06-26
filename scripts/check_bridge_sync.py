@@ -92,7 +92,7 @@ REPORTER_PAIRS = {
     "BridgeFixtureTiming": "FixtureTiming",
 }
 
-WIRE_RUST_PATH = ROOT / "src" / "worker_result.rs"
+WIRE_RUST_PATH = ROOT / "src" / "worker_result" / "wire.rs"
 WORKER_PY_PATH = ROOT / "python" / "oxitest" / "_bridge" / "worker.py"
 
 
