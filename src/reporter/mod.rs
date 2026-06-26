@@ -291,7 +291,6 @@ mod tests {
     fn test_composite_reporter_finish_returns_max_exit_code() {
         struct StubReporter(ExitVote);
         impl Reporter for StubReporter {
-            fn test_started(&mut self, _: &crate::types::TestItem) {}
             fn test_completed(
                 &mut self,
                 _: &crate::types::TestItem,
@@ -338,7 +337,6 @@ mod tests {
     fn test_composite_reporter_finish_ignores_abstentions() {
         struct StubReporter(ExitVote);
         impl Reporter for StubReporter {
-            fn test_started(&mut self, _: &crate::types::TestItem) {}
             fn test_completed(
                 &mut self,
                 _: &crate::types::TestItem,
@@ -373,7 +371,6 @@ mod tests {
     fn test_composite_reporter_finish_all_abstain_returns_zero() {
         struct StubReporter(ExitVote);
         impl Reporter for StubReporter {
-            fn test_started(&mut self, _: &crate::types::TestItem) {}
             fn test_completed(
                 &mut self,
                 _: &crate::types::TestItem,
@@ -592,7 +589,6 @@ mod tests {
 
         struct WarningCollector(Arc<Mutex<Vec<(String, String)>>>);
         impl Reporter for WarningCollector {
-            fn test_started(&mut self, _: &crate::types::TestItem) {}
             fn test_completed(
                 &mut self,
                 _: &crate::types::TestItem,
