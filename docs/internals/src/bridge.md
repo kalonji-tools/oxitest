@@ -170,7 +170,7 @@ class Frame:
     locals: tuple[tuple[str, str], ...] = ()
 ```
 
-**Rust** (`src/worker_result.rs` + manual `FromPyObject` in `src/bridge.rs`):
+**Rust** (`src/worker_result/wire.rs` + manual `FromPyObject` in `src/bridge.rs`):
 
 ```rust
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -230,7 +230,7 @@ Adding a new field requires synchronized changes on both sides. The steps:
    fields are mapped to `WorkerOutcome` variants in the `convert_test_result()`
    function. If the field affects the domain, add it to the appropriate
    `WorkerOutcome` variant and update the `From<WorkerOutcome> for TestOutcome`
-   impl in `worker_result.rs`.
+   impl in `worker_result/convert.rs`.
 
 4. **Run both test suites** to verify sync:
 

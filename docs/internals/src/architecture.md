@@ -124,7 +124,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | `scheduler` | `src/scheduler.rs` | `apply_schedule_strategy()` -- sorts groups by timing, failure status, or round-robin. |
 | `strict` | `src/strict.rs` | `StrictViolation` -- strict-mode violation types and classification. |
 | `worker_session` | `src/worker_session.rs` | `WorkerParams`, `setup_worker_process()`, `spawn_worker()` -- subprocess lifecycle and I/O. |
-| `worker_result` | `src/worker_result.rs` | `WorkerTask`, `WireResult`, `WorkerOutcome`, `RawFrame` -- JSON wire protocol types. |
+| `worker_result` | `src/worker_result/` | `WorkerTask`, `WireResult`, `RawFrame` in `wire.rs`; `build_diagnostic`, `into_outcome` in `convert.rs`. |
 | `assert_rewriter` | `src/assert_rewriter.rs` | Transforms `assert` statements into `_OxitestAssertionError` raises via PyO3 AST manipulation. |
 | `retry` | `src/retry.rs` | Re-runs failed tests serially up to N times. Tests that pass on retry are marked flaky. |
 | `affected` | `src/affected.rs` | `--affected` git-aware test selection. Classifies changed files and filters test list. |
