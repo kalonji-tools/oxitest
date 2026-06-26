@@ -123,7 +123,7 @@ pub(super) fn collect_items(
     test_files: &[Utf8PathBuf],
     cfg: &config::Config,
     session: &bridge::FixtureSession,
-    cache: &mut impl cache::ModuleCache,
+    cache: &mut cache::TestCache,
 ) -> (
     Vec<Arc<types::TestItem>>,
     Vec<types::CollectError>,

@@ -15,10 +15,6 @@ mod timing;
 #[cfg(test)]
 mod test_helpers;
 
-pub use module::ModuleCache;
-pub use outcome::OutcomeCache;
-pub use timing::TimingCache;
-
 use ahash::AHashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -150,7 +146,6 @@ mod tests {
     use assert_fs::prelude::*;
 
     use super::test_helpers::make_timing;
-    use super::timing::TimingCache;
     use super::*;
 
     #[test]

@@ -3,7 +3,6 @@
 use super::super::{Pipeline, PipelinePhase};
 use super::FilterPredicates;
 use super::file_passes_all_filters;
-use crate::cache::OutcomeCache;
 use crate::types::ExitCode;
 use crate::{collector, config};
 

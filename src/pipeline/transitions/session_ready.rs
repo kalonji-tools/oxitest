@@ -6,7 +6,6 @@ use pyo3::prelude::*;
 use super::super::collection;
 use super::super::helpers;
 use super::super::{Pipeline, PipelinePhase};
-use crate::cache::ModuleCache;
 use crate::types::ExitCode;
 use crate::{bridge, collector, config, query};
 

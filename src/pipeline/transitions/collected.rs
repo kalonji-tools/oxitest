@@ -5,7 +5,6 @@ use pyo3::prelude::*;
 use super::super::helpers;
 use super::super::{Pipeline, PipelinePhase};
 use super::apply_query_dsl_filter;
-use crate::cache::OutcomeCache;
 use crate::types::ExitCode;
 use crate::{bridge, config, filter, types};
 
