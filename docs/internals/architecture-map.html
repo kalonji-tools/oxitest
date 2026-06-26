@@ -972,7 +972,7 @@ window.oxiNavPaths = {
       connects: ['Pipeline', 'ExecutionStrategy']
     },
     {
-      kind: 'struct', name: 'TestItem', loc: 'types/mod.rs',
+      kind: 'struct', name: 'TestItem', loc: 'types/item.rs',
       summary: 'Core test representation. One per collected test function (expanded by parametrize).',
       fields: [
         ['node_id', 'NodeId', 'Unique test identifier (file::function[param])'],
@@ -985,7 +985,7 @@ window.oxiNavPaths = {
       connects: ['NodeId', 'TestOutcome', 'ExecutionPlan']
     },
     {
-      kind: 'enum', name: 'TestOutcome', loc: 'types/mod.rs',
+      kind: 'enum', name: 'TestOutcome', loc: 'types/outcome.rs',
       summary: '9-variant enum representing the result of a single test execution.',
       fields: [
         ['Passed', '', 'Test passed'],
@@ -1001,7 +1001,7 @@ window.oxiNavPaths = {
       connects: ['TestItem', 'Reporter', 'OutcomeCache']
     },
     {
-      kind: 'struct', name: 'NodeId', loc: 'types/mod.rs',
+      kind: 'struct', name: 'NodeId', loc: 'types/node_id.rs',
       summary: 'Newtype wrapping String. Unique test identifier in the format file::function[param_id].',
       fields: [
         ['0', 'String', 'The identifier string'],
@@ -1082,7 +1082,7 @@ window.oxiNavPaths = {
       connects: ['ExecutionPlan', 'Config']
     },
     {
-      kind: 'struct', name: 'TestTiming', loc: 'types/mod.rs',
+      kind: 'struct', name: 'TestTiming', loc: 'types/exit.rs',
       summary: 'Duration measurement for a single test. Stored in TimingCache for scheduling.',
       fields: [
         ['node_id', 'NodeId', 'Test identifier'],
@@ -1101,7 +1101,7 @@ window.oxiNavPaths = {
       connects: ['Pipeline', 'Scheduler']
     },
     {
-      kind: 'struct', name: 'ExitCode', loc: 'types/mod.rs',
+      kind: 'struct', name: 'ExitCode', loc: 'types/exit.rs',
       summary: 'Newtype wrapping u8. Reporters vote on the final exit code via ExitVote.',
       fields: [
         ['0', 'u8', 'Exit status code'],
@@ -1109,7 +1109,7 @@ window.oxiNavPaths = {
       connects: ['Reporter', 'Pipeline']
     },
     {
-      kind: 'struct', name: 'DurationMs', loc: 'types/mod.rs',
+      kind: 'struct', name: 'DurationMs', loc: 'types/node_id.rs',
       summary: 'Newtype wrapping f64. Prevents mixing raw floats with duration values.',
       fields: [
         ['0', 'f64', 'Milliseconds'],

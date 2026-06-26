@@ -117,7 +117,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | `import_graph` | `src/import_graph.rs` | Pure-Rust import graph analysis for `--affected`. |
 | `bare_asserts` | `src/bare_asserts.rs` | Pure-Rust bare-assert detection for strict mode. |
 | **Core types and services** | | |
-| `types` | `src/types/mod.rs` | `NodeId`, `TestItem`, `TestOutcome`, `DurationMs`, `TestTiming`, `CollectError`, `ExitCode`. |
+| `types` | `src/types/` | `NodeId`, `TestItem`, `TestOutcome`, `DurationMs`, `TestTiming`, `CollectError`, `ExitCode`. Split into submodules: `node_id.rs`, `item.rs`, `outcome.rs`, `exit.rs`; `mod.rs` re-exports all public types. |
 | `bridge` | `src/bridge.rs` | PyO3 boundary: `TestResult`, `CollectedItem`, `RawViolation`, `FixtureSession`. Data contracts that must stay in sync with `python/oxitest/_bridge/result.py`. |
 | `filter` | `src/filter.rs` | `BUILTIN_MARKERS`, `validate_markers()`, query DSL (`-E`) filtering, module grouping. |
 | `collector` | `src/collector.rs` | Filesystem walk for test files and conftest files. |
