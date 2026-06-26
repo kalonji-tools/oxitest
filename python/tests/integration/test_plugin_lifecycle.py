@@ -145,7 +145,7 @@ def _write_inline_fixture_plugin(tmp: TempDir) -> None:
         "        pass\n\n"
         "def oxitest_plugin(config=None):\n"
         "    Path.cwd().joinpath('plugin_activated.txt').write_text('yes')\n"
-        "    return Plugin(fixture_providers=[SimpleProvider()])\n"
+        "    return Plugin(fixture_providers=(SimpleProvider(),))\n"
     )
 
 
@@ -171,7 +171,7 @@ def _write_inline_reporter_plugin(tmp: TempDir) -> None:
         "        Path.cwd().joinpath('reporter_output.json').write_text(\n"
         "            json.dumps(self._events, indent=2))\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(reporters=[SimpleReporter()])\n"
+        "    return Plugin(reporters=(SimpleReporter(),))\n"
     )
 
 
@@ -189,7 +189,7 @@ def _write_inline_wrapper_plugin(tmp: TempDir) -> None:
         "        Path.cwd().joinpath('wrapper_intercepted.txt').write_text('yes')\n"
         "        return test_fn()\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(execution_wrappers=[SimpleWrapper()])\n"
+        "    return Plugin(execution_wrappers=(SimpleWrapper(),))\n"
     )
 
 
@@ -422,7 +422,7 @@ def test_fixtures_from_both_plugins_in_same_test(tmp: TempDir) -> None:
         "    def teardown(self, value: object) -> None:\n"
         "        pass\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(fixture_providers=[CounterProvider()])\n"
+        "    return Plugin(fixture_providers=(CounterProvider(),))\n"
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"

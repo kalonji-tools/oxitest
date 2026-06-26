@@ -195,7 +195,7 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
                     return self._records
 
             def oxitest_plugin(config=None):
-                return Plugin(log_backends=[MarkerBackend(config['marker'])])
+                return Plugin(log_backends=(MarkerBackend(config['marker']),))
         """),
         config=(
             f'\n[tool.oxitest.plugin_settings.log_plugin]\nmarker = "{marker_file}"\n'
@@ -259,7 +259,7 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
                     value.connected = False
 
             def oxitest_plugin(config=None):
-                return Plugin(fixture_providers=[DatabaseProvider()])
+                return Plugin(fixture_providers=(DatabaseProvider(),))
         """),
         test_code=textwrap.dedent(f"""\
             from pathlib import Path
@@ -326,7 +326,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
                     self._path.write_text(json.dumps(self._events))
 
             def oxitest_plugin(config=None):
-                return Plugin(reporters=[FileReporter(config['output'])])
+                return Plugin(reporters=(FileReporter(config['output']),))
         """),
         config=(
             f"\n[tool.oxitest.plugin_settings.reporter_plugin]\n"
@@ -394,7 +394,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
                     return items
 
             def oxitest_plugin(config=None):
-                return Plugin(collectors=[CheckCollector()])
+                return Plugin(collectors=(CheckCollector(),))
         """),
         test_code=textwrap.dedent(f"""\
             from pathlib import Path
@@ -457,7 +457,7 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir):
                     return last_result
 
             def oxitest_plugin(config=None):
-                return Plugin(execution_wrappers=[RetryWrapper()])
+                return Plugin(execution_wrappers=(RetryWrapper(),))
         """),
         config='markers = ["retry: retry a test multiple times"]\n',
         test_code=textwrap.dedent(f"""\

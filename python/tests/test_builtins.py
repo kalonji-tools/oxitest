@@ -998,7 +998,7 @@ def test_logcapture_includes_plugin_backends():
     fake_backend = FakePluginBackend()
 
     mod = types.ModuleType("fake_log_plugin")
-    mod.oxitest_plugin = lambda config=None: Plugin(log_backends=[fake_backend])  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.oxitest_plugin = lambda config=None: Plugin(log_backends=(fake_backend,))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["fake_log_plugin"] = mod
     try:
         registry = load_plugins(["fake_log_plugin"], {})
