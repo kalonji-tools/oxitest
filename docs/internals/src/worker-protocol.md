@@ -189,7 +189,7 @@ reported as crashed errors via `drain_remaining_into_crashed()`.
 
 ### Adding a field to the task (Rust -> worker)
 
-The task schema is defined by `WorkerTask` and `WorkerTaskItem` in `src/worker_result.rs`.
+The task schema is defined by `WorkerTask` and `WorkerTaskItem` in `src/worker_result/wire.rs`.
 These structs derive `serde::Serialize` and are written as JSON to the worker's stdin.
 
 ```rust
@@ -218,7 +218,7 @@ pub(crate) struct WorkerTaskItem<'a> {
 
 Steps:
 
-1. Add the field to `WorkerTask` or `WorkerTaskItem` in `src/worker_result.rs`.
+1. Add the field to `WorkerTask` or `WorkerTaskItem` in `src/worker_result/wire.rs`.
    Use `#[serde(skip_serializing_if = "Option::is_none")]` if the field is optional,
    so older workers that do not expect it receive compact JSON.
 
@@ -231,7 +231,7 @@ Steps:
 
 ### Adding a field to results (worker -> Rust)
 
-`WireResult` in `src/worker_result.rs` is an internally-tagged enum
+`WireResult` in `src/worker_result/wire.rs` is an internally-tagged enum
 (`#[serde(tag = "outcome")]`). Each variant carries only the fields relevant to
 that outcome. `TestResult.to_wire()` in `python/oxitest/_bridge/result.py` produces
 the JSON.
@@ -260,7 +260,7 @@ Steps:
 1. Add the field to `TestResult` in `python/oxitest/_bridge/result.py` with a
    default value. Emit it in the appropriate outcome branch of `to_wire()`.
 
-2. Add the field to the relevant `WireResult` variant in `src/worker_result.rs`.
+2. Add the field to the relevant `WireResult` variant in `src/worker_result/wire.rs`.
    **Always** use `#[serde(default)]` so messages from older workers (which omit
    the field) still deserialize:
 
@@ -283,7 +283,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `2`) in both `src/worker_result.rs` and
+- The `PROTOCOL_VERSION` constant (currently `2`) in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
