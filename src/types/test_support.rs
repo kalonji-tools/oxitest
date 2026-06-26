@@ -5,22 +5,24 @@
 
 use super::ComparisonDetail;
 use super::*;
+use camino::Utf8PathBuf;
+use std::sync::Arc;
 
 /// Builder for [`TestItem`], used exclusively in tests.
 ///
 /// Required fields (`module_path`, `fn_name`) are set at construction.
 /// All other fields default to empty/zero/false.
 pub(crate) struct TestItemBuilder {
-    pub(super) node_id: Option<NodeId>,
-    pub(super) module_path: Utf8PathBuf,
-    pub(super) fn_name: String,
-    pub(super) lineno: LineNo,
-    pub(super) markers: MarkerSet,
-    pub(super) param_id: Option<String>,
-    pub(super) param_values: Vec<ParamPair>,
-    pub(super) is_async: bool,
-    pub(super) fixture_names: Vec<String>,
-    pub(super) fixref_names: Vec<String>,
+    pub(crate) node_id: Option<NodeId>,
+    pub(crate) module_path: Utf8PathBuf,
+    pub(crate) fn_name: String,
+    pub(crate) lineno: LineNo,
+    pub(crate) markers: MarkerSet,
+    pub(crate) param_id: Option<String>,
+    pub(crate) param_values: Vec<ParamPair>,
+    pub(crate) is_async: bool,
+    pub(crate) fixture_names: Vec<String>,
+    pub(crate) fixref_names: Vec<String>,
 }
 
 impl TestItemBuilder {
@@ -93,15 +95,15 @@ impl TestItemBuilder {
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
 #[allow(dead_code)]
 pub(crate) struct FailedOutcomeBuilder {
-    pub(super) message: String,
-    pub(super) file: Utf8PathBuf,
-    pub(super) lineno: LineNo,
-    pub(super) source_line: String,
-    pub(super) left: String,
-    pub(super) right: String,
-    pub(super) op: String,
-    pub(super) frames: Vec<Frame>,
-    pub(super) field_diffs: Vec<FieldDiff>,
+    pub(crate) message: String,
+    pub(crate) file: Utf8PathBuf,
+    pub(crate) lineno: LineNo,
+    pub(crate) source_line: String,
+    pub(crate) left: String,
+    pub(crate) right: String,
+    pub(crate) op: String,
+    pub(crate) frames: Vec<Frame>,
+    pub(crate) field_diffs: Vec<FieldDiff>,
 }
 
 #[allow(dead_code)]
@@ -164,11 +166,11 @@ impl FailedOutcomeBuilder {
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
 #[allow(dead_code)]
 pub(crate) struct ErrorOutcomeBuilder {
-    pub(super) message: String,
-    pub(super) file: Utf8PathBuf,
-    pub(super) lineno: LineNo,
-    pub(super) source_line: String,
-    pub(super) frames: Vec<Frame>,
+    pub(crate) message: String,
+    pub(crate) file: Utf8PathBuf,
+    pub(crate) lineno: LineNo,
+    pub(crate) source_line: String,
+    pub(crate) frames: Vec<Frame>,
 }
 
 #[allow(dead_code)]
