@@ -6,7 +6,7 @@ Verifies that:
 - Wire format (to_wire / WorkerResult) round-trips correctly
 - Cross-language constants (PROTOCOL_VERSION) stay in sync
 
-These tests catch drift between result.py and bridge.rs / worker_result.rs
+These tests catch drift between result.py and bridge.rs / worker_result/wire.rs
 before it ships. PyO3's FromPyObject deserializes by field name — mismatches
 cause runtime panics with no compile-time protection.
 """
@@ -41,7 +41,7 @@ from oxitest._bridge.result import (
 
 _SRC_DIR = pathlib.Path(__file__).parent.parent.parent / "src"
 _BRIDGE_RS = _SRC_DIR / "bridge.rs"
-_WORKER_RESULT_RS = _SRC_DIR / "worker_result.rs"
+_WORKER_RESULT_RS = _SRC_DIR / "worker_result" / "wire.rs"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -398,7 +398,7 @@ def test_protocol_version_matches_rust_constant():
     """Python PROTOCOL_VERSION must equal Rust PROTOCOL_VERSION."""
     source = _WORKER_RESULT_RS.read_text()
     match = re.search(r"PROTOCOL_VERSION:\s*u32\s*=\s*(\d+)", source)
-    assert match, "PROTOCOL_VERSION not found in src/worker_result.rs"
+    assert match, "PROTOCOL_VERSION not found in src/worker_result/wire.rs"
     rust_version = int(match.group(1))
     assert rust_version == PROTOCOL_VERSION, (
         f"Python PROTOCOL_VERSION={PROTOCOL_VERSION} != "
