@@ -439,6 +439,59 @@ for proto in my_protocols {
 
 For at-most-one protocols (like `debugger_backend` or `coverage_provider`), add a check in `PluginRegistry.validate()`.
 
+### Plugin CLI extensions
+
+Plugins can declare CLI flags via a module-level `oxitest_cli_extension` attribute. oxitest discovers these during startup and adds them to the clap parser before re-parsing argv.
+
+#### Init sequence
+
+```
+1. Rust: read pyproject.toml → plugin module names
+2. Rust→Python: import each plugin module, read oxitest_cli_extension  [EAGER, CHEAP]
+3. Rust: introspect config dataclasses → build dynamic clap args
+4. Rust: re-parse CLI (static + plugin args)
+5. Rust: validate + merge (pyproject + env + CLI) → populate plugin_settings
+6. Rust→Python: call oxitest_plugin(config=typed_instance)              [DEFERRED]
+```
+
+Heavy plugin modules (`_plugin.py`) are never imported until step 6. The `__init__.py` re-exports `oxitest_cli_extension` cheaply and wraps `oxitest_plugin` with a lazy import.
+
+#### Plugin-side declaration
+
+```python
+from oxitest import CliExtension, Both, Cli
+
+@dataclass(frozen=True)
+class MyConfig:
+    host: Annotated[str, Both(help="Target host", short="H", env="MY_HOST")]
+    verbose: Annotated[bool, Cli(help="Verbose output")] = False
+
+oxitest_cli_extension = CliExtension(prefix="myplugin", config_type=MyConfig)
+```
+
+Source markers control where each field is read from:
+- `Cli` -- CLI-only (no config file)
+- `Conf` -- config file only (no CLI flag)
+- `Both` -- both sources, CLI overrides config
+
+#### Rust-side infrastructure
+
+| Function | File | Purpose |
+|----------|------|---------|
+| `discover_plugin_cli()` | `src/bridge.rs` | Import plugins, read extensions, introspect config |
+| `add_plugin_args()` | `src/config/cli.rs` | Add plugin flags to clap Command |
+| `extract_plugin_values()` | `src/config/cli.rs` | Extract parsed plugin values from ArgMatches |
+| `validate_prefix_uniqueness()` | `src/pipeline/mod.rs` | Error if two plugins claim the same prefix |
+
+#### Prefix uniqueness
+
+All plugin CLI args are namespaced: `--{prefix}-{field_name}`. Prefix uniqueness is validated at startup. Users can override the default prefix per plugin:
+
+```toml
+[tool.oxitest.plugin_settings.oxi_nixinfra]
+cli_prefix = "nix"
+```
+
 ### Plugin entry point contract
 
 Every plugin module must expose an `oxitest_plugin(config=None)` function that returns a `Plugin` instance:
