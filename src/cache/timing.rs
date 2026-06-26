@@ -6,28 +6,6 @@ use super::{CacheEntry, TestCache};
 use crate::scheduler::ModuleGroup;
 use crate::types::{DurationMs, TestItem};
 
-/// Cache for test timing data (scheduling, timeout suggestions, duration estimates).
-pub trait TimingCache {
-    /// Estimate total duration for the given items.
-    ///
-    /// `ast_fallback_ms` is the sum of AST-derived body weights for the same item list.
-    /// When the cache has >= 50% coverage, the cached sum is used directly.
-    /// When coverage < 50% and `ast_fallback_ms` is provided, a blend is returned:
-    ///   `cached_ms + ast_total * uncovered_fraction`.
-    /// When fully cold (0 covered) and `ast_fallback_ms` is provided, `ast_total` is used.
-    /// Otherwise returns `None`.
-    #[must_use = "caller must use the duration estimate to decide parallel vs serial"]
-    fn estimated_duration(
-        &self,
-        items: &[Arc<TestItem>],
-        ast_fallback_ms: Option<f64>,
-    ) -> Option<Duration>;
-    fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64>;
-    fn sort_groups(&self, groups: &mut Vec<ModuleGroup>);
-    fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32);
-    fn invalidate(&mut self, items: &[Arc<TestItem>]);
-}
-
 impl TestCache {
     /// Returns `(total_duration_ms, covered_count)` for items present in the timing cache.
     pub(super) fn sum_and_count(&self, items: &[Arc<TestItem>]) -> (f64, usize) {
@@ -48,8 +26,8 @@ impl TestCache {
     }
 }
 
-impl TimingCache for TestCache {
-    fn estimated_duration(
+impl TestCache {
+    pub fn estimated_duration(
         &self,
         items: &[Arc<TestItem>],
         ast_fallback_ms: Option<f64>,
@@ -87,7 +65,7 @@ impl TimingCache for TestCache {
     /// Returns a suggested timeout in whole seconds for `item`, scaled by `multiplier`.
     /// Returns `None` if the item has no cached timing (caller should use global timeout).
     /// Result is `ceil(cached_duration_secs * multiplier)`, minimum 1 second.
-    fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
+    pub fn suggested_timeout_secs(&self, item: &TestItem, multiplier: f64) -> Option<u64> {
         let entry = self.inner.timings.get(item.node_id.as_ref())?;
         let scaled_secs = (entry.duration_ms.as_f64() / 1000.0) * multiplier;
         Some((scaled_secs.ceil() as u64).max(1))
@@ -99,7 +77,7 @@ impl TimingCache for TestCache {
     /// durations. Uncached groups fall back to descending item count. Assigning
     /// the heaviest module to the first worker minimises tail latency by ensuring
     /// the longest-running work starts immediately.
-    fn sort_groups(&self, groups: &mut Vec<ModuleGroup>) {
+    pub fn sort_groups(&self, groups: &mut Vec<ModuleGroup>) {
         // Pre-compute (duration_sum, item_count) for each group once — O(N*M) total.
         // Avoids re-running module_duration_sum inside the comparator, which would be
         // O(N log N * M) because the comparator fires once per sort comparison.
@@ -125,7 +103,7 @@ impl TimingCache for TestCache {
     }
 
     /// Merge test timings directly from `&[TestTiming]`, avoiding intermediate allocations.
-    fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32) {
+    pub fn merge_timings(&mut self, timings: &[crate::types::TestTiming], max_age: u32) {
         let executed: HashSet<&str> = timings.iter().map(|t| t.node_id.as_ref()).collect();
 
         for t in timings {
@@ -161,7 +139,7 @@ impl TimingCache for TestCache {
     ///
     /// Called after collection to prune stale entries (e.g. deleted or renamed tests).
     /// Sets `dirty = true` if any entries were removed, triggering a cache save.
-    fn invalidate(&mut self, items: &[Arc<TestItem>]) {
+    pub fn invalidate(&mut self, items: &[Arc<TestItem>]) {
         let live: HashSet<&str> = items.iter().map(|item| item.node_id.as_ref()).collect();
         let before = self.inner.timings.len();
         self.inner

@@ -4,7 +4,6 @@ use pyo3::prelude::*;
 
 use super::super::execution::{self, ExecutionContext};
 use super::super::{ExecutionResults, Pipeline, PipelinePhase};
-use crate::cache::TimingCache;
 use crate::types::ExitCode;
 use crate::{bridge, parallel, reporter};
 

@@ -1,6 +1,5 @@
 //! Shared utility functions used by pipeline phases.
 
-use crate::cache::{OutcomeCache, TimingCache};
 use crate::types::ExitCode;
 use crate::{bridge, cache, config, reporter, strict, types};
 use pyo3::prelude::*;
