@@ -2,16 +2,10 @@ use crate::types::OutcomeKind;
 
 use super::TestCache;
 
-/// Cache for test outcome history (--lf/--ff, flaky tracking).
-pub trait OutcomeCache {
-    fn last_failed_ids(&self) -> std::collections::HashSet<String>;
-    fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]);
-}
-
-impl OutcomeCache for TestCache {
+impl TestCache {
     /// Returns node IDs whose last recorded outcome was a failure
     /// (failed, error, or timeout).
-    fn last_failed_ids(&self) -> std::collections::HashSet<String> {
+    pub fn last_failed_ids(&self) -> std::collections::HashSet<String> {
         self.inner
             .timings
             .iter()
@@ -26,7 +20,7 @@ impl OutcomeCache for TestCache {
     }
 
     /// Record outcomes from `&[TestTiming]` directly.
-    fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]) {
+    pub fn record_timing_outcomes(&mut self, timings: &[crate::types::TestTiming]) {
         let mut changed = false;
         for t in timings {
             if let Some(entry) = self.inner.timings.get_mut(t.node_id.as_ref()) {
@@ -46,7 +40,6 @@ impl OutcomeCache for TestCache {
 #[cfg(test)]
 mod tests {
     use super::super::test_helpers::{cache_with_entries, make_timing};
-    use super::super::timing::TimingCache;
     use super::*;
     use crate::types::{DurationMs, NodeId, OutcomeKind, TestTiming};
 

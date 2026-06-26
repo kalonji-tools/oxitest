@@ -5,21 +5,10 @@ use camino::Utf8Path;
 use super::{ModuleCacheEntry, TestCache};
 use crate::types::{NodeId, TestItem};
 
-/// Cache for mtime-based module collection results.
-pub trait ModuleCache {
-    fn cached_module_items(
-        &self,
-        path: &Utf8Path,
-        current_mtime_secs: u64,
-    ) -> Option<Vec<Arc<TestItem>>>;
-    fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[Arc<TestItem>]);
-    fn invalidate_modules(&mut self);
-}
-
-impl ModuleCache for TestCache {
+impl TestCache {
     /// Returns cached TestItems for `path` if the file's mtime matches `current_mtime_secs`.
     /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
-    fn cached_module_items(
+    pub fn cached_module_items(
         &self,
         path: &Utf8Path,
         current_mtime_secs: u64,
@@ -43,7 +32,12 @@ impl ModuleCache for TestCache {
 
     /// Store the collection result for `path` with the given mtime.
     /// Sets dirty = true.
-    fn update_module_cache(&mut self, path: &Utf8Path, mtime_secs: u64, items: &[Arc<TestItem>]) {
+    pub fn update_module_cache(
+        &mut self,
+        path: &Utf8Path,
+        mtime_secs: u64,
+        items: &[Arc<TestItem>],
+    ) {
         let key = path.as_str().to_string();
         let cached_items = items.iter().map(|item| item.as_ref().clone()).collect();
         self.inner.modules.insert(
@@ -58,7 +52,7 @@ impl ModuleCache for TestCache {
 
     /// Remove module cache entries for paths that no longer exist on disk.
     /// Sets dirty = true if any entries were pruned.
-    fn invalidate_modules(&mut self) {
+    pub fn invalidate_modules(&mut self) {
         let before = self.inner.modules.len();
         self.inner
             .modules

@@ -6,7 +6,6 @@ use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
 use super::arrange::{self, ExecutionStrategy};
-use crate::cache::{OutcomeCache, TimingCache};
 use crate::scheduler::ModuleGroup;
 use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
 
@@ -30,7 +29,7 @@ pub(crate) struct DebugOptions<'a> {
 }
 
 fn resolve_timeout(
-    cache: &(impl cache::TimingCache + ?Sized),
+    cache: &cache::TestCache,
     item: &types::TestItem,
     global: Option<u64>,
     multiplier: Option<f64>,
@@ -68,7 +67,7 @@ pub(super) enum ExecutionDispatch<'a> {
     Serial {
         py: Python<'a>,
         session: &'a bridge::FixtureSession,
-        cache: &'a dyn cache::TimingCache,
+        cache: &'a cache::TestCache,
         timeout_secs: Option<u64>,
         timeout_multiplier: Option<f64>,
         maxfail: usize,
@@ -128,7 +127,7 @@ impl<'a> ExecutionDispatch<'a> {
                     for item in items {
                         rep.test_started(item);
                         let timeout =
-                            resolve_timeout(*cache, item, *timeout_secs, *timeout_multiplier);
+                            resolve_timeout(cache, item, *timeout_secs, *timeout_multiplier);
                         let (outcome, duration_ms) = run_timed(*py, item, session, timeout, *opts);
                         timings.push(types::TestTiming {
                             node_id: item.node_id.clone(),
