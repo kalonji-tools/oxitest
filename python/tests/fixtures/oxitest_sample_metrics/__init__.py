@@ -35,8 +35,8 @@ def oxitest_plugin(*, config: MetricsConfig | None = None) -> Plugin:
 
     provider, reporter, collector, coverage = build_plugin(config)
     return Plugin(
-        fixture_providers=[provider],
-        reporters=[reporter],
-        collectors=[collector],
+        fixture_providers=(provider,),
+        reporters=(reporter,),
+        collectors=(collector,),
         coverage_provider=coverage,
     )

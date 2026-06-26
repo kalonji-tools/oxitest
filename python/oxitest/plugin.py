@@ -8,7 +8,7 @@ Plugin authors import from here:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from oxitest._bridge._coverage import CovReportFormat
@@ -230,7 +230,7 @@ class CoverageProvider(Protocol):
         ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class Plugin:
     """Typed declaration of what a plugin provides.
 
@@ -238,13 +238,13 @@ class Plugin:
     """
 
     # Fixture-adjacent hooks (lazy — activated on first use)
-    log_backends: list[LogBackend] = field(default_factory=list)
-    fixture_providers: list[FixtureProvider] = field(default_factory=list)
-    execution_wrappers: list[ExecutionWrapper] = field(default_factory=list)
+    log_backends: tuple[LogBackend, ...] = ()
+    fixture_providers: tuple[FixtureProvider, ...] = ()
+    execution_wrappers: tuple[ExecutionWrapper, ...] = ()
 
     # Global hooks (eager — activated at startup)
-    collectors: list[Collector] = field(default_factory=list)
-    reporters: list[Reporter] = field(default_factory=list)
+    collectors: tuple[Collector, ...] = ()
+    reporters: tuple[Reporter, ...] = ()
 
     # Async runtime backend (at most one across all plugins)
     async_backend: AsyncBackend | None = None

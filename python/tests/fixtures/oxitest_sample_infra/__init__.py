@@ -36,7 +36,7 @@ def oxitest_plugin(*, config: InfraConfig | None = None) -> Plugin:
 
     provider, log_backend, wrapper = build_plugin(config)
     return Plugin(
-        fixture_providers=[provider],
-        log_backends=[log_backend],
-        execution_wrappers=[wrapper],
+        fixture_providers=(provider,),
+        log_backends=(log_backend,),
+        execution_wrappers=(wrapper,),
     )

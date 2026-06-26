@@ -126,9 +126,9 @@ def test_registry_aggregates_across_plugins():
             return []
 
     mod1 = types.ModuleType("plug1")
-    mod1.oxitest_plugin = lambda config=None: Plugin(log_backends=[FakeBackend()])  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod1.oxitest_plugin = lambda config=None: Plugin(log_backends=(FakeBackend(),))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     mod2 = types.ModuleType("plug2")
-    mod2.oxitest_plugin = lambda config=None: Plugin(log_backends=[FakeBackend()])  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod2.oxitest_plugin = lambda config=None: Plugin(log_backends=(FakeBackend(),))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     _install_fake_module("plug1", mod1)
     _install_fake_module("plug2", mod2)
     try:
