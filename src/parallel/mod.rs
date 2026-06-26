@@ -56,8 +56,8 @@ pub(crate) fn run_phase_parallel(
         .flat_map(|g| g.items.iter())
         .map(|item| (item.node_id.clone(), Arc::clone(item)))
         .collect();
-    let in_flight: std::sync::Arc<std::sync::Mutex<ahash::AHashSet<String>>> =
-        std::sync::Arc::new(std::sync::Mutex::new(ahash::AHashSet::new()));
+    let in_flight: std::sync::Arc<parking_lot::Mutex<ahash::AHashSet<String>>> =
+        std::sync::Arc::new(parking_lot::Mutex::new(ahash::AHashSet::new()));
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
     let conftest_raw: std::sync::Arc<serde_json::value::RawValue> = {
@@ -118,7 +118,7 @@ pub(crate) fn run_phase_parallel(
         // Snapshot concurrent tests (excluding the one that just completed)
         let node_id = resolved.node_id.clone(); // Arc refcount bump — cheap
         let concurrent_tests: Vec<String> = {
-            let mut set = in_flight.lock().unwrap();
+            let mut set = in_flight.lock();
             set.remove(node_id.as_ref());
             set.iter().cloned().collect()
         };
