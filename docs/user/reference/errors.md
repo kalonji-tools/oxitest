@@ -144,7 +144,7 @@ from oxitest.plugin import Plugin
 
 
 def oxitest_plugin(config=None) -> Plugin:
-    return Plugin(reporters=[MyReporter()])
+    return Plugin(reporters=(MyReporter(),))
 ```
 
 ---

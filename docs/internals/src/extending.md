@@ -391,7 +391,7 @@ class MyProtocol(Protocol):
 @dataclass
 class Plugin:
     # ...existing fields...
-    my_protocols: list[MyProtocol] = field(default_factory=list)
+    my_protocols: tuple[MyProtocol, ...] = ()
 ```
 
 #### 3. Add a registry accessor in `plugin_loader.py`
