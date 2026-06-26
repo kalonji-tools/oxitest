@@ -19,24 +19,38 @@ and how to add a new config option end-to-end.
 
 ### How it works in code
 
-Config construction happens in two phases inside `src/pipeline/mod.rs`:
+Config construction happens in three phases inside `src/pipeline/mod.rs`:
 
 ```rust
-// Phase 1: load pyproject.toml on top of defaults
+// Phase 1: Core CLI parse + config load
+let (command, _) = config::OxitestCli::resolve(&argv)?;
 let cfg = config::Config::load(&rootdir);
-
-// Phase 2: merge CLI args on top (CLI wins)
 let cfg = match &command {
     config::Command::Run(args) => cfg.merge_run_args(args),
     config::Command::Debug(args) => cfg.merge_debug_args(args),
     config::Command::Query(args) => cfg.merge_query_args(args),
     // ...
 };
+
+// Phase 2: Plugin CLI extension discovery (if plugins configured)
+// Imports plugin modules, reads oxitest_cli_extension attributes,
+// rebuilds clap with plugin-specific flags, re-parses argv,
+// and merges plugin CLI values into plugin_settings.
+let extensions = bridge::discover_plugin_cli(py, &cfg.features.plugins, ...)?;
+if !extensions.plugins.is_empty() {
+    validate_prefix_uniqueness(&extensions)?;
+    let extended_cmd = config::cli::add_plugin_args(base_cmd, &extensions);
+    let matches = extended_cmd.try_get_matches_from(&argv)?;
+    let plugin_values = config::cli::extract_plugin_values(&matches, &extensions);
+    // CLI values merged into cfg.features.plugin_settings (CLI > pyproject)
+}
 ```
 
 `Config::load` (in `src/config/mod.rs`) reads `pyproject.toml`, deserializes it into a `PyprojectToml` -> `OxitestConfig`, then calls `config.merge_toml(tc, rootdir)`.
 
 The merge methods (`merge_run_args`, `merge_debug_args`, etc.) in `src/config/merge.rs` apply CLI values on top.
+
+Plugin CLI values follow the same precedence: **CLI > env > pyproject > default**. See the plugin CLI extension section in `docs/internals/src/extending.md` for details.
 
 ### The `apply_if_some!` pattern
 
