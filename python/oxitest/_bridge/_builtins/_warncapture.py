@@ -6,8 +6,10 @@ import warnings
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_type import injectable
 
 
+@injectable
 class _WarnCapture:
     """Captures all `warnings.warn()` calls issued during a test.
 

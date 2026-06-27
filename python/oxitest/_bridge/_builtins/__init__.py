@@ -4,8 +4,8 @@ Importing this package registers all built-in fixture implementations via
 `BuiltinFixture.__init_subclass__`. `oxitest/__init__.py` triggers this
 import so registrations are in place before any test runs.
 
-Public type aliases (all carry `_FixtureMarker` so users write them bare,
-without wrapping in `Fixture[...]`):
+Public re-exports (all decorated with ``@injectable`` so users write them
+bare, without wrapping in ``Fixture[...]``):
 
     tmp: TempDir              # unique temp directory, deleted after test
     factory: TempDirFactory   # session-scoped factory for multiple temp dirs
@@ -18,61 +18,49 @@ without wrapping in `Fixture[...]`):
 
 from __future__ import annotations
 
-from typing import Annotated
-
 # ── TestContext registration ──────────────────────────────────────────────────
 # _TestContextFixture registers TestContext with BuiltinFixture._registry so
 # the resolver in FixtureSession._inject_builtin() handles it alongside all
 # other built-ins — no special-case needed in _fixture_session.py.
-from oxitest._bridge._builtin_context import _BuiltinContext, _TestContext
+from oxitest._bridge._builtin_context import (
+    _BuiltinContext,
+    _TestContext,
+    _TestContext as TestContext,
+)
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (
     CaptureResult as CaptureResult,
-    _FdCapture,
+    _FdCapture as FdCapture,
     _FdCaptureFixture as _FdCaptureFixture,
-    _StdCapture,
+    _StdCapture as StdCapture,
     _StdCaptureFixture as _StdCaptureFixture,
 )
 from oxitest._bridge._builtins._logcapture import (
     LogBackend as LogBackend,
     StdlibLogBackend as StdlibLogBackend,
-    _LogCapture,
+    _LogCapture as LogCapture,
     _LogCaptureFixture as _LogCaptureFixture,
 )
 from oxitest._bridge._builtins._patch import (
-    _Patcher,
+    _Patcher as Patcher,
     _PatcherFixture as _PatcherFixture,
 )
 from oxitest._bridge._builtins._tempdir import (
-    _TempDir,
-    _TempDirFactory,
+    _TempDir as TempDir,
+    _TempDirFactory as TempDirFactory,
     _TempDirFactoryFixture as _TempDirFactoryFixture,
     _TempDirFixture as _TempDirFixture,
 )
 from oxitest._bridge._builtins._warncapture import (
-    _WarnCapture,
+    _WarnCapture as WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
-from oxitest._bridge._fixture_type import _FixtureMarker
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
     def create(self, ctx: _BuiltinContext) -> _TestContext:
         return _TestContext(ctx.meta, ctx.teardown_stack)
 
-
-# ── Public type aliases ───────────────────────────────────────────────────────
-# Each alias IS already Annotated[..., _FixtureMarker()], so users write the
-# name bare in annotations — no `Fixture[TempDir]` wrapping needed.
-
-TempDir = Annotated[_TempDir, _FixtureMarker()]
-TempDirFactory = Annotated[_TempDirFactory, _FixtureMarker()]
-StdCapture = Annotated[_StdCapture, _FixtureMarker()]
-FdCapture = Annotated[_FdCapture, _FixtureMarker()]
-Patcher = Annotated[_Patcher, _FixtureMarker()]
-TestContext = Annotated[_TestContext, _FixtureMarker()]
-LogCapture = Annotated[_LogCapture, _FixtureMarker()]
-WarnCapture = Annotated[_WarnCapture, _FixtureMarker()]
 
 __all__ = [
     "TempDir",

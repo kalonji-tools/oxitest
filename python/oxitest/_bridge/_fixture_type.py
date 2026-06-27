@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 
 class _FixtureMarker:
@@ -107,7 +107,10 @@ class _YieldsAlias:
 Yields = _YieldsAlias
 
 
-def injectable(cls: type) -> type:
+_T = TypeVar("_T", bound=type)
+
+
+def injectable(cls: _T) -> _T:
     """Mark a class as automatically injectable by oxitest.
 
     Parameters annotated with an ``@injectable`` class trigger fixture
