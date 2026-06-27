@@ -19,9 +19,6 @@ class DebuggerBackend(Protocol):
     Plugins implement this to provide alternative debuggers (ipdb, pudb, etc.).
     oxitest owns capture management, banners, and *when* to call the debugger.
     The backend only provides the *what* — the actual debugger interaction.
-
-    .. provisional::
-        This protocol is provisional and may change in minor releases.
     """
 
     def trace(self) -> None:

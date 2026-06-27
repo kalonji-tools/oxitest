@@ -18,7 +18,7 @@ import asyncio
 import contextlib
 import warnings
 from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
     from oxitest._bridge.plugin_loader import PluginRegistry
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 
 
+@runtime_checkable
 class SharedAsyncSession(Protocol):
     """A long-lived async session for shared fixture resolution."""
 
@@ -38,12 +39,9 @@ class SharedAsyncSession(Protocol):
         ...
 
 
+@runtime_checkable
 class AsyncBackend(Protocol):
-    """Pluggable async runtime backend.
-
-    .. provisional::
-        This protocol is provisional and may change in minor releases.
-    """
+    """Pluggable async runtime backend."""
 
     @property
     def name(self) -> str:

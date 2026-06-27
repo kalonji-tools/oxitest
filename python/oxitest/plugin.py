@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from oxitest._bridge._coverage import CovReportFormat
+from oxitest._bridge.result import CollectedItem, TestResult
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import AsyncBackend
@@ -20,13 +21,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class LogBackend(Protocol):
-    """Protocol for log-capture backends.
-
-    .. provisional::
-        This protocol is provisional and may change in minor releases.
-        It is modeled on Python's logging.LogRecord and may not fit
-        structured logging libraries.
-    """
+    """Protocol for log-capture backends."""
 
     def install(self) -> None:
         """Attach the log handler and begin capturing records.
@@ -148,15 +143,9 @@ class ExecutionWrapper(Protocol):
 
 @runtime_checkable
 class Collector(Protocol):
-    """Protocol for custom test collectors.
+    """Protocol for custom test collectors."""
 
-    .. provisional::
-        This protocol is provisional and may change in minor releases.
-        It has not yet been exercised by a real plugin. The method signature
-        may be expanded to include config or fixture registry access.
-    """
-
-    def collect(self, path: str, module: object) -> list[Any]:
+    def collect(self, path: str, module: object) -> list[CollectedItem]:
         """Collect test items from an already-imported module.
 
         Args:
@@ -164,8 +153,8 @@ class Collector(Protocol):
             module: The imported module object.
 
         Returns:
-            A list of `CollectedItem`-compatible objects describing the tests
-            found.  Return an empty list if the collector finds nothing.
+            A list of `CollectedItem` objects describing the tests found.
+            Return an empty list if the collector finds nothing.
         """
         ...
 
@@ -174,23 +163,24 @@ class Collector(Protocol):
 class Reporter(Protocol):
     """Protocol for plugin reporters."""
 
-    def test_started(self, item: Any) -> None:
+    def test_started(self, item: CollectedItem) -> None:
         """Called immediately before a test begins executing.
 
         Args:
-            item: A `CollectedItem`-compatible object identifying the test
-                (node ID, module path, function name).
+            item: The `CollectedItem` identifying the test
+                (fn_name, lineno, markers, param_id, etc.).
         """
         ...
 
-    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None:
+    def test_completed(
+        self, item: CollectedItem, outcome: TestResult, duration_ms: float
+    ) -> None:
         """Called immediately after a test finishes, whether it passed or failed.
 
         Args:
-            item: The same `CollectedItem`-compatible object passed to
-                `test_started`.
-            outcome: A `TestResult`-compatible object with the test status
-                and any failure information.
+            item: The same `CollectedItem` passed to `test_started`.
+            outcome: A `TestResult` with the test status and any failure
+                information.
             duration_ms: Wall-clock time the test took, in milliseconds.
         """
         ...
