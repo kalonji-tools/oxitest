@@ -1,6 +1,40 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.0.0] - 2026-06-27
+
+### Bug Fixes
+
+
+- Harden provisional plugin protocol error handling (#1023)
+- Resolve rustdoc broken links and invalid HTML tags
+- Restore nav bar, footer, and cross-discipline links on GitHub Pages (#1029)
+- Include landing page in docs deploy (#1029)
+- Landing page nav assets reference MkDocs build output (#1029)
+- Landing page links work on both localhost and GitHub Pages (#1029)
+- Use relative paths for cross-discipline doc links (#1029)
+- Allow cross-discipline links in mkdocs strict mode (#1029)
+- Correct mkdocs validation key for cross-discipline links (#1029)
+- Correct two-phase CLI parse ordering for plugin flags (#1055)
+- Eliminate double CLI parse in pipeline setup (#1060)
+- Replace std::sync::Mutex with parking_lot::Mutex for in_flight (#1061)
+- Propagate dict.set_item errors in validate_fixture_names (#1062)
+- Reduce allocations in node ID prefix matching and remove dead prescan functions (#1069)
+- Freeze CacheEntry, CacheStats, FixtureTiming dataclasses (#1003)
+
+### Features
+
+
+- Export Nix package via flake.nix (#1022)
+- Wire plugin CLI extension discovery into setup (#1050)
+- Add plugin integration test suite with reference plugins (#1052)
+- Make Plugin dataclass frozen with tuple fields (#1058)
+- Export TestResult/CollectedItem, stabilize protocols, and make all runtime_checkable (#1072)
+- Add @injectable decorator to _fixture_type (#1081)
+- Detect @injectable types in _fixture_inner_type (#1081)
+- Migrate built-in types from Annotated aliases to @injectable (#1081)
+- Export injectable from oxitest (#1081)
+
 ## [1.0.0-beta.2] - 2026-06-20
 
 ### Bug Fixes
