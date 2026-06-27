@@ -130,6 +130,235 @@ cli_prefix = "mp"
 This changes `--myplugin-host` to `--mp-host`. Prefix uniqueness is validated
 at startup -- two plugins cannot share the same prefix.
 
+## When to use plugins
+
+### Plugin vs. conftest.py
+
+Both plugins and `conftest.py` extend oxitest, but they serve different
+purposes:
+
+| | `conftest.py` | Plugin |
+|---|---|---|
+| **Scope** | One project | Any project that installs it |
+| **Distribution** | Not distributed | Published to PyPI or a private index |
+| **Packaging** | None required | Standard Python package |
+| **Best for** | Project-specific fixtures and helpers | Reusable infrastructure across many projects |
+
+Use `conftest.py` when the extension is specific to your test suite.
+Use a plugin when you want to share the behaviour across multiple projects or
+distribute it to other teams.
+
+### Decision matrix
+
+| I want to... | Use this protocol |
+|---|---|
+| Provide reusable fixtures across projects | `FixtureProvider` |
+| Add retry, profiling, or tracing around tests | `ExecutionWrapper` |
+| Send results to a dashboard or custom format | `Reporter` |
+| Use an alternative coverage tool | `CoverageProvider` |
+| Replace or extend the default test collector | `Collector` |
+| Customize log capture (e.g. structured logging) | `LogBackend` |
+| Run async tests with a custom event loop | `AsyncBackend` |
+| Integrate a custom debugger | `DebuggerBackend` |
+
+### Composability
+
+A single `Plugin` dataclass can implement multiple protocols at once. There is
+no limit on how many protocols one plugin registers — just populate the
+relevant fields:
+
+```python
+from oxitest.plugin import Plugin
+
+
+def oxitest_plugin(config=None):
+    return Plugin(
+        reporters=(MyReporter(),),
+        fixture_providers=(MyFixtureProvider(),),
+    )
+```
+
+This is useful when a plugin naturally owns both a fixture and the reporting
+that accompanies it (for example, a coverage plugin that also provides a
+`coverage_session` fixture).
+
+## End-to-end examples
+
+### Example 1: Reporter that writes a JSON summary
+
+This example shows a complete plugin that collects test results and writes a
+JSON summary file after the run. It uses the public `TestResult` and
+`CollectedItem` types from `oxitest`.
+
+```python
+# json_summary/__init__.py
+"""oxitest plugin: write a JSON summary of every test result."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from oxitest import CollectedItem, TestResult
+from oxitest.plugin import Plugin
+
+
+class JsonSummaryReporter:
+    """Writes a JSON summary file after all tests complete."""
+
+    def __init__(self, output_path: str) -> None:
+        self._path = Path(output_path)
+        self._results: list[dict] = []
+
+    def test_started(self, item: CollectedItem) -> None:
+        pass  # Nothing to record until the test completes.
+
+    def test_completed(
+        self, item: CollectedItem, outcome: TestResult, duration_ms: float
+    ) -> None:
+        entry: dict = {
+            "test": item.fn_name,
+            "status": outcome.status,
+            "duration_ms": round(duration_ms, 2),
+        }
+        # Most non-passing variants carry a .message field.
+        message = getattr(outcome, "message", "")
+        if message:
+            entry["message"] = message
+        self._results.append(entry)
+
+    def finish(self, collect_errors: list, interrupted: bool) -> None:
+        summary = {
+            "total": len(self._results),
+            "interrupted": interrupted,
+            "collect_errors": len(collect_errors),
+            "results": self._results,
+        }
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(summary, indent=2))
+
+
+def oxitest_plugin(config=None) -> Plugin:
+    output = (config or {}).get("output", "build/summary.json")
+    return Plugin(reporters=(JsonSummaryReporter(output),))
+```
+
+Register the plugin and configure the output path in `pyproject.toml`:
+
+```toml
+[tool.oxitest]
+plugins = ["json_summary"]
+
+[tool.oxitest.plugin_settings.json_summary]
+output = "build/test-summary.json"
+```
+
+After running `oxitest`, `build/test-summary.json` contains:
+
+```json
+{
+  "total": 2,
+  "interrupted": false,
+  "collect_errors": 0,
+  "results": [
+    {"test": "test_addition", "status": "passed", "duration_ms": 0.41},
+    {"test": "test_division_by_zero", "status": "failed", "duration_ms": 0.87,
+     "message": "assert result == 0"}
+  ]
+}
+```
+
+### Example 2: FixtureProvider for database sessions
+
+This example shows a plugin that provides a `db_session` fixture backed by a
+real database connection. Tests request it with `Fixture[DbSession]`.
+
+```python
+# db_plugin/__init__.py
+"""oxitest plugin: provide a per-test database session fixture."""
+
+from __future__ import annotations
+
+from oxitest import Fixture  # used in test files, shown here for clarity
+from oxitest.plugin import Plugin
+
+
+class DbSession:
+    """Thin wrapper around a database connection for test isolation."""
+
+    def __init__(self, dsn: str) -> None:
+        # Replace with your real database driver call.
+        self._dsn = dsn
+        self.connection = None  # populated by connect()
+
+    def connect(self) -> None:
+        # e.g. self.connection = psycopg2.connect(self._dsn)
+        pass
+
+    def rollback(self) -> None:
+        # Roll back so each test starts with a clean slate.
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class DbSessionProvider:
+    """FixtureProvider that creates one DbSession per test."""
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+
+    @property
+    def name(self) -> str:
+        return "db_session"
+
+    @property
+    def fixture_type(self) -> type:
+        return DbSession
+
+    def create(self, ctx) -> DbSession:
+        session = DbSession(self._dsn)
+        session.connect()
+        return session
+
+    def teardown(self, value: DbSession) -> None:
+        value.rollback()
+        value.close()
+
+
+def oxitest_plugin(config=None) -> Plugin:
+    dsn = (config or {}).get("dsn", "postgresql://localhost/test")
+    return Plugin(fixture_providers=(DbSessionProvider(dsn),))
+```
+
+Register the plugin:
+
+```toml
+[tool.oxitest]
+plugins = ["db_plugin"]
+
+[tool.oxitest.plugin_settings.db_plugin]
+dsn = "postgresql://localhost/myapp_test"
+```
+
+Tests request the fixture by annotating a parameter with `Fixture[DbSession]`:
+
+```python
+from oxitest import Fixture
+from db_plugin import DbSession
+
+
+def test_user_created(db_session: Fixture[DbSession]):
+    # db_session is a DbSession instance; teardown (rollback + close)
+    # runs automatically after the test, pass or fail.
+    assert db_session.connection is not None, "session should be connected"
+```
+
+oxitest matches the `Fixture[DbSession]` annotation to the provider whose
+`fixture_type` is `DbSession`, calls `create()` before the test, and calls
+`teardown()` after it — regardless of whether the test passed or failed.
+
 ## Protocols
 
 The `Plugin` dataclass has seven fields — five tuple-based protocol fields and
