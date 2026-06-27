@@ -159,6 +159,10 @@ from oxitest._bridge.parametrize import (
     parametrize as parametrize,
     partial as partial,
 )
+from oxitest._bridge.result import (
+    CollectedItem as CollectedItem,
+    TestResult as TestResult,
+)
 from oxitest._exit_code import ExitCode as ExitCode
 from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugin
 
@@ -169,6 +173,7 @@ __all__ = [
     "CaptureResult",
     "Cli",
     "CliExtension",
+    "CollectedItem",
     "Conf",
     "CovReportFormat",
     "CoverageProvider",
@@ -188,6 +193,7 @@ __all__ = [
     "TempDir",
     "TempDirFactory",
     "TestContext",
+    "TestResult",
     "Yields",
     "importorskip",
     "mark",
