@@ -198,13 +198,22 @@ def test_fixture_teardown_warning_exported_from_oxitest() -> None:
 def test_internal_types_not_in_all():
     removed = [
         "ApproxBase",
-        "SharedFixtureMutationError",
-        "FixtureShadowWarning",
-        "FixtureTeardownWarning",
     ]
     for name in removed:
         assert name not in oxitest.__all__, (
             f"{name} should not be in __all__ — it is an internal type"
+        )
+
+
+def test_exception_types_in_all():
+    promoted = [
+        "SharedFixtureMutationError",
+        "FixtureShadowWarning",
+        "FixtureTeardownWarning",
+    ]
+    for name in promoted:
+        assert name in oxitest.__all__, (
+            f"{name} should be in __all__ — it is a public exception/warning type"
         )
 
 
