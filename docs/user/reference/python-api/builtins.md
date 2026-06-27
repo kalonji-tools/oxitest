@@ -5,7 +5,7 @@
     directly with the public type alias — no ``Fixture[T]`` wrapping needed.
 
 !!! note
-    All built-in types carry an injection marker, so you write
+    All built-in types are decorated with ``@injectable``, so you write
     ``tmp: TempDir`` rather than ``tmp: Fixture[TempDir]``.
 
 ## TempDir
