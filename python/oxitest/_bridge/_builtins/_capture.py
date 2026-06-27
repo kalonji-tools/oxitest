@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_type import injectable
 
 
 @dataclass
@@ -73,6 +74,7 @@ class _CaptureBase(ABC):
         self._suspend()
 
 
+@injectable
 class _StdCapture(_CaptureBase):
     r"""Captures `sys.stdout` and `sys.stderr` at the Python stream level.
 
@@ -116,6 +118,7 @@ class _StdCapture(_CaptureBase):
         sys.stderr = self._err_buf
 
 
+@injectable
 class _FdCapture(_CaptureBase):
     """Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).
 

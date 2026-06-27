@@ -9,6 +9,7 @@ from typing import Protocol, runtime_checkable
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_type import injectable
 
 
 @runtime_checkable
@@ -83,6 +84,7 @@ class StdlibLogBackend:
             self._level = level
 
 
+@injectable
 class _LogCapture:
     """Aggregates log records from all registered backends.
 
