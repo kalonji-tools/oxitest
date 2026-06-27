@@ -120,7 +120,11 @@ pub(crate) fn run_phase_parallel(
         let concurrent_tests: Vec<String> = {
             let mut set = in_flight.lock();
             set.remove(node_id.as_ref());
-            set.iter().cloned().collect()
+            if set.is_empty() {
+                Vec::new()
+            } else {
+                set.iter().cloned().collect()
+            }
         };
 
         let parallel_ctx = crate::parallel_context::ParallelContext {
