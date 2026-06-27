@@ -20,6 +20,7 @@ assertions stay in the Python you already know.
 - **Parallel by default** — the Rust scheduler spawns worker subprocesses and distributes tests automatically.
 - **Fast startup** — the Rust binary starts in milliseconds; Python is only loaded per worker, not per test. [2–3x faster than pytest](https://kalonji-tools.github.io/oxitest/explanation/benchmarks/) on runner overhead.
 - **Strict mode** — opt-in checks for bare asserts, dict parametrize, and marks missing a `reason`.
+- **Flaky test detection** — `--retries N` automatically reruns failures and identifies intermittent tests without failing the build.
 
 ## Installation
 
