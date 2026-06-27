@@ -202,9 +202,9 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
         ),
         test_code=textwrap.dedent("""\
             from oxitest import Fixture
-            from oxitest._bridge._builtins._logcapture import _LogCapture
+            from oxitest._bridge._builtins._logcapture import LogCapture
 
-            def test_with_log(log: Fixture[_LogCapture]):
+            def test_with_log(log: Fixture[LogCapture]):
                 assert log is not None
         """),
     )

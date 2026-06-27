@@ -615,11 +615,11 @@ def test_builtin_types_are_injectable():
 
 def test_testcontext_registered_as_builtin():
     import oxitest._bridge._builtins  # noqa: F401 — trigger registrations
-    from oxitest._bridge._builtin_context import _TestContext
+    from oxitest._bridge._builtin_context import TestContext
     from oxitest._bridge._builtins._base import BuiltinFixture
 
-    assert BuiltinFixture.for_type(_TestContext) is not None, (
-        "_TestContext should be registered as a BuiltinFixture (registration triggered "
+    assert BuiltinFixture.for_type(TestContext) is not None, (
+        "TestContext should be registered as a BuiltinFixture (registration triggered "
         "by importing _builtins)"
     )
 
@@ -831,21 +831,21 @@ def test_stdlib_backend_set_level_filters_records():
     )
 
 
-# ── _LogCapture ───────────────────────────────────────────────────────────────
+# ── LogCapture ───────────────────────────────────────────────────────────────
 
 
 def test_logcapture_records_aggregates_backends():
     import logging
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
 
-    cap = _LogCapture([StdlibLogBackend(level=logging.DEBUG)])
+    cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
     logging.getLogger().debug("agg test")
     recs = cap.records
     cap._teardown()
 
     assert any("agg test" in r.getMessage() for r in recs), (
-        f"_LogCapture.records should aggregate records from all backends; 'agg test' "
+        f"LogCapture.records should aggregate records from all backends; 'agg test' "
         f"not found in {[r.getMessage() for r in recs]}"
     )
 
@@ -853,27 +853,27 @@ def test_logcapture_records_aggregates_backends():
 def test_logcapture_text_formats_records():
     import logging
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
 
-    cap = _LogCapture([StdlibLogBackend(level=logging.DEBUG)])
+    cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
     logging.getLogger().warning("formatted")
     text = cap.text
     cap._teardown()
 
     assert "WARNING" in text, (
-        f"_LogCapture.text should include 'WARNING' level label, got {text!r}"
+        f"LogCapture.text should include 'WARNING' level label, got {text!r}"
     )
     assert "formatted" in text, (
-        f"_LogCapture.text should include the log message 'formatted', got {text!r}"
+        f"LogCapture.text should include the log message 'formatted', got {text!r}"
     )
 
 
 def test_logcapture_set_level_changes_threshold():
     import logging
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
 
-    cap = _LogCapture([StdlibLogBackend(level=logging.WARNING)])
+    cap = LogCapture([StdlibLogBackend(level=logging.WARNING)])
     logging.getLogger().debug("filtered")
     cap.set_level(logging.DEBUG)
     logging.getLogger().debug("captured")
@@ -894,9 +894,9 @@ def test_logcapture_set_level_changes_threshold():
 def test_logcapture_at_level_captures_and_restores():
     import logging
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
 
-    cap = _LogCapture([StdlibLogBackend(level=logging.WARNING)])
+    cap = LogCapture([StdlibLogBackend(level=logging.WARNING)])
     root = logging.getLogger()
     with cap.at_level(logging.DEBUG):
         logging.getLogger().debug("inside block")
@@ -917,18 +917,18 @@ def test_logcapture_at_level_captures_and_restores():
 def test_logcapture_teardown_uninstalls_backends():
     import logging
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
 
     root = logging.getLogger()
     handler_count = len(root.handlers)
-    cap = _LogCapture([StdlibLogBackend(level=logging.DEBUG)])
+    cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
     assert len(root.handlers) == handler_count + 1, (
-        f"_LogCapture should add 1 handler on creation, got {len(root.handlers)} (was "
+        f"LogCapture should add 1 handler on creation, got {len(root.handlers)} (was "
         f"{handler_count})"
     )
     cap._teardown()
     assert len(root.handlers) == handler_count, (
-        f"_LogCapture._teardown() should remove the handler, restoring count to "
+        f"LogCapture._teardown() should remove the handler, restoring count to "
         f"{handler_count}, got {len(root.handlers)}"
     )
 
@@ -942,13 +942,13 @@ def test_logcapture_fixture_registers_teardown():
     _LogCaptureFixture().create(ctx)
 
     assert len(teardowns) == 1, (
-        f"_LogCaptureFixture should register exactly 1 teardown, got {len(teardowns)}"
+        f"LogCaptureFixture should register exactly 1 teardown, got {len(teardowns)}"
     )
     root = logging.getLogger()
     handler_count = len(root.handlers)
     teardowns[0]()
     assert len(root.handlers) < handler_count + 1, (
-        f"_LogCaptureFixture teardown should remove the log handler; "
+        f"LogCaptureFixture teardown should remove the log handler; "
         f"handler count should be < {handler_count + 1}, got {len(root.handlers)}"
     )
 
@@ -977,7 +977,7 @@ def test_logcapture_includes_plugin_backends():
     import logging
     import types
 
-    from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCapture
+    from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
     from oxitest._bridge.plugin_loader import load_plugins
     from oxitest.plugin import Plugin
 
@@ -1004,7 +1004,7 @@ def test_logcapture_includes_plugin_backends():
     try:
         registry = load_plugins(["fake_log_plugin"], {})
         backends = [StdlibLogBackend()] + list(registry.log_backends)
-        cap = _LogCapture(backends)
+        cap = LogCapture(backends)
 
         assert fake_backend.installed, (
             "Plugin log backend should be installed when LogCapture is created"

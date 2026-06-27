@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["_Patcher", "_PatcherFixture"]
+__all__ = ["Patcher", "_PatcherFixture"]
 
 import os
 from collections.abc import Callable
@@ -13,7 +13,7 @@ from oxitest._bridge._fixture_type import injectable
 
 
 @injectable
-class _Patcher:
+class Patcher:
     """Applies temporary overrides to attributes, env vars, and working directory.
 
     All changes are reverted in LIFO order when the test completes.
@@ -82,8 +82,8 @@ class _Patcher:
         self._undos.clear()
 
 
-class _PatcherFixture(BuiltinFixture, fixture_type=_Patcher):
-    def create(self, ctx: _BuiltinContext) -> _Patcher:
-        patcher = _Patcher()
+class _PatcherFixture(BuiltinFixture, fixture_type=Patcher):
+    def create(self, ctx: _BuiltinContext) -> Patcher:
+        patcher = Patcher()
         ctx.teardown_stack.append(patcher._undo_all)
         return patcher

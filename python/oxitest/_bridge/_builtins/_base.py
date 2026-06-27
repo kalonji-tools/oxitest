@@ -16,8 +16,8 @@ class BuiltinFixture:
 
     Usage::
 
-        class _TempDirFixture(BuiltinFixture, fixture_type=_TempDir):
-            def create(self, ctx: _BuiltinContext) -> _TempDir:
+        class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
+            def create(self, ctx: _BuiltinContext) -> TempDir:
                 ...
     """
 
