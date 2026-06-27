@@ -322,9 +322,11 @@ class FixtureProvider(Protocol):
 **Example** -- database connection pool:
 
 ```python
+from oxitest import injectable
 from oxitest.plugin import Plugin
 
 
+@injectable
 class ConnectionPool:
     """The fixture type that tests receive."""
     def __init__(self, dsn):
@@ -367,14 +369,19 @@ def oxitest_plugin(config=None):
 Tests inject the fixture using the provider's `name` and `fixture_type`:
 
 ```python
-from oxitest import Fixture
 from my_plugin import ConnectionPool
 
 
-def test_database(pool: Fixture[ConnectionPool]):
+def test_database(pool: ConnectionPool):
     conn = pool.acquire()
     assert conn is not None
 ```
+
+!!! tip
+    `@injectable` makes `Fixture[ConnectionPool]` wrapping optional. Both
+    `pool: ConnectionPool` and `pool: Fixture[ConnectionPool]` work — the
+    decorator simply lets users skip the `Fixture[T]` boilerplate when the
+    type is unambiguously a fixture.
 
 ### Collector
 
