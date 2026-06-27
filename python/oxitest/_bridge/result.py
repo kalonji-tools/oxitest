@@ -351,21 +351,21 @@ class CollectedViolation:
     detail: str  # kind-specific payload; empty string when unused
 
 
-@dataclass
+@dataclass(frozen=True)
 class CacheEntry:
     name: str
     hits: int
     misses: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class CacheStats:
     total_hits: int
     total_misses: int
     breakdown: tuple[CacheEntry, ...]
 
 
-@dataclass
+@dataclass(frozen=True)
 class FixtureTiming:
     name: str
     total_setup_ms: float
