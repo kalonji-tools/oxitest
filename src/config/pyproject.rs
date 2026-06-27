@@ -8,17 +8,17 @@ pub(super) enum AutoArrangeToml {
     Disabled(bool),
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 pub(super) struct PyprojectToml {
     pub(super) tool: Option<ToolTable>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 pub(super) struct ToolTable {
     pub(super) oxitest: Option<OxitestConfig>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 pub(super) struct OxitestConfig {
     pub(super) testpaths: Option<Vec<String>>,
     pub(super) python_files: Option<Vec<String>>,
@@ -92,5 +92,174 @@ impl<'de> serde::Deserialize<'de> for WorkerCount {
         }
 
         deserializer.deserialize_any(WorkerCountVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse a `[tool.oxitest]` section from inline TOML and return `OxitestConfig`.
+    fn parse_oxitest(toml: &str) -> OxitestConfig {
+        let full = format!("[tool.oxitest]\n{toml}");
+        let parsed: PyprojectToml = toml::from_str(&full).expect("valid TOML");
+        parsed
+            .tool
+            .expect("tool table present")
+            .oxitest
+            .expect("oxitest table present")
+    }
+
+    /// Parse a `[tool.oxitest]` section and expect deserialization to fail.
+    fn parse_oxitest_err(toml: &str) -> toml::de::Error {
+        let full = format!("[tool.oxitest]\n{toml}");
+        toml::from_str::<PyprojectToml>(&full).expect_err("expected parse error")
+    }
+
+    // ── WorkerCount deserialization ───────────────────────────────────────────
+
+    #[test]
+    fn workers_auto_lowercase() {
+        let cfg = parse_oxitest(r#"workers = "auto""#);
+        assert_eq!(
+            cfg.workers,
+            Some(WorkerCount::Auto),
+            "\"auto\" should deserialize to WorkerCount::Auto"
+        );
+    }
+
+    #[test]
+    fn workers_auto_mixed_case() {
+        let cfg = parse_oxitest(r#"workers = "AUTO""#);
+        assert_eq!(
+            cfg.workers,
+            Some(WorkerCount::Auto),
+            "\"AUTO\" should be accepted case-insensitively"
+        );
+    }
+
+    #[test]
+    fn workers_positive_integer() {
+        let cfg = parse_oxitest("workers = 4");
+        assert_eq!(
+            cfg.workers,
+            Some(WorkerCount::Fixed(4)),
+            "positive integer should deserialize to WorkerCount::Fixed"
+        );
+    }
+
+    #[test]
+    fn workers_invalid_string_rejected() {
+        let err = parse_oxitest_err(r#"workers = "bogus""#);
+        let msg = err.to_string();
+        assert!(
+            msg.contains("expected \"auto\"") || msg.contains("auto"),
+            "invalid string should report it expected \"auto\", got: {msg}"
+        );
+    }
+
+    #[test]
+    fn workers_zero_rejected() {
+        let err = parse_oxitest_err("workers = 0");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("at least 1"),
+            "zero workers should be rejected with 'at least 1' message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn workers_negative_rejected() {
+        let err = parse_oxitest_err("workers = -1");
+        let msg = err.to_string();
+        assert!(
+            !msg.is_empty(),
+            "negative worker count must be rejected, got empty error"
+        );
+    }
+
+    // ── OxitestConfig field deserialization ───────────────────────────────────
+
+    #[test]
+    fn testpaths_array() {
+        let cfg = parse_oxitest(r#"testpaths = ["tests", "integration"]"#);
+        assert_eq!(
+            cfg.testpaths,
+            Some(vec!["tests".to_string(), "integration".to_string()]),
+            "testpaths should deserialize as a Vec<String>"
+        );
+    }
+
+    #[test]
+    fn timeout_integer() {
+        let cfg = parse_oxitest("timeout = 30");
+        assert_eq!(cfg.timeout, Some(30), "timeout should deserialize as u64");
+    }
+
+    #[test]
+    fn markers_array() {
+        let cfg = parse_oxitest(r#"markers = ["slow", "integration"]"#);
+        assert_eq!(
+            cfg.markers,
+            Some(vec!["slow".to_string(), "integration".to_string()]),
+            "markers should deserialize as Vec<String>"
+        );
+    }
+
+    #[test]
+    fn plugins_array() {
+        let cfg = parse_oxitest(r#"plugins = ["my_plugin", "another"]"#);
+        assert_eq!(
+            cfg.plugins,
+            Some(vec!["my_plugin".to_string(), "another".to_string()]),
+            "plugins should deserialize as Vec<String>"
+        );
+    }
+
+    #[test]
+    fn empty_tool_oxitest_table() {
+        let cfg = parse_oxitest("");
+        assert!(
+            cfg.testpaths.is_none(),
+            "empty [tool.oxitest] table should leave testpaths as None"
+        );
+        assert!(
+            cfg.workers.is_none(),
+            "empty [tool.oxitest] table should leave workers as None"
+        );
+        assert!(
+            cfg.timeout.is_none(),
+            "empty [tool.oxitest] table should leave timeout as None"
+        );
+    }
+
+    #[test]
+    fn missing_tool_table_gives_default_pyproject() {
+        let parsed: PyprojectToml = toml::from_str("").expect("empty TOML is valid");
+        assert!(
+            parsed.tool.is_none(),
+            "TOML without [tool] section should deserialize to tool = None"
+        );
+    }
+
+    #[test]
+    fn auto_arrange_threshold_integer() {
+        let cfg = parse_oxitest("auto_arrange = 80");
+        match cfg.auto_arrange {
+            Some(AutoArrangeToml::Threshold(n)) => assert_eq!(
+                n, 80,
+                "auto_arrange integer should deserialize to Threshold(80)"
+            ),
+            other => panic!("expected Some(Threshold(80)), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_arrange_disabled_false() {
+        let cfg = parse_oxitest("auto_arrange = false");
+        match cfg.auto_arrange {
+            Some(AutoArrangeToml::Disabled(false)) => {}
+            other => panic!("expected Some(Disabled(false)), got {other:?}"),
+        }
     }
 }
