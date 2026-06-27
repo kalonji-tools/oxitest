@@ -79,6 +79,7 @@ typecheck = [
 ]
 docs = [
     "mkdocs-material>=9",
+    "mkdocs-awesome-pages-plugin>=2.10",
     "mkdocs-git-revision-date-localized-plugin>=1",
     "mkdocs-minify-plugin>=0.7",
     "mkdocstrings[python]>=0.24",
