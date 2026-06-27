@@ -202,3 +202,50 @@ def test_injectable_returns_the_class_unchanged():
     assert MyType.__name__ == "MyType", (
         "@injectable should return the original class, not a wrapper"
     )
+
+
+def test_fixture_inner_type_detects_injectable():
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+    from oxitest._bridge._fixture_type import injectable
+
+    @injectable
+    class DbSession:
+        pass
+
+    is_fx, inner = _fixture_inner_type(DbSession)
+    assert is_fx is True, (
+        "_fixture_inner_type should return is_fixture=True for @injectable classes"
+    )
+    assert inner is DbSession, (
+        "_fixture_inner_type should return the @injectable class itself as inner type"
+    )
+
+
+def test_fixture_inner_type_ignores_plain_class():
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+    class PlainClass:
+        pass
+
+    is_fx, _ = _fixture_inner_type(PlainClass)
+    assert is_fx is False, (
+        "_fixture_inner_type should return is_fixture=False for plain "
+        "(non-injectable) classes"
+    )
+
+
+def test_fixture_wrapper_on_injectable_still_works():
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+    from oxitest._bridge._fixture_type import Fixture, injectable
+
+    @injectable
+    class DbSession:
+        pass
+
+    is_fx, inner = _fixture_inner_type(Fixture[DbSession])
+    assert is_fx is True, (
+        "Fixture[T] wrapping an @injectable type should still be detected as a fixture"
+    )
+    assert inner is DbSession, (
+        "Fixture[T] wrapping an @injectable type should unwrap to the inner class"
+    )
