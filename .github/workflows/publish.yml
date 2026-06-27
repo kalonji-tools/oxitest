@@ -22,7 +22,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist -i python3.11 python3.12 python3.13
+          args: --release --out dist -i python3.11 python3.12 python3.13 python3.14
 
       - uses: actions/upload-artifact@v7
         with:
@@ -41,11 +41,12 @@ jobs:
             3.11
             3.12
             3.13
+            3.14
 
       - uses: PyO3/maturin-action@v1
         with:
           target: universal2-apple-darwin
-          args: --release --out dist -i python3.11 python3.12 python3.13
+          args: --release --out dist -i python3.11 python3.12 python3.13 python3.14
 
       - uses: actions/upload-artifact@v7
         with:
