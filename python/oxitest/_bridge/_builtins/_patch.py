@@ -9,8 +9,10 @@ from typing import Any
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_type import injectable
 
 
+@injectable
 class _Patcher:
     """Applies temporary overrides to attributes, env vars, and working directory.
 
