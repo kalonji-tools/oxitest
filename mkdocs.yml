@@ -31,6 +31,7 @@ theme:
 
 plugins:
   - search
+  - awesome-pages
   - git-revision-date-localized:
       enable_creation_date: true
   - minify:
@@ -68,53 +69,3 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
-
-nav:
-  - Home: index.md
-  - Tutorials:
-    - Getting started: tutorials/getting-started.md
-  - How-to guides:
-    - Filter tests: how-to/filter-tests.md
-    - Configure testpaths: how-to/configure-testpaths.md
-    - Migrate from pytest: how-to/migrate-from-pytest.md
-    - Use markers: how-to/use-markers.md
-    - Use parametrize: how-to/use-parametrize.md
-    - Use fixtures: how-to/use-fixtures.md
-    - Share test helpers: how-to/share-test-helpers.md
-    - Use built-in fixtures: how-to/use-builtin-fixtures.md
-    - Run tests in parallel: how-to/run-in-parallel.md
-    - Use retries and flaky detection: how-to/use-retries.md
-    - Debug tests: how-to/debug-tests.md
-    - Run affected tests: how-to/run-affected-tests.md
-    - Use async tests: how-to/use-async-tests.md
-    - Use the test cache: how-to/use-test-cache.md
-    - Use doctests: how-to/use-doctests.md
-    - Use coverage: how-to/use-coverage.md
-    - Use class-based tests: how-to/use-class-based-tests.md
-    - Use raises, warns, and importorskip: how-to/use-raises-warns.md
-    - Write plugins: how-to/write-plugins.md
-    - Troubleshooting: how-to/troubleshooting.md
-  - Reference:
-    - CLI flags: reference/cli.md
-    - Configuration: reference/configuration.md
-    - Exit codes: reference/exit-codes.md
-    - Errors: reference/errors.md
-    - Exceptions: reference/exceptions.md
-    - API stability: reference/stability.md
-    - JSON output format: reference/json-output.md
-    - JUnit XML output: reference/junit-output.md
-    - Python API:
-      - Marks: reference/python-api/marks.md
-      - Fixture types: reference/python-api/fixture-types.md
-      - Built-in fixtures: reference/python-api/builtins.md
-      - Utilities: reference/python-api/utilities.md
-  - Explanation:
-    - Why Rust + Python: explanation/why-rust-python.md
-    - Assertion diagnostics: explanation/assertion-diagnostics.md
-    - Performance: explanation/performance.md
-    - Benchmarks: explanation/benchmarks.md
-    - Strict mode: explanation/strict-mode.md
-    - Lazy collection: explanation/lazy-collection.md
-    - Parallelism: explanation/parallelism.md
-    - Conftest helpers: explanation/conftest-helpers.md
-    - Working with AI: explanation/why-ai.md

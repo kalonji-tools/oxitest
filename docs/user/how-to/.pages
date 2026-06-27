@@ -1,0 +1,21 @@
+nav:
+  - Filter tests: filter-tests.md
+  - Configure testpaths: configure-testpaths.md
+  - Migrate from pytest: migrate-from-pytest.md
+  - Use markers: use-markers.md
+  - Use parametrize: use-parametrize.md
+  - Use fixtures: use-fixtures.md
+  - Share test helpers: share-test-helpers.md
+  - Use built-in fixtures: use-builtin-fixtures.md
+  - Run tests in parallel: run-in-parallel.md
+  - Use retries and flaky detection: use-retries.md
+  - Debug tests: debug-tests.md
+  - Run affected tests: run-affected-tests.md
+  - Use async tests: use-async-tests.md
+  - Use the test cache: use-test-cache.md
+  - Use doctests: use-doctests.md
+  - Use coverage: use-coverage.md
+  - Use class-based tests: use-class-based-tests.md
+  - Use raises, warns, and importorskip: use-raises-warns.md
+  - Write plugins: write-plugins.md
+  - Troubleshooting: troubleshooting.md
