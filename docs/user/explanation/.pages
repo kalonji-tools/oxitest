@@ -1,0 +1,10 @@
+nav:
+  - Why Rust + Python: why-rust-python.md
+  - Assertion diagnostics: assertion-diagnostics.md
+  - Performance: performance.md
+  - Benchmarks: benchmarks.md
+  - Strict mode: strict-mode.md
+  - Lazy collection: lazy-collection.md
+  - Parallelism: parallelism.md
+  - Conftest helpers: conftest-helpers.md
+  - Working with AI: why-ai.md
