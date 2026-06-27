@@ -163,8 +163,10 @@ fn item_matches_node_ids(
     let literal_match = literal_ids.iter().any(|target| {
         let t: &str = target.as_ref();
         item_id == t
-            || item_id.starts_with(&format!("{}[", t))
-            || item_id.starts_with(&format!("{}::", t))
+            || (item_id.starts_with(t) && item_id.as_bytes().get(t.len()) == Some(&b'['))
+            || (item_id.len() > t.len()
+                && item_id.starts_with(t)
+                && item_id[t.len()..].starts_with("::"))
     });
     if literal_match {
         return true;
@@ -258,47 +260,24 @@ fn prescan_item_matches_node_ids(
     // Check literal node IDs with prefix matching in both directions.
     let literal_match = literal_ids.iter().any(|target| {
         id == **target
-            || id.starts_with(&format!("{target}["))
-            || id.starts_with(&format!("{target}::"))
+            || (id.starts_with(target.as_str())
+                && id.as_bytes().get(target.len()) == Some(&b'['))
+            || (id.len() > target.len()
+                && id.starts_with(target.as_str())
+                && id[target.len()..].starts_with("::"))
             // Target is a parametrized case of this item (e.g., target
             // is "path::test_mul[case]" and prescan id is "path::test_mul")
-            || target.starts_with(&format!("{id}["))
-            || target.starts_with(&format!("{id}::"))
+            || (target.starts_with(id.as_str())
+                && target.as_bytes().get(id.len()) == Some(&b'['))
+            || (target.len() > id.len()
+                && target.starts_with(id.as_str())
+                && target[id.len()..].starts_with("::"))
     });
     if literal_match {
         return true;
     }
     // Check glob node IDs against the prescan ID.
     glob_matchers.iter().any(|m| m.is_match(&id))
-}
-
-/// Filter prescan items by node ID prefixes.
-///
-/// A node ID like `path::test_name` matches items with that fn_name.
-/// A node ID like `path::ClassName` matches all methods in that class.
-/// A node ID like `path::ClassName::test_name` matches a specific class method.
-#[allow(dead_code)]
-fn filter_prescan_by_node_ids<'a>(
-    items: &'a [PrescanItem],
-    file_path: &str,
-    node_ids: &[String],
-) -> Vec<&'a PrescanItem> {
-    if node_ids.is_empty() {
-        return items.iter().collect();
-    }
-
-    // For prescan filtering, only `*` and `?` trigger glob mode.
-    // Brackets in node IDs are structural (parametrize case IDs), not glob chars.
-    let has_glob = |s: &str| s.contains('*') || s.contains('?');
-    let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids.iter().partition(|id| has_glob(id));
-
-    // Pre-compile glob matchers for wildcard node IDs.
-    let glob_matchers = build_glob_matchers(&glob_ids);
-
-    items
-        .iter()
-        .filter(|item| prescan_item_matches_node_ids(item, file_path, &literal_ids, &glob_matchers))
-        .collect()
 }
 
 /// Convert a [`PrescanItem`] to a [`QueryEntry`](crate::query::resource::QueryEntry) for DSL evaluation.
@@ -319,54 +298,6 @@ fn prescan_item_to_query_entry(
     );
     fields.insert("async".to_string(), item.is_async.to_string());
     crate::query::resource::QueryEntry { fields }
-}
-
-/// Filter prescan items by a query DSL expression.
-///
-/// Supports: `name(pattern)`, `mark(name)`, `source(pattern)`, `async()`.
-/// On parse error, returns all items (fall through to eager).
-#[allow(dead_code)]
-fn filter_prescan_by_expression<'a>(
-    items: &'a [PrescanItem],
-    file_path: &str,
-    expression: &str,
-) -> Vec<&'a PrescanItem> {
-    let tokens = match crate::query::compile::lex(expression) {
-        Ok(t) => t,
-        Err(_) => return items.iter().collect(),
-    };
-    let parsed = match crate::query::compile::parse(tokens) {
-        Ok(p) => p,
-        Err(_) => return items.iter().collect(),
-    };
-    items
-        .iter()
-        .filter(|item| {
-            let entry = prescan_item_to_query_entry(item, file_path);
-            crate::query::eval::eval(&parsed, &entry)
-        })
-        .collect()
-}
-
-/// Filter prescan items by last-failed node IDs.
-///
-/// Checks exact match and parametrize prefix match.
-#[allow(dead_code)]
-fn filter_prescan_last_failed<'a>(
-    items: &'a [PrescanItem],
-    file_path: &str,
-    failed_ids: &std::collections::HashSet<String>,
-) -> Vec<&'a PrescanItem> {
-    items
-        .iter()
-        .filter(|item| {
-            let id = prescan_node_id(file_path, item);
-            let prefix = format!("{id}[");
-            failed_ids
-                .iter()
-                .any(|fid| fid == &id || fid.starts_with(&prefix))
-        })
-        .collect()
 }
 
 /// Returns true if any prescan item in the file matches any of the given node IDs.
@@ -834,6 +765,113 @@ mod tests {
         assert_eq!(filtered[0].param_id.as_deref(), Some("case_basic"));
     }
 
+    // ── Allocation-free prefix matching ─────────────────────────────────────
+    // These tests directly exercise the byte-level `[` and `::` checks that
+    // replaced `format!()` calls in `item_matches_node_ids` and
+    // `prescan_item_matches_node_ids`.
+
+    #[test]
+    fn prefix_match_exact_no_format_alloc() {
+        // Exact match: item_id == t — no prefix logic involved.
+        let items = vec![TestItem::builder("tests/test_a.py", "test_foo").arc()];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(
+            filtered.len(),
+            1,
+            "exact match should select exactly one item"
+        );
+    }
+
+    #[test]
+    fn prefix_match_parametrize_bracket() {
+        // Target is "path::test_foo"; items are parametrized variants ending in `[case]`.
+        // The byte-level check `item_id.as_bytes().get(t.len()) == Some(&b'[')` must fire.
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("alpha".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("beta".to_string())
+                .arc(),
+            TestItem::builder("tests/test_a.py", "test_foobar").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(
+            filtered.len(),
+            2,
+            "prefix '[' check must match parametrized variants but not 'test_foobar'"
+        );
+        assert!(
+            filtered.iter().all(|i| &*i.fn_name == "test_foo"),
+            "only test_foo variants should be selected"
+        );
+    }
+
+    #[test]
+    fn prefix_match_class_double_colon() {
+        // Target is "tests/test_cls.py::TestSuite"; items are class methods.
+        // The `item_id[t.len()..].starts_with("::")` branch must fire.
+        let items = vec![
+            TestItem::builder("tests/test_cls.py", "TestSuite::test_a").arc(),
+            TestItem::builder("tests/test_cls.py", "TestSuite::test_b").arc(),
+            TestItem::builder("tests/test_cls.py", "TestSuiteExtra::test_c").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw(
+            "tests/test_cls.py::TestSuite",
+        )];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert_eq!(
+            filtered.len(),
+            2,
+            "'::' prefix check must match class methods but not 'TestSuiteExtra'"
+        );
+    }
+
+    #[test]
+    fn prefix_match_no_false_positive_on_substring() {
+        // "test_foo" must NOT match "test_foobar" (no `[` or `::` follows the target).
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foobar").arc(),
+            TestItem::builder("tests/test_a.py", "test_foo_baz").arc(),
+        ];
+        let ids = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+        let source_files = HashSet::new();
+        let filtered = filter_by_node_ids(items, &ids, &source_files);
+        assert!(
+            filtered.is_empty(),
+            "a target that is a substring but lacks the '[' or '::' delimiter must not match"
+        );
+    }
+
+    #[test]
+    fn prescan_prefix_match_bidirectional() {
+        // When the target is a parametrized node ID like "path::test_mul[case]"
+        // and the prescan id is "path::test_mul", the reverse direction check
+        // (`target.starts_with(id) && target[id.len()..].starts_with("[")`) must fire.
+        let items = vec![make_item("test_mul"), make_item("test_add")];
+        let file_path = "tests/test_a.py";
+        let node_ids = vec!["tests/test_a.py::test_mul[case1]".to_string()];
+        assert!(
+            file_matches_node_ids(&items, file_path, &node_ids),
+            "bidirectional '[' check must match prescan item when target is a parametrized case"
+        );
+        let node_ids_other = vec!["tests/test_a.py::test_add[case1]".to_string()];
+        assert!(
+            file_matches_node_ids(&items, file_path, &node_ids_other),
+            "reverse '[' check must also work for test_add"
+        );
+        let node_ids_no_match = vec!["tests/test_a.py::test_sub[case1]".to_string()];
+        assert!(
+            !file_matches_node_ids(&items, file_path, &node_ids_no_match),
+            "test_sub is not in the prescan items — must not match"
+        );
+    }
+
     // ── Prescan filter helpers ───────────────────────────────────────────────
 
     use crate::prescan::{PrescanItem, PrescanMarker};
@@ -850,110 +888,6 @@ mod tests {
             class_name: None,
             body_weight: crate::types::DurationMs::ZERO,
         }
-    }
-
-    fn make_item_with_marker(fn_name: &str, marker: &str) -> PrescanItem {
-        PrescanItem {
-            markers: vec![PrescanMarker {
-                name: marker.to_string(),
-                has_dynamic_args: false,
-            }],
-            ..make_item(fn_name)
-        }
-    }
-
-    fn make_item_in_class(fn_name: &str, class: &str) -> PrescanItem {
-        PrescanItem {
-            is_class_method: true,
-            class_name: Some(class.to_string()),
-            ..make_item(fn_name)
-        }
-    }
-
-    #[test]
-    fn prescan_node_id_matches_exact_function() {
-        let items = vec![make_item("test_foo"), make_item("test_bar")];
-        let ids = vec!["tests/test_a.py::test_foo".to_string()];
-        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_foo");
-    }
-
-    #[test]
-    fn prescan_node_id_matches_class_method() {
-        let items = vec![
-            make_item_in_class("test_one", "TestSuite"),
-            make_item_in_class("test_two", "TestSuite"),
-            make_item("test_standalone"),
-        ];
-        let ids = vec!["tests/test_a.py::TestSuite::test_one".to_string()];
-        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_one");
-    }
-
-    #[test]
-    fn prescan_node_id_matches_all_class_methods() {
-        let items = vec![
-            make_item_in_class("test_one", "TestSuite"),
-            make_item_in_class("test_two", "TestSuite"),
-            make_item("test_standalone"),
-        ];
-        let ids = vec!["tests/test_a.py::TestSuite".to_string()];
-        let filtered = filter_prescan_by_node_ids(&items, "tests/test_a.py", &ids);
-        assert_eq!(filtered.len(), 2);
-        assert!(
-            filtered
-                .iter()
-                .all(|i| i.class_name.as_deref() == Some("TestSuite"))
-        );
-    }
-
-    #[test]
-    fn prescan_expression_filter_by_name() {
-        let items = vec![make_item("test_foo"), make_item("test_bar")];
-        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "name(test_foo)");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_foo");
-    }
-
-    #[test]
-    fn prescan_expression_filter_by_mark() {
-        let items = vec![
-            make_item_with_marker("test_slow", "slow"),
-            make_item("test_fast"),
-        ];
-        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "mark(slow)");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_slow");
-    }
-
-    #[test]
-    fn prescan_expression_filter_by_async() {
-        let mut async_item = make_item("test_async_fn");
-        async_item.is_async = true;
-        let items = vec![async_item, make_item("test_sync_fn")];
-        let filtered = filter_prescan_by_expression(&items, "tests/test_a.py", "async()");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].fn_name, "test_async_fn");
-    }
-
-    #[test]
-    fn prescan_last_failed_filters_by_cached_ids() {
-        let items = vec![
-            make_item("test_pass"),
-            make_item("test_fail"),
-            make_item("test_param"),
-        ];
-        let mut failed = HashSet::new();
-        failed.insert("tests/test_a.py::test_fail".to_string());
-        // Also test parametrize prefix matching
-        failed.insert("tests/test_a.py::test_param[case1]".to_string());
-        let filtered = filter_prescan_last_failed(&items, "tests/test_a.py", &failed);
-        assert_eq!(filtered.len(), 2);
-        let names: Vec<_> = filtered.iter().map(|i| &*i.fn_name).collect();
-        assert!(names.contains(&"test_fail"));
-        assert!(names.contains(&"test_param"));
     }
 
     mod prescan_file_predicates {
