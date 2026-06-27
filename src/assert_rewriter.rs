@@ -517,3 +517,288 @@ pub(crate) fn rewrite_asserts(
     let bare_map = ctx.into_py_dict(py)?;
     Ok((tree.into_any().unbind(), bare_map))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Run a closure with the Python GIL acquired and the `ast` module imported.
+    ///
+    /// Uses `Python::attach` (pyo3 0.29 API), which initialises the interpreter
+    /// automatically when running outside an embedded Python process.
+    fn with_ast<F, T>(f: F) -> T
+    where
+        F: FnOnce(Python<'_>, &Bound<'_, PyModule>) -> T,
+    {
+        Python::initialize();
+        Python::attach(|py| {
+            let ast = py.import("ast").expect("ast module should be importable");
+            f(py, &ast)
+        })
+    }
+
+    // ── op_str ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn op_str_known_operators() {
+        with_ast(|_py, ast| {
+            let cases: &[(&str, &str)] = &[
+                ("Eq", "=="),
+                ("NotEq", "!="),
+                ("Lt", "<"),
+                ("LtE", "<="),
+                ("Gt", ">"),
+                ("GtE", ">="),
+                ("Is", "is"),
+                ("IsNot", "is not"),
+                ("In", "in"),
+                ("NotIn", "not in"),
+            ];
+            for (type_name, expected) in cases {
+                let op = ast
+                    .getattr(type_name)
+                    .unwrap_or_else(|_| panic!("ast.{type_name} should exist"))
+                    .call0()
+                    .unwrap_or_else(|_| panic!("ast.{type_name}() should be callable"));
+                let result =
+                    op_str(&op).unwrap_or_else(|e| panic!("op_str failed for {type_name}: {e}"));
+                assert!(
+                    result == Some(*expected),
+                    "op_str for {type_name} should return Some({expected:?}), got {result:?}"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn op_str_unknown_operator_returns_none() {
+        with_ast(|_py, ast| {
+            // ast.Add is a binary operator, not a compare operator — not in OP_MAP.
+            let add = ast
+                .getattr("Add")
+                .expect("ast.Add should exist")
+                .call0()
+                .expect("ast.Add() should be callable");
+            let result = op_str(&add).expect("op_str should not raise for unknown op");
+            assert!(
+                result.is_none(),
+                "op_str for unknown operator should return None, got {result:?}"
+            );
+        });
+    }
+
+    // ── AST node constructors ─────────────────────────────────────────────────
+
+    #[test]
+    fn make_name_load_produces_correct_node() {
+        with_ast(|py, ast| {
+            let node =
+                make_name_load(py, ast, "my_var", 3, 7).expect("make_name_load should succeed");
+            let id: String = node.getattr("id").unwrap().extract().unwrap();
+            let lineno: i64 = node.getattr("lineno").unwrap().extract().unwrap();
+            let col: i64 = node.getattr("col_offset").unwrap().extract().unwrap();
+            let ctx_type: String = node
+                .getattr("ctx")
+                .unwrap()
+                .get_type()
+                .getattr("__name__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(id == "my_var", "id should be 'my_var', got {id:?}");
+            assert!(lineno == 3, "lineno should be 3, got {lineno}");
+            assert!(col == 7, "col_offset should be 7, got {col}");
+            assert!(ctx_type == "Load", "ctx should be Load, got {ctx_type:?}");
+        });
+    }
+
+    #[test]
+    fn make_name_store_produces_correct_node() {
+        with_ast(|py, ast| {
+            let node =
+                make_name_store(py, ast, "target", 1, 0).expect("make_name_store should succeed");
+            let id: String = node.getattr("id").unwrap().extract().unwrap();
+            let ctx_type: String = node
+                .getattr("ctx")
+                .unwrap()
+                .get_type()
+                .getattr("__name__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(id == "target", "id should be 'target', got {id:?}");
+            assert!(ctx_type == "Store", "ctx should be Store, got {ctx_type:?}");
+        });
+    }
+
+    #[test]
+    fn make_constant_produces_correct_node() {
+        with_ast(|py, ast| {
+            let val = pyo3::types::PyString::new(py, "hello").into_any();
+            let node = make_constant(py, ast, &val, 2, 4).expect("make_constant should succeed");
+            let value: String = node.getattr("value").unwrap().extract().unwrap();
+            let lineno: i64 = node.getattr("lineno").unwrap().extract().unwrap();
+            assert!(value == "hello", "value should be 'hello', got {value:?}");
+            assert!(lineno == 2, "lineno should be 2, got {lineno}");
+        });
+    }
+
+    #[test]
+    fn make_assign_produces_correct_node() {
+        with_ast(|py, ast| {
+            let rhs = pyo3::types::PyString::new(py, "rhs_val").into_any();
+            let node = make_assign(py, ast, "x", &rhs, 5, 0).expect("make_assign should succeed");
+            let type_name: String = node
+                .get_type()
+                .getattr("__name__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(
+                type_name == "Assign",
+                "node should be Assign, got {type_name:?}"
+            );
+            // targets is a list; first element should be a Name(Store).
+            let targets = node.getattr("targets").unwrap();
+            let first = targets.get_item(0).unwrap();
+            let first_id: String = first.getattr("id").unwrap().extract().unwrap();
+            assert!(
+                first_id == "x",
+                "target name should be 'x', got {first_id:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn make_raise_produces_correct_node() {
+        with_ast(|py, ast| {
+            let exc = pyo3::types::PyString::new(py, "err").into_any();
+            let node = make_raise(py, ast, &exc, 9, 0).expect("make_raise should succeed");
+            let type_name: String = node
+                .get_type()
+                .getattr("__name__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(
+                type_name == "Raise",
+                "node should be Raise, got {type_name:?}"
+            );
+            let lineno: i64 = node.getattr("lineno").unwrap().extract().unwrap();
+            assert!(lineno == 9, "lineno should be 9, got {lineno}");
+        });
+    }
+
+    #[test]
+    fn make_call_produces_correct_node() {
+        with_ast(|py, ast| {
+            let args = pyo3::types::PyList::empty(py);
+            let node =
+                make_call(py, ast, "my_func", &args, 4, 2).expect("make_call should succeed");
+            let type_name: String = node
+                .get_type()
+                .getattr("__name__")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(
+                type_name == "Call",
+                "node should be Call, got {type_name:?}"
+            );
+            // func should be a Name(id="my_func", ctx=Load).
+            let func = node.getattr("func").unwrap();
+            let func_id: String = func.getattr("id").unwrap().extract().unwrap();
+            assert!(
+                func_id == "my_func",
+                "func.id should be 'my_func', got {func_id:?}"
+            );
+        });
+    }
+
+    // ── BareAssertCtx ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn bare_assert_ctx_empty_stack_records_nothing() {
+        let mut ctx = BareAssertCtx::new();
+        // Recording with no function on the stack is a no-op.
+        ctx.record(42);
+        assert!(
+            ctx.by_fn.is_empty(),
+            "by_fn should be empty when fn_stack is empty"
+        );
+    }
+
+    #[test]
+    fn bare_assert_ctx_single_function() {
+        let mut ctx = BareAssertCtx::new();
+        ctx.fn_stack.push("test_foo".to_string());
+        ctx.record(5);
+        ctx.record(10);
+        assert!(
+            ctx.by_fn.get("test_foo") == Some(&vec![5, 10]),
+            "should record lines 5 and 10 under 'test_foo'"
+        );
+    }
+
+    #[test]
+    fn bare_assert_ctx_nested_functions_attributed_to_outermost() {
+        let mut ctx = BareAssertCtx::new();
+        ctx.fn_stack.push("outer".to_string());
+        ctx.fn_stack.push("inner".to_string());
+        ctx.record(7);
+        // Line 7 should be attributed to "outer" (index 0), not "inner".
+        assert!(
+            ctx.by_fn.get("outer") == Some(&vec![7]),
+            "record should attribute to outermost function"
+        );
+        assert!(
+            ctx.by_fn.get("inner").is_none(),
+            "inner function should not appear in by_fn"
+        );
+    }
+
+    #[test]
+    fn bare_assert_ctx_into_py_dict_sorted() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut ctx = BareAssertCtx::new();
+            ctx.fn_stack.push("test_bar".to_string());
+            // Insert lines out of order to verify that into_py_dict sorts them.
+            ctx.record(20);
+            ctx.record(5);
+            ctx.record(12);
+
+            let dict_obj = ctx.into_py_dict(py).expect("into_py_dict should succeed");
+            let dict = dict_obj.bind(py);
+            let lines: Bound<'_, PyAny> = dict
+                .get_item("test_bar")
+                .expect("test_bar key should exist in dict");
+            let lines_vec: Vec<i64> = lines.extract().expect("should extract as Vec<i64>");
+            assert!(
+                lines_vec == vec![5, 12, 20],
+                "lines should be sorted ascending, got {lines_vec:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn bare_assert_ctx_multiple_functions_after_pop() {
+        let mut ctx = BareAssertCtx::new();
+        ctx.fn_stack.push("test_a".to_string());
+        ctx.record(1);
+        ctx.fn_stack.pop();
+
+        ctx.fn_stack.push("test_b".to_string());
+        ctx.record(2);
+        ctx.fn_stack.pop();
+
+        assert!(
+            ctx.by_fn.get("test_a") == Some(&vec![1]),
+            "test_a should have line 1"
+        );
+        assert!(
+            ctx.by_fn.get("test_b") == Some(&vec![2]),
+            "test_b should have line 2"
+        );
+    }
+}
