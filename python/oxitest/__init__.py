@@ -45,6 +45,7 @@ Patcher        — Temp overrides: `patch.setattr`, `patch.setenv`,
 CaptureResult  — `out` and `err` strings returned by `readouterr()`.
 LogCapture     — Capture logging records; `log.records`, `log.text`,
                  `log.set_level()`.
+injectable    — Class decorator: mark a type as auto-injectable without Fixture[T].
 WarnCapture    — Capture all warnings.warn() calls during a test:
                  `warn.list`, `warn.clear()`.
 raises         — Assert a block raises an exception:
@@ -138,6 +139,7 @@ from oxitest._bridge._fixture_type import (
     Fixture as Fixture,
     FixtureRef as FixtureRef,
     Yields as Yields,
+    injectable as injectable,
 )
 from oxitest._bridge._fixtures import (
     Fixtures as Fixtures,
@@ -199,6 +201,7 @@ __all__ = [
     "TestResult",
     "Yields",
     "importorskip",
+    "injectable",
     "mark",
     "Plugin",
     "skip",

@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._fixture_type import injectable
+
 if TYPE_CHECKING:
     from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.plugin_loader import PluginRegistry
@@ -31,6 +33,7 @@ class _BuiltinContext:
         return self.meta.fn_name
 
 
+@injectable
 class _TestContext:
     """Test identity metadata and imperative teardown registration.
 

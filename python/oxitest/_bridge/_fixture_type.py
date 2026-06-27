@@ -106,6 +106,27 @@ class _YieldsAlias:
 
 Yields = _YieldsAlias
 
+
+def injectable(cls: type) -> type:
+    """Class decorator that marks a type as automatically injectable.
+
+    Parameters annotated with @injectable classes trigger injection
+    without Fixture[T] wrapping::
+
+        @injectable
+        class DbSession:
+            ...
+
+        def test_query(db_session: DbSession) -> None:
+            ...
+
+    Fixture[T] still works on @injectable types (redundant but
+    harmless).
+    """
+    cls.__oxitest_injectable__ = True
+    return cls
+
+
 __all__ = [
     "_FixtureMarker",
     "_FixtureType",
@@ -115,4 +136,5 @@ __all__ = [
     "FixtureRef",
     "_YieldsAlias",
     "Yields",
+    "injectable",
 ]

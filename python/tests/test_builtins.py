@@ -590,11 +590,9 @@ def test_patcher_teardown_undoes_in_lifo_order():
 # ── Type aliases ──────────────────────────────────────────────────────────────
 
 
-def test_type_aliases_are_annotated_with_fixture_marker():
-    from typing import Annotated, get_args, get_origin
-
+def test_type_aliases_are_injectable():
+    """Built-in type aliases are @injectable classes (not Annotated aliases)."""
     import oxitest._bridge._builtins as builtins_pkg
-    from oxitest._bridge._fixture_type import _FixtureMarker
 
     for name in (
         "TempDir",
@@ -603,12 +601,13 @@ def test_type_aliases_are_annotated_with_fixture_marker():
         "FdCapture",
         "Patcher",
         "LogCapture",
+        "TestContext",
+        "WarnCapture",
     ):
-        alias = getattr(builtins_pkg, name)
-        assert get_origin(alias) is Annotated, f"{name} is not Annotated"
-        args = get_args(alias)
-        assert any(isinstance(m, _FixtureMarker) for m in args[1:]), (
-            f"{name} missing _FixtureMarker in metadata"
+        cls = getattr(builtins_pkg, name)
+        assert isinstance(cls, type), f"{name} should be a class, got {cls!r}"
+        assert getattr(cls, '__oxitest_injectable__', False), (
+            f"{name} missing __oxitest_injectable__ attribute"
         )
 
 

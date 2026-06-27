@@ -234,5 +234,15 @@ def _extract_annotated_type(hint: Any, marker_type: type) -> tuple[bool, Any]:
 
 
 def _fixture_inner_type(hint: Any) -> tuple[bool, Any]:
-    """Return (is_fixture, inner_type). is_fixture is True iff hint is Fixture[T]."""
-    return _extract_annotated_type(hint, _FixtureMarker)
+    """Return (is_fixture, inner_type).
+
+    is_fixture is True if hint is Fixture[T] (Annotated[T, _FixtureMarker])
+    or if hint is an @injectable class.
+    """
+    is_fx, inner = _extract_annotated_type(hint, _FixtureMarker)
+    if is_fx:
+        return True, inner
+    # @injectable classes carry __oxitest_injectable__ = True
+    if isinstance(hint, type) and getattr(hint, '__oxitest_injectable__', False):
+        return True, hint
+    return False, None

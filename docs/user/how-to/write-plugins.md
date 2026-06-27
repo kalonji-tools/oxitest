@@ -302,8 +302,10 @@ def oxitest_plugin(config=None):
 
 Fixture providers inject custom fixtures into tests. The `name` property is the
 parameter name used in test functions. The `fixture_type` property is the type
-that `Fixture[T]` must match. `create()` builds the fixture value and
-`teardown()` cleans it up.
+that `Fixture[T]` or `@injectable` must match. `create()` builds the
+fixture value and `teardown()` cleans it up. Use the `@injectable` decorator
+on the fixture class so tests can annotate parameters directly without
+`Fixture[T]` wrapping.
 
 **Signatures:**
 
@@ -367,11 +369,23 @@ def oxitest_plugin(config=None):
 Tests inject the fixture using the provider's `name` and `fixture_type`:
 
 ```python
-from oxitest import Fixture
+from oxitest import Fixture, injectable
 from my_plugin import ConnectionPool
 
 
-def test_database(pool: Fixture[ConnectionPool]):
+@injectable
+class DbPool(ConnectionPool):
+    """Auto-injectable type — no Fixture[T] wrapping needed."""
+
+
+def test_database(pool: DbPool):
+    """Annotation `pool: DbPool` alone triggers injection."""
+    conn = pool.acquire()
+    assert conn is not None
+
+
+def test_original(pool: Fixture[ConnectionPool]):
+    """Fixture[T] still works (redundant but harmless)."""
     conn = pool.acquire()
     assert conn is not None
 ```

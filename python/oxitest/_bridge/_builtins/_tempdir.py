@@ -10,6 +10,7 @@ from pathlib import Path
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_type import injectable
 from oxitest._bridge.result import StatusKind
 
 # Statuses where the test did NOT fail — TempDir can be cleaned up safely.
@@ -36,6 +37,7 @@ def _should_keep(mode: str, result_cell: list | None) -> bool:
 
 
 @dataclass
+@injectable
 class _TempDir:
     """A temporary directory provided to a test.
 
@@ -67,6 +69,7 @@ class _TempDir:
         return str(self.path)
 
 
+@injectable
 class _TempDirFactory:
     """Session-scoped factory for creating multiple named temp directories.
 

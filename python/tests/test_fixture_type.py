@@ -178,3 +178,89 @@ def test_fixture_ref_exported_from_oxitest():
     assert "FixtureRef" in oxitest.__all__, (
         "'FixtureRef' should be listed in oxitest.__all__"
     )
+
+
+# ── @injectable decorator ──────────────────────────────────────────────────
+
+
+def test_injectable_decorator_sets_attribute():
+    """@injectable sets __oxitest_injectable__ = True on the decorated class."""
+    from oxitest import injectable
+
+    @injectable
+    class _MyType:
+        pass
+
+    assert _MyType.__oxitest_injectable__ is True, (
+        "@injectable should set __oxitest_injectable__"
+    )
+
+
+def test_injectable_does_not_affect_undecorated():
+    """Undecorated classes lack __oxitest_injectable__."""
+    class _Plain:
+        pass
+
+    assert not hasattr(_Plain, '__oxitest_injectable__'), (
+        "Plain class should not have __oxitest_injectable__"
+    )
+
+
+def test_injectable_class_is_detected_by_fixture_inner_type():
+    """_fixture_inner_type returns (True, cls) for @injectable classes."""
+    from oxitest import injectable
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+    @injectable
+    class _MyType:
+        pass
+
+    is_fx, inner = _fixture_inner_type(_MyType)
+    assert is_fx, "_fixture_inner_type should detect @injectable class"
+    assert inner is _MyType, (
+        f"inner type should be _MyType, got {inner!r}"
+    )
+
+
+def test_injectable_plain_class_not_detected():
+    """_fixture_inner_type returns (False, None) for plain classes."""
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+    class _Plain:
+        pass
+
+    is_fx, inner = _fixture_inner_type(_Plain)
+    assert not is_fx, "Plain class should not be detected as fixture"
+    assert inner is None, f"inner should be None, got {inner!r}"
+
+
+def test_injectable_interop_with_fixture_t():
+    """Fixture[T] still works on @injectable classes (redundant but harmless)."""
+    from oxitest import Fixture, injectable
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+    @injectable
+    class _MyType:
+        pass
+
+    # Via Fixture[T] — same result as before
+    is_fx, inner = _fixture_inner_type(Fixture[_MyType])
+    assert is_fx, "Fixture[T] on @injectable class should still work"
+    assert inner is _MyType, (
+        f"inner should be _MyType, got {inner!r}"
+    )
+
+
+def test_injectable_class_as_test_annotation():
+    """An @injectable class used as a parameter annotation is injectable."""
+    from oxitest import injectable
+    from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+    @injectable
+    class _DbSession:
+        pass
+
+    # Simulate what happens when a test annotates with the @injectable class
+    is_fx, inner = _fixture_inner_type(_DbSession)
+    assert is_fx, "@injectable class should be detected"
+    assert inner is _DbSession

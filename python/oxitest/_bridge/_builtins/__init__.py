@@ -53,7 +53,6 @@ from oxitest._bridge._builtins._warncapture import (
     _WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
-from oxitest._bridge._fixture_type import _FixtureMarker
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
@@ -65,14 +64,14 @@ class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
 # Each alias IS already Annotated[..., _FixtureMarker()], so users write the
 # name bare in annotations — no `Fixture[TempDir]` wrapping needed.
 
-TempDir = Annotated[_TempDir, _FixtureMarker()]
-TempDirFactory = Annotated[_TempDirFactory, _FixtureMarker()]
-StdCapture = Annotated[_StdCapture, _FixtureMarker()]
-FdCapture = Annotated[_FdCapture, _FixtureMarker()]
-Patcher = Annotated[_Patcher, _FixtureMarker()]
-TestContext = Annotated[_TestContext, _FixtureMarker()]
-LogCapture = Annotated[_LogCapture, _FixtureMarker()]
-WarnCapture = Annotated[_WarnCapture, _FixtureMarker()]
+TempDir = _TempDir  # @injectable
+TempDirFactory = _TempDirFactory  # @injectable
+StdCapture = _StdCapture  # @injectable
+FdCapture = _FdCapture  # @injectable
+Patcher = _Patcher  # @injectable
+TestContext = _TestContext  # @injectable
+LogCapture = _LogCapture  # @injectable
+WarnCapture = _WarnCapture  # @injectable
 
 __all__ = [
     "TempDir",
