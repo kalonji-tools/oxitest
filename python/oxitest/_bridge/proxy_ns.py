@@ -6,21 +6,21 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._builtins._capture import _FdCapture, _StdCapture
-from oxitest._bridge._builtins._logcapture import _LogCapture
-from oxitest._bridge._builtins._patch import _Patcher
-from oxitest._bridge._builtins._tempdir import _TempDir, _TempDirFactory
+from oxitest._bridge._builtins._capture import FdCapture, StdCapture
+from oxitest._bridge._builtins._logcapture import LogCapture
+from oxitest._bridge._builtins._patch import Patcher
+from oxitest._bridge._builtins._tempdir import TempDir, TempDirFactory
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_session import FixtureSession
 
 _OXI_NAMES: dict[str, type] = {
-    "tmp": _TempDir,
-    "tmp_factory": _TempDirFactory,
-    "cap": _StdCapture,
-    "fd_cap": _FdCapture,
-    "patch": _Patcher,
-    "log": _LogCapture,
+    "tmp": TempDir,
+    "tmp_factory": TempDirFactory,
+    "cap": StdCapture,
+    "fd_cap": FdCapture,
+    "patch": Patcher,
+    "log": LogCapture,
     # "ctx" handled separately via _get_ctx_type() to avoid circular import
 }
 
@@ -28,9 +28,9 @@ _CTX_NAME = "ctx"
 
 
 def _get_ctx_type() -> type:
-    from oxitest._bridge._builtin_context import _TestContext
+    from oxitest._bridge._builtin_context import TestContext
 
-    return _TestContext
+    return TestContext
 
 
 class _CachingProxy:
@@ -95,7 +95,7 @@ class OxiNamespaceProxy(_CachingProxy):
         tmp, tmp_factory, cap, fd_cap, patch, log, ctx
 
     Built-in values are cached on first access so that e.g. `fx.oxi.log` always
-    returns the same `_LogCapture` instance within a single test.
+    returns the same `LogCapture` instance within a single test.
     """
 
     __slots__ = ("_session", "_module_path", "_fn_teardowns", "_fn_name", "_cache")

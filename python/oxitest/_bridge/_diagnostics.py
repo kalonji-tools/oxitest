@@ -23,7 +23,7 @@ from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )
-from oxitest._bridge._builtins._warncapture import _WarnCapture
+from oxitest._bridge._builtins._warncapture import WarnCapture
 from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge.result import (
     ErrorResult,
@@ -212,7 +212,7 @@ def check_warnings(
 ) -> tuple[bool, str]:
     """Filter caught warnings, excluding captured and teardown warnings."""
     warn_capture = next(
-        (v for v in all_kwargs.values() if isinstance(v, _WarnCapture)), None
+        (v for v in all_kwargs.values() if isinstance(v, WarnCapture)), None
     )
     captured_ids = warn_capture._all_captured_ids if warn_capture else set()
     relevant = "\n".join(

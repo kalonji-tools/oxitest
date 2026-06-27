@@ -10,7 +10,7 @@
 
 ## TempDir
 
-::: oxitest._bridge._builtins._tempdir._TempDir
+::: oxitest._bridge._builtins._tempdir.TempDir
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -18,7 +18,7 @@
 
 ## TempDirFactory
 
-::: oxitest._bridge._builtins._tempdir._TempDirFactory
+::: oxitest._bridge._builtins._tempdir.TempDirFactory
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -56,7 +56,7 @@ keep_tmp = "failed"
 
 ## StdCapture
 
-::: oxitest._bridge._builtins._capture._StdCapture
+::: oxitest._bridge._builtins._capture.StdCapture
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -67,7 +67,7 @@ keep_tmp = "failed"
 
 ## FdCapture
 
-::: oxitest._bridge._builtins._capture._FdCapture
+::: oxitest._bridge._builtins._capture.FdCapture
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -86,7 +86,7 @@ keep_tmp = "failed"
 
 ## Patcher
 
-::: oxitest._bridge._builtins._patch._Patcher
+::: oxitest._bridge._builtins._patch.Patcher
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -99,7 +99,7 @@ keep_tmp = "failed"
 
 ## LogCapture
 
-::: oxitest._bridge._builtins._logcapture._LogCapture
+::: oxitest._bridge._builtins._logcapture.LogCapture
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -112,7 +112,7 @@ keep_tmp = "failed"
 
 ## WarnCapture
 
-::: oxitest._bridge._builtins._warncapture._WarnCapture
+::: oxitest._bridge._builtins._warncapture.WarnCapture
     options:
       show_root_heading: false
       show_root_toc_entry: false
@@ -123,7 +123,7 @@ keep_tmp = "failed"
 
 ## TestContext
 
-::: oxitest._bridge._builtin_context._TestContext
+::: oxitest._bridge._builtin_context.TestContext
     options:
       show_root_heading: false
       show_root_toc_entry: false

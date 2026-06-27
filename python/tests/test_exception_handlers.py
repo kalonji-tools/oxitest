@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest._bridge._builtins._warncapture import _WarnCapture
+from oxitest._bridge._builtins._warncapture import WarnCapture
 from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
@@ -53,12 +53,12 @@ def test_check_warnings_excludes_teardown_warnings():
 
 
 def test_check_warnings_excludes_captured_ids():
-    """Warnings already captured by _WarnCapture are filtered out."""
+    """Warnings already captured by WarnCapture are filtered out."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         warnings.warn("captured one", UserWarning, stacklevel=1)
 
-    wc = _WarnCapture()
+    wc = WarnCapture()
     # Simulate that the WarnCapture already captured this warning
     wc._all_captured_ids.add(id(caught[0]))
 

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from conftest import helpers
 from oxitest import Fixture, TempDir
-from oxitest._bridge._builtin_context import _TestContext
-from oxitest._bridge._builtins._capture import _StdCapture
-from oxitest._bridge._builtins._logcapture import _LogCapture
-from oxitest._bridge._builtins._patch import _Patcher
-from oxitest._bridge._builtins._tempdir import _TempDir
+from oxitest._bridge._builtin_context import TestContext as OxiTestContext
+from oxitest._bridge._builtins._capture import StdCapture
+from oxitest._bridge._builtins._logcapture import LogCapture
+from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
@@ -108,8 +107,8 @@ def test_oxi_proxy_tmp_injects_tempdir(
 ):
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.tmp
-    assert isinstance(result, _TempDir), (
-        f"oxi.tmp should inject a _TempDir instance, got {type(result).__name__}"
+    assert isinstance(result, TempDir), (
+        f"oxi.tmp should inject a TempDir instance, got {type(result).__name__}"
     )
 
 
@@ -119,8 +118,8 @@ def test_oxi_proxy_cap_injects_stdcapture(
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.cap
-    assert isinstance(result, _StdCapture), (
-        f"oxi.cap should inject a _StdCapture instance, got {type(result).__name__}"
+    assert isinstance(result, StdCapture), (
+        f"oxi.cap should inject a StdCapture instance, got {type(result).__name__}"
     )
     for td in reversed(teardowns):
         td()
@@ -131,8 +130,8 @@ def test_oxi_proxy_patch_injects_patcher(
 ):
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.patch
-    assert isinstance(result, _Patcher), (
-        f"oxi.patch should inject a _Patcher instance, got {type(result).__name__}"
+    assert isinstance(result, Patcher), (
+        f"oxi.patch should inject a Patcher instance, got {type(result).__name__}"
     )
 
 
@@ -142,8 +141,8 @@ def test_oxi_proxy_log_injects_logcapture(
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.log
-    assert isinstance(result, _LogCapture), (
-        f"oxi.log should inject a _LogCapture instance, got {type(result).__name__}"
+    assert isinstance(result, LogCapture), (
+        f"oxi.log should inject a LogCapture instance, got {type(result).__name__}"
     )
     for td in reversed(teardowns):
         td()
@@ -191,11 +190,11 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
 
 
 def test_oxi_proxy_ctx_returns_test_context(fixture_session: Fixture[FixtureSession]):
-    """fx.oxi.ctx should return a _TestContext instance."""
+    """fx.oxi.ctx should return a TestContext instance."""
     proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", [])
     result = proxy.ctx
-    assert isinstance(result, _TestContext), (
-        f"oxi.ctx should return a _TestContext instance, got {type(result).__name__}"
+    assert isinstance(result, OxiTestContext), (
+        f"oxi.ctx should return a TestContext instance, got {type(result).__name__}"
     )
 
 
@@ -223,8 +222,7 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
     tmp1 = proxy.tmp
     tmp2 = proxy.tmp
     assert tmp1 is tmp2, (
-        "OxiNamespaceProxy.tmp should return the same cached _TempDir on repeated "
-        "access"
+        "OxiNamespaceProxy.tmp should return the same cached TempDir on repeated access"
     )
     for td in reversed(teardowns):
         td()

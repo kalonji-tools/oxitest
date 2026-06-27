@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["_BuiltinContext", "_TestContext"]
+__all__ = ["_BuiltinContext", "TestContext"]
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -34,7 +34,7 @@ class _BuiltinContext:
 
 
 @injectable
-class _TestContext:
+class TestContext:
     """Test identity metadata and imperative teardown registration.
 
     Injected when a test parameter is annotated with `TestContext`::

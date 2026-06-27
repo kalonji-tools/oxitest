@@ -57,7 +57,7 @@ class LogBackend(Protocol):
             - ``levelname`` (``str``) — severity name (e.g. ``"WARNING"``)
             - ``getMessage()`` (``Callable[[], str]``) — formatted message text
 
-            The built-in ``_LogCapture`` consumer sorts by ``created`` and
+            The built-in ``LogCapture`` consumer sorts by ``created`` and
             formats output using ``levelname`` and ``getMessage()``.  Records
             missing these attributes will raise ``AttributeError`` at runtime.
         """
