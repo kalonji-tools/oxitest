@@ -106,6 +106,28 @@ class _YieldsAlias:
 
 Yields = _YieldsAlias
 
+
+def injectable(cls: type) -> type:
+    """Mark a class as automatically injectable by oxitest.
+
+    Parameters annotated with an ``@injectable`` class trigger fixture
+    injection without ``Fixture[T]`` wrapping::
+
+        @injectable
+        class DbSession:
+            ...
+
+        def test_query(db_session: DbSession) -> None:
+            ...
+
+    ``Fixture[T]`` still works on ``@injectable`` types (redundant but
+    harmless).  ``Fixture[T]`` remains the only mechanism for conftest
+    fixtures whose types are generic (e.g. ``list[int]``).
+    """
+    setattr(cls, "__oxitest_injectable__", True)
+    return cls
+
+
 __all__ = [
     "_FixtureMarker",
     "_FixtureType",
@@ -115,4 +137,5 @@ __all__ = [
     "FixtureRef",
     "_YieldsAlias",
     "Yields",
+    "injectable",
 ]
