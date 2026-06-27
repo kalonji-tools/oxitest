@@ -178,3 +178,27 @@ def test_fixture_ref_exported_from_oxitest():
     assert "FixtureRef" in oxitest.__all__, (
         "'FixtureRef' should be listed in oxitest.__all__"
     )
+
+
+def test_injectable_stamps_attribute():
+    from oxitest._bridge._fixture_type import injectable
+
+    @injectable
+    class MyType:
+        pass
+
+    assert getattr(MyType, "__oxitest_injectable__", False) is True, (
+        "@injectable should stamp __oxitest_injectable__ = True on the class"
+    )
+
+
+def test_injectable_returns_the_class_unchanged():
+    from oxitest._bridge._fixture_type import injectable
+
+    @injectable
+    class MyType:
+        pass
+
+    assert MyType.__name__ == "MyType", (
+        "@injectable should return the original class, not a wrapper"
+    )
