@@ -234,3 +234,14 @@ def test_plugin_config_types_importable():
     assert CliExtension(prefix="p", config_type=int).prefix == "p", (
         "CliExtension should be constructable"
     )
+
+
+def test_injectable_exported_from_oxitest():
+    import oxitest
+
+    assert hasattr(oxitest, "injectable"), (
+        "'injectable' should be exported from the oxitest module"
+    )
+    assert "injectable" in oxitest.__all__, (
+        "'injectable' should be listed in oxitest.__all__"
+    )

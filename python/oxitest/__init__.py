@@ -138,6 +138,7 @@ from oxitest._bridge._fixture_type import (
     Fixture as Fixture,
     FixtureRef as FixtureRef,
     Yields as Yields,
+    injectable as injectable,
 )
 from oxitest._bridge._fixtures import (
     Fixtures as Fixtures,
@@ -199,6 +200,7 @@ __all__ = [
     "TestResult",
     "Yields",
     "importorskip",
+    "injectable",
     "mark",
     "Plugin",
     "skip",
