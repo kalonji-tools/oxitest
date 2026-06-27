@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import oxitest
 from conftest import helpers
-from oxitest._bridge._builtins._capture import _StdCapture
+from oxitest._bridge._builtins._capture import StdCapture
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._diagnostics import is_debuggable as _is_debuggable
 from oxitest._bridge.executor import (
@@ -65,7 +65,7 @@ def test_is_debuggable_system_exit_false():
 
 def test_suspend_capture_restores_std_capture():
     """_suspend_capture should call _restore on StdCapture instances."""
-    cap = _StdCapture()
+    cap = StdCapture()
     old_stdout = cap._old_stdout
     _suspend_capture({"cap": cap, "x": 42})
     assert sys.stdout is old_stdout, "stdout should be restored after _suspend_capture"
@@ -240,7 +240,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
 
 def test_trace_before_test_suspends_capture_during_call():
     """Capture should be suspended when backend.trace() is called."""
-    cap = _StdCapture()
+    cap = StdCapture()
     suspended_during_trace = False
 
     class SpyDebugger:
@@ -274,7 +274,7 @@ def test_trace_before_test_no_capture_kwargs():
 
 def test_debug_post_mortem_permanently_suspends_capture():
     """_debug_post_mortem should permanently restore capture."""
-    cap = _StdCapture()
+    cap = StdCapture()
     old_stdout = cap._old_stdout
     rec = helpers.common.RecordingDebugger()
 

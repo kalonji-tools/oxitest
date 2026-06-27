@@ -3,8 +3,8 @@ from __future__ import annotations
 __all__ = [
     "CaptureResult",
     "_CaptureBase",
-    "_StdCapture",
-    "_FdCapture",
+    "StdCapture",
+    "FdCapture",
     "_StdCaptureFixture",
     "_FdCaptureFixture",
 ]
@@ -75,7 +75,7 @@ class _CaptureBase(ABC):
 
 
 @injectable
-class _StdCapture(_CaptureBase):
+class StdCapture(_CaptureBase):
     r"""Captures `sys.stdout` and `sys.stderr` at the Python stream level.
 
     Replaces `sys.stdout` and `sys.stderr` with in-memory `StringIO`
@@ -119,7 +119,7 @@ class _StdCapture(_CaptureBase):
 
 
 @injectable
-class _FdCapture(_CaptureBase):
+class FdCapture(_CaptureBase):
     """Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).
 
     Redirects the underlying OS file descriptors, so output from C extensions,
@@ -172,15 +172,15 @@ class _FdCapture(_CaptureBase):
         self._stderr_tmp.close()
 
 
-class _StdCaptureFixture(BuiltinFixture, fixture_type=_StdCapture):
-    def create(self, ctx: _BuiltinContext) -> _StdCapture:
-        cap = _StdCapture()
+class _StdCaptureFixture(BuiltinFixture, fixture_type=StdCapture):
+    def create(self, ctx: _BuiltinContext) -> StdCapture:
+        cap = StdCapture()
         ctx.teardown_stack.append(cap._restore)
         return cap
 
 
-class _FdCaptureFixture(BuiltinFixture, fixture_type=_FdCapture):
-    def create(self, ctx: _BuiltinContext) -> _FdCapture:
-        cap = _FdCapture()
+class _FdCaptureFixture(BuiltinFixture, fixture_type=FdCapture):
+    def create(self, ctx: _BuiltinContext) -> FdCapture:
+        cap = FdCapture()
         ctx.teardown_stack.append(cap._restore)
         return cap

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["LogBackend", "StdlibLogBackend", "_LogCapture", "_LogCaptureFixture"]
+__all__ = ["LogBackend", "StdlibLogBackend", "LogCapture", "_LogCaptureFixture"]
 
 import logging
 from collections.abc import Generator
@@ -85,7 +85,7 @@ class StdlibLogBackend:
 
 
 @injectable
-class _LogCapture:
+class LogCapture:
     """Aggregates log records from all registered backends.
 
     Constructed with a list of `LogBackend` instances. Each backend is
@@ -157,11 +157,11 @@ class _LogCapture:
             b.uninstall()
 
 
-class _LogCaptureFixture(BuiltinFixture, fixture_type=_LogCapture):
-    def create(self, ctx: _BuiltinContext) -> _LogCapture:
+class _LogCaptureFixture(BuiltinFixture, fixture_type=LogCapture):
+    def create(self, ctx: _BuiltinContext) -> LogCapture:
         backends: list[LogBackend] = [StdlibLogBackend()]
         if ctx.plugin_registry is not None:
             backends.extend(ctx.plugin_registry.log_backends)
-        cap = _LogCapture(backends)
+        cap = LogCapture(backends)
         ctx.teardown_stack.append(cap._teardown)
         return cap

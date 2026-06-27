@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["_WarnCapture", "_WarnCaptureFixture"]
+__all__ = ["WarnCapture", "_WarnCaptureFixture"]
 
 import warnings
 
@@ -10,7 +10,7 @@ from oxitest._bridge._fixture_type import injectable
 
 
 @injectable
-class _WarnCapture:
+class WarnCapture:
     """Captures all `warnings.warn()` calls issued during a test.
 
     Installed automatically when a test parameter is annotated `warn: WarnCapture`.
@@ -49,8 +49,8 @@ class _WarnCapture:
         setattr(warnings, "_showwarnmsg", self._orig_showwarnmsg)
 
 
-class _WarnCaptureFixture(BuiltinFixture, fixture_type=_WarnCapture):
-    def create(self, ctx: _BuiltinContext) -> _WarnCapture:
-        cap = _WarnCapture()
+class _WarnCaptureFixture(BuiltinFixture, fixture_type=WarnCapture):
+    def create(self, ctx: _BuiltinContext) -> WarnCapture:
+        cap = WarnCapture()
         ctx.teardown_stack.append(cap._teardown)
         return cap

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["_TempDir", "_TempDirFactory", "_TempDirFixture", "_TempDirFactoryFixture"]
+__all__ = ["TempDir", "TempDirFactory", "_TempDirFixture", "_TempDirFactoryFixture"]
 
 import shutil
 import sys
@@ -38,7 +38,7 @@ def _should_keep(mode: str, result_cell: list | None) -> bool:
 
 @injectable
 @dataclass
-class _TempDir:
+class TempDir:
     """A temporary directory provided to a test.
 
     Created fresh for each test and deleted (with all contents) after the test
@@ -70,7 +70,7 @@ class _TempDir:
 
 
 @injectable
-class _TempDirFactory:
+class TempDirFactory:
     """Session-scoped factory for creating multiple named temp directories.
 
     Injected as `factory: TempDirFactory`. Each call to `mktemp` returns a
@@ -89,7 +89,7 @@ class _TempDirFactory:
     def __init__(self) -> None:
         self._dirs: list[Path] = []
 
-    def mktemp(self, label: str) -> _TempDir:
+    def mktemp(self, label: str) -> TempDir:
         """Create a new temp directory and return it as a TempDir.
 
         Args:
@@ -101,7 +101,7 @@ class _TempDirFactory:
         """
         d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
         self._dirs.append(d)
-        return _TempDir(d)
+        return TempDir(d)
 
     def _cleanup(self) -> None:
         for d in self._dirs:
@@ -109,11 +109,11 @@ class _TempDirFactory:
         self._dirs.clear()
 
 
-class _TempDirFixture(BuiltinFixture, fixture_type=_TempDir):
-    def create(self, ctx: _BuiltinContext) -> _TempDir:
+class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
+    def create(self, ctx: _BuiltinContext) -> TempDir:
         prefix = f"{ctx.fn_name}_" if ctx.fn_name else None
         d = Path(tempfile.mkdtemp(prefix=prefix))
-        tmp = _TempDir(d)
+        tmp = TempDir(d)
 
         if ctx.keep_tmp is None:
             ctx.teardown_stack.append(lambda: shutil.rmtree(d, ignore_errors=True))
@@ -131,11 +131,11 @@ class _TempDirFixture(BuiltinFixture, fixture_type=_TempDir):
         return tmp
 
 
-class _TempDirFactoryFixture(BuiltinFixture, fixture_type=_TempDirFactory):
+class _TempDirFactoryFixture(BuiltinFixture, fixture_type=TempDirFactory):
     scope = "session"
 
-    def create(self, ctx: _BuiltinContext) -> _TempDirFactory:
-        factory = _TempDirFactory()
+    def create(self, ctx: _BuiltinContext) -> TempDirFactory:
+        factory = TempDirFactory()
         if ctx.keep_tmp is None:
             ctx.teardown_stack.append(factory._cleanup)
         else:

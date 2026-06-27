@@ -23,43 +23,42 @@ from __future__ import annotations
 # the resolver in FixtureSession._inject_builtin() handles it alongside all
 # other built-ins — no special-case needed in _fixture_session.py.
 from oxitest._bridge._builtin_context import (
+    TestContext,
     _BuiltinContext,
-    _TestContext,
-    _TestContext as TestContext,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (
     CaptureResult as CaptureResult,
-    _FdCapture as FdCapture,
+    FdCapture,
+    StdCapture,
     _FdCaptureFixture as _FdCaptureFixture,
-    _StdCapture as StdCapture,
     _StdCaptureFixture as _StdCaptureFixture,
 )
 from oxitest._bridge._builtins._logcapture import (
     LogBackend as LogBackend,
+    LogCapture,
     StdlibLogBackend as StdlibLogBackend,
-    _LogCapture as LogCapture,
     _LogCaptureFixture as _LogCaptureFixture,
 )
 from oxitest._bridge._builtins._patch import (
-    _Patcher as Patcher,
+    Patcher,
     _PatcherFixture as _PatcherFixture,
 )
 from oxitest._bridge._builtins._tempdir import (
-    _TempDir as TempDir,
-    _TempDirFactory as TempDirFactory,
+    TempDir,
+    TempDirFactory,
     _TempDirFactoryFixture as _TempDirFactoryFixture,
     _TempDirFixture as _TempDirFixture,
 )
 from oxitest._bridge._builtins._warncapture import (
-    _WarnCapture as WarnCapture,
+    WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
 
 
-class _TestContextFixture(BuiltinFixture, fixture_type=_TestContext):
-    def create(self, ctx: _BuiltinContext) -> _TestContext:
-        return _TestContext(ctx.meta, ctx.teardown_stack)
+class _TestContextFixture(BuiltinFixture, fixture_type=TestContext):
+    def create(self, ctx: _BuiltinContext) -> TestContext:
+        return TestContext(ctx.meta, ctx.teardown_stack)
 
 
 __all__ = [
