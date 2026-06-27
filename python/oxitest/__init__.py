@@ -58,9 +58,10 @@ approx          — Approximate floating-point comparison:
                  Supports scalars, sequences, mappings, and nested combos.
                  Parameters: rel (1e-6), abs (1e-12), nan_ok (False).
 
-Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture and
-      TempDirFactory already carry the injection marker — annotate parameters
-      directly (`tmp: TempDir`) without wrapping in `Fixture[T]`.
+Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture,
+      TempDirFactory and WarnCapture are decorated with ``@injectable`` —
+      annotate parameters directly (`tmp: TempDir`) without wrapping in
+      `Fixture[T]`.
 
 Examples:
 --------
