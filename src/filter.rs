@@ -141,6 +141,38 @@ fn escape_node_id_brackets(id: &str) -> String {
     out
 }
 
+/// Check whether `item_id` matches `target` using the 3-way node ID prefix rule.
+///
+/// The three forward checks are:
+/// 1. Exact match: `item_id == target`
+/// 2. Parametrize bracket: `item_id` starts with `target` and the next byte is `[`
+/// 3. Class `::` prefix: `item_id` starts with `target` and continues with `::`
+///
+/// When `bidirectional` is `true`, the same 3 checks are also applied in reverse
+/// (with `item_id` and `target` swapped), so that a parametrized target such as
+/// `"path::test_mul[case]"` matches a prescan item whose id is `"path::test_mul"`.
+fn matches_node_id_prefix(item_id: &str, target: &str, bidirectional: bool) -> bool {
+    // Forward: item_id is a descendant of target.
+    if item_id == target
+        || (item_id.starts_with(target) && item_id.as_bytes().get(target.len()) == Some(&b'['))
+        || (item_id.len() > target.len()
+            && item_id.starts_with(target)
+            && item_id[target.len()..].starts_with("::"))
+    {
+        return true;
+    }
+    // Reverse: target is a descendant of item_id (only used during prescan).
+    if bidirectional
+        && ((target.starts_with(item_id) && target.as_bytes().get(item_id.len()) == Some(&b'['))
+            || (target.len() > item_id.len()
+                && target.starts_with(item_id)
+                && target[item_id.len()..].starts_with("::")))
+    {
+        return true;
+    }
+    false
+}
+
 /// Check whether a collected item matches any of the given node IDs.
 ///
 /// Returns `true` if the item's node ID matches a literal ID (via prefix
@@ -160,14 +192,9 @@ fn item_matches_node_ids(
     let item_id: &str = item.node_id.as_ref();
 
     // Check literal IDs (prefix logic).
-    let literal_match = literal_ids.iter().any(|target| {
-        let t: &str = target.as_ref();
-        item_id == t
-            || (item_id.starts_with(t) && item_id.as_bytes().get(t.len()) == Some(&b'['))
-            || (item_id.len() > t.len()
-                && item_id.starts_with(t)
-                && item_id[t.len()..].starts_with("::"))
-    });
+    let literal_match = literal_ids
+        .iter()
+        .any(|target| matches_node_id_prefix(item_id, target.as_ref(), false));
     if literal_match {
         return true;
     }
@@ -258,21 +285,9 @@ fn prescan_item_matches_node_ids(
 ) -> bool {
     let id = prescan_node_id(file_path, item);
     // Check literal node IDs with prefix matching in both directions.
-    let literal_match = literal_ids.iter().any(|target| {
-        id == **target
-            || (id.starts_with(target.as_str())
-                && id.as_bytes().get(target.len()) == Some(&b'['))
-            || (id.len() > target.len()
-                && id.starts_with(target.as_str())
-                && id[target.len()..].starts_with("::"))
-            // Target is a parametrized case of this item (e.g., target
-            // is "path::test_mul[case]" and prescan id is "path::test_mul")
-            || (target.starts_with(id.as_str())
-                && target.as_bytes().get(id.len()) == Some(&b'['))
-            || (target.len() > id.len()
-                && target.starts_with(id.as_str())
-                && target[id.len()..].starts_with("::"))
-    });
+    let literal_match = literal_ids
+        .iter()
+        .any(|target| matches_node_id_prefix(&id, target.as_str(), true));
     if literal_match {
         return true;
     }
@@ -869,6 +884,101 @@ mod tests {
         assert!(
             !file_matches_node_ids(&items, file_path, &node_ids_no_match),
             "test_sub is not in the prescan items — must not match"
+        );
+    }
+
+    // ── matches_node_id_prefix unit tests ───────────────────────────────────
+
+    #[test]
+    fn helper_exact_match() {
+        assert!(
+            matches_node_id_prefix(
+                "tests/test_a.py::test_foo",
+                "tests/test_a.py::test_foo",
+                false
+            ),
+            "identical item_id and target must be an exact match"
+        );
+    }
+
+    #[test]
+    fn helper_parametrize_bracket_forward() {
+        // item_id has a `[param]` suffix relative to target
+        assert!(
+            matches_node_id_prefix(
+                "tests/test_a.py::test_foo[case1]",
+                "tests/test_a.py::test_foo",
+                false
+            ),
+            "item_id ending in '[…]' must match the bare target via the bracket check"
+        );
+    }
+
+    #[test]
+    fn helper_class_double_colon_forward() {
+        // item_id extends target with `::method`
+        assert!(
+            matches_node_id_prefix(
+                "tests/test_cls.py::TestSuite::test_a",
+                "tests/test_cls.py::TestSuite",
+                false
+            ),
+            "item_id that extends target with '::method' must match via the '::' check"
+        );
+    }
+
+    #[test]
+    fn helper_no_match_substring_only() {
+        // target is a substring of item_id but lacks `[` or `::` delimiter
+        assert!(
+            !matches_node_id_prefix(
+                "tests/test_a.py::test_foobar",
+                "tests/test_a.py::test_foo",
+                false
+            ),
+            "a bare substring without a delimiter must not match"
+        );
+    }
+
+    #[test]
+    fn helper_bidirectional_reverse_bracket() {
+        // target has a `[param]` suffix relative to item_id — only fires when bidirectional=true
+        assert!(
+            matches_node_id_prefix(
+                "tests/test_a.py::test_mul",
+                "tests/test_a.py::test_mul[case1]",
+                true
+            ),
+            "reverse '[' check must fire when bidirectional=true and target is the parametrized form"
+        );
+        assert!(
+            !matches_node_id_prefix(
+                "tests/test_a.py::test_mul",
+                "tests/test_a.py::test_mul[case1]",
+                false
+            ),
+            "reverse '[' check must NOT fire when bidirectional=false"
+        );
+    }
+
+    #[test]
+    fn helper_bidirectional_reverse_class_colon() {
+        // target extends item_id with `::method` — only fires when bidirectional=true
+        assert!(
+            matches_node_id_prefix(
+                "tests/test_cls.py::TestSuite",
+                "tests/test_cls.py::TestSuite::test_a",
+                true
+            ),
+            "reverse '::' check must fire when bidirectional=true and target is the child"
+        );
+        assert!(
+            !matches_node_id_prefix(
+                "tests/test_cls.py::TestSuite",
+                "tests/test_cls.py::TestSuite::test_a",
+                false
+            ),
+            "reverse '::' check must NOT fire when bidirectional=false"
         );
     }
 
