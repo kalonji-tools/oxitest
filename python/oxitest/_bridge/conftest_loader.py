@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = [
     "find_conftest_paths",
     "load_fixtures_from_conftest",
+    "create_conftest_fixtures",
     "create_session",
     "_extract_fixture_type",
     "_extract_depends_on",
@@ -19,6 +20,7 @@ from types import ModuleType
 from typing import Any, get_type_hints
 
 from oxitest._bridge._fixture_registry import (
+    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     _fixture_inner_type,
@@ -122,8 +124,17 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
             )
         obj._namespace_name = namespace_name
         for defn in obj._defs:
+            try:
+                ft = _extract_fixture_type(defn.source.func)
+            except ValueError:
+                ft = object
+            deps = _extract_depends_on(defn.source.func)
             stamped = dataclasses.replace(
-                defn, conftest_path=path, namespace=namespace_name
+                defn,
+                fixture_type=ft,
+                depends_on=deps,
+                source=ConftestSource(func=defn.source.func, conftest_path=path),
+                namespace=namespace_name,
             )
             found.append(stamped)
     return found
@@ -155,20 +166,23 @@ def load_fixtures_from_conftest(
     return _extract_fixtures(module, path)
 
 
-def create_session(
+def create_conftest_fixtures(
     conftest_paths: Sequence[str],
-) -> tuple[FixtureSession, list[CollectedViolation]]:
-    """Build a FixtureRegistry from all conftest paths and return a FixtureSession.
+) -> tuple[list[FixtureDef], list[CollectedViolation]]:
+    """Load conftest files and return all fixture defs with any violations.
 
     Also assembles a HelperNamespace from public callables in each conftest
     and attaches it as ``sys.modules["conftest"].helpers``.
 
-    Returns a tuple of (session, violations) where violations contains any
+    Returns a tuple of (fixture_defs, violations) where violations contains any
     strict-mode issues detected during fixture registration.
     """
-    registry = FixtureRegistry()
+    all_defs: list[FixtureDef] = []
     all_violations: list[CollectedViolation] = []
     conftest_chain: list[tuple[ModuleType, Path]] = []
+
+    # We still need a temporary registry to detect violations during registration
+    _tmp_registry = FixtureRegistry()
 
     for path in conftest_paths:
         module = _load_conftest_module(path)
@@ -188,7 +202,8 @@ def create_session(
             )
 
         for defn in fixtures:
-            all_violations.extend(registry.register(defn))
+            all_violations.extend(_tmp_registry.register(defn))
+            all_defs.append(defn)
 
         conftest_chain.append((module, Path(path).parent))
 
@@ -199,4 +214,16 @@ def create_session(
     if conftest_mod is not None:
         conftest_mod.helpers = helpers  # ty: ignore[unresolved-attribute]
 
-    return FixtureSession(registry), all_violations
+    return all_defs, all_violations
+
+
+def create_session(
+    conftest_paths: Sequence[str],
+) -> tuple[FixtureSession, list[CollectedViolation]]:
+    """Build a FixtureSession from all conftest paths.
+
+    Convenience wrapper around ``create_conftest_fixtures`` that constructs
+    the ``FixtureSession`` for callers that still expect one.
+    """
+    defs, violations = create_conftest_fixtures(conftest_paths)
+    return FixtureSession(defs), violations

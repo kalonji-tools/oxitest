@@ -106,7 +106,11 @@ class FixtureValidator:
             if defn is None:
                 return
             try:
-                sig = inspect.signature(defn.func)
+                func = defn.func
+            except AttributeError:
+                return
+            try:
+                sig = inspect.signature(func)
             except (ValueError, TypeError):
                 return
             for param_name in sig.parameters:

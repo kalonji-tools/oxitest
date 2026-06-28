@@ -122,3 +122,42 @@ def test_broad_fixture_type_error():
     msg = str(err)
     assert "db" in msg, "error should mention the parameter name"
     assert "Any" in msg, "error should mention the broad type"
+
+
+# ─── Unified resolve_param ───────────────────────────────────────────────────
+
+
+def test_resolve_param_by_type_not_name():
+    """Conftest fixture resolves by binding type even when param name differs."""
+    from oxitest._bridge._fixture_registry import (
+        ConftestSource,
+        FixtureDef,
+        FixtureScope,
+    )
+    from oxitest._bridge._test_meta import TestMeta
+
+    class MyType:
+        pass
+
+    defn = FixtureDef(
+        name="my_thing",
+        fixture_type=MyType,
+        scope=FixtureScope.EACH,
+        source=ConftestSource(func=lambda: MyType(), conftest_path="/c.py"),
+    )
+    inst, _reg = _make_instantiator(defn)
+    teardowns: list = []
+    meta = TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x")
+    resolved, value = inst.resolve_param(
+        "different_name",
+        Fixture[MyType],
+        meta,
+        fn_teardowns=teardowns,
+        resolve_user_fixture=lambda n: inst.resolve_fixture(
+            n, "t.py", teardowns, frozenset(), lambda _defn: None
+        ),
+    )
+    assert resolved is True, "should resolve by type"
+    assert isinstance(value, MyType), (
+        "should return a MyType instance from type-based resolution"
+    )

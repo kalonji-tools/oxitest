@@ -35,7 +35,13 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
     FixtureSetupError,
 )
-from oxitest._bridge._fixture_registry import FixtureDef, _fixture_inner_type
+from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
+    FixtureDef,
+    PluginSource,
+    _fixture_inner_type,
+)
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
@@ -190,14 +196,62 @@ class FixtureInstantiator:
         is_fx, inner = _fixture_inner_type(hint)
         if not is_fx:
             return False, None
-        impl_cls = BuiltinFixture.for_type(inner)
-        if impl_cls is not None:
-            return True, self.inject_builtin(impl_cls, meta, "function", fn_teardowns)
-        # Check plugin fixture providers (matched by type, not name)
-        plugin_value = self._try_plugin_fixture(inner, fn_teardowns)
-        if plugin_value is not None:
-            return True, plugin_value
-        return True, resolve_user_fixture(param_name)
+
+        # Broad type fallback (Fixture[Any] / Fixture[object])
+        if inner is Any or inner is object:
+            defn = self._registry.get(param_name)
+            if defn is None:
+                raise FixtureNotFoundError(param_name)
+            return True, self._resolve_by_source(
+                defn, meta, fn_teardowns, resolve_user_fixture
+            )
+
+        # Unified type-based resolution — try type first
+        try:
+            defn = self._registry.resolve(inner, qualifier=param_name)
+        except FixtureNotFoundError:
+            defn = None
+
+        # For Builtin/Plugin sources found by type, use direct instantiation
+        if defn is not None and not isinstance(defn.source, ConftestSource):
+            return True, self._resolve_by_source(
+                defn, meta, fn_teardowns, resolve_user_fixture
+            )
+
+        # For ConftestSource fixtures:
+        # - If a name-based fixture exists for param_name, prefer it (preserves
+        #   cycle detection and handles cases where type-based found the wrong fixture)
+        # - If no name match, use the type-resolved fixture's name
+        # - If type resolution failed entirely, fall back to name-based
+        name_defn = self._registry.get(param_name)
+        if name_defn is not None:
+            return True, resolve_user_fixture(param_name)
+        if defn is not None:
+            return True, resolve_user_fixture(defn.name)
+        raise FixtureNotFoundError(param_name)
+
+    def _resolve_by_source(
+        self,
+        defn: FixtureDef[Any],
+        meta: TestMeta,
+        fn_teardowns: list[Callable[[], None]],
+        resolve_user_fixture: Callable[[str], Any],
+    ) -> Any:
+        """Dispatch instantiation based on the fixture's source variant.
+
+        For ConftestSource, routes through ``resolve_user_fixture`` to preserve
+        cycle detection and scope caching.  For PluginSource and BuiltinSource,
+        creates the value directly (no cycle risk — they have no registry deps).
+        """
+        match defn.source:
+            case ConftestSource():
+                return resolve_user_fixture(defn.name)
+            case PluginSource(provider=provider):
+                value = provider.create(None)
+                fn_teardowns.append(lambda v=value, p=provider: p.teardown(v))
+                return value
+            case BuiltinSource(impl_cls=impl_cls):
+                return self.inject_builtin(impl_cls, meta, "function", fn_teardowns)
 
     # ── Fixture resolution ───────────────────────────────────────────────
 
@@ -421,22 +475,6 @@ class FixtureInstantiator:
                 result_cell=_result_cell,
             )
         )
-
-    def _try_plugin_fixture(
-        self,
-        inner: type,
-        teardown_stack: list[Callable[[], None]],
-    ) -> Any | None:
-        """Check plugin registry for a FixtureProvider matching the requested type.
-
-        Returns the fixture value if a provider matches, None otherwise.
-        """
-        for provider in self._plugin_registry.fixture_providers:
-            if provider.fixture_type is inner:
-                value = provider.create(None)
-                teardown_stack.append(lambda v=value, p=provider: p.teardown(v))
-                return value
-        return None
 
     # ── Timing ───────────────────────────────────────────────────────────
 
