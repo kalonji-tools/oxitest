@@ -257,6 +257,14 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin():
         def teardown(self, value: object) -> None:
             pass
 
+        @property
+        def scope(self) -> str:
+            return "each"
+
+        @property
+        def autouse(self) -> bool:
+            return False
+
     mod.oxitest_plugin = lambda: Plugin(fixture_providers=(FakeFixtureProvider(),))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["deferred_fixture_plugin"] = mod
     try:

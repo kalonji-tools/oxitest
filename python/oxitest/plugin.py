@@ -108,6 +108,22 @@ class FixtureProvider(Protocol):
         """
         ...
 
+    @property
+    def scope(self) -> str:
+        """Fixture scope: 'each', 'shared' (per-module), or 'session' (per-run).
+
+        Optional. Defaults to 'each' if not implemented.
+        """
+        ...
+
+    @property
+    def autouse(self) -> bool:
+        """If True, this fixture runs for every test without explicit annotation.
+
+        Optional. Defaults to False if not implemented.
+        """
+        ...
+
 
 @runtime_checkable
 class ExecutionWrapper(Protocol):

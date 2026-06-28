@@ -1556,6 +1556,14 @@ def test_plugin_fixture_provider_injected():
             if isinstance(value, FakeDatabase):
                 value.closed = True
 
+        @property
+        def scope(self) -> str:
+            return "each"
+
+        @property
+        def autouse(self) -> bool:
+            return False
+
     provider = FakeDatabaseProvider()
     mod = types.ModuleType("db_plugin")
     mod.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
@@ -1573,3 +1581,104 @@ def test_plugin_fixture_provider_injected():
         )
     finally:
         sys.modules.pop("db_plugin", None)
+
+
+# ── FixtureRegistry: dual-index type-based resolve ────────────────────────────
+
+
+class DBSession:
+    pass
+
+
+class AuthToken:
+    pass
+
+
+def test_registry_resolve_by_type_unique():
+    """Single fixture for a type resolves regardless of qualifier."""
+    import dataclasses
+
+    reg = FixtureRegistry()
+    defn = helpers.common.make_fixture_def(
+        "db_session", lambda: DBSession(), conftest_path="/c.py"
+    )
+    defn = dataclasses.replace(defn, fixture_type=DBSession)
+    reg.register(defn)
+
+    result = reg.resolve(DBSession)
+    assert result.name == "db_session", "should resolve the only match by type"
+
+    result2 = reg.resolve(DBSession, qualifier="anything")
+    assert result2.name == "db_session", "qualifier ignored when type is unique"
+
+
+def test_registry_resolve_by_type_ambiguous_with_qualifier():
+    """Two fixtures of same type -- qualifier disambiguates."""
+    import dataclasses
+
+    reg = FixtureRegistry()
+    dev = helpers.common.make_fixture_def(
+        "dev_db", lambda: DBSession(), conftest_path="/c.py"
+    )
+    dev = dataclasses.replace(dev, fixture_type=DBSession)
+    prod = helpers.common.make_fixture_def(
+        "prod_db", lambda: DBSession(), conftest_path="/c.py"
+    )
+    prod = dataclasses.replace(prod, fixture_type=DBSession)
+    reg.register(dev)
+    reg.register(prod)
+
+    result = reg.resolve(DBSession, qualifier="dev_db")
+    assert result.name == "dev_db", "qualifier should select dev_db"
+
+
+def test_registry_resolve_ambiguous_no_match():
+    """Two fixtures of same type, unknown qualifier -- AmbiguousFixtureError."""
+    import dataclasses
+
+    from oxitest._bridge._errors import AmbiguousFixtureError
+
+    reg = FixtureRegistry()
+    dev = helpers.common.make_fixture_def(
+        "dev_db", lambda: DBSession(), conftest_path="/c.py"
+    )
+    dev = dataclasses.replace(dev, fixture_type=DBSession)
+    prod = helpers.common.make_fixture_def(
+        "prod_db", lambda: DBSession(), conftest_path="/c.py"
+    )
+    prod = dataclasses.replace(prod, fixture_type=DBSession)
+    reg.register(dev)
+    reg.register(prod)
+
+    with raises(AmbiguousFixtureError, match="ambiguous"):
+        reg.resolve(DBSession, qualifier="unknown")
+
+
+def test_registry_resolve_no_match():
+    """No fixture for type -- FixtureNotFoundError."""
+    reg = FixtureRegistry()
+
+    with raises(FixtureNotFoundError):
+        reg.resolve(AuthToken)
+
+
+def test_registry_override_precedence():
+    """Last registered fixture of same type wins (leaf conftest overrides root)."""
+    import dataclasses
+
+    reg = FixtureRegistry()
+    root = helpers.common.make_fixture_def(
+        "db", lambda: "root", conftest_path="/conftest.py"
+    )
+    root = dataclasses.replace(root, fixture_type=DBSession)
+    leaf = helpers.common.make_fixture_def(
+        "db", lambda: "leaf", conftest_path="/tests/conftest.py"
+    )
+    leaf = dataclasses.replace(leaf, fixture_type=DBSession)
+    reg.register(root)
+    reg.register(leaf)
+
+    result = reg.resolve(DBSession)
+    assert result.conftest_path == "/tests/conftest.py", (
+        "leaf conftest should override root"
+    )

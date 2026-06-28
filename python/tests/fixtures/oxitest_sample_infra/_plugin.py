@@ -39,6 +39,14 @@ class InfraHostProvider:
     def teardown(self, value: object) -> None:
         pass
 
+    @property
+    def scope(self) -> str:
+        return "each"
+
+    @property
+    def autouse(self) -> bool:
+        return False
+
 
 class _RecordCollector(logging.Handler):
     """Internal handler that appends records to a shared list."""

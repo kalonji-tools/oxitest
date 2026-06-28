@@ -37,6 +37,14 @@ class MetricsCollectorProvider:
     def teardown(self, value: object) -> None:
         pass
 
+    @property
+    def scope(self) -> str:
+        return "each"
+
+    @property
+    def autouse(self) -> bool:
+        return False
+
 
 class MetricsReporter:
     """Reporter: writes test events to a JSON file."""
