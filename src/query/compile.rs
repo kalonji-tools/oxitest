@@ -346,10 +346,14 @@ impl Parser {
                 }
             }
 
-            // /pattern/ → Regex
+            // /pattern/ → Regex (compiled eagerly at parse time)
             Some(Token::Regex(pattern)) => {
-                self.advance(); // consume regex token
-                Matcher::Regex(pattern)
+                self.advance();
+                let re = regex::Regex::new(&pattern).map_err(|e| DslError::InvalidRegex {
+                    pattern: pattern.clone(),
+                    reason: e.to_string(),
+                })?;
+                Matcher::Regex(re)
             }
 
             // bare Str → Contains (default)
@@ -576,60 +580,51 @@ mod tests {
     #[test]
     fn parse_simple_predicate() {
         let expr = lex_and_parse("name(foo)").unwrap();
-        assert_eq!(
-            expr,
-            Expr::Predicate {
-                name: "name".into(),
-                matcher: Matcher::Contains("foo".into()),
-            }
+        assert!(
+            matches!(&expr, Expr::Predicate { name, matcher: Matcher::Contains(s) } if name == "name" && s == "foo"),
+            "expected Predicate with Contains(\"foo\"), got {expr:?}"
         );
     }
 
     #[test]
     fn parse_exact_matcher() {
         let expr = lex_and_parse("name(=exact)").unwrap();
-        assert_eq!(
-            expr,
-            Expr::Predicate {
-                name: "name".into(),
-                matcher: Matcher::Exact("exact".into()),
-            }
+        assert!(
+            matches!(&expr, Expr::Predicate { name, matcher: Matcher::Exact(s) } if name == "name" && s == "exact"),
+            "expected Predicate with Exact(\"exact\"), got {expr:?}"
         );
     }
 
     #[test]
     fn parse_contains_matcher() {
         let expr = lex_and_parse("name(~partial)").unwrap();
-        assert_eq!(
-            expr,
-            Expr::Predicate {
-                name: "name".into(),
-                matcher: Matcher::Contains("partial".into()),
-            }
+        assert!(
+            matches!(&expr, Expr::Predicate { name, matcher: Matcher::Contains(s) } if name == "name" && s == "partial"),
+            "expected Predicate with Contains(\"partial\"), got {expr:?}"
         );
     }
 
     #[test]
     fn parse_regex_matcher() {
         let expr = lex_and_parse("name(/test_.*/)").unwrap();
-        assert_eq!(
-            expr,
+        match &expr {
             Expr::Predicate {
-                name: "name".into(),
-                matcher: Matcher::Regex("test_.*".into()),
+                name,
+                matcher: Matcher::Regex(re),
+            } => {
+                assert_eq!(name, "name", "predicate name mismatch");
+                assert_eq!(re.as_str(), "test_.*", "regex pattern mismatch");
             }
-        );
+            other => panic!("expected Predicate with Regex, got {other:?}"),
+        }
     }
 
     #[test]
     fn parse_boolean_predicate() {
         let expr = lex_and_parse("async()").unwrap();
-        assert_eq!(
-            expr,
-            Expr::Predicate {
-                name: "async".into(),
-                matcher: Matcher::Any,
-            }
+        assert!(
+            matches!(&expr, Expr::Predicate { name, matcher: Matcher::Any } if name == "async"),
+            "expected Predicate with Any for async(), got {expr:?}"
         );
     }
 

@@ -3,8 +3,6 @@
 //! Validates predicate names against resource kinds and evaluates
 //! expression trees against [`crate::query::resource::QueryEntry`] field maps.
 
-use regex::Regex;
-
 use super::ast::{DslError, Expr, Matcher};
 use super::resource::ResourceKind;
 
@@ -39,15 +37,7 @@ pub(crate) fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> b
                 Matcher::Any => !field_val.is_empty() && field_val != "false",
                 Matcher::Contains(s) => match_field_value(field_val, s),
                 Matcher::Exact(s) => any_field_part(field_val, |v| v == s.as_str()),
-                Matcher::Regex(pattern) => {
-                    // Compile at eval time; errors are surfaced via validate_predicates
-                    // before eval is called in production, so unwrap is safe here for
-                    // patterns that passed validation.
-                    match Regex::new(pattern) {
-                        Ok(re) => any_field_part(field_val, |v| re.is_match(v)),
-                        Err(_) => false,
-                    }
-                }
+                Matcher::Regex(re) => any_field_part(field_val, |v| re.is_match(v)),
             }
         }
     }
@@ -68,7 +58,7 @@ pub(crate) fn validate_predicates(expr: &Expr, resource: &ResourceKind) -> Resul
             Ok(())
         }
         Expr::Not(inner) => validate_predicates(inner, resource),
-        Expr::Predicate { name, matcher } => {
+        Expr::Predicate { name, .. } => {
             let valid = resource.valid_predicates();
             if !valid.contains(&name.as_str()) {
                 return Err(DslError::InvalidPredicate {
@@ -76,13 +66,7 @@ pub(crate) fn validate_predicates(expr: &Expr, resource: &ResourceKind) -> Resul
                     resource: resource.as_str().to_string(),
                 });
             }
-            // Also validate regex patterns compile
-            if let Matcher::Regex(pattern) = matcher {
-                Regex::new(pattern).map_err(|e| DslError::InvalidRegex {
-                    pattern: pattern.clone(),
-                    reason: e.to_string(),
-                })?;
-            }
+            // Regex validity is guaranteed at parse time — no recompilation needed here.
             Ok(())
         }
     }
@@ -260,5 +244,18 @@ mod tests {
     #[test]
     fn match_field_value_trims_whitespace() {
         assert!(match_field_value("slow, fast , unit", "fast"));
+    }
+
+    #[test]
+    fn eval_regex_multiple_entries() {
+        let e1 = entry(&[("name", "test_something")]);
+        let e2 = entry(&[("name", "helper_func")]);
+        let e3 = entry(&[("name", "test_other")]);
+        assert!(eval_str("name(/^test_/)", &e1), "test_ prefix should match");
+        assert!(
+            !eval_str("name(/^test_/)", &e2),
+            "helper_ prefix should not match"
+        );
+        assert!(eval_str("name(/^test_/)", &e3), "test_ prefix should match");
     }
 }
