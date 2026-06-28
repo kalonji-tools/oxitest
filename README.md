@@ -34,6 +34,13 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add oxitest
 ```
 
+Or on [NixOS / with Nix](https://nixos.org/):
+
+```nix
+# In your flake or overlay
+pkgs.python3Packages.callPackage ./nix/package.nix { }
+```
+
 Requires Python 3.11+.
 
 ## Quick start
