@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from typing import Annotated, get_args, get_origin, get_type_hints
 
 import oxitest as oxi
+from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
+    FixtureScope,
+    PluginSource,
+)
 from oxitest._bridge._fixture_type import Fixture, _FixtureMarker, _FixtureType
 
 
@@ -249,3 +255,35 @@ def test_fixture_wrapper_on_injectable_still_works():
     assert inner is DbSession, (
         "Fixture[T] wrapping an @injectable type should unwrap to the inner class"
     )
+
+
+# ── FixtureScope ─────────────────────────────────────────────────────────────
+
+
+def test_fixture_scope_values():
+    """FixtureScope has three tiers: each, shared, session."""
+    assert FixtureScope.EACH == "each", "EACH should be 'each'"
+    assert FixtureScope.SHARED == "shared", "SHARED should be 'shared'"
+    assert FixtureScope.SESSION == "session", "SESSION should be 'session'"
+    assert len(FixtureScope) == 3, "FixtureScope should have exactly 3 members"
+
+
+# ── Source variants ──────────────────────────────────────────────────────────
+
+
+def test_conftest_source_frozen():
+    """ConftestSource is a frozen dataclass with func and conftest_path."""
+    src = ConftestSource(func=lambda: None, conftest_path="/conftest.py")
+    assert src.conftest_path == "/conftest.py", "conftest_path should be stored"
+
+
+def test_plugin_source_frozen():
+    """PluginSource is a frozen dataclass with provider and plugin_module."""
+    src = PluginSource(provider=object(), plugin_module="my_plugin")
+    assert src.plugin_module == "my_plugin", "plugin_module should be stored"
+
+
+def test_builtin_source_frozen():
+    """BuiltinSource is a frozen dataclass with impl_cls."""
+    src = BuiltinSource(impl_cls=int)
+    assert src.impl_cls is int, "impl_cls should be stored"

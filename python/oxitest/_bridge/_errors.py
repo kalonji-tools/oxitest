@@ -11,6 +11,8 @@ __all__ = [
     "FixtureSetupError",
     "UnannotatedFixtureParamError",
     "SharedFixtureMutationError",
+    "AmbiguousFixtureError",
+    "BroadFixtureTypeError",
     "OxitestTimeoutError",
     "BackendNotFoundError",
     "ConflictingBackendError",
@@ -147,3 +149,36 @@ class LoadError(OxitestError):
 
     def __init__(self, result: TestResult) -> None:
         self.result = result
+
+
+# ─── Unified fixture backend errors ──────────────────────────────────────────
+
+
+class AmbiguousFixtureError(FixtureError):
+    """Raised when multiple fixtures match a binding type.
+
+    The qualifier doesn't disambiguate among the candidates.
+    """
+
+    def __init__(self, type_name: str, candidates: list[str]) -> None:
+        candidates_str = ", ".join(f"'{c}'" for c in sorted(candidates))
+        super().__init__(
+            f"ambiguous fixture: {len(candidates)} fixtures provide type"
+            f" '{type_name}': {candidates_str}."
+            f" Use the fixture name as the parameter name to disambiguate."
+        )
+        self.type_name = type_name
+        self.candidates = candidates
+
+
+class BroadFixtureTypeError(FixtureError):
+    """Raised in strict mode when Fixture[Any] or Fixture[object] is used."""
+
+    def __init__(self, param_name: str, broad_type: type) -> None:
+        super().__init__(
+            f"parameter '{param_name}' uses Fixture[{broad_type.__name__}]"
+            f" which is too broad for type-based resolution."
+            f" Use a concrete binding type."
+        )
+        self.param_name = param_name
+        self.broad_type = broad_type

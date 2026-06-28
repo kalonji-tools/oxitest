@@ -5,10 +5,12 @@ import textwrap
 
 import oxitest
 from conftest import helpers
-from oxitest import Fixture, TempDir, raises, warns
+from oxitest import Fixture, TempDir, Yields, raises, warns
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_namespace import HelperNamespace
 from oxitest._bridge.conftest_loader import (
+    _extract_depends_on,
+    _extract_fixture_type,
     create_session,
     find_conftest_paths,
     load_fixtures_from_conftest,
@@ -493,4 +495,59 @@ def test_create_session_helpers_empty_when_no_callables(
     conftest_mod = _sys.modules["conftest"]
     assert hasattr(conftest_mod, "helpers"), (
         "conftest module should have 'helpers' even with no public callables"
+    )
+
+
+# ── _extract_fixture_type and _extract_depends_on ─────────────────────────────
+
+
+class Connection:
+    pass
+
+
+class DBSession:
+    pass
+
+
+def test_extract_fixture_type_from_return():
+    """Return annotation directly becomes the binding type."""
+
+    def my_fixture() -> DBSession:
+        raise NotImplementedError
+
+    assert _extract_fixture_type(my_fixture) is DBSession, (
+        "should extract DBSession from return annotation"
+    )
+
+
+def test_extract_fixture_type_from_yields():
+    """Yields[T] unwraps to T."""
+
+    def my_fixture() -> Yields[DBSession]:
+        raise NotImplementedError
+
+    assert _extract_fixture_type(my_fixture) is DBSession, (
+        "should unwrap Yields[DBSession] to DBSession"
+    )
+
+
+def test_extract_fixture_type_missing_raises():
+    """No return annotation raises an error."""
+
+    def my_fixture():
+        pass
+
+    with raises(Exception, match="return"):
+        _extract_fixture_type(my_fixture)
+
+
+def test_extract_depends_on():
+    """Fixture[T] params produce (qualifier, binding_type) tuples."""
+
+    def my_fixture(conn: Fixture[Connection], x: int) -> DBSession:
+        raise NotImplementedError
+
+    deps = _extract_depends_on(my_fixture)
+    assert deps == (("conn", Connection),), (
+        "should extract conn: Fixture[Connection] as a dependency, ignoring plain int"
     )

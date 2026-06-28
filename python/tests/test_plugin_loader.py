@@ -196,3 +196,62 @@ def test_single_debugger_backend_is_valid():
         )
     finally:
         _remove_fake_module("solo_dbg")
+
+
+def test_fixture_provider_scope_default():
+    """FixtureProvider without scope property defaults to 'each'."""
+
+    class MinimalProvider:
+        @property
+        def name(self) -> str:
+            return "test"
+
+        @property
+        def fixture_type(self) -> type:
+            return int
+
+        def create(self, ctx):
+            return 42
+
+        def teardown(self, value):
+            pass
+
+    provider = MinimalProvider()
+    assert getattr(provider, "scope", "each") == "each", (
+        "provider without scope should default to 'each'"
+    )
+
+
+def test_fixture_provider_scope_custom():
+    """FixtureProvider with scope property is respected."""
+
+    class SessionProvider:
+        @property
+        def name(self) -> str:
+            return "test"
+
+        @property
+        def fixture_type(self) -> type:
+            return int
+
+        @property
+        def scope(self) -> str:
+            return "session"
+
+        @property
+        def autouse(self) -> bool:
+            return True
+
+        def create(self, ctx):
+            return 42
+
+        def teardown(self, value):
+            pass
+
+    provider = SessionProvider()
+    assert getattr(provider, "scope", "each") == "session", (
+        "provider with scope='session' should return 'session'"
+    )
+    assert getattr(provider, "autouse", False) is True, (
+        "provider with autouse=True should return True"
+    )

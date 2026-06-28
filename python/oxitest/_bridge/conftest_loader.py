@@ -1,22 +1,80 @@
 from __future__ import annotations
 
-__all__ = ["find_conftest_paths", "load_fixtures_from_conftest", "create_session"]
+__all__ = [
+    "find_conftest_paths",
+    "load_fixtures_from_conftest",
+    "create_session",
+    "_extract_fixture_type",
+    "_extract_depends_on",
+]
 
+import collections.abc
 import dataclasses
 import importlib.util
 import sys
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, get_type_hints
 
-from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    FixtureDef,
+    FixtureRegistry,
+    _fixture_inner_type,
+)
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_namespace import build_helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge.result import CollectedViolation
+
+
+def _extract_fixture_type(func: Callable[..., Any]) -> type:
+    """Extract the binding type from a fixture function's return annotation.
+
+    ``Yields[T]`` (which resolves to ``Generator[T, None, None]``) is unwrapped
+    to ``T`` so callers receive the actual yielded type, not the generator type.
+
+    Raises ``ValueError`` if the function has no return annotation.
+    """
+    hints = get_type_hints(func)
+    ret = hints.get("return")
+    if ret is None:
+        raise ValueError(
+            f"fixture '{getattr(func, '__name__', repr(func))}' has no return type "
+            f"annotation. All fixtures must declare their return type for "
+            f"type-based resolution."
+        )
+    # Yields[T] resolves to Generator[T, None, None] via get_type_hints.
+    # Unwrap to the yielded type T (first type argument).
+    origin = getattr(ret, "__origin__", None)
+    if origin is collections.abc.Generator:
+        args = getattr(ret, "__args__", ())
+        if args:
+            return args[0]  # type: ignore[return-value]
+    return ret  # type: ignore[return-value]
+
+
+def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...]:
+    """Extract injection points from a fixture function's type hints.
+
+    Returns a tuple of ``(qualifier, binding_type)`` pairs — one per parameter
+    annotated with ``Fixture[T]`` or an ``@injectable`` type. Parameters with
+    plain (non-fixture) annotations are ignored.
+    """
+    try:
+        hints = get_type_hints(func, include_extras=True)
+    except Exception:  # noqa: BLE001
+        return ()
+    deps: list[tuple[str, type]] = []
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        is_fx, inner = _fixture_inner_type(hint)
+        if is_fx:
+            deps.append((param_name, inner))
+    return tuple(deps)
 
 
 def find_conftest_paths(test_path: str, rootdir: str) -> list[str]:

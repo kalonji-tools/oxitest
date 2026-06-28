@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 __all__ = [
+    "BuiltinSource",
+    "ConftestSource",
     "FixtureDef",
     "FixtureRegistry",
+    "FixtureScope",
     "FixtureShadowWarning",
+    "FixtureSource",
+    "PluginSource",
     "_fixture_inner_type",
 ]
 
@@ -11,6 +16,7 @@ import inspect
 import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import (
     Annotated,
     Any,
@@ -21,10 +27,37 @@ from typing import (
     get_type_hints,
 )
 
+from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 T = TypeVar("T")
+
+
+class FixtureScope(StrEnum):
+    EACH = "each"
+    SHARED = "shared"
+    SESSION = "session"
+
+
+@dataclass(frozen=True)
+class ConftestSource:
+    func: Callable  # type: ignore[type-arg]
+    conftest_path: str
+
+
+@dataclass(frozen=True)
+class PluginSource:
+    provider: Any  # FixtureProvider — use Any to avoid circular import
+    plugin_module: str
+
+
+@dataclass(frozen=True)
+class BuiltinSource:
+    impl_cls: type  # type[BuiltinFixture] — use type to avoid circular import
+
+
+FixtureSource = ConftestSource | PluginSource | BuiltinSource
 
 
 class FixtureShadowWarning(UserWarning):
@@ -40,6 +73,7 @@ class FixtureDef(Generic[T]):
     shared: bool = False  # True = session-lifetime, immutable (FrozenProxy-wrapped)
     namespace: str = ""  # Fixtures() instance name; empty = no namespace
     is_async: bool = False  # True = async def or async generator fixture
+    fixture_type: type | None = None  # binding type for type-based resolve
 
 
 class FixtureRegistry:
@@ -53,13 +87,15 @@ class FixtureRegistry:
 
     def __init__(self) -> None:
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
-        self._defs: dict[str, list[FixtureDef[Any]]] = {}
+        self._by_name: dict[str, list[FixtureDef[Any]]] = {}
+        # type -> list of FixtureDef (only for defs with fixture_type set)
+        self._by_type: dict[type, list[FixtureDef[Any]]] = {}
         self._namespaces: set[str] = set()  # O(1) namespace existence check
         self._has_shared_cache: bool | None = None
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
         self._has_shared_cache = None
-        existing = self._defs.get(defn.name)
+        existing = self._by_name.get(defn.name)
         if existing and existing[-1].conftest_path != defn.conftest_path:
             parent = existing[-1]
             warnings.warn(
@@ -69,7 +105,9 @@ class FixtureRegistry:
                 ),
                 stacklevel=2,
             )
-        self._defs.setdefault(defn.name, []).append(defn)
+        self._by_name.setdefault(defn.name, []).append(defn)
+        if defn.fixture_type is not None:
+            self._by_type.setdefault(defn.fixture_type, []).append(defn)
         if defn.namespace:
             self._namespaces.add(defn.namespace)
 
@@ -93,27 +131,29 @@ class FixtureRegistry:
         return violations
 
     def __contains__(self, name: object) -> bool:
-        return name in self._defs
+        return name in self._by_name
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._defs)
+        return iter(self._by_name)
 
     def all_defs(self, name: str) -> list[FixtureDef[Any]]:
-        defs = self._defs.get(name)
+        defs = self._by_name.get(name)
         return list(defs) if defs else []
 
     def get(self, name: str) -> FixtureDef[Any] | None:
         """Return the most-local (last-registered) FixtureDef for name."""
-        defs = self._defs.get(name)
+        defs = self._by_name.get(name)
         return defs[-1] if defs else None
 
     def get_autouse(self) -> Iterator[FixtureDef[Any]]:
         """Yield all autouse fixtures (most-local version of each name)."""
-        return (defs[-1] for defs in self._defs.values() if defs and defs[-1].autouse)
+        return (
+            defs[-1] for defs in self._by_name.values() if defs and defs[-1].autouse
+        )
 
     def get_in_namespace(self, name: str, namespace: str) -> FixtureDef[Any] | None:
         """Return the most-local FixtureDef for name within the given namespace."""
-        defs = self._defs.get(name)
+        defs = self._by_name.get(name)
         if not defs:
             return None
         for defn in reversed(defs):
@@ -126,7 +166,7 @@ class FixtureRegistry:
 
         Also handles FixtureAccessor objects by unwrapping via `_fa_func`.
         """
-        defs = self._defs.get(name)
+        defs = self._by_name.get(name)
         if not defs:
             return None
         # Unwrap FixtureAccessor (duck-typed to avoid circular import)
@@ -148,7 +188,7 @@ class FixtureRegistry:
         shared fixture dependencies. Returns sorted list of sorted groups.
         """
         graph: dict[str, set[str]] = {}
-        for name, defs in self._defs.items():
+        for name, defs in self._by_name.items():
             if not defs:
                 continue
             defn = defs[-1]  # most-local definition
@@ -159,7 +199,7 @@ class FixtureRegistry:
                 pass
             else:
                 for param_name in sig.parameters:
-                    if param_name in self._defs and param_name != name:
+                    if param_name in self._by_name and param_name != name:
                         deps.add(param_name)
             graph[name] = deps
 
@@ -171,7 +211,7 @@ class FixtureRegistry:
                 return set()
             visited.add(name)
             result: set[str] = set()
-            defs = self._defs.get(name)
+            defs = self._by_name.get(name)
             if defs and defs[-1].shared:
                 result.add(name)
             for dep in graph.get(name, ()):
@@ -180,7 +220,7 @@ class FixtureRegistry:
 
         # Collect fixtures with shared ancestors.
         shared_ancestors: dict[str, frozenset[str]] = {}
-        for name in self._defs:
+        for name in self._by_name:
             ancestors = _transitive_shared(name)
             if ancestors:
                 shared_ancestors[name] = frozenset(ancestors)
@@ -219,7 +259,38 @@ class FixtureRegistry:
     def shared_names(self) -> list[str]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
         return sorted(
-            name for name, defs in self._defs.items() if defs and defs[-1].shared
+            name for name, defs in self._by_name.items() if defs and defs[-1].shared
+        )
+
+    def resolve(
+        self, fixture_type: type, qualifier: str | None = None
+    ) -> FixtureDef[Any]:
+        """Resolve a fixture by its binding type.
+
+        When exactly one fixture provides *fixture_type*, return it (qualifier
+        is ignored).  When multiple fixtures match, *qualifier* (the parameter
+        name) is used to disambiguate.  Raises ``FixtureNotFoundError`` if no
+        fixture matches, ``AmbiguousFixtureError`` if disambiguation fails.
+        """
+        candidates = self._by_type.get(fixture_type, [])
+        if not candidates:
+            raise FixtureNotFoundError(fixture_type.__name__)
+        # Deduplicate by name — keep only the most-local (last) entry per name
+        by_name: dict[str, FixtureDef[Any]] = {}
+        for d in candidates:
+            by_name[d.name] = d  # later entries override earlier ones
+        unique = list(by_name.values())
+        if len(unique) == 1:
+            return unique[0]
+        # Multiple matches — try qualifier
+        if qualifier:
+            named = self._by_name.get(qualifier, [])
+            matched = [d for d in named if d.fixture_type == fixture_type]
+            if len(matched) == 1:
+                return matched[0]
+        raise AmbiguousFixtureError(
+            fixture_type.__name__,
+            [d.name for d in unique],
         )
 
 

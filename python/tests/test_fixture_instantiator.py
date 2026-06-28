@@ -11,7 +11,12 @@ if TYPE_CHECKING:
 
 from conftest import helpers  # type: ignore[assignment]
 from oxitest import Fixture, raises
-from oxitest._bridge._errors import FixtureCycleError, FixtureNotFoundError
+from oxitest._bridge._errors import (
+    AmbiguousFixtureError,
+    BroadFixtureTypeError,
+    FixtureCycleError,
+    FixtureNotFoundError,
+)
 from oxitest._bridge._fixture_instantiator import FixtureInstantiator, ScopeRefs
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge.plugin_loader import PluginRegistry
@@ -95,3 +100,25 @@ def test_timing_recorded():
     assert timings[0].setup_count == 1, (
         f"expected 1 setup, got {timings[0].setup_count}"
     )
+
+
+# ─── New error types ─────────────────────────────────────────────────────────
+
+
+def test_ambiguous_fixture_error_lists_candidates():
+    """AmbiguousFixtureError message lists candidate fixture names."""
+    err = AmbiguousFixtureError("DBSession", ["dev_db", "prod_db"])
+    msg = str(err)
+    assert "DBSession" in msg, "error should mention the ambiguous type"
+    assert "dev_db" in msg, "error should list candidate 'dev_db'"
+    assert "prod_db" in msg, "error should list candidate 'prod_db'"
+
+
+def test_broad_fixture_type_error():
+    """BroadFixtureTypeError mentions the param name and broad type."""
+    from typing import Any
+
+    err = BroadFixtureTypeError("db", Any)
+    msg = str(err)
+    assert "db" in msg, "error should mention the parameter name"
+    assert "Any" in msg, "error should mention the broad type"
