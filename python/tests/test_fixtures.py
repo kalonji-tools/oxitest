@@ -1341,17 +1341,18 @@ def test_shared_fixture_groups_single_shared():
 
 
 def test_shared_fixture_groups_transitive_dependency():
-    def _db():
-        pass
-
-    def _repo(db):
+    class _DbType:
         pass
 
     session = helpers.common.make_session(
         helpers.common.make_fixture_def(
-            "db", _db, shared=True, conftest_path="/conftest.py"
+            "db", shared=True, conftest_path="/conftest.py", fixture_type=_DbType
         ),
-        helpers.common.make_fixture_def("repo", _repo, conftest_path="/conftest.py"),
+        helpers.common.make_fixture_def(
+            "repo",
+            conftest_path="/conftest.py",
+            depends_on=(("db", _DbType),),
+        ),
     )
     groups = session.shared_fixture_groups()
     assert groups == [["db", "repo"]], (
@@ -1379,21 +1380,24 @@ def test_shared_fixture_groups_two_independent_shared():
 
 
 def test_shared_fixture_groups_transitive_merge():
-    def _db():
+    class _DbType:
         pass
 
-    def _cache():
-        pass
-
-    def _service(db, cache):
+    class _CacheType:
         pass
 
     session = helpers.common.make_session(
-        helpers.common.make_fixture_def("db", _db, shared=True, conftest_path="/c.py"),
         helpers.common.make_fixture_def(
-            "cache", _cache, shared=True, conftest_path="/c.py"
+            "db", shared=True, conftest_path="/c.py", fixture_type=_DbType
         ),
-        helpers.common.make_fixture_def("service", _service, conftest_path="/c.py"),
+        helpers.common.make_fixture_def(
+            "cache", shared=True, conftest_path="/c.py", fixture_type=_CacheType
+        ),
+        helpers.common.make_fixture_def(
+            "service",
+            conftest_path="/c.py",
+            depends_on=(("db", _DbType), ("cache", _CacheType)),
+        ),
     )
     groups = session.shared_fixture_groups()
     # service links db+cache into one connected component
@@ -1596,13 +1600,10 @@ class AuthToken:
 
 def test_registry_resolve_by_type_unique():
     """Single fixture for a type resolves regardless of qualifier."""
-    import dataclasses
-
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def(
-        "db_session", lambda: DBSession(), conftest_path="/c.py"
+        "db_session", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
     )
-    defn = dataclasses.replace(defn, fixture_type=DBSession)
     reg.register(defn)
 
     result = reg.resolve(DBSession)
@@ -1614,17 +1615,13 @@ def test_registry_resolve_by_type_unique():
 
 def test_registry_resolve_by_type_ambiguous_with_qualifier():
     """Two fixtures of same type -- qualifier disambiguates."""
-    import dataclasses
-
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
-        "dev_db", lambda: DBSession(), conftest_path="/c.py"
+        "dev_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
     )
-    dev = dataclasses.replace(dev, fixture_type=DBSession)
     prod = helpers.common.make_fixture_def(
-        "prod_db", lambda: DBSession(), conftest_path="/c.py"
+        "prod_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
     )
-    prod = dataclasses.replace(prod, fixture_type=DBSession)
     reg.register(dev)
     reg.register(prod)
 
@@ -1634,19 +1631,15 @@ def test_registry_resolve_by_type_ambiguous_with_qualifier():
 
 def test_registry_resolve_ambiguous_no_match():
     """Two fixtures of same type, unknown qualifier -- AmbiguousFixtureError."""
-    import dataclasses
-
     from oxitest._bridge._errors import AmbiguousFixtureError
 
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
-        "dev_db", lambda: DBSession(), conftest_path="/c.py"
+        "dev_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
     )
-    dev = dataclasses.replace(dev, fixture_type=DBSession)
     prod = helpers.common.make_fixture_def(
-        "prod_db", lambda: DBSession(), conftest_path="/c.py"
+        "prod_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
     )
-    prod = dataclasses.replace(prod, fixture_type=DBSession)
     reg.register(dev)
     reg.register(prod)
 
@@ -1664,17 +1657,13 @@ def test_registry_resolve_no_match():
 
 def test_registry_override_precedence():
     """Last registered fixture of same type wins (leaf conftest overrides root)."""
-    import dataclasses
-
     reg = FixtureRegistry()
     root = helpers.common.make_fixture_def(
-        "db", lambda: "root", conftest_path="/conftest.py"
+        "db", lambda: "root", conftest_path="/conftest.py", fixture_type=DBSession
     )
-    root = dataclasses.replace(root, fixture_type=DBSession)
     leaf = helpers.common.make_fixture_def(
-        "db", lambda: "leaf", conftest_path="/tests/conftest.py"
+        "db", lambda: "leaf", conftest_path="/tests/conftest.py", fixture_type=DBSession
     )
-    leaf = dataclasses.replace(leaf, fixture_type=DBSession)
     reg.register(root)
     reg.register(leaf)
 

@@ -91,10 +91,33 @@ def test_find_unused_excludes_transitive_deps():
             "dep", conftest_path="/project/conftest.py", factory=_factory_no_dep
         ),
         helpers.common.make_fixture_def(
-            "parent", conftest_path="/project/conftest.py", factory=_parent
+            "parent",
+            conftest_path="/project/conftest.py",
+            factory=_parent,
+            depends_on=(("dep", object),),
         ),
     )
 
     result = v.find_unused_fixtures([{"fixture_names": ["parent"]}])
 
     assert result == [], f"transitive dep should not be unused: {result}"
+
+
+def test_validate_builtin_qualifier_not_flagged():
+    """fixture_deps with builtin type_name are not flagged missing."""
+    v = _make_validator()
+
+    errors = v.validate_fixture_names(
+        [
+            {
+                "node_id": "test.py::test_a",
+                "fixture_names": ["tmp"],
+                "fixref_names": [],
+                "fixture_deps": [("tmp", "TempDir")],
+            },
+        ]
+    )
+
+    assert errors == [], (
+        "builtin fixture qualifier should be excluded from missing fixture errors"
+    )

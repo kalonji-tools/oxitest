@@ -268,8 +268,8 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
-                fixture_names: vec![],
-                fixref_names: vec![],
+                fixture_deps: vec![],
+                fixref_deps: vec![],
             }));
         }
     }

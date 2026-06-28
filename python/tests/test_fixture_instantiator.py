@@ -18,8 +18,18 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
 )
 from oxitest._bridge._fixture_instantiator import FixtureInstantiator, ScopeRefs
-from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+    PluginSource,
+)
+from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
+
+
+class _PluginType:
+    """Marker type for plugin fixture tests."""
 
 
 def _make_instantiator(*defs) -> tuple[FixtureInstantiator, FixtureRegistry]:
@@ -160,4 +170,55 @@ def test_resolve_param_by_type_not_name():
     assert resolved is True, "should resolve by type"
     assert isinstance(value, MyType), (
         "should return a MyType instance from type-based resolution"
+    )
+
+
+# ─── _resolve_by_source dispatch ────────────────────────────────────────────
+
+
+def test_resolve_by_source_plugin():
+    """PluginSource fixture resolved through registry dispatches to provider.create."""
+
+    class FakeProvider:
+        @property
+        def name(self):
+            return "fake"
+
+        @property
+        def fixture_type(self):
+            return _PluginType
+
+        @property
+        def scope(self):
+            return "each"
+
+        @property
+        def autouse(self):
+            return False
+
+        def create(self, ctx):
+            return "plugin_value"
+
+        def teardown(self, value):
+            pass
+
+    defn = FixtureDef(
+        name="fake",
+        fixture_type=_PluginType,
+        scope=FixtureScope.EACH,
+        source=PluginSource(provider=FakeProvider(), plugin_module="test_plugin"),
+    )
+    inst, _reg = _make_instantiator(defn)
+    teardowns: list = []
+    value = inst._resolve_by_source(
+        defn,
+        TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x"),
+        teardowns,
+        lambda n: None,
+    )
+    assert value == "plugin_value", (
+        "should return provider.create() result for PluginSource fixture"
+    )
+    assert len(teardowns) == 1, (
+        "should register provider.teardown in teardowns list for cleanup"
     )

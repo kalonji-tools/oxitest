@@ -11,9 +11,14 @@ from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
     FixtureScope,
+    PluginSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _NullFixtureSession
 from oxitest._bridge.plugin_loader import PluginRegistry
+
+
+class _MinimalType:
+    """Marker type for minimal plugin provider tests."""
 
 
 def test_setup_timing_recorded_for_function_scoped_fixture():
@@ -153,3 +158,43 @@ def test_session_conftest_overrides_builtin():
     assert isinstance(defn.source, ConftestSource), (
         "conftest fixture should override builtin when they share the same type"
     )
+
+
+def test_session_plugin_without_scope_autouse():
+    """Plugin provider without scope/autouse attrs uses defaults (each, False)."""
+
+    class MinimalProvider:
+        """Provider with only the required protocol methods."""
+
+        @property
+        def name(self):
+            return "minimal"
+
+        @property
+        def fixture_type(self):
+            return _MinimalType
+
+        def create(self, ctx):
+            return 42
+
+        def teardown(self, value):
+            pass
+
+    class FakePluginRegistry:
+        """Stands in for PluginRegistry with a single fixture provider."""
+
+        fixture_providers = (MinimalProvider(),)
+
+    session = FixtureSession([], FakePluginRegistry())  # ty: ignore[invalid-argument-type]
+
+    defn = session._registry.resolve(_MinimalType)
+    assert defn.name == "minimal", (
+        "plugin fixture should be registered with provider name"
+    )
+    assert isinstance(defn.source, PluginSource), (
+        "plugin fixture should have PluginSource, not a different source variant"
+    )
+    assert defn.scope == FixtureScope.EACH, (
+        "plugin without scope attr should default to EACH scope"
+    )
+    assert defn.autouse is False, "plugin without autouse attr should default to False"

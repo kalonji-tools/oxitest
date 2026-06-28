@@ -318,8 +318,8 @@ class CollectedItem:
     param_id: str | None
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
-    fixture_names: tuple[str, ...] = ()
-    fixref_names: tuple[str, ...] = ()
+    fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
+    fixref_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
 
 
 class ViolationKind(StrEnum):
@@ -336,6 +336,7 @@ class ViolationKind(StrEnum):
     MISSING_MARK_REASON = "missing_mark_reason"
     MISSING_RETURN_ANNOTATION = "missing_return_annotation"
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
+    BROAD_FIXTURE_TYPE = "broad_fixture_type"
     UNUSED_FIXTURE = "unused_fixture"
 
 

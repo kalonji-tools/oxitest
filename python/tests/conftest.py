@@ -78,12 +78,22 @@ def make_fixture_def(
     is_async: bool = False,
     conftest_path: str = "",
     doc: str = "",
+    depends_on: tuple[tuple[str, type], ...] = (),
+    fixture_type: type | None = None,
 ) -> FixtureDef:
     """Create a ``FixtureDef`` with sensible defaults.
 
     When *factory* is ``None`` a no-op ``lambda: None`` is used and
     its ``__name__`` / ``__doc__`` / ``__module__`` are set so that
     the fixture lister can group by origin.
+
+    *depends_on* is a tuple of ``(qualifier, binding_type)`` pairs that
+    explicitly declare fixture dependencies for type-based graph construction.
+
+    *fixture_type* overrides the type extracted from the factory's return
+    annotation. Useful when the factory is defined in a module with
+    ``from __future__ import annotations`` (which turns annotations into
+    strings that ``get_type_hints`` cannot resolve for locally-defined types).
     """
     if factory is None:
 
@@ -94,11 +104,15 @@ def make_fixture_def(
         _fn.__doc__ = doc or None
         _fn.__module__ = "conftest" if conftest_path else "oxitest._bridge._builtins"
         factory = _fn
-    # Try to extract return type; fall back to object
-    try:
-        ft = get_type_hints(factory).get("return", object)
-    except Exception:  # noqa: BLE001
-        ft = object
+    # Explicit fixture_type overrides annotation extraction
+    if fixture_type is not None:
+        ft: type = fixture_type
+    else:
+        # Try to extract return type; fall back to object
+        try:
+            ft = get_type_hints(factory).get("return", object)
+        except Exception:  # noqa: BLE001
+            ft = object
     return FixtureDef(
         name=name,
         fixture_type=ft,
@@ -107,6 +121,7 @@ def make_fixture_def(
         autouse=autouse,
         namespace=namespace,
         is_async=is_async,
+        depends_on=depends_on,
     )
 
 

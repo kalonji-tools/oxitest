@@ -12,7 +12,6 @@ __all__ = [
     "_fixture_inner_type",
 ]
 
-import inspect
 import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -163,6 +162,10 @@ class FixtureRegistry:
     def __iter__(self) -> Iterator[str]:
         return iter(self._by_name)
 
+    def all(self) -> list[FixtureDef[Any]]:
+        """Return all effective (most-local) fixture defs."""
+        return [defs[-1] for defs in self._by_name.values() if defs]
+
     def all_defs(self, name: str) -> list[FixtureDef[Any]]:
         defs = self._by_name.get(name)
         return list(defs) if defs else []
@@ -210,30 +213,20 @@ class FixtureRegistry:
     def shared_fixture_groups(self) -> list[list[str]]:
         """Compute connected components of shared fixture dependencies.
 
-        Walks fixture function signatures to build a dependency graph, then
-        computes transitive closure to find groups of fixtures linked by
-        shared fixture dependencies. Returns sorted list of sorted groups.
+        Uses the depends_on field of each FixtureDef to build a dependency
+        graph, then computes transitive closure to find groups of fixtures
+        linked by shared fixture dependencies. Returns sorted list of sorted
+        groups.
         """
         graph: dict[str, set[str]] = {}
-        for name, defs in self._by_name.items():
-            if not defs:
-                continue
-            defn = defs[-1]  # most-local definition
+        for defn in self.all():
             deps: set[str] = set()
-            try:
-                func = defn.func
-            except AttributeError:
-                pass
-            else:
-                try:
-                    sig = inspect.signature(func)
-                except (ValueError, TypeError):
-                    pass
-                else:
-                    for param_name in sig.parameters:
-                        if param_name in self._by_name and param_name != name:
-                            deps.add(param_name)
-            graph[name] = deps
+            for _qualifier, dep_type in defn.depends_on:
+                dep_defs = self._by_type.get(dep_type, [])
+                for dep in dep_defs:
+                    if dep.name != defn.name:
+                        deps.add(dep.name)
+            graph[defn.name] = deps
 
         # Find which shared fixtures each fixture transitively reaches.
         def _transitive_shared(name: str, visited: set[str] | None = None) -> set[str]:

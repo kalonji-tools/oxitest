@@ -420,8 +420,8 @@ mod drain_tests {
                 param_id: None,
                 param_values: vec![],
                 is_async: false,
-                fixture_names: vec![],
-                fixref_names: vec![],
+                fixture_deps: vec![],
+                fixref_deps: vec![],
             })
         }
 

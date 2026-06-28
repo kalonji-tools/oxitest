@@ -54,7 +54,7 @@ pub(super) struct FixturePartition {
 
 /// Partition test groups by shared fixture affinity.
 ///
-/// Tests whose `fixture_names` overlap with any connected component from
+/// Tests whose `fixture_deps` qualifiers overlap with any connected component from
 /// `shared_fixture_groups()` are grouped together (one group per component).
 /// Tests with no shared fixture dependency stay in `remaining`.
 ///
@@ -87,9 +87,9 @@ pub(super) fn partition_by_fixture_groups(
 
         for item in items {
             let group = item
-                .fixture_names
+                .fixture_deps
                 .iter()
-                .find_map(|f| fixture_to_group.get(f.as_str()).copied());
+                .find_map(|(q, _)| fixture_to_group.get(q.as_str()).copied());
             match group {
                 Some(gi) => group_buckets[gi].push(Arc::clone(&item)),
                 None => unassigned.push(item),
@@ -379,9 +379,9 @@ mod tests {
     #[test]
     fn test_partition_by_fixture_groups_splits_by_fixture() {
         let mut a = TestItem::builder_raw("test_a.py::test_db").build();
-        a.fixture_names = vec!["db".to_string()];
+        a.fixture_deps = vec![("db".to_string(), "DB".to_string())];
         let mut b = TestItem::builder_raw("test_a.py::test_plain").build();
-        b.fixture_names = vec![];
+        b.fixture_deps = vec![];
         let groups = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(a), Arc::new(b)],
@@ -410,11 +410,11 @@ mod tests {
     #[test]
     fn test_partition_by_fixture_groups_transitive() {
         let mut a = TestItem::builder_raw("test_a.py::test_repo").build();
-        a.fixture_names = vec!["repo".to_string()];
+        a.fixture_deps = vec![("repo".to_string(), "Repo".to_string())];
         let mut b = TestItem::builder_raw("test_a.py::test_db").build();
-        b.fixture_names = vec!["db".to_string()];
+        b.fixture_deps = vec![("db".to_string(), "DB".to_string())];
         let mut c = TestItem::builder_raw("test_a.py::test_plain").build();
-        c.fixture_names = vec![];
+        c.fixture_deps = vec![];
         let groups = vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(a), Arc::new(b), Arc::new(c)],
@@ -438,7 +438,7 @@ mod tests {
     fn test_threshold_below_allows_arrangement() {
         // 2 arranged + 8 remaining = 20% ratio, threshold 70% → Arrange
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_names = vec!["db".to_string()];
+        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
         let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             vec![Arc::new(item.clone()), Arc::new(item)],
@@ -460,7 +460,7 @@ mod tests {
     fn test_threshold_exceeded_falls_back_to_serial() {
         // 9 arranged + 1 remaining = 90% ratio, threshold 70% → FallbackSerial
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_names = vec!["db".to_string()];
+        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
         let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             (0..9).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
@@ -478,7 +478,7 @@ mod tests {
     fn test_threshold_at_boundary_allows_arrangement() {
         // 7 arranged + 3 remaining = 70% ratio, threshold 70% → Arrange (not >)
         let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_names = vec!["db".to_string()];
+        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
         let arranged = vec![vec![ModuleGroup::new(
             Utf8PathBuf::from("test_a.py"),
             (0..7).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),

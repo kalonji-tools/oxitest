@@ -59,11 +59,14 @@ def _extract_fixture_type(func: Callable[..., Any]) -> type:
 
 
 def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...]:
-    """Extract injection points from a fixture function's type hints.
+    """Extract dependency declarations from a fixture function.
 
-    Returns a tuple of ``(qualifier, binding_type)`` pairs — one per parameter
-    annotated with ``Fixture[T]`` or an ``@injectable`` type. Parameters with
-    plain (non-fixture) annotations are ignored.
+    Returns a tuple of ``(qualifier, binding_type)`` pairs for parameters
+    annotated with ``Fixture[T]``.
+
+    Unannotated parameters are NOT included — they are caught at resolve
+    time by ``UnannotatedFixtureParamError`` in ``resolve_for_test``.
+    Parameters with plain (non-fixture) type annotations are also ignored.
     """
     try:
         hints = get_type_hints(func, include_extras=True)
@@ -181,7 +184,10 @@ def create_conftest_fixtures(
     all_violations: list[CollectedViolation] = []
     conftest_chain: list[tuple[ModuleType, Path]] = []
 
-    # We still need a temporary registry to detect violations during registration
+    # Intentional: _tmp_registry detects registration violations (e.g.
+    # missing_return_annotation) here so they can be surfaced to the Rust
+    # bridge via create_session(). FixtureSession.__init__ re-registers
+    # the same defs but discards the violations returned by register().
     _tmp_registry = FixtureRegistry()
 
     for path in conftest_paths:

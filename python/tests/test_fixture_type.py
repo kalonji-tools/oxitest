@@ -271,19 +271,35 @@ def test_fixture_scope_values():
 # ── Source variants ──────────────────────────────────────────────────────────
 
 
-def test_conftest_source_frozen():
-    """ConftestSource is a frozen dataclass with func and conftest_path."""
-    src = ConftestSource(func=lambda: None, conftest_path="/conftest.py")
-    assert src.conftest_path == "/conftest.py", "conftest_path should be stored"
+@dataclass(frozen=True)
+class SourceCase:
+    label: str
+    source: object
+    field: str
+    expected: object
 
 
-def test_plugin_source_frozen():
-    """PluginSource is a frozen dataclass with provider and plugin_module."""
-    src = PluginSource(provider=object(), plugin_module="my_plugin")
-    assert src.plugin_module == "my_plugin", "plugin_module should be stored"
-
-
-def test_builtin_source_frozen():
-    """BuiltinSource is a frozen dataclass with impl_cls."""
-    src = BuiltinSource(impl_cls=int)
-    assert src.impl_cls is int, "impl_cls should be stored"
+@oxi.parametrize(
+    conftest=SourceCase(
+        label="conftest",
+        source=ConftestSource(func=lambda: None, conftest_path="/conftest.py"),
+        field="conftest_path",
+        expected="/conftest.py",
+    ),
+    plugin=SourceCase(
+        label="plugin",
+        source=PluginSource(provider=object(), plugin_module="my_plugin"),
+        field="plugin_module",
+        expected="my_plugin",
+    ),
+    builtin=SourceCase(
+        label="builtin",
+        source=BuiltinSource(impl_cls=int),
+        field="impl_cls",
+        expected=int,
+    ),
+)
+def test_source_variant_stores_fields(case: SourceCase):
+    """Source variant dataclasses store their fields correctly."""
+    actual = getattr(case.source, case.field)
+    assert actual == case.expected, f"{case.label} source should store {case.field}"

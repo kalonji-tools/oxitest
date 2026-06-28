@@ -218,17 +218,18 @@ class FixtureInstantiator:
                 defn, meta, fn_teardowns, resolve_user_fixture
             )
 
-        # For ConftestSource fixtures:
-        # - If a name-based fixture exists for param_name, prefer it (preserves
-        #   cycle detection and handles cases where type-based found the wrong fixture)
-        # - If no name match, use the type-resolved fixture's name
-        # - If type resolution failed entirely, fall back to name-based
-        name_defn = self._registry.get(param_name)
-        if name_defn is not None:
-            return True, resolve_user_fixture(param_name)
-        if defn is not None:
-            return True, resolve_user_fixture(defn.name)
-        raise FixtureNotFoundError(param_name)
+        # For ConftestSource: prefer name-based (preserves cycle detection),
+        # fall back to type-resolved name, or raise if neither exists.
+        resolve_name = (
+            param_name
+            if self._registry.get(param_name) is not None
+            else defn.name
+            if defn is not None
+            else None
+        )
+        if resolve_name is None:
+            raise FixtureNotFoundError(param_name)
+        return True, resolve_user_fixture(resolve_name)
 
     def _resolve_by_source(
         self,

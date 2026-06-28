@@ -192,8 +192,8 @@ def test_collected_item_manual_construction():
         "param_id",
         "param_values",
         "is_async",
-        "fixture_names",
-        "fixref_names",
+        "fixture_deps",
+        "fixref_deps",
     }
     actual_fields = {f.name for f in dataclasses.fields(item)}
     assert actual_fields == expected_fields, (

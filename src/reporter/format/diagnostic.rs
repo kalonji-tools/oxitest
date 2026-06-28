@@ -553,8 +553,8 @@ mod tests {
                 },
             ],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         });
         let outcome = TestOutcome::failed("")
             .lineno(8)
@@ -586,8 +586,8 @@ mod tests {
                 value: "1".to_string(),
             }],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         });
         let outcome = TestOutcome::failed("")
             .lineno(8)
@@ -658,8 +658,8 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         let outcome = TestOutcome::failed("assert failed")
             .file("test_foo.py")
@@ -707,8 +707,8 @@ mod tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         let outcome = TestOutcome::failed("oops")
             .file("t.py")

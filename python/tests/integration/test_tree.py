@@ -9,13 +9,13 @@ _TREE_ARGS = ("query", "fixtures", "--tree")
 def test_tree_basic_output(tmp: TempDir):
     """`fixtures --tree` shows fixture dependency tree and exits 0."""
     (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
+        "from oxitest import Fixture, Fixtures\n\n"
         "fx = Fixtures()\n\n"
         "@fx.fixture\n"
         "def config() -> dict:\n"
         "    return {'host': 'localhost'}\n\n"
         "@fx.fixture\n"
-        "def db(config):\n"
+        "def db(config: Fixture[dict]) -> str:\n"
         "    return f'connected to {config}'\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
@@ -43,13 +43,13 @@ def test_tree_shared_fixture(tmp: TempDir):
 def test_tree_cycle_exits_failure(tmp: TempDir):
     """`fixtures --tree` detects circular deps and exits 1."""
     (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
+        "from oxitest import Fixture, Fixtures\n\n"
         "fx = Fixtures()\n\n"
         "@fx.fixture\n"
-        "def a(b):\n"
+        "def a(b: Fixture[str]) -> str:\n"
         "    return 'a'\n\n"
         "@fx.fixture\n"
-        "def b(a):\n"
+        "def b(a: Fixture[str]) -> str:\n"
         "    return 'b'\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")

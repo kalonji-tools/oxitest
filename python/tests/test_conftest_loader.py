@@ -551,3 +551,15 @@ def test_extract_depends_on():
     assert deps == (("conn", Connection),), (
         "should extract conn: Fixture[Connection] as a dependency, ignoring plain int"
     )
+
+
+def test_extract_depends_on_skips_unannotated():
+    """Unannotated parameters are not included in depends_on."""
+
+    def my_fixture(db, x: int) -> DBSession:
+        raise NotImplementedError
+
+    deps = _extract_depends_on(my_fixture)
+    assert deps == (), (
+        "unannotated and non-Fixture params should not appear in depends_on"
+    )
