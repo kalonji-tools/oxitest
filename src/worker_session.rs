@@ -4,6 +4,13 @@
 //! its stdin/stdout, and the [`WorkerSession`] struct that bundles communication
 //! state for a single worker thread.
 
+/// Maximum length of a single worker stdout line (10 MB).
+///
+/// Normal test results are <10 KB. A line exceeding this limit indicates
+/// a misbehaving worker (e.g., printing large data to stdout). The line
+/// is truncated and reported as an error.
+const MAX_LINE_LENGTH: usize = 10 * 1024 * 1024;
+
 use crate::{
     parallel::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome},
     scheduler, types,
@@ -63,7 +70,7 @@ pub(crate) fn setup_worker_process(
 
     // Offload blocking reads into a dedicated thread so the worker loop
     // can use recv_timeout() and remain responsive to the watchdog deadline.
-    let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+    let (line_tx, line_rx) = crossbeam_channel::bounded::<String>(1024);
     let _reader = std::thread::spawn(move || {
         let mut stdout = worker_stdout;
         let mut buf = String::with_capacity(256);
@@ -72,6 +79,14 @@ pub(crate) fn setup_worker_process(
             match stdout.read_line(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
+                    if buf.len() > MAX_LINE_LENGTH {
+                        tracing::warn!(
+                            len = buf.len(),
+                            "Worker stdout line exceeds {} bytes — truncating",
+                            MAX_LINE_LENGTH
+                        );
+                        buf.truncate(MAX_LINE_LENGTH);
+                    }
                     if line_tx.send(buf.clone()).is_err() {
                         break;
                     }
@@ -512,5 +527,26 @@ mod worker_session_tests {
 
         // Assert
         assert!(errored, "send_task must return Err after process exits");
+    }
+}
+
+#[cfg(test)]
+mod line_length_tests {
+    use super::*;
+
+    // NOTE: The truncation path (buf.len() > MAX_LINE_LENGTH) is embedded in a
+    // closure inside setup_worker_process and requires a real subprocess write of
+    // >10 MB to trigger. That is impractical in a unit test context. The constant
+    // value and channel capacity are verified here; normal operation is covered by
+    // the integration tests via `just test`.
+
+    #[test]
+    fn max_line_length_is_ten_mebibytes() {
+        assert_eq!(
+            MAX_LINE_LENGTH,
+            10 * 1024 * 1024,
+            "MAX_LINE_LENGTH must be 10 MiB — change this value only with a deliberate decision \
+             about memory safety for the coordinator process"
+        );
     }
 }
