@@ -8,7 +8,13 @@ import inspect
 from typing import Any
 
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+)
 
 _BUILTIN_MODULE_PREFIX = "oxitest._bridge._builtins"
 _BUILTIN_CONFTEST = "<builtin>"
@@ -36,13 +42,14 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
         _stub.__name__ = name
         _stub.__doc__ = doc
         _stub.__module__ = "oxitest._bridge._builtins"
+        is_shared = getattr(impl_cls, "scope", "function") == "session"
         defs.append(
             FixtureDef(
                 name=name,
-                func=_stub,
+                fixture_type=fixture_type,
+                scope=FixtureScope.SHARED if is_shared else FixtureScope.EACH,
+                source=BuiltinSource(impl_cls=impl_cls),
                 autouse=False,
-                conftest_path=_BUILTIN_CONFTEST,
-                shared=getattr(impl_cls, "scope", "function") == "session",
                 is_async=False,
             )
         )
@@ -50,18 +57,24 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
 
 
 def _is_builtin(defn: FixtureDef[Any]) -> bool:
+    if isinstance(defn.source, BuiltinSource):
+        return True
     if defn.conftest_path == _BUILTIN_CONFTEST:
         return True
-    mod = getattr(defn.func, "__module__", "") or ""
-    return mod.startswith(_BUILTIN_MODULE_PREFIX)
+    if isinstance(defn.source, ConftestSource):
+        mod = getattr(defn.source.func, "__module__", "") or ""
+        return mod.startswith(_BUILTIN_MODULE_PREFIX)
+    return False
 
 
 def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
     """Sort key: (0, '') for built-in, (1, plugin), (2, conftest_path)."""
     if _is_builtin(defn):
         return (0, "")
-    if not defn.conftest_path:
-        return (1, getattr(defn.func, "__module__", "plugin"))
+    if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
+        return (1, getattr(defn.source.func, "__module__", "plugin"))
+    if not isinstance(defn.source, ConftestSource):
+        return (1, defn.conftest_path)
     return (2, defn.conftest_path)
 
 
@@ -74,9 +87,11 @@ def _dim(text: str, use_color: bool) -> str:
 def _origin_header(defn: FixtureDef[Any]) -> str:
     if _is_builtin(defn):
         return "built-in"
-    if not defn.conftest_path:
-        mod = getattr(defn.func, "__module__", "plugin")
+    if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
+        mod = getattr(defn.source.func, "__module__", "plugin")
         return f"plugin ({mod})"
+    if not isinstance(defn.source, ConftestSource):
+        return defn.conftest_path
     return defn.conftest_path
 
 
@@ -116,15 +131,20 @@ def tree_fixtures_from_registry(
     for name, defn in all_defs.items():
         deps: list[str] = []
         try:
-            sig = inspect.signature(defn.func)
-        except (ValueError, TypeError):
+            func = defn.func
+        except AttributeError:
             pass
         else:
-            deps.extend(
-                param_name
-                for param_name in sig.parameters
-                if param_name in all_defs and param_name != name
-            )
+            try:
+                sig = inspect.signature(func)
+            except (ValueError, TypeError):
+                pass
+            else:
+                deps.extend(
+                    param_name
+                    for param_name in sig.parameters
+                    if param_name in all_defs and param_name != name
+                )
         graph[name] = deps
 
     # Cycle detection via DFS (white/gray/black)

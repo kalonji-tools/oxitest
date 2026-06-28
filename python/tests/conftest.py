@@ -7,7 +7,7 @@ docs/src/explanation/conftest-helpers.md.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_type_hints
 
 __helpers_namespace__ = "common"
 
@@ -24,9 +24,14 @@ if TYPE_CHECKING:
 
 import oxitest
 from oxitest import TempDir, Yields
-from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    ConftestSource,
+    FixtureDef,
+    FixtureScope,
+)
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
+from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import TestResult
 
 __all__ = [
@@ -48,8 +53,7 @@ fx = oxitest.Fixtures()
 
 @fx.fixture
 def fixture_session(tmp: TempDir) -> Yields[FixtureSession]:
-    reg = FixtureRegistry()
-    session = FixtureSession(reg)
+    session = FixtureSession([], PluginRegistry())
     yield session
     session.end_session()
 
@@ -87,15 +91,20 @@ def make_fixture_def(
             pass
 
         _fn.__name__ = name
-        _fn.__doc__ = doc
+        _fn.__doc__ = doc or None
         _fn.__module__ = "conftest" if conftest_path else "oxitest._bridge._builtins"
         factory = _fn
+    # Try to extract return type; fall back to object
+    try:
+        ft = get_type_hints(factory).get("return", object)
+    except Exception:  # noqa: BLE001
+        ft = object
     return FixtureDef(
         name=name,
-        func=factory,
+        fixture_type=ft,
+        scope=FixtureScope.SHARED if shared else FixtureScope.EACH,
+        source=ConftestSource(func=factory, conftest_path=conftest_path),
         autouse=autouse,
-        conftest_path=conftest_path,
-        shared=shared,
         namespace=namespace,
         is_async=is_async,
     )
@@ -103,10 +112,7 @@ def make_fixture_def(
 
 def make_session(*defs: FixtureDef) -> FixtureSession:
     """Create a ``FixtureSession`` from one or more ``FixtureDef``s."""
-    reg = FixtureRegistry()
-    for d in defs:
-        reg.register(d)
-    return FixtureSession(reg)
+    return FixtureSession(list(defs), PluginRegistry())
 
 
 def make_session_with(name: str, factory) -> FixtureSession:

@@ -1,11 +1,19 @@
-"""Tests for FixtureSession fixture timing instrumentation."""
+"""Tests for FixtureSession fixture timing instrumentation and unification."""
 
 from __future__ import annotations
 
 import time
 
 from conftest import helpers
-from oxitest._bridge._fixture_session import _NullFixtureSession
+from oxitest import TempDir
+from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
+    FixtureDef,
+    FixtureScope,
+)
+from oxitest._bridge._fixture_session import FixtureSession, _NullFixtureSession
+from oxitest._bridge.plugin_loader import PluginRegistry
 
 
 def test_setup_timing_recorded_for_function_scoped_fixture():
@@ -115,4 +123,33 @@ def test_multiple_fixtures_each_tracked_separately():
     assert len(timings) == 2, f"expected 2 timing entries, got {len(timings)}"
     assert all(t.setup_count == 1 for t in timings), (
         f"expected all setup_count to be 1, got {[t.setup_count for t in timings]}"
+    )
+
+
+# ── FixtureSession unification ────────────────────────────────────────────────
+
+
+def test_session_builtins_registered():
+    """Builtins appear in the unified registry after session init."""
+    session = FixtureSession([], PluginRegistry())
+    defn = session._registry.resolve(TempDir)
+    assert defn.name is not None, "TempDir builtin should be registered"
+    assert isinstance(defn.source, BuiltinSource), (
+        "source should be BuiltinSource for a builtin fixture"
+    )
+
+
+def test_session_conftest_overrides_builtin():
+    """A conftest fixture with the same binding type overrides a builtin."""
+    custom = FixtureDef(
+        name="TempDir",
+        fixture_type=TempDir,
+        scope=FixtureScope.EACH,
+        source=ConftestSource(func=lambda: "custom", conftest_path="/conftest.py"),
+    )
+    session = FixtureSession([custom], PluginRegistry())
+    # Use qualifier "TempDir" to disambiguate (conftest registered with name "TempDir")
+    defn = session._registry.resolve(TempDir, qualifier="TempDir")
+    assert isinstance(defn.source, ConftestSource), (
+        "conftest fixture should override builtin when they share the same type"
     )

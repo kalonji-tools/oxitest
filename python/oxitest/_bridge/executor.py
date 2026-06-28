@@ -38,7 +38,6 @@ from oxitest._bridge._fixture_context import (
     _current_teardown_node_id,
     _test_run_context,
 )
-from oxitest._bridge._fixture_registry import FixtureRegistry as _FixtureRegistry
 from oxitest._bridge._fixture_session import (
     FixtureSession,
     _SessionProtocol,
@@ -230,7 +229,7 @@ def _build_execution_chain(
     return execute
 
 
-_NULL_SESSION: _SessionProtocol = FixtureSession(_FixtureRegistry())
+_NULL_SESSION: _SessionProtocol = FixtureSession([])
 
 
 def _evaluate_marks_phase(

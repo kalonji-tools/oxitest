@@ -67,13 +67,39 @@ class FixtureShadowWarning(UserWarning):
 @dataclass(frozen=True)
 class FixtureDef(Generic[T]):
     name: str
-    func: Callable[..., T]
-    autouse: bool
-    conftest_path: str  # which conftest registered this (for locality precedence)
-    shared: bool = False  # True = session-lifetime, immutable (FrozenProxy-wrapped)
+    fixture_type: type  # binding type for type-based resolve
+    scope: FixtureScope  # each, shared, or session
+    source: FixtureSource  # where this fixture comes from
+    autouse: bool = False
     namespace: str = ""  # Fixtures() instance name; empty = no namespace
     is_async: bool = False  # True = async def or async generator fixture
-    fixture_type: type | None = None  # binding type for type-based resolve
+    depends_on: tuple[tuple[str, type], ...] = ()  # (qualifier, binding_type) pairs
+
+    @property
+    def func(self) -> Callable[..., T]:
+        """Backward-compat: conftest fixture callable."""
+        if isinstance(self.source, ConftestSource):
+            return self.source.func
+        raise AttributeError(
+            f"FixtureDef '{self.name}' has no func "
+            f"(source: {type(self.source).__name__})"
+        )
+
+    @property
+    def conftest_path(self) -> str:
+        """Backward-compat: return a path-like string for any source variant."""
+        match self.source:
+            case ConftestSource(conftest_path=p):
+                return p
+            case PluginSource(plugin_module=m):
+                return f"<plugin:{m}>"
+            case BuiltinSource():
+                return "<builtin>"
+
+    @property
+    def shared(self) -> bool:
+        """Backward-compat: True when scope is SHARED."""
+        return self.scope == FixtureScope.SHARED
 
 
 class FixtureRegistry:
@@ -88,7 +114,7 @@ class FixtureRegistry:
     def __init__(self) -> None:
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
         self._by_name: dict[str, list[FixtureDef[Any]]] = {}
-        # type -> list of FixtureDef (only for defs with fixture_type set)
+        # type -> list of FixtureDef, indexed by fixture_type for type-based resolve
         self._by_type: dict[type, list[FixtureDef[Any]]] = {}
         self._namespaces: set[str] = set()  # O(1) namespace existence check
         self._has_shared_cache: bool | None = None
@@ -106,18 +132,19 @@ class FixtureRegistry:
                 stacklevel=2,
             )
         self._by_name.setdefault(defn.name, []).append(defn)
-        if defn.fixture_type is not None:
-            self._by_type.setdefault(defn.fixture_type, []).append(defn)
+        self._by_type.setdefault(defn.fixture_type, []).append(defn)
         if defn.namespace:
             self._namespaces.add(defn.namespace)
 
-        # Skip annotation check for builtins (conftest_path starts with "<")
+        # Only check return annotation for conftest fixtures with real paths
+        if not isinstance(defn.source, ConftestSource):
+            return []
         if defn.conftest_path.startswith("<"):
             return []
 
         violations: list[CollectedViolation] = []
         try:
-            hints = get_type_hints(defn.func)
+            hints = get_type_hints(defn.source.func)
         except Exception:  # noqa: BLE001
             hints = {}
         if "return" not in hints:
@@ -172,7 +199,7 @@ class FixtureRegistry:
         # Unwrap FixtureAccessor (duck-typed to avoid circular import)
         raw = getattr(func, "_fa_func", func)
         for defn in defs:
-            if defn.func is raw:
+            if isinstance(defn.source, ConftestSource) and defn.source.func is raw:
                 return defn.namespace or None
         return None
 
@@ -194,13 +221,18 @@ class FixtureRegistry:
             defn = defs[-1]  # most-local definition
             deps: set[str] = set()
             try:
-                sig = inspect.signature(defn.func)
-            except (ValueError, TypeError):
+                func = defn.func
+            except AttributeError:
                 pass
             else:
-                for param_name in sig.parameters:
-                    if param_name in self._by_name and param_name != name:
-                        deps.add(param_name)
+                try:
+                    sig = inspect.signature(func)
+                except (ValueError, TypeError):
+                    pass
+                else:
+                    for param_name in sig.parameters:
+                        if param_name in self._by_name and param_name != name:
+                            deps.add(param_name)
             graph[name] = deps
 
         # Find which shared fixtures each fixture transitively reaches.

@@ -12,7 +12,7 @@ from types import ModuleType
 from typing import Any, cast, get_type_hints
 
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._fixture_registry import _fixture_inner_type
+from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
@@ -310,7 +310,14 @@ def _register_module_fixtures(
         if isinstance(obj, Fixtures):
             for defn in obj._defs:
                 violations.extend(
-                    registry.register(dataclasses.replace(defn, conftest_path=path))
+                    registry.register(
+                        dataclasses.replace(
+                            defn,
+                            source=ConftestSource(
+                                func=defn.source.func, conftest_path=path
+                            ),
+                        )
+                    )
                 )
     return violations
 

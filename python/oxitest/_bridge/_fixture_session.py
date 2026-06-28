@@ -49,8 +49,12 @@ from oxitest._bridge._fixture_instantiator import (
     ScopeRefs,
 )
 from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
     FixtureDef,
     FixtureRegistry,
+    FixtureScope,
+    PluginSource,
     _fixture_inner_type,
 )
 from oxitest._bridge._fixtures import (
@@ -235,11 +239,11 @@ class FixtureSession:
 
     def __init__(
         self,
-        registry: FixtureRegistry,
+        conftest_defs: list[FixtureDef] | FixtureRegistry,
         plugin_registry: PluginRegistry | None = None,
         async_backend: AsyncBackend | None = None,
     ) -> None:
-        self._registry = registry
+        self._registry = FixtureRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
         self._session_scope = _Scope()
@@ -247,6 +251,65 @@ class FixtureSession:
             _Scope()
         )  # shared=True fixtures — init once, drain at end_session
         self._module_cache = ModuleCache()
+
+        # ── Register all fixture sources into the unified registry ──
+        # 1. Builtins (lowest priority)
+        for fixture_type, impl_cls in BuiltinFixture._registry.items():
+            scope = (
+                FixtureScope.SESSION
+                if getattr(impl_cls, "scope", "function") == "session"
+                else FixtureScope.EACH
+            )
+            self._registry.register(
+                FixtureDef(
+                    name=impl_cls.__name__,
+                    fixture_type=fixture_type,
+                    scope=scope,
+                    source=BuiltinSource(impl_cls=impl_cls),
+                )
+            )
+
+        # 2. Plugin fixtures (medium priority)
+        for provider in getattr(self._plugin_registry, "fixture_providers", ()):
+            provider_scope = getattr(provider, "scope", "each")
+            provider_autouse = getattr(provider, "autouse", False)
+            self._registry.register(
+                FixtureDef(
+                    name=provider.name,
+                    fixture_type=provider.fixture_type,
+                    scope=FixtureScope(provider_scope),
+                    source=PluginSource(
+                        provider=provider,
+                        plugin_module=getattr(provider, "__module__", "<plugin>"),
+                    ),
+                    autouse=provider_autouse,
+                )
+            )
+
+        # 3. Conftest fixtures (highest priority)
+        # Support both new list[FixtureDef] API and legacy FixtureRegistry API
+        if isinstance(conftest_defs, FixtureRegistry):
+            # Legacy path: iterate all defs from the registry
+            for name in conftest_defs:
+                for defn in conftest_defs.all_defs(name):
+                    self._registry.register(defn)
+        else:
+            for defn in conftest_defs:
+                self._registry.register(defn)
+
+        # Built-in task_group fixture (async yield fixture for managed TaskGroup)
+        self._registry.register(
+            FixtureDef(
+                name="task_group",
+                fixture_type=object,
+                scope=FixtureScope.EACH,
+                source=ConftestSource(
+                    func=_task_group_factory, conftest_path="<builtin>"
+                ),
+                autouse=False,
+                is_async=True,
+            )
+        )
 
         from oxitest._bridge._fixture_instantiator import (
             FixtureInstantiator as _FixtureInstantiator,
@@ -264,22 +327,30 @@ class FixtureSession:
         self._validator = _FixtureValidator(
             self._registry, self._plugin_registry, self._module_cache
         )
-        self._registry.register(
-            FixtureDef(
-                name="task_group",
-                func=_task_group_factory,
-                autouse=False,
-                conftest_path="<builtin>",
-                is_async=True,
-            )
-        )
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
-        # Propagate plugin registry to instantiator so it can
-        # resolve plugin-provided fixtures
+        # When plugin registry is replaced (e.g. by Rust bridge after init),
+        # re-register plugin fixtures into the unified registry and propagate
+        # to the instantiator.
         if name == "_plugin_registry" and hasattr(self, "_instantiator"):
             self._instantiator._plugin_registry = value
+            # Register any new plugin fixture providers into the unified registry
+            for provider in getattr(value, "fixture_providers", ()):
+                provider_scope = getattr(provider, "scope", "each")
+                provider_autouse = getattr(provider, "autouse", False)
+                self._registry.register(
+                    FixtureDef(
+                        name=provider.name,
+                        fixture_type=provider.fixture_type,
+                        scope=FixtureScope(provider_scope),
+                        source=PluginSource(
+                            provider=provider,
+                            plugin_module=getattr(provider, "__module__", "<plugin>"),
+                        ),
+                        autouse=provider_autouse,
+                    )
+                )
 
     def _scope_for(self, defn: FixtureDef) -> ScopeRefs | None:
         """Map a fixture def to its scope refs. None = function scope."""
@@ -425,12 +496,8 @@ class FixtureSession:
             for param_name, hint in hints.items():
                 if param_name == "return":
                     continue
-                is_fx, inner = _fixture_inner_type(hint)
-                if (
-                    is_fx
-                    and BuiltinFixture.for_type(inner) is None
-                    and param_name not in skip_names
-                ):
+                is_fx, _inner = _fixture_inner_type(hint)
+                if is_fx and param_name not in skip_names:
                     requested_names.add(param_name)
 
             # Autouse: run for side effects; value NOT injected unless

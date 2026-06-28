@@ -23,7 +23,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
 from oxitest._bridge._fixture_context import _fixture_context
-from oxitest._bridge._fixture_registry import FixtureDef
+from oxitest._bridge._fixture_registry import ConftestSource, FixtureDef, FixtureScope
 from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
@@ -198,10 +198,10 @@ class Fixtures:
             get_or_create(f).fixture_name = fixture_name
             defn = FixtureDef(
                 name=fixture_name,
-                func=f,
+                fixture_type=object,  # placeholder — overwritten by conftest_loader
+                scope=FixtureScope.SHARED if shared else FixtureScope.EACH,
+                source=ConftestSource(func=f, conftest_path=""),
                 autouse=autouse,
-                conftest_path="",
-                shared=shared,
                 is_async=(
                     inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
                 ),
