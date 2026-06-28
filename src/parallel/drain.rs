@@ -101,6 +101,16 @@ pub(crate) fn drain_worker_results(
                             });
                         } else {
                             tracing::warn!(error = %e, output = %trimmed, "bad worker output");
+                            let _ = tx.send(WorkerResult {
+                                resolved: types::ResolvedOutcome {
+                                    node_id: types::NodeId::from_raw("<worker>::malformed_output"),
+                                    duration_ms: types::DurationMs::ZERO,
+                                    outcome: types::TestOutcome::error_sentinel(format!(
+                                        "Malformed worker output (not valid JSON): {e}"
+                                    )),
+                                },
+                                worker_id,
+                            });
                         }
                     }
                 }
@@ -575,6 +585,42 @@ mod drain_tests {
         assert_eq!(count, 1);
         // Result must still be forwarded despite version mismatch
         let _r = result_rx.try_recv().expect("result should be forwarded");
+    }
+
+    // ── Test 11 ─────────────────────────────────────────────────────────────────
+    // Completely invalid JSON (not salvageable via WireMinimal) must still emit
+    // an error sentinel so the test is not silently dropped.
+    #[test]
+    fn completely_malformed_json_emits_error_sentinel() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+
+        line_tx.send("not json at all\n".to_string()).unwrap();
+        drop(line_tx);
+
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx, 0);
+
+        assert_eq!(
+            outcome,
+            DrainOutcome::Complete,
+            "drain must return Complete when expected count is satisfied by the sentinel"
+        );
+        assert_eq!(
+            received, 1,
+            "the malformed line must be counted as received"
+        );
+        let result = result_rx
+            .try_recv()
+            .expect("an error sentinel must be sent for completely malformed JSON");
+        assert!(
+            matches!(
+                result.resolved.outcome,
+                crate::types::TestOutcome::Error(..)
+            ),
+            "outcome must be an Error sentinel, got: {:?}",
+            result.resolved.outcome
+        );
     }
 }
 
