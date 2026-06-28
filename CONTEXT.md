@@ -30,9 +30,13 @@
 
 ## Fixtures
 
-**Fixture** — A reusable value injected into test functions. Declared via a `Fixtures()` registry and requested via `Fixture[T]` annotation.
+**Fixture** — A reusable value injected into test functions. Resolved primarily by type via `Fixture[T]` annotation. Sources: conftest definitions, plugin providers, and builtins.
 
-**Fixture[T]** — Type annotation that signals oxitest to inject the matching fixture. Unannotated parameters are never injected.
+**Fixture[T]** — Type annotation that signals oxitest to inject a fixture whose binding type is `T`. Resolution: match by type first; if ambiguous, the parameter name acts as a qualifier.
+
+**Binding Type** — The type a fixture provides, used as the primary key for resolution. For conftest fixtures, the return annotation. For plugins, `FixtureProvider.fixture_type`. For builtins, the registered `fixture_type`.
+
+**Qualifier** — The parameter name used to disambiguate when multiple fixtures share the same binding type. Only consulted when type-based resolution yields more than one candidate.
 
 **FixtureRef[T]** — Type annotation on a dataclass field indicating the field holds a reference to a fixture function, not a literal value. Resolved at execution time.
 
@@ -40,7 +44,7 @@
 
 **Namespace** — A `Fixtures()` instance acts as a namespace. Two registries can define fixtures with the same name without conflict. Namespace names must not be Python keywords or builtins.
 
-**Scope** — The lifetime of a fixture value: `"each"` (per-test, default) or `"shared"` (per-module).
+**Scope** — The lifetime of a fixture value. Three tiers: `"each"` (per-test, default), `"shared"` (per-module, FrozenProxy-wrapped), or `"session"` (per-process/run).
 
 **Autouse** — A fixture that is automatically injected into every test in its scope without explicit annotation.
 
@@ -94,7 +98,9 @@
 
 ## CLI Structure
 
-**Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `list` (show collected tests), `fixtures` (inspect fixtures), `env` (print environment). Each subcommand has its own flag set.
+**Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `list` (show collected tests), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
+
+**Inspect Node** — A navigable entity in the `inspect` TUI. One of six types: Fixture, Test, Mark, Conftest, Plugin, Helper. Each node has fields, connections to other nodes, and a detail view.
 
 ## Strict Mode
 
