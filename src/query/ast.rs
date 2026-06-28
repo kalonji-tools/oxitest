@@ -82,7 +82,7 @@ pub(crate) enum DslError {
 // ── AST ───────────────────────────────────────────────────────────────────────
 
 /// How a predicate argument matches a field value.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum Matcher {
     /// Field exists and is non-empty and non-"false" (boolean predicate).
     Any,
@@ -90,12 +90,12 @@ pub(crate) enum Matcher {
     Contains(String),
     /// Any comma-separated value exactly equals the string.
     Exact(String),
-    /// Any comma-separated value matches the regex pattern.
-    Regex(String),
+    /// Any comma-separated value matches the regex pattern (pre-compiled at parse time).
+    Regex(regex::Regex),
 }
 
 /// A parsed DSL expression tree.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub(crate) enum Expr {
     /// A single predicate: `field_name(matcher)`.
     Predicate {
