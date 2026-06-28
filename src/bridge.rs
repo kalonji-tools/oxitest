@@ -183,8 +183,8 @@ struct CollectedItem {
     param_id: Option<String>,
     param_values: Vec<(String, String)>,
     is_async: bool,
-    fixture_names: Vec<String>,
-    fixref_names: Vec<String>,
+    fixture_deps: Vec<(String, String)>,
+    fixref_deps: Vec<(String, String)>,
 }
 
 /// Typed violation kind coming from Python. Variants map 1-to-1 to the
@@ -192,6 +192,7 @@ struct CollectedItem {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ViolationKind {
     BareAssert,
+    BroadFixtureType,
     DictParametrize,
     InvalidModuleMark,
     MissingMarkReason,
@@ -208,6 +209,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
         let s: String = ob.extract()?;
         Ok(match s.as_str() {
             "bare_assert" => ViolationKind::BareAssert,
+            "broad_fixture_type" => ViolationKind::BroadFixtureType,
             "dict_parametrize" => ViolationKind::DictParametrize,
             "invalid_module_mark" => ViolationKind::InvalidModuleMark,
             "missing_mark_reason" => ViolationKind::MissingMarkReason,
@@ -286,8 +288,8 @@ pub(crate) fn collect_module_with_session_obj(
             param_id: item.param_id,
             param_values: item.param_values.into_iter().map(Into::into).collect(),
             is_async: item.is_async,
-            fixture_names: item.fixture_names,
-            fixref_names: item.fixref_names,
+            fixture_deps: item.fixture_deps,
+            fixref_deps: item.fixref_deps,
         })
         .collect();
 
@@ -311,9 +313,16 @@ pub(crate) fn validate_fixture_names(
             let dict = pyo3::types::PyDict::new(py);
             let nid: &str = &item.node_id;
             dict.set_item("node_id", nid).map_err(py_collect_err)?;
-            dict.set_item("fixture_names", &item.fixture_names)
+            let fixture_names: Vec<&str> =
+                item.fixture_deps.iter().map(|(q, _)| q.as_str()).collect();
+            dict.set_item("fixture_names", fixture_names)
                 .map_err(py_collect_err)?;
-            dict.set_item("fixref_names", &item.fixref_names)
+            let fixref_names: Vec<&str> =
+                item.fixref_deps.iter().map(|(q, _)| q.as_str()).collect();
+            dict.set_item("fixref_names", fixref_names)
+                .map_err(py_collect_err)?;
+            // Pass full (qualifier, type_name) pairs so the validator can filter builtins
+            dict.set_item("fixture_deps", &item.fixture_deps)
                 .map_err(py_collect_err)?;
             Ok(dict)
         })
@@ -375,9 +384,9 @@ pub(crate) fn find_unused_fixtures(
     let items_list = pyo3::types::PyList::empty(py);
     for item in items {
         let dict = pyo3::types::PyDict::new(py);
-        let fixture_names =
-            pyo3::types::PyList::new(py, item.fixture_names.iter().map(String::as_str))?;
-        dict.set_item("fixture_names", fixture_names)?;
+        let fixture_names: Vec<&str> = item.fixture_deps.iter().map(|(q, _)| q.as_str()).collect();
+        let fixture_names_py = pyo3::types::PyList::new(py, fixture_names)?;
+        dict.set_item("fixture_names", fixture_names_py)?;
         items_list.append(dict)?;
     }
     let result: Vec<(String, String)> = session

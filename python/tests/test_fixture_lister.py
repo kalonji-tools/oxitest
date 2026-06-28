@@ -43,11 +43,19 @@ def test_tree_linear_chain():
     )
     reg.register(
         helpers.common.make_fixture_def(
-            "connection", factory=_connection, conftest_path="c.py"
+            "connection",
+            factory=_connection,
+            conftest_path="c.py",
+            depends_on=(("config", object),),
         )
     )
     reg.register(
-        helpers.common.make_fixture_def("db", factory=_db, conftest_path="c.py")
+        helpers.common.make_fixture_def(
+            "db",
+            factory=_db,
+            conftest_path="c.py",
+            depends_on=(("connection", object),),
+        )
     )
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     # db depends on connection, connection depends on config
@@ -75,13 +83,28 @@ def test_tree_diamond():
         helpers.common.make_fixture_def("base", factory=_base, conftest_path="c.py")
     )
     reg.register(
-        helpers.common.make_fixture_def("left", factory=_left, conftest_path="c.py")
+        helpers.common.make_fixture_def(
+            "left",
+            factory=_left,
+            conftest_path="c.py",
+            depends_on=(("base", object),),
+        )
     )
     reg.register(
-        helpers.common.make_fixture_def("right", factory=_right, conftest_path="c.py")
+        helpers.common.make_fixture_def(
+            "right",
+            factory=_right,
+            conftest_path="c.py",
+            depends_on=(("base", object),),
+        )
     )
     reg.register(
-        helpers.common.make_fixture_def("top", factory=_top, conftest_path="c.py")
+        helpers.common.make_fixture_def(
+            "top",
+            factory=_top,
+            conftest_path="c.py",
+            depends_on=(("left", object), ("right", object)),
+        )
     )
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     # "top" should show both left and right as children
@@ -101,8 +124,16 @@ def test_tree_cycle_detection():
         pass
 
     reg = FixtureRegistry()
-    reg.register(helpers.common.make_fixture_def("a", factory=_a, conftest_path="c.py"))
-    reg.register(helpers.common.make_fixture_def("b", factory=_b, conftest_path="c.py"))
+    reg.register(
+        helpers.common.make_fixture_def(
+            "a", factory=_a, conftest_path="c.py", depends_on=(("b", object),)
+        )
+    )
+    reg.register(
+        helpers.common.make_fixture_def(
+            "b", factory=_b, conftest_path="c.py", depends_on=(("a", object),)
+        )
+    )
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     assert "Circular" in result or "circular" in result, (
         f"cycle not detected: {result!r}"
@@ -121,7 +152,12 @@ def test_tree_keyword_filter():
         helpers.common.make_fixture_def("config", factory=_config, conftest_path="c.py")
     )
     reg.register(
-        helpers.common.make_fixture_def("db", factory=_db, conftest_path="c.py")
+        helpers.common.make_fixture_def(
+            "db",
+            factory=_db,
+            conftest_path="c.py",
+            depends_on=(("config", object),),
+        )
     )
     result = tree_fixtures_from_registry(
         reg, verbosity=0, pattern="db", use_color=False

@@ -126,25 +126,14 @@ def tree_fixtures_from_registry(
         if defn.name not in seen_names:
             all_defs[defn.name] = defn
 
-    # Extract deps for each fixture
+    # Extract deps for each fixture via depends_on (populated at registration)
     graph: dict[str, list[str]] = {}
     for name, defn in all_defs.items():
-        deps: list[str] = []
-        try:
-            func = defn.func
-        except AttributeError:
-            pass
-        else:
-            try:
-                sig = inspect.signature(func)
-            except (ValueError, TypeError):
-                pass
-            else:
-                deps.extend(
-                    param_name
-                    for param_name in sig.parameters
-                    if param_name in all_defs and param_name != name
-                )
+        deps = [
+            qualifier
+            for qualifier, _binding_type in defn.depends_on
+            if qualifier in all_defs and qualifier != name
+        ]
         graph[name] = deps
 
     # Cycle detection via DFS (white/gray/black)

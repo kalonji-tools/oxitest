@@ -20,7 +20,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::types::{DurationMs, OutcomeKind};
 
-const CACHE_VERSION: u32 = 1;
+const CACHE_VERSION: u32 = 2;
 
 /// Timing and outcome record for a single test, stored by node ID.
 ///
@@ -193,7 +193,7 @@ mod tests {
         let cache_dir = dir.child(".oxitest_cache");
         cache_dir.create_dir_all().unwrap();
         cache_dir.child("timings.json").write_str(
-            r#"{"version":1,"timings":{"tests/test_foo.py::test_a":{"duration_ms":42.5,"age":0}}}"#
+            r#"{"version":2,"timings":{"tests/test_foo.py::test_a":{"duration_ms":42.5,"age":0}}}"#
         ).unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::load(utf8_dir);
@@ -267,7 +267,7 @@ mod tests {
         let cache_dir = dir.child(".oxitest_cache");
         cache_dir.create_dir_all().unwrap();
         cache_dir.child("timings.json").write_str(
-            r#"{"version":1,"timings":{"tests/test_foo.py::test_a":{"duration_ms":10.0,"age":0}}}"#
+            r#"{"version":2,"timings":{"tests/test_foo.py::test_a":{"duration_ms":10.0,"age":0}}}"#
         ).unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::load(utf8_dir);
@@ -309,7 +309,7 @@ mod tests {
         );
 
         let cache = CacheFile {
-            version: 1,
+            version: 2,
             timings,
             modules: AHashMap::new(),
         };

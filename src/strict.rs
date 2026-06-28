@@ -25,6 +25,10 @@ pub enum PerTestViolation {
         node_id: NodeId,
         lines: Vec<usize>,
     },
+    BroadFixtureType {
+        node_id: NodeId,
+        detail: String,
+    },
     DictParametrize {
         node_id: NodeId,
     },
@@ -53,6 +57,7 @@ impl PerTestViolation {
     pub fn node_id(&self) -> &NodeId {
         match self {
             Self::BareAssert { node_id, .. }
+            | Self::BroadFixtureType { node_id, .. }
             | Self::DictParametrize { node_id }
             | Self::InvalidModuleMark { node_id, .. }
             | Self::MissingMarkReason { node_id, .. }
@@ -134,6 +139,12 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         lines,
                     }))
                 }
+                ViolationKind::BroadFixtureType => Some(StrictViolation::PerTest(
+                    PerTestViolation::BroadFixtureType {
+                        node_id,
+                        detail: r.detail,
+                    },
+                )),
                 ViolationKind::DictParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::DictParametrize { node_id },
                 )),
@@ -205,6 +216,14 @@ impl std::fmt::Display for PerTestViolation {
                         nums
                     )
                 }
+            }
+            Self::BroadFixtureType { node_id, detail } => {
+                write!(
+                    f,
+                    "{:<60}  broad-fixture-type   {}",
+                    node_id.as_ref(),
+                    detail
+                )
             }
             Self::DictParametrize { node_id } => {
                 write!(f, "{:<60}  dict-parametrize", node_id.as_ref())
@@ -299,6 +318,9 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
                 let label = if lines.len() == 1 { "line" } else { "lines" };
                 format!("strict: bare assert on {} {}", label, nums)
             }
+        }
+        PerTestViolation::BroadFixtureType { detail, .. } => {
+            format!("strict: broad fixture type — {}", detail)
         }
         PerTestViolation::DictParametrize { .. } => {
             "strict: use a frozen dataclass instead of dict for parametrize cases".to_string()

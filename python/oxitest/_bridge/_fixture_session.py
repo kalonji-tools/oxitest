@@ -270,21 +270,7 @@ class FixtureSession:
             )
 
         # 2. Plugin fixtures (medium priority)
-        for provider in getattr(self._plugin_registry, "fixture_providers", ()):
-            provider_scope = getattr(provider, "scope", "each")
-            provider_autouse = getattr(provider, "autouse", False)
-            self._registry.register(
-                FixtureDef(
-                    name=provider.name,
-                    fixture_type=provider.fixture_type,
-                    scope=FixtureScope(provider_scope),
-                    source=PluginSource(
-                        provider=provider,
-                        plugin_module=getattr(provider, "__module__", "<plugin>"),
-                    ),
-                    autouse=provider_autouse,
-                )
-            )
+        self._register_plugin_fixtures()
 
         # 3. Conftest fixtures (highest priority)
         # Support both new list[FixtureDef] API and legacy FixtureRegistry API
@@ -336,21 +322,25 @@ class FixtureSession:
         if name == "_plugin_registry" and hasattr(self, "_instantiator"):
             self._instantiator._plugin_registry = value
             # Register any new plugin fixture providers into the unified registry
-            for provider in getattr(value, "fixture_providers", ()):
-                provider_scope = getattr(provider, "scope", "each")
-                provider_autouse = getattr(provider, "autouse", False)
-                self._registry.register(
-                    FixtureDef(
-                        name=provider.name,
-                        fixture_type=provider.fixture_type,
-                        scope=FixtureScope(provider_scope),
-                        source=PluginSource(
-                            provider=provider,
-                            plugin_module=getattr(provider, "__module__", "<plugin>"),
-                        ),
-                        autouse=provider_autouse,
-                    )
+            self._register_plugin_fixtures()
+
+    def _register_plugin_fixtures(self) -> None:
+        """Register all fixtures from the current plugin registry."""
+        for provider in getattr(self._plugin_registry, "fixture_providers", ()):
+            provider_scope = getattr(provider, "scope", "each")
+            provider_autouse = getattr(provider, "autouse", False)
+            self._registry.register(
+                FixtureDef(
+                    name=provider.name,
+                    fixture_type=provider.fixture_type,
+                    scope=FixtureScope(provider_scope),
+                    source=PluginSource(
+                        provider=provider,
+                        plugin_module=getattr(provider, "__module__", "<plugin>"),
+                    ),
+                    autouse=provider_autouse,
                 )
+            )
 
     def _scope_for(self, defn: FixtureDef) -> ScopeRefs | None:
         """Map a fixture def to its scope refs. None = function scope."""

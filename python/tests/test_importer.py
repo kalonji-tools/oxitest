@@ -14,6 +14,7 @@ from oxitest._bridge.importer import (
     _apply_module_marks,
     _collect_items,
     _extract_module_marks,
+    _get_fixture_deps,
     _module_members,
     _propagate_class_marks,
     collect_module,
@@ -1056,4 +1057,92 @@ def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture):
     ]
     assert len(collector_warnings) == 0, (
         f"a well-behaved collector should emit no warnings, got: {collector_warnings}"
+    )
+
+
+# ── _get_fixture_deps tests ────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _MyDB:
+    """Dummy fixture type for tests."""
+
+    host: str = "localhost"
+
+
+def test_get_fixture_deps_includes_builtins() -> None:
+    """_get_fixture_deps includes builtins (unlike old _get_fixture_names)."""
+    from oxitest._bridge._fixture_type import Fixture
+
+    # Use exec to avoid `from __future__ import annotations` stringification
+    ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
+    exec(  # noqa: S102
+        "def test_fn(db: Fixture[_MyDB], tmp: TempDir) -> None: ...",
+        ns,
+    )
+    test_fn = ns["test_fn"]
+
+    deps = _get_fixture_deps(test_fn)
+    type_names = [t for _, t in deps]
+    assert "_MyDB" in type_names, "should include user fixture type in deps"
+    assert "TempDir" in type_names, (
+        "should include builtin fixture type in deps — "
+        "_get_fixture_deps does NOT exclude builtins"
+    )
+
+
+def test_get_fixture_deps_skips_non_fixture() -> None:
+    """Plain-typed params are not included."""
+    from oxitest._bridge._fixture_type import Fixture
+
+    ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
+    exec(  # noqa: S102
+        "def test_fn(x: int, db: Fixture[_MyDB]) -> None: ...",
+        ns,
+    )
+    test_fn = ns["test_fn"]
+
+    deps = _get_fixture_deps(test_fn)
+    assert len(deps) == 1, (
+        f"should only include Fixture[T]-annotated params, got {deps}"
+    )
+    assert deps[0] == ("db", "_MyDB"), (
+        f"should be (qualifier, type_name) tuple, got {deps[0]!r}"
+    )
+
+
+def test_get_fixture_deps_returns_qualifier_and_type() -> None:
+    """Each dep is a (qualifier, type_name) tuple."""
+    from oxitest._bridge._fixture_type import Fixture
+
+    ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
+    exec(  # noqa: S102
+        "def test_fn(db: Fixture[_MyDB], tmp: Fixture[TempDir]) -> None: ...",
+        ns,
+    )
+    test_fn = ns["test_fn"]
+
+    deps = _get_fixture_deps(test_fn)
+    deps_dict = dict(deps)
+    assert deps_dict.get("db") == "_MyDB", f"expected db -> _MyDB, got {deps_dict}"
+    assert deps_dict.get("tmp") == "TempDir", (
+        f"expected tmp -> TempDir, got {deps_dict}"
+    )
+
+
+def test_get_fixture_deps_skips_return_annotation() -> None:
+    """Return annotation is not included in deps."""
+    from oxitest._bridge._fixture_type import Fixture
+
+    ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
+    exec(  # noqa: S102
+        "def test_fn(db: Fixture[_MyDB]) -> None: ...",
+        ns,
+    )
+    test_fn = ns["test_fn"]
+
+    deps = _get_fixture_deps(test_fn)
+    qualifiers = [q for q, _ in deps]
+    assert "return" not in qualifiers, (
+        f"return annotation should not be in deps, got {deps}"
     )

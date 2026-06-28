@@ -21,8 +21,8 @@ pub(crate) struct TestItemBuilder {
     pub(crate) param_id: Option<String>,
     pub(crate) param_values: Vec<ParamPair>,
     pub(crate) is_async: bool,
-    pub(crate) fixture_names: Vec<String>,
-    pub(crate) fixref_names: Vec<String>,
+    pub(crate) fixture_deps: Vec<(String, String)>,
+    pub(crate) fixref_deps: Vec<(String, String)>,
 }
 
 impl TestItemBuilder {
@@ -46,14 +46,14 @@ impl TestItemBuilder {
         self
     }
 
-    pub(crate) fn fixture_names(mut self, names: Vec<String>) -> Self {
-        self.fixture_names = names;
+    pub(crate) fn fixture_deps(mut self, deps: Vec<(String, String)>) -> Self {
+        self.fixture_deps = deps;
         self
     }
 
     #[allow(dead_code)]
-    pub(crate) fn fixref_names(mut self, names: Vec<String>) -> Self {
-        self.fixref_names = names;
+    pub(crate) fn fixref_deps(mut self, deps: Vec<(String, String)>) -> Self {
+        self.fixref_deps = deps;
         self
     }
 
@@ -79,8 +79,8 @@ impl TestItemBuilder {
             param_id: self.param_id,
             param_values: self.param_values,
             is_async: self.is_async,
-            fixture_names: self.fixture_names,
-            fixref_names: self.fixref_names,
+            fixture_deps: self.fixture_deps,
+            fixref_deps: self.fixref_deps,
         }
     }
 

@@ -162,7 +162,10 @@ def test_transitive_deps_excluded() -> None:
             "dep", conftest_path="/project/conftest.py", factory=_factory_no_dep
         ),
         helpers.common.make_fixture_def(
-            "parent", conftest_path="/project/conftest.py", factory=_parent
+            "parent",
+            conftest_path="/project/conftest.py",
+            factory=_parent,
+            depends_on=(("dep", object),),
         ),
     )
     items: list[dict] = [{"fixture_names": ["parent"]}]

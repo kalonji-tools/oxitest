@@ -18,46 +18,44 @@ _PROTOCOL_FIELDS = (
 )
 
 
-_BUILTIN_FIXTURES = (
-    ("TempDir", "Unique temp directory, deleted after test"),
-    ("TempDirFactory", "Session-scoped factory for multiple temp dirs"),
-    ("StdCapture", "Capture sys.stdout / sys.stderr"),
-    ("FdCapture", "Capture at fd level (C extensions, subprocesses)"),
-    ("Patcher", "Temporary attribute / env / chdir overrides"),
-    ("TestContext", "Test metadata and teardown stack"),
-    ("LogCapture", "Capture logging records"),
-    ("WarnCapture", "Capture warnings.warn() calls"),
-)
-
-
 def fixture_entries(registry: Any) -> list[dict[str, str]]:
-    """Return fixture defs as list of dicts for Rust query engine."""
-    entries = []
+    """Return all fixture defs as dicts for the Rust query engine."""
+    from oxitest._bridge._fixture_registry import (
+        BuiltinSource,
+        ConftestSource,
+        FixtureScope,
+        PluginSource,
+    )
 
-    # Built-in type-based fixtures
-    for name, desc in _BUILTIN_FIXTURES:
+    entries = []
+    for defn in registry.all():
+        match defn.source:
+            case ConftestSource(conftest_path=p):
+                source = p
+            case PluginSource(plugin_module=m):
+                source = f"<plugin:{m}>"
+            case BuiltinSource():
+                source = "<builtin>"
+            case _:
+                source = "<unknown>"
+
+        doc = ""
+        if isinstance(defn.source, ConftestSource):
+            doc = (defn.source.func.__doc__ or "").strip()
+        elif isinstance(defn.source, BuiltinSource):
+            doc = (defn.source.impl_cls.__doc__ or "").strip()
+
         entries.append(
             {
-                "name": name,
-                "source": "<builtin>",
-                "shared": "false",
-                "autouse": "false",
-                "async": "false",
-                "description": desc,
+                "name": defn.name,
+                "source": source,
+                "shared": str(defn.scope == FixtureScope.SHARED).lower(),
+                "autouse": str(defn.autouse).lower(),
+                "async": str(defn.is_async).lower(),
+                "description": doc,
+                "scope": defn.scope.value,
+                "type": defn.fixture_type.__name__,
             }
-        )
-
-    # User-defined conftest fixtures
-    for name in registry:
-        entries.extend(
-            {
-                "name": fd.name,
-                "source": fd.conftest_path,
-                "shared": str(fd.shared).lower(),
-                "autouse": str(fd.autouse).lower(),
-                "async": str(fd.is_async).lower(),
-            }
-            for fd in registry.all_defs(name)
         )
     return entries
 

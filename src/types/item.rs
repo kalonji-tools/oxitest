@@ -218,9 +218,9 @@ pub struct TestItem {
     #[serde(default)]
     pub(crate) is_async: bool,
     #[serde(default)]
-    pub(crate) fixture_names: Vec<String>,
+    pub(crate) fixture_deps: Vec<(String, String)>,
     #[serde(default)]
-    pub(crate) fixref_names: Vec<String>,
+    pub(crate) fixref_deps: Vec<(String, String)>,
 }
 
 impl TestItem {
@@ -252,8 +252,8 @@ impl TestItem {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         }
     }
 
@@ -269,8 +269,8 @@ impl TestItem {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         }
     }
 }
@@ -292,8 +292,8 @@ mod item_tests {
                 value: "1".to_string(),
             }],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         assert_eq!(item.param_id, Some("basic".to_string()));
         assert_eq!(item.param_values.len(), 1);
@@ -309,8 +309,8 @@ mod item_tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
@@ -326,8 +326,8 @@ mod item_tests {
             param_id: None,
             param_values: vec![],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         assert!(!sync_item.is_async);
 
@@ -339,8 +339,8 @@ mod item_tests {
             param_id: None,
             param_values: vec![],
             is_async: true,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         assert!(async_item.is_async);
     }
@@ -356,7 +356,7 @@ mod item_tests {
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
         assert!(!item.is_async);
-        assert!(item.fixture_names.is_empty());
+        assert!(item.fixture_deps.is_empty());
     }
 
     #[test]
@@ -365,14 +365,20 @@ mod item_tests {
             .lineno(42)
             .markers(vec!["slow".to_string()])
             .async_fn(true)
-            .fixture_names(vec!["db".to_string()])
-            .fixref_names(vec!["backend".to_string()])
+            .fixture_deps(vec![("db".to_string(), "MyDB".to_string())])
+            .fixref_deps(vec![("backend".to_string(), "Backend".to_string())])
             .build();
         assert_eq!(item.lineno, LineNo::new(42));
         assert_eq!(item.markers.to_vec(), vec!["slow"]);
         assert!(item.is_async);
-        assert_eq!(item.fixture_names, vec!["db"]);
-        assert_eq!(item.fixref_names, vec!["backend"]);
+        assert_eq!(
+            item.fixture_deps,
+            vec![("db".to_string(), "MyDB".to_string())]
+        );
+        assert_eq!(
+            item.fixref_deps,
+            vec![("backend".to_string(), "Backend".to_string())]
+        );
     }
 
     #[test]

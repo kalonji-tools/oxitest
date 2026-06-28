@@ -364,8 +364,8 @@ mod tests {
                 value: "-1".to_string(),
             }],
             is_async: false,
-            fixture_names: vec![],
-            fixref_names: vec![],
+            fixture_deps: vec![],
+            fixref_deps: vec![],
         };
         let outcome = TestOutcome::failed("")
             .lineno(5)

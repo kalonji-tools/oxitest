@@ -64,7 +64,12 @@ just
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
-**8. Merge rules.**
+**8. Post-implementation review.** After all plan tasks are implemented and pushed, run two review passes before marking the PR ready:
+- **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity.
+- **`improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
+- **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
+
+**9. Merge rules.**
 - **Never push directly to main.** All changes go through pull requests.
 - **Never merge without approval.** Wait for either a GitHub review approval or an explicit user command (e.g., "merge", "merge rebase delete branch"). Do not auto-merge after CI passes.
 - Only `--rebase` merge is allowed. Never squash merge, never merge commits.
@@ -74,7 +79,7 @@ just
 - **Pre-merge commit hygiene**: When a merge is triggered (e.g., "merge", "merge rebase delete branch"), evaluate the commit history first. If commits are too granular or disorganized, logically rebase them into coherent commits before merging. Each commit should represent a logical unit of work.
 - Run `just preflight` before pushing.
 
-**9. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
+**10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
 
 ### Quick reference
 
@@ -87,6 +92,8 @@ just
 | Draft PR | Before coding | — | — |
 | Implementation plan | Before coding | `superpowers:writing-plans` | — |
 | Execute plan | During coding | `superpowers:subagent-driven-development` | — |
+| Ponytail review | After push | `ponytail:ponytail-review` | — |
+| Improve audit | After push | `improve branch` | — |
 | Code review | Before merge | `superpowers:requesting-code-review` | — |
 | Post-merge debrief | If diverged | — | `diverged-from-plan` (closed PRs only) |
 

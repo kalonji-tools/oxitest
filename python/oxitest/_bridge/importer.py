@@ -11,7 +11,6 @@ from collections.abc import Iterable
 from types import ModuleType
 from typing import Any, cast, get_type_hints
 
-from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
@@ -27,27 +26,23 @@ class PluginCollectorWarning(UserWarning):
     """Issued when a plugin collector raises or returns unexpected types."""
 
 
-def _get_fixture_names(fn: object) -> tuple[str, ...]:
-    """Extract parameter names annotated with Fixture[T] that need registry resolution.
-
-    Excludes built-in fixtures (resolved by type, not name) and the bare
-    ``Fixtures`` accessor type, since those never go through the registry.
-    """
+def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
+    """Extract (qualifier, type_name) pairs for all Fixture[T]-annotated params."""
     try:
         hints = get_type_hints(fn, include_extras=True)
     except Exception:  # noqa: BLE001
         # Swallow type hint errors — user code may have unresolvable forward references
         return ()
-    names: list[str] = []
+    deps: list[tuple[str, str]] = []
     for param_name, hint in hints.items():
         if param_name == "return":
             continue
         if hint is Fixtures:
             continue
         is_fix, inner = _fixture_inner_type(hint)
-        if is_fix and BuiltinFixture.for_type(inner) is None:
-            names.append(param_name)
-    return tuple(names)
+        if is_fix:
+            deps.append((param_name, inner.__name__))
+    return tuple(deps)
 
 
 def _propagate_class_marks(fn: object, cls: object) -> None:
@@ -182,8 +177,8 @@ def _expand_composed(
     lineno: int,
     marker_names: list[str],
     is_async: bool,
-    fixture_names: tuple[str, ...],
-    fixref_names: tuple[str, ...] = (),
+    fixture_deps: tuple[tuple[str, str], ...],
+    fixref_deps: tuple[tuple[str, str], ...] = (),
 ) -> list[CollectedItem]:
     """Expand composed ResolvedCases layers via cartesian product."""
     _validate_composition(layers)
@@ -202,16 +197,56 @@ def _expand_composed(
                 param_id=compound_id,
                 param_values=tuple(merged_pv),
                 is_async=is_async,
-                fixture_names=fixture_names,
-                fixref_names=fixref_names,
+                fixture_deps=fixture_deps,
+                fixref_deps=fixref_deps,
             )
         )
     return items
 
 
-def _get_fixref_names(layer: ComposedCases) -> tuple[str, ...]:
-    """Extract fixture-ref field names from a parametrize layer."""
-    return layer.fixref_fields
+def _get_fixref_deps(layer: ComposedCases) -> tuple[tuple[str, str], ...]:
+    """Extract (qualifier, type_name) for FixtureRef fields.
+
+    Inspects type hints on the layer's param_type to get the inner
+    type T from FixtureRef[T].
+    """
+    import sys
+
+    from oxitest._bridge._fixture_type import FixtureRef
+
+    fixref_fields = layer.fixref_fields
+    if not fixref_fields:
+        return ()
+    param_type = getattr(layer, "param_type", None)
+    if param_type is None:
+        # DictCases has no param_type — should never have fixref_fields either
+        return ()
+    mod = sys.modules.get(param_type.__module__)
+    globalns = dict(vars(mod)) if mod else {}
+    globalns.setdefault("FixtureRef", FixtureRef)
+    try:
+        field_hints = get_type_hints(param_type, globalns=globalns, include_extras=True)
+    except Exception:  # noqa: BLE001
+        return ()
+    from typing import Annotated, get_args, get_origin
+
+    deps: list[tuple[str, str]] = []
+    for name in fixref_fields:
+        hint = field_hints.get(name)
+        if hint is None:
+            continue
+        if get_origin(hint) is not Annotated:
+            continue
+        inner = get_args(hint)[0]  # Callable[..., T]
+        # Get T from Callable[..., T]
+        callable_args = get_args(inner)
+        if callable_args:
+            fixture_type = callable_args[-1]  # last arg is return type T
+            type_name = getattr(fixture_type, "__name__", str(fixture_type))
+        else:
+            type_name = str(inner)
+        deps.append((name, type_name))
+    return tuple(deps)
 
 
 def _expand_item(
@@ -222,7 +257,7 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     is_async = inspect.iscoroutinefunction(fn)
-    fixture_names = _get_fixture_names(fn)
+    fixture_deps = _get_fixture_deps(fn)
     raw = get_metadata(fn).param_cases
     if raw is None:
         return [
@@ -233,27 +268,31 @@ def _expand_item(
                 param_id=None,
                 param_values=(),
                 is_async=is_async,
-                fixture_names=fixture_names,
+                fixture_deps=fixture_deps,
             )
         ]
     layers = cast(tuple, raw)
     # Composition: all layers are ComposedCases (partial)
     if len(layers) > 1 or isinstance(layers[0], ComposedCases):
-        # Merge fixref_fields from all composition layers
-        all_fixrefs: set[str] = set()
+        # Merge fixref_deps from all composition layers
+        all_fixref_deps: list[tuple[str, str]] = []
+        seen: set[str] = set()
         for layer in layers:
-            all_fixrefs.update(_get_fixref_names(layer))
+            for dep in _get_fixref_deps(layer):
+                if dep[0] not in seen:
+                    all_fixref_deps.append(dep)
+                    seen.add(dep[0])
         return _expand_composed(
             layers,
             fn_name,
             lineno,
             marker_names,
             is_async,
-            fixture_names,
-            fixref_names=tuple(sorted(all_fixrefs)),
+            fixture_deps,
+            fixref_deps=tuple(sorted(all_fixref_deps)),
         )
     # Single layer: existing behavior
-    fixref_names = _get_fixref_names(layers[0])
+    fixref_deps = _get_fixref_deps(layers[0])
     return [
         CollectedItem(
             fn_name=fn_name,
@@ -262,8 +301,8 @@ def _expand_item(
             param_id=case_id,
             param_values=tuple(pv),
             is_async=is_async,
-            fixture_names=fixture_names,
-            fixref_names=fixref_names,
+            fixture_deps=fixture_deps,
+            fixref_deps=fixref_deps,
         )
         for case_id, pv in layers[0].items()
     ]

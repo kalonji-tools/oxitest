@@ -4,9 +4,9 @@ from __future__ import annotations
 
 __all__ = ["FixtureValidator"]
 
-import inspect
 from typing import Any, get_type_hints
 
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     _fixture_inner_type,
@@ -63,12 +63,23 @@ class FixtureValidator:
         for provider in effective_registry.fixture_providers:
             plugin_types.add(provider.fixture_type)
 
+        # Precompute builtin type names once for the entire validation pass
+        builtin_type_names = {t.__name__ for t in BuiltinFixture._registry}
+
         errors: list[tuple[str, str]] = []
         for item in items:
             node_id: str = item["node_id"]
             fixref = set(item.get("fixref_names", ()))
+            # Build set of qualifiers that resolve to builtin fixtures,
+            # using type_name from fixture_deps to skip them during validation
+            builtin_qualifiers: set[str] = set()
+            for qualifier, type_name in item.get("fixture_deps", ()):
+                if type_name in builtin_type_names:
+                    builtin_qualifiers.add(qualifier)
             for name in item["fixture_names"]:
                 if name in fixref:
+                    continue
+                if name in builtin_qualifiers:
                     continue
                 if self._registry.get(name) is not None:
                     continue
@@ -97,7 +108,7 @@ class FixtureValidator:
         for item in items:
             referenced.update(item.get("fixture_names", ()))
 
-        # 2. Expand transitively -- walk fixture function signatures
+        # 2. Expand transitively via depends_on (populated at registration)
         def _expand_deps(name: str, visited: set[str]) -> None:
             if name in visited:
                 return
@@ -105,17 +116,9 @@ class FixtureValidator:
             defn = self._registry.get(name)
             if defn is None:
                 return
-            try:
-                func = defn.func
-            except AttributeError:
-                return
-            try:
-                sig = inspect.signature(func)
-            except (ValueError, TypeError):
-                return
-            for param_name in sig.parameters:
-                if param_name in self._registry:
-                    _expand_deps(param_name, visited)
+            for qualifier, _binding_type in defn.depends_on:
+                if qualifier in self._registry:
+                    _expand_deps(qualifier, visited)
 
         all_used: set[str] = set()
         for name in referenced:
