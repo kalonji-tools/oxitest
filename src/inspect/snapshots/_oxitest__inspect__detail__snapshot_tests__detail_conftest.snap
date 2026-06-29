@@ -1,18 +1,18 @@
 ---
-source: src/inspect/ui.rs
+source: src/inspect/detail.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
-"┌ Home ──────────────────────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
-"│No data loaded                              ││No data loaded                                                          │"
+"┌ C tests/conftest.py ───────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
+"│ C  tests/conftest.py                       ││C tests/conftest.py                                                     │"
 "│                                            ││                                                                        │"
+"│ (see detail pane)                          ││  fixtures_count: 1                                                     │"
+"│                                            ││  helpers_count: 1                                                      │"
 "│                                            ││                                                                        │"
+"│                                            ││  Fixtures                                                              │"
+"│                                            ││    F db                                                                │"
 "│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
+"│                                            ││  Helpers                                                               │"
+"│                                            ││    H make_db                                                           │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"
