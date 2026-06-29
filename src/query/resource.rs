@@ -30,7 +30,7 @@ impl ResourceKind {
             ResourceKind::Tests => &["name", "source", "mark", "async"],
             ResourceKind::Fixtures => &["name", "source", "shared", "autouse", "async"],
             ResourceKind::Marks => &["name", "used_in"],
-            ResourceKind::Helpers => &["name", "source"],
+            ResourceKind::Helpers => &["name", "source", "docstring", "signature"],
             ResourceKind::Plugins => &["name", "protocol"],
         }
     }

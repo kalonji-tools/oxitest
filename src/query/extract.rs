@@ -125,18 +125,22 @@ pub(crate) fn extract_mark_entries(
 /// Each entry has fields:
 /// - `name`: the function name
 /// - `source`: the conftest file path
+/// - `docstring`: the function's docstring (empty string if none)
+/// - `signature`: the formatted signature, e.g. `"make_db(name: str)"`
 pub(crate) fn extract_helper_entries(conftest_files: &[Utf8PathBuf]) -> Vec<QueryEntry> {
     let mut entries = Vec::new();
 
     for file in conftest_files {
-        let Some((_, stmts)) = python_ast::parse_file(file) else {
+        let Some((source, stmts)) = python_ast::parse_file(file) else {
             continue;
         };
-        let helpers = python_ast::extract_helpers(&stmts);
-        for name in helpers {
+        let helpers = python_ast::extract_helpers(&stmts, &source);
+        for info in helpers {
             let mut fields = HashMap::new();
-            fields.insert("name".to_string(), name);
+            fields.insert("name".to_string(), info.name);
             fields.insert("source".to_string(), file.to_string());
+            fields.insert("docstring".to_string(), info.docstring.unwrap_or_default());
+            fields.insert("signature".to_string(), info.signature);
             entries.push(QueryEntry { fields });
         }
     }
@@ -344,5 +348,32 @@ mod tests {
         let names: Vec<_> = entries.iter().filter_map(|e| e.get("name")).collect();
         assert!(names.contains(&"helper_a"));
         assert!(names.contains(&"helper_b"));
+    }
+
+    #[test]
+    fn helper_entries_include_docstring() {
+        let f =
+            write_temp_py("def make_db():\n    \"\"\"Create a test database.\"\"\"\n    pass\n");
+        let path = temp_path(&f);
+        let entries = extract_helper_entries(&[path]);
+        assert_eq!(entries.len(), 1, "should extract exactly one helper entry");
+        assert_eq!(
+            entries[0].get("docstring"),
+            Some("Create a test database."),
+            "QueryEntry should have docstring field populated from function docstring"
+        );
+    }
+
+    #[test]
+    fn helper_entries_include_signature() {
+        let f = write_temp_py("def make_db(name: str, shared: bool = False):\n    pass\n");
+        let path = temp_path(&f);
+        let entries = extract_helper_entries(&[path]);
+        assert_eq!(entries.len(), 1, "should extract exactly one helper entry");
+        assert_eq!(
+            entries[0].get("signature"),
+            Some("make_db(name: str, shared: bool = False)"),
+            "QueryEntry should have signature field populated from function parameters"
+        );
     }
 }

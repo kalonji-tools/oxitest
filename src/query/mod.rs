@@ -52,7 +52,7 @@ pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
         ResourceKind::Tests => vec!["name"],
         ResourceKind::Fixtures => vec!["name"],
         ResourceKind::Marks => vec!["name"],
-        ResourceKind::Helpers => vec!["name", "source"],
+        ResourceKind::Helpers => vec!["name", "signature", "source"],
         ResourceKind::Plugins => vec!["name"],
     }
 }
