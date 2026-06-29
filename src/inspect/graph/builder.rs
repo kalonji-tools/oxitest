@@ -29,7 +29,8 @@ pub(crate) struct GraphBuilder {
     test_mark_names: HashMap<usize, Vec<String>>,
     // Side channel: fixture dep names per test index (populated during add_test_entries,
     // consumed during resolve_edges).
-    #[allow(dead_code)] // consumed when fixture data is available from Python session (#1119)
+    // TODO(#1119): wire up test -> fixture edges once fixture data is available
+    #[allow(dead_code)]
     test_fixture_names: HashMap<usize, Vec<String>>,
 }
 
@@ -43,6 +44,62 @@ impl GraphBuilder {
             conftest_by_path: HashMap::new(),
             plugin_by_name: HashMap::new(),
             helper_by_key: HashMap::new(),
+            test_mark_names: HashMap::new(),
+            test_fixture_names: HashMap::new(),
+        }
+    }
+
+    /// Reconstruct a builder from an existing graph, repopulating lookup tables.
+    ///
+    /// Used by progressive loading (#1119) to merge phase-2 data (fixtures,
+    /// plugins) into a graph that already contains phase-1 data (tests,
+    /// marks, helpers).
+    pub(crate) fn from_graph(graph: InspectGraph) -> Self {
+        let fixture_by_name = graph
+            .fixtures
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.name.clone(), i))
+            .collect();
+        let test_by_node_id = graph
+            .tests
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.node_id.clone(), i))
+            .collect();
+        let mark_by_name = graph
+            .marks
+            .iter()
+            .enumerate()
+            .map(|(i, m)| (m.name.clone(), i))
+            .collect();
+        let conftest_by_path = graph
+            .conftests
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.path.clone(), i))
+            .collect();
+        let plugin_by_name = graph
+            .plugins
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.name.clone(), i))
+            .collect();
+        let helper_by_key = graph
+            .helpers
+            .iter()
+            .enumerate()
+            .map(|(i, h)| ((h.name.clone(), h.source.clone()), i))
+            .collect();
+
+        Self {
+            graph,
+            fixture_by_name,
+            test_by_node_id,
+            mark_by_name,
+            conftest_by_path,
+            plugin_by_name,
+            helper_by_key,
             test_mark_names: HashMap::new(),
             test_fixture_names: HashMap::new(),
         }
@@ -145,7 +202,6 @@ impl GraphBuilder {
     ///
     /// Expected entry fields: `name`, `source`, `shared` (= binding type),
     /// `autouse`, `async`, `description`, `scope`, `type`.
-    #[allow(dead_code)] // called once Python session is available via progressive loading (#1119)
     pub(crate) fn add_fixture_entries(&mut self, entries: &[QueryEntry]) {
         for entry in entries {
             let name = entry.get("name").unwrap_or_default().to_string();
@@ -180,7 +236,6 @@ impl GraphBuilder {
     /// Add plugin nodes from Python-tier collection.
     ///
     /// Expected entry fields: `name`, `protocol`.
-    #[allow(dead_code)] // called once Python session is available via progressive loading (#1119)
     pub(crate) fn add_plugin_entries(&mut self, entries: &[QueryEntry]) {
         for entry in entries {
             let name = entry.get("name").unwrap_or_default().to_string();
@@ -905,6 +960,137 @@ mod tests {
         assert!(
             graph.fixtures[0].conftest_idx.is_none(),
             "plugin-sourced fixture should not have conftest_idx"
+        );
+    }
+
+    // ── from_graph (progressive loading) ────────────────────────────────
+
+    #[test]
+    fn from_graph_preserves_existing_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "tests/test_foo.py::test_bar"),
+            ("source", "tests/test_foo.py"),
+            ("async", "false"),
+            ("mark", "slow"),
+        ])]);
+        builder.add_mark_entries(&[entry(&[("name", "slow"), ("used_in", "test_foo.py")])]);
+        builder.add_helper_entries(&[entry(&[
+            ("name", "make_db"),
+            ("source", "tests/conftest.py"),
+            ("docstring", ""),
+            ("signature", "make_db()"),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Reconstruct from graph and add fixtures.
+        let mut builder2 = GraphBuilder::from_graph(graph);
+        builder2.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "tests/conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder2.resolve_edges();
+        let merged = builder2.build();
+
+        assert_eq!(
+            merged.tests.len(),
+            1,
+            "from_graph should preserve existing test nodes"
+        );
+        assert_eq!(
+            merged.marks.len(),
+            1,
+            "from_graph should preserve existing mark nodes"
+        );
+        assert_eq!(
+            merged.helpers.len(),
+            1,
+            "from_graph should preserve existing helper nodes"
+        );
+        assert_eq!(
+            merged.fixtures.len(),
+            1,
+            "from_graph should allow adding new fixture nodes"
+        );
+    }
+
+    #[test]
+    fn from_graph_deduplicates_on_merge() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        let mut builder2 = GraphBuilder::from_graph(graph);
+        // Adding the same test again should be a no-op.
+        builder2.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        let merged = builder2.build();
+
+        assert_eq!(
+            merged.tests.len(),
+            1,
+            "from_graph should deduplicate when re-adding existing nodes"
+        );
+    }
+
+    #[test]
+    fn from_graph_resolves_fixture_to_conftest_edges() {
+        let mut builder = GraphBuilder::new();
+        builder.add_helper_entries(&[entry(&[
+            ("name", "make_thing"),
+            ("source", "tests/conftest.py"),
+            ("docstring", ""),
+            ("signature", "make_thing()"),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Phase 2: add fixture from the same conftest.
+        let mut builder2 = GraphBuilder::from_graph(graph);
+        builder2.add_fixture_entries(&[entry(&[
+            ("name", "thing"),
+            ("source", "tests/conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder2.resolve_edges();
+        let merged = builder2.build();
+
+        assert_eq!(
+            merged.conftests.len(),
+            1,
+            "fixture from same conftest should reuse existing conftest node"
+        );
+        assert!(
+            merged.fixtures[0].conftest_idx.is_some(),
+            "fixture should be linked to the conftest node"
+        );
+        assert!(
+            merged.conftests[0].fixtures.contains(&0),
+            "conftest should reference the fixture"
+        );
+        assert!(
+            merged.conftests[0].helpers.contains(&0),
+            "conftest should still reference the helper"
         );
     }
 }

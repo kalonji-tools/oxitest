@@ -13,7 +13,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-use super::app::{InputMode, InspectApp};
+use super::app::{InputMode, InspectApp, LoadingState};
 use super::detail;
 use super::graph::NodeKind;
 use super::nav::{HOME_KINDS, NavScreen};
@@ -107,13 +107,21 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     // Right pane — detail view (only if two-pane layout)
     if panes.len() > 1 {
         let right_block = Block::default().borders(Borders::ALL).title(" Detail ");
-        let detail_lines = match (&app.graph, app.nav.current()) {
+        let mut detail_lines = match (&app.graph, app.nav.current()) {
             (Some(graph), NavScreen::NodeDetail { node }) => {
                 detail::render_detail(graph, Some(node))
             }
             (Some(graph), _) => detail::render_detail(graph, None),
             (None, _) => vec![Line::from("No data loaded")],
         };
+        // Append loading indicator when fixture/plugin data is still arriving.
+        if app.loading_state == LoadingState::InstantOnly {
+            detail_lines.push(Line::from(""));
+            detail_lines.push(Line::from(Span::styled(
+                "Loading fixture and plugin data...",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
         let right_content = Paragraph::new(detail_lines).block(right_block);
         frame.render_widget(right_content, panes[1]);
     }
@@ -152,13 +160,15 @@ fn pane_title(app: &InspectApp) -> String {
 
 /// Build the left pane content based on the current navigation screen.
 fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
+    let is_loading = app.loading_state == LoadingState::InstantOnly;
+
     let graph = match &app.graph {
-        Some(g) if !g.is_empty() => g,
+        Some(g) if !g.is_empty() || is_loading => g,
         _ => return vec![Line::from("No data loaded")],
     };
 
     match app.nav.current() {
-        NavScreen::Home { selected } => build_home_content(graph, *selected),
+        NavScreen::Home { selected } => build_home_content(graph, *selected, is_loading),
         NavScreen::NodeList { kind, selected } => build_node_list_content(graph, *kind, *selected),
         NavScreen::NodeDetail { node } => {
             let name = graph.node_name(node);
@@ -176,22 +186,49 @@ fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
 }
 
 /// Render the Home screen: one line per non-empty node kind.
-fn build_home_content(graph: &super::graph::InspectGraph, selected: usize) -> Vec<Line<'static>> {
+///
+/// When in `LoadingState::InstantOnly`, fixture and plugin counts show
+/// "loading..." instead of a number.
+fn build_home_content(
+    graph: &super::graph::InspectGraph,
+    selected: usize,
+    is_loading: bool,
+) -> Vec<Line<'static>> {
     HOME_KINDS
         .iter()
-        .filter(|(kind, _)| graph.node_count(*kind) > 0)
+        .filter(|(kind, _)| {
+            // Always show fixture/plugin rows while loading
+            if is_loading && is_python_tier(*kind) {
+                return true;
+            }
+            graph.node_count(*kind) > 0
+        })
         .enumerate()
         .map(|(idx, (kind, label))| {
             let sigil = kind.sigil();
-            let count = graph.node_count(*kind);
-            let text = format!(" {sigil}  {label} ({count})");
-            if idx == selected {
-                Line::from(Span::styled(
-                    text,
-                    Style::default().fg(Color::Black).bg(Color::Cyan),
-                ))
+            if is_loading && is_python_tier(*kind) {
+                let text = format!(" {sigil}  {label} (");
+                let spans = vec![
+                    Span::raw(text),
+                    Span::styled("loading...", Style::default().fg(Color::DarkGray)),
+                    Span::raw(")"),
+                ];
+                if idx == selected {
+                    Line::from(spans).style(Style::default().fg(Color::Black).bg(Color::Cyan))
+                } else {
+                    Line::from(spans)
+                }
             } else {
-                Line::from(text)
+                let count = graph.node_count(*kind);
+                let text = format!(" {sigil}  {label} ({count})");
+                if idx == selected {
+                    Line::from(Span::styled(
+                        text,
+                        Style::default().fg(Color::Black).bg(Color::Cyan),
+                    ))
+                } else {
+                    Line::from(text)
+                }
             }
         })
         .collect()
@@ -245,6 +282,11 @@ fn build_disambiguation_content(
             }
         })
         .collect()
+}
+
+/// Returns `true` for node kinds that require the Python session (phase 2).
+fn is_python_tier(kind: NodeKind) -> bool {
+    matches!(kind, NodeKind::Fixture | NodeKind::Plugin)
 }
 
 /// Build the footer bar with context-sensitive keybinding hints.
