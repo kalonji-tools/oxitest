@@ -20,6 +20,7 @@ subcommand is equivalent to `oxitest run`.
 | `debug` | Run tests under an interactive debugger |
 | `query` | Inspect tests, fixtures, marks, helpers, or plugins without running them |
 | `env` | Print environment information and exit |
+| `fixtures` | **Deprecated.** Use `oxitest query fixtures` instead. |
 
 Positional arguments accept **file paths**, **directories**, or **node IDs**:
 
@@ -313,6 +314,32 @@ oxitest env
 ```
 
 No flags.
+
+---
+
+## Deprecated subcommands
+
+### `oxitest fixtures` (deprecated)
+
+!!! warning "Deprecated"
+    `oxitest fixtures` is deprecated and will be removed in a future release.
+    Use [`oxitest query fixtures`](#query-fixtures) instead.
+
+`oxitest fixtures` still works but prints a deprecation warning to stderr:
+
+```text
+Warning: 'oxitest fixtures' is deprecated and will be removed in a future release. Use 'oxitest query fixtures' instead.
+```
+
+The command is hidden from `--help` output. Migrate by replacing:
+
+```bash
+# Old (deprecated)
+oxitest fixtures
+
+# New
+oxitest query fixtures
+```
 
 ---
 

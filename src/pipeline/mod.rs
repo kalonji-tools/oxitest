@@ -479,6 +479,7 @@ fn setup_with_plugin_recovery(
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Fixtures(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Inspect(_)
         | config::Command::Env
         | config::Command::Completions { .. } => None,
@@ -488,6 +489,20 @@ fn setup_with_plugin_recovery(
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
+        config::Command::Fixtures(args) => {
+            let synthetic = config::QueryArgs {
+                resource: query::resource::ResourceKind::Fixtures,
+                expression: None,
+                fzf: false,
+                detail: None,
+                format: None,
+                count: false,
+                tree: false,
+                color: None,
+                paths: args.paths.clone(),
+            };
+            config::Config::load(&rootdir).merge_query_args(&synthetic)
+        }
         config::Command::Inspect(_)
         | config::Command::Env
         | config::Command::Completions { .. } => {
@@ -601,6 +616,7 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
+        config::Command::Fixtures(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Inspect(_)
         | config::Command::Env
         | config::Command::Completions { .. } => None,
@@ -611,6 +627,20 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
+        config::Command::Fixtures(args) => {
+            let synthetic = config::QueryArgs {
+                resource: query::resource::ResourceKind::Fixtures,
+                expression: None,
+                fzf: false,
+                detail: None,
+                format: None,
+                count: false,
+                tree: false,
+                color: None,
+                paths: args.paths.clone(),
+            };
+            config::Config::load(&rootdir).merge_query_args(&synthetic)
+        }
         config::Command::Inspect(_)
         | config::Command::Env
         | config::Command::Completions { .. } => {
@@ -774,6 +804,31 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
             let needs_session =
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
             query_command(py, pipeline, needs_session)
+        }
+        config::Command::Fixtures(_) => {
+            eprintln!(
+                "Warning: 'oxitest fixtures' is deprecated and will be removed in a future release. \
+                Use 'oxitest query fixtures' instead."
+            );
+            // Rewrite the command as `query fixtures` so the downstream pipeline
+            // (which pattern-matches on Command::Query) works without modification.
+            let query_args = config::QueryArgs {
+                resource: query::resource::ResourceKind::Fixtures,
+                expression: None,
+                fzf: false,
+                detail: None,
+                format: None,
+                count: false,
+                tree: false,
+                color: None,
+                paths: match pipeline.command {
+                    config::Command::Fixtures(ref a) => a.paths.clone(),
+                    _ => unreachable!(),
+                },
+            };
+            let mut pipeline = pipeline;
+            pipeline.shared.command = config::Command::Query(query_args);
+            query_command(py, pipeline, true)
         }
         config::Command::Inspect(_)
         | config::Command::Env
