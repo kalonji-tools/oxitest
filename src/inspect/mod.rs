@@ -2,6 +2,11 @@
 //!
 //! This module implements `oxitest inspect`, a ratatui-based terminal UI that
 //! lets users browse tests, fixtures, marks, and other collected metadata.
+//!
+//! Graph construction uses **progressive loading** (#1119): instant-tier data
+//! (tests, marks, helpers) is collected synchronously before the TUI starts,
+//! while Python-tier data (fixtures, plugins) is collected in a background
+//! thread and merged into the graph when ready.
 
 mod app;
 mod detail;
@@ -11,15 +16,19 @@ pub(crate) mod nav;
 pub(crate) mod search;
 mod ui;
 
+use std::sync::mpsc;
+use std::thread;
+
+use camino::Utf8PathBuf;
+
 use crate::config::{self, cli::InspectArgs};
+use app::Phase2Data;
 use graph::InspectGraph;
 
-/// Build the inspect graph from instant-tier data available without a
+/// Phase 1: build the inspect graph from instant-tier data available without a
 /// Python session.
 ///
-/// This collects test, mark, and helper entries via Rust AST extraction
-/// and wires up edges.  Fixture and plugin nodes require a Python session
-/// and are added later by progressive loading (#1119).
+/// Returns the graph along with the conftest file paths needed by phase 2.
 ///
 /// Startup filters are applied in order:
 /// 1. `--affected` — narrow test files before AST extraction
@@ -27,10 +36,10 @@ use graph::InspectGraph;
 /// 3. `-E` expression — evaluate DSL against test entries, discard non-matching
 /// 4. `--lf` — load TestCache, keep only previously-failed tests
 /// 5. Build graph from surviving entries
-fn build_graph(
+fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
-) -> Result<InspectGraph, Box<dyn std::error::Error>> {
+) -> Result<(InspectGraph, Vec<Utf8PathBuf>), Box<dyn std::error::Error>> {
     use crate::collector;
     use crate::query::extract;
     use graph::builder::GraphBuilder;
@@ -94,21 +103,97 @@ fn build_graph(
     builder.add_helper_entries(&extract::extract_helper_entries(&conftest_files));
     builder.resolve_edges();
 
-    Ok(builder.build())
+    Ok((builder.build(), conftest_files))
 }
 
-/// Launch the inspect TUI.
+/// Phase 2: spawn a background thread that initializes the Python session and
+/// collects fixture and plugin entries.
 ///
-/// Builds the inspect graph from instant-tier data, then sets up the terminal
-/// (raw mode, alternate screen, mouse capture), runs the event loop, and
-/// restores the terminal on exit.
+/// Sends a [`Phase2Data`] payload through the channel when done.  If the
+/// Python session fails, the sender is simply dropped, which causes the
+/// receiver to see `Disconnected` — the TUI then transitions to
+/// `LoadingState::Complete` with whatever data it already has.
+fn spawn_phase2(
+    conftest_files: Vec<Utf8PathBuf>,
+    plugins: Vec<String>,
+    plugin_settings: std::collections::HashMap<String, toml::Value>,
+    tx: mpsc::Sender<Phase2Data>,
+) {
+    thread::spawn(move || {
+        pyo3::Python::attach(|py| {
+            let result = (|| -> Result<Phase2Data, String> {
+                use crate::bridge::FixtureSession;
+                use crate::query::resource::QueryEntry;
+
+                let (session, _violations) =
+                    FixtureSession::new(py, &conftest_files).map_err(|e| e.to_string())?;
+
+                // Load plugins if configured.
+                if !plugins.is_empty() {
+                    session
+                        .load_plugins(py, &plugins, &plugin_settings)
+                        .map_err(|e| e.to_string())?;
+                }
+
+                let fixture_raw = crate::query::bridge::fixture_entries(&session, py)
+                    .map_err(|e| e.to_string())?;
+                let plugin_raw = crate::query::bridge::plugin_entries(&session, py)
+                    .map_err(|e| e.to_string())?;
+
+                let fixture_entries = fixture_raw
+                    .into_iter()
+                    .map(|fields| QueryEntry { fields })
+                    .collect();
+                let plugin_entries = plugin_raw
+                    .into_iter()
+                    .map(|fields| QueryEntry { fields })
+                    .collect();
+
+                Ok(Phase2Data {
+                    fixture_entries,
+                    plugin_entries,
+                })
+            })();
+
+            match result {
+                Ok(data) => {
+                    // If the receiver was dropped (TUI quit early), this is fine.
+                    let _ = tx.send(data);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "phase-2 Python session failed; fixture/plugin data unavailable");
+                    // Dropping tx causes Disconnected on the receiver side.
+                }
+            }
+        });
+    });
+}
+
+/// Launch the inspect TUI with progressive loading.
+///
+/// Phase 1 collects instant-tier data (tests, marks, helpers) synchronously,
+/// then starts the TUI immediately.  Phase 2 spawns a background thread to
+/// collect fixture and plugin data from the Python session, which is merged
+/// into the graph when ready.
 pub(crate) fn run(
     args: &InspectArgs,
     cfg: &config::Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let graph = build_graph(args, cfg)?;
+    // Phase 1: instant-tier graph (synchronous).
+    let (graph, conftest_files) = build_phase1_graph(args, cfg)?;
+
+    // Phase 2: Python-tier data (background thread).
+    let (tx, rx) = mpsc::channel();
+    spawn_phase2(
+        conftest_files,
+        cfg.features.plugins.clone(),
+        cfg.features.plugin_settings.clone(),
+        tx,
+    );
+
     let mut terminal = ui::setup_terminal()?;
-    let result = app::InspectApp::new(Some(graph), args.name.as_deref()).run(&mut terminal);
+    let result = app::InspectApp::with_progressive_loading(graph, rx, args.name.as_deref())
+        .run(&mut terminal);
     ui::restore_terminal(&mut terminal)?;
     result
 }

@@ -1,5 +1,7 @@
 //! Application state and event loop for `oxitest inspect`.
 
+use std::sync::mpsc;
+
 use crossterm::event::{self, Event};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -75,6 +77,30 @@ impl SearchState {
     }
 }
 
+// ── LoadingState ─────────────────────────────────────────────────────────────
+
+/// Tracks the progressive loading phase of the inspect graph.
+///
+/// Phase 1 (instant-tier) data is available immediately from Rust AST
+/// extraction.  Phase 2 (fixture/plugin) data requires a Python session
+/// and arrives asynchronously via a background thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoadingState {
+    /// Only instant-tier data (tests, marks, helpers) is loaded.
+    /// Fixture and plugin counts are still being collected.
+    InstantOnly,
+    /// All data has been loaded, including fixtures and plugins.
+    Complete,
+}
+
+// ── Phase2Data ──────────────────────────────────────────────────────────────
+
+/// Payload sent from the background thread once Python-tier data is ready.
+pub(crate) struct Phase2Data {
+    pub(crate) fixture_entries: Vec<crate::query::resource::QueryEntry>,
+    pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
+}
+
 // ── InspectApp ───────────────────────────────────────────────────────────────
 
 /// Top-level application state for the inspect TUI.
@@ -90,16 +116,25 @@ pub(crate) struct InspectApp {
     pub(crate) graph: Option<InspectGraph>,
     /// Stack-based navigation state.
     pub(crate) nav: NavStack,
+    /// Current loading phase — determines whether loading indicators are shown.
+    pub(crate) loading_state: LoadingState,
+    /// Receiver for phase-2 data from the background Python thread.
+    /// `None` once the data has been received (or if no background thread
+    /// was spawned).
+    phase2_rx: Option<mpsc::Receiver<Phase2Data>>,
 }
 
 impl InspectApp {
-    /// Create a new `InspectApp`.
+    /// Create a new `InspectApp` with default state and `LoadingState::Complete`.
     ///
     /// If `name` is provided and a graph is available, resolves it
     /// against the graph for direct-jump navigation:
     /// - 1 match: jumps straight to that node's kind list.
     /// - N matches: opens a disambiguation screen.
     /// - 0 matches: stays on the Home screen.
+    ///
+    /// Used by tests and by callers that do not need progressive loading.
+    #[cfg(test)]
     pub(crate) fn new(graph: Option<InspectGraph>, name: Option<&str>) -> Self {
         let nav = match (&graph, name) {
             (Some(g), Some(n)) => nav::resolve_direct_jump(g, n),
@@ -113,6 +148,34 @@ impl InspectApp {
             search: SearchState::new(),
             graph,
             nav,
+            loading_state: LoadingState::Complete,
+            phase2_rx: None,
+        }
+    }
+
+    /// Create a new `InspectApp` with phase-1 graph and a receiver for phase-2 data.
+    ///
+    /// If `name` is provided, resolves it against the graph for direct-jump
+    /// navigation (same logic as `new()`).
+    pub(crate) fn with_progressive_loading(
+        graph: InspectGraph,
+        rx: mpsc::Receiver<Phase2Data>,
+        name: Option<&str>,
+    ) -> Self {
+        let nav = match name {
+            Some(n) => nav::resolve_direct_jump(&graph, n),
+            None => NavStack::new(),
+        };
+        Self {
+            should_quit: false,
+            terminal_width: 0,
+            input_mode: InputMode::Normal,
+            show_help: false,
+            search: SearchState::new(),
+            graph: Some(graph),
+            nav,
+            loading_state: LoadingState::InstantOnly,
+            phase2_rx: Some(rx),
         }
     }
 
@@ -122,6 +185,9 @@ impl InspectApp {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            // Check for phase-2 data from the background thread.
+            self.poll_phase2();
+
             // Update terminal width from the current frame size.
             self.terminal_width = terminal.size()?.width;
 
@@ -140,6 +206,49 @@ impl InspectApp {
             }
         }
         Ok(())
+    }
+
+    /// Non-blocking check for phase-2 data arrival.
+    ///
+    /// When the background thread sends fixture and plugin data, this
+    /// method merges it into the existing graph and transitions to
+    /// `LoadingState::Complete`.
+    fn poll_phase2(&mut self) {
+        let rx = match &self.phase2_rx {
+            Some(rx) => rx,
+            None => return,
+        };
+
+        match rx.try_recv() {
+            Ok(data) => {
+                self.merge_phase2(data);
+                self.phase2_rx = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {
+                // Not ready yet — keep waiting.
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                // Background thread finished without sending data (error path).
+                // Transition to Complete so loading indicators disappear.
+                self.loading_state = LoadingState::Complete;
+                self.phase2_rx = None;
+            }
+        }
+    }
+
+    /// Merge phase-2 fixture and plugin data into the existing graph.
+    fn merge_phase2(&mut self, data: Phase2Data) {
+        use super::graph::builder::GraphBuilder;
+
+        if let Some(existing_graph) = self.graph.take() {
+            let mut builder = GraphBuilder::from_graph(existing_graph);
+            builder.add_fixture_entries(&data.fixture_entries);
+            builder.add_plugin_entries(&data.plugin_entries);
+            builder.resolve_edges();
+            self.graph = Some(builder.build());
+        }
+
+        self.loading_state = LoadingState::Complete;
     }
 }
 
@@ -242,6 +351,167 @@ mod tests {
             state.selected(),
             Some(NodeRef(10)),
             "selected at index 1 should return second result"
+        );
+    }
+
+    // ── LoadingState tests ──────────────────────────────────────────────
+
+    #[test]
+    fn new_app_defaults_to_complete_loading_state() {
+        let app = InspectApp::new(None, None);
+        assert_eq!(
+            app.loading_state,
+            LoadingState::Complete,
+            "new() should default to Complete loading state"
+        );
+    }
+
+    #[test]
+    fn progressive_loading_starts_in_instant_only() {
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let app = InspectApp::with_progressive_loading(graph, rx, None);
+        assert_eq!(
+            app.loading_state,
+            LoadingState::InstantOnly,
+            "with_progressive_loading should start in InstantOnly state"
+        );
+        assert!(
+            app.graph.is_some(),
+            "with_progressive_loading should have a graph set"
+        );
+    }
+
+    #[test]
+    fn merge_phase2_transitions_to_complete() {
+        use crate::query::resource::QueryEntry;
+
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        let data = Phase2Data {
+            fixture_entries: vec![QueryEntry {
+                fields: [
+                    ("name".to_string(), "db".to_string()),
+                    ("source".to_string(), "conftest.py".to_string()),
+                    ("type".to_string(), "fixture".to_string()),
+                    ("scope".to_string(), "function".to_string()),
+                    ("autouse".to_string(), "false".to_string()),
+                    ("async".to_string(), "false".to_string()),
+                    ("description".to_string(), String::new()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+            plugin_entries: vec![],
+        };
+
+        app.merge_phase2(data);
+        assert_eq!(
+            app.loading_state,
+            LoadingState::Complete,
+            "merge_phase2 should transition to Complete"
+        );
+        assert_eq!(
+            app.graph.as_ref().unwrap().fixtures.len(),
+            1,
+            "merged graph should contain the fixture from phase 2"
+        );
+    }
+
+    #[test]
+    fn poll_phase2_receives_data() {
+        use crate::query::resource::QueryEntry;
+
+        let graph = InspectGraph::default();
+        let (tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        tx.send(Phase2Data {
+            fixture_entries: vec![QueryEntry {
+                fields: [
+                    ("name".to_string(), "cache".to_string()),
+                    ("source".to_string(), "<plugin:cache>".to_string()),
+                    ("type".to_string(), "fixture".to_string()),
+                    ("scope".to_string(), "function".to_string()),
+                    ("autouse".to_string(), "false".to_string()),
+                    ("async".to_string(), "false".to_string()),
+                    ("description".to_string(), String::new()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+            plugin_entries: vec![QueryEntry {
+                fields: [
+                    ("name".to_string(), "cache".to_string()),
+                    ("protocol".to_string(), String::new()),
+                ]
+                .into_iter()
+                .collect(),
+            }],
+        })
+        .expect("send should succeed while receiver exists");
+
+        app.poll_phase2();
+
+        assert_eq!(
+            app.loading_state,
+            LoadingState::Complete,
+            "poll_phase2 should transition to Complete after receiving data"
+        );
+        let graph = app.graph.as_ref().unwrap();
+        assert_eq!(
+            graph.fixtures.len(),
+            1,
+            "graph should have one fixture after phase-2 merge"
+        );
+        assert_eq!(
+            graph.plugins.len(),
+            1,
+            "graph should have one plugin after phase-2 merge"
+        );
+    }
+
+    #[test]
+    fn poll_phase2_handles_disconnected_sender() {
+        let graph = InspectGraph::default();
+        let (tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        // Drop the sender to simulate background thread failure.
+        drop(tx);
+
+        app.poll_phase2();
+
+        assert_eq!(
+            app.loading_state,
+            LoadingState::Complete,
+            "poll_phase2 should transition to Complete on Disconnected"
+        );
+        assert!(
+            app.phase2_rx.is_none(),
+            "phase2_rx should be cleared after Disconnected"
+        );
+    }
+
+    #[test]
+    fn poll_phase2_noop_when_empty() {
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        // Sender exists but hasn't sent anything yet.
+        app.poll_phase2();
+
+        assert_eq!(
+            app.loading_state,
+            LoadingState::InstantOnly,
+            "poll_phase2 should stay in InstantOnly when channel is empty"
+        );
+        assert!(
+            app.phase2_rx.is_some(),
+            "phase2_rx should remain while waiting for data"
         );
     }
 }
