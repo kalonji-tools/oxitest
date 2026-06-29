@@ -5,6 +5,7 @@
 
 mod app;
 mod input;
+pub(crate) mod search;
 mod ui;
 
 use crate::config::{self, cli::InspectArgs};
