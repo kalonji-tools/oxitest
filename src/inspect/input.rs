@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn input_key_q_sets_quit() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         handle_key(&mut app, key(KeyCode::Char('q')));
         assert!(
             app.should_quit,
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn input_key_esc_sets_quit_in_normal() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         handle_key(&mut app, key(KeyCode::Esc));
         assert!(
             app.should_quit,
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn input_key_slash_enters_search() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         handle_key(&mut app, key(KeyCode::Char('/')));
         assert_eq!(
             app.input_mode,
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn input_key_esc_exits_search() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "foo".to_string(),
         };
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn input_search_mode_appends_chars() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: String::new(),
         };
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn input_search_mode_backspace_removes_char() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "abc".to_string(),
         };
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn input_question_mark_toggles_help() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         assert!(!app.show_help, "help should start hidden");
         handle_key(&mut app, key(KeyCode::Char('?')));
         assert!(app.show_help, "pressing '?' should show help overlay");
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn input_ctrl_c_quits_from_any_mode() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn input_search_esc_clears_search_state() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn input_search_syncs_query_to_search_state() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: String::new(),
         };
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn input_search_backspace_syncs_query() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "abc".to_string(),
         };
@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn input_search_down_selects_next() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn input_search_up_selects_prev() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn input_search_enter_keeps_results() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn input_slash_resets_search_state() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.search.query = "old".to_string();
         app.search.results = vec![super::super::search::NodeRef(0)];
         handle_key(&mut app, key(KeyCode::Char('/')));
