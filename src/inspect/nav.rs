@@ -44,6 +44,10 @@ pub(crate) enum NavScreen {
         matches: Vec<NodeRef>,
         selected: usize,
     },
+
+    /// History screen: lists previously visited nodes, most recent first.
+    /// `selected` is the cursor index within the history entries.
+    History { selected: usize },
 }
 
 // ── NavStack ─────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ use ratatui::{
 
 use std::collections::HashSet;
 
-use super::app::{InputMode, InspectApp, LoadingState};
+use super::app::{InputMode, InspectApp, LoadingState, SessionHistory};
 use super::detail;
 use super::graph::{self, NodeKind};
 use super::nav::{HOME_KINDS, NavScreen};
@@ -200,6 +200,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
                     None => detail::render_detail(graph, None),
                 }
             }
+            (Some(graph), NavScreen::History { selected }) => {
+                let node = app.history.get(*selected);
+                detail::render_detail(graph, node)
+            }
             (Some(graph), _) => detail::render_detail(graph, None),
             (None, _) => vec![Line::from("No data loaded")],
         };
@@ -244,6 +248,7 @@ fn pane_title(app: &InspectApp) -> String {
         NavScreen::Disambiguation { query, .. } => {
             format!("Jump: {query}")
         }
+        NavScreen::History { .. } => "History".to_string(),
     }
 }
 
@@ -273,6 +278,7 @@ fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
         NavScreen::Disambiguation {
             matches, selected, ..
         } => build_disambiguation_content(graph, matches, *selected),
+        NavScreen::History { selected } => build_history_content(graph, &app.history, *selected),
     }
 }
 
@@ -449,6 +455,35 @@ fn build_disambiguation_content(
         .collect()
 }
 
+/// Render the History screen: one line per visited node, most recent first.
+fn build_history_content(
+    graph: &super::graph::InspectGraph,
+    history: &SessionHistory,
+    selected: usize,
+) -> Vec<Line<'static>> {
+    if history.len() == 0 {
+        return vec![Line::from(" No history yet")];
+    }
+    history
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(idx, node_ref)| {
+            let sigil = node_ref.kind.sigil();
+            let name = graph.node_name(node_ref);
+            let text = format!(" {sigil}  {name}");
+            if idx == selected {
+                Line::from(Span::styled(
+                    text,
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(text)
+            }
+        })
+        .collect()
+}
+
 /// Returns `true` for node kinds that require the Python session (phase 2).
 fn is_python_tier(kind: NodeKind) -> bool {
     matches!(kind, NodeKind::Fixture | NodeKind::Plugin)
@@ -486,7 +521,7 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
                     Span::styled("l", Style::default().fg(Color::Yellow)),
                     Span::raw(" Enter  "),
                     Span::styled("h", Style::default().fg(Color::Yellow)),
-                    Span::raw(" Back"),
+                    Span::raw(" History"),
                 ]
             }
         }
@@ -527,7 +562,8 @@ fn draw_help_overlay(frame: &mut Frame<'_>, area: Rect) {
         Line::from(" j / Down    Move down"),
         Line::from(" k / Up      Move up"),
         Line::from(" l / Right   Navigate into"),
-        Line::from(" h / Left    Back"),
+        Line::from(" h           History"),
+        Line::from(" Left        Back"),
         Line::from(" Space       Navigate into"),
         Line::from(" Backspace   Back"),
         Line::from(" /           Search"),
@@ -1024,5 +1060,45 @@ mod snapshot_tests {
             "node_list_parametrized_expanded",
             render_to_string(&app, 80, 12)
         );
+    }
+
+    // ── History screen snapshots ─────────────────────────────────────────
+
+    use crate::inspect::graph::NodeRef as GraphNodeRef;
+
+    #[test]
+    fn snap_history_screen_with_entries() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 120;
+        // Push three history entries (most recent first after push()).
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Mark,
+            index: 0,
+        });
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 1,
+        });
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        });
+        // Navigate to History screen with cursor on first entry.
+        app.nav.push(super::NavScreen::History { selected: 0 });
+        assert_snapshot!(
+            "history_screen_with_entries",
+            render_to_string(&app, 120, 24)
+        );
+    }
+
+    #[test]
+    fn snap_history_screen_empty() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 120;
+        // No history pushes — history is empty.
+        app.nav.push(super::NavScreen::History { selected: 0 });
+        assert_snapshot!("history_screen_empty", render_to_string(&app, 120, 24));
     }
 }

@@ -7,7 +7,7 @@ use crossterm::event::{self, Event};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use super::graph::InspectGraph;
+use super::graph::{InspectGraph, NodeRef as GraphNodeRef};
 use super::input;
 use super::nav::{self, NavStack};
 use super::search::NodeRef;
@@ -102,6 +102,44 @@ pub(crate) struct Phase2Data {
     pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
 }
 
+// ── SessionHistory ──────────────────────────────────────────────────────────
+
+/// Append-only list of visited nodes, most recent first.
+///
+/// Every time the user navigates to a `NodeDetail` screen, the node is
+/// pushed onto the front of this list.  Duplicates are allowed — visiting
+/// the same node twice produces two entries.  The history is session-only
+/// and is lost when the TUI exits.
+#[derive(Debug, Clone)]
+pub(crate) struct SessionHistory {
+    /// Entries in reverse-chronological order (most recent first).
+    pub(crate) entries: Vec<GraphNodeRef>,
+}
+
+impl SessionHistory {
+    /// Create a new empty history.
+    pub(crate) fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Record a visit to the given node (prepended, so index 0 is most recent).
+    pub(crate) fn push(&mut self, node: GraphNodeRef) {
+        self.entries.insert(0, node);
+    }
+
+    /// Return the number of entries.
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Return the entry at the given index, if in range.
+    pub(crate) fn get(&self, index: usize) -> Option<&GraphNodeRef> {
+        self.entries.get(index)
+    }
+}
+
 // ── InspectApp ───────────────────────────────────────────────────────────────
 
 /// Top-level application state for the inspect TUI.
@@ -117,6 +155,8 @@ pub(crate) struct InspectApp {
     pub(crate) graph: Option<InspectGraph>,
     /// Stack-based navigation state.
     pub(crate) nav: NavStack,
+    /// Session history of visited nodes (most recent first).
+    pub(crate) history: SessionHistory,
     /// Current loading phase — determines whether loading indicators are shown.
     pub(crate) loading_state: LoadingState,
     /// Receiver for phase-2 data from the background Python thread.
@@ -153,6 +193,7 @@ impl InspectApp {
             search: SearchState::new(),
             graph,
             nav,
+            history: SessionHistory::new(),
             loading_state: LoadingState::Complete,
             phase2_rx: None,
             expanded_groups: HashSet::new(),
@@ -180,6 +221,7 @@ impl InspectApp {
             search: SearchState::new(),
             graph: Some(graph),
             nav,
+            history: SessionHistory::new(),
             loading_state: LoadingState::InstantOnly,
             phase2_rx: Some(rx),
             expanded_groups: HashSet::new(),
@@ -278,6 +320,16 @@ mod tests {
             "app should not be in quit state on creation"
         );
         assert!(!app.show_help, "help overlay should be hidden on creation");
+    }
+
+    #[test]
+    fn new_app_has_empty_history() {
+        let app = InspectApp::new(None, None);
+        assert_eq!(
+            app.history.len(),
+            0,
+            "history should start empty on creation"
+        );
     }
 
     #[test]
@@ -519,6 +571,76 @@ mod tests {
         assert!(
             app.phase2_rx.is_some(),
             "phase2_rx should remain while waiting for data"
+        );
+    }
+
+    // ── SessionHistory tests ──────────────────────────────────────────
+
+    #[test]
+    fn session_history_starts_empty() {
+        let history = SessionHistory::new();
+        assert_eq!(
+            history.len(),
+            0,
+            "new SessionHistory should have zero entries"
+        );
+        assert!(
+            history.get(0).is_none(),
+            "get(0) on empty history should return None"
+        );
+    }
+
+    #[test]
+    fn session_history_push_prepends() {
+        use crate::inspect::graph::{NodeKind, NodeRef as GraphNodeRef};
+
+        let mut history = SessionHistory::new();
+        let first = GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        };
+        let second = GraphNodeRef {
+            kind: NodeKind::Fixture,
+            index: 1,
+        };
+
+        history.push(first.clone());
+        history.push(second.clone());
+
+        assert_eq!(
+            history.len(),
+            2,
+            "history should contain 2 entries after 2 pushes"
+        );
+        assert_eq!(
+            history.get(0),
+            Some(&second),
+            "most recent push should be at index 0"
+        );
+        assert_eq!(
+            history.get(1),
+            Some(&first),
+            "first push should be at index 1"
+        );
+    }
+
+    #[test]
+    fn session_history_allows_duplicates() {
+        use crate::inspect::graph::{NodeKind, NodeRef as GraphNodeRef};
+
+        let mut history = SessionHistory::new();
+        let node = GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        };
+
+        history.push(node.clone());
+        history.push(node.clone());
+
+        assert_eq!(
+            history.len(),
+            2,
+            "pushing the same node twice should create 2 entries"
         );
     }
 }
