@@ -3,7 +3,7 @@ source: src/inspect/ui.rs
 expression: "render_to_string(&app, 90, 24)"
 ---
 "┌ Home ─────────────────────────────────┐┌ Detail ───────────────────────────────────────┐"
-"│No data loaded                         ││oxitest inspect                                │"
+"│No data loaded                         ││No data loaded                                 │"
 "│                                       ││                                               │"
 "│                                       ││                                               │"
 "│                                       ││                                               │"

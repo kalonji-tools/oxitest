@@ -1,14 +1,14 @@
 ---
-source: src/inspect/ui.rs
+source: src/inspect/detail.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
-"┌ Home ──────────────────────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
-"│No data loaded                              ││No data loaded                                                          │"
+"┌ P capture ─────────────────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
+"│ P  capture                                 ││P capture                                                               │"
 "│                                            ││                                                                        │"
+"│ (see detail pane)                          ││  protocols: CollectorProvider, ReporterProvider                        │"
 "│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
+"│                                            ││  Fixtures                                                              │"
+"│                                            ││    F std_capture                                                       │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"
