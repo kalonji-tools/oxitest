@@ -149,3 +149,53 @@ def test_query_helpers(tmp: TempDir):
     out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "helpers")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "my_helper")
+
+
+def test_query_helpers_shows_docstring(tmp: TempDir):
+    """``query helpers --inspect`` includes helper docstrings."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": "def test_one(): pass\n",
+        },
+        conftest="""\
+            def make_db():
+                \"\"\"Create a test database.\"\"\"
+                return {}
+        """,
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "helpers", "--inspect", "make_db"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "Create a test database.")
+
+
+def test_query_fixtures_shows_docstring(tmp: TempDir):
+    """``query fixtures --inspect`` includes fixture docstrings."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+                from oxitest import Fixture
+
+                def test_one(db: Fixture[object]):
+                    pass
+            """,
+        },
+        conftest="""\
+            from oxitest import Fixtures
+
+            fx = Fixtures()
+
+            @fx.fixture
+            def db() -> object:
+                \"\"\"Provide a database connection.\"\"\"
+                return object()
+        """,
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "fixtures", "--inspect", "db"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "Provide a database connection.")

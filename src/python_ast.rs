@@ -257,24 +257,114 @@ pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
     marks.into_iter().collect()
 }
 
-/// Extract public, non-test, non-dunder function names from a module's statements.
+/// Information about a helper function extracted from the AST.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HelperInfo {
+    /// The function name.
+    pub name: String,
+    /// The docstring, if present (first statement is a string literal).
+    pub docstring: Option<String>,
+    /// The formatted signature, e.g. `"make_db(name: str, shared: bool = False)"`.
+    pub signature: String,
+}
+
+/// Extract public, non-test, non-dunder helper functions from a module's statements.
 ///
 /// Includes top-level function definitions whose names:
 /// - do not start with `_`
 /// - do not start with `test_`
 ///
-/// Returns a sorted `Vec<String>`.
-pub(crate) fn extract_helpers(stmts: &[ast::Stmt]) -> Vec<String> {
-    let mut names = std::collections::BTreeSet::new();
+/// Each helper includes its name, docstring (if any), and formatted signature.
+/// Results are sorted by name.
+///
+/// The `source` parameter is the original Python source text, used to extract
+/// annotation and default-value text from AST ranges.
+pub(crate) fn extract_helpers(stmts: &[ast::Stmt], source: &str) -> Vec<HelperInfo> {
+    let mut helpers = std::collections::BTreeMap::new();
     for stmt in stmts {
         if let Some(def) = FnDef::try_from_stmt(stmt) {
             let fn_name = def.name();
             if !fn_name.starts_with('_') && !is_test_fn(fn_name) {
-                names.insert(fn_name.to_string());
+                let docstring = extract_fn_docstring(def.body());
+                let signature = format_signature(fn_name, def.args(), source);
+                helpers.insert(
+                    fn_name.to_string(),
+                    HelperInfo {
+                        name: fn_name.to_string(),
+                        docstring,
+                        signature,
+                    },
+                );
             }
         }
     }
-    names.into_iter().collect()
+    helpers.into_values().collect()
+}
+
+/// Extract a docstring from a function body.
+///
+/// If the first statement is an expression statement containing a string literal,
+/// that's the docstring (Python convention). Otherwise returns `None`.
+/// Multi-line docstrings are captured in full with leading/trailing whitespace trimmed.
+fn extract_fn_docstring(body: &[ast::Stmt]) -> Option<String> {
+    if let Some(ast::Stmt::Expr(expr)) = body.first()
+        && let ast::Expr::Constant(ast::ExprConstant {
+            value: ast::Constant::Str(s),
+            ..
+        }) = &*expr.value
+    {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() {
+            return None;
+        }
+        return Some(trimmed);
+    }
+    None
+}
+
+/// Format a function signature string from its name and AST arguments.
+///
+/// Produces output like `"make_db(name: str, shared: bool = False)"`.
+/// Uses the original source text to extract annotation and default-value text
+/// via AST node ranges.
+fn format_signature(fn_name: &str, args: &ast::Arguments, source: &str) -> String {
+    let mut parts: Vec<String> = args
+        .args
+        .iter()
+        .chain(&args.kwonlyargs)
+        .map(|awd| format_param(awd, source))
+        .collect();
+    let _ = &mut parts; // suppress unused_mut if chain is empty
+    format!("{}({})", fn_name, parts.join(", "))
+}
+
+/// Format a single parameter with optional annotation and default value.
+fn format_param(awd: &ast::ArgWithDefault, source: &str) -> String {
+    use rustpython_parser::ast::Ranged;
+
+    let mut part = awd.def.arg.to_string();
+
+    if let Some(ref annotation) = awd.def.annotation {
+        let range = annotation.range();
+        let start = range.start().to_usize();
+        let end = range.end().to_usize();
+        if start < source.len() && end <= source.len() {
+            part.push_str(": ");
+            part.push_str(&source[start..end]);
+        }
+    }
+
+    if let Some(ref default) = awd.default {
+        let range = default.range();
+        let start = range.start().to_usize();
+        let end = range.end().to_usize();
+        if start < source.len() && end <= source.len() {
+            part.push_str(" = ");
+            part.push_str(&source[start..end]);
+        }
+    }
+
+    part
 }
 
 #[cfg(test)]
@@ -606,29 +696,137 @@ pub(crate) mod tests {
         let f = write_temp_py(
             "def make_thing(): pass\ndef _private(): pass\ndef another_helper(): pass\n",
         );
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        let helpers = extract_helpers(&stmts);
-        assert!(helpers.contains(&"make_thing".to_string()));
-        assert!(helpers.contains(&"another_helper".to_string()));
-        assert!(!helpers.contains(&"_private".to_string()));
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        let names: Vec<&str> = helpers.iter().map(|h| h.name.as_str()).collect();
+        assert!(
+            names.contains(&"make_thing"),
+            "public helper 'make_thing' should be included"
+        );
+        assert!(
+            names.contains(&"another_helper"),
+            "public helper 'another_helper' should be included"
+        );
+        assert!(
+            !names.contains(&"_private"),
+            "private function '_private' should be excluded"
+        );
     }
 
     #[test]
     fn extract_helpers_skips_test_functions() {
         let f = write_temp_py("def test_foo(): pass\ndef helper(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        let helpers = extract_helpers(&stmts);
-        assert!(!helpers.contains(&"test_foo".to_string()));
-        assert!(helpers.contains(&"helper".to_string()));
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        let names: Vec<&str> = helpers.iter().map(|h| h.name.as_str()).collect();
+        assert!(
+            !names.contains(&"test_foo"),
+            "test function 'test_foo' should be excluded"
+        );
+        assert!(
+            names.contains(&"helper"),
+            "helper function 'helper' should be included"
+        );
     }
 
     #[test]
     fn extract_helpers_skips_dunder() {
         let f = write_temp_py("def __helpers_namespace__(): pass\ndef public_fn(): pass\n");
-        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
-        let helpers = extract_helpers(&stmts);
-        assert!(!helpers.contains(&"__helpers_namespace__".to_string()));
-        assert!(helpers.contains(&"public_fn".to_string()));
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        let names: Vec<&str> = helpers.iter().map(|h| h.name.as_str()).collect();
+        assert!(
+            !names.contains(&"__helpers_namespace__"),
+            "dunder function should be excluded"
+        );
+        assert!(
+            names.contains(&"public_fn"),
+            "public function should be included"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_with_docstring() {
+        let f =
+            write_temp_py("def make_db():\n    \"\"\"Create a test database.\"\"\"\n    pass\n");
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        assert_eq!(
+            helpers[0].docstring.as_deref(),
+            Some("Create a test database."),
+            "docstring should be extracted and trimmed"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_without_docstring() {
+        let f = write_temp_py("def make_db():\n    pass\n");
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        assert_eq!(
+            helpers[0].docstring, None,
+            "function without docstring should return None"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_multiline_docstring() {
+        let f = write_temp_py(
+            "def make_db():\n    \"\"\"\n    Create a test database.\n\n    Returns a connection object.\n    \"\"\"\n    pass\n",
+        );
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        let doc = helpers[0]
+            .docstring
+            .as_ref()
+            .expect("multiline docstring should be captured");
+        assert!(
+            doc.contains("Create a test database."),
+            "docstring should contain first line content"
+        );
+        assert!(
+            doc.contains("Returns a connection object."),
+            "docstring should contain subsequent content"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_signature_with_params() {
+        let f = write_temp_py("def make_db(name: str, shared: bool):\n    pass\n");
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        assert_eq!(
+            helpers[0].signature, "make_db(name: str, shared: bool)",
+            "signature should include parameter names and annotations"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_signature_no_params() {
+        let f = write_temp_py("def make_db():\n    pass\n");
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        assert_eq!(
+            helpers[0].signature, "make_db()",
+            "no-param function should have empty parens"
+        );
+    }
+
+    #[test]
+    fn extract_helpers_signature_defaults() {
+        let f = write_temp_py("def make_db(name: str, shared: bool = False):\n    pass\n");
+        let (source, stmts) = parse_file(&temp_path(&f)).unwrap();
+        let helpers = extract_helpers(&stmts, &source);
+        assert_eq!(helpers.len(), 1, "should extract exactly one helper");
+        assert_eq!(
+            helpers[0].signature, "make_db(name: str, shared: bool = False)",
+            "default values should be included in signature"
+        );
     }
 
     // ── FnDef ──────────────────────────────────────────────────────────
