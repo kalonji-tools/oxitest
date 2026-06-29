@@ -3,6 +3,6 @@ source: src/inspect/ui.rs
 expression: "render_to_string(&app, 80, 4)"
 ---
 "┌ Home ────────────────────────────┐┌ Detail ──────────────────────────────────┐"
-"│No data loaded                    ││oxitest inspect                           │"
+"│No data loaded                    ││No data loaded                            │"
 "└──────────────────────────────────┘└──────────────────────────────────────────┘"
 " /test_foo  0/0 matches  Esc Cancel  Enter Accept  ↑/↓ Navigate                 "

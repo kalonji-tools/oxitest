@@ -3,7 +3,7 @@ source: src/inspect/ui.rs
 expression: "render_to_string(&app, 80, 12)"
 ---
 "┌ Tests ───────────────────────────┐┌ Detail ──────────────────────────────────┐"
-"│ T  tests/test_auth.py::test_login││oxitest inspect                           │"
+"│ T  tests/test_auth.py::test_login││Select a node to view details             │"
 "│ T  tests/test_auth.py::test_logou││                                          │"
 "│ T  tests/test_db.py::test_connect││                                          │"
 "│                                  ││                                          │"
