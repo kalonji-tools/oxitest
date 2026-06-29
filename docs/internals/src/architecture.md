@@ -111,10 +111,16 @@ Every `.rs` file in `src/`, with its responsibility:
 | `query::resource` | `src/query/resource.rs` | `ResourceKind` enum and `QueryEntry`. |
 | `query::bridge` | `src/query/bridge.rs` | Query-to-Python bridge for fixture/plugin introspection. |
 | **Inspect TUI** | | |
-| `inspect` | `src/inspect/mod.rs` | `oxitest inspect` entry point — terminal setup, event loop, teardown. |
-| `inspect::app` | `src/inspect/app.rs` | `InspectApp` state, `InputMode` enum. |
-| `inspect::ui` | `src/inspect/ui.rs` | `draw()` function, adaptive pane layout, footer, help overlay. |
-| `inspect::input` | `src/inspect/input.rs` | Key and mouse event → action mapping. |
+| `inspect` | `src/inspect/mod.rs` | `oxitest inspect` entry point — graph building, startup filters, terminal lifecycle. |
+| `inspect::app` | `src/inspect/app.rs` | `InspectApp` state, `InputMode`, `LoadingState`, progressive loading. |
+| `inspect::nav` | `src/inspect/nav.rs` | `NavStack`, `NavScreen` (Home, NodeList, NodeDetail, Disambiguation), direct jump resolution. |
+| `inspect::detail` | `src/inspect/detail.rs` | Per-type detail renderers for the right pane (Fixture, Test, Mark, Conftest, Plugin, Helper). |
+| `inspect::search` | `src/inspect/search.rs` | `Searchable` trait, fuzzy substring + DSL auto-detection search. |
+| `inspect::ui` | `src/inspect/ui.rs` | `draw()` function, adaptive pane layout, footer, help overlay, loading indicators. |
+| `inspect::input` | `src/inspect/input.rs` | Key and mouse event → action mapping, nav stack integration. |
+| `inspect::graph` | `src/inspect/graph/mod.rs` | `InspectGraph`, `NodeRef`, `NodeKind`, `BrokenEdge`. |
+| `inspect::graph::nodes` | `src/inspect/graph/nodes.rs` | 6 node structs: `FixtureNode`, `TestNode`, `MarkNode`, `ConftestNode`, `PluginNode`, `HelperNode`. |
+| `inspect::graph::builder` | `src/inspect/graph/builder.rs` | `GraphBuilder` — constructs graph from `QueryEntry` data, resolves edges, supports progressive merge. |
 | **AST + Prescan** | | |
 | `python_ast` | `src/python_ast.rs` | `parse_file()`, `is_test_fn()` -- shared AST utilities for `rustpython-parser`. |
 | `prescan` | `src/prescan.rs` | `PrescanItem`, `PrescanMarker`, `PrescanResult`. AST-based metadata extraction for lazy collection. |

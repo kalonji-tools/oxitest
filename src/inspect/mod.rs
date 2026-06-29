@@ -6,6 +6,7 @@
 mod app;
 pub(crate) mod graph;
 mod input;
+pub(crate) mod nav;
 pub(crate) mod search;
 mod ui;
 
@@ -51,7 +52,7 @@ pub(crate) fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let graph = build_graph(args, cfg)?;
     let mut terminal = ui::setup_terminal()?;
-    let result = app::InspectApp::new(Some(graph)).run(&mut terminal);
+    let result = app::InspectApp::new(Some(graph), args.name.as_deref()).run(&mut terminal);
     ui::restore_terminal(&mut terminal)?;
     result
 }
