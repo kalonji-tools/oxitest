@@ -16,6 +16,7 @@ mod doctest;
 mod edit_distance;
 mod filter;
 mod import_graph;
+mod inspect;
 mod parallel;
 mod parallel_context;
 mod pipeline;
