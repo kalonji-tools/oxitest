@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -qE '^git (reset --hard|clean -f)' && echo '{\"decision\":\"block\",\"reason\":\"Destructive git command blocked. Ask the user to run it manually.\"}' || echo '{}'",
+            "statusMessage": "Checking for blocked git commands..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "The user submitted a message. Check if they are asking to merge, mark ready for review, push code, or reporting a merge happened. Remind of the workflow:\n\n1. Grill 2. Issue 3. Triage 4. Spec (on issue) 5. Draft PR (assign user) 6. Plan (on PR) 7. Implement 8. Post-impl review (ponytail + improve + docs eval — explore findings before acting) 9. Preflight + rebase 10. Present to user — STOP and wait for merge authorization 11. Merge: USER ONLY via ! gh pr merge (gh pr merge is denied)\n\nPost-merge tasks: debrief if diverged (comment + label), verify issue triage labels, clean worktrees, update memory.\n\nCRITICAL: Claude CANNOT merge. gh pr merge is denied by permissions. The user merges manually. Claude presents the PR status and waits.\n\nReturn {\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"<relevant reminder>\"}} if workflow steps apply, or {} if not relevant."
+          }
+        ]
+      }
+    ]
+  }
+}
