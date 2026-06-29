@@ -82,16 +82,16 @@ pub(crate) fn search<G: Searchable>(graph: &G, query: &str, scope: SearchScope) 
     // Try DSL auto-detection: if the query looks like a DSL expression
     // (contains parentheses, which are required by the DSL grammar),
     // attempt to compile and evaluate it.
-    if looks_like_dsl(query) {
-        if let Some(expr) = try_compile_dsl(query) {
-            return candidates
-                .into_iter()
-                .filter(|r| {
-                    let entry = graph.node_query_entry(*r);
-                    eval::eval(&expr, &entry)
-                })
-                .collect();
-        }
+    if looks_like_dsl(query)
+        && let Some(expr) = try_compile_dsl(query)
+    {
+        return candidates
+            .into_iter()
+            .filter(|r| {
+                let entry = graph.node_query_entry(*r);
+                eval::eval(&expr, &entry)
+            })
+            .collect();
     }
 
     // Fallback: case-insensitive substring match on node name.
