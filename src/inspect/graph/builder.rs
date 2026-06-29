@@ -1,0 +1,910 @@
+//! Graph construction from [`QueryEntry`] data.
+//!
+//! [`GraphBuilder`] accumulates nodes via `add_*_entries` methods, then
+//! [`resolve_edges`] wires cross-references, populates inverse edges,
+//! groups parametrized tests, and records broken edges for unresolved
+//! fixture dependencies.
+
+use std::collections::HashMap;
+
+use crate::query::resource::QueryEntry;
+
+use super::InspectGraph;
+use super::nodes::{ConftestNode, FixtureNode, HelperNode, MarkNode, PluginNode, TestNode};
+
+// ── GraphBuilder ─────────────────────────────────────────────────────────────
+
+/// Incrementally builds an [`InspectGraph`] from flat [`QueryEntry`] slices.
+pub(crate) struct GraphBuilder {
+    graph: InspectGraph,
+    // Lookup tables for deduplication during construction.
+    fixture_by_name: HashMap<String, usize>,
+    test_by_node_id: HashMap<String, usize>,
+    mark_by_name: HashMap<String, usize>,
+    conftest_by_path: HashMap<String, usize>,
+    plugin_by_name: HashMap<String, usize>,
+    helper_by_key: HashMap<(String, String), usize>, // (name, source)
+    // Side channel: mark names per test index (populated during add_test_entries,
+    // consumed during resolve_edges).
+    test_mark_names: HashMap<usize, Vec<String>>,
+    // Side channel: fixture dep names per test index (populated during add_test_entries,
+    // consumed during resolve_edges).
+    #[allow(dead_code)] // consumed when fixture data is available from Python session (#1119)
+    test_fixture_names: HashMap<usize, Vec<String>>,
+}
+
+impl GraphBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            graph: InspectGraph::default(),
+            fixture_by_name: HashMap::new(),
+            test_by_node_id: HashMap::new(),
+            mark_by_name: HashMap::new(),
+            conftest_by_path: HashMap::new(),
+            plugin_by_name: HashMap::new(),
+            helper_by_key: HashMap::new(),
+            test_mark_names: HashMap::new(),
+            test_fixture_names: HashMap::new(),
+        }
+    }
+
+    // ── add_* methods ────────────────────────────────────────────────────
+
+    /// Add test nodes from instant-tier AST extraction.
+    ///
+    /// Expected entry fields: `name` (node_id), `source`, `mark`, `async`.
+    pub(crate) fn add_test_entries(&mut self, entries: &[QueryEntry]) {
+        for entry in entries {
+            let node_id = entry.get("name").unwrap_or_default().to_string();
+            if self.test_by_node_id.contains_key(&node_id) {
+                continue;
+            }
+            let is_async = entry.get("async").is_some_and(|v| v == "true");
+
+            // Store mark names in side channel for resolve_edges.
+            let mark_names: Vec<String> = entry
+                .get("mark")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect();
+
+            let idx = self.graph.tests.len();
+            if !mark_names.is_empty() {
+                self.test_mark_names.insert(idx, mark_names);
+            }
+
+            self.graph.tests.push(TestNode {
+                node_id: node_id.clone(),
+                is_async,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+            self.test_by_node_id.insert(node_id, idx);
+        }
+    }
+
+    /// Add mark nodes from instant-tier AST extraction.
+    ///
+    /// Expected entry fields: `name`, `used_in`.
+    pub(crate) fn add_mark_entries(&mut self, entries: &[QueryEntry]) {
+        for entry in entries {
+            let name = entry.get("name").unwrap_or_default().to_string();
+            if self.mark_by_name.contains_key(&name) {
+                continue;
+            }
+            let idx = self.graph.marks.len();
+            self.graph.marks.push(MarkNode {
+                name: name.clone(),
+                used_by: vec![],
+            });
+            self.mark_by_name.insert(name, idx);
+        }
+    }
+
+    /// Add helper nodes from instant-tier AST extraction.
+    ///
+    /// Expected entry fields: `name`, `source`, `docstring`, `signature`.
+    pub(crate) fn add_helper_entries(&mut self, entries: &[QueryEntry]) {
+        for entry in entries {
+            let name = entry.get("name").unwrap_or_default().to_string();
+            let source = entry.get("source").unwrap_or_default().to_string();
+            let key = (name.clone(), source.clone());
+            if self.helper_by_key.contains_key(&key) {
+                continue;
+            }
+
+            // Ensure conftest node exists for this source.
+            let conftest_idx = self.ensure_conftest(&source);
+
+            let docstring = entry.get("docstring").map(|s| s.to_string());
+            let docstring = if docstring.as_deref() == Some("") {
+                None
+            } else {
+                docstring
+            };
+            let signature = entry.get("signature").unwrap_or_default().to_string();
+
+            let idx = self.graph.helpers.len();
+            self.graph.helpers.push(HelperNode {
+                name,
+                signature,
+                docstring,
+                source,
+                conftest_idx,
+            });
+            self.helper_by_key.insert(key, idx);
+        }
+    }
+
+    /// Add fixture nodes from Python-tier collection.
+    ///
+    /// Expected entry fields: `name`, `source`, `shared` (= binding type),
+    /// `autouse`, `async`, `description`, `scope`, `type`.
+    #[allow(dead_code)] // called once Python session is available via progressive loading (#1119)
+    pub(crate) fn add_fixture_entries(&mut self, entries: &[QueryEntry]) {
+        for entry in entries {
+            let name = entry.get("name").unwrap_or_default().to_string();
+            if self.fixture_by_name.contains_key(&name) {
+                continue;
+            }
+            let source = entry.get("source").unwrap_or_default().to_string();
+            let binding_type = entry.get("type").unwrap_or("fixture").to_string();
+            let scope = entry.get("scope").unwrap_or("function").to_string();
+            let autouse = entry.get("autouse").is_some_and(|v| v == "true");
+            let is_async = entry.get("async").is_some_and(|v| v == "true");
+            let description = entry.get("description").unwrap_or_default().to_string();
+
+            let idx = self.graph.fixtures.len();
+            self.graph.fixtures.push(FixtureNode {
+                name: name.clone(),
+                binding_type,
+                scope,
+                autouse,
+                source,
+                is_async,
+                description,
+                depends_on: vec![],
+                consumers: vec![],
+                conftest_idx: None,
+                plugin_idx: None,
+            });
+            self.fixture_by_name.insert(name, idx);
+        }
+    }
+
+    /// Add plugin nodes from Python-tier collection.
+    ///
+    /// Expected entry fields: `name`, `protocol`.
+    #[allow(dead_code)] // called once Python session is available via progressive loading (#1119)
+    pub(crate) fn add_plugin_entries(&mut self, entries: &[QueryEntry]) {
+        for entry in entries {
+            let name = entry.get("name").unwrap_or_default().to_string();
+            if self.plugin_by_name.contains_key(&name) {
+                continue;
+            }
+            let protocols: Vec<String> = entry
+                .get("protocol")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect();
+
+            let idx = self.graph.plugins.len();
+            self.graph.plugins.push(PluginNode {
+                name: name.clone(),
+                protocols,
+                fixtures: vec![],
+            });
+            self.plugin_by_name.insert(name, idx);
+        }
+    }
+
+    // ── Edge resolution ──────────────────────────────────────────────────
+
+    /// Wire up cross-references between nodes.
+    ///
+    /// This must be called after all `add_*_entries` methods.  It resolves:
+    ///
+    /// 1. **Test -> Mark** edges from test entry `mark` fields
+    /// 2. **Helper -> Conftest** membership edges
+    /// 3. **Fixture -> Conftest** membership edges (by source path)
+    /// 4. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
+    /// 5. **Parametrize grouping** (strip `[param_id]` from node_id)
+    /// 6. **Broken edges** for unresolved fixture references
+    /// 7. **Inverse edges** (consumers, used_by, conftest.fixtures, conftest.helpers)
+    pub(crate) fn resolve_edges(&mut self) {
+        self.resolve_test_to_mark_edges();
+        self.resolve_fixture_to_conftest_edges();
+        self.resolve_fixture_to_plugin_edges();
+        self.resolve_helper_to_conftest_edges();
+        self.resolve_parametrize_grouping();
+    }
+
+    /// Consume the builder and return the finished graph.
+    pub(crate) fn build(self) -> InspectGraph {
+        self.graph
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────
+
+    /// Ensure a conftest node exists for the given path, returning its index.
+    fn ensure_conftest(&mut self, path: &str) -> usize {
+        if let Some(&idx) = self.conftest_by_path.get(path) {
+            return idx;
+        }
+        let idx = self.graph.conftests.len();
+        self.graph.conftests.push(ConftestNode {
+            path: path.to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
+        self.conftest_by_path.insert(path.to_string(), idx);
+        idx
+    }
+
+    /// Ensure a mark node exists for the given name, returning its index.
+    fn ensure_mark(&mut self, name: &str) -> usize {
+        if let Some(&idx) = self.mark_by_name.get(name) {
+            return idx;
+        }
+        let idx = self.graph.marks.len();
+        self.graph.marks.push(MarkNode {
+            name: name.to_string(),
+            used_by: vec![],
+        });
+        self.mark_by_name.insert(name.to_string(), idx);
+        idx
+    }
+
+    /// Wire test -> mark edges using the mark data stored in `test_mark_names`.
+    fn resolve_test_to_mark_edges(&mut self) {
+        let mark_map = std::mem::take(&mut self.test_mark_names);
+        for (test_idx, mark_names) in mark_map {
+            for name in mark_names {
+                let mark_idx = self.ensure_mark(&name);
+                // Forward: test -> mark
+                if !self.graph.tests[test_idx].marks.contains(&mark_idx) {
+                    self.graph.tests[test_idx].marks.push(mark_idx);
+                }
+                // Inverse: mark -> test
+                if !self.graph.marks[mark_idx].used_by.contains(&test_idx) {
+                    self.graph.marks[mark_idx].used_by.push(test_idx);
+                }
+            }
+        }
+    }
+
+    fn resolve_fixture_to_conftest_edges(&mut self) {
+        for fix_idx in 0..self.graph.fixtures.len() {
+            let source = self.graph.fixtures[fix_idx].source.clone();
+            if source.is_empty() || source.starts_with("<plugin:") {
+                continue;
+            }
+            let conftest_idx = self.ensure_conftest(&source);
+            self.graph.fixtures[fix_idx].conftest_idx = Some(conftest_idx);
+            // Inverse: conftest -> fixture
+            if !self.graph.conftests[conftest_idx]
+                .fixtures
+                .contains(&fix_idx)
+            {
+                self.graph.conftests[conftest_idx].fixtures.push(fix_idx);
+            }
+        }
+    }
+
+    fn resolve_fixture_to_plugin_edges(&mut self) {
+        for fix_idx in 0..self.graph.fixtures.len() {
+            let source = self.graph.fixtures[fix_idx].source.clone();
+            if let Some(plugin_name) = source
+                .strip_prefix("<plugin:")
+                .and_then(|s| s.strip_suffix('>'))
+                && let Some(&plugin_idx) = self.plugin_by_name.get(plugin_name)
+            {
+                self.graph.fixtures[fix_idx].plugin_idx = Some(plugin_idx);
+                // Inverse: plugin -> fixture
+                if !self.graph.plugins[plugin_idx].fixtures.contains(&fix_idx) {
+                    self.graph.plugins[plugin_idx].fixtures.push(fix_idx);
+                }
+            }
+        }
+    }
+
+    fn resolve_helper_to_conftest_edges(&mut self) {
+        // Helpers already have conftest_idx set during add_helper_entries.
+        // Here we wire the inverse: conftest -> helper.
+        for helper_idx in 0..self.graph.helpers.len() {
+            let conftest_idx = self.graph.helpers[helper_idx].conftest_idx;
+            if !self.graph.conftests[conftest_idx]
+                .helpers
+                .contains(&helper_idx)
+            {
+                self.graph.conftests[conftest_idx].helpers.push(helper_idx);
+            }
+        }
+    }
+
+    fn resolve_parametrize_grouping(&mut self) {
+        // Group tests by base name (strip [param_id] suffix).
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+
+        for (idx, test) in self.graph.tests.iter_mut().enumerate() {
+            if let Some(bracket_pos) = test.node_id.rfind('[') {
+                let base = test.node_id[..bracket_pos].to_string();
+                let param_id = test.node_id[bracket_pos + 1..]
+                    .trim_end_matches(']')
+                    .to_string();
+                test.param_id = Some(param_id);
+                groups.entry(base).or_default().push(idx);
+            }
+        }
+
+        // For groups with more than one variant, set param_count and variants.
+        for indices in groups.values() {
+            if indices.len() > 1 {
+                let count = indices.len();
+                for &idx in indices {
+                    self.graph.tests[idx].param_count = count;
+                    self.graph.tests[idx].variants =
+                        indices.iter().copied().filter(|&i| i != idx).collect();
+                }
+            }
+        }
+    }
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create a QueryEntry from key-value pairs.
+    fn entry(pairs: &[(&str, &str)]) -> QueryEntry {
+        let fields = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        QueryEntry { fields }
+    }
+
+    // ── Empty graph ──────────────────────────────────────────────────────
+
+    #[test]
+    fn build_empty_graph() {
+        let builder = GraphBuilder::new();
+        let graph = builder.build();
+        assert!(
+            graph.is_empty(),
+            "builder with no entries should produce an empty graph"
+        );
+    }
+
+    // ── add_test_entries ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_test_entries_creates_test_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[
+            entry(&[
+                ("name", "tests/test_foo.py::test_bar"),
+                ("source", "tests/test_foo.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+            entry(&[
+                ("name", "tests/test_foo.py::test_baz"),
+                ("source", "tests/test_foo.py"),
+                ("async", "true"),
+                ("mark", "slow"),
+            ]),
+        ]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.tests.len(),
+            2,
+            "two test entries should produce two test nodes"
+        );
+        assert_eq!(
+            graph.tests[0].node_id, "tests/test_foo.py::test_bar",
+            "first test node_id should match entry name"
+        );
+        assert!(!graph.tests[0].is_async, "first test should not be async");
+        assert!(graph.tests[1].is_async, "second test should be async");
+    }
+
+    // ── add_fixture_entries ──────────────────────────────────────────────
+
+    #[test]
+    fn add_fixture_entries_creates_fixture_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "tests/conftest.py"),
+            ("type", "fixture"),
+            ("scope", "session"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", "Database fixture"),
+        ])]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.fixtures.len(),
+            1,
+            "one fixture entry should produce one fixture node"
+        );
+        assert_eq!(
+            graph.fixtures[0].name, "db",
+            "fixture name should match entry"
+        );
+        assert_eq!(
+            graph.fixtures[0].scope, "session",
+            "fixture scope should match entry"
+        );
+        assert_eq!(
+            graph.fixtures[0].description, "Database fixture",
+            "fixture description should match entry"
+        );
+    }
+
+    // ── add_helper_entries ───────────────────────────────────────────────
+
+    #[test]
+    fn add_helper_entries_creates_helper_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_helper_entries(&[entry(&[
+            ("name", "make_db"),
+            ("source", "tests/conftest.py"),
+            ("docstring", "Create a test database."),
+            ("signature", "make_db(name: str)"),
+        ])]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.helpers.len(),
+            1,
+            "one helper entry should produce one helper node"
+        );
+        assert_eq!(
+            graph.helpers[0].name, "make_db",
+            "helper name should match entry"
+        );
+        assert_eq!(
+            graph.helpers[0].docstring,
+            Some("Create a test database.".to_string()),
+            "helper docstring should be populated from entry"
+        );
+        assert_eq!(
+            graph.helpers[0].signature, "make_db(name: str)",
+            "helper signature should match entry"
+        );
+    }
+
+    #[test]
+    fn add_helper_entries_empty_docstring_becomes_none() {
+        let mut builder = GraphBuilder::new();
+        builder.add_helper_entries(&[entry(&[
+            ("name", "helper_fn"),
+            ("source", "conftest.py"),
+            ("docstring", ""),
+            ("signature", "helper_fn()"),
+        ])]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.helpers[0].docstring, None,
+            "empty docstring string should be stored as None"
+        );
+    }
+
+    // ── add_mark_entries ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_mark_entries_creates_mark_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_mark_entries(&[
+            entry(&[("name", "slow"), ("used_in", "tests/test_a.py")]),
+            entry(&[("name", "integration"), ("used_in", "")]),
+        ]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.marks.len(),
+            2,
+            "two mark entries should produce two mark nodes"
+        );
+        assert_eq!(
+            graph.marks[0].name, "slow",
+            "first mark name should match entry"
+        );
+        assert_eq!(
+            graph.marks[1].name, "integration",
+            "second mark name should match entry"
+        );
+    }
+
+    // ── add_plugin_entries ───────────────────────────────────────────────
+
+    #[test]
+    fn add_plugin_entries_creates_plugin_nodes() {
+        let mut builder = GraphBuilder::new();
+        builder.add_plugin_entries(&[entry(&[
+            ("name", "capture"),
+            ("protocol", "CollectorProvider,ReporterProvider"),
+        ])]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.plugins.len(),
+            1,
+            "one plugin entry should produce one plugin node"
+        );
+        assert_eq!(
+            graph.plugins[0].name, "capture",
+            "plugin name should match entry"
+        );
+        assert_eq!(
+            graph.plugins[0].protocols,
+            vec!["CollectorProvider", "ReporterProvider"],
+            "plugin protocols should be split from comma-separated entry"
+        );
+    }
+
+    // ── Edge resolution ──────────────────────────────────────────────────
+
+    #[test]
+    fn resolve_edges_wires_fixture_to_conftest() {
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "tests/conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert!(
+            graph.fixtures[0].conftest_idx.is_some(),
+            "fixture from conftest should have conftest_idx set"
+        );
+        let conftest_idx = graph.fixtures[0].conftest_idx.unwrap();
+        assert_eq!(
+            graph.conftests[conftest_idx].path, "tests/conftest.py",
+            "conftest node should have matching path"
+        );
+        assert!(
+            graph.conftests[conftest_idx].fixtures.contains(&0),
+            "conftest should reference the fixture in its fixtures list"
+        );
+    }
+
+    #[test]
+    fn resolve_edges_wires_fixture_to_plugin() {
+        let mut builder = GraphBuilder::new();
+        builder.add_plugin_entries(&[entry(&[("name", "capture"), ("protocol", "")])]);
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "std_capture"),
+            ("source", "<plugin:capture>"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.fixtures[0].plugin_idx,
+            Some(0),
+            "fixture from plugin should have plugin_idx set"
+        );
+        assert!(
+            graph.plugins[0].fixtures.contains(&0),
+            "plugin should reference the fixture in its fixtures list"
+        );
+    }
+
+    #[test]
+    fn resolve_edges_wires_helper_to_conftest() {
+        let mut builder = GraphBuilder::new();
+        builder.add_helper_entries(&[entry(&[
+            ("name", "make_thing"),
+            ("source", "tests/conftest.py"),
+            ("docstring", ""),
+            ("signature", "make_thing()"),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.conftests.len(),
+            1,
+            "helper source should create a conftest node"
+        );
+        assert!(
+            graph.conftests[0].helpers.contains(&0),
+            "conftest should reference the helper in its helpers list"
+        );
+    }
+
+    #[test]
+    fn resolve_edges_parametrize_grouping() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[
+            entry(&[
+                ("name", "test_foo.py::test_add[1]"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+            entry(&[
+                ("name", "test_foo.py::test_add[2]"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+            entry(&[
+                ("name", "test_foo.py::test_add[3]"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+            entry(&[
+                ("name", "test_foo.py::test_solo"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+        ]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Parametrized tests should be grouped.
+        assert_eq!(
+            graph.tests[0].param_count, 3,
+            "parametrized test with 3 variants should have param_count = 3"
+        );
+        assert_eq!(
+            graph.tests[0].param_id,
+            Some("1".to_string()),
+            "first variant should have param_id '1'"
+        );
+        assert_eq!(
+            graph.tests[0].variants.len(),
+            2,
+            "first variant should list 2 sibling variants (excluding self)"
+        );
+
+        // Non-parametrized test should have no group data.
+        assert_eq!(
+            graph.tests[3].param_count, 0,
+            "non-parametrized test should have param_count = 0"
+        );
+        assert!(
+            graph.tests[3].param_id.is_none(),
+            "non-parametrized test should have no param_id"
+        );
+        assert!(
+            graph.tests[3].variants.is_empty(),
+            "non-parametrized test should have no variants"
+        );
+    }
+
+    #[test]
+    fn resolve_edges_wires_test_to_mark() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[
+            entry(&[
+                ("name", "test_foo.py::test_bar"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", "slow,integration"),
+            ]),
+            entry(&[
+                ("name", "test_foo.py::test_baz"),
+                ("source", "test_foo.py"),
+                ("async", "false"),
+                ("mark", "slow"),
+            ]),
+        ]);
+        builder.add_mark_entries(&[
+            entry(&[("name", "slow"), ("used_in", "test_foo.py")]),
+            entry(&[("name", "integration"), ("used_in", "test_foo.py")]),
+        ]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // test_bar should have 2 marks (slow, integration)
+        assert_eq!(
+            graph.tests[0].marks.len(),
+            2,
+            "test with 'slow,integration' mark field should have 2 mark edges"
+        );
+        // test_baz should have 1 mark (slow)
+        assert_eq!(
+            graph.tests[1].marks.len(),
+            1,
+            "test with 'slow' mark field should have 1 mark edge"
+        );
+        // Mark 'slow' should be used_by 2 tests
+        let slow_idx = graph.tests[0].marks[0];
+        assert_eq!(
+            graph.marks[slow_idx].used_by.len(),
+            2,
+            "mark 'slow' should be used_by both tests"
+        );
+    }
+
+    #[test]
+    fn resolve_edges_creates_mark_if_not_already_added() {
+        let mut builder = GraphBuilder::new();
+        // Add test with mark but don't add_mark_entries for it.
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_foo.py::test_bar"),
+            ("source", "test_foo.py"),
+            ("async", "false"),
+            ("mark", "custom_mark"),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.marks.len(),
+            1,
+            "resolve_edges should auto-create mark nodes for marks referenced by tests"
+        );
+        assert_eq!(
+            graph.marks[0].name, "custom_mark",
+            "auto-created mark should have the correct name"
+        );
+        assert_eq!(
+            graph.marks[0].used_by.len(),
+            1,
+            "auto-created mark should track its consumer test"
+        );
+    }
+
+    // ── Deduplication ────────────────────────────────────────────────────
+
+    #[test]
+    fn deduplication_by_name() {
+        let mut builder = GraphBuilder::new();
+        let fx_entry = entry(&[
+            ("name", "db"),
+            ("source", "tests/conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ]);
+        builder.add_fixture_entries(&[fx_entry.clone(), fx_entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.fixtures.len(),
+            1,
+            "adding the same fixture twice should not create duplicates"
+        );
+    }
+
+    #[test]
+    fn deduplication_test_by_node_id() {
+        let mut builder = GraphBuilder::new();
+        let test_entry = entry(&[
+            ("name", "test_foo.py::test_bar"),
+            ("source", "test_foo.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ]);
+        builder.add_test_entries(&[test_entry.clone(), test_entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.tests.len(),
+            1,
+            "adding the same test twice should not create duplicates"
+        );
+    }
+
+    #[test]
+    fn deduplication_mark_by_name() {
+        let mut builder = GraphBuilder::new();
+        let mark_entry = entry(&[("name", "slow"), ("used_in", "test_a.py")]);
+        builder.add_mark_entries(&[mark_entry.clone(), mark_entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.marks.len(),
+            1,
+            "adding the same mark twice should not create duplicates"
+        );
+    }
+
+    #[test]
+    fn deduplication_helper_by_name_and_source() {
+        let mut builder = GraphBuilder::new();
+        let helper_entry = entry(&[
+            ("name", "make_db"),
+            ("source", "tests/conftest.py"),
+            ("docstring", ""),
+            ("signature", "make_db()"),
+        ]);
+        builder.add_helper_entries(&[helper_entry.clone(), helper_entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.helpers.len(),
+            1,
+            "adding the same helper (name+source) twice should not create duplicates"
+        );
+    }
+
+    #[test]
+    fn deduplication_plugin_by_name() {
+        let mut builder = GraphBuilder::new();
+        let plugin_entry = entry(&[("name", "capture"), ("protocol", "")]);
+        builder.add_plugin_entries(&[plugin_entry.clone(), plugin_entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.plugins.len(),
+            1,
+            "adding the same plugin twice should not create duplicates"
+        );
+    }
+
+    // ── Conftest auto-creation ───────────────────────────────────────────
+
+    #[test]
+    fn helpers_from_same_conftest_share_conftest_node() {
+        let mut builder = GraphBuilder::new();
+        builder.add_helper_entries(&[
+            entry(&[
+                ("name", "helper_a"),
+                ("source", "tests/conftest.py"),
+                ("docstring", ""),
+                ("signature", "helper_a()"),
+            ]),
+            entry(&[
+                ("name", "helper_b"),
+                ("source", "tests/conftest.py"),
+                ("docstring", ""),
+                ("signature", "helper_b()"),
+            ]),
+        ]);
+        builder.resolve_edges();
+        let graph = builder.build();
+        assert_eq!(
+            graph.conftests.len(),
+            1,
+            "two helpers from the same conftest should share one conftest node"
+        );
+        assert_eq!(
+            graph.conftests[0].helpers.len(),
+            2,
+            "shared conftest should reference both helpers"
+        );
+    }
+
+    #[test]
+    fn fixture_plugin_source_does_not_create_conftest() {
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "std_capture"),
+            ("source", "<plugin:capture>"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+        assert!(
+            graph.fixtures[0].conftest_idx.is_none(),
+            "plugin-sourced fixture should not have conftest_idx"
+        );
+    }
+}

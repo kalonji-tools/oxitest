@@ -4,6 +4,7 @@ use crossterm::event::{self, Event};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
+use super::graph::InspectGraph;
 use super::input;
 use super::search::NodeRef;
 use super::ui;
@@ -83,17 +84,21 @@ pub(crate) struct InspectApp {
     pub(crate) show_help: bool,
     /// Search state, populated when the user is in search mode.
     pub(crate) search: SearchState,
+    /// The inspect graph, if loaded.  `None` while data is still being
+    /// collected (or if collection failed).
+    pub(crate) graph: Option<InspectGraph>,
 }
 
 impl InspectApp {
     /// Create a new `InspectApp` with default state.
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(graph: Option<InspectGraph>) -> Self {
         Self {
             should_quit: false,
             terminal_width: 0,
             input_mode: InputMode::Normal,
             show_help: false,
             search: SearchState::new(),
+            graph,
         }
     }
 
@@ -132,7 +137,7 @@ mod tests {
 
     #[test]
     fn new_app_starts_in_normal_mode() {
-        let app = InspectApp::new();
+        let app = InspectApp::new(None);
         assert_eq!(
             app.input_mode,
             InputMode::Normal,
@@ -147,7 +152,7 @@ mod tests {
 
     #[test]
     fn new_app_has_empty_search_state() {
-        let app = InspectApp::new();
+        let app = InspectApp::new(None);
         assert!(
             app.search.query.is_empty(),
             "search query should start empty"

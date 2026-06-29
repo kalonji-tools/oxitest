@@ -14,6 +14,7 @@ use ratatui::{
 };
 
 use super::app::{InputMode, InspectApp};
+use super::graph::NodeKind;
 
 // ── Terminal lifecycle ───────────────────────────────────────────────────────
 
@@ -92,9 +93,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     // Main panes
     let panes = main_layout(app.terminal_width, main_area);
 
-    // Left pane — tree browser (placeholder)
+    // Left pane — tree browser
     let left_block = Block::default().borders(Borders::ALL).title(" Tree ");
-    let left_content = Paragraph::new("No data loaded").block(left_block);
+    let left_text = build_tree_content(app);
+    let left_content = Paragraph::new(left_text).block(left_block);
     frame.render_widget(left_content, panes[0]);
 
     // Right pane — detail view (placeholder, only if two-pane layout)
@@ -111,6 +113,33 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     // Help overlay
     if app.show_help {
         draw_help_overlay(frame, size);
+    }
+}
+
+/// Build the left pane content: node counts when a graph is loaded,
+/// or a placeholder message otherwise.
+fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
+    match &app.graph {
+        Some(graph) if !graph.is_empty() => {
+            let kinds = [
+                (NodeKind::Test, "Tests"),
+                (NodeKind::Fixture, "Fixtures"),
+                (NodeKind::Mark, "Marks"),
+                (NodeKind::Conftest, "Conftests"),
+                (NodeKind::Plugin, "Plugins"),
+                (NodeKind::Helper, "Helpers"),
+            ];
+            kinds
+                .iter()
+                .filter(|(kind, _)| graph.node_count(*kind) > 0)
+                .map(|(kind, label)| {
+                    let sigil = kind.sigil();
+                    let count = graph.node_count(*kind);
+                    Line::from(format!(" {sigil}  {label} ({count})"))
+                })
+                .collect()
+        }
+        _ => vec![Line::from("No data loaded")],
     }
 }
 
@@ -319,14 +348,14 @@ mod snapshot_tests {
 
     #[test]
     fn snap_wide_layout_renders_two_panes() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 120;
         assert_snapshot!("wide_layout_two_panes", render_to_string(&app, 120, 24));
     }
 
     #[test]
     fn snap_narrow_layout_renders_adjusted_split() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 90;
         assert_snapshot!(
             "narrow_layout_adjusted_split",
@@ -336,7 +365,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_single_pane_layout() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 60;
         assert_snapshot!("single_pane_layout", render_to_string(&app, 60, 24));
     }
@@ -345,7 +374,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_footer_normal_mode() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 80;
         // Height must be >= 4 so footer row is visible (Min(3) main + Length(1) footer).
         assert_snapshot!("footer_normal_mode", render_to_string(&app, 80, 4));
@@ -353,7 +382,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_footer_search_mode() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 80;
         app.input_mode = InputMode::Search {
             query: String::new(),
@@ -363,7 +392,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_search_query_displayed() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 80;
         app.input_mode = InputMode::Search {
             query: "test_foo".to_string(),
@@ -375,7 +404,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_help_overlay_visible() {
-        let mut app = InspectApp::new();
+        let mut app = InspectApp::new(None);
         app.terminal_width = 120;
         app.show_help = true;
         assert_snapshot!("help_overlay_visible", render_to_string(&app, 120, 24));
