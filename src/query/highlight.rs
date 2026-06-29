@@ -1,4 +1,4 @@
-//! Lexer-driven Python source highlighting for query inspect previews.
+//! Lexer-driven Python source highlighting for query detail previews.
 //!
 //! Uses `rustpython_parser::lexer::lex` to tokenize Python source and maps
 //! each token type to a color function. Gaps between tokens (whitespace,

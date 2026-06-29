@@ -40,12 +40,12 @@ def test_plugins_with_configured_plugin(tmp: TempDir):
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "my_plugin")
-    # Protocol details are in the inspect card
+    # Protocol details are in the detail card
     out2, _, rc2 = helpers.common.run_oxitest_subcmd(
         tmp,
         "query",
         "plugins",
-        "--inspect",
+        "--detail",
         "my_plugin",
         cwd=".",
     )

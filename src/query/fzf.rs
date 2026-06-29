@@ -58,7 +58,7 @@ pub(crate) fn run_fzf(
     // 3. Build fzf command with preview and keybindings
     let resource_str = args.resource.as_str();
     let preview_cmd = format!(
-        "oxitest query {} --inspect {{1}} --color always",
+        "oxitest query {} --detail {{1}} --color always",
         resource_str
     );
 

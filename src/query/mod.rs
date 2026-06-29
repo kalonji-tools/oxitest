@@ -1,12 +1,12 @@
 pub(crate) mod ast;
 pub(crate) mod bridge;
 pub(crate) mod compile;
+pub(crate) mod detail;
 pub(crate) mod eval;
 pub(crate) mod extract;
 pub(crate) mod format;
 pub(crate) mod fzf;
 pub(crate) mod highlight;
-pub(crate) mod inspect;
 pub(crate) mod resource;
 
 use crate::config;
@@ -114,7 +114,7 @@ fn extract_plugin_entries(
 /// Run a query and return the formatted output string.
 ///
 /// Handles the full pipeline: collect entries, parse/validate/apply DSL filter,
-/// handle --inspect, --count, --format, and default columnar output.
+/// handle --detail, --count, --format, and default columnar output.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_query(
     py: pyo3::Python<'_>,
@@ -143,13 +143,13 @@ pub(crate) fn run_query(
         entries.retain(|e| eval::eval(expr, e));
     }
 
-    // 3. Handle --inspect
-    if let Some(ref id) = args.inspect {
+    // 3. Handle --detail
+    if let Some(ref id) = args.detail {
         let found = entries
             .iter()
             .find(|e| e.get("name").is_some_and(|n| n.contains(id.as_str())));
         return match found {
-            Some(entry) => Ok(inspect::format_inspect(entry, args.resource, use_color)),
+            Some(entry) => Ok(detail::format_detail(entry, args.resource, use_color)),
             None => Err(format!("no {} matching '{id}'", args.resource.as_str())),
         };
     }

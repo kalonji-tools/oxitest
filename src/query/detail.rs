@@ -1,6 +1,6 @@
-//! Single-item inspect card formatter for the unified query system.
+//! Single-item detail card formatter for the unified query system.
 //!
-//! [`format_inspect`] renders a detailed card for one [`QueryEntry`],
+//! [`format_detail`] renders a detailed card for one [`QueryEntry`],
 //! showing resource-specific fields in a human-readable layout.
 
 use crate::colors::{color_blue, color_bold_cyan, color_dim, color_dim_green};
@@ -21,9 +21,9 @@ fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
     }
 }
 
-// ── format_inspect ────────────────────────────────────────────────────────────
+// ── format_detail ────────────────────────────────────────────────────────────
 
-/// Render a single-item inspect card for `entry`.
+/// Render a single-item detail card for `entry`.
 ///
 /// Output layout:
 /// ```text
@@ -36,11 +36,7 @@ fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
 ///
 /// Fields that are absent or empty in the entry are skipped.
 /// If a `_source_code` field is present it is appended after a blank line.
-pub(crate) fn format_inspect(
-    entry: &QueryEntry,
-    resource: ResourceKind,
-    use_color: bool,
-) -> String {
+pub(crate) fn format_detail(entry: &QueryEntry, resource: ResourceKind, use_color: bool) -> String {
     let name = entry.get("name").unwrap_or("<unknown>");
     let mut out = format!(
         "{} {} {}\n\n",
@@ -214,14 +210,14 @@ mod tests {
     }
 
     #[test]
-    fn inspect_test_entry() {
+    fn detail_test_entry() {
         let e = entry(&[
             ("name", "test_foo"),
             ("source", "tests/test_a.py"),
             ("mark", "slow"),
             ("async", "false"),
         ]);
-        let out = format_inspect(&e, ResourceKind::Tests, false);
+        let out = format_detail(&e, ResourceKind::Tests, false);
         assert!(out.contains("─── test_foo ───"), "header missing: {out:?}");
         assert!(out.contains("source:"), "source field missing: {out:?}");
         assert!(
@@ -233,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn inspect_fixture_entry() {
+    fn detail_fixture_entry() {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "conftest.py"),
@@ -241,7 +237,7 @@ mod tests {
             ("autouse", "true"),
             ("async", "false"),
         ]);
-        let out = format_inspect(&e, ResourceKind::Fixtures, false);
+        let out = format_detail(&e, ResourceKind::Fixtures, false);
         assert!(out.contains("shared:"), "shared field missing: {out:?}");
         assert!(out.contains("true"), "shared value missing: {out:?}");
         assert!(out.contains("autouse:"), "autouse field missing: {out:?}");
@@ -249,10 +245,10 @@ mod tests {
     }
 
     #[test]
-    fn inspect_missing_fields_skipped() {
+    fn detail_missing_fields_skipped() {
         // Entry with only a name — no other fields should appear
         let e = entry(&[("name", "test_bare")]);
-        let out = format_inspect(&e, ResourceKind::Tests, false);
+        let out = format_detail(&e, ResourceKind::Tests, false);
         assert!(
             out.starts_with("─── test_bare ───"),
             "header wrong: {out:?}"
@@ -266,18 +262,18 @@ mod tests {
     // ── Snapshot tests ────────────────────────────────────────────────────────
 
     #[test]
-    fn snap_inspect_test_entry() {
+    fn snap_detail_test_entry() {
         let e = entry(&[
             ("name", "test_network_call"),
             ("source", "tests/test_api.py"),
             ("mark", "slow,network"),
             ("async", "true"),
         ]);
-        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Tests, false));
+        insta::assert_snapshot!(format_detail(&e, ResourceKind::Tests, false));
     }
 
     #[test]
-    fn snap_inspect_fixture_entry() {
+    fn snap_detail_fixture_entry() {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "conftest.py"),
@@ -285,11 +281,11 @@ mod tests {
             ("autouse", "true"),
             ("async", "false"),
         ]);
-        insta::assert_snapshot!(format_inspect(&e, ResourceKind::Fixtures, false));
+        insta::assert_snapshot!(format_detail(&e, ResourceKind::Fixtures, false));
     }
 
     #[test]
-    fn snap_inspect_test_entry_colored() {
+    fn snap_detail_test_entry_colored() {
         let e = entry(&[
             ("name", "test_network_call"),
             ("source", "tests/test_api.py"),
@@ -297,13 +293,13 @@ mod tests {
             ("async", "true"),
         ]);
         console::set_colors_enabled(true);
-        let result = format_inspect(&e, ResourceKind::Tests, true);
+        let result = format_detail(&e, ResourceKind::Tests, true);
         console::set_colors_enabled(false);
         insta::assert_snapshot!(result);
     }
 
     #[test]
-    fn snap_inspect_fixture_entry_colored() {
+    fn snap_detail_fixture_entry_colored() {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "conftest.py"),
@@ -312,7 +308,7 @@ mod tests {
             ("async", "false"),
         ]);
         console::set_colors_enabled(true);
-        let result = format_inspect(&e, ResourceKind::Fixtures, true);
+        let result = format_detail(&e, ResourceKind::Fixtures, true);
         console::set_colors_enabled(false);
         insta::assert_snapshot!(result);
     }

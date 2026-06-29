@@ -105,8 +105,8 @@ def test_heavy():
     helpers.integ.assert_contains(out, "slow")
 
 
-def test_query_inspect_single(tmp: TempDir):
-    """``query tests --inspect test_one`` shows a detail card."""
+def test_query_detail_single(tmp: TempDir):
+    """``query tests --detail test_one`` shows a detail card."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -114,7 +114,7 @@ def test_query_inspect_single(tmp: TempDir):
         },
     )
     out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "--inspect", "test_one"
+        tmp, "query", "tests", "--detail", "test_one"
     )
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "test_one")
@@ -152,7 +152,7 @@ def test_query_helpers(tmp: TempDir):
 
 
 def test_query_helpers_shows_docstring(tmp: TempDir):
-    """``query helpers --inspect`` includes helper docstrings."""
+    """``query helpers --detail`` includes helper docstrings."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -165,14 +165,14 @@ def test_query_helpers_shows_docstring(tmp: TempDir):
         """,
     )
     out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "helpers", "--inspect", "make_db"
+        tmp, "query", "helpers", "--detail", "make_db"
     )
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "Create a test database.")
 
 
 def test_query_fixtures_shows_docstring(tmp: TempDir):
-    """``query fixtures --inspect`` includes fixture docstrings."""
+    """``query fixtures --detail`` includes fixture docstrings."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -195,7 +195,7 @@ def test_query_fixtures_shows_docstring(tmp: TempDir):
         """,
     )
     out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "fixtures", "--inspect", "db"
+        tmp, "query", "fixtures", "--detail", "db"
     )
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "Provide a database connection.")

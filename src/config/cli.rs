@@ -434,7 +434,7 @@ EXAMPLES:
   oxitest query tests -E 'async() & !mark(skip)'
   oxitest query fixtures -E 'shared()'
   oxitest query tests --fzf                  Interactive fuzzy finder
-  oxitest query tests --inspect test_foo     Show details for test_foo
+  oxitest query tests --detail test_foo      Show details for test_foo
   oxitest query tests --format jsonl         JSON lines output
   oxitest query tests --count                Just the count\
 ")]
@@ -450,9 +450,9 @@ pub struct QueryArgs {
     #[arg(long)]
     pub fzf: bool,
 
-    /// Inspect a single item by identifier
+    /// Show a single-item detail card for the given identifier
     #[arg(long, value_name = "ID")]
-    pub inspect: Option<String>,
+    pub detail: Option<String>,
 
     /// Output format
     #[arg(long, value_enum)]
@@ -835,14 +835,13 @@ mod tests {
     }
 
     #[test]
-    fn query_with_inspect() {
+    fn query_with_detail() {
         let (cmd, _) =
-            OxitestCli::resolve(&s(["oxitest", "query", "tests", "--inspect", "test_foo"]))
-                .unwrap();
+            OxitestCli::resolve(&s(["oxitest", "query", "tests", "--detail", "test_foo"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
-        assert_eq!(args.inspect.as_deref(), Some("test_foo"));
+        assert_eq!(args.detail.as_deref(), Some("test_foo"));
     }
 
     #[test]

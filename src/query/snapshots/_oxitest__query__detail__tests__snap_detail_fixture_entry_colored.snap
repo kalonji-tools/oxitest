@@ -1,5 +1,5 @@
 ---
-source: src/query/inspect.rs
+source: src/query/detail.rs
 expression: result
 ---
 [2m───[0m [36m[1mdb_session[0m [2m───[0m
