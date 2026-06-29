@@ -15,6 +15,7 @@ use ratatui::{
 
 use super::app::{InputMode, InspectApp};
 use super::graph::NodeKind;
+use super::nav::{HOME_KINDS, NavScreen};
 
 // ── Terminal lifecycle ───────────────────────────────────────────────────────
 
@@ -94,7 +95,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     let panes = main_layout(app.terminal_width, main_area);
 
     // Left pane — tree browser
-    let left_block = Block::default().borders(Borders::ALL).title(" Tree ");
+    let left_title = pane_title(app);
+    let left_block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {left_title} "));
     let left_text = build_tree_content(app);
     let left_content = Paragraph::new(left_text).block(left_block);
     frame.render_widget(left_content, panes[0]);
@@ -116,31 +120,124 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     }
 }
 
-/// Build the left pane content: node counts when a graph is loaded,
-/// or a placeholder message otherwise.
-fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
-    match &app.graph {
-        Some(graph) if !graph.is_empty() => {
-            let kinds = [
-                (NodeKind::Test, "Tests"),
-                (NodeKind::Fixture, "Fixtures"),
-                (NodeKind::Mark, "Marks"),
-                (NodeKind::Conftest, "Conftests"),
-                (NodeKind::Plugin, "Plugins"),
-                (NodeKind::Helper, "Helpers"),
-            ];
-            kinds
+/// Compute the left-pane title based on the current navigation screen.
+fn pane_title(app: &InspectApp) -> String {
+    match app.nav.current() {
+        NavScreen::Home { .. } => "Home".to_string(),
+        NavScreen::NodeList { kind, .. } => {
+            // Find the display label for this kind.
+            HOME_KINDS
                 .iter()
-                .filter(|(kind, _)| graph.node_count(*kind) > 0)
-                .map(|(kind, label)| {
-                    let sigil = kind.sigil();
-                    let count = graph.node_count(*kind);
-                    Line::from(format!(" {sigil}  {label} ({count})"))
-                })
-                .collect()
+                .find(|(k, _)| *k == *kind)
+                .map(|(_, label)| label.to_string())
+                .unwrap_or_else(|| format!("{kind:?}"))
         }
-        _ => vec![Line::from("No data loaded")],
+        NavScreen::NodeDetail { node } => match &app.graph {
+            Some(g) => format!("{} {}", node.kind.sigil(), g.node_name(node)),
+            None => "Detail".to_string(),
+        },
+        NavScreen::Disambiguation { query, .. } => {
+            format!("Jump: {query}")
+        }
     }
+}
+
+/// Build the left pane content based on the current navigation screen.
+fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
+    let graph = match &app.graph {
+        Some(g) if !g.is_empty() => g,
+        _ => return vec![Line::from("No data loaded")],
+    };
+
+    match app.nav.current() {
+        NavScreen::Home { selected } => build_home_content(graph, *selected),
+        NavScreen::NodeList { kind, selected } => build_node_list_content(graph, *kind, *selected),
+        NavScreen::NodeDetail { node } => {
+            // Placeholder until #1117 implements full detail view.
+            let name = graph.node_name(node);
+            let sigil = node.kind.sigil();
+            vec![
+                Line::from(format!(" {sigil}  {name}")),
+                Line::from(""),
+                Line::from(" (detail view coming in #1117)"),
+            ]
+        }
+        NavScreen::Disambiguation {
+            matches, selected, ..
+        } => build_disambiguation_content(graph, matches, *selected),
+    }
+}
+
+/// Render the Home screen: one line per non-empty node kind.
+fn build_home_content(graph: &super::graph::InspectGraph, selected: usize) -> Vec<Line<'static>> {
+    HOME_KINDS
+        .iter()
+        .filter(|(kind, _)| graph.node_count(*kind) > 0)
+        .enumerate()
+        .map(|(idx, (kind, label))| {
+            let sigil = kind.sigil();
+            let count = graph.node_count(*kind);
+            let text = format!(" {sigil}  {label} ({count})");
+            if idx == selected {
+                Line::from(Span::styled(
+                    text,
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(text)
+            }
+        })
+        .collect()
+}
+
+/// Render a NodeList screen: one line per node of the given kind.
+fn build_node_list_content(
+    graph: &super::graph::InspectGraph,
+    kind: NodeKind,
+    selected: usize,
+) -> Vec<Line<'static>> {
+    let count = graph.node_count(kind);
+    let sigil = kind.sigil();
+    (0..count)
+        .map(|idx| {
+            let node_ref = super::graph::NodeRef { kind, index: idx };
+            let name = graph.node_name(&node_ref);
+            let text = format!(" {sigil}  {name}");
+            if idx == selected {
+                Line::from(Span::styled(
+                    text,
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(text)
+            }
+        })
+        .collect()
+}
+
+/// Render a Disambiguation screen: one line per matching node.
+fn build_disambiguation_content(
+    graph: &super::graph::InspectGraph,
+    matches: &[super::graph::NodeRef],
+    selected: usize,
+) -> Vec<Line<'static>> {
+    matches
+        .iter()
+        .enumerate()
+        .map(|(idx, node_ref)| {
+            let sigil = node_ref.kind.sigil();
+            let name = graph.node_name(node_ref);
+            let text = format!(" {sigil}  {name}");
+            if idx == selected {
+                Line::from(Span::styled(
+                    text,
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(text)
+            }
+        })
+        .collect()
 }
 
 /// Build the footer bar with context-sensitive keybinding hints.
@@ -348,14 +445,14 @@ mod snapshot_tests {
 
     #[test]
     fn snap_wide_layout_renders_two_panes() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 120;
         assert_snapshot!("wide_layout_two_panes", render_to_string(&app, 120, 24));
     }
 
     #[test]
     fn snap_narrow_layout_renders_adjusted_split() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 90;
         assert_snapshot!(
             "narrow_layout_adjusted_split",
@@ -365,7 +462,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_single_pane_layout() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 60;
         assert_snapshot!("single_pane_layout", render_to_string(&app, 60, 24));
     }
@@ -374,7 +471,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_footer_normal_mode() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 80;
         // Height must be >= 4 so footer row is visible (Min(3) main + Length(1) footer).
         assert_snapshot!("footer_normal_mode", render_to_string(&app, 80, 4));
@@ -382,7 +479,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_footer_search_mode() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 80;
         app.input_mode = InputMode::Search {
             query: String::new(),
@@ -392,7 +489,7 @@ mod snapshot_tests {
 
     #[test]
     fn snap_search_query_displayed() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 80;
         app.input_mode = InputMode::Search {
             query: "test_foo".to_string(),
@@ -404,9 +501,94 @@ mod snapshot_tests {
 
     #[test]
     fn snap_help_overlay_visible() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.terminal_width = 120;
         app.show_help = true;
         assert_snapshot!("help_overlay_visible", render_to_string(&app, 120, 24));
+    }
+
+    // ── Navigation screen snapshots ─────────────────────────────────────
+
+    use crate::inspect::graph::InspectGraph;
+    use crate::inspect::graph::nodes::{MarkNode, TestNode};
+
+    /// Build a graph with 3 tests and 1 mark for snapshot tests.
+    fn snapshot_graph() -> InspectGraph {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_login".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_logout".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_db.py::test_connect".to_string(),
+            is_async: true,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.marks.push(MarkNode {
+            name: "slow".to_string(),
+            used_by: vec![0],
+        });
+        graph
+    }
+
+    #[test]
+    fn snap_home_screen_with_graph() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        assert_snapshot!("home_screen_with_graph", render_to_string(&app, 80, 12));
+    }
+
+    #[test]
+    fn snap_home_screen_cursor_on_second() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        if let NavScreen::Home { selected } = app.nav.current_mut() {
+            *selected = 1;
+        }
+        assert_snapshot!("home_screen_cursor_second", render_to_string(&app, 80, 12));
+    }
+
+    #[test]
+    fn snap_node_list_tests() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        app.nav.push(super::NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0,
+        });
+        assert_snapshot!("node_list_tests", render_to_string(&app, 80, 12));
+    }
+
+    #[test]
+    fn snap_node_list_cursor_moved() {
+        let graph = snapshot_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        app.nav.push(super::NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 2,
+        });
+        assert_snapshot!("node_list_cursor_moved", render_to_string(&app, 80, 12));
     }
 }

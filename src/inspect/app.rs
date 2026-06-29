@@ -6,6 +6,7 @@ use ratatui::backend::CrosstermBackend;
 
 use super::graph::InspectGraph;
 use super::input;
+use super::nav::{self, NavStack};
 use super::search::NodeRef;
 use super::ui;
 
@@ -87,11 +88,23 @@ pub(crate) struct InspectApp {
     /// The inspect graph, if loaded.  `None` while data is still being
     /// collected (or if collection failed).
     pub(crate) graph: Option<InspectGraph>,
+    /// Stack-based navigation state.
+    pub(crate) nav: NavStack,
 }
 
 impl InspectApp {
-    /// Create a new `InspectApp` with default state.
-    pub(crate) fn new(graph: Option<InspectGraph>) -> Self {
+    /// Create a new `InspectApp`.
+    ///
+    /// If `name` is provided and a graph is available, resolves it
+    /// against the graph for direct-jump navigation:
+    /// - 1 match: jumps straight to that node's kind list.
+    /// - N matches: opens a disambiguation screen.
+    /// - 0 matches: stays on the Home screen.
+    pub(crate) fn new(graph: Option<InspectGraph>, name: Option<&str>) -> Self {
+        let nav = match (&graph, name) {
+            (Some(g), Some(n)) => nav::resolve_direct_jump(g, n),
+            _ => NavStack::new(),
+        };
         Self {
             should_quit: false,
             terminal_width: 0,
@@ -99,6 +112,7 @@ impl InspectApp {
             show_help: false,
             search: SearchState::new(),
             graph,
+            nav,
         }
     }
 
@@ -137,7 +151,7 @@ mod tests {
 
     #[test]
     fn new_app_starts_in_normal_mode() {
-        let app = InspectApp::new(None);
+        let app = InspectApp::new(None, None);
         assert_eq!(
             app.input_mode,
             InputMode::Normal,
@@ -152,7 +166,7 @@ mod tests {
 
     #[test]
     fn new_app_has_empty_search_state() {
-        let app = InspectApp::new(None);
+        let app = InspectApp::new(None, None);
         assert!(
             app.search.query.is_empty(),
             "search query should start empty"
