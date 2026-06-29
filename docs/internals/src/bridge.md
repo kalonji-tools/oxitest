@@ -93,8 +93,8 @@ class CollectedItem:
     param_id: str | None
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
-    fixture_names: tuple[str, ...] = ()
-    fixref_names: tuple[str, ...] = ()
+    fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
+    fixref_deps: tuple[tuple[str, str], ...] = ()   # (qualifier, type_name)
 ```
 
 **Rust** (`src/bridge.rs`):
@@ -108,10 +108,15 @@ struct CollectedItem {
     param_id: Option<String>,
     param_values: Vec<(String, String)>,
     is_async: bool,
-    fixture_names: Vec<String>,
-    fixref_names: Vec<String>,
+    fixture_deps: Vec<(String, String)>,  // (qualifier, binding_type_name)
+    fixref_deps: Vec<(String, String)>,
 }
 ```
+
+Each `fixture_deps` entry is a `(qualifier, type_name)` pair — the parameter name
+(used as a qualifier for disambiguation) and the binding type name (the `T` from
+`Fixture[T]`). This replaced the earlier `fixture_names: Vec<String>` which only
+carried parameter names and excluded builtins.
 
 After extraction, Rust converts each `CollectedItem` into a `TestItem` in
 `collect_module_with_session_obj()`, computing the `NodeId` and copying fields
@@ -126,6 +131,7 @@ Strict-mode violations detected at collection time.
 ```python
 class ViolationKind(StrEnum):
     BARE_ASSERT = "bare_assert"
+    BROAD_FIXTURE_TYPE = "broad_fixture_type"
     DICT_PARAMETRIZE = "dict_parametrize"
     INVALID_MODULE_MARK = "invalid_module_mark"
     MISSING_MARK_REASON = "missing_mark_reason"

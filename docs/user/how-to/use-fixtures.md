@@ -26,20 +26,26 @@ def sample_data() -> list[int]:
 
 ## Inject a fixture into a test
 
-Annotate a test parameter with `Fixture[T]`. The annotation is the injection
-signal — unannotated parameters are **not** injected.
+Annotate a test parameter with `Fixture[T]`. Resolution is **type-based** — oxitest
+matches the `T` in `Fixture[T]` against fixture return types. The parameter name
+is just for readability.
 
 ```python
 # tests/test_example.py
-from conftest import sample_data
 from oxitest import Fixture
 
-def test_sum(sample_data: Fixture[list[int]]) -> None:
-    assert sum(sample_data) == 15
+def test_sum(data: Fixture[list[int]]) -> None:
+    assert sum(data) == 15
 ```
 
-Import the fixture function directly from `conftest`. Your type checker knows
-`sample_data` is `list[int]` — no plugin required.
+The parameter name `data` doesn't need to match the fixture name `sample_data` —
+oxitest finds the fixture by its return type `list[int]`.
+
+!!! info "Disambiguation"
+    If multiple fixtures return the same type, the parameter name acts as a
+    **qualifier** to disambiguate. For example, if both `dev_db` and `prod_db`
+    return `DBSession`, use `def test(dev_db: Fixture[DBSession])` to select
+    the right one.
 
 ## Fixture teardown
 

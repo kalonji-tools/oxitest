@@ -207,13 +207,14 @@ Fixture errors occur during fixture resolution or teardown.
 FixtureNotFoundError: no fixture named '<name>'
 ```
 
-**Cause:** A test parameter is annotated with `Fixture[T]` but no fixture with
-that name is registered -- neither in `conftest.py`, via a plugin
+**Cause:** A test parameter is annotated with `Fixture[T]` but no fixture
+with binding type `T` is registered — neither in `conftest.py`, via a plugin
 `FixtureProvider`, nor as a built-in fixture.
 
-**Fix:** Register the fixture with `@fixtures.fixture` in your `conftest.py`,
-check the spelling of the parameter name, or verify that the plugin providing
-the fixture is declared in `pyproject.toml`.
+**Fix:** Register a fixture that returns type `T` via `@fixtures.fixture` in
+your `conftest.py`, or verify that the plugin providing the fixture is declared
+in `pyproject.toml`. Check that the fixture has a return type annotation
+matching `T`.
 
 ---
 
@@ -248,6 +249,35 @@ def test_example(tmp: TempDir):
 ```
 
 If the parameter is not a fixture, remove it from the function signature.
+
+---
+
+```text
+AmbiguousFixtureError: ambiguous fixture: N fixtures provide type 'T': 'a', 'b'. Use the fixture name as the parameter name to disambiguate.
+```
+
+**Cause:** Multiple fixtures return the same binding type `T`, and the parameter
+name doesn't match any of them. oxitest can't determine which fixture to inject.
+
+**Fix:** Use the fixture name as the parameter name to disambiguate. For example,
+if `dev_db` and `prod_db` both return `DBSession`, write
+`def test(dev_db: Fixture[DBSession])` to select the right one.
+
+---
+
+```text
+BroadFixtureTypeError: parameter 'x' uses Fixture[Any] which is too broad for type-based resolution. Use a concrete binding type.
+```
+
+**Cause:** A parameter is annotated with `Fixture[Any]` or `Fixture[object]` in
+strict mode (`strict = "abort"`). Type-based resolution requires a concrete type.
+
+**Fix:** Replace the broad annotation with a specific type:
+`Fixture[DBSession]` instead of `Fixture[Any]`.
+
+!!! note
+    In non-strict mode, `Fixture[Any]` falls back to name-based resolution with
+    a deprecation warning. In `strict = "abort"` mode, it is a collection error.
 
 ---
 
