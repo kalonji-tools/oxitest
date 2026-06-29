@@ -1,15 +1,15 @@
 ---
-source: src/inspect/ui.rs
+source: src/inspect/detail.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
-"┌ Home ──────────────────────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
-"│No data loaded                              ││No data loaded                                                          │"
+"┌ M slow ────────────────────────────────────┐┌ Detail ────────────────────────────────────────────────────────────────┐"
+"│ M  slow                                    ││M slow                                                                  │"
 "│                                            ││                                                                        │"
+"│ (see detail pane)                          ││  used_by_count: 2                                                      │"
 "│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
-"│                                            ││                                                                        │"
+"│                                            ││  Used By                                                               │"
+"│                                            ││    T tests/test_a.py::test_one                                         │"
+"│                                            ││    T tests/test_b.py::test_two                                         │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"
 "│                                            ││                                                                        │"

@@ -14,6 +14,7 @@ use ratatui::{
 };
 
 use super::app::{InputMode, InspectApp};
+use super::detail;
 use super::graph::NodeKind;
 use super::nav::{HOME_KINDS, NavScreen};
 
@@ -103,10 +104,17 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     let left_content = Paragraph::new(left_text).block(left_block);
     frame.render_widget(left_content, panes[0]);
 
-    // Right pane — detail view (placeholder, only if two-pane layout)
+    // Right pane — detail view (only if two-pane layout)
     if panes.len() > 1 {
         let right_block = Block::default().borders(Borders::ALL).title(" Detail ");
-        let right_content = Paragraph::new("oxitest inspect").block(right_block);
+        let detail_lines = match (&app.graph, app.nav.current()) {
+            (Some(graph), NavScreen::NodeDetail { node }) => {
+                detail::render_detail(graph, Some(node))
+            }
+            (Some(graph), _) => detail::render_detail(graph, None),
+            (None, _) => vec![Line::from("No data loaded")],
+        };
+        let right_content = Paragraph::new(detail_lines).block(right_block);
         frame.render_widget(right_content, panes[1]);
     }
 
@@ -153,13 +161,12 @@ fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
         NavScreen::Home { selected } => build_home_content(graph, *selected),
         NavScreen::NodeList { kind, selected } => build_node_list_content(graph, *kind, *selected),
         NavScreen::NodeDetail { node } => {
-            // Placeholder until #1117 implements full detail view.
             let name = graph.node_name(node);
             let sigil = node.kind.sigil();
             vec![
                 Line::from(format!(" {sigil}  {name}")),
                 Line::from(""),
-                Line::from(" (detail view coming in #1117)"),
+                Line::from(" (see detail pane)"),
             ]
         }
         NavScreen::Disambiguation {

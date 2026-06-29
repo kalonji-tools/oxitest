@@ -4,6 +4,7 @@
 //! lets users browse tests, fixtures, marks, and other collected metadata.
 
 mod app;
+mod detail;
 pub(crate) mod graph;
 mod input;
 pub(crate) mod nav;
