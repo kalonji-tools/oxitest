@@ -3,6 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use super::app::{InputMode, InspectApp};
+use super::nav::{self, NavScreen};
 
 /// Process a key event and update application state.
 pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
@@ -40,13 +41,17 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
         // Quit
         KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
 
-        // Vertical movement (no-op until tree data is loaded)
-        KeyCode::Char('j') | KeyCode::Down => {}
-        KeyCode::Char('k') | KeyCode::Up => {}
+        // Vertical movement
+        KeyCode::Char('j') | KeyCode::Down => nav_cursor_down(app),
+        KeyCode::Char('k') | KeyCode::Up => nav_cursor_up(app),
 
-        // Horizontal navigation (no-op until tree data is loaded)
-        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {}
-        KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => {}
+        // Navigate into selected item
+        KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => nav_push(app),
+
+        // Navigate back
+        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
+            app.nav.pop();
+        }
 
         // Enter search mode
         KeyCode::Char('/') => {
@@ -120,6 +125,111 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
     }
 }
 
+// ── Navigation helpers ───────────────────────────────────────────────────────
+
+/// Move the cursor down on the current navigation screen.
+fn nav_cursor_down(app: &mut InspectApp) {
+    let max = screen_item_count(app);
+    if max == 0 {
+        return;
+    }
+    match app.nav.current_mut() {
+        NavScreen::Home { selected } => {
+            *selected = (*selected + 1) % max;
+        }
+        NavScreen::NodeList { selected, .. } => {
+            *selected = (*selected + 1) % max;
+        }
+        NavScreen::Disambiguation { selected, .. } => {
+            *selected = (*selected + 1) % max;
+        }
+        NavScreen::NodeDetail { .. } => {}
+    }
+}
+
+/// Move the cursor up on the current navigation screen.
+fn nav_cursor_up(app: &mut InspectApp) {
+    let max = screen_item_count(app);
+    if max == 0 {
+        return;
+    }
+    match app.nav.current_mut() {
+        NavScreen::Home { selected } => {
+            *selected = if *selected == 0 {
+                max - 1
+            } else {
+                *selected - 1
+            };
+        }
+        NavScreen::NodeList { selected, .. } => {
+            *selected = if *selected == 0 {
+                max - 1
+            } else {
+                *selected - 1
+            };
+        }
+        NavScreen::Disambiguation { selected, .. } => {
+            *selected = if *selected == 0 {
+                max - 1
+            } else {
+                *selected - 1
+            };
+        }
+        NavScreen::NodeDetail { .. } => {}
+    }
+}
+
+/// Push into the currently selected item on the navigation stack.
+fn nav_push(app: &mut InspectApp) {
+    let graph = match &app.graph {
+        Some(g) => g,
+        None => return,
+    };
+
+    match app.nav.current().clone() {
+        NavScreen::Home { selected } => {
+            if let Some(kind) = nav::visible_kind_at(graph, selected) {
+                app.nav.push(NavScreen::NodeList { kind, selected: 0 });
+            }
+        }
+        NavScreen::NodeList { kind, selected } => {
+            let count = graph.node_count(kind);
+            if selected < count {
+                let node = super::graph::NodeRef {
+                    kind,
+                    index: selected,
+                };
+                app.nav.push(NavScreen::NodeDetail { node });
+            }
+        }
+        NavScreen::Disambiguation {
+            matches, selected, ..
+        } => {
+            if let Some(node) = matches.get(selected) {
+                app.nav.push(NavScreen::NodeDetail { node: node.clone() });
+            }
+        }
+        NavScreen::NodeDetail { .. } => {
+            // No further drill-down from detail (yet).
+        }
+    }
+}
+
+/// Return the number of selectable items on the current screen.
+fn screen_item_count(app: &InspectApp) -> usize {
+    let graph = match &app.graph {
+        Some(g) => g,
+        None => return 0,
+    };
+
+    match app.nav.current() {
+        NavScreen::Home { .. } => nav::visible_kind_count(graph),
+        NavScreen::NodeList { kind, .. } => graph.node_count(*kind),
+        NavScreen::Disambiguation { matches, .. } => matches.len(),
+        NavScreen::NodeDetail { .. } => 0,
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -138,7 +248,7 @@ mod tests {
 
     #[test]
     fn input_key_q_sets_quit() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         handle_key(&mut app, key(KeyCode::Char('q')));
         assert!(
             app.should_quit,
@@ -148,7 +258,7 @@ mod tests {
 
     #[test]
     fn input_key_esc_sets_quit_in_normal() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         handle_key(&mut app, key(KeyCode::Esc));
         assert!(
             app.should_quit,
@@ -158,7 +268,7 @@ mod tests {
 
     #[test]
     fn input_key_slash_enters_search() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         handle_key(&mut app, key(KeyCode::Char('/')));
         assert_eq!(
             app.input_mode,
@@ -171,7 +281,7 @@ mod tests {
 
     #[test]
     fn input_key_esc_exits_search() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "foo".to_string(),
         };
@@ -189,7 +299,7 @@ mod tests {
 
     #[test]
     fn input_search_mode_appends_chars() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: String::new(),
         };
@@ -206,7 +316,7 @@ mod tests {
 
     #[test]
     fn input_search_mode_backspace_removes_char() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "abc".to_string(),
         };
@@ -222,7 +332,7 @@ mod tests {
 
     #[test]
     fn input_question_mark_toggles_help() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         assert!(!app.show_help, "help should start hidden");
         handle_key(&mut app, key(KeyCode::Char('?')));
         assert!(app.show_help, "pressing '?' should show help overlay");
@@ -235,7 +345,7 @@ mod tests {
 
     #[test]
     fn input_ctrl_c_quits_from_any_mode() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -251,7 +361,7 @@ mod tests {
 
     #[test]
     fn input_search_esc_clears_search_state() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -278,7 +388,7 @@ mod tests {
 
     #[test]
     fn input_search_syncs_query_to_search_state() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: String::new(),
         };
@@ -292,7 +402,7 @@ mod tests {
 
     #[test]
     fn input_search_backspace_syncs_query() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "abc".to_string(),
         };
@@ -306,7 +416,7 @@ mod tests {
 
     #[test]
     fn input_search_down_selects_next() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -323,7 +433,7 @@ mod tests {
 
     #[test]
     fn input_search_up_selects_prev() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -342,7 +452,7 @@ mod tests {
 
     #[test]
     fn input_search_enter_keeps_results() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.input_mode = InputMode::Search {
             query: "test".to_string(),
         };
@@ -362,7 +472,7 @@ mod tests {
 
     #[test]
     fn input_slash_resets_search_state() {
-        let mut app = InspectApp::new(None);
+        let mut app = InspectApp::new(None, None);
         app.search.query = "old".to_string();
         app.search.results = vec![super::super::search::NodeRef(0)];
         handle_key(&mut app, key(KeyCode::Char('/')));
