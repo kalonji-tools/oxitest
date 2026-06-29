@@ -16,14 +16,14 @@ def _write_project(tmp: TempDir) -> None:
     )
 
 
-def test_inspect_color_always_has_ansi(tmp: TempDir):
-    """--color always produces ANSI escape codes in inspect output."""
+def test_detail_color_always_has_ansi(tmp: TempDir):
+    """--color always produces ANSI escape codes in detail output."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",
-        "--inspect",
+        "--detail",
         "test_add",
         "--color",
         "always",
@@ -33,14 +33,14 @@ def test_inspect_color_always_has_ansi(tmp: TempDir):
     assert ANSI_ESCAPE in out, f"expected ANSI escapes in output: {out!r}"
 
 
-def test_inspect_color_never_no_ansi(tmp: TempDir):
+def test_detail_color_never_no_ansi(tmp: TempDir):
     """--color never produces no ANSI escape codes."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",
-        "--inspect",
+        "--detail",
         "test_add",
         "--color",
         "never",
@@ -50,14 +50,14 @@ def test_inspect_color_never_no_ansi(tmp: TempDir):
     assert ANSI_ESCAPE not in out, f"unexpected ANSI in output: {out!r}"
 
 
-def test_inspect_shows_source_with_highlighting(tmp: TempDir):
-    """Inspect card includes source code when --color always."""
+def test_detail_shows_source_with_highlighting(tmp: TempDir):
+    """Detail card includes source code when --color always."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",
-        "--inspect",
+        "--detail",
         "test_add",
         "--color",
         "always",

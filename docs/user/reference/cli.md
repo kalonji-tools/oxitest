@@ -150,7 +150,7 @@ These flags apply to all resources:
 |------|-------|------|---------|-------------|
 | `-E` | — | `EXPR` | — | DSL filter expression. See [Query DSL](#query-dsl). |
 | `--fzf` | — | flag | `false` | Open results in an interactive fuzzy-finder. For tests: Tab to multi-select, Enter to run selected, Ctrl-R to debug focused item. |
-| `--inspect` | — | `ID` | — | Show a single-item detail card for the given identifier. |
+| `--detail` | — | `ID` | — | Show a single-item detail card for the given identifier. |
 | `--format` | — | `jsonl` | — | Output as JSON Lines (one JSON object per result). |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
@@ -167,7 +167,7 @@ oxitest query tests [OPTIONS] [PATHS...]
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` shows marks and fixtures per test. `-vv` groups parametrize cases with expanded values. |
 | `--format` | — | `jsonl` | — | Output as JSON Lines. |
 | `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
-| `--inspect` | — | `ID` | — | Show detail card for a single test. |
+| `--detail` | — | `ID` | — | Show detail card for a single test. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 !!! tip
@@ -191,7 +191,7 @@ oxitest query fixtures [OPTIONS] [PATHS...]
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail). |
 | `--format` | — | `jsonl` | — | Output as JSON Lines. |
 | `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
-| `--inspect` | — | `ID` | — | Show detail card for a single fixture. |
+| `--detail` | — | `ID` | — | Show detail card for a single fixture. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 #### Fixture tree
