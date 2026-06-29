@@ -300,10 +300,10 @@ def oxitest_plugin(config=None):
 
 ### FixtureProvider
 
-Fixture providers inject custom fixtures into tests. The `name` property is the
-parameter name used in test functions. The `fixture_type` property is the type
-that `Fixture[T]` must match. `create()` builds the fixture value and
-`teardown()` cleans it up.
+Fixture providers inject custom fixtures into tests. The `name` property is a
+diagnostic name for error messages. The `fixture_type` property is the binding
+type — tests request the fixture via `Fixture[T]` where `T` matches
+`fixture_type`. `create()` builds the fixture value and `teardown()` cleans it up.
 
 **Signatures:**
 
@@ -317,7 +317,19 @@ class FixtureProvider(Protocol):
 
     def create(self, ctx: Any) -> object: ...
     def teardown(self, value: object) -> None: ...
+
+    # Optional — defaults via getattr if not implemented:
+    @property
+    def scope(self) -> str: ...    # "each" (default), "shared", or "session"
+
+    @property
+    def autouse(self) -> bool: ... # False (default)
 ```
+
+`scope` controls fixture lifetime: `"each"` (per-test, default), `"shared"`
+(per-module, FrozenProxy-wrapped), or `"session"` (per-process). `autouse`
+makes the fixture run for every test without explicit `Fixture[T]` annotation.
+Both are optional — existing plugins without these properties work unchanged.
 
 **Example** -- database connection pool:
 
@@ -366,7 +378,8 @@ def oxitest_plugin(config=None):
     return Plugin(fixture_providers=(PoolProvider(dsn),))
 ```
 
-Tests inject the fixture using the provider's `name` and `fixture_type`:
+Tests inject the fixture using the provider's `fixture_type` (the parameter name
+is just for readability — resolution is type-based):
 
 ```python
 from my_plugin import ConnectionPool
