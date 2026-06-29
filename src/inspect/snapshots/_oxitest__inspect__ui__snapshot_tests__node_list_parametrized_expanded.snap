@@ -1,13 +1,12 @@
 ---
 source: src/inspect/ui.rs
-assertion_line: 818
 expression: "render_to_string(&app, 80, 12)"
 ---
 "┌ Tests ───────────────────────────┐┌ Detail ──────────────────────────────────┐"
-"│ T  tests/test_auth.py::test_login││T tests/test_db.py::test_connect          │"
-"│ T  tests/test_auth.py::test_logou││                                          │"
-"│ T  tests/test_db.py::test_connect││  async: yes                              │"
-"│                                  ││                                          │"
+"│ T  tests/test_math.py::test_add (││T tests/test_math.py::test_add            │"
+"│     T  [1+2]                     ││                                          │"
+"│     T  [3+4]                     ││  variants: 3                             │"
+"│     T  [5+6]                     ││  async: no                               │"
 "│                                  ││                                          │"
 "│                                  ││                                          │"
 "│                                  ││                                          │"
