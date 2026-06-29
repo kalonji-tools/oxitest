@@ -491,6 +491,16 @@ pub struct InspectArgs {
 
 // ── Command enum ─────────────────────────────────────────────────────────────
 
+/// Arguments for the deprecated `oxitest fixtures` subcommand.
+///
+/// This subcommand is kept for backwards compatibility but delegates
+/// to `oxitest query fixtures`. Use `oxitest query fixtures` instead.
+#[derive(clap::Args, Debug, Clone)]
+pub struct FixturesArgs {
+    /// Paths to test files or directories
+    pub paths: Vec<Utf8PathBuf>,
+}
+
 /// Available subcommands.
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum Command {
@@ -511,6 +521,9 @@ pub enum Command {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+    /// List registered fixtures (deprecated — use `oxitest query fixtures`)
+    #[command(hide = true)]
+    Fixtures(FixturesArgs),
 }
 
 // ── partition_positionals ─────────────────────────────────────────────────────
@@ -575,7 +588,11 @@ fn partition_command(cmd: &mut Command) {
             args.paths = paths;
             args.node_ids = node_ids;
         }
-        _ => {}
+        Command::Query(_)
+        | Command::Inspect(_)
+        | Command::Env
+        | Command::Completions { .. }
+        | Command::Fixtures(_) => {}
     }
 }
 

@@ -187,7 +187,7 @@ def run_oxitest_subcmd(
     cmd = [sys.executable, "-m", "oxitest", *subcmd_and_args]
     if not use_cwd and tmp_path is not None:
         cmd.append(str(tmp_path))
-    if subcmd_and_args and subcmd_and_args[0] not in {"query", "env"}:
+    if subcmd_and_args and subcmd_and_args[0] not in {"query", "env", "fixtures"}:
         cmd.extend(["--color", "never"])
     result = subprocess.run(
         cmd,
