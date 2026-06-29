@@ -177,7 +177,8 @@ creates them:
 ```
 src/reporter/format/snapshots/    # diff, summary, diagnostic, suggestions
 src/reporter/snapshots/           # JUnit XML, CTRF JSON
-src/query/snapshots/              # columnar, tab, JSONL, inspect, highlight
+src/query/snapshots/              # columnar, tab, JSONL, detail, highlight
+src/inspect/snapshots/            # TUI layout, footer, help overlay
 ```
 
 Each `.snap` file is named after the full test path:

@@ -107,9 +107,14 @@ Every `.rs` file in `src/`, with its responsibility:
 | `query::format` | `src/query/format.rs` | Formats query results for display. |
 | `query::fzf` | `src/query/fzf.rs` | Fuzzy matching support. |
 | `query::highlight` | `src/query/highlight.rs` | Syntax highlighting for query expressions. |
-| `query::inspect` | `src/query/inspect.rs` | Introspection of query predicates. |
+| `query::detail` | `src/query/detail.rs` | Single-item detail card formatting for `--detail` flag. |
 | `query::resource` | `src/query/resource.rs` | `ResourceKind` enum and `QueryEntry`. |
 | `query::bridge` | `src/query/bridge.rs` | Query-to-Python bridge for fixture/plugin introspection. |
+| **Inspect TUI** | | |
+| `inspect` | `src/inspect/mod.rs` | `oxitest inspect` entry point — terminal setup, event loop, teardown. |
+| `inspect::app` | `src/inspect/app.rs` | `InspectApp` state, `InputMode` enum. |
+| `inspect::ui` | `src/inspect/ui.rs` | `draw()` function, adaptive pane layout, footer, help overlay. |
+| `inspect::input` | `src/inspect/input.rs` | Key and mouse event → action mapping. |
 | **AST + Prescan** | | |
 | `python_ast` | `src/python_ast.rs` | `parse_file()`, `is_test_fn()` -- shared AST utilities for `rustpython-parser`. |
 | `prescan` | `src/prescan.rs` | `PrescanItem`, `PrescanMarker`, `PrescanResult`. AST-based metadata extraction for lazy collection. |

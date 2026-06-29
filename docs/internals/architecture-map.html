@@ -980,7 +980,7 @@ window.oxiNavPaths = {
         ['name', 'String', 'Test function name'],
         ['markers', 'Vec<Marker>', 'Applied markers (skip, xfail, timeout, custom)'],
         ['parametrize_id', 'Option<String>', 'Parametrize case identifier'],
-        ['fixture_names', 'Vec<String>', 'Required fixture names'],
+        ['fixture_deps', 'Vec<(String, String)>', 'Fixture dependencies as (qualifier, binding_type_name) pairs'],
       ],
       connects: ['NodeId', 'TestOutcome', 'ExecutionPlan']
     },
@@ -1027,7 +1027,7 @@ window.oxiNavPaths = {
         ['name', 'String', 'Test function name'],
         ['markers', 'Vec<...>', 'Marker data from Python'],
         ['parametrize_ids', 'Vec<String>', 'Parametrize case IDs'],
-        ['fixture_names', 'Vec<String>', 'Fixture dependencies'],
+        ['fixture_deps', 'Vec<(String, String)>', 'Fixture dependencies as (qualifier, binding_type_name) pairs'],
       ],
       connects: ['TestItem']
     },
