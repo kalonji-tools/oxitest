@@ -9,7 +9,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use super::graph::{BrokenEdge, InspectGraph, NodeKind, NodeRef};
+use super::graph::{self, BrokenEdge, InspectGraph, NodeKind, NodeRef};
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -103,6 +103,100 @@ fn broken_edges_for<'a>(broken_edges: &'a [BrokenEdge], node_ref: &NodeRef) -> V
         .iter()
         .filter(|e| e.from == *node_ref)
         .collect()
+}
+
+// ── Group detail (parametrize collapse) ──────────────────────────────────
+
+/// Render the detail pane for a collapsed parametrize group.
+///
+/// Shows the shared base name, variant count, and connections that are
+/// common across all variants (fixture deps, marks).
+pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -> Vec<Line<'a>> {
+    if indices.is_empty() {
+        return vec![Line::from("Empty group")];
+    }
+
+    let first = &graph.tests[indices[0]];
+
+    // Derive base name from the first variant's node_id.
+    let base_name = graph::base_test_name(&first.node_id);
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("T", sigil_style()),
+            Span::raw(format!(" {base_name}")),
+        ]),
+        Line::from(""),
+        field_line("variants", &indices.len().to_string()),
+    ];
+
+    // Shared async status (show if all variants agree).
+    let all_async = indices.iter().all(|&i| graph.tests[i].is_async);
+    let any_async = indices.iter().any(|&i| graph.tests[i].is_async);
+    if all_async {
+        lines.push(bool_field("async", true));
+    } else if !any_async {
+        lines.push(bool_field("async", false));
+    } else {
+        lines.push(field_line("async", "mixed"));
+    }
+
+    // Shared fixture dependencies: intersection across all variants.
+    let shared_fixture_deps: Vec<usize> = if indices.is_empty() {
+        vec![]
+    } else {
+        let first_deps: std::collections::HashSet<usize> = graph.tests[indices[0]]
+            .fixture_deps
+            .iter()
+            .copied()
+            .collect();
+        indices
+            .iter()
+            .skip(1)
+            .fold(first_deps, |acc, &i| {
+                let deps: std::collections::HashSet<usize> =
+                    graph.tests[i].fixture_deps.iter().copied().collect();
+                acc.intersection(&deps).copied().collect()
+            })
+            .into_iter()
+            .collect()
+    };
+
+    if !shared_fixture_deps.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(section_header("Shared Fixture Dependencies"));
+        for &dep_idx in &shared_fixture_deps {
+            lines.push(connection_line('F', &graph.fixtures[dep_idx].name));
+        }
+    }
+
+    // Shared marks: intersection across all variants.
+    let shared_marks: Vec<usize> = if indices.is_empty() {
+        vec![]
+    } else {
+        let first_marks: std::collections::HashSet<usize> =
+            graph.tests[indices[0]].marks.iter().copied().collect();
+        indices
+            .iter()
+            .skip(1)
+            .fold(first_marks, |acc, &i| {
+                let marks: std::collections::HashSet<usize> =
+                    graph.tests[i].marks.iter().copied().collect();
+                acc.intersection(&marks).copied().collect()
+            })
+            .into_iter()
+            .collect()
+    };
+
+    if !shared_marks.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(section_header("Shared Marks"));
+        for &mark_idx in &shared_marks {
+            lines.push(connection_line('M', &graph.marks[mark_idx].name));
+        }
+    }
+
+    lines
 }
 
 // ── Per-type renderers ──────────────────────────────────────────────────────
@@ -785,6 +879,72 @@ mod tests {
         assert!(
             text.contains("Defined In"),
             "helper should show the Defined In section"
+        );
+    }
+
+    // ── Group detail tests ───────────────────────────────────────────────
+
+    #[test]
+    fn render_group_detail_shows_base_name_and_variant_count() {
+        let graph = test_parametrized_graph();
+        let indices = vec![0, 1];
+        let lines = render_group_detail(&graph, &indices);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("test_add"),
+            "group detail should show the base name"
+        );
+        assert!(
+            text.contains("2"),
+            "group detail should show the variant count"
+        );
+    }
+
+    #[test]
+    fn render_group_detail_shows_shared_marks() {
+        let mut graph = InspectGraph::default();
+        graph.marks.push(MarkNode {
+            name: "slow".to_string(),
+            used_by: vec![0, 1],
+        });
+        graph.tests.push(TestNode {
+            node_id: "t.py::test_add[1]".to_string(),
+            is_async: false,
+            param_id: Some("1".to_string()),
+            param_count: 2,
+            variants: vec![1],
+            fixture_deps: vec![],
+            marks: vec![0],
+        });
+        graph.tests.push(TestNode {
+            node_id: "t.py::test_add[2]".to_string(),
+            is_async: false,
+            param_id: Some("2".to_string()),
+            param_count: 2,
+            variants: vec![0],
+            fixture_deps: vec![],
+            marks: vec![0],
+        });
+        let lines = render_group_detail(&graph, &[0, 1]);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("Shared Marks"),
+            "group detail should show shared marks when all variants share a mark"
+        );
+        assert!(
+            text.contains("slow"),
+            "group detail should show the shared mark name"
+        );
+    }
+
+    #[test]
+    fn render_group_detail_empty_indices() {
+        let graph = InspectGraph::default();
+        let lines = render_group_detail(&graph, &[]);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("Empty group"),
+            "empty indices should show a placeholder message"
         );
     }
 }

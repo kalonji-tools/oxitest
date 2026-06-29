@@ -3,7 +3,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use super::app::{InputMode, InspectApp};
+use super::graph::NodeKind;
 use super::nav::{self, NavScreen};
+use super::ui::{TestRow, build_test_rows};
 
 /// Process a key event and update application state.
 pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
@@ -193,13 +195,48 @@ fn nav_push(app: &mut InspectApp) {
             }
         }
         NavScreen::NodeList { kind, selected } => {
-            let count = graph.node_count(kind);
-            if selected < count {
-                let node = super::graph::NodeRef {
-                    kind,
-                    index: selected,
-                };
-                app.nav.push(NavScreen::NodeDetail { node });
+            if kind == NodeKind::Test {
+                // Use the visible-row model for test lists.
+                let rows = build_test_rows(graph, &app.expanded_groups);
+                if let Some(row) = rows.get(selected) {
+                    match row {
+                        TestRow::GroupHeader { base_name, .. } => {
+                            // Toggle expand/collapse for this group.
+                            if app.expanded_groups.contains(base_name) {
+                                app.expanded_groups.remove(base_name);
+                                // After collapsing, the visible list shrinks.
+                                // Clamp the cursor to stay within bounds.
+                                let new_rows = build_test_rows(graph, &app.expanded_groups);
+                                let max = new_rows.len().saturating_sub(1);
+                                if let NavScreen::NodeList { selected, .. } = app.nav.current_mut()
+                                    && *selected > max
+                                {
+                                    *selected = max;
+                                }
+                            } else {
+                                app.expanded_groups.insert(base_name.clone());
+                                // Cursor stays at the same row index (the group
+                                // header), which is still valid after expanding.
+                            }
+                        }
+                        TestRow::Standalone { index } | TestRow::Variant { index } => {
+                            let node = super::graph::NodeRef {
+                                kind: NodeKind::Test,
+                                index: *index,
+                            };
+                            app.nav.push(NavScreen::NodeDetail { node });
+                        }
+                    }
+                }
+            } else {
+                let count = graph.node_count(kind);
+                if selected < count {
+                    let node = super::graph::NodeRef {
+                        kind,
+                        index: selected,
+                    };
+                    app.nav.push(NavScreen::NodeDetail { node });
+                }
             }
         }
         NavScreen::Disambiguation {
@@ -224,7 +261,13 @@ fn screen_item_count(app: &InspectApp) -> usize {
 
     match app.nav.current() {
         NavScreen::Home { .. } => nav::visible_kind_count(graph),
-        NavScreen::NodeList { kind, .. } => graph.node_count(*kind),
+        NavScreen::NodeList { kind, .. } => {
+            if *kind == NodeKind::Test {
+                build_test_rows(graph, &app.expanded_groups).len()
+            } else {
+                graph.node_count(*kind)
+            }
+        }
         NavScreen::Disambiguation { matches, .. } => matches.len(),
         NavScreen::NodeDetail { .. } => 0,
     }
@@ -531,5 +574,216 @@ mod tests {
             matches!(app.nav.current(), NavScreen::Home { .. }),
             "space without graph should stay on Home"
         );
+    }
+
+    // ── Parametrize collapsing tests ─────────────────────────────────────
+
+    /// Build a graph with parametrized tests for collapsing tests.
+    fn parametrized_test_graph() -> crate::inspect::graph::InspectGraph {
+        use crate::inspect::graph::nodes::TestNode;
+
+        let mut graph = crate::inspect::graph::InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[1+2]".to_string(),
+            is_async: false,
+            param_id: Some("1+2".to_string()),
+            param_count: 3,
+            variants: vec![1, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[3+4]".to_string(),
+            is_async: false,
+            param_id: Some("3+4".to_string()),
+            param_count: 3,
+            variants: vec![0, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[5+6]".to_string(),
+            is_async: false,
+            param_id: Some("5+6".to_string()),
+            param_count: 3,
+            variants: vec![0, 1],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_solo".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph
+    }
+
+    #[test]
+    fn space_on_collapsed_group_expands_it() {
+        use crate::inspect::nav::NavScreen;
+
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        // Navigate into test list
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0, // points to the collapsed group header
+        });
+
+        assert!(
+            app.expanded_groups.is_empty(),
+            "no groups should be expanded initially"
+        );
+
+        // Press Space on the group header
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        assert!(
+            app.expanded_groups.contains("tests/test_math.py::test_add"),
+            "space on collapsed group should expand it"
+        );
+        // Should still be on NodeList (not pushed to NodeDetail)
+        assert!(
+            matches!(app.nav.current(), NavScreen::NodeList { .. }),
+            "space on group header should not push to NodeDetail"
+        );
+    }
+
+    #[test]
+    fn space_on_expanded_group_header_collapses_it() {
+        use crate::inspect::nav::NavScreen;
+
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0,
+        });
+        // Expand the group first
+        app.expanded_groups
+            .insert("tests/test_math.py::test_add".to_string());
+
+        // Press Space on the group header (row 0 is still the header)
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        assert!(
+            !app.expanded_groups.contains("tests/test_math.py::test_add"),
+            "space on expanded group header should collapse it"
+        );
+    }
+
+    #[test]
+    fn space_on_variant_navigates_to_detail() {
+        use crate::inspect::nav::NavScreen;
+
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 1, // First variant row (after header at index 0)
+        });
+        // Expand the group so variants are visible
+        app.expanded_groups
+            .insert("tests/test_math.py::test_add".to_string());
+
+        // Press Space on a variant row
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        match app.nav.current() {
+            NavScreen::NodeDetail { node } => {
+                assert_eq!(
+                    node.kind,
+                    NodeKind::Test,
+                    "variant navigation should go to Test detail"
+                );
+                assert_eq!(node.index, 0, "first variant should be at graph index 0");
+            }
+            other => panic!("expected NodeDetail after Space on variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn screen_item_count_accounts_for_collapsed_groups() {
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0,
+        });
+
+        // Collapsed: 1 group header + 1 standalone = 2
+        let count_collapsed = screen_item_count(&app);
+        assert_eq!(
+            count_collapsed, 2,
+            "collapsed group should count as 1 row, plus 1 standalone = 2"
+        );
+
+        // Expand the group: 1 header + 3 variants + 1 standalone = 5
+        app.expanded_groups
+            .insert("tests/test_math.py::test_add".to_string());
+        let count_expanded = screen_item_count(&app);
+        assert_eq!(
+            count_expanded, 5,
+            "expanded group should show header + 3 variants + 1 standalone = 5"
+        );
+    }
+
+    #[test]
+    fn space_on_standalone_test_navigates_to_detail() {
+        use crate::inspect::nav::NavScreen;
+
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 1, // standalone test is at visible row 1 when collapsed
+        });
+
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        match app.nav.current() {
+            NavScreen::NodeDetail { node } => {
+                assert_eq!(node.index, 3, "standalone test_solo is at graph index 3");
+            }
+            other => panic!("expected NodeDetail for standalone test, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn collapse_clamps_cursor_within_bounds() {
+        use crate::inspect::nav::NavScreen;
+
+        let graph = parametrized_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        // Expand the group
+        app.expanded_groups
+            .insert("tests/test_math.py::test_add".to_string());
+        // Set cursor to last expanded row (standalone = row 4)
+        app.nav.push(NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 4,
+        });
+
+        // Collapse the group by pressing Space on the header
+        // First move cursor to the header (row 0)
+        if let NavScreen::NodeList { selected, .. } = app.nav.current_mut() {
+            *selected = 0;
+        }
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        // After collapse, the list has 2 rows (header + standalone).
+        // Cursor should be at row 0 (the header).
+        if let NavScreen::NodeList { selected, .. } = app.nav.current() {
+            assert!(
+                *selected <= 1,
+                "cursor should be within bounds after collapse, got {selected}"
+            );
+        } else {
+            panic!("expected NodeList after collapse");
+        }
     }
 }

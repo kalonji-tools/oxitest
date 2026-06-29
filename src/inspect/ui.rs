@@ -13,10 +13,83 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
+use std::collections::HashSet;
+
 use super::app::{InputMode, InspectApp, LoadingState};
 use super::detail;
-use super::graph::NodeKind;
+use super::graph::{self, NodeKind};
 use super::nav::{HOME_KINDS, NavScreen};
+
+// ── Visible row model for parametrize collapsing ─────────────────────────────
+
+/// A single visible row in the Test NodeList.
+///
+/// When parametrize collapsing is active, tests sharing a base name
+/// (everything before `[`) are grouped.  The group appears as a single
+/// collapsed header row or as an expanded sequence of variant rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum TestRow {
+    /// A standalone test (not part of a parametrize group).
+    Standalone { index: usize },
+    /// A collapsed parametrize group header.
+    /// `base_name` is the node_id prefix before `[`.
+    /// `indices` lists all graph indices that belong to this group.
+    GroupHeader {
+        base_name: String,
+        indices: Vec<usize>,
+    },
+    /// An individual variant inside an expanded group.
+    Variant { index: usize },
+}
+
+/// Build the visible row list for the Test NodeList, accounting for
+/// parametrize group collapsing.
+///
+/// Groups are identified by stripping the `[param_id]` suffix from the
+/// `node_id`.  Tests without a `[` bracket are standalone.  A group
+/// with `param_count > 1` is collapsed unless its base name is in
+/// `expanded_groups`.
+pub(super) fn build_test_rows(
+    graph: &super::graph::InspectGraph,
+    expanded_groups: &HashSet<String>,
+) -> Vec<TestRow> {
+    let mut rows: Vec<TestRow> = Vec::new();
+    let mut seen_groups: HashSet<String> = HashSet::new();
+
+    for (idx, test) in graph.tests.iter().enumerate() {
+        if test.param_count > 1 {
+            // This test belongs to a parametrize group.
+            let base_name = graph::base_test_name(&test.node_id).to_string();
+
+            if !seen_groups.insert(base_name.clone()) {
+                // Already processed this group — skip.
+                continue;
+            }
+
+            let mut all_indices = vec![idx];
+            all_indices.extend_from_slice(&test.variants);
+            all_indices.sort_unstable();
+
+            // Always emit a group header row (collapsed or expanded).
+            rows.push(TestRow::GroupHeader {
+                base_name: base_name.clone(),
+                indices: all_indices.clone(),
+            });
+
+            // If expanded, also emit variant rows below the header.
+            if expanded_groups.contains(&base_name) {
+                for &variant_idx in &all_indices {
+                    rows.push(TestRow::Variant { index: variant_idx });
+                }
+            }
+        } else {
+            // Standalone test (not parametrized, or single-variant).
+            rows.push(TestRow::Standalone { index: idx });
+        }
+    }
+
+    rows
+}
 
 // ── Terminal lifecycle ───────────────────────────────────────────────────────
 
@@ -111,6 +184,22 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
             (Some(graph), NavScreen::NodeDetail { node }) => {
                 detail::render_detail(graph, Some(node))
             }
+            (Some(graph), NavScreen::NodeList { kind, selected }) if *kind == NodeKind::Test => {
+                let rows = build_test_rows(graph, &app.expanded_groups);
+                match rows.get(*selected) {
+                    Some(TestRow::GroupHeader { indices, .. }) => {
+                        detail::render_group_detail(graph, indices)
+                    }
+                    Some(TestRow::Standalone { index } | TestRow::Variant { index }) => {
+                        let node_ref = super::graph::NodeRef {
+                            kind: NodeKind::Test,
+                            index: *index,
+                        };
+                        detail::render_detail(graph, Some(&node_ref))
+                    }
+                    None => detail::render_detail(graph, None),
+                }
+            }
             (Some(graph), _) => detail::render_detail(graph, None),
             (None, _) => vec![Line::from("No data loaded")],
         };
@@ -169,7 +258,9 @@ fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
 
     match app.nav.current() {
         NavScreen::Home { selected } => build_home_content(graph, *selected, is_loading),
-        NavScreen::NodeList { kind, selected } => build_node_list_content(graph, *kind, *selected),
+        NavScreen::NodeList { kind, selected } => {
+            build_node_list_content(graph, *kind, *selected, &app.expanded_groups)
+        }
         NavScreen::NodeDetail { node } => {
             let name = graph.node_name(node);
             let sigil = node.kind.sigil();
@@ -235,11 +326,19 @@ fn build_home_content(
 }
 
 /// Render a NodeList screen: one line per node of the given kind.
+///
+/// For `NodeKind::Test`, parametrized tests are grouped and collapsed
+/// by default.  Other kinds render a flat list.
 fn build_node_list_content(
     graph: &super::graph::InspectGraph,
     kind: NodeKind,
     selected: usize,
+    expanded_groups: &HashSet<String>,
 ) -> Vec<Line<'static>> {
+    if kind == NodeKind::Test {
+        return build_test_list_content(graph, selected, expanded_groups);
+    }
+
     let count = graph.node_count(kind);
     let sigil = kind.sigil();
     (0..count)
@@ -254,6 +353,72 @@ fn build_node_list_content(
                 ))
             } else {
                 Line::from(text)
+            }
+        })
+        .collect()
+}
+
+/// Render the Test NodeList with parametrize group collapsing.
+fn build_test_list_content(
+    graph: &super::graph::InspectGraph,
+    selected: usize,
+    expanded_groups: &HashSet<String>,
+) -> Vec<Line<'static>> {
+    let rows = build_test_rows(graph, expanded_groups);
+
+    rows.iter()
+        .enumerate()
+        .map(|(row_idx, row)| {
+            let is_selected = row_idx == selected;
+            match row {
+                TestRow::Standalone { index } => {
+                    let name = graph.node_name(&super::graph::NodeRef {
+                        kind: NodeKind::Test,
+                        index: *index,
+                    });
+                    let text = format!(" T  {name}");
+                    if is_selected {
+                        Line::from(Span::styled(
+                            text,
+                            Style::default().fg(Color::Black).bg(Color::Cyan),
+                        ))
+                    } else {
+                        Line::from(text)
+                    }
+                }
+                TestRow::GroupHeader { base_name, indices } => {
+                    let count = indices.len();
+                    let text = format!(" T  {base_name} ({count} variants)");
+                    if is_selected {
+                        Line::from(Span::styled(
+                            text,
+                            Style::default().fg(Color::Black).bg(Color::Cyan),
+                        ))
+                    } else {
+                        Line::from(text)
+                    }
+                }
+                TestRow::Variant { index } => {
+                    let name = graph.node_name(&super::graph::NodeRef {
+                        kind: NodeKind::Test,
+                        index: *index,
+                    });
+                    // Extract just the param_id portion for display.
+                    let display = if let Some(bracket_pos) = name.rfind('[') {
+                        &name[bracket_pos..]
+                    } else {
+                        name
+                    };
+                    let text = format!("     T  {display}");
+                    if is_selected {
+                        Line::from(Span::styled(
+                            text,
+                            Style::default().fg(Color::Black).bg(Color::Cyan),
+                        ))
+                    } else {
+                        Line::from(text)
+                    }
+                }
             }
         })
         .collect()
@@ -470,6 +635,157 @@ mod tests {
             "terminal width 79 should produce a single-pane layout"
         );
     }
+
+    // ── build_test_rows tests ─────────────────────────────────────────────
+
+    use crate::inspect::graph::InspectGraph;
+    use crate::inspect::graph::nodes::TestNode;
+
+    /// Build a graph with parametrized and standalone tests.
+    fn parametrized_graph() -> InspectGraph {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[1+2]".to_string(),
+            is_async: false,
+            param_id: Some("1+2".to_string()),
+            param_count: 3,
+            variants: vec![1, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[3+4]".to_string(),
+            is_async: false,
+            param_id: Some("3+4".to_string()),
+            param_count: 3,
+            variants: vec![0, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[5+6]".to_string(),
+            is_async: false,
+            param_id: Some("5+6".to_string()),
+            param_count: 3,
+            variants: vec![0, 1],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_solo".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph
+    }
+
+    #[test]
+    fn test_rows_collapsed_groups_single_row() {
+        let graph = parametrized_graph();
+        let expanded = HashSet::new();
+        let rows = build_test_rows(&graph, &expanded);
+        assert_eq!(
+            rows.len(),
+            2,
+            "3 parametrized variants collapsed + 1 standalone = 2 visible rows"
+        );
+        match &rows[0] {
+            TestRow::GroupHeader { base_name, indices } => {
+                assert_eq!(
+                    base_name, "tests/test_math.py::test_add",
+                    "group header should show the base name"
+                );
+                assert_eq!(
+                    indices.len(),
+                    3,
+                    "group header should list all 3 variant indices"
+                );
+            }
+            other => panic!("expected GroupHeader, got {other:?}"),
+        }
+        assert!(
+            matches!(rows[1], TestRow::Standalone { index: 3 }),
+            "second row should be the standalone test at index 3"
+        );
+    }
+
+    #[test]
+    fn test_rows_expanded_group_shows_header_and_variants() {
+        let graph = parametrized_graph();
+        let mut expanded = HashSet::new();
+        expanded.insert("tests/test_math.py::test_add".to_string());
+        let rows = build_test_rows(&graph, &expanded);
+        // 1 group header + 3 variants + 1 standalone = 5
+        assert_eq!(
+            rows.len(),
+            5,
+            "expanded group should show header + 3 variants + 1 standalone = 5 rows"
+        );
+        assert!(
+            matches!(&rows[0], TestRow::GroupHeader { .. }),
+            "first row should be the group header"
+        );
+        assert!(
+            matches!(rows[1], TestRow::Variant { index: 0 }),
+            "second row should be variant at index 0"
+        );
+        assert!(
+            matches!(rows[2], TestRow::Variant { index: 1 }),
+            "third row should be variant at index 1"
+        );
+        assert!(
+            matches!(rows[3], TestRow::Variant { index: 2 }),
+            "fourth row should be variant at index 2"
+        );
+        assert!(
+            matches!(rows[4], TestRow::Standalone { index: 3 }),
+            "fifth row should be the standalone test"
+        );
+    }
+
+    #[test]
+    fn test_rows_standalone_only() {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_a.py::test_one".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_b.py::test_two".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        let rows = build_test_rows(&graph, &HashSet::new());
+        assert_eq!(rows.len(), 2, "two standalone tests should produce 2 rows");
+        assert!(
+            matches!(rows[0], TestRow::Standalone { index: 0 }),
+            "first row should be standalone at index 0"
+        );
+        assert!(
+            matches!(rows[1], TestRow::Standalone { index: 1 }),
+            "second row should be standalone at index 1"
+        );
+    }
+
+    #[test]
+    fn test_rows_empty_graph() {
+        let graph = InspectGraph::default();
+        let rows = build_test_rows(&graph, &HashSet::new());
+        assert!(rows.is_empty(), "empty graph should produce no test rows");
+    }
 }
 
 #[cfg(test)]
@@ -639,5 +955,74 @@ mod snapshot_tests {
             selected: 2,
         });
         assert_snapshot!("node_list_cursor_moved", render_to_string(&app, 80, 12));
+    }
+
+    // ── Parametrize collapse snapshots ───────────────────────────────────
+
+    /// Build a graph with parametrized tests for collapsing snapshots.
+    fn parametrized_graph() -> InspectGraph {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[1+2]".to_string(),
+            is_async: false,
+            param_id: Some("1+2".to_string()),
+            param_count: 3,
+            variants: vec![1, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[3+4]".to_string(),
+            is_async: false,
+            param_id: Some("3+4".to_string()),
+            param_count: 3,
+            variants: vec![0, 2],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_math.py::test_add[5+6]".to_string(),
+            is_async: false,
+            param_id: Some("5+6".to_string()),
+            param_count: 3,
+            variants: vec![0, 1],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph
+    }
+
+    #[test]
+    fn snap_node_list_parametrized_collapsed() {
+        let graph = parametrized_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        // No groups expanded — the 3-variant group shows as a single collapsed row.
+        app.nav.push(super::NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0,
+        });
+        assert_snapshot!(
+            "node_list_parametrized_collapsed",
+            render_to_string(&app, 80, 12)
+        );
+    }
+
+    #[test]
+    fn snap_node_list_parametrized_expanded() {
+        let graph = parametrized_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        // Expand the parametrize group so variants appear below the header.
+        app.expanded_groups
+            .insert("tests/test_math.py::test_add".to_string());
+        app.nav.push(super::NavScreen::NodeList {
+            kind: NodeKind::Test,
+            selected: 0,
+        });
+        assert_snapshot!(
+            "node_list_parametrized_expanded",
+            render_to_string(&app, 80, 12)
+        );
     }
 }

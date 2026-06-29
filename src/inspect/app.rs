@@ -1,5 +1,6 @@
 //! Application state and event loop for `oxitest inspect`.
 
+use std::collections::HashSet;
 use std::sync::mpsc;
 
 use crossterm::event::{self, Event};
@@ -122,6 +123,10 @@ pub(crate) struct InspectApp {
     /// `None` once the data has been received (or if no background thread
     /// was spawned).
     phase2_rx: Option<mpsc::Receiver<Phase2Data>>,
+    /// Base names of parametrize groups that are currently expanded in the
+    /// Test NodeList.  A group's base name is the node_id prefix before the
+    /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
+    pub(crate) expanded_groups: HashSet<String>,
 }
 
 impl InspectApp {
@@ -150,6 +155,7 @@ impl InspectApp {
             nav,
             loading_state: LoadingState::Complete,
             phase2_rx: None,
+            expanded_groups: HashSet::new(),
         }
     }
 
@@ -176,6 +182,7 @@ impl InspectApp {
             nav,
             loading_state: LoadingState::InstantOnly,
             phase2_rx: Some(rx),
+            expanded_groups: HashSet::new(),
         }
     }
 

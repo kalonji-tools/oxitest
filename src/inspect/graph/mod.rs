@@ -120,6 +120,14 @@ impl InspectGraph {
     }
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Extract the base function name from a node ID by stripping `[param_id]`.
+/// Returns the full node_id if no `[` is found.
+pub(crate) fn base_test_name(node_id: &str) -> &str {
+    node_id.rfind('[').map_or(node_id, |pos| &node_id[..pos])
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -313,6 +321,24 @@ mod tests {
         assert!(
             !graph.is_empty(),
             "graph with one mark node should not be empty"
+        );
+    }
+
+    #[test]
+    fn base_test_name_strips_param_id() {
+        assert_eq!(
+            super::base_test_name("tests/test_math.py::test_add[1+2]"),
+            "tests/test_math.py::test_add",
+            "base_test_name should strip the bracketed param_id suffix"
+        );
+    }
+
+    #[test]
+    fn base_test_name_returns_full_id_when_no_bracket() {
+        assert_eq!(
+            super::base_test_name("tests/test_math.py::test_solo"),
+            "tests/test_math.py::test_solo",
+            "base_test_name should return the full node_id when no '[' is present"
         );
     }
 }
