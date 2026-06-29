@@ -51,8 +51,13 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => nav_push(app),
 
         // Navigate back
-        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
+        KeyCode::Left | KeyCode::Backspace => {
             app.nav.pop();
+        }
+
+        // Open history screen
+        KeyCode::Char('h') => {
+            app.nav.push(NavScreen::History { selected: 0 });
         }
 
         // Enter search mode
@@ -145,6 +150,9 @@ fn nav_cursor_down(app: &mut InspectApp) {
         NavScreen::Disambiguation { selected, .. } => {
             *selected = (*selected + 1) % max;
         }
+        NavScreen::History { selected } => {
+            *selected = (*selected + 1) % max;
+        }
         NavScreen::NodeDetail { .. } => {}
     }
 }
@@ -171,6 +179,13 @@ fn nav_cursor_up(app: &mut InspectApp) {
             };
         }
         NavScreen::Disambiguation { selected, .. } => {
+            *selected = if *selected == 0 {
+                max - 1
+            } else {
+                *selected - 1
+            };
+        }
+        NavScreen::History { selected } => {
             *selected = if *selected == 0 {
                 max - 1
             } else {
@@ -224,6 +239,7 @@ fn nav_push(app: &mut InspectApp) {
                                 kind: NodeKind::Test,
                                 index: *index,
                             };
+                            app.history.push(node.clone());
                             app.nav.push(NavScreen::NodeDetail { node });
                         }
                     }
@@ -235,6 +251,7 @@ fn nav_push(app: &mut InspectApp) {
                         kind,
                         index: selected,
                     };
+                    app.history.push(node.clone());
                     app.nav.push(NavScreen::NodeDetail { node });
                 }
             }
@@ -243,7 +260,14 @@ fn nav_push(app: &mut InspectApp) {
             matches, selected, ..
         } => {
             if let Some(node) = matches.get(selected) {
+                app.history.push(node.clone());
                 app.nav.push(NavScreen::NodeDetail { node: node.clone() });
+            }
+        }
+        NavScreen::History { selected } => {
+            if let Some(node) = app.history.get(selected).cloned() {
+                app.history.push(node.clone());
+                app.nav.push(NavScreen::NodeDetail { node });
             }
         }
         NavScreen::NodeDetail { .. } => {
@@ -269,6 +293,7 @@ fn screen_item_count(app: &InspectApp) -> usize {
             }
         }
         NavScreen::Disambiguation { matches, .. } => matches.len(),
+        NavScreen::History { .. } => app.history.len(),
         NavScreen::NodeDetail { .. } => 0,
     }
 }
@@ -784,6 +809,178 @@ mod tests {
             );
         } else {
             panic!("expected NodeList after collapse");
+        }
+    }
+
+    // ── History key tests ──────────────────────────────────────────────
+
+    #[test]
+    fn h_key_opens_history_screen() {
+        use crate::inspect::nav::NavScreen;
+
+        let mut app = InspectApp::new(None, None);
+        handle_key(&mut app, key(KeyCode::Char('h')));
+
+        assert!(
+            matches!(app.nav.current(), NavScreen::History { selected: 0 }),
+            "pressing 'h' should push History screen with selected=0"
+        );
+    }
+
+    #[test]
+    fn backspace_pops_without_opening_history() {
+        use crate::inspect::nav::NavScreen;
+
+        let mut app = InspectApp::new(None, None);
+        // Push a screen so pop has something to pop
+        app.nav.push(NavScreen::NodeList {
+            kind: crate::inspect::graph::NodeKind::Test,
+            selected: 0,
+        });
+        handle_key(&mut app, key(KeyCode::Backspace));
+
+        assert!(
+            matches!(app.nav.current(), NavScreen::Home { .. }),
+            "Backspace should pop back to Home, not open History"
+        );
+    }
+
+    #[test]
+    fn left_arrow_pops_without_opening_history() {
+        use crate::inspect::nav::NavScreen;
+
+        let mut app = InspectApp::new(None, None);
+        app.nav.push(NavScreen::NodeList {
+            kind: crate::inspect::graph::NodeKind::Test,
+            selected: 0,
+        });
+        handle_key(&mut app, key(KeyCode::Left));
+
+        assert!(
+            matches!(app.nav.current(), NavScreen::Home { .. }),
+            "Left arrow should pop back to Home, not open History"
+        );
+    }
+
+    #[test]
+    fn navigating_to_node_detail_records_history() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind};
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "t.py::test_a".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        // Navigate: Home -> NodeList (Tests)
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+        // Navigate: NodeList -> NodeDetail (first test)
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        assert_eq!(
+            app.history.len(),
+            1,
+            "navigating to NodeDetail should record one history entry"
+        );
+        let entry = app.history.get(0).unwrap();
+        assert_eq!(
+            entry.kind,
+            NodeKind::Test,
+            "history entry should be of kind Test"
+        );
+        assert_eq!(
+            entry.index, 0,
+            "history entry should reference the first test node"
+        );
+    }
+
+    #[test]
+    fn space_on_history_navigates_to_node_detail() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::NavScreen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "t.py::test_a".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        // Pre-populate history with one entry
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        });
+        // Open history screen
+        app.nav.push(NavScreen::History { selected: 0 });
+        // Press space to navigate to the selected history entry
+        handle_key(&mut app, key(KeyCode::Char(' ')));
+
+        assert!(
+            matches!(app.nav.current(), NavScreen::NodeDetail { .. }),
+            "space on History should navigate to NodeDetail"
+        );
+        assert_eq!(
+            app.history.len(),
+            2,
+            "navigating from History should add another history entry"
+        );
+    }
+
+    #[test]
+    fn cursor_moves_on_history_screen() {
+        use crate::inspect::graph::{NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::NavScreen;
+
+        let mut graph = crate::inspect::graph::InspectGraph::default();
+        graph.tests.push(crate::inspect::graph::nodes::TestNode {
+            node_id: "t.py::test_a".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        });
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        });
+        app.nav.push(NavScreen::History { selected: 0 });
+
+        handle_key(&mut app, key(KeyCode::Char('j')));
+        match app.nav.current() {
+            NavScreen::History { selected } => {
+                assert_eq!(*selected, 1, "j should move cursor down on History screen");
+            }
+            other => panic!("expected History screen, got {:?}", other),
+        }
+
+        handle_key(&mut app, key(KeyCode::Char('k')));
+        match app.nav.current() {
+            NavScreen::History { selected } => {
+                assert_eq!(*selected, 0, "k should move cursor up on History screen");
+            }
+            other => panic!("expected History screen, got {:?}", other),
         }
     }
 }
