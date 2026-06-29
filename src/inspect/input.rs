@@ -50,6 +50,7 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
 
         // Enter search mode
         KeyCode::Char('/') => {
+            app.search = super::app::SearchState::new();
             app.input_mode = InputMode::Search {
                 query: String::new(),
             };
@@ -77,24 +78,42 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
     }
 
     match key.code {
-        // Exit search mode, return to normal
+        // Exit search mode, clear search state, return to normal
         KeyCode::Esc => {
+            app.search = super::app::SearchState::new();
             app.input_mode = InputMode::Normal;
         }
-        // Accept search (no-op until search is wired up)
+        // Accept search — navigate to selected result (no-op until #1116)
         KeyCode::Enter => {
+            // Keep search results visible; just switch to normal mode
             app.input_mode = InputMode::Normal;
+        }
+        // Navigate results: next
+        KeyCode::Down => {
+            app.search.select_next();
+        }
+        // Navigate results: previous
+        KeyCode::Up => {
+            app.search.select_prev();
         }
         // Delete last character from search query
         KeyCode::Backspace => {
             if let InputMode::Search { query } = &mut app.input_mode {
                 query.pop();
+                // Sync SearchState query
+                app.search.query.clone_from(query);
+                // Reset selection when query changes
+                app.search.selected_idx = 0;
             }
         }
         // Append character to search query
         KeyCode::Char(c) => {
             if let InputMode::Search { query } = &mut app.input_mode {
                 query.push(c);
+                // Sync SearchState query
+                app.search.query.clone_from(query);
+                // Reset selection when query changes
+                app.search.selected_idx = 0;
             }
         }
         _ => {}
@@ -228,5 +247,129 @@ mod tests {
         };
         handle_key(&mut app, ctrl_c);
         assert!(app.should_quit, "Ctrl+C should quit from search mode");
+    }
+
+    #[test]
+    fn input_search_esc_clears_search_state() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: "test".to_string(),
+        };
+        app.search.query = "test".to_string();
+        app.search.results = vec![
+            super::super::search::NodeRef(0),
+            super::super::search::NodeRef(1),
+        ];
+        handle_key(&mut app, key(KeyCode::Esc));
+        assert_eq!(
+            app.input_mode,
+            InputMode::Normal,
+            "Esc should return to normal mode"
+        );
+        assert!(
+            app.search.query.is_empty(),
+            "Esc should clear the search query"
+        );
+        assert!(
+            app.search.results.is_empty(),
+            "Esc should clear the search results"
+        );
+    }
+
+    #[test]
+    fn input_search_syncs_query_to_search_state() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        handle_key(&mut app, key(KeyCode::Char('a')));
+        handle_key(&mut app, key(KeyCode::Char('b')));
+        assert_eq!(
+            app.search.query, "ab",
+            "typing in search mode should sync query to SearchState"
+        );
+    }
+
+    #[test]
+    fn input_search_backspace_syncs_query() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: "abc".to_string(),
+        };
+        app.search.query = "abc".to_string();
+        handle_key(&mut app, key(KeyCode::Backspace));
+        assert_eq!(
+            app.search.query, "ab",
+            "backspace should sync shortened query to SearchState"
+        );
+    }
+
+    #[test]
+    fn input_search_down_selects_next() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: "test".to_string(),
+        };
+        app.search.results = vec![
+            super::super::search::NodeRef(0),
+            super::super::search::NodeRef(1),
+        ];
+        handle_key(&mut app, key(KeyCode::Down));
+        assert_eq!(
+            app.search.selected_idx, 1,
+            "Down arrow in search mode should move selection forward"
+        );
+    }
+
+    #[test]
+    fn input_search_up_selects_prev() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: "test".to_string(),
+        };
+        app.search.results = vec![
+            super::super::search::NodeRef(0),
+            super::super::search::NodeRef(1),
+            super::super::search::NodeRef(2),
+        ];
+        app.search.selected_idx = 1;
+        handle_key(&mut app, key(KeyCode::Up));
+        assert_eq!(
+            app.search.selected_idx, 0,
+            "Up arrow in search mode should move selection backward"
+        );
+    }
+
+    #[test]
+    fn input_search_enter_keeps_results() {
+        let mut app = InspectApp::new();
+        app.input_mode = InputMode::Search {
+            query: "test".to_string(),
+        };
+        app.search.query = "test".to_string();
+        app.search.results = vec![super::super::search::NodeRef(0)];
+        handle_key(&mut app, key(KeyCode::Enter));
+        assert_eq!(
+            app.input_mode,
+            InputMode::Normal,
+            "Enter should return to normal mode"
+        );
+        assert!(
+            !app.search.results.is_empty(),
+            "Enter should keep search results visible"
+        );
+    }
+
+    #[test]
+    fn input_slash_resets_search_state() {
+        let mut app = InspectApp::new();
+        app.search.query = "old".to_string();
+        app.search.results = vec![super::super::search::NodeRef(0)];
+        handle_key(&mut app, key(KeyCode::Char('/')));
+        assert!(app.search.query.is_empty(), "'/' should reset search query");
+        assert!(
+            app.search.results.is_empty(),
+            "'/' should reset search results"
+        );
     }
 }

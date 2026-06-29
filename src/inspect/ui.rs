@@ -117,29 +117,60 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
 /// Build the footer bar with context-sensitive keybinding hints.
 fn build_footer(app: &InspectApp) -> Paragraph<'static> {
     let spans = match &app.input_mode {
-        InputMode::Normal => vec![
-            Span::styled(" q", Style::default().fg(Color::Yellow)),
-            Span::raw(" Quit  "),
-            Span::styled("/", Style::default().fg(Color::Yellow)),
-            Span::raw(" Search  "),
-            Span::styled("?", Style::default().fg(Color::Yellow)),
-            Span::raw(" Help  "),
-            Span::styled("j/k", Style::default().fg(Color::Yellow)),
-            Span::raw(" Navigate  "),
-            Span::styled("l", Style::default().fg(Color::Yellow)),
-            Span::raw(" Enter  "),
-            Span::styled("h", Style::default().fg(Color::Yellow)),
-            Span::raw(" Back"),
-        ],
-        InputMode::Search { query } => vec![
-            Span::styled(" /", Style::default().fg(Color::Yellow)),
-            Span::raw(query.to_string()),
-            Span::raw("  "),
-            Span::styled("Esc", Style::default().fg(Color::Yellow)),
-            Span::raw(" Cancel  "),
-            Span::styled("Enter", Style::default().fg(Color::Yellow)),
-            Span::raw(" Accept"),
-        ],
+        InputMode::Normal => {
+            // If search results are active (Enter was pressed), show match count
+            if !app.search.results.is_empty() {
+                let count = app.search.results.len();
+                let total = app.search.total_nodes;
+                vec![
+                    Span::styled(" q", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Quit  "),
+                    Span::styled("/", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Search  "),
+                    Span::styled("?", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Help  "),
+                    Span::styled("j/k", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Navigate  "),
+                    Span::raw(format!("{count}/{total} matches")),
+                ]
+            } else {
+                vec![
+                    Span::styled(" q", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Quit  "),
+                    Span::styled("/", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Search  "),
+                    Span::styled("?", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Help  "),
+                    Span::styled("j/k", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Navigate  "),
+                    Span::styled("l", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Enter  "),
+                    Span::styled("h", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Back"),
+                ]
+            }
+        }
+        InputMode::Search { query } => {
+            let count = app.search.results.len();
+            let total = app.search.total_nodes;
+            let match_info = if query.is_empty() {
+                String::new()
+            } else {
+                format!("  {count}/{total} matches")
+            };
+            vec![
+                Span::styled(" /", Style::default().fg(Color::Yellow)),
+                Span::raw(query.to_string()),
+                Span::raw(match_info),
+                Span::raw("  "),
+                Span::styled("Esc", Style::default().fg(Color::Yellow)),
+                Span::raw(" Cancel  "),
+                Span::styled("Enter", Style::default().fg(Color::Yellow)),
+                Span::raw(" Accept  "),
+                Span::styled("\u{2191}/\u{2193}", Style::default().fg(Color::Yellow)),
+                Span::raw(" Navigate"),
+            ]
+        }
     };
     Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::DarkGray))
 }
