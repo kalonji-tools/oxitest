@@ -64,10 +64,11 @@ just
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
-**8. Post-implementation review.** After all plan tasks are implemented and pushed, run two review passes before marking the PR ready:
+**8. Post-implementation review.** After all plan tasks are implemented and pushed, run these passes before marking the PR ready:
 - **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity.
 - **`improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
 - **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
+- **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
 
 **9. Merge rules.**
 - **Never push directly to main.** All changes go through pull requests.
