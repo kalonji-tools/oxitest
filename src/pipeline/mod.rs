@@ -479,14 +479,18 @@ fn setup_with_plugin_recovery(
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Env | config::Command::Completions { .. } => None,
+        config::Command::Inspect(_)
+        | config::Command::Env
+        | config::Command::Completions { .. } => None,
     };
     let rootdir = config::find_rootdir(first_path);
     let mut cfg = match &command {
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
-        config::Command::Env | config::Command::Completions { .. } => {
+        config::Command::Inspect(_)
+        | config::Command::Env
+        | config::Command::Completions { .. } => {
             unreachable!("non-run commands handled before")
         }
     };
@@ -581,11 +585,25 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         return Ok(Err(ExitCode::Success));
     }
 
+    if let config::Command::Inspect(args) = command {
+        let rootdir = config::find_rootdir(None);
+        let cfg = config::Config::load(&rootdir);
+        return match crate::inspect::run(&args, &cfg) {
+            Ok(()) => Ok(Err(ExitCode::Success)),
+            Err(e) => {
+                eprintln!("error: {e}");
+                Ok(Err(ExitCode::Failure))
+            }
+        };
+    }
+
     let first_path = match &command {
         config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
         config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Env | config::Command::Completions { .. } => None,
+        config::Command::Inspect(_)
+        | config::Command::Env
+        | config::Command::Completions { .. } => None,
     };
     let rootdir = config::find_rootdir(first_path);
 
@@ -593,7 +611,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
         config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
         config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
-        config::Command::Env | config::Command::Completions { .. } => {
+        config::Command::Inspect(_)
+        | config::Command::Env
+        | config::Command::Completions { .. } => {
             unreachable!("handled above")
         }
     };
@@ -755,7 +775,9 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
             query_command(py, pipeline, needs_session)
         }
-        config::Command::Env | config::Command::Completions { .. } => {
+        config::Command::Inspect(_)
+        | config::Command::Env
+        | config::Command::Completions { .. } => {
             unreachable!("handled in setup")
         }
     };

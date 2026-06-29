@@ -474,6 +474,21 @@ pub struct QueryArgs {
     pub paths: Vec<Utf8PathBuf>,
 }
 
+// ── InspectArgs ──────────────────────────────────────────────────────────────
+
+/// Arguments for `oxitest inspect`.
+#[derive(clap::Args, Debug, Clone)]
+pub struct InspectArgs {
+    /// Jump directly to a node by name
+    pub name: Option<String>,
+
+    #[command(flatten)]
+    pub filter: FilteringArgs,
+
+    #[command(flatten)]
+    pub failed_filter: FailedFilterArgs,
+}
+
 // ── Command enum ─────────────────────────────────────────────────────────────
 
 /// Available subcommands.
@@ -485,6 +500,8 @@ pub enum Command {
     Debug(DebugArgs),
     /// Query tests, fixtures, marks, helpers, or plugins
     Query(QueryArgs),
+    /// Interactive TUI for test suite introspection
+    Inspect(InspectArgs),
     /// Print environment information (version, Python, rustc, OS)
     Env,
     /// Generate shell completions
@@ -682,6 +699,21 @@ impl QueryArgs {
     }
 }
 
+#[cfg(test)]
+impl InspectArgs {
+    #[expect(dead_code, reason = "test helper not yet exercised by any test")]
+    pub fn default_for_test() -> Self {
+        OxitestCli::try_parse_from(["oxitest", "inspect"])
+            .expect("default InspectArgs must parse")
+            .command
+            .map(|cmd| match cmd {
+                Command::Inspect(args) => args,
+                _ => unreachable!(),
+            })
+            .unwrap()
+    }
+}
+
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -839,6 +871,44 @@ mod tests {
             panic!("expected Command::Query");
         };
         assert!(args.tree);
+    }
+
+    // ── Inspect subcommand tests ───────────────────────────────────────────────
+
+    #[test]
+    fn inspect_args_parses_name() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "inspect", "test_foo"])).unwrap();
+        let Command::Inspect(args) = cmd else {
+            panic!("expected Command::Inspect");
+        };
+        assert_eq!(args.name.as_deref(), Some("test_foo"));
+    }
+
+    #[test]
+    fn inspect_args_parses_expression() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "inspect", "-E", "mark:slow"])).unwrap();
+        let Command::Inspect(args) = cmd else {
+            panic!("expected Command::Inspect");
+        };
+        assert_eq!(args.filter.expression.as_deref(), Some("mark:slow"));
+    }
+
+    #[test]
+    fn inspect_args_parses_affected() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "inspect", "--affected"])).unwrap();
+        let Command::Inspect(args) = cmd else {
+            panic!("expected Command::Inspect");
+        };
+        assert!(args.filter.affected.is_some());
+    }
+
+    #[test]
+    fn inspect_args_parses_lf() {
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "inspect", "--lf"])).unwrap();
+        let Command::Inspect(args) = cmd else {
+            panic!("expected Command::Inspect");
+        };
+        assert_eq!(args.failed_filter.resolve(), Some(FailedMode::Only));
     }
 
     // ── FailedFilterArgs::resolve ─────────────────────────────────────────────
