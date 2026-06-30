@@ -28,23 +28,23 @@ use graph::InspectGraph;
 /// Phase 1: build the inspect graph from instant-tier data available without a
 /// Python session.
 ///
-/// Returns the graph along with the conftest file paths needed by phase 2.
+/// Accepts pre-collected file lists so that the caller can spawn Phase 2 with
+/// the conftest paths before this function begins AST extraction.
 ///
 /// Startup filters are applied in order:
 /// 1. `--affected` — narrow test files before AST extraction
-/// 2. Extract AST entries from surviving files
+/// 2. Extract AST entries from surviving files (single-pass combined extraction)
 /// 3. `-E` expression — evaluate DSL against test entries, discard non-matching
 /// 4. `--lf` — load TestCache, keep only previously-failed tests
 /// 5. Build graph from surviving entries
 fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
-) -> Result<(InspectGraph, Vec<Utf8PathBuf>), Box<dyn std::error::Error>> {
-    use crate::collector;
+    mut test_files: Vec<Utf8PathBuf>,
+    conftest_files: &[Utf8PathBuf],
+) -> Result<InspectGraph, Box<dyn std::error::Error>> {
     use crate::query::extract;
     use graph::builder::GraphBuilder;
-
-    let (mut test_files, conftest_files) = collector::collect_files(cfg)?;
 
     // ── 1. --affected: narrow test files before extraction ────────────
     if let Some(ref raw_ref) = args.filter.affected {
@@ -72,8 +72,9 @@ fn build_phase1_graph(
         }
     }
 
-    // ── 2. Extract AST entries from surviving files ───────────────────
-    let mut test_entries = extract::extract_test_entries(&test_files);
+    // ── 2. Extract AST entries from surviving files (single-pass) ────
+    let (mut test_entries, mark_entries) =
+        extract::extract_test_and_mark_entries(&test_files, &cfg.markers.registered_markers);
 
     // ── 3. -E expression: filter test entries via DSL ────────────────
     if let Some(ref expr_str) = args.filter.expression {
@@ -96,14 +97,11 @@ fn build_phase1_graph(
     // ── 5. Build graph from surviving entries ─────────────────────────
     let mut builder = GraphBuilder::new();
     builder.add_test_entries(&test_entries);
-    builder.add_mark_entries(&extract::extract_mark_entries(
-        &test_files,
-        &cfg.markers.registered_markers,
-    ));
-    builder.add_helper_entries(&extract::extract_helper_entries(&conftest_files));
+    builder.add_mark_entries(&mark_entries);
+    builder.add_helper_entries(&extract::extract_helper_entries(conftest_files));
     builder.resolve_edges();
 
-    Ok((builder.build(), conftest_files))
+    Ok(builder.build())
 }
 
 /// Phase 2: spawn a background thread that initializes the Python session and
@@ -179,21 +177,27 @@ pub(crate) fn run(
     args: &InspectArgs,
     cfg: &config::Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Phase 1: instant-tier graph (synchronous).
-    let (graph, conftest_files) = build_phase1_graph(args, cfg)?;
+    // Collect files first so conftest paths are available before AST work begins.
+    let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
 
-    // Phase 2: Python-tier data (background thread).
+    // Phase 2: spawn background Python session immediately — it starts while
+    // Phase 1 parses ASTs, so fixture/plugin data is ready sooner.
     let (tx, rx) = mpsc::channel();
     spawn_phase2(
-        conftest_files,
+        conftest_files.clone(),
         cfg.features.plugins.clone(),
         cfg.features.plugin_settings.clone(),
         tx,
     );
 
+    // Phase 1: instant-tier graph (synchronous, runs concurrently with Phase 2).
+    let graph = build_phase1_graph(args, cfg, test_files, &conftest_files)?;
+
+    let timeout = std::time::Duration::from_secs(cfg.exec.inspect_timeout_secs);
     let mut terminal = ui::setup_terminal()?;
-    let result = app::InspectApp::with_progressive_loading(graph, rx, args.name.as_deref())
-        .run(&mut terminal);
+    let result =
+        app::InspectApp::with_progressive_loading(graph, rx, args.name.as_deref(), timeout)
+            .run(&mut terminal);
     ui::restore_terminal(&mut terminal)?;
     result
 }
