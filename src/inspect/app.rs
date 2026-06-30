@@ -77,19 +77,20 @@ impl SearchState {
     }
 }
 
-// ── LoadingState ─────────────────────────────────────────────────────────────
+// ── Phase2State ───────────────────────────────────────────────────────────────
 
 /// Tracks the progressive loading phase of the inspect graph.
 ///
 /// Phase 1 (instant-tier) data is available immediately from Rust AST
 /// extraction.  Phase 2 (fixture/plugin) data requires a Python session
 /// and arrives asynchronously via a background thread.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LoadingState {
-    /// Only instant-tier data (tests, marks, helpers) is loaded.
-    /// Fixture and plugin counts are still being collected.
-    InstantOnly,
-    /// All data has been loaded, including fixtures and plugins.
+enum Phase2State {
+    /// Background thread is active: receiver and start instant are held here.
+    Loading {
+        rx: mpsc::Receiver<Phase2Data>,
+        started: std::time::Instant,
+    },
+    /// All data has been loaded (or timed out / thread disconnected).
     Complete,
 }
 
@@ -156,15 +157,9 @@ pub(crate) struct InspectApp {
     pub(crate) nav: NavStack,
     /// Session history of visited nodes (most recent first).
     pub(crate) history: SessionHistory,
-    /// Current loading phase — determines whether loading indicators are shown.
-    pub(crate) loading_state: LoadingState,
-    /// Receiver for phase-2 data from the background Python thread.
-    /// `None` once the data has been received (or if no background thread
-    /// was spawned).
-    phase2_rx: Option<mpsc::Receiver<Phase2Data>>,
-    /// Instant at which phase-2 loading began, used to enforce a 30-second
-    /// deadline.  `None` when no background thread is active.
-    phase2_started: Option<std::time::Instant>,
+    /// Progressive-loading state: holds the background receiver while loading,
+    /// transitions to `Complete` once data arrives (or times out / disconnects).
+    phase2: Phase2State,
     /// Base names of parametrize groups that are currently expanded in the
     /// Test NodeList.  A group's base name is the node_id prefix before the
     /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
@@ -172,7 +167,7 @@ pub(crate) struct InspectApp {
 }
 
 impl InspectApp {
-    /// Create a new `InspectApp` with default state and `LoadingState::Complete`.
+    /// Create a new `InspectApp` with default state and `Phase2State::Complete`.
     ///
     /// If `name` is provided and a graph is available, resolves it
     /// against the graph for direct-jump navigation:
@@ -196,9 +191,7 @@ impl InspectApp {
             graph,
             nav,
             history: SessionHistory::new(),
-            loading_state: LoadingState::Complete,
-            phase2_rx: None,
-            phase2_started: None,
+            phase2: Phase2State::Complete,
             expanded_groups: HashSet::new(),
         }
     }
@@ -229,9 +222,10 @@ impl InspectApp {
             graph: Some(graph),
             nav,
             history: SessionHistory::new(),
-            loading_state: LoadingState::InstantOnly,
-            phase2_rx: Some(rx),
-            phase2_started: Some(std::time::Instant::now()),
+            phase2: Phase2State::Loading {
+                rx,
+                started: std::time::Instant::now(),
+            },
             expanded_groups: HashSet::new(),
         }
     }
@@ -269,39 +263,37 @@ impl InspectApp {
     ///
     /// When the background thread sends fixture and plugin data, this
     /// method merges it into the existing graph and transitions to
-    /// `LoadingState::Complete`.
+    /// `Phase2State::Complete`.
     fn poll_phase2(&mut self) {
-        let rx = match &self.phase2_rx {
-            Some(rx) => rx,
-            None => return,
+        // Take ownership to avoid borrow conflict between rx.try_recv() and
+        // merge_phase2(&mut self).  If we're already Complete, return early.
+        let Phase2State::Loading { ref rx, started } = self.phase2 else {
+            return;
         };
-
         match rx.try_recv() {
             Ok(data) => {
+                self.phase2 = Phase2State::Complete;
                 self.merge_phase2(data);
-                self.phase2_rx = None;
-                self.phase2_started = None;
             }
             Err(mpsc::TryRecvError::Empty) => {
-                if let Some(started) = self.phase2_started
-                    && started.elapsed() > std::time::Duration::from_secs(30)
-                {
+                if started.elapsed() > std::time::Duration::from_secs(30) {
                     tracing::warn!(
                         "phase-2 loading timed out after 30s; proceeding with instant-tier data only"
                     );
-                    self.loading_state = LoadingState::Complete;
-                    self.phase2_rx = None;
-                    self.phase2_started = None;
+                    self.phase2 = Phase2State::Complete;
                 }
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 // Background thread finished without sending data (error path).
                 // Transition to Complete so loading indicators disappear.
-                self.loading_state = LoadingState::Complete;
-                self.phase2_rx = None;
-                self.phase2_started = None;
+                self.phase2 = Phase2State::Complete;
             }
         }
+    }
+
+    /// Returns `true` while phase-2 (fixture/plugin) data is still loading.
+    pub(crate) fn is_loading(&self) -> bool {
+        matches!(self.phase2, Phase2State::Loading { .. })
     }
 
     /// Merge phase-2 fixture and plugin data into the existing graph.
@@ -321,7 +313,16 @@ impl InspectApp {
             self.graph = Some(new_graph);
         }
 
-        self.loading_state = LoadingState::Complete;
+        // Reset nav to Home if current screen holds potentially stale NodeRefs.
+        // Phase-2 adds fixtures/plugins — Disambiguation and NodeDetail screens
+        // may reference fixture/plugin indices that shifted during rebuild.
+        match self.nav.current() {
+            super::nav::NavScreen::Disambiguation { .. }
+            | super::nav::NavScreen::NodeDetail { .. } => {
+                self.nav = super::nav::NavStack::new();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -479,10 +480,9 @@ mod tests {
     #[test]
     fn new_app_defaults_to_complete_loading_state() {
         let app = InspectApp::new(None, None);
-        assert_eq!(
-            app.loading_state,
-            LoadingState::Complete,
-            "new() should default to Complete loading state"
+        assert!(
+            !app.is_loading(),
+            "new() should default to Complete loading state (is_loading must be false)"
         );
     }
 
@@ -491,10 +491,9 @@ mod tests {
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
         let app = InspectApp::with_progressive_loading(graph, rx, None);
-        assert_eq!(
-            app.loading_state,
-            LoadingState::InstantOnly,
-            "with_progressive_loading should start in InstantOnly state"
+        assert!(
+            app.is_loading(),
+            "with_progressive_loading should start in Loading state (is_loading must be true)"
         );
         assert!(
             app.graph.is_some(),
@@ -527,11 +526,13 @@ mod tests {
             plugin_entries: vec![],
         };
 
+        // merge_phase2 is called after phase2 is already set to Complete by poll_phase2;
+        // call it directly here as a unit test, so set phase2 = Complete first.
+        app.phase2 = Phase2State::Complete;
         app.merge_phase2(data);
-        assert_eq!(
-            app.loading_state,
-            LoadingState::Complete,
-            "merge_phase2 should transition to Complete"
+        assert!(
+            !app.is_loading(),
+            "after merge_phase2 the app must not be in loading state"
         );
         assert_eq!(
             app.graph.as_ref().unwrap().fixtures.len(),
@@ -575,10 +576,9 @@ mod tests {
 
         app.poll_phase2();
 
-        assert_eq!(
-            app.loading_state,
-            LoadingState::Complete,
-            "poll_phase2 should transition to Complete after receiving data"
+        assert!(
+            !app.is_loading(),
+            "poll_phase2 should transition to Complete (is_loading false) after receiving data"
         );
         let graph = app.graph.as_ref().unwrap();
         assert_eq!(
@@ -604,14 +604,13 @@ mod tests {
 
         app.poll_phase2();
 
-        assert_eq!(
-            app.loading_state,
-            LoadingState::Complete,
-            "poll_phase2 should transition to Complete on Disconnected"
+        assert!(
+            !app.is_loading(),
+            "poll_phase2 should transition to Complete (is_loading false) on Disconnected"
         );
         assert!(
-            app.phase2_rx.is_none(),
-            "phase2_rx should be cleared after Disconnected"
+            matches!(app.phase2, Phase2State::Complete),
+            "phase2 must be Complete after Disconnected so no further polls are attempted"
         );
     }
 
@@ -624,14 +623,13 @@ mod tests {
         // Sender exists but hasn't sent anything yet.
         app.poll_phase2();
 
-        assert_eq!(
-            app.loading_state,
-            LoadingState::InstantOnly,
-            "poll_phase2 should stay in InstantOnly when channel is empty"
+        assert!(
+            app.is_loading(),
+            "poll_phase2 should stay Loading (is_loading true) when channel is empty"
         );
         assert!(
-            app.phase2_rx.is_some(),
-            "phase2_rx should remain while waiting for data"
+            matches!(app.phase2, Phase2State::Loading { .. }),
+            "phase2 must remain Loading while waiting for data"
         );
     }
 
@@ -642,27 +640,29 @@ mod tests {
         let mut app = InspectApp::with_progressive_loading(graph, rx, None);
 
         // Backdate the start time to 31 seconds ago to simulate an elapsed timeout.
-        app.phase2_started = Some(
-            std::time::Instant::now()
-                .checked_sub(std::time::Duration::from_secs(31))
-                .expect("system clock must support subtracting 31s"),
-        );
+        let backdated = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(31))
+            .expect("system clock must support subtracting 31s");
+        // Replace the Loading variant with the backdated started instant.
+        let old = std::mem::replace(&mut app.phase2, Phase2State::Complete);
+        let Phase2State::Loading { rx: old_rx, .. } = old else {
+            panic!("app should be in Loading state at this point in the test");
+        };
+        app.phase2 = Phase2State::Loading {
+            rx: old_rx,
+            started: backdated,
+        };
 
         app.poll_phase2();
 
-        assert_eq!(
-            app.loading_state,
-            LoadingState::Complete,
-            "poll_phase2 must transition to Complete once the 30s deadline is exceeded \
-             so loading indicators disappear and the UI is not stuck indefinitely"
+        assert!(
+            !app.is_loading(),
+            "poll_phase2 must transition to Complete (is_loading false) once the 30s deadline \
+             is exceeded so loading indicators disappear and the UI is not stuck indefinitely"
         );
         assert!(
-            app.phase2_rx.is_none(),
-            "phase2_rx must be cleared after timeout so no further polls are attempted"
-        );
-        assert!(
-            app.phase2_started.is_none(),
-            "phase2_started must be cleared after timeout to release the Instant"
+            matches!(app.phase2, Phase2State::Complete),
+            "phase2 must be Complete after timeout so no further polls are attempted"
         );
     }
 
@@ -672,23 +672,50 @@ mod tests {
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
         let mut app = InspectApp::with_progressive_loading(graph, rx, None);
 
-        // phase2_started is set to Instant::now() by with_progressive_loading,
+        // started is set to Instant::now() by with_progressive_loading,
         // so elapsed() will be far below 30s — the timeout must NOT trigger.
         app.poll_phase2();
 
-        assert_eq!(
-            app.loading_state,
-            LoadingState::InstantOnly,
-            "poll_phase2 must stay in InstantOnly before the 30s deadline so the \
+        assert!(
+            app.is_loading(),
+            "poll_phase2 must stay Loading (is_loading true) before the 30s deadline so the \
              UI continues waiting for phase-2 data rather than discarding it early"
         );
         assert!(
-            app.phase2_rx.is_some(),
-            "phase2_rx must remain before the deadline so the channel is not prematurely dropped"
+            matches!(app.phase2, Phase2State::Loading { .. }),
+            "phase2 must remain Loading before the deadline so the channel is not prematurely dropped"
         );
+    }
+
+    #[test]
+    fn merge_phase2_resets_nav_when_on_detail_screen() {
+        // Create app with progressive loading, push a NodeDetail screen,
+        // then merge phase-2 data. Nav should reset to Home.
+        use super::super::graph::{NodeKind, NodeRef};
+
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        // Push a NodeDetail screen (simulating user navigated to a node)
+        app.nav.push(super::super::nav::NavScreen::NodeDetail {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+        });
+
+        // Simulate phase-2 data arrival
+        app.phase2 = Phase2State::Complete; // mirror what poll_phase2 does
+        app.merge_phase2(Phase2Data {
+            fixture_entries: vec![],
+            plugin_entries: vec![],
+        });
+
         assert!(
-            app.phase2_started.is_some(),
-            "phase2_started must remain before the deadline so future polls can still detect timeout"
+            matches!(app.nav.current(), super::super::nav::NavScreen::Home { .. }),
+            "nav should reset to Home after phase-2 merge when on NodeDetail — \
+             stale NodeRef indices could cause panics if the user navigates"
         );
     }
 

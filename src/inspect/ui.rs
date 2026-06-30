@@ -15,7 +15,7 @@ use ratatui::{
 
 use std::collections::HashSet;
 
-use super::app::{InputMode, InspectApp, LoadingState, SessionHistory};
+use super::app::{InputMode, InspectApp, SessionHistory};
 use super::detail;
 use super::graph::{self, NodeKind};
 use super::nav::{HOME_KINDS, NavScreen};
@@ -208,7 +208,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
             (None, _) => vec![Line::from("No data loaded")],
         };
         // Append loading indicator when fixture/plugin data is still arriving.
-        if app.loading_state == LoadingState::InstantOnly {
+        if app.is_loading() {
             detail_lines.push(Line::from(""));
             detail_lines.push(Line::from(Span::styled(
                 "Loading fixture and plugin data...",
@@ -254,7 +254,7 @@ fn pane_title(app: &InspectApp) -> String {
 
 /// Build the left pane content based on the current navigation screen.
 fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
-    let is_loading = app.loading_state == LoadingState::InstantOnly;
+    let is_loading = app.is_loading();
 
     let graph = match &app.graph {
         Some(g) if !g.is_empty() || is_loading => g,
