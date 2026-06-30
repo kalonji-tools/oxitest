@@ -212,7 +212,7 @@ class DataclassCases:
 class ComposedCases:
     """Composition-mode parametrize: cases are ``dict[str, _Partial]``."""
 
-    cases: dict[str, Any]
+    cases: MappingProxyType[str, Any]
     param_type: type
     fixref_fields: tuple[str, ...] = ()
     provided_fields: frozenset[str] = frozenset()
@@ -312,7 +312,7 @@ def _build_partial_cases(cases: dict[str, Any]) -> ComposedCases:
     provided = first.provided_fields
     fixref = first.fixref_fields
     return ComposedCases(
-        cases=cases,
+        cases=MappingProxyType(cases),
         param_type=target_type,
         provided_fields=provided,
         fixref_fields=fixref,

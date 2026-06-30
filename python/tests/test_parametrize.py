@@ -1098,7 +1098,7 @@ def test_partial_rejects_non_callable_fixref():
 def test_partial_cases_items_yields_field_repr_pairs():
     p = partial(MathCase, x=1, y=2, expected=3)
     pc = ComposedCases(
-        cases={"add": p},
+        cases=MappingProxyType({"add": p}),
         param_type=MathCase,
         provided_fields=frozenset({"x", "y", "expected"}),
         fixref_fields=(),
