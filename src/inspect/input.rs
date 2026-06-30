@@ -112,23 +112,32 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
         KeyCode::Backspace => {
             if let InputMode::Search { query } = &mut app.input_mode {
                 query.pop();
-                // Sync SearchState query
                 app.search.query.clone_from(query);
-                // Reset selection when query changes
                 app.search.selected_idx = 0;
             }
+            refresh_search(app);
         }
         // Append character to search query
         KeyCode::Char(c) => {
             if let InputMode::Search { query } = &mut app.input_mode {
                 query.push(c);
-                // Sync SearchState query
                 app.search.query.clone_from(query);
-                // Reset selection when query changes
                 app.search.selected_idx = 0;
             }
+            refresh_search(app);
         }
         _ => {}
+    }
+}
+
+/// Re-run the search engine against the current query after a keystroke.
+fn refresh_search(app: &mut InspectApp) {
+    if let Some(graph) = &app.graph {
+        app.search.results = super::search::search(
+            graph,
+            &app.search.query.clone(),
+            super::search::SearchScope::All,
+        );
     }
 }
 
@@ -435,8 +444,14 @@ mod tests {
         };
         app.search.query = "test".to_string();
         app.search.results = vec![
-            super::super::search::NodeRef(0),
-            super::super::search::NodeRef(1),
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 0,
+            },
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 1,
+            },
         ];
         handle_key(&mut app, key(KeyCode::Esc));
         assert_eq!(
@@ -489,8 +504,14 @@ mod tests {
             query: "test".to_string(),
         };
         app.search.results = vec![
-            super::super::search::NodeRef(0),
-            super::super::search::NodeRef(1),
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 0,
+            },
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 1,
+            },
         ];
         handle_key(&mut app, key(KeyCode::Down));
         assert_eq!(
@@ -506,9 +527,18 @@ mod tests {
             query: "test".to_string(),
         };
         app.search.results = vec![
-            super::super::search::NodeRef(0),
-            super::super::search::NodeRef(1),
-            super::super::search::NodeRef(2),
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 0,
+            },
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 1,
+            },
+            super::super::graph::NodeRef {
+                kind: super::super::graph::NodeKind::Test,
+                index: 2,
+            },
         ];
         app.search.selected_idx = 1;
         handle_key(&mut app, key(KeyCode::Up));
@@ -525,7 +555,10 @@ mod tests {
             query: "test".to_string(),
         };
         app.search.query = "test".to_string();
-        app.search.results = vec![super::super::search::NodeRef(0)];
+        app.search.results = vec![super::super::graph::NodeRef {
+            kind: super::super::graph::NodeKind::Test,
+            index: 0,
+        }];
         handle_key(&mut app, key(KeyCode::Enter));
         assert_eq!(
             app.input_mode,
@@ -542,7 +575,10 @@ mod tests {
     fn input_slash_resets_search_state() {
         let mut app = InspectApp::new(None, None);
         app.search.query = "old".to_string();
-        app.search.results = vec![super::super::search::NodeRef(0)];
+        app.search.results = vec![super::super::graph::NodeRef {
+            kind: super::super::graph::NodeKind::Test,
+            index: 0,
+        }];
         handle_key(&mut app, key(KeyCode::Char('/')));
         assert!(app.search.query.is_empty(), "'/' should reset search query");
         assert!(
@@ -581,7 +617,7 @@ mod tests {
                 );
                 assert_eq!(*selected, 0, "NodeList should start with cursor at 0");
             }
-            other => panic!(
+            other => unreachable!(
                 "expected NodeList after Space on Home, got {:?}",
                 std::mem::discriminant(other)
             ),
@@ -727,7 +763,7 @@ mod tests {
                 );
                 assert_eq!(node.index, 0, "first variant should be at graph index 0");
             }
-            other => panic!("expected NodeDetail after Space on variant, got {other:?}"),
+            other => unreachable!("expected NodeDetail after Space on variant, got {other:?}"),
         }
     }
 
@@ -774,7 +810,7 @@ mod tests {
             NavScreen::NodeDetail { node } => {
                 assert_eq!(node.index, 3, "standalone test_solo is at graph index 3");
             }
-            other => panic!("expected NodeDetail for standalone test, got {other:?}"),
+            other => unreachable!("expected NodeDetail for standalone test, got {other:?}"),
         }
     }
 
@@ -808,7 +844,7 @@ mod tests {
                 "cursor should be within bounds after collapse, got {selected}"
             );
         } else {
-            panic!("expected NodeList after collapse");
+            unreachable!("expected NodeList after collapse");
         }
     }
 
@@ -972,7 +1008,7 @@ mod tests {
             NavScreen::History { selected } => {
                 assert_eq!(*selected, 1, "j should move cursor down on History screen");
             }
-            other => panic!("expected History screen, got {:?}", other),
+            other => unreachable!("expected History screen, got {:?}", other),
         }
 
         handle_key(&mut app, key(KeyCode::Char('k')));
@@ -980,7 +1016,89 @@ mod tests {
             NavScreen::History { selected } => {
                 assert_eq!(*selected, 0, "k should move cursor up on History screen");
             }
-            other => panic!("expected History screen, got {:?}", other),
+            other => unreachable!("expected History screen, got {:?}", other),
         }
+    }
+
+    // ── Search integration tests ───────────────────────────────────────
+
+    /// Build a graph with three test nodes for search integration tests.
+    fn three_test_graph() -> crate::inspect::graph::InspectGraph {
+        use crate::inspect::graph::nodes::TestNode;
+        let mut graph = crate::inspect::graph::InspectGraph::default();
+        for name in [
+            "tests/test_login.py::test_login",
+            "tests/test_logout.py::test_logout",
+            "tests/test_signup.py::test_signup",
+        ] {
+            graph.tests.push(TestNode {
+                node_id: name.to_string(),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+        }
+        graph
+    }
+
+    #[test]
+    fn search_populates_results_on_keypress() {
+        // Typing chars that match exactly one node should yield a single result.
+        // This validates that handle_search_key() calls search() after Char(c).
+        let graph = three_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        // Type "login" — should match only test_login
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(
+            app.search.results.len(),
+            1,
+            "typing 'login' should match exactly one test node (test_login); \
+             search() must be called on every Char keypress or results stay empty"
+        );
+    }
+
+    #[test]
+    fn search_clears_results_on_no_match() {
+        // Typing chars that match nothing should produce an empty result set.
+        // This validates that search() runs and filters correctly via input.
+        let graph = three_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        // Type "zzz" — should match nothing
+        for c in "zzz".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert!(
+            app.search.results.is_empty(),
+            "typing 'zzz' should match no nodes; search() must filter correctly \
+             so the UI does not show stale results when the query has no match"
+        );
+    }
+
+    #[test]
+    fn search_total_nodes_set_on_graph_load() {
+        // with_progressive_loading() must seed total_nodes from the graph so
+        // the "N/M matches" display has a denominator on first render.
+        use crate::inspect::app::{InspectApp as App, Phase2Data};
+        use std::sync::mpsc;
+
+        let graph = three_test_graph();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let app = App::with_progressive_loading(graph, rx, None);
+        assert!(
+            app.search.total_nodes > 0,
+            "total_nodes must be set when the graph is loaded via with_progressive_loading(); \
+             a zero value means the '0/N matches' display will always show zero denominator"
+        );
     }
 }

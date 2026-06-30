@@ -7,10 +7,9 @@ use crossterm::event::{self, Event};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use super::graph::{InspectGraph, NodeRef as GraphNodeRef};
+use super::graph::{InspectGraph, NodeRef};
 use super::input;
 use super::nav::{self, NavStack};
-use super::search::NodeRef;
 use super::ui;
 
 // ── InputMode ────────────────────────────────────────────────────────────────
@@ -74,7 +73,7 @@ impl SearchState {
     /// Return the currently selected node reference, if any.
     #[allow(dead_code)] // consumed once tree navigation (#1116) is wired up
     pub(crate) fn selected(&self) -> Option<NodeRef> {
-        self.results.get(self.selected_idx).copied()
+        self.results.get(self.selected_idx).cloned()
     }
 }
 
@@ -113,7 +112,7 @@ pub(crate) struct Phase2Data {
 #[derive(Debug, Clone)]
 pub(crate) struct SessionHistory {
     /// Entries in reverse-chronological order (most recent first).
-    pub(crate) entries: Vec<GraphNodeRef>,
+    pub(crate) entries: Vec<NodeRef>,
 }
 
 impl SessionHistory {
@@ -125,7 +124,7 @@ impl SessionHistory {
     }
 
     /// Record a visit to the given node (prepended, so index 0 is most recent).
-    pub(crate) fn push(&mut self, node: GraphNodeRef) {
+    pub(crate) fn push(&mut self, node: NodeRef) {
         self.entries.insert(0, node);
     }
 
@@ -135,7 +134,7 @@ impl SessionHistory {
     }
 
     /// Return the entry at the given index, if in range.
-    pub(crate) fn get(&self, index: usize) -> Option<&GraphNodeRef> {
+    pub(crate) fn get(&self, index: usize) -> Option<&NodeRef> {
         self.entries.get(index)
     }
 }
@@ -163,6 +162,9 @@ pub(crate) struct InspectApp {
     /// `None` once the data has been received (or if no background thread
     /// was spawned).
     phase2_rx: Option<mpsc::Receiver<Phase2Data>>,
+    /// Instant at which phase-2 loading began, used to enforce a 30-second
+    /// deadline.  `None` when no background thread is active.
+    phase2_started: Option<std::time::Instant>,
     /// Base names of parametrize groups that are currently expanded in the
     /// Test NodeList.  A group's base name is the node_id prefix before the
     /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
@@ -196,6 +198,7 @@ impl InspectApp {
             history: SessionHistory::new(),
             loading_state: LoadingState::Complete,
             phase2_rx: None,
+            phase2_started: None,
             expanded_groups: HashSet::new(),
         }
     }
@@ -213,17 +216,22 @@ impl InspectApp {
             Some(n) => nav::resolve_direct_jump(&graph, n),
             None => NavStack::new(),
         };
+        use super::search::Searchable as _;
+        let total_nodes = graph.all_nodes().len();
+        let mut search = SearchState::new();
+        search.total_nodes = total_nodes;
         Self {
             should_quit: false,
             terminal_width: 0,
             input_mode: InputMode::Normal,
             show_help: false,
-            search: SearchState::new(),
+            search,
             graph: Some(graph),
             nav,
             history: SessionHistory::new(),
             loading_state: LoadingState::InstantOnly,
             phase2_rx: Some(rx),
+            phase2_started: Some(std::time::Instant::now()),
             expanded_groups: HashSet::new(),
         }
     }
@@ -272,15 +280,26 @@ impl InspectApp {
             Ok(data) => {
                 self.merge_phase2(data);
                 self.phase2_rx = None;
+                self.phase2_started = None;
             }
             Err(mpsc::TryRecvError::Empty) => {
-                // Not ready yet — keep waiting.
+                if let Some(started) = self.phase2_started
+                    && started.elapsed() > std::time::Duration::from_secs(30)
+                {
+                    tracing::warn!(
+                        "phase-2 loading timed out after 30s; proceeding with instant-tier data only"
+                    );
+                    self.loading_state = LoadingState::Complete;
+                    self.phase2_rx = None;
+                    self.phase2_started = None;
+                }
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 // Background thread finished without sending data (error path).
                 // Transition to Complete so loading indicators disappear.
                 self.loading_state = LoadingState::Complete;
                 self.phase2_rx = None;
+                self.phase2_started = None;
             }
         }
     }
@@ -288,13 +307,18 @@ impl InspectApp {
     /// Merge phase-2 fixture and plugin data into the existing graph.
     fn merge_phase2(&mut self, data: Phase2Data) {
         use super::graph::builder::GraphBuilder;
+        use super::search::Searchable as _;
 
         if let Some(existing_graph) = self.graph.take() {
             let mut builder = GraphBuilder::from_graph(existing_graph);
             builder.add_fixture_entries(&data.fixture_entries);
             builder.add_plugin_entries(&data.plugin_entries);
             builder.resolve_edges();
-            self.graph = Some(builder.build());
+            let new_graph = builder.build();
+            // Update total_nodes to reflect the now-complete graph so the
+            // "N/M matches" display accounts for fixture and plugin nodes.
+            self.search.total_nodes = new_graph.all_nodes().len();
+            self.graph = Some(new_graph);
         }
 
         self.loading_state = LoadingState::Complete;
@@ -351,8 +375,22 @@ mod tests {
 
     #[test]
     fn search_state_select_next_wraps() {
+        use super::super::graph::NodeKind;
         let mut state = SearchState::new();
-        state.results = vec![NodeRef(0), NodeRef(1), NodeRef(2)];
+        state.results = vec![
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 1,
+            },
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 2,
+            },
+        ];
         state.select_next();
         assert_eq!(state.selected_idx, 1, "select_next from 0 should move to 1");
         state.select_next();
@@ -366,8 +404,22 @@ mod tests {
 
     #[test]
     fn search_state_select_prev_wraps() {
+        use super::super::graph::NodeKind;
         let mut state = SearchState::new();
-        state.results = vec![NodeRef(0), NodeRef(1), NodeRef(2)];
+        state.results = vec![
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 1,
+            },
+            NodeRef {
+                kind: NodeKind::Test,
+                index: 2,
+            },
+        ];
         state.select_prev();
         assert_eq!(
             state.selected_idx, 2,
@@ -394,21 +446,30 @@ mod tests {
 
     #[test]
     fn search_state_selected_returns_current() {
+        use super::super::graph::NodeKind;
+        let node_a = NodeRef {
+            kind: NodeKind::Test,
+            index: 5,
+        };
+        let node_b = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 10,
+        };
         let mut state = SearchState::new();
         assert!(
             state.selected().is_none(),
             "selected on empty results should return None"
         );
-        state.results = vec![NodeRef(5), NodeRef(10)];
+        state.results = vec![node_a.clone(), node_b.clone()];
         assert_eq!(
             state.selected(),
-            Some(NodeRef(5)),
+            Some(node_a.clone()),
             "selected at index 0 should return first result"
         );
         state.select_next();
         assert_eq!(
             state.selected(),
-            Some(NodeRef(10)),
+            Some(node_b.clone()),
             "selected at index 1 should return second result"
         );
     }
@@ -571,6 +632,63 @@ mod tests {
         assert!(
             app.phase2_rx.is_some(),
             "phase2_rx should remain while waiting for data"
+        );
+    }
+
+    #[test]
+    fn poll_phase2_times_out_after_deadline() {
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        // Backdate the start time to 31 seconds ago to simulate an elapsed timeout.
+        app.phase2_started = Some(
+            std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(31))
+                .expect("system clock must support subtracting 31s"),
+        );
+
+        app.poll_phase2();
+
+        assert_eq!(
+            app.loading_state,
+            LoadingState::Complete,
+            "poll_phase2 must transition to Complete once the 30s deadline is exceeded \
+             so loading indicators disappear and the UI is not stuck indefinitely"
+        );
+        assert!(
+            app.phase2_rx.is_none(),
+            "phase2_rx must be cleared after timeout so no further polls are attempted"
+        );
+        assert!(
+            app.phase2_started.is_none(),
+            "phase2_started must be cleared after timeout to release the Instant"
+        );
+    }
+
+    #[test]
+    fn poll_phase2_no_timeout_before_deadline() {
+        let graph = InspectGraph::default();
+        let (_tx, rx) = mpsc::channel::<Phase2Data>();
+        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+
+        // phase2_started is set to Instant::now() by with_progressive_loading,
+        // so elapsed() will be far below 30s — the timeout must NOT trigger.
+        app.poll_phase2();
+
+        assert_eq!(
+            app.loading_state,
+            LoadingState::InstantOnly,
+            "poll_phase2 must stay in InstantOnly before the 30s deadline so the \
+             UI continues waiting for phase-2 data rather than discarding it early"
+        );
+        assert!(
+            app.phase2_rx.is_some(),
+            "phase2_rx must remain before the deadline so the channel is not prematurely dropped"
+        );
+        assert!(
+            app.phase2_started.is_some(),
+            "phase2_started must remain before the deadline so future polls can still detect timeout"
         );
     }
 
