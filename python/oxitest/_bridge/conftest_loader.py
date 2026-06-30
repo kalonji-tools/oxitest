@@ -12,6 +12,7 @@ __all__ = [
 import collections.abc
 import dataclasses
 import importlib.util
+import logging
 import sys
 import warnings
 from collections.abc import Callable, Sequence
@@ -30,6 +31,8 @@ from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_namespace import build_helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge.result import CollectedViolation
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_fixture_type(func: Callable[..., Any]) -> type:
@@ -70,7 +73,8 @@ def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...
     """
     try:
         hints = get_type_hints(func, include_extras=True)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not resolve type hints for %r: %s", func, exc)
         return ()
     deps: list[tuple[str, type]] = []
     for param_name, hint in hints.items():

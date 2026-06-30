@@ -101,7 +101,7 @@ def run(task: WorkerTask) -> None:
     # collect_module during collection, so self-contained test files that define
     # their own fixtures work correctly in parallel mode too.
     # Register fixtures — skip for pure doctest modules that aren't test files.
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(ImportError, ModuleNotFoundError):
         collect_module(module_path, session)
 
     for item in items:

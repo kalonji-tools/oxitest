@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import inspect
 import itertools
+import logging
 import warnings
 from collections.abc import Iterable
 from types import ModuleType
@@ -21,6 +22,8 @@ from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import ComposedCases
 from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
 
+logger = logging.getLogger(__name__)
+
 
 class PluginCollectorWarning(UserWarning):
     """Issued when a plugin collector raises or returns unexpected types."""
@@ -30,8 +33,9 @@ def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
     """Extract (qualifier, type_name) pairs for all Fixture[T]-annotated params."""
     try:
         hints = get_type_hints(fn, include_extras=True)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         # Swallow type hint errors — user code may have unresolvable forward references
+        logger.debug("Could not resolve type hints for %r: %s", fn, exc)
         return ()
     deps: list[tuple[str, str]] = []
     for param_name, hint in hints.items():
@@ -226,7 +230,8 @@ def _get_fixref_deps(layer: ComposedCases) -> tuple[tuple[str, str], ...]:
     globalns.setdefault("FixtureRef", FixtureRef)
     try:
         field_hints = get_type_hints(param_type, globalns=globalns, include_extras=True)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not resolve type hints for %r: %s", param_type, exc)
         return ()
     from typing import Annotated, get_args, get_origin
 

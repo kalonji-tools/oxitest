@@ -105,6 +105,26 @@ fn broken_edges_for<'a>(broken_edges: &'a [BrokenEdge], node_ref: &NodeRef) -> V
         .collect()
 }
 
+/// Compute the intersection of index slices across a set of test variants.
+///
+/// Returns the indices that appear in every variant's slice (e.g. fixture_deps or marks).
+/// Returns an empty vec if `indices` is empty.
+fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize]) -> Vec<usize> {
+    if indices.is_empty() {
+        return vec![];
+    }
+    let first: std::collections::HashSet<usize> = extractor(indices[0]).iter().copied().collect();
+    indices
+        .iter()
+        .skip(1)
+        .fold(first, |acc, &i| {
+            let set: std::collections::HashSet<usize> = extractor(i).iter().copied().collect();
+            acc.intersection(&set).copied().collect()
+        })
+        .into_iter()
+        .collect()
+}
+
 // ── Group detail (parametrize collapse) ──────────────────────────────────
 
 /// Render the detail pane for a collapsed parametrize group.
@@ -142,25 +162,7 @@ pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -
     }
 
     // Shared fixture dependencies: intersection across all variants.
-    let shared_fixture_deps: Vec<usize> = if indices.is_empty() {
-        vec![]
-    } else {
-        let first_deps: std::collections::HashSet<usize> = graph.tests[indices[0]]
-            .fixture_deps
-            .iter()
-            .copied()
-            .collect();
-        indices
-            .iter()
-            .skip(1)
-            .fold(first_deps, |acc, &i| {
-                let deps: std::collections::HashSet<usize> =
-                    graph.tests[i].fixture_deps.iter().copied().collect();
-                acc.intersection(&deps).copied().collect()
-            })
-            .into_iter()
-            .collect()
-    };
+    let shared_fixture_deps = shared_indices(indices, |i| &graph.tests[i].fixture_deps);
 
     if !shared_fixture_deps.is_empty() {
         lines.push(Line::from(""));
@@ -171,22 +173,7 @@ pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -
     }
 
     // Shared marks: intersection across all variants.
-    let shared_marks: Vec<usize> = if indices.is_empty() {
-        vec![]
-    } else {
-        let first_marks: std::collections::HashSet<usize> =
-            graph.tests[indices[0]].marks.iter().copied().collect();
-        indices
-            .iter()
-            .skip(1)
-            .fold(first_marks, |acc, &i| {
-                let marks: std::collections::HashSet<usize> =
-                    graph.tests[i].marks.iter().copied().collect();
-                acc.intersection(&marks).copied().collect()
-            })
-            .into_iter()
-            .collect()
-    };
+    let shared_marks = shared_indices(indices, |i| &graph.tests[i].marks);
 
     if !shared_marks.is_empty() {
         lines.push(Line::from(""));
