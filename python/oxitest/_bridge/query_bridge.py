@@ -54,7 +54,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "async": str(defn.is_async).lower(),
                 "description": doc,
                 "scope": defn.scope.value,
-                "type": defn.fixture_type.__name__,
+                "type": getattr(defn.fixture_type, "__name__", "None"),
             }
         )
     return entries
