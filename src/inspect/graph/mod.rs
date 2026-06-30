@@ -140,6 +140,7 @@ impl InspectGraph {
     }
 
     /// Return the number of nodes of the given kind.
+    #[allow(dead_code)] // utility used by nodes_of_kind and graph tests
     pub(crate) fn node_count(&self, kind: NodeKind) -> usize {
         match kind {
             NodeKind::Fixture => self.fixtures.len(),
@@ -162,6 +163,7 @@ impl InspectGraph {
     }
 
     /// Return node refs for a specific kind.
+    #[allow(dead_code)] // used by context-scoped search tests
     pub(crate) fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
         let count = self.node_count(kind);
         (0..count).map(|i| NodeRef { kind, index: i }).collect()

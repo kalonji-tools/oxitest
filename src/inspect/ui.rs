@@ -379,6 +379,40 @@ fn build_overview_content(
         }
     }
 
+    // Signals section
+    if !sections.signals.is_empty() {
+        if !lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(Span::styled(
+            " Signals",
+            Style::default().fg(Color::Yellow),
+        )));
+        for signal in &sections.signals {
+            let text = format!("  \u{26A0}  {}", signal.message);
+            if cursor == selected {
+                cursor_line_idx = Some(lines.len());
+            }
+            lines.push(if cursor == selected {
+                Line::from(Span::styled(
+                    format!("\u{203A} {text}"),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(format!("  {text}"))
+            });
+            cursor += 1;
+        }
+    } else if is_loading {
+        if !lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(Span::styled(
+            " Signals  \u{23F3}",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
     if lines.is_empty() {
         if is_loading {
             lines.push(Line::from(Span::styled(
@@ -565,7 +599,7 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
             // If search results are active (Enter was pressed), show match count
             if !app.search.results.is_empty() {
                 let count = app.search.results.len();
-                let total = app.search.total_nodes;
+                let total = app.search.total_candidates;
                 vec![
                     Span::styled(" q", Style::default().fg(Color::Yellow)),
                     Span::raw(" Quit  "),
@@ -607,18 +641,25 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
             }
         }
         InputMode::Search { query } => {
+            use super::app::ScopeMode;
             let count = app.search.results.len();
-            let total = app.search.total_nodes;
+            let total = app.search.total_candidates;
             let match_info = if query.is_empty() {
                 String::new()
             } else {
                 format!("  {count}/{total} matches")
+            };
+            let scope_hint = match app.search.scope_mode {
+                ScopeMode::Context => "global",
+                ScopeMode::Global => "context",
             };
             vec![
                 Span::styled(" /", Style::default().fg(Color::Yellow)),
                 Span::raw(query.to_string()),
                 Span::raw(match_info),
                 Span::raw("  "),
+                Span::styled("Tab", Style::default().fg(Color::Yellow)),
+                Span::raw(format!(" {scope_hint}  ")),
                 Span::styled("Esc", Style::default().fg(Color::Yellow)),
                 Span::raw(" Cancel  "),
                 Span::styled("Enter", Style::default().fg(Color::Yellow)),

@@ -1,10 +1,12 @@
 //! Overview section data for the cartographic landing screen.
 //!
-//! [`OverviewSections`] holds three pre-sorted slices of "gravity" entries —
-//! fixtures with the most consumers, marks with the most tests, and conftests
-//! with the most fixtures — used to populate the TUI overview panel.
+//! [`OverviewSections`] holds pre-sorted slices of "gravity" entries —
+//! fixtures with the most consumers, marks with the most tests, conftests
+//! with the most fixtures, and diagnostic signals — used to populate the
+//! TUI overview panel.
 
 use super::graph::{InspectGraph, NodeKind, NodeRef};
+use super::signals::Signal;
 
 // ── Entry types ──────────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ pub(crate) enum OverviewItem {
     Gravity(GravityEntry),
     Mark(MarkEntry),
     Conftest(ConftestEntry),
+    Signal(Signal),
 }
 
 // ── OverviewSections ─────────────────────────────────────────────────────────
@@ -48,13 +51,24 @@ pub(crate) enum OverviewItem {
 /// Flat cursor layout (for `item_at` / `node_ref_at`):
 ///
 /// ```text
-/// [gravity[0], gravity[1], …, marks[0], marks[1], …, conftests[0], …]
+/// [gravity[0], …, marks[0], …, conftests[0], …, signals[0], …]
 /// ```
-#[derive(Default)]
 pub(crate) struct OverviewSections {
     pub gravity: Vec<GravityEntry>,
     pub marks: Vec<MarkEntry>,
     pub conftests: Vec<ConftestEntry>,
+    pub signals: Vec<Signal>,
+}
+
+impl Default for OverviewSections {
+    fn default() -> Self {
+        Self {
+            gravity: Vec::new(),
+            marks: Vec::new(),
+            conftests: Vec::new(),
+            signals: Vec::new(),
+        }
+    }
 }
 
 impl OverviewSections {
@@ -106,16 +120,19 @@ impl OverviewSections {
             .collect();
         conftests.sort_by_key(|e| std::cmp::Reverse(e.fixture_count));
 
+        let signals = super::signals::detect_signals(graph);
+
         Self {
             gravity,
             marks,
             conftests,
+            signals,
         }
     }
 
-    /// Total number of selectable items across all three sections.
+    /// Total number of selectable items across all sections.
     pub(crate) fn item_count(&self) -> usize {
-        self.gravity.len() + self.marks.len() + self.conftests.len()
+        self.gravity.len() + self.marks.len() + self.conftests.len() + self.signals.len()
     }
 
     /// Return the item at the given flat cursor `index`.
@@ -124,31 +141,35 @@ impl OverviewSections {
     /// Returns `None` if `index >= item_count()`.
     #[cfg(test)]
     pub(crate) fn item_at(&self, index: usize) -> Option<OverviewItem> {
-        let gravity_len = self.gravity.len();
-        let marks_len = self.marks.len();
+        let g = self.gravity.len();
+        let m = self.marks.len();
+        let c = self.conftests.len();
 
-        if index < gravity_len {
+        if index < g {
             let e = &self.gravity[index];
             Some(OverviewItem::Gravity(GravityEntry {
                 node_ref: e.node_ref.clone(),
                 name: e.name.clone(),
                 consumer_count: e.consumer_count,
             }))
-        } else if index < gravity_len + marks_len {
-            let e = &self.marks[index - gravity_len];
+        } else if index < g + m {
+            let e = &self.marks[index - g];
             Some(OverviewItem::Mark(MarkEntry {
                 node_ref: e.node_ref.clone(),
                 name: e.name.clone(),
                 test_count: e.test_count,
             }))
-        } else if index < gravity_len + marks_len + self.conftests.len() {
-            let e = &self.conftests[index - gravity_len - marks_len];
+        } else if index < g + m + c {
+            let e = &self.conftests[index - g - m];
             Some(OverviewItem::Conftest(ConftestEntry {
                 node_ref: e.node_ref.clone(),
                 path: e.path.clone(),
                 fixture_count: e.fixture_count,
                 helper_count: e.helper_count,
             }))
+        } else if index < g + m + c + self.signals.len() {
+            let s = &self.signals[index - g - m - c];
+            Some(OverviewItem::Signal(s.clone()))
         } else {
             None
         }
@@ -161,12 +182,15 @@ impl OverviewSections {
     pub(crate) fn node_ref_at(&self, index: usize) -> Option<NodeRef> {
         let g = self.gravity.len();
         let m = self.marks.len();
+        let c = self.conftests.len();
         if index < g {
             Some(self.gravity[index].node_ref.clone())
         } else if index < g + m {
             Some(self.marks[index - g].node_ref.clone())
-        } else if index < g + m + self.conftests.len() {
+        } else if index < g + m + c {
             Some(self.conftests[index - g - m].node_ref.clone())
+        } else if index < g + m + c + self.signals.len() {
+            self.signals[index - g - m - c].affected.first().cloned()
         } else {
             None
         }
@@ -365,8 +389,15 @@ mod tests {
 
         let sections = OverviewSections::from_graph(&graph);
         let total = sections.item_count();
+        let expected = sections.gravity.len()
+            + sections.marks.len()
+            + sections.conftests.len()
+            + sections.signals.len();
 
-        assert_eq!(total, 4, "2 gravity + 1 mark + 1 conftest = 4 total items");
+        assert_eq!(
+            total, expected,
+            "item_count should equal gravity + marks + conftests + signals"
+        );
 
         // Every index in [0, total) must return Some.
         for i in 0..total {
@@ -542,6 +573,143 @@ mod tests {
         assert_eq!(
             sections.gravity[0].name, "with_consumer",
             "only the fixture with consumers should appear"
+        );
+    }
+
+    // ── signal_integration ──────────────────────────────────────────────
+
+    #[test]
+    fn signals_populated_from_graph_with_unused_fixture() {
+        let mut graph = InspectGraph::default();
+        // Unused fixture (no consumers, not autouse) triggers UnusedFixtures signal.
+        graph.fixtures.push(FixtureNode {
+            name: "orphan".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: String::new(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        let sections = OverviewSections::from_graph(&graph);
+
+        assert!(
+            !sections.signals.is_empty(),
+            "graph with an unused fixture should produce at least one signal"
+        );
+        assert!(
+            sections.signals[0].message.contains("fixture"),
+            "first signal message should mention fixtures — got: {}",
+            sections.signals[0].message,
+        );
+    }
+
+    #[test]
+    fn signals_included_in_item_count() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "orphan".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: String::new(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        let sections = OverviewSections::from_graph(&graph);
+        let expected = sections.gravity.len()
+            + sections.marks.len()
+            + sections.conftests.len()
+            + sections.signals.len();
+
+        assert_eq!(
+            sections.item_count(),
+            expected,
+            "item_count should include signals in the total — \
+             gravity={}, marks={}, conftests={}, signals={}",
+            sections.gravity.len(),
+            sections.marks.len(),
+            sections.conftests.len(),
+            sections.signals.len(),
+        );
+    }
+
+    #[test]
+    fn item_at_returns_signal_variant_for_signal_index() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "orphan".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: String::new(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        let sections = OverviewSections::from_graph(&graph);
+        let signal_start = sections.gravity.len() + sections.marks.len() + sections.conftests.len();
+
+        assert!(
+            !sections.signals.is_empty(),
+            "setup: graph must produce at least one signal for this test"
+        );
+        assert!(
+            matches!(
+                sections.item_at(signal_start),
+                Some(OverviewItem::Signal(_))
+            ),
+            "item_at at the signal range should return OverviewItem::Signal"
+        );
+    }
+
+    #[test]
+    fn node_ref_at_returns_first_affected_for_signal() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "orphan".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: String::new(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        let sections = OverviewSections::from_graph(&graph);
+        let signal_start = sections.gravity.len() + sections.marks.len() + sections.conftests.len();
+
+        let node_ref = sections.node_ref_at(signal_start);
+        let expected = sections.signals[0].affected.first().cloned();
+
+        assert_eq!(
+            node_ref, expected,
+            "node_ref_at for a signal should return its first affected NodeRef"
+        );
+    }
+
+    #[test]
+    fn empty_graph_has_no_signals() {
+        let graph = InspectGraph::default();
+        let sections = OverviewSections::from_graph(&graph);
+
+        assert!(
+            sections.signals.is_empty(),
+            "empty graph should produce no signals — nothing to diagnose"
         );
     }
 }
