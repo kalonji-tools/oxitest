@@ -13,6 +13,15 @@ use super::nav::{self, Screen, Trail};
 use super::overview::OverviewSections;
 use super::ui;
 
+// ── RefreshArgs ──────────────────────────────────────────────────────────────
+
+/// Arguments needed to re-run file collection and graph construction
+/// when the user presses `r` to refresh.
+pub(crate) struct RefreshArgs {
+    pub inspect_args: crate::config::cli::InspectArgs,
+    pub config: crate::config::Config,
+}
+
 // ── InputMode ────────────────────────────────────────────────────────────────
 
 /// Current input mode of the TUI.
@@ -175,7 +184,6 @@ pub(crate) struct InspectApp {
     /// Pre-sorted overview sections derived from the graph.
     pub(crate) overview_sections: OverviewSections,
     /// Flash message displayed briefly after user actions (e.g. "back to overview").
-    #[allow(dead_code)] // wired up in event loop once flash messages are triggered
     pub(crate) flash_message: Option<(String, std::time::Instant)>,
     /// Progressive-loading state: holds the background receiver while loading,
     /// transitions to `Complete` once data arrives (or times out / disconnects).
@@ -191,6 +199,9 @@ pub(crate) struct InspectApp {
     pub(crate) rootdir: String,
     /// How long to wait for phase-2 (Python-tier) data before giving up.
     phase2_timeout: std::time::Duration,
+    /// Arguments needed for manual graph refresh (`r` key).
+    /// `None` in test-only construction; `Some` when launched from `run()`.
+    refresh_args: Option<RefreshArgs>,
 }
 
 impl InspectApp {
@@ -229,6 +240,7 @@ impl InspectApp {
             scroll_offset: 0,
             rootdir: String::new(),
             phase2_timeout: std::time::Duration::from_secs(30),
+            refresh_args: None,
         }
     }
 
@@ -245,6 +257,7 @@ impl InspectApp {
         name: Option<&str>,
         timeout: std::time::Duration,
         rootdir: &str,
+        refresh_args: Option<RefreshArgs>,
     ) -> Self {
         let nav = match name {
             Some(n) => nav::resolve_direct_jump(&graph, n),
@@ -273,6 +286,7 @@ impl InspectApp {
             scroll_offset: 0,
             rootdir: rootdir.to_string(),
             phase2_timeout: timeout,
+            refresh_args,
         }
     }
 
@@ -284,6 +298,7 @@ impl InspectApp {
         loop {
             // Check for phase-2 data from the background thread.
             self.poll_phase2();
+            self.clear_expired_flash();
 
             // Update terminal dimensions and scroll offset before drawing.
             let term_size = terminal.size()?;
@@ -379,13 +394,11 @@ impl InspectApp {
     }
 
     /// Set a flash message that auto-clears after 2 seconds.
-    #[allow(dead_code)] // wired up once flash messages are triggered from input handlers
     pub(crate) fn flash(&mut self, message: impl Into<String>) {
         self.flash_message = Some((message.into(), std::time::Instant::now()));
     }
 
     /// Clear the flash message if it has expired (> 2 seconds).
-    #[allow(dead_code)] // wired up once flash messages are triggered from event loop
     pub(crate) fn clear_expired_flash(&mut self) {
         if let Some((_, instant)) = &self.flash_message
             && instant.elapsed() > std::time::Duration::from_secs(2)
@@ -398,6 +411,81 @@ impl InspectApp {
     #[allow(dead_code)] // convenience alias for future callers
     pub(crate) fn is_phase2_loading(&self) -> bool {
         self.is_loading()
+    }
+
+    /// Re-collect files, rebuild the phase-1 graph, and spawn a new phase-2
+    /// background thread.  Called when the user presses `r`.
+    ///
+    /// Startup filters (`-E`, `--affected`, `--lf`) are re-applied because
+    /// `build_phase1_graph` reads them directly from the stored `InspectArgs`.
+    /// Any runtime state (scroll position, nav trail) is pruned via
+    /// `prune_stale_trail` to avoid stale node-index panics after a refresh.
+    pub(crate) fn refresh(&mut self) {
+        let Some(ref rargs) = self.refresh_args else {
+            return;
+        };
+
+        // Re-collect files.
+        let Ok((test_files, conftest_files)) = crate::collector::collect_files(&rargs.config)
+        else {
+            self.flash("Refresh failed: file collection error");
+            return;
+        };
+
+        // Rebuild phase-1 graph.
+        let Ok(mut graph) = super::build_phase1_graph(
+            &rargs.inspect_args,
+            &rargs.config,
+            test_files,
+            &conftest_files,
+        ) else {
+            self.flash("Refresh failed: graph build error");
+            return;
+        };
+        graph.relativize_paths(&self.rootdir);
+
+        // Spawn phase-2 in background.
+        let (tx, rx) = std::sync::mpsc::channel();
+        super::spawn_phase2(
+            conftest_files,
+            rargs.config.features.plugins.clone(),
+            rargs.config.features.plugin_settings.clone(),
+            tx,
+        );
+
+        // Swap graph and reset dependent state.
+        self.search.total_candidates = graph.all_node_refs().len();
+        self.overview_sections = super::overview::OverviewSections::from_graph(&graph);
+        self.graph = Some(graph);
+        self.phase2 = Phase2State::Loading {
+            rx,
+            started: std::time::Instant::now(),
+        };
+
+        self.prune_stale_trail();
+        self.flash("Refreshed");
+    }
+
+    /// Pop trail screens that reference nodes beyond the new graph's bounds.
+    ///
+    /// After a refresh the graph may have fewer nodes than before.  Any
+    /// `NodeFocus` screen whose `node.index` exceeds the new node count for
+    /// that kind is stale and must be removed to prevent panics.
+    fn prune_stale_trail(&mut self) {
+        let graph = match &self.graph {
+            Some(g) => g,
+            None => return,
+        };
+        // Pop NodeFocus screens that reference nodes beyond the graph's bounds.
+        while let Screen::NodeFocus { ref node, .. } = *self.nav.current() {
+            if node.index < graph.node_count(node.kind) {
+                break; // Node still exists
+            }
+            if !self.nav.pop() {
+                break; // At overview root
+            }
+        }
+        self.scroll_offset = 0;
     }
 }
 
@@ -571,6 +659,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
         assert!(
             app.is_loading(),
@@ -594,6 +683,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         let data = Phase2Data {
@@ -640,6 +730,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         tx.send(Phase2Data {
@@ -696,6 +787,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         // Drop the sender to simulate background thread failure.
@@ -723,6 +815,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         // Sender exists but hasn't sent anything yet.
@@ -748,6 +841,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         // Backdate the start time to 31 seconds ago to simulate an elapsed timeout.
@@ -787,6 +881,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         // started is set to Instant::now() by with_progressive_loading,
@@ -819,6 +914,7 @@ mod tests {
             None,
             std::time::Duration::from_secs(30),
             "",
+            None,
         );
 
         // Push a NodeFocus screen (simulating user navigated to a node)
@@ -911,6 +1007,118 @@ mod tests {
             history.len(),
             2,
             "pushing the same node twice should create 2 entries"
+        );
+    }
+
+    // ── prune_stale_trail tests ──────────────────────────────────────
+
+    #[test]
+    fn prune_stale_trail_pops_invalid_nodes() {
+        use super::super::graph::nodes::TestNode;
+        use super::super::graph::{NodeKind, NodeRef};
+        use super::super::nav::Screen;
+
+        // Build a graph with 6 test nodes.
+        let mut graph = InspectGraph::default();
+        for i in 0..6 {
+            graph.tests.push(TestNode {
+                node_id: format!("t.py::test_{i}"),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+        }
+
+        let mut app = InspectApp::new(Some(graph), None);
+
+        // Push NodeFocus for index 5 (valid in the 6-node graph).
+        app.nav.push(Screen::NodeFocus {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 5,
+            },
+            selected: 0,
+        });
+
+        // Replace graph with one that has only 3 test nodes.
+        let mut small_graph = InspectGraph::default();
+        for i in 0..3 {
+            small_graph.tests.push(TestNode {
+                node_id: format!("t.py::test_{i}"),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+        }
+        app.graph = Some(small_graph);
+
+        app.prune_stale_trail();
+
+        assert!(
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "prune_stale_trail should pop NodeFocus with index 5 when graph has only 3 nodes — \
+             stale indices would cause panics on navigation"
+        );
+    }
+
+    #[test]
+    fn prune_stale_trail_keeps_valid_nodes() {
+        use super::super::graph::nodes::TestNode;
+        use super::super::graph::{NodeKind, NodeRef};
+        use super::super::nav::Screen;
+
+        // Build a graph with 3 test nodes.
+        let mut graph = InspectGraph::default();
+        for i in 0..3 {
+            graph.tests.push(TestNode {
+                node_id: format!("t.py::test_{i}"),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+        }
+
+        let mut app = InspectApp::new(Some(graph), None);
+
+        // Push NodeFocus for index 0 (still valid after graph replacement).
+        app.nav.push(Screen::NodeFocus {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        // Replace graph with another that still has index 0.
+        let mut new_graph = InspectGraph::default();
+        for i in 0..2 {
+            new_graph.tests.push(TestNode {
+                node_id: format!("t.py::test_{i}"),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![],
+                marks: vec![],
+            });
+        }
+        app.graph = Some(new_graph);
+
+        app.prune_stale_trail();
+
+        assert!(
+            matches!(app.nav.current(), Screen::NodeFocus { .. }),
+            "prune_stale_trail should keep NodeFocus with index 0 when graph still has that node — \
+             valid screens should not be discarded"
         );
     }
 }

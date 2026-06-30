@@ -205,7 +205,7 @@ impl ColorMode {
 // ─── Sub-struct definitions ──────────────────────────────────────────────────
 
 /// File discovery and path configuration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PathConfig {
     /// Directories to search for test files.
     pub testpaths: Vec<Utf8PathBuf>,
@@ -241,7 +241,7 @@ impl Default for PathConfig {
 }
 
 /// Execution control: parallelism, timeouts, retries, debug mode.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExecConfig {
     /// Execution dispatch mode (serial, debug, or parallel).
     pub mode: ExecutionMode,
@@ -283,7 +283,7 @@ impl Default for ExecConfig {
 }
 
 /// Output and display configuration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutputConfig {
     /// Traceback display style (short, long, line, no, native, auto).
     pub tb: TbStyle,
@@ -319,7 +319,7 @@ impl Default for OutputConfig {
 }
 
 /// Marker registration and strict-mode configuration.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MarkerConfig {
     /// Custom marker names registered via `[tool.oxitest] markers`.
     pub registered_markers: Vec<String>,
@@ -330,7 +330,7 @@ pub struct MarkerConfig {
 }
 
 /// Filtering and scheduling configuration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FilterConfig {
     /// Scheduling strategy for distributing tests across workers.
     pub schedule: ScheduleStrategy,
@@ -376,7 +376,7 @@ impl Default for FilterConfig {
 }
 
 /// Feature flags: plugins, coverage, async, caching.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FeatureConfig {
     /// Python plugin module paths to load.
     pub plugins: Vec<String>,
@@ -434,7 +434,7 @@ pub enum PluginValueType {
 }
 
 /// All CLI extensions declared by plugins, keyed by module name.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PluginCliExtensions {
     /// (prefix, options) per plugin module.
     pub plugins: std::collections::HashMap<String, (String, Vec<PluginCliOption>)>,
@@ -447,7 +447,7 @@ pub struct PluginCliExtensions {
 /// CLI flags take precedence over `pyproject.toml` values. Construct via
 /// `Config::load(rootdir)` then `config.merge_run_args(&args)` or
 /// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Project root directory (where `pyproject.toml` lives).
     pub rootdir: Utf8PathBuf,

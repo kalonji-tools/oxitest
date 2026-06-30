@@ -53,22 +53,12 @@ pub(crate) enum OverviewItem {
 /// ```text
 /// [gravity[0], …, marks[0], …, conftests[0], …, signals[0], …]
 /// ```
+#[derive(Default)]
 pub(crate) struct OverviewSections {
     pub gravity: Vec<GravityEntry>,
     pub marks: Vec<MarkEntry>,
     pub conftests: Vec<ConftestEntry>,
     pub signals: Vec<Signal>,
-}
-
-impl Default for OverviewSections {
-    fn default() -> Self {
-        Self {
-            gravity: Vec::new(),
-            marks: Vec::new(),
-            conftests: Vec::new(),
-            signals: Vec::new(),
-        }
-    }
 }
 
 impl OverviewSections {
@@ -581,17 +571,23 @@ mod tests {
     #[test]
     fn signals_populated_from_graph_with_unused_fixture() {
         let mut graph = InspectGraph::default();
-        // Unused fixture (no consumers, not autouse) triggers UnusedFixtures signal.
+        // Conftest needed so conftest_idx is valid.
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
+        // Unused conftest fixture (no consumers, not autouse) triggers UnusedFixtures signal.
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: String::new(),
+            source: "conftest.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            conftest_idx: Some(0),
             plugin_idx: None,
         });
 
@@ -645,16 +641,21 @@ mod tests {
     #[test]
     fn item_at_returns_signal_variant_for_signal_index() {
         let mut graph = InspectGraph::default();
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: String::new(),
+            source: "conftest.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            conftest_idx: Some(0),
             plugin_idx: None,
         });
 
@@ -677,16 +678,21 @@ mod tests {
     #[test]
     fn node_ref_at_returns_first_affected_for_signal() {
         let mut graph = InspectGraph::default();
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: String::new(),
+            source: "conftest.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            conftest_idx: Some(0),
             plugin_idx: None,
         });
 
