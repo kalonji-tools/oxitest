@@ -19,6 +19,7 @@ subcommand is equivalent to `oxitest run`.
 | `run` | Run tests (default when no subcommand is given) |
 | `debug` | Run tests under an interactive debugger |
 | `query` | Inspect tests, fixtures, marks, helpers, or plugins without running them |
+| `inspect` | Interactive TUI explorer for tests, fixtures, marks, and other project metadata |
 | `env` | Print environment information and exit |
 | `fixtures` | **Deprecated.** Use `oxitest query fixtures` instead. |
 
@@ -301,6 +302,64 @@ Expressions can be combined with `and`, `or`, `not`, and parentheses:
 -E 'mark(slow) and not source(test_legacy)'
 -E 'scope(session) or autouse()'
 ```
+
+---
+
+## `oxitest inspect`
+
+Interactive terminal UI for exploring test project metadata — tests, fixtures,
+marks, conftests, plugins, and helpers — without running any tests.
+
+```text
+oxitest inspect [NAME] [OPTIONS]
+```
+
+### Positional arguments
+
+| Argument | Description |
+|----------|-------------|
+| `NAME` | Jump directly to a node whose name contains this string. If one match is found, the TUI opens on that node's list. If multiple matches are found, a disambiguation screen is shown. If no match is found, the TUI opens on the Home screen. |
+
+### Startup filters
+
+These flags narrow the data loaded into the TUI before it starts. They use the
+same filter semantics as `oxitest run`.
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `-E` | — | `EXPR` | — | Filter tests using the query DSL before building the graph. See [Query DSL](#query-dsl). |
+| `--affected` | — | `REF` | — | Limit test files to those affected by git changes relative to `REF`. Use `--affected=REF` with `=`. Bare `--affected` uses the `affected_base` config value. |
+| `--lf` | — | flag | — | Show only previously-failed tests. |
+| `--ff` | — | flag | — | Show previously-failed tests before others. |
+
+### Key bindings
+
+| Key | Action |
+|-----|--------|
+| `j` / `Down` | Move cursor down |
+| `k` / `Up` | Move cursor up |
+| `Space` / `l` / `Right` | Navigate into selected item (or expand/collapse a parametrized group on the test list) |
+| `Backspace` / `Left` | Go back to previous screen |
+| `h` | Open session history screen |
+| `/` | Enter search mode — type to filter by name (substring) or DSL expression |
+| `Esc` (in search mode) | Exit search mode and clear the query |
+| `?` | Toggle help overlay |
+| `q` / `Esc` (in normal mode) | Quit |
+| `Ctrl+C` | Quit (works in any mode) |
+
+### Progressive loading
+
+`oxitest inspect` uses a two-phase loading model:
+
+1. **Phase 1 (instant)** — Tests, marks, and helpers are extracted from the
+   Rust AST without starting a Python session. The TUI becomes interactive
+   immediately.
+2. **Phase 2 (background)** — A background thread initialises the Python
+   session and collects fixtures and plugins. These are merged into the graph
+   when ready. If the Python session fails, the TUI continues with whatever
+   data phase 1 collected.
+
+See [Use oxitest inspect](../how-to/use-inspect.md) for usage examples.
 
 ---
 
