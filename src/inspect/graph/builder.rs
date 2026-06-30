@@ -27,11 +27,6 @@ pub(crate) struct GraphBuilder {
     // Side channel: mark names per test index (populated during add_test_entries,
     // consumed during resolve_edges).
     test_mark_names: HashMap<usize, Vec<String>>,
-    // Side channel: fixture dep names per test index (populated during add_test_entries,
-    // consumed during resolve_edges).
-    // TODO(#1119): wire up test -> fixture edges once fixture data is available
-    #[allow(dead_code)]
-    test_fixture_names: HashMap<usize, Vec<String>>,
 }
 
 impl GraphBuilder {
@@ -45,7 +40,6 @@ impl GraphBuilder {
             plugin_by_name: HashMap::new(),
             helper_by_key: HashMap::new(),
             test_mark_names: HashMap::new(),
-            test_fixture_names: HashMap::new(),
         }
     }
 
@@ -101,7 +95,6 @@ impl GraphBuilder {
             plugin_by_name,
             helper_by_key,
             test_mark_names: HashMap::new(),
-            test_fixture_names: HashMap::new(),
         }
     }
 
