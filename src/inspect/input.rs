@@ -997,4 +997,292 @@ mod tests {
              global={global_results}, context={context_results}"
         );
     }
+
+    #[test]
+    fn context_search_on_node_focus_uses_edge_nodes() {
+        // Context-scoped search while focused on a fixture node must restrict
+        // candidates to that fixture's selectable edges (consumers + owner),
+        // not the entire graph.  Here: one fixture "db" consumed by one test
+        // "test_login", plus a conftest owner.  Searching "login" in Context
+        // mode must find the consumer test; searching "db" must find nothing
+        // (the fixture itself is not a selectable edge of itself).
+        use crate::inspect::app::ScopeMode;
+        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode, TestNode};
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        // fixture at index 0 with one consumer (test index 0) and conftest at index 0
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: "fixture".to_string(),
+            scope: "session".to_string(),
+            autouse: false,
+            source: "conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            }],
+            conftest_idx: Some(0),
+            plugin_idx: None,
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_login".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![0],
+            marks: vec![],
+        });
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![0],
+            helpers: vec![],
+        });
+
+        let fixture_node_ref = GraphNodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        let mut app = InspectApp::new(Some(graph), None);
+        // Push NodeFocus for the "db" fixture
+        app.nav.push(Screen::NodeFocus {
+            node: fixture_node_ref,
+            selected: 0,
+        });
+
+        // Enter search mode and stay in Context scope (the default)
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "scope should default to Context"
+        );
+
+        // Type "login" — only the consumer test matches; the fixture itself is not an edge
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(
+            app.search.results.len(),
+            1,
+            "context search on NodeFocus should find the consumer test 'test_login'; \
+             got {} results — scope must be limited to the fixture's edge nodes, \
+             not the whole graph",
+            app.search.results.len()
+        );
+        assert_eq!(
+            app.search.results[0],
+            GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0
+            },
+            "the single result should be the consumer test node"
+        );
+
+        // Searching for "db" should NOT match: the fixture itself is not in its own edge list
+        for _ in 0.."login".len() {
+            handle_key(&mut app, key(KeyCode::Backspace));
+        }
+        for c in "db".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert!(
+            app.search.results.is_empty(),
+            "context search on NodeFocus for 'db' should not match the focused fixture itself — \
+             the fixture is not among its own selectable edges"
+        );
+    }
+
+    #[test]
+    fn context_search_on_history_uses_history_entries() {
+        // Context-scoped search on the History screen must restrict candidates
+        // to the nodes recorded in session history, not the whole graph.
+        // Graph has two tests; only one is in history.  Searching "logout"
+        // in Context mode must return empty because "logout" is not in history.
+        // Searching "login" must find the history entry.
+        use crate::inspect::app::ScopeMode;
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_login".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_logout".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        // Only push test_login (index 0) into history — test_logout stays out
+        app.history.push(GraphNodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        });
+        // Open the History screen
+        app.nav.push(Screen::History { selected: 0 });
+
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "scope should default to Context"
+        );
+
+        // "login" is in history → should match
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(
+            app.search.results.len(),
+            1,
+            "context search on History should find 'test_login' which is in history; \
+             got {} results",
+            app.search.results.len()
+        );
+        assert_eq!(
+            app.search.results[0],
+            GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0
+            },
+            "the result should be the history entry for test_login"
+        );
+
+        // "logout" is NOT in history → no results despite being in the graph
+        for _ in 0.."login".len() {
+            handle_key(&mut app, key(KeyCode::Backspace));
+        }
+        for c in "logout".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert!(
+            app.search.results.is_empty(),
+            "context search on History for 'logout' must return empty — 'test_logout' \
+             is in the graph but not in session history, so Context scope must exclude it"
+        );
+    }
+
+    #[test]
+    fn context_search_on_disambiguation_uses_matches() {
+        // Context-scoped search on a Disambiguation screen must restrict
+        // candidates to the match list stored in that screen variant, not
+        // the whole graph.  Graph has three tests; only two are in the
+        // disambiguation list.  Searching "signup" in Context mode must
+        // return empty because "signup" is not in the match list.
+        use crate::inspect::app::ScopeMode;
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_login".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_logout".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.tests.push(TestNode {
+            node_id: "tests/test_auth.py::test_signup".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        // Disambiguation contains only test_login and test_logout (indices 0 and 1)
+        let matches = vec![
+            GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 1,
+            },
+        ];
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::Disambiguation {
+            query: "auth test".to_string(),
+            matches,
+            selected: 0,
+        });
+
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "scope should default to Context"
+        );
+
+        // "login" is in the match list → should match
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(
+            app.search.results.len(),
+            1,
+            "context search on Disambiguation should find 'test_login' which is in matches; \
+             got {} results",
+            app.search.results.len()
+        );
+        assert_eq!(
+            app.search.results[0],
+            GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0
+            },
+            "the result should be the test_login match"
+        );
+
+        // "signup" is in the graph but NOT in the disambiguation match list → no results
+        for _ in 0.."login".len() {
+            handle_key(&mut app, key(KeyCode::Backspace));
+        }
+        for c in "signup".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        assert!(
+            app.search.results.is_empty(),
+            "context search on Disambiguation for 'signup' must return empty — \
+             'test_signup' is in the graph but not in the Disambiguation match list, \
+             so Context scope must exclude it"
+        );
+    }
 }

@@ -107,7 +107,7 @@ pub(crate) fn build_phase1_graph(
 }
 
 /// Phase 2: spawn a background thread that initializes the Python session and
-/// collects fixture and plugin entries.
+/// collects fixture, plugin, and test→fixture dependency entries.
 ///
 /// Sends a [`Phase2Data`] payload through the channel when done.  If the
 /// Python session fails, the sender is simply dropped, which causes the
@@ -115,6 +115,7 @@ pub(crate) fn build_phase1_graph(
 /// `LoadingState::Complete` with whatever data it already has.
 pub(crate) fn spawn_phase2(
     conftest_files: Vec<Utf8PathBuf>,
+    test_files: Vec<Utf8PathBuf>,
     plugins: Vec<String>,
     plugin_settings: std::collections::HashMap<String, toml::Value>,
     tx: mpsc::Sender<Phase2Data>,
@@ -139,6 +140,9 @@ pub(crate) fn spawn_phase2(
                     .map_err(|e| e.to_string())?;
                 let plugin_raw = crate::query::bridge::plugin_entries(&session, py)
                     .map_err(|e| e.to_string())?;
+                let fixture_dep_raw =
+                    crate::query::bridge::test_fixture_deps(&session, py, &test_files)
+                        .map_err(|e| e.to_string())?;
 
                 let fixture_entries = fixture_raw
                     .into_iter()
@@ -148,10 +152,15 @@ pub(crate) fn spawn_phase2(
                     .into_iter()
                     .map(|fields| QueryEntry { fields })
                     .collect();
+                let fixture_dep_entries = fixture_dep_raw
+                    .into_iter()
+                    .map(|fields| QueryEntry { fields })
+                    .collect();
 
                 Ok(Phase2Data {
                     fixture_entries,
                     plugin_entries,
+                    fixture_dep_entries,
                 })
             })();
 
@@ -182,11 +191,15 @@ pub(crate) fn run(
     // Collect files first so conftest paths are available before AST work begins.
     let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
 
+    // Clone test files for phase 2 before phase 1 consumes the original.
+    let test_files_for_phase2 = test_files.clone();
+
     // Phase 2: spawn background Python session immediately — it starts while
     // Phase 1 parses ASTs, so fixture/plugin data is ready sooner.
     let (tx, rx) = mpsc::channel();
     spawn_phase2(
         conftest_files.clone(),
+        test_files_for_phase2,
         cfg.features.plugins.clone(),
         cfg.features.plugin_settings.clone(),
         tx,

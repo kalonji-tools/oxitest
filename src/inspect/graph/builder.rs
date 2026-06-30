@@ -252,6 +252,63 @@ impl GraphBuilder {
         }
     }
 
+    /// Wire test→fixture consumer edges from Python-tier fixture dependency data.
+    ///
+    /// Expected entry fields: `test_node_id`, `fixture_names` (comma-separated).
+    /// For each entry, looks up the test by node_id and each fixture by name,
+    /// then adds forward (test→fixture) and inverse (fixture→test) edges.
+    /// Entries referencing unknown tests or fixtures are silently skipped.
+    ///
+    /// `rootdir` is stripped from absolute `test_node_id` values so they match
+    /// the relative keys stored in `test_by_node_id` (phase-1 relativizes paths
+    /// after graph build; phase-2 Python data carries absolute paths).
+    pub(crate) fn add_fixture_dep_entries(&mut self, entries: &[QueryEntry], rootdir: &str) {
+        let prefix = if rootdir.is_empty() {
+            String::new()
+        } else if rootdir.ends_with('/') {
+            rootdir.to_string()
+        } else {
+            format!("{rootdir}/")
+        };
+
+        for entry in entries {
+            let raw_id = entry.get("test_node_id").unwrap_or_default();
+            let test_node_id = if prefix.is_empty() {
+                raw_id
+            } else {
+                raw_id.strip_prefix(&prefix).unwrap_or(raw_id)
+            };
+            let fixture_names = entry.get("fixture_names").unwrap_or_default();
+
+            let Some(&test_idx) = self.test_by_node_id.get(test_node_id) else {
+                continue;
+            };
+
+            for name in fixture_names.split(',') {
+                let name = name.trim();
+                if name.is_empty() {
+                    continue;
+                }
+                let Some(&fix_idx) = self.fixture_by_name.get(name) else {
+                    continue;
+                };
+
+                // Forward: test -> fixture
+                if !self.graph.tests[test_idx].fixture_deps.contains(&fix_idx) {
+                    self.graph.tests[test_idx].fixture_deps.push(fix_idx);
+                }
+                // Inverse: fixture -> test (consumer)
+                let consumer_ref = super::NodeRef::new(super::NodeKind::Test, test_idx);
+                if !self.graph.fixtures[fix_idx]
+                    .consumers
+                    .contains(&consumer_ref)
+                {
+                    self.graph.fixtures[fix_idx].consumers.push(consumer_ref);
+                }
+            }
+        }
+    }
+
     // ── Edge resolution ──────────────────────────────────────────────────
 
     /// Wire up cross-references between nodes.
@@ -1154,6 +1211,277 @@ mod tests {
             1,
             "two entries with missing 'name' both default to \"\" — \
              deduplication on the empty key should keep only one node"
+        );
+    }
+
+    // ── add_fixture_dep_entries ────────────────────────────────────────────
+
+    #[test]
+    fn fixture_dep_entries_wire_test_to_fixture_edges() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_a.py::test_one"),
+                ("fixture_names", "db"),
+            ])],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.tests[0].fixture_deps,
+            vec![0],
+            "test should have fixture dep pointing to fixture index 0 — \
+             add_fixture_dep_entries must wire the forward edge"
+        );
+        assert_eq!(
+            graph.fixtures[0].consumers.len(),
+            1,
+            "fixture should have exactly one consumer — \
+             add_fixture_dep_entries must wire the inverse edge"
+        );
+        assert_eq!(
+            graph.fixtures[0].consumers[0],
+            super::super::NodeRef::new(super::super::NodeKind::Test, 0),
+            "fixture consumer should reference test at index 0"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_multiple_fixtures_per_test() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_multi"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        builder.add_fixture_entries(&[
+            entry(&[
+                ("name", "db"),
+                ("source", "conftest.py"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
+            ]),
+            entry(&[
+                ("name", "cache"),
+                ("source", "conftest.py"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
+            ]),
+        ]);
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_a.py::test_multi"),
+                ("fixture_names", "db,cache"),
+            ])],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.tests[0].fixture_deps.len(),
+            2,
+            "test depending on two fixtures should have 2 fixture_deps — \
+             comma-separated names must be split and resolved individually"
+        );
+        assert!(
+            graph.fixtures[0].consumers.len() == 1 && graph.fixtures[1].consumers.len() == 1,
+            "each fixture should have exactly one consumer — both fixtures are used by one test"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_unknown_test_silently_skipped() {
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        // No test with this node_id exists.
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_b.py::test_missing"),
+                ("fixture_names", "db"),
+            ])],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert!(
+            graph.fixtures[0].consumers.is_empty(),
+            "fixture should have no consumers when the referencing test does not exist — \
+             unknown test_node_id entries must be silently skipped"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_unknown_fixture_silently_skipped() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        // No fixture named "nonexistent" exists.
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_a.py::test_one"),
+                ("fixture_names", "nonexistent"),
+            ])],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert!(
+            graph.tests[0].fixture_deps.is_empty(),
+            "test should have no fixture_deps when the named fixture does not exist — \
+             unknown fixture names must be silently skipped"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_deduplicates_edges() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        // Two entries referencing the same test→fixture pair.
+        builder.add_fixture_dep_entries(
+            &[
+                entry(&[
+                    ("test_node_id", "test_a.py::test_one"),
+                    ("fixture_names", "db"),
+                ]),
+                entry(&[
+                    ("test_node_id", "test_a.py::test_one"),
+                    ("fixture_names", "db"),
+                ]),
+            ],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.tests[0].fixture_deps.len(),
+            1,
+            "duplicate fixture dep entries should not create duplicate edges — \
+             the contains check must prevent double-wiring"
+        );
+        assert_eq!(
+            graph.fixtures[0].consumers.len(),
+            1,
+            "duplicate consumer entries should not create duplicate inverse edges"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_in_progressive_loading() {
+        // Simulate phase-1 (tests) then phase-2 (fixtures + deps) via from_graph.
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[
+            entry(&[
+                ("name", "test_a.py::test_one"),
+                ("source", "test_a.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+            entry(&[
+                ("name", "test_a.py::test_two"),
+                ("source", "test_a.py"),
+                ("async", "false"),
+                ("mark", ""),
+            ]),
+        ]);
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Phase 2: reconstruct builder and add fixtures + deps.
+        let mut builder2 = GraphBuilder::from_graph(graph);
+        builder2.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "conftest.py"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        builder2.add_fixture_dep_entries(
+            &[
+                entry(&[
+                    ("test_node_id", "test_a.py::test_one"),
+                    ("fixture_names", "db"),
+                ]),
+                entry(&[
+                    ("test_node_id", "test_a.py::test_two"),
+                    ("fixture_names", "db"),
+                ]),
+            ],
+            "",
+        );
+        builder2.resolve_edges();
+        let merged = builder2.build();
+
+        assert_eq!(
+            merged.tests[0].fixture_deps,
+            vec![0],
+            "first test should have fixture dep wired during phase-2 merge"
+        );
+        assert_eq!(
+            merged.tests[1].fixture_deps,
+            vec![0],
+            "second test should have fixture dep wired during phase-2 merge"
+        );
+        assert_eq!(
+            merged.fixtures[0].consumers.len(),
+            2,
+            "fixture consumed by both tests should have 2 consumers after phase-2 merge — \
+             progressive loading must support wiring edges across rebuild boundaries"
         );
     }
 }
