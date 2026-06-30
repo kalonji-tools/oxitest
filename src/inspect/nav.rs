@@ -54,55 +54,55 @@ pub(crate) enum NavScreen {
 
 /// A non-empty stack of [`NavScreen`]s.
 ///
-/// The bottom entry is always `Home`; `pop()` refuses to remove it.
+/// `home` is always present and can never be popped; `overlays` holds any
+/// screens pushed on top of it.  This two-field representation makes the
+/// non-empty invariant structural — no `.expect()` is needed anywhere.
 #[derive(Debug)]
 pub(crate) struct NavStack {
-    stack: Vec<NavScreen>,
+    home: NavScreen,
+    overlays: Vec<NavScreen>,
 }
 
 impl NavStack {
     /// Create a new stack starting at the Home screen.
     pub(crate) fn new() -> Self {
         Self {
-            stack: vec![NavScreen::Home { selected: 0 }],
+            home: NavScreen::Home { selected: 0 },
+            overlays: vec![],
         }
     }
 
     /// Return the current (top-of-stack) screen.
     pub(crate) fn current(&self) -> &NavScreen {
-        self.stack
-            .last()
-            .expect("NavStack invariant violated: stack must never be empty")
+        self.overlays.last().unwrap_or(&self.home)
     }
 
     /// Return a mutable reference to the current screen.
     pub(crate) fn current_mut(&mut self) -> &mut NavScreen {
-        self.stack
-            .last_mut()
-            .expect("NavStack invariant violated: stack must never be empty")
+        self.overlays.last_mut().unwrap_or(&mut self.home)
     }
 
     /// Push a new screen onto the stack.
     pub(crate) fn push(&mut self, screen: NavScreen) {
-        self.stack.push(screen);
+        self.overlays.push(screen);
     }
 
     /// Pop the top screen, unless it is the Home screen.
     ///
     /// Returns `true` if a screen was popped, `false` if already at Home.
     pub(crate) fn pop(&mut self) -> bool {
-        if self.stack.len() > 1 {
-            self.stack.pop();
-            true
-        } else {
+        if self.overlays.is_empty() {
             false
+        } else {
+            self.overlays.pop();
+            true
         }
     }
 
     /// Return the depth of the stack (1 = Home only).
     #[allow(dead_code)] // useful for breadcrumb rendering (#1117)
     pub(crate) fn depth(&self) -> usize {
-        self.stack.len()
+        1 + self.overlays.len()
     }
 }
 
