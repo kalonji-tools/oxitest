@@ -10,6 +10,7 @@ nav:
   - Run tests in parallel: run-in-parallel.md
   - Use retries and flaky detection: use-retries.md
   - Debug tests: debug-tests.md
+  - Use oxitest inspect: use-inspect.md
   - Run affected tests: run-affected-tests.md
   - Use async tests: use-async-tests.md
   - Use the test cache: use-test-cache.md
