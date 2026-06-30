@@ -2,8 +2,9 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use super::app::{InputMode, InspectApp, SearchState};
+use super::app::{InputMode, InspectApp, ScopeMode, SearchState};
 use super::detail;
+use super::graph::NodeRef;
 use super::nav::Screen;
 
 /// Process a key event and update application state.
@@ -121,6 +122,14 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
             }
             refresh_search(app);
         }
+        // Toggle search scope between Context and Global
+        KeyCode::Tab => {
+            app.search.scope_mode = match app.search.scope_mode {
+                ScopeMode::Context => ScopeMode::Global,
+                ScopeMode::Global => ScopeMode::Context,
+            };
+            refresh_search(app);
+        }
         // Append character to search query
         KeyCode::Char(c) => {
             if let InputMode::Search { query } = &mut app.input_mode {
@@ -137,11 +146,36 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
 /// Re-run the search engine against the current query after a keystroke.
 fn refresh_search(app: &mut InspectApp) {
     if let Some(graph) = &app.graph {
-        app.search.results = super::search::search(
-            graph,
-            &app.search.query.clone(),
-            super::search::SearchScope::All,
-        );
+        let scope = match app.search.scope_mode {
+            ScopeMode::Global => {
+                app.search.total_candidates = graph.all_node_refs().len();
+                super::search::SearchScope::Global
+            }
+            ScopeMode::Context => {
+                let candidates = context_candidates(app, graph);
+                app.search.total_candidates = candidates.len();
+                super::search::SearchScope::Context(candidates)
+            }
+        };
+        app.search.results = super::search::search(graph, &app.search.query.clone(), scope);
+    }
+}
+
+/// Compute the candidate node refs for context-scoped search based on the
+/// current screen.
+fn context_candidates(app: &InspectApp, graph: &super::graph::InspectGraph) -> Vec<NodeRef> {
+    match app.nav.current() {
+        Screen::Overview { .. } => (0..app.overview_sections.item_count())
+            .filter_map(|i| app.overview_sections.node_ref_at(i))
+            .collect(),
+        Screen::NodeFocus { node, .. } => {
+            let count = detail::selectable_edge_count(graph, node);
+            (0..count)
+                .filter_map(|i| detail::edge_node_at(graph, node, i))
+                .collect()
+        }
+        Screen::History { .. } => app.history.entries.clone(),
+        Screen::Disambiguation { matches, .. } => matches.clone(),
     }
 }
 
@@ -217,7 +251,30 @@ fn nav_push(app: &mut InspectApp) {
 
     match app.nav.current().clone() {
         Screen::Overview { selected } => {
-            if let Some(node_ref) = app.overview_sections.node_ref_at(selected) {
+            let g = app.overview_sections.gravity.len();
+            let m = app.overview_sections.marks.len();
+            let c = app.overview_sections.conftests.len();
+            if selected >= g + m + c {
+                // Signal range: navigate to affected node(s)
+                let sig_idx = selected - g - m - c;
+                if let Some(signal) = app.overview_sections.signals.get(sig_idx) {
+                    match signal.affected.len() {
+                        0 => {}
+                        1 => {
+                            let node = signal.affected[0].clone();
+                            app.history.push(node.clone());
+                            app.nav.push(Screen::NodeFocus { node, selected: 0 });
+                        }
+                        _ => {
+                            app.nav.push(Screen::Disambiguation {
+                                query: signal.message.clone(),
+                                matches: signal.affected.clone(),
+                                selected: 0,
+                            });
+                        }
+                    }
+                }
+            } else if let Some(node_ref) = app.overview_sections.node_ref_at(selected) {
                 app.history.push(node_ref.clone());
                 app.nav.push(Screen::NodeFocus {
                     node: node_ref,
@@ -753,11 +810,15 @@ mod tests {
     fn search_populates_results_on_keypress() {
         // Typing chars that match exactly one node should yield a single result.
         // This validates that handle_search_key() calls search() after Char(c).
+        use crate::inspect::app::ScopeMode;
         let graph = three_test_graph();
         let mut app = InspectApp::new(Some(graph), None);
         app.input_mode = InputMode::Search {
             query: String::new(),
         };
+        // Use Global scope since three_test_graph() has only test nodes, which
+        // do not appear in overview sections (gravity/marks/conftests are empty).
+        app.search.scope_mode = ScopeMode::Global;
         // Type "login" — should match only test_login
         for c in "login".chars() {
             handle_key(&mut app, key(KeyCode::Char(c)));
@@ -791,8 +852,8 @@ mod tests {
     }
 
     #[test]
-    fn search_total_nodes_set_on_graph_load() {
-        // with_progressive_loading() must seed total_nodes from the graph so
+    fn search_total_candidates_set_on_graph_load() {
+        // with_progressive_loading() must seed total_candidates from the graph so
         // the "N/M matches" display has a denominator on first render.
         use crate::inspect::app::{InspectApp as App, Phase2Data};
         use std::sync::mpsc;
@@ -802,9 +863,106 @@ mod tests {
         let app =
             App::with_progressive_loading(graph, rx, None, std::time::Duration::from_secs(30), "");
         assert!(
-            app.search.total_nodes > 0,
-            "total_nodes must be set when the graph is loaded via with_progressive_loading(); \
+            app.search.total_candidates > 0,
+            "total_candidates must be set when the graph is loaded via with_progressive_loading(); \
              a zero value means the '0/N matches' display will always show zero denominator"
+        );
+    }
+
+    // ── Tab scope toggle tests ──────────────────────────────────────────
+
+    #[test]
+    fn tab_toggles_scope_mode_in_search() {
+        use crate::inspect::app::ScopeMode;
+
+        let graph = three_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "search scope should default to Context"
+        );
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Global,
+            "Tab should toggle scope from Context to Global"
+        );
+
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "Tab again should toggle scope back to Context"
+        );
+    }
+
+    #[test]
+    fn tab_refreshes_search_results() {
+        use crate::inspect::app::ScopeMode;
+
+        let graph = three_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        // Type a query that matches
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        let context_count = app.search.results.len();
+
+        // Toggle to Global — may produce different results
+        handle_key(&mut app, key(KeyCode::Tab));
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Global,
+            "scope should be Global after Tab"
+        );
+        // Both context and global should find "login" since it's a test node
+        assert!(
+            !app.search.results.is_empty(),
+            "Global search for 'login' should still find matches — got empty; \
+             context had {context_count} results"
+        );
+    }
+
+    #[test]
+    fn context_search_on_overview_uses_overview_items() {
+        use crate::inspect::app::ScopeMode;
+
+        let graph = three_test_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.input_mode = InputMode::Search {
+            query: String::new(),
+        };
+        // Ensure we're in context mode on Overview
+        assert_eq!(
+            app.search.scope_mode,
+            ScopeMode::Context,
+            "default scope should be Context"
+        );
+
+        // Type a query — context candidates come from overview_sections
+        for c in "login".chars() {
+            handle_key(&mut app, key(KeyCode::Char(c)));
+        }
+        // Overview has no marks/gravity/conftests for this graph, so context
+        // candidates are empty → no results in context mode.
+        let context_results = app.search.results.len();
+
+        // Toggle to Global
+        handle_key(&mut app, key(KeyCode::Tab));
+        let global_results = app.search.results.len();
+
+        assert!(
+            global_results >= context_results,
+            "Global scope should find at least as many results as Context scope — \
+             global={global_results}, context={context_results}"
         );
     }
 }

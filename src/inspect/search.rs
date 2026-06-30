@@ -5,19 +5,15 @@ use crate::query::{ast::Expr, compile, eval};
 use super::graph::InspectGraph;
 
 // Re-export graph types so callers reference one set of types.
-pub(crate) use super::graph::{NodeKind, NodeRef};
+pub(crate) use super::graph::NodeRef;
 
 /// The scope to search within.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SearchScope {
-    /// Search all node kinds.
-    All,
-    /// Only search nodes of the given kind.
-    ///
-    /// Used by tests and by future UI filters; production `handle_search_key`
-    /// uses `All` for now.
-    #[allow(dead_code)]
-    Kind(NodeKind),
+    /// Search all nodes in the graph.
+    Global,
+    /// Search within a specific set of candidate nodes.
+    Context(Vec<NodeRef>),
 }
 
 // ── Search function ────────────────────────────────────────────────────────
@@ -36,9 +32,9 @@ pub(crate) fn search(graph: &InspectGraph, query: &str, scope: SearchScope) -> V
         return Vec::new();
     }
 
-    let candidates = match &scope {
-        SearchScope::All => graph.all_node_refs(),
-        SearchScope::Kind(kind) => graph.nodes_of_kind(*kind),
+    let candidates = match scope {
+        SearchScope::Global => graph.all_node_refs(),
+        SearchScope::Context(refs) => refs,
     };
 
     // Try DSL auto-detection: if the query looks like a DSL expression
@@ -86,7 +82,7 @@ fn try_compile_dsl(query: &str) -> Option<Expr> {
 #[cfg(test)]
 mod tests {
     use super::super::graph::{
-        InspectGraph,
+        InspectGraph, NodeKind,
         nodes::{FixtureNode, MarkNode, TestNode},
     };
     use super::*;
@@ -156,7 +152,7 @@ mod tests {
         graph.fixtures.push(fixture("db_session"));
         graph.tests.push(test_node("test_login"));
         graph.fixtures.push(fixture("db_cleanup"));
-        let results = search(&graph, "db", SearchScope::All);
+        let results = search(&graph, "db", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
@@ -170,7 +166,7 @@ mod tests {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(fixture("db_session"));
         graph.tests.push(test_node("test_login"));
-        let results = search(&graph, "DB", SearchScope::All);
+        let results = search(&graph, "DB", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
@@ -184,7 +180,7 @@ mod tests {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(fixture("db_session"));
         graph.tests.push(test_node("test_login"));
-        let results = search(&graph, "zzz", SearchScope::All);
+        let results = search(&graph, "zzz", SearchScope::Global);
         assert!(
             results.is_empty(),
             "query 'zzz' should match nothing, got: {:?}",
@@ -196,37 +192,52 @@ mod tests {
     fn search_empty_query_returns_empty() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(fixture("db_session"));
-        let results = search(&graph, "", SearchScope::All);
+        let results = search(&graph, "", SearchScope::Global);
         assert!(results.is_empty(), "empty query should return no results");
     }
 
     #[test]
-    fn search_scope_filters_by_kind() {
+    fn search_context_scope_filters_to_candidates() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(fixture("db_session"));
         graph.tests.push(test_node("db_test"));
         graph.fixtures.push(fixture("db_cleanup"));
-        let results = search(&graph, "db", SearchScope::Kind(NodeKind::Fixture));
+        // Context scope with only fixture refs — test nodes excluded.
+        let candidates = graph.nodes_of_kind(NodeKind::Fixture);
+        let results = search(&graph, "db", SearchScope::Context(candidates));
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
             vec!["db_session", "db_cleanup"],
-            "Kind(Fixture) scope should exclude Test nodes even if name matches"
+            "Context scope with fixture candidates should exclude Test nodes even if name matches"
         );
     }
 
     #[test]
-    fn search_scope_kind_test() {
+    fn search_context_scope_test_only() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(fixture("db_session"));
         graph.tests.push(test_node("db_test"));
         graph.fixtures.push(fixture("db_cleanup"));
-        let results = search(&graph, "db", SearchScope::Kind(NodeKind::Test));
+        // Context scope with only test refs.
+        let candidates = graph.nodes_of_kind(NodeKind::Test);
+        let results = search(&graph, "db", SearchScope::Context(candidates));
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
             vec!["db_test"],
-            "Kind(Test) scope should only return test nodes"
+            "Context scope with test candidates should only return test nodes"
+        );
+    }
+
+    #[test]
+    fn search_context_scope_empty_candidates() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(fixture("db_session"));
+        let results = search(&graph, "db", SearchScope::Context(vec![]));
+        assert!(
+            results.is_empty(),
+            "Context scope with empty candidates should always return no results"
         );
     }
 
@@ -238,7 +249,7 @@ mod tests {
         graph.tests.push(test_node("test_login"));
         graph.tests.push(test_node("test_logout"));
         graph.fixtures.push(fixture("db_session"));
-        let results = search(&graph, "name(~login)", SearchScope::All);
+        let results = search(&graph, "name(~login)", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
@@ -255,7 +266,7 @@ mod tests {
         graph.marks.push(mark("fast"));
         graph.tests.push(test_node_with_mark("test_login", 0));
         graph.tests.push(test_node_with_mark("test_logout", 1));
-        let results = search(&graph, "name(~login) & mark(slow)", SearchScope::All);
+        let results = search(&graph, "name(~login) & mark(slow)", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
@@ -273,7 +284,7 @@ mod tests {
         graph.tests.push(test_node_with_mark("test_login", 0));
         graph.tests.push(test_node_with_mark("test_logout", 1));
         graph.tests.push(test_node_with_mark("test_signup", 2));
-        let results = search(&graph, "mark(slow) | mark(fast)", SearchScope::All);
+        let results = search(&graph, "mark(slow) | mark(fast)", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,
@@ -288,7 +299,7 @@ mod tests {
         // Use a fixture whose name contains "login(" — fixtures use `name` field.
         graph.fixtures.push(fixture("test_login(slow)"));
         graph.tests.push(test_node("test_logout"));
-        let results = search(&graph, "login(", SearchScope::All);
+        let results = search(&graph, "login(", SearchScope::Global);
         // "login(" fails DSL parse (unterminated), falls back to substring
         let matched = names(&graph, &results);
         assert_eq!(
@@ -304,7 +315,7 @@ mod tests {
         graph.tests.push(test_node("test_login"));
         graph.tests.push(test_node("test_logout"));
         // No parens, no operators — should go straight to substring match
-        let results = search(&graph, "login", SearchScope::All);
+        let results = search(&graph, "login", SearchScope::Global);
         let matched = names(&graph, &results);
         assert_eq!(
             matched,

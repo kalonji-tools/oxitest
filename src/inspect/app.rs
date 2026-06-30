@@ -24,6 +24,17 @@ pub(crate) enum InputMode {
     Search { query: String },
 }
 
+// ── ScopeMode ────────────────────────────────────────────────────────────────
+
+/// Whether search scans the current screen's nodes or the entire graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScopeMode {
+    /// Search only nodes visible on the current screen.
+    Context,
+    /// Search all nodes in the graph.
+    Global,
+}
+
 // ── SearchState ──────────────────────────────────────────────────────────────
 
 /// Persistent search state, active when `InputMode::Search`.
@@ -38,8 +49,10 @@ pub(crate) struct SearchState {
     pub(crate) results: Vec<NodeRef>,
     /// Index of the selected result within `results`.
     pub(crate) selected_idx: usize,
-    /// Total number of searchable nodes (for "N/M matches" display).
-    pub(crate) total_nodes: usize,
+    /// Total number of searchable candidates (for "N/M matches" display).
+    pub(crate) total_candidates: usize,
+    /// Whether to search the current screen's context or the entire graph.
+    pub(crate) scope_mode: ScopeMode,
 }
 
 impl SearchState {
@@ -49,7 +62,8 @@ impl SearchState {
             query: String::new(),
             results: Vec::new(),
             selected_idx: 0,
-            total_nodes: 0,
+            total_candidates: 0,
+            scope_mode: ScopeMode::Context,
         }
     }
 
@@ -236,9 +250,9 @@ impl InspectApp {
             Some(n) => nav::resolve_direct_jump(&graph, n),
             None => Trail::new(),
         };
-        let total_nodes = graph.all_node_refs().len();
+        let total_candidates = graph.all_node_refs().len();
         let mut search = SearchState::new();
-        search.total_nodes = total_nodes;
+        search.total_candidates = total_candidates;
         let overview_sections = OverviewSections::from_graph(&graph);
         Self {
             should_quit: false,
@@ -345,9 +359,9 @@ impl InspectApp {
             let mut new_graph = builder.build();
             // Normalize paths from phase-2 (Python bridge sends absolute paths).
             new_graph.relativize_paths(&self.rootdir);
-            // Update total_nodes to reflect the now-complete graph so the
+            // Update total_candidates to reflect the now-complete graph so the
             // "N/M matches" display accounts for fixture and plugin nodes.
-            self.search.total_nodes = new_graph.all_node_refs().len();
+            self.search.total_candidates = new_graph.all_node_refs().len();
             // Rebuild overview sections from the now-complete graph.
             self.overview_sections = OverviewSections::from_graph(&new_graph);
             self.graph = Some(new_graph);
