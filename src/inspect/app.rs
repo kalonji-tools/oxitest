@@ -164,6 +164,8 @@ pub(crate) struct InspectApp {
     /// Test NodeList.  A group's base name is the node_id prefix before the
     /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
     pub(crate) expanded_groups: HashSet<String>,
+    /// How long to wait for phase-2 (Python-tier) data before giving up.
+    phase2_timeout: std::time::Duration,
 }
 
 impl InspectApp {
@@ -193,10 +195,14 @@ impl InspectApp {
             history: SessionHistory::new(),
             phase2: Phase2State::Complete,
             expanded_groups: HashSet::new(),
+            phase2_timeout: std::time::Duration::from_secs(30),
         }
     }
 
     /// Create a new `InspectApp` with phase-1 graph and a receiver for phase-2 data.
+    ///
+    /// `timeout` controls how long the app waits for the background Python
+    /// session before giving up and proceeding with instant-tier data only.
     ///
     /// If `name` is provided, resolves it against the graph for direct-jump
     /// navigation (same logic as `new()`).
@@ -204,6 +210,7 @@ impl InspectApp {
         graph: InspectGraph,
         rx: mpsc::Receiver<Phase2Data>,
         name: Option<&str>,
+        timeout: std::time::Duration,
     ) -> Self {
         let nav = match name {
             Some(n) => nav::resolve_direct_jump(&graph, n),
@@ -227,6 +234,7 @@ impl InspectApp {
                 started: std::time::Instant::now(),
             },
             expanded_groups: HashSet::new(),
+            phase2_timeout: timeout,
         }
     }
 
@@ -276,9 +284,10 @@ impl InspectApp {
                 self.merge_phase2(data);
             }
             Err(mpsc::TryRecvError::Empty) => {
-                if started.elapsed() > std::time::Duration::from_secs(30) {
+                if started.elapsed() > self.phase2_timeout {
                     tracing::warn!(
-                        "phase-2 loading timed out after 30s; proceeding with instant-tier data only"
+                        timeout_secs = self.phase2_timeout.as_secs(),
+                        "phase-2 loading timed out; proceeding with instant-tier data only"
                     );
                     self.phase2 = Phase2State::Complete;
                 }
@@ -490,7 +499,12 @@ mod tests {
     fn progressive_loading_starts_in_instant_only() {
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let app = InspectApp::with_progressive_loading(graph, rx, None);
+        let app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
         assert!(
             app.is_loading(),
             "with_progressive_loading should start in Loading state (is_loading must be true)"
@@ -507,7 +521,12 @@ mod tests {
 
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         let data = Phase2Data {
             fixture_entries: vec![QueryEntry {
@@ -547,7 +566,12 @@ mod tests {
 
         let graph = InspectGraph::default();
         let (tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         tx.send(Phase2Data {
             fixture_entries: vec![QueryEntry {
@@ -597,7 +621,12 @@ mod tests {
     fn poll_phase2_handles_disconnected_sender() {
         let graph = InspectGraph::default();
         let (tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         // Drop the sender to simulate background thread failure.
         drop(tx);
@@ -618,7 +647,12 @@ mod tests {
     fn poll_phase2_noop_when_empty() {
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         // Sender exists but hasn't sent anything yet.
         app.poll_phase2();
@@ -637,7 +671,12 @@ mod tests {
     fn poll_phase2_times_out_after_deadline() {
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         // Backdate the start time to 31 seconds ago to simulate an elapsed timeout.
         let backdated = std::time::Instant::now()
@@ -670,7 +709,12 @@ mod tests {
     fn poll_phase2_no_timeout_before_deadline() {
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         // started is set to Instant::now() by with_progressive_loading,
         // so elapsed() will be far below 30s — the timeout must NOT trigger.
@@ -695,7 +739,12 @@ mod tests {
 
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let mut app = InspectApp::with_progressive_loading(graph, rx, None);
+        let mut app = InspectApp::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+        );
 
         // Push a NodeDetail screen (simulating user navigated to a node)
         app.nav.push(super::super::nav::NavScreen::NodeDetail {

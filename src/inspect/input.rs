@@ -1094,7 +1094,8 @@ mod tests {
 
         let graph = three_test_graph();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let app = App::with_progressive_loading(graph, rx, None);
+        let app =
+            App::with_progressive_loading(graph, rx, None, std::time::Duration::from_secs(30));
         assert!(
             app.search.total_nodes > 0,
             "total_nodes must be set when the graph is loaded via with_progressive_loading(); \
