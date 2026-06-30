@@ -90,33 +90,32 @@ impl InspectGraph {
     ///
     /// Normalizes `FixtureNode.source`, `ConftestNode.path`, `HelperNode.source`,
     /// and `TestNode.node_id` to relative paths for display in the TUI.
+    ///
+    /// Uses `camino::Utf8Path::strip_prefix` for platform-safe path handling
+    /// instead of manual string prefix manipulation with hardcoded separators.
     pub(crate) fn relativize_paths(&mut self, rootdir: &str) {
         if rootdir.is_empty() {
             return;
         }
-        let prefix = if rootdir.ends_with('/') {
-            rootdir.to_string()
-        } else {
-            format!("{rootdir}/")
-        };
+        let root = camino::Utf8Path::new(rootdir);
         for f in &mut self.fixtures {
-            if let Some(rest) = f.source.strip_prefix(&prefix) {
-                f.source = rest.to_string();
+            if let Ok(rel) = camino::Utf8Path::new(&f.source).strip_prefix(root) {
+                f.source = rel.to_string();
             }
         }
         for t in &mut self.tests {
-            if let Some(rest) = t.node_id.strip_prefix(&prefix) {
-                t.node_id = rest.to_string();
+            if let Ok(rel) = camino::Utf8Path::new(&t.node_id).strip_prefix(root) {
+                t.node_id = rel.to_string();
             }
         }
         for c in &mut self.conftests {
-            if let Some(rest) = c.path.strip_prefix(&prefix) {
-                c.path = rest.to_string();
+            if let Ok(rel) = camino::Utf8Path::new(&c.path).strip_prefix(root) {
+                c.path = rel.to_string();
             }
         }
         for h in &mut self.helpers {
-            if let Some(rest) = h.source.strip_prefix(&prefix) {
-                h.source = rest.to_string();
+            if let Ok(rel) = camino::Utf8Path::new(&h.source).strip_prefix(root) {
+                h.source = rel.to_string();
             }
         }
     }
@@ -500,6 +499,158 @@ mod tests {
             refs.len(),
             3,
             "1 test + 1 fixture + 1 auto-created conftest = 3 node refs"
+        );
+    }
+
+    // ── relativize_paths tests ────────────────────────────────────────────
+
+    #[test]
+    fn relativize_paths_strips_prefix() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "/home/user/project/conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+        graph.tests.push(TestNode {
+            node_id: "/home/user/project/tests/test_a.py::test_one".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+        graph.conftests.push(ConftestNode {
+            path: "/home/user/project/tests/conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
+        graph.helpers.push(HelperNode {
+            name: "make_db".to_string(),
+            signature: "make_db()".to_string(),
+            docstring: None,
+            source: "/home/user/project/tests/conftest.py".to_string(),
+            conftest_idx: 0,
+        });
+
+        graph.relativize_paths("/home/user/project");
+
+        assert_eq!(
+            graph.fixtures[0].source, "conftest.py",
+            "fixture source should have rootdir prefix stripped"
+        );
+        assert_eq!(
+            graph.tests[0].node_id, "tests/test_a.py::test_one",
+            "test node_id should have rootdir prefix stripped"
+        );
+        assert_eq!(
+            graph.conftests[0].path, "tests/conftest.py",
+            "conftest path should have rootdir prefix stripped"
+        );
+        assert_eq!(
+            graph.helpers[0].source, "tests/conftest.py",
+            "helper source should have rootdir prefix stripped"
+        );
+    }
+
+    #[test]
+    fn relativize_paths_no_match_unchanged() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "fx".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "/other/path/conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        graph.relativize_paths("/home/user/project");
+
+        assert_eq!(
+            graph.fixtures[0].source, "/other/path/conftest.py",
+            "path that does not start with rootdir should remain unchanged"
+        );
+    }
+
+    #[test]
+    fn relativize_paths_empty_rootdir_noop() {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "/home/user/project/test_a.py::test_one".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        graph.relativize_paths("");
+
+        assert_eq!(
+            graph.tests[0].node_id, "/home/user/project/test_a.py::test_one",
+            "empty rootdir should not modify any paths"
+        );
+    }
+
+    #[test]
+    fn relativize_paths_trailing_slash() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "/home/user/project/conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        graph.relativize_paths("/home/user/project/");
+
+        assert_eq!(
+            graph.fixtures[0].source, "conftest.py",
+            "rootdir with trailing slash should work the same as without"
+        );
+    }
+
+    #[test]
+    fn relativize_paths_plugin_source_unchanged() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "cache".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "<plugin:cache>".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        graph.relativize_paths("/home/user/project");
+
+        assert_eq!(
+            graph.fixtures[0].source, "<plugin:cache>",
+            "plugin source markers like '<plugin:cache>' should not be modified"
         );
     }
 }

@@ -189,7 +189,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     // ── Adaptive two-pane layout ─────────────────────────────────────────
     let (left_width, right_width) = adaptive_layout(app.terminal_width, preview_line_count);
 
-    let left_text = build_left_pane(app);
+    let (left_text, _) = build_left_pane(app);
     let scroll = (app.scroll_offset, 0);
 
     if right_width > 0 {
@@ -246,12 +246,15 @@ fn build_breadcrumb(app: &InspectApp) -> Paragraph<'static> {
 }
 
 /// Build the left pane content based on the current screen.
-fn build_left_pane(app: &InspectApp) -> Vec<Line<'static>> {
+///
+/// Returns `(lines, cursor_line)` where `cursor_line` is the index of
+/// the line that holds the cursor, or `None` when no cursor is visible.
+fn build_left_pane(app: &InspectApp) -> (Vec<Line<'static>>, Option<usize>) {
     let is_loading = app.is_loading();
 
     let graph = match &app.graph {
         Some(g) if !g.is_empty() || is_loading => g,
-        _ => return vec![Line::from("No data loaded")],
+        _ => return (vec![Line::from("No data loaded")], None),
     };
 
     match app.nav.current() {
@@ -271,19 +274,11 @@ fn build_left_pane(app: &InspectApp) -> Vec<Line<'static>> {
 /// Called from the event loop before `draw()`, since `draw()` receives
 /// an immutable reference to `InspectApp`.
 pub(crate) fn update_scroll(app: &mut InspectApp, viewport_height: u16) {
-    let lines = build_left_pane(app);
-    let cursor_line = lines
-        .iter()
-        .position(|line| {
-            line.spans
-                .iter()
-                .any(|span| span.content.contains('\u{203A}'))
-        })
-        .map(|pos| pos as u16);
-
+    let (_, cursor_line) = build_left_pane(app);
     let Some(cursor_line) = cursor_line else {
         return;
     };
+    let cursor_line = cursor_line as u16;
 
     // Account for border (1 line top, 1 line bottom)
     let visible = viewport_height.saturating_sub(2);
@@ -298,13 +293,17 @@ pub(crate) fn update_scroll(app: &mut InspectApp, viewport_height: u16) {
 }
 
 /// Render the Overview screen: sections with titles and selectable items.
+///
+/// Returns `(lines, cursor_line)` — the rendered lines and the index of
+/// the line that holds the cursor, or `None` when no selectable items exist.
 fn build_overview_content(
     sections: &overview::OverviewSections,
     selected: usize,
     is_loading: bool,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Option<usize>) {
     let mut lines = Vec::new();
     let mut cursor = 0;
+    let mut cursor_line_idx: Option<usize> = None;
 
     // Gravity section (fixtures by consumer count)
     if !sections.gravity.is_empty() {
@@ -314,6 +313,9 @@ fn build_overview_content(
         )));
         for entry in &sections.gravity {
             let text = format!("  F  {} ({} consumers)", entry.name, entry.consumer_count);
+            if cursor == selected {
+                cursor_line_idx = Some(lines.len());
+            }
             lines.push(if cursor == selected {
                 Line::from(Span::styled(
                     format!("\u{203A} {text}"),
@@ -335,6 +337,9 @@ fn build_overview_content(
         )));
         for entry in &sections.marks {
             let text = format!("  M  {} ({} tests)", entry.name, entry.test_count);
+            if cursor == selected {
+                cursor_line_idx = Some(lines.len());
+            }
             lines.push(if cursor == selected {
                 Line::from(Span::styled(
                     format!("\u{203A} {text}"),
@@ -359,6 +364,9 @@ fn build_overview_content(
                 "  C  {} ({} fixtures, {} helpers)",
                 entry.path, entry.fixture_count, entry.helper_count
             );
+            if cursor == selected {
+                cursor_line_idx = Some(lines.len());
+            }
             lines.push(if cursor == selected {
                 Line::from(Span::styled(
                     format!("\u{203A} {text}"),
@@ -382,31 +390,39 @@ fn build_overview_content(
         }
     }
 
-    lines
+    (lines, cursor_line_idx)
 }
 
 /// Render the NodeFocus screen: node properties + selectable edge list.
+///
+/// Returns `(lines, cursor_line)` — the rendered lines and the index of
+/// the line that holds the cursor within the "Related" section.
 fn build_node_focus_content(
     graph: &super::graph::InspectGraph,
     node: &NodeRef,
     selected: usize,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Option<usize>) {
     // Show detailed properties from the detail module
     let mut lines = detail::render_detail(graph, Some(node));
 
     // Append selectable edges with cursor indicators
     let edge_count = detail::selectable_edge_count(graph, node);
+    let mut cursor_line_idx: Option<usize> = None;
     if edge_count > 0 {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
             "  Related",
             Style::default().fg(Color::Yellow),
         )));
+        let related_start = lines.len();
         for i in 0..edge_count {
             if let Some(edge_ref) = detail::edge_node_at(graph, node, i) {
                 let sigil = edge_ref.kind.sigil();
                 let name = graph.node_name(&edge_ref);
                 let text = format!("  {sigil}  {name}");
+                if i == selected {
+                    cursor_line_idx = Some(related_start + i);
+                }
                 lines.push(if i == selected {
                     Line::from(Span::styled(
                         format!("\u{203A} {text}"),
@@ -419,16 +435,19 @@ fn build_node_focus_content(
         }
     }
 
-    lines
+    (lines, cursor_line_idx)
 }
 
 /// Render a Disambiguation screen: one line per matching node.
+///
+/// Returns `(lines, cursor_line)` — one line per match, cursor line
+/// equals `selected` (no headers).
 fn build_disambiguation_content(
     graph: &super::graph::InspectGraph,
     matches: &[NodeRef],
     selected: usize,
-) -> Vec<Line<'static>> {
-    matches
+) -> (Vec<Line<'static>>, Option<usize>) {
+    let lines: Vec<Line<'static>> = matches
         .iter()
         .enumerate()
         .map(|(idx, node_ref)| {
@@ -444,19 +463,28 @@ fn build_disambiguation_content(
                 Line::from(text)
             }
         })
-        .collect()
+        .collect();
+    let cursor_line = if matches.is_empty() {
+        None
+    } else {
+        Some(selected)
+    };
+    (lines, cursor_line)
 }
 
 /// Render the History screen: one line per visited node, most recent first.
+///
+/// Returns `(lines, cursor_line)` — one line per entry, cursor line
+/// equals `selected`.  Returns `None` when history is empty.
 fn build_history_content(
     graph: &super::graph::InspectGraph,
     history: &SessionHistory,
     selected: usize,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Option<usize>) {
     if history.len() == 0 {
-        return vec![Line::from(" No history yet")];
+        return (vec![Line::from(" No history yet")], None);
     }
-    history
+    let lines: Vec<Line<'static>> = history
         .entries
         .iter()
         .enumerate()
@@ -473,7 +501,8 @@ fn build_history_content(
                 Line::from(text)
             }
         })
-        .collect()
+        .collect();
+    (lines, Some(selected))
 }
 
 /// Build the preview content for the right pane based on current screen and
@@ -887,6 +916,94 @@ mod tests {
         let graph = InspectGraph::default();
         let rows = build_test_rows(&graph, &HashSet::new());
         assert!(rows.is_empty(), "empty graph should produce no test rows");
+    }
+
+    // ── update_scroll tests ───────────────────────────────────────────────
+
+    use crate::inspect::graph::nodes::MarkNode;
+
+    /// Build a graph with many marks so the overview generates enough lines
+    /// to exceed a small viewport.
+    fn many_marks_graph() -> InspectGraph {
+        let mut graph = InspectGraph::default();
+        for i in 0..20 {
+            graph.marks.push(MarkNode {
+                name: format!("mark_{i}"),
+                used_by: vec![],
+            });
+        }
+        graph
+    }
+
+    #[test]
+    fn update_scroll_cursor_below_viewport() {
+        let graph = many_marks_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        // Move cursor to the last overview item (mark_19 at index 19).
+        if let Screen::Overview { selected } = app.nav.current_mut() {
+            *selected = 19;
+        }
+        // Small viewport: 8 lines total, 6 visible after border subtraction.
+        update_scroll(&mut app, 8);
+        assert!(
+            app.scroll_offset > 0,
+            "cursor on the last of 20 marks should push scroll_offset above zero \
+             when the viewport is only 8 lines tall"
+        );
+    }
+
+    #[test]
+    fn update_scroll_cursor_above_viewport() {
+        let graph = many_marks_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        // Simulate a high scroll offset as if user had scrolled far down.
+        app.scroll_offset = 15;
+        // Cursor at first item (selected = 0).
+        if let Screen::Overview { selected } = app.nav.current_mut() {
+            *selected = 0;
+        }
+        update_scroll(&mut app, 8);
+        // The first selectable item sits at line 1 (after the "Marks" section
+        // header at line 0), so scroll_offset snaps to cursor_line = 1.
+        assert!(
+            app.scroll_offset <= 1,
+            "cursor at the first selectable item should bring scroll_offset \
+             down from 15 to at most the cursor line (line 1 after section header)"
+        );
+    }
+
+    #[test]
+    fn update_scroll_cursor_visible_no_change() {
+        let graph = many_marks_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.scroll_offset = 0;
+        // Cursor at first item — already visible.
+        if let Screen::Overview { selected } = app.nav.current_mut() {
+            *selected = 0;
+        }
+        update_scroll(&mut app, 30);
+        assert_eq!(
+            app.scroll_offset, 0,
+            "cursor within the visible viewport should not change scroll_offset"
+        );
+    }
+
+    #[test]
+    fn update_scroll_zero_viewport() {
+        let graph = many_marks_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        let original_offset = app.scroll_offset;
+        // viewport_height of 0 and 1 both yield visible=0 after saturating_sub(2).
+        update_scroll(&mut app, 0);
+        assert_eq!(
+            app.scroll_offset, original_offset,
+            "viewport_height=0 should not panic and should leave scroll_offset unchanged"
+        );
+        update_scroll(&mut app, 1);
+        assert_eq!(
+            app.scroll_offset, original_offset,
+            "viewport_height=1 should not panic and should leave scroll_offset unchanged"
+        );
     }
 }
 
