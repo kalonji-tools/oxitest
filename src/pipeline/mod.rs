@@ -603,13 +603,13 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     if let config::Command::Inspect(args) = command {
         let rootdir = config::find_rootdir(None);
         let cfg = config::Config::load(&rootdir);
-        return match crate::inspect::run(&args, &cfg) {
+        return py.detach(|| match crate::inspect::run(&args, &cfg) {
             Ok(()) => Ok(Err(ExitCode::Success)),
             Err(e) => {
                 eprintln!("error: {e}");
                 Ok(Err(ExitCode::Failure))
             }
-        };
+        });
     }
 
     let first_path = match &command {
