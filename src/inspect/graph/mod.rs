@@ -227,7 +227,6 @@ mod tests {
             source: String::new(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: None,

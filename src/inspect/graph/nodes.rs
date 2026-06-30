@@ -9,8 +9,6 @@
 //! Suppress dead-code warnings at the module level until those features land.
 #![allow(dead_code)]
 
-use super::NodeKind;
-
 // ── FixtureNode ──────────────────────────────────────────────────────────────
 
 /// A fixture definition (conftest or plugin-provided).
@@ -24,10 +22,8 @@ pub(crate) struct FixtureNode {
     pub is_async: bool,
     pub description: String,
     // Edges
-    /// Indices into `InspectGraph::fixtures` — fixtures this one depends on.
-    pub depends_on: Vec<usize>,
-    /// (NodeKind, index) pairs — tests and fixtures that consume this fixture.
-    pub consumers: Vec<(NodeKind, usize)>,
+    /// Node references for tests and fixtures that consume this fixture.
+    pub consumers: Vec<super::NodeRef>,
     /// Index into `InspectGraph::conftests` if this fixture lives in a conftest.
     pub conftest_idx: Option<usize>,
     /// Index into `InspectGraph::plugins` if this fixture is plugin-provided.

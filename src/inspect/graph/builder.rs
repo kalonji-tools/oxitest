@@ -217,7 +217,6 @@ impl GraphBuilder {
                 source,
                 is_async,
                 description,
-                depends_on: vec![],
                 consumers: vec![],
                 conftest_idx: None,
                 plugin_idx: None,

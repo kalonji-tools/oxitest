@@ -207,22 +207,11 @@ fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>>
         lines.push(field_line("description", &fixture.description));
     }
 
-    // Depends on (other fixtures)
-    if !fixture.depends_on.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Depends On"));
-        for &dep_idx in &fixture.depends_on {
-            lines.push(connection_line('F', &graph.fixtures[dep_idx].name));
-        }
-    }
-
     // Broken edges (unresolved dependencies)
     let broken = broken_edges_for(&graph.broken_edges, node_ref);
     if !broken.is_empty() {
-        if fixture.depends_on.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(section_header("Depends On"));
-        }
+        lines.push(Line::from(""));
+        lines.push(section_header("Depends On"));
         for edge in &broken {
             lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
         }
@@ -232,13 +221,9 @@ fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>>
     if !fixture.consumers.is_empty() {
         lines.push(Line::from(""));
         lines.push(section_header("Consumers"));
-        for (kind, idx) in &fixture.consumers {
-            let sigil = kind.sigil();
-            let name_ref = NodeRef {
-                kind: *kind,
-                index: *idx,
-            };
-            lines.push(connection_line(sigil, graph.node_name(&name_ref)));
+        for consumer in &fixture.consumers {
+            let sigil = consumer.kind.sigil();
+            lines.push(connection_line(sigil, graph.node_name(consumer)));
         }
     }
 
@@ -442,8 +427,10 @@ mod tests {
             source: "tests/conftest.py".to_string(),
             is_async: false,
             description: "Database session fixture".to_string(),
-            depends_on: vec![],
-            consumers: vec![(NodeKind::Test, 0)],
+            consumers: vec![NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            }],
             conftest_idx: Some(0),
             plugin_idx: None,
         });
@@ -475,7 +462,6 @@ mod tests {
             source: "tests/conftest.py".to_string(),
             is_async: true,
             description: "".to_string(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: None,
@@ -502,7 +488,6 @@ mod tests {
             source: String::new(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: None,
@@ -586,7 +571,6 @@ mod tests {
             source: "tests/conftest.py".to_string(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: Some(0),
             plugin_idx: None,
@@ -599,7 +583,6 @@ mod tests {
             source: "tests/conftest.py".to_string(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: Some(0),
             plugin_idx: None,
@@ -630,7 +613,6 @@ mod tests {
             source: "<plugin:capture>".to_string(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: Some(0),
@@ -969,8 +951,10 @@ mod snapshot_tests {
             source: "tests/conftest.py".to_string(),
             is_async: false,
             description: "Database session fixture".to_string(),
-            depends_on: vec![],
-            consumers: vec![(NodeKind::Test, 0)],
+            consumers: vec![NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            }],
             conftest_idx: Some(0),
             plugin_idx: None,
         });
@@ -1010,7 +994,6 @@ mod snapshot_tests {
             source: String::new(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: None,
@@ -1118,7 +1101,6 @@ mod snapshot_tests {
             source: "tests/conftest.py".to_string(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: Some(0),
             plugin_idx: None,
@@ -1157,7 +1139,6 @@ mod snapshot_tests {
             source: "<plugin:capture>".to_string(),
             is_async: false,
             description: String::new(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: Some(0),
@@ -1218,7 +1199,6 @@ mod snapshot_tests {
             source: "tests/conftest.py".to_string(),
             is_async: true,
             description: "".to_string(),
-            depends_on: vec![],
             consumers: vec![],
             conftest_idx: None,
             plugin_idx: None,
