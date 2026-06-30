@@ -13,6 +13,7 @@ mod detail;
 pub(crate) mod graph;
 mod input;
 pub(crate) mod nav;
+pub(crate) mod overview;
 pub(crate) mod search;
 mod ui;
 

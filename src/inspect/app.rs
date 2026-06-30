@@ -9,7 +9,7 @@ use ratatui::backend::CrosstermBackend;
 
 use super::graph::{InspectGraph, NodeRef};
 use super::input;
-use super::nav::{self, NavStack};
+use super::nav::{self, Screen, Trail};
 use super::ui;
 
 // ── InputMode ────────────────────────────────────────────────────────────────
@@ -153,16 +153,22 @@ pub(crate) struct InspectApp {
     /// The inspect graph, if loaded.  `None` while data is still being
     /// collected (or if collection failed).
     pub(crate) graph: Option<InspectGraph>,
-    /// Stack-based navigation state.
-    pub(crate) nav: NavStack,
+    /// Trail-based navigation state (ADR-0003).
+    pub(crate) nav: Trail,
     /// Session history of visited nodes (most recent first).
     pub(crate) history: SessionHistory,
+    /// Pre-sorted overview sections derived from the graph.
+    pub(crate) overview_sections: super::overview::OverviewSections,
+    /// Flash message displayed briefly after user actions (e.g. "back to overview").
+    #[allow(dead_code)] // wired up in event loop once flash messages are triggered
+    pub(crate) flash_message: Option<(String, std::time::Instant)>,
     /// Progressive-loading state: holds the background receiver while loading,
     /// transitions to `Complete` once data arrives (or times out / disconnects).
     phase2: Phase2State,
     /// Base names of parametrize groups that are currently expanded in the
     /// Test NodeList.  A group's base name is the node_id prefix before the
     /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
+    #[allow(dead_code)] // retained for future parametrize collapsing in edge lists
     pub(crate) expanded_groups: HashSet<String>,
     /// How long to wait for phase-2 (Python-tier) data before giving up.
     phase2_timeout: std::time::Duration,
@@ -173,16 +179,20 @@ impl InspectApp {
     ///
     /// If `name` is provided and a graph is available, resolves it
     /// against the graph for direct-jump navigation:
-    /// - 1 match: jumps straight to that node's kind list.
+    /// - 1 match: jumps straight to that node's detail.
     /// - N matches: opens a disambiguation screen.
-    /// - 0 matches: stays on the Home screen.
+    /// - 0 matches: stays on the Overview screen.
     ///
     /// Used by tests and by callers that do not need progressive loading.
     #[cfg(test)]
     pub(crate) fn new(graph: Option<InspectGraph>, name: Option<&str>) -> Self {
         let nav = match (&graph, name) {
-            (Some(g), Some(n)) => nav::resolve_direct_jump(g, n),
-            _ => NavStack::new(),
+            (Some(g), Some(n)) => nav::resolve_direct_jump_trail(g, n),
+            _ => Trail::new(),
+        };
+        let overview_sections = match &graph {
+            Some(g) => super::overview::OverviewSections::from_graph(g),
+            None => super::overview::OverviewSections::default(),
         };
         Self {
             should_quit: false,
@@ -193,6 +203,8 @@ impl InspectApp {
             graph,
             nav,
             history: SessionHistory::new(),
+            overview_sections,
+            flash_message: None,
             phase2: Phase2State::Complete,
             expanded_groups: HashSet::new(),
             phase2_timeout: std::time::Duration::from_secs(30),
@@ -213,13 +225,13 @@ impl InspectApp {
         timeout: std::time::Duration,
     ) -> Self {
         let nav = match name {
-            Some(n) => nav::resolve_direct_jump(&graph, n),
-            None => NavStack::new(),
+            Some(n) => nav::resolve_direct_jump_trail(&graph, n),
+            None => Trail::new(),
         };
-        use super::search::Searchable as _;
-        let total_nodes = graph.all_nodes().len();
+        let total_nodes = graph.all_node_refs().len();
         let mut search = SearchState::new();
         search.total_nodes = total_nodes;
+        let overview_sections = super::overview::OverviewSections::from_graph(&graph);
         Self {
             should_quit: false,
             terminal_width: 0,
@@ -229,6 +241,8 @@ impl InspectApp {
             graph: Some(graph),
             nav,
             history: SessionHistory::new(),
+            overview_sections,
+            flash_message: None,
             phase2: Phase2State::Loading {
                 rx,
                 started: std::time::Instant::now(),
@@ -308,7 +322,6 @@ impl InspectApp {
     /// Merge phase-2 fixture and plugin data into the existing graph.
     fn merge_phase2(&mut self, data: Phase2Data) {
         use super::graph::builder::GraphBuilder;
-        use super::search::Searchable as _;
 
         if let Some(existing_graph) = self.graph.take() {
             let mut builder = GraphBuilder::from_graph(existing_graph);
@@ -318,20 +331,43 @@ impl InspectApp {
             let new_graph = builder.build();
             // Update total_nodes to reflect the now-complete graph so the
             // "N/M matches" display accounts for fixture and plugin nodes.
-            self.search.total_nodes = new_graph.all_nodes().len();
+            self.search.total_nodes = new_graph.all_node_refs().len();
+            // Rebuild overview sections from the now-complete graph.
+            self.overview_sections = super::overview::OverviewSections::from_graph(&new_graph);
             self.graph = Some(new_graph);
         }
 
-        // Reset nav to Home if current screen holds potentially stale NodeRefs.
-        // Phase-2 adds fixtures/plugins — Disambiguation and NodeDetail screens
+        // Reset nav to Overview if current screen holds potentially stale NodeRefs.
+        // Phase-2 adds fixtures/plugins — Disambiguation and NodeFocus screens
         // may reference fixture/plugin indices that shifted during rebuild.
         match self.nav.current() {
-            super::nav::NavScreen::Disambiguation { .. }
-            | super::nav::NavScreen::NodeDetail { .. } => {
-                self.nav = super::nav::NavStack::new();
+            Screen::Disambiguation { .. } | Screen::NodeFocus { .. } => {
+                self.nav = Trail::new();
             }
             _ => {}
         }
+    }
+
+    /// Set a flash message that auto-clears after 2 seconds.
+    #[allow(dead_code)] // wired up once flash messages are triggered from input handlers
+    pub(crate) fn flash(&mut self, message: impl Into<String>) {
+        self.flash_message = Some((message.into(), std::time::Instant::now()));
+    }
+
+    /// Clear the flash message if it has expired (> 2 seconds).
+    #[allow(dead_code)] // wired up once flash messages are triggered from event loop
+    pub(crate) fn clear_expired_flash(&mut self) {
+        if let Some((_, instant)) = &self.flash_message {
+            if instant.elapsed() > std::time::Duration::from_secs(2) {
+                self.flash_message = None;
+            }
+        }
+    }
+
+    /// Returns `true` while phase-2 data is still loading (alias for `is_loading`).
+    #[allow(dead_code)] // convenience alias for future callers
+    pub(crate) fn is_phase2_loading(&self) -> bool {
+        self.is_loading()
     }
 }
 
@@ -733,9 +769,10 @@ mod tests {
 
     #[test]
     fn merge_phase2_resets_nav_when_on_detail_screen() {
-        // Create app with progressive loading, push a NodeDetail screen,
-        // then merge phase-2 data. Nav should reset to Home.
+        // Create app with progressive loading, push a NodeFocus screen,
+        // then merge phase-2 data. Nav should reset to Overview.
         use super::super::graph::{NodeKind, NodeRef};
+        use super::super::nav::Screen;
 
         let graph = InspectGraph::default();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
@@ -746,12 +783,13 @@ mod tests {
             std::time::Duration::from_secs(30),
         );
 
-        // Push a NodeDetail screen (simulating user navigated to a node)
-        app.nav.push(super::super::nav::NavScreen::NodeDetail {
+        // Push a NodeFocus screen (simulating user navigated to a node)
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             },
+            selected: 0,
         });
 
         // Simulate phase-2 data arrival
@@ -762,8 +800,8 @@ mod tests {
         });
 
         assert!(
-            matches!(app.nav.current(), super::super::nav::NavScreen::Home { .. }),
-            "nav should reset to Home after phase-2 merge when on NodeDetail — \
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "nav should reset to Overview after phase-2 merge when on NodeFocus — \
              stale NodeRef indices could cause panics if the user navigates"
         );
     }

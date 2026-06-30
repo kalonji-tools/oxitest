@@ -3,9 +3,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use super::app::{InputMode, InspectApp};
-use super::graph::NodeKind;
-use super::nav::{self, NavScreen};
-use super::ui::{TestRow, build_test_rows};
+use super::detail;
+use super::nav::Screen;
 
 /// Process a key event and update application state.
 pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
@@ -48,16 +47,16 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
         KeyCode::Char('k') | KeyCode::Up => nav_cursor_up(app),
 
         // Navigate into selected item
-        KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => nav_push(app),
+        KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => nav_push(app),
 
         // Navigate back
-        KeyCode::Left | KeyCode::Backspace => {
+        KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
             app.nav.pop();
         }
 
         // Open history screen
-        KeyCode::Char('h') => {
-            app.nav.push(NavScreen::History { selected: 0 });
+        KeyCode::Char('H') => {
+            app.nav.push(Screen::History { selected: 0 });
         }
 
         // Enter search mode
@@ -75,6 +74,9 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
 
         // Toggle source view (no-op until #1117)
         KeyCode::Char('s') => {}
+
+        // Space — no-op (removed from navigate-into)
+        KeyCode::Char(' ') => {}
 
         _ => {}
     }
@@ -150,19 +152,18 @@ fn nav_cursor_down(app: &mut InspectApp) {
         return;
     }
     match app.nav.current_mut() {
-        NavScreen::Home { selected } => {
+        Screen::Overview { selected } => {
             *selected = (*selected + 1) % max;
         }
-        NavScreen::NodeList { selected, .. } => {
+        Screen::NodeFocus { selected, .. } => {
             *selected = (*selected + 1) % max;
         }
-        NavScreen::Disambiguation { selected, .. } => {
+        Screen::Disambiguation { selected, .. } => {
             *selected = (*selected + 1) % max;
         }
-        NavScreen::History { selected } => {
+        Screen::History { selected } => {
             *selected = (*selected + 1) % max;
         }
-        NavScreen::NodeDetail { .. } => {}
     }
 }
 
@@ -173,35 +174,34 @@ fn nav_cursor_up(app: &mut InspectApp) {
         return;
     }
     match app.nav.current_mut() {
-        NavScreen::Home { selected } => {
+        Screen::Overview { selected } => {
             *selected = if *selected == 0 {
                 max - 1
             } else {
                 *selected - 1
             };
         }
-        NavScreen::NodeList { selected, .. } => {
+        Screen::NodeFocus { selected, .. } => {
             *selected = if *selected == 0 {
                 max - 1
             } else {
                 *selected - 1
             };
         }
-        NavScreen::Disambiguation { selected, .. } => {
+        Screen::Disambiguation { selected, .. } => {
             *selected = if *selected == 0 {
                 max - 1
             } else {
                 *selected - 1
             };
         }
-        NavScreen::History { selected } => {
+        Screen::History { selected } => {
             *selected = if *selected == 0 {
                 max - 1
             } else {
                 *selected - 1
             };
         }
-        NavScreen::NodeDetail { .. } => {}
     }
 }
 
@@ -213,74 +213,40 @@ fn nav_push(app: &mut InspectApp) {
     };
 
     match app.nav.current().clone() {
-        NavScreen::Home { selected } => {
-            if let Some(kind) = nav::visible_kind_at(graph, selected) {
-                app.nav.push(NavScreen::NodeList { kind, selected: 0 });
+        Screen::Overview { selected } => {
+            if let Some(node_ref) = app.overview_sections.node_ref_at(selected) {
+                app.history.push(node_ref.clone());
+                app.nav.push(Screen::NodeFocus {
+                    node: node_ref,
+                    selected: 0,
+                });
             }
         }
-        NavScreen::NodeList { kind, selected } => {
-            if kind == NodeKind::Test {
-                // Use the visible-row model for test lists.
-                let rows = build_test_rows(graph, &app.expanded_groups);
-                if let Some(row) = rows.get(selected) {
-                    match row {
-                        TestRow::GroupHeader { base_name, .. } => {
-                            // Toggle expand/collapse for this group.
-                            if app.expanded_groups.contains(base_name) {
-                                app.expanded_groups.remove(base_name);
-                                // After collapsing, the visible list shrinks.
-                                // Clamp the cursor to stay within bounds.
-                                let new_rows = build_test_rows(graph, &app.expanded_groups);
-                                let max = new_rows.len().saturating_sub(1);
-                                if let NavScreen::NodeList { selected, .. } = app.nav.current_mut()
-                                    && *selected > max
-                                {
-                                    *selected = max;
-                                }
-                            } else {
-                                app.expanded_groups.insert(base_name.clone());
-                                // Cursor stays at the same row index (the group
-                                // header), which is still valid after expanding.
-                            }
-                        }
-                        TestRow::Standalone { index } | TestRow::Variant { index } => {
-                            let node = super::graph::NodeRef {
-                                kind: NodeKind::Test,
-                                index: *index,
-                            };
-                            app.history.push(node.clone());
-                            app.nav.push(NavScreen::NodeDetail { node });
-                        }
-                    }
-                }
-            } else {
-                let count = graph.node_count(kind);
-                if selected < count {
-                    let node = super::graph::NodeRef {
-                        kind,
-                        index: selected,
-                    };
-                    app.history.push(node.clone());
-                    app.nav.push(NavScreen::NodeDetail { node });
-                }
+        Screen::NodeFocus { node, selected } => {
+            if let Some(target) = detail::edge_node_at(graph, &node, selected) {
+                app.history.push(target.clone());
+                app.nav.push(Screen::NodeFocus {
+                    node: target,
+                    selected: 0,
+                });
             }
         }
-        NavScreen::Disambiguation {
+        Screen::Disambiguation {
             matches, selected, ..
         } => {
             if let Some(node) = matches.get(selected) {
                 app.history.push(node.clone());
-                app.nav.push(NavScreen::NodeDetail { node: node.clone() });
+                app.nav.push(Screen::NodeFocus {
+                    node: node.clone(),
+                    selected: 0,
+                });
             }
         }
-        NavScreen::History { selected } => {
+        Screen::History { selected } => {
             if let Some(node) = app.history.get(selected).cloned() {
                 app.history.push(node.clone());
-                app.nav.push(NavScreen::NodeDetail { node });
+                app.nav.push(Screen::NodeFocus { node, selected: 0 });
             }
-        }
-        NavScreen::NodeDetail { .. } => {
-            // No further drill-down from detail (yet).
         }
     }
 }
@@ -293,17 +259,10 @@ fn screen_item_count(app: &InspectApp) -> usize {
     };
 
     match app.nav.current() {
-        NavScreen::Home { .. } => nav::visible_kind_count(graph),
-        NavScreen::NodeList { kind, .. } => {
-            if *kind == NodeKind::Test {
-                build_test_rows(graph, &app.expanded_groups).len()
-            } else {
-                graph.node_count(*kind)
-            }
-        }
-        NavScreen::Disambiguation { matches, .. } => matches.len(),
-        NavScreen::History { .. } => app.history.len(),
-        NavScreen::NodeDetail { .. } => 0,
+        Screen::Overview { .. } => app.overview_sections.item_count(),
+        Screen::NodeFocus { node, .. } => detail::selectable_edge_count(graph, node),
+        Screen::Disambiguation { matches, .. } => matches.len(),
+        Screen::History { .. } => app.history.len(),
     }
 }
 
@@ -588,360 +547,103 @@ mod tests {
     }
 
     #[test]
-    fn space_on_home_navigates_to_node_list() {
-        use crate::inspect::graph::nodes::TestNode;
-        use crate::inspect::graph::{InspectGraph, NodeKind};
-        use crate::inspect::nav::NavScreen;
-
-        let mut graph = InspectGraph::default();
-        graph.tests.push(TestNode {
-            node_id: "t.py::test_a".to_string(),
-            is_async: false,
-            param_id: None,
-            param_count: 0,
-            variants: vec![],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-
-        let mut app = InspectApp::new(Some(graph), None);
-        // Home screen, cursor at 0 — first visible kind should be Test
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        match app.nav.current() {
-            NavScreen::NodeList { kind, selected } => {
-                assert_eq!(
-                    *kind,
-                    NodeKind::Test,
-                    "space on Home should navigate into the first non-empty kind"
-                );
-                assert_eq!(*selected, 0, "NodeList should start with cursor at 0");
-            }
-            other => unreachable!(
-                "expected NodeList after Space on Home, got {:?}",
-                std::mem::discriminant(other)
-            ),
-        }
-    }
-
-    #[test]
-    fn space_without_graph_is_noop() {
-        use crate::inspect::nav::NavScreen;
+    fn space_on_overview_is_noop() {
+        use crate::inspect::nav::Screen;
 
         let mut app = InspectApp::new(None, None);
         handle_key(&mut app, key(KeyCode::Char(' ')));
 
         assert!(
-            matches!(app.nav.current(), NavScreen::Home { .. }),
-            "space without graph should stay on Home"
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "space should be a no-op and stay on Overview"
         );
-    }
-
-    // ── Parametrize collapsing tests ─────────────────────────────────────
-
-    /// Build a graph with parametrized tests for collapsing tests.
-    fn parametrized_test_graph() -> crate::inspect::graph::InspectGraph {
-        use crate::inspect::graph::nodes::TestNode;
-
-        let mut graph = crate::inspect::graph::InspectGraph::default();
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[1+2]".to_string(),
-            is_async: false,
-            param_id: Some("1+2".to_string()),
-            param_count: 3,
-            variants: vec![1, 2],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[3+4]".to_string(),
-            is_async: false,
-            param_id: Some("3+4".to_string()),
-            param_count: 3,
-            variants: vec![0, 2],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[5+6]".to_string(),
-            is_async: false,
-            param_id: Some("5+6".to_string()),
-            param_count: 3,
-            variants: vec![0, 1],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_solo".to_string(),
-            is_async: false,
-            param_id: None,
-            param_count: 0,
-            variants: vec![],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph
-    }
-
-    #[test]
-    fn space_on_collapsed_group_expands_it() {
-        use crate::inspect::nav::NavScreen;
-
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        // Navigate into test list
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 0, // points to the collapsed group header
-        });
-
-        assert!(
-            app.expanded_groups.is_empty(),
-            "no groups should be expanded initially"
-        );
-
-        // Press Space on the group header
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        assert!(
-            app.expanded_groups.contains("tests/test_math.py::test_add"),
-            "space on collapsed group should expand it"
-        );
-        // Should still be on NodeList (not pushed to NodeDetail)
-        assert!(
-            matches!(app.nav.current(), NavScreen::NodeList { .. }),
-            "space on group header should not push to NodeDetail"
-        );
-    }
-
-    #[test]
-    fn space_on_expanded_group_header_collapses_it() {
-        use crate::inspect::nav::NavScreen;
-
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 0,
-        });
-        // Expand the group first
-        app.expanded_groups
-            .insert("tests/test_math.py::test_add".to_string());
-
-        // Press Space on the group header (row 0 is still the header)
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        assert!(
-            !app.expanded_groups.contains("tests/test_math.py::test_add"),
-            "space on expanded group header should collapse it"
-        );
-    }
-
-    #[test]
-    fn space_on_variant_navigates_to_detail() {
-        use crate::inspect::nav::NavScreen;
-
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 1, // First variant row (after header at index 0)
-        });
-        // Expand the group so variants are visible
-        app.expanded_groups
-            .insert("tests/test_math.py::test_add".to_string());
-
-        // Press Space on a variant row
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        match app.nav.current() {
-            NavScreen::NodeDetail { node } => {
-                assert_eq!(
-                    node.kind,
-                    NodeKind::Test,
-                    "variant navigation should go to Test detail"
-                );
-                assert_eq!(node.index, 0, "first variant should be at graph index 0");
-            }
-            other => unreachable!("expected NodeDetail after Space on variant, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn screen_item_count_accounts_for_collapsed_groups() {
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 0,
-        });
-
-        // Collapsed: 1 group header + 1 standalone = 2
-        let count_collapsed = screen_item_count(&app);
-        assert_eq!(
-            count_collapsed, 2,
-            "collapsed group should count as 1 row, plus 1 standalone = 2"
-        );
-
-        // Expand the group: 1 header + 3 variants + 1 standalone = 5
-        app.expanded_groups
-            .insert("tests/test_math.py::test_add".to_string());
-        let count_expanded = screen_item_count(&app);
-        assert_eq!(
-            count_expanded, 5,
-            "expanded group should show header + 3 variants + 1 standalone = 5"
-        );
-    }
-
-    #[test]
-    fn space_on_standalone_test_navigates_to_detail() {
-        use crate::inspect::nav::NavScreen;
-
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 1, // standalone test is at visible row 1 when collapsed
-        });
-
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        match app.nav.current() {
-            NavScreen::NodeDetail { node } => {
-                assert_eq!(node.index, 3, "standalone test_solo is at graph index 3");
-            }
-            other => unreachable!("expected NodeDetail for standalone test, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn collapse_clamps_cursor_within_bounds() {
-        use crate::inspect::nav::NavScreen;
-
-        let graph = parametrized_test_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        // Expand the group
-        app.expanded_groups
-            .insert("tests/test_math.py::test_add".to_string());
-        // Set cursor to last expanded row (standalone = row 4)
-        app.nav.push(NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 4,
-        });
-
-        // Collapse the group by pressing Space on the header
-        // First move cursor to the header (row 0)
-        if let NavScreen::NodeList { selected, .. } = app.nav.current_mut() {
-            *selected = 0;
-        }
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        // After collapse, the list has 2 rows (header + standalone).
-        // Cursor should be at row 0 (the header).
-        if let NavScreen::NodeList { selected, .. } = app.nav.current() {
-            assert!(
-                *selected <= 1,
-                "cursor should be within bounds after collapse, got {selected}"
-            );
-        } else {
-            unreachable!("expected NodeList after collapse");
-        }
     }
 
     // ── History key tests ──────────────────────────────────────────────
 
     #[test]
-    fn h_key_opens_history_screen() {
-        use crate::inspect::nav::NavScreen;
+    fn capital_h_opens_history_screen() {
+        use crate::inspect::nav::Screen;
 
         let mut app = InspectApp::new(None, None);
+        handle_key(&mut app, key(KeyCode::Char('H')));
+
+        assert!(
+            matches!(app.nav.current(), Screen::History { selected: 0 }),
+            "pressing 'H' should push History screen with selected=0"
+        );
+    }
+
+    #[test]
+    fn h_key_pops_back() {
+        use crate::inspect::graph::{NodeKind, NodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut app = InspectApp::new(None, None);
+        // Push a screen so pop has something to pop
+        app.nav.push(Screen::NodeFocus {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
         handle_key(&mut app, key(KeyCode::Char('h')));
 
         assert!(
-            matches!(app.nav.current(), NavScreen::History { selected: 0 }),
-            "pressing 'h' should push History screen with selected=0"
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "pressing 'h' should pop back to Overview (h is now back)"
         );
     }
 
     #[test]
     fn backspace_pops_without_opening_history() {
-        use crate::inspect::nav::NavScreen;
+        use crate::inspect::graph::{NodeKind, NodeRef};
+        use crate::inspect::nav::Screen;
 
         let mut app = InspectApp::new(None, None);
         // Push a screen so pop has something to pop
-        app.nav.push(NavScreen::NodeList {
-            kind: crate::inspect::graph::NodeKind::Test,
+        app.nav.push(Screen::NodeFocus {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
             selected: 0,
         });
         handle_key(&mut app, key(KeyCode::Backspace));
 
         assert!(
-            matches!(app.nav.current(), NavScreen::Home { .. }),
-            "Backspace should pop back to Home, not open History"
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "Backspace should pop back to Overview, not open History"
         );
     }
 
     #[test]
     fn left_arrow_pops_without_opening_history() {
-        use crate::inspect::nav::NavScreen;
+        use crate::inspect::graph::{NodeKind, NodeRef};
+        use crate::inspect::nav::Screen;
 
         let mut app = InspectApp::new(None, None);
-        app.nav.push(NavScreen::NodeList {
-            kind: crate::inspect::graph::NodeKind::Test,
+        app.nav.push(Screen::NodeFocus {
+            node: NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
             selected: 0,
         });
         handle_key(&mut app, key(KeyCode::Left));
 
         assert!(
-            matches!(app.nav.current(), NavScreen::Home { .. }),
-            "Left arrow should pop back to Home, not open History"
+            matches!(app.nav.current(), Screen::Overview { .. }),
+            "Left arrow should pop back to Overview, not open History"
         );
     }
 
     #[test]
-    fn navigating_to_node_detail_records_history() {
-        use crate::inspect::graph::nodes::TestNode;
-        use crate::inspect::graph::{InspectGraph, NodeKind};
-
-        let mut graph = InspectGraph::default();
-        graph.tests.push(TestNode {
-            node_id: "t.py::test_a".to_string(),
-            is_async: false,
-            param_id: None,
-            param_count: 0,
-            variants: vec![],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-
-        let mut app = InspectApp::new(Some(graph), None);
-        // Navigate: Home -> NodeList (Tests)
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-        // Navigate: NodeList -> NodeDetail (first test)
-        handle_key(&mut app, key(KeyCode::Char(' ')));
-
-        assert_eq!(
-            app.history.len(),
-            1,
-            "navigating to NodeDetail should record one history entry"
-        );
-        let entry = app.history.get(0).unwrap();
-        assert_eq!(
-            entry.kind,
-            NodeKind::Test,
-            "history entry should be of kind Test"
-        );
-        assert_eq!(
-            entry.index, 0,
-            "history entry should reference the first test node"
-        );
-    }
-
-    #[test]
-    fn space_on_history_navigates_to_node_detail() {
+    fn enter_on_history_navigates_to_node_focus() {
         use crate::inspect::graph::nodes::TestNode;
         use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
-        use crate::inspect::nav::NavScreen;
+        use crate::inspect::nav::Screen;
 
         let mut graph = InspectGraph::default();
         graph.tests.push(TestNode {
@@ -961,13 +663,13 @@ mod tests {
             index: 0,
         });
         // Open history screen
-        app.nav.push(NavScreen::History { selected: 0 });
-        // Press space to navigate to the selected history entry
-        handle_key(&mut app, key(KeyCode::Char(' ')));
+        app.nav.push(Screen::History { selected: 0 });
+        // Press Enter to navigate to the selected history entry
+        handle_key(&mut app, key(KeyCode::Enter));
 
         assert!(
-            matches!(app.nav.current(), NavScreen::NodeDetail { .. }),
-            "space on History should navigate to NodeDetail"
+            matches!(app.nav.current(), Screen::NodeFocus { .. }),
+            "Enter on History should navigate to NodeFocus"
         );
         assert_eq!(
             app.history.len(),
@@ -979,7 +681,7 @@ mod tests {
     #[test]
     fn cursor_moves_on_history_screen() {
         use crate::inspect::graph::{NodeKind, NodeRef as GraphNodeRef};
-        use crate::inspect::nav::NavScreen;
+        use crate::inspect::nav::Screen;
 
         let mut graph = crate::inspect::graph::InspectGraph::default();
         graph.tests.push(crate::inspect::graph::nodes::TestNode {
@@ -1001,11 +703,11 @@ mod tests {
             kind: NodeKind::Test,
             index: 0,
         });
-        app.nav.push(NavScreen::History { selected: 0 });
+        app.nav.push(Screen::History { selected: 0 });
 
         handle_key(&mut app, key(KeyCode::Char('j')));
         match app.nav.current() {
-            NavScreen::History { selected } => {
+            Screen::History { selected } => {
                 assert_eq!(*selected, 1, "j should move cursor down on History screen");
             }
             other => unreachable!("expected History screen, got {:?}", other),
@@ -1013,7 +715,7 @@ mod tests {
 
         handle_key(&mut app, key(KeyCode::Char('k')));
         match app.nav.current() {
-            NavScreen::History { selected } => {
+            Screen::History { selected } => {
                 assert_eq!(*selected, 0, "k should move cursor up on History screen");
             }
             other => unreachable!("expected History screen, got {:?}", other),

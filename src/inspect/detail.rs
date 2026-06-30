@@ -109,6 +109,7 @@ fn broken_edges_for<'a>(broken_edges: &'a [BrokenEdge], node_ref: &NodeRef) -> V
 ///
 /// Returns the indices that appear in every variant's slice (e.g. fixture_deps or marks).
 /// Returns an empty vec if `indices` is empty.
+#[allow(dead_code)] // retained for future parametrize group detail rendering
 fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize]) -> Vec<usize> {
     if indices.is_empty() {
         return vec![];
@@ -131,6 +132,7 @@ fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize
 ///
 /// Shows the shared base name, variant count, and connections that are
 /// common across all variants (fixture deps, marks).
+#[allow(dead_code)] // retained for future parametrize group detail rendering
 pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -> Vec<Line<'a>> {
     if indices.is_empty() {
         return vec![Line::from("Empty group")];
@@ -407,6 +409,324 @@ fn render_helper<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> 
     ));
 
     lines
+}
+
+// ── Preview API ─────────────────────────────────────────────────────────────
+
+/// Build compact preview content for the right pane.
+///
+/// Shows: node header, 2-3 key properties, top 3 edges per group.
+/// Omits: description text, some boolean fields.
+pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    match node_ref.kind {
+        NodeKind::Fixture => preview_fixture(graph, node_ref),
+        NodeKind::Test => preview_test(graph, node_ref),
+        NodeKind::Mark => preview_mark(graph, node_ref),
+        NodeKind::Conftest => preview_conftest(graph, node_ref),
+        NodeKind::Plugin => preview_plugin(graph, node_ref),
+        NodeKind::Helper => preview_helper(graph, node_ref),
+    }
+}
+
+// ── Preview helpers ──────────────────────────────────────────────────────────
+
+/// Append up to `max_shown` connection lines from `edges`, then a "N more"
+/// line if any are truncated.
+fn preview_edges<'a>(
+    lines: &mut Vec<Line<'a>>,
+    edges: &[NodeRef],
+    graph: &InspectGraph,
+    max_shown: usize,
+) {
+    for r in edges.iter().take(max_shown) {
+        lines.push(connection_line(r.kind.sigil(), graph.node_name(r)));
+    }
+    let remaining = edges.len().saturating_sub(max_shown);
+    if remaining > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  · · · {remaining} more"),
+            label_style(),
+        )));
+    }
+}
+
+fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let fixture = &graph.fixtures[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("F", sigil_style()),
+            Span::raw(format!(" {}", fixture.name)),
+        ]),
+        Line::from(""),
+        field_line("scope", &fixture.scope),
+        field_line("source", &fixture.source),
+    ];
+
+    if !fixture.consumers.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(section_header(&format!(
+            "Consumers ({})",
+            fixture.consumers.len()
+        )));
+        preview_edges(&mut lines, &fixture.consumers, graph, 3);
+    }
+
+    lines
+}
+
+fn preview_test<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let test = &graph.tests[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("T", sigil_style()),
+            Span::raw(format!(" {}", test.node_id)),
+        ]),
+        Line::from(""),
+        bool_field("async", test.is_async),
+    ];
+
+    if !test.fixture_deps.is_empty() {
+        let edge_refs: Vec<NodeRef> = test
+            .fixture_deps
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Fixture,
+                index: idx,
+            })
+            .collect();
+        lines.push(Line::from(""));
+        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    if !test.marks.is_empty() {
+        let edge_refs: Vec<NodeRef> = test
+            .marks
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Mark,
+                index: idx,
+            })
+            .collect();
+        lines.push(Line::from(""));
+        lines.push(section_header(&format!("Marks ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    lines
+}
+
+fn preview_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let mark = &graph.marks[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("M", sigil_style()),
+            Span::raw(format!(" {}", mark.name)),
+        ]),
+        Line::from(""),
+    ];
+
+    if !mark.used_by.is_empty() {
+        let edge_refs: Vec<NodeRef> = mark
+            .used_by
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Test,
+                index: idx,
+            })
+            .collect();
+        lines.push(section_header(&format!("Tests ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    lines
+}
+
+fn preview_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let conftest = &graph.conftests[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("C", sigil_style()),
+            Span::raw(format!(" {}", conftest.path)),
+        ]),
+        Line::from(""),
+    ];
+
+    if !conftest.fixtures.is_empty() {
+        let edge_refs: Vec<NodeRef> = conftest
+            .fixtures
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Fixture,
+                index: idx,
+            })
+            .collect();
+        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    if !conftest.helpers.is_empty() {
+        let edge_refs: Vec<NodeRef> = conftest
+            .helpers
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Helper,
+                index: idx,
+            })
+            .collect();
+        lines.push(Line::from(""));
+        lines.push(section_header(&format!("Helpers ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    lines
+}
+
+fn preview_plugin<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let plugin = &graph.plugins[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("P", sigil_style()),
+            Span::raw(format!(" {}", plugin.name)),
+        ]),
+        Line::from(""),
+    ];
+
+    if !plugin.protocols.is_empty() {
+        lines.push(field_line("protocols", &plugin.protocols.join(", ")));
+    }
+
+    if !plugin.fixtures.is_empty() {
+        let edge_refs: Vec<NodeRef> = plugin
+            .fixtures
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Fixture,
+                index: idx,
+            })
+            .collect();
+        lines.push(Line::from(""));
+        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
+        preview_edges(&mut lines, &edge_refs, graph, 3);
+    }
+
+    lines
+}
+
+fn preview_helper<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let helper = &graph.helpers[node_ref.index];
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("H", sigil_style()),
+            Span::raw(format!(" {}", helper.name)),
+        ]),
+        Line::from(""),
+        field_line("signature", &helper.signature),
+    ];
+
+    // Defined In — always a single conftest, no truncation needed
+    lines.push(Line::from(""));
+    lines.push(section_header("Defined In (1)"));
+    lines.push(connection_line(
+        'C',
+        &graph.conftests[helper.conftest_idx].path,
+    ));
+
+    lines
+}
+
+// ── Edge navigation helpers ──────────────────────────────────────────────────
+
+/// Collect all selectable edge NodeRefs for a node.
+fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
+    match node.kind {
+        NodeKind::Fixture => {
+            let f = &graph.fixtures[node.index];
+            let mut edges = Vec::new();
+            edges.extend(f.consumers.iter().cloned());
+            if let Some(idx) = f.conftest_idx {
+                edges.push(NodeRef {
+                    kind: NodeKind::Conftest,
+                    index: idx,
+                });
+            }
+            if let Some(idx) = f.plugin_idx {
+                edges.push(NodeRef {
+                    kind: NodeKind::Plugin,
+                    index: idx,
+                });
+            }
+            edges
+        }
+        NodeKind::Test => {
+            let t = &graph.tests[node.index];
+            let mut edges = Vec::new();
+            for &idx in &t.fixture_deps {
+                edges.push(NodeRef {
+                    kind: NodeKind::Fixture,
+                    index: idx,
+                });
+            }
+            for &idx in &t.marks {
+                edges.push(NodeRef {
+                    kind: NodeKind::Mark,
+                    index: idx,
+                });
+            }
+            edges
+        }
+        NodeKind::Mark => graph.marks[node.index]
+            .used_by
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Test,
+                index: idx,
+            })
+            .collect(),
+        NodeKind::Conftest => {
+            let c = &graph.conftests[node.index];
+            let mut edges = Vec::new();
+            for &idx in &c.fixtures {
+                edges.push(NodeRef {
+                    kind: NodeKind::Fixture,
+                    index: idx,
+                });
+            }
+            for &idx in &c.helpers {
+                edges.push(NodeRef {
+                    kind: NodeKind::Helper,
+                    index: idx,
+                });
+            }
+            edges
+        }
+        NodeKind::Plugin => graph.plugins[node.index]
+            .fixtures
+            .iter()
+            .map(|&idx| NodeRef {
+                kind: NodeKind::Fixture,
+                index: idx,
+            })
+            .collect(),
+        NodeKind::Helper => {
+            let h = &graph.helpers[node.index];
+            vec![NodeRef {
+                kind: NodeKind::Conftest,
+                index: h.conftest_idx,
+            }]
+        }
+    }
+}
+
+/// Return the NodeRef of the selectable edge at `index` within a focused node.
+pub(crate) fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
+    let edges = collect_selectable_edges(graph, node);
+    edges.get(index).cloned()
+}
+
+/// Count the number of selectable edge items for a focused node.
+pub(crate) fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usize {
+    collect_selectable_edges(graph, node).len()
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -916,6 +1236,474 @@ mod tests {
             "empty indices should show a placeholder message"
         );
     }
+
+    // ── render_preview tests ─────────────────────────────────────────────
+
+    #[test]
+    fn preview_fixture_shows_scope_and_source() {
+        let graph = fixture_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("db_session"),
+            "fixture preview should show the fixture name"
+        );
+        assert!(
+            text.contains("session"),
+            "fixture preview should show the scope"
+        );
+        assert!(
+            text.contains("tests/conftest.py"),
+            "fixture preview should show the source"
+        );
+        assert!(
+            !text.contains("binding"),
+            "fixture preview should omit binding_type"
+        );
+        assert!(
+            !text.contains("autouse"),
+            "fixture preview should omit autouse"
+        );
+    }
+
+    #[test]
+    fn preview_fixture_shows_consumers_section() {
+        let graph = fixture_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("Consumers"),
+            "fixture preview should show the Consumers section when consumers exist"
+        );
+        assert!(
+            text.contains("test_create_user"),
+            "fixture preview should list consumer test names"
+        );
+    }
+
+    #[test]
+    fn preview_truncates_edges_at_three() {
+        let mut graph = InspectGraph::default();
+        // 5 consumer tests — only first 3 should appear, then "2 more"
+        for i in 0..5 {
+            graph.tests.push(TestNode {
+                node_id: format!("tests/test_x.py::test_{i}"),
+                is_async: false,
+                param_id: None,
+                param_count: 0,
+                variants: vec![],
+                fixture_deps: vec![0],
+                marks: vec![],
+            });
+        }
+        graph.fixtures.push(FixtureNode {
+            name: "shared_fixture".to_string(),
+            binding_type: "fixture".to_string(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: (0..5)
+                .map(|i| NodeRef {
+                    kind: NodeKind::Test,
+                    index: i,
+                })
+                .collect(),
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("2 more"),
+            "preview should show '2 more' when 5 consumers exist but only 3 are shown"
+        );
+        assert!(
+            text.contains("test_0"),
+            "preview should show the first consumer"
+        );
+        assert!(
+            text.contains("test_2"),
+            "preview should show the third consumer"
+        );
+        assert!(
+            !text.contains("test_3"),
+            "preview should not show the fourth consumer"
+        );
+    }
+
+    #[test]
+    fn preview_test_shows_async_and_edges() {
+        let graph = test_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("test_create_user"),
+            "test preview should show the test node_id"
+        );
+        assert!(
+            text.contains("async"),
+            "test preview should show async status"
+        );
+        assert!(
+            text.contains("Fixtures"),
+            "test preview should show the Fixtures section"
+        );
+        assert!(
+            text.contains("Marks"),
+            "test preview should show the Marks section"
+        );
+    }
+
+    #[test]
+    fn preview_mark_shows_tests_section() {
+        let graph = mark_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Mark,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("slow"),
+            "mark preview should show the mark name"
+        );
+        assert!(
+            text.contains("Tests"),
+            "mark preview should show a Tests section"
+        );
+        assert!(
+            text.contains("test_one"),
+            "mark preview should list tests that use it"
+        );
+    }
+
+    #[test]
+    fn preview_conftest_shows_fixtures_and_helpers() {
+        let graph = conftest_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Conftest,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("tests/conftest.py"),
+            "conftest preview should show the path"
+        );
+        assert!(
+            text.contains("Fixtures"),
+            "conftest preview should show Fixtures section"
+        );
+        assert!(
+            text.contains("Helpers"),
+            "conftest preview should show Helpers section"
+        );
+    }
+
+    #[test]
+    fn preview_plugin_shows_protocols_and_fixtures() {
+        let graph = plugin_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Plugin,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("capture"),
+            "plugin preview should show the plugin name"
+        );
+        assert!(
+            text.contains("CollectorProvider"),
+            "plugin preview should show protocols"
+        );
+        assert!(
+            text.contains("Fixtures"),
+            "plugin preview should show Fixtures section"
+        );
+    }
+
+    #[test]
+    fn preview_helper_shows_signature_and_defined_in() {
+        let graph = helper_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Helper,
+            index: 0,
+        };
+        let lines = render_preview(&graph, &node_ref);
+        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        assert!(
+            text.contains("make_db"),
+            "helper preview should show the helper name"
+        );
+        assert!(
+            text.contains("make_db(name: str)"),
+            "helper preview should show the signature"
+        );
+        assert!(
+            !text.contains("Create a test database."),
+            "helper preview should omit the docstring"
+        );
+        assert!(
+            text.contains("Defined In"),
+            "helper preview should show the Defined In section"
+        );
+    }
+
+    // ── Edge navigation helper tests ────────────────────────────────────
+
+    #[test]
+    fn fixture_edges_include_consumers_and_conftest() {
+        let graph = fixture_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        // fixture_graph has 1 consumer (Test index 0) and conftest_idx = Some(0)
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            2,
+            "fixture with one consumer and one conftest should have 2 selectable edges"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Test,
+                index: 0
+            }),
+            "first edge should be the consumer test"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 1),
+            Some(NodeRef {
+                kind: NodeKind::Conftest,
+                index: 0
+            }),
+            "second edge should be the conftest owner"
+        );
+    }
+
+    #[test]
+    fn fixture_edges_include_plugin() {
+        let graph = plugin_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        // plugin_graph fixture has no consumers, no conftest, plugin_idx = Some(0)
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            1,
+            "fixture with only a plugin owner should have 1 selectable edge"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Plugin,
+                index: 0
+            }),
+            "sole edge should be the plugin owner"
+        );
+    }
+
+    #[test]
+    fn test_edges_include_fixtures_and_marks() {
+        let graph = test_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Test,
+            index: 0,
+        };
+        // test_graph test has fixture_deps=[0] and marks=[0]
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            2,
+            "test with one fixture dep and one mark should have 2 selectable edges"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Fixture,
+                index: 0
+            }),
+            "first edge should be the fixture dependency"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 1),
+            Some(NodeRef {
+                kind: NodeKind::Mark,
+                index: 0
+            }),
+            "second edge should be the mark"
+        );
+    }
+
+    #[test]
+    fn mark_edges_are_used_by_tests() {
+        let graph = mark_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Mark,
+            index: 0,
+        };
+        // mark_graph mark has used_by=[0, 1]
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            2,
+            "mark used by two tests should have 2 selectable edges"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Test,
+                index: 0
+            }),
+            "first edge should be the first test"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 1),
+            Some(NodeRef {
+                kind: NodeKind::Test,
+                index: 1
+            }),
+            "second edge should be the second test"
+        );
+    }
+
+    #[test]
+    fn conftest_edges_include_fixtures_and_helpers() {
+        let graph = conftest_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Conftest,
+            index: 0,
+        };
+        // conftest_graph conftest has fixtures=[0, 1] and helpers=[0]
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            3,
+            "conftest with two fixtures and one helper should have 3 selectable edges"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Fixture,
+                index: 0
+            }),
+            "first edge should be the first fixture"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 1),
+            Some(NodeRef {
+                kind: NodeKind::Fixture,
+                index: 1
+            }),
+            "second edge should be the second fixture"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 2),
+            Some(NodeRef {
+                kind: NodeKind::Helper,
+                index: 0
+            }),
+            "third edge should be the helper"
+        );
+    }
+
+    #[test]
+    fn plugin_edges_are_fixtures() {
+        let graph = plugin_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Plugin,
+            index: 0,
+        };
+        // plugin_graph plugin has fixtures=[0]
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            1,
+            "plugin with one fixture should have 1 selectable edge"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Fixture,
+                index: 0
+            }),
+            "sole edge should be the fixture"
+        );
+    }
+
+    #[test]
+    fn helper_edge_is_conftest() {
+        let graph = helper_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Helper,
+            index: 0,
+        };
+        // helper_graph helper has conftest_idx=0
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            1,
+            "helper should always have exactly 1 selectable edge (its conftest)"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 0),
+            Some(NodeRef {
+                kind: NodeKind::Conftest,
+                index: 0
+            }),
+            "sole edge should be the conftest owner"
+        );
+    }
+
+    #[test]
+    fn edge_node_at_out_of_bounds_returns_none() {
+        let graph = helper_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Helper,
+            index: 0,
+        };
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 1),
+            None,
+            "index beyond edge count should return None"
+        );
+        assert_eq!(
+            edge_node_at(&graph, &node_ref, 100),
+            None,
+            "large index should return None"
+        );
+    }
+
+    #[test]
+    fn fixture_with_no_edges_has_zero_count() {
+        let graph = fixture_with_broken_edges_graph();
+        let node_ref = NodeRef {
+            kind: NodeKind::Fixture,
+            index: 0,
+        };
+        // This fixture has no consumers, no conftest_idx, no plugin_idx
+        assert_eq!(
+            selectable_edge_count(&graph, &node_ref),
+            0,
+            "fixture with no consumers or owners should have 0 selectable edges"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -923,7 +1711,7 @@ mod snapshot_tests {
     use super::*;
     use crate::inspect::app::InspectApp;
     use crate::inspect::graph::nodes::*;
-    use crate::inspect::nav::NavScreen;
+    use crate::inspect::nav::Screen;
     use crate::inspect::ui::draw;
     use insta::assert_snapshot;
     use ratatui::{Terminal, backend::TestBackend};
@@ -974,11 +1762,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Fixture,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_fixture", render_to_string(&app, 120, 24));
     }
@@ -1013,11 +1802,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_test", render_to_string(&app, 120, 24));
     }
@@ -1045,11 +1835,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_test_parametrized", render_to_string(&app, 120, 24));
     }
@@ -1081,11 +1872,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Mark,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_mark", render_to_string(&app, 120, 24));
     }
@@ -1119,11 +1911,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Conftest,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_conftest", render_to_string(&app, 120, 24));
     }
@@ -1153,11 +1946,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Plugin,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_plugin", render_to_string(&app, 120, 24));
     }
@@ -1179,11 +1973,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Helper,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!("detail_helper", render_to_string(&app, 120, 24));
     }
@@ -1213,11 +2008,12 @@ mod snapshot_tests {
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
-        app.nav.push(NavScreen::NodeDetail {
+        app.nav.push(Screen::NodeFocus {
             node: NodeRef {
                 kind: NodeKind::Fixture,
                 index: 0,
             },
+            selected: 0,
         });
         assert_snapshot!(
             "detail_fixture_broken_edge",

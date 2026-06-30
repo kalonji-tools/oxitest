@@ -17,8 +17,9 @@ use std::collections::HashSet;
 
 use super::app::{InputMode, InspectApp, SessionHistory};
 use super::detail;
-use super::graph::{self, NodeKind};
-use super::nav::{HOME_KINDS, NavScreen};
+use super::graph::{self, NodeRef};
+use super::nav::Screen;
+use super::overview;
 
 // ── Visible row model for parametrize collapsing ─────────────────────────────
 
@@ -28,6 +29,7 @@ use super::nav::{HOME_KINDS, NavScreen};
 /// (everything before `[`) are grouped.  The group appears as a single
 /// collapsed header row or as an expanded sequence of variant rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // retained for future parametrize collapsing in edge lists
 pub(super) enum TestRow {
     /// A standalone test (not part of a parametrize group).
     Standalone { index: usize },
@@ -49,6 +51,7 @@ pub(super) enum TestRow {
 /// `node_id`.  Tests without a `[` bracket are standalone.  A group
 /// with `param_count > 1` is collapsed unless its base name is in
 /// `expanded_groups`.
+#[allow(dead_code)] // retained for future parametrize collapsing in edge lists
 pub(super) fn build_test_rows(
     graph: &super::graph::InspectGraph,
     expanded_groups: &HashSet<String>,
@@ -126,134 +129,125 @@ pub(crate) fn restore_terminal(
 
 // ── Layout ───────────────────────────────────────────────────────────────────
 
-/// Compute the main pane layout based on terminal width.
+/// Compute the adaptive two-pane column widths based on terminal width and
+/// preview content length.
 ///
-/// - >= 100 cols: two panes, 38% / 62% split
-/// - >= 80 cols:  two panes, 45% / 55% split
-/// - < 80 cols:   single pane (left only)
-pub(crate) fn main_layout(width: u16, area: Rect) -> Vec<Rect> {
-    if width >= 100 {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
-            .split(area)
-            .to_vec()
-    } else if width >= 80 {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-            .split(area)
-            .to_vec()
-    } else {
-        vec![area]
+/// Returns `(left_width, right_width)`.  When `width < 80`, the right pane
+/// is zero (single-pane mode).
+pub(super) fn adaptive_layout(width: u16, preview_line_count: usize) -> (u16, u16) {
+    if width < 80 {
+        return (width, 0);
     }
+    let min_left = (width as f32 * 0.30) as u16;
+    let max_left = (width as f32 * 0.55) as u16;
+    let min_right = (width as f32 * 0.30) as u16;
+    let mut left = width / 2;
+    let right;
+    if preview_line_count < 10 {
+        left = max_left.min(width - min_right);
+        right = width - left;
+    } else if preview_line_count > 20 {
+        right = (width as f32 * 0.62) as u16;
+        left = width - right;
+        if left < min_left {
+            left = min_left;
+        }
+    } else {
+        right = width - left;
+    }
+    let _ = right; // suppress unused warning in the > 20 branch
+    (left, width - left)
 }
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
 
-/// Render the full TUI frame: header area, main panes, footer, and any
+/// Render the full TUI frame: breadcrumb header, main panes, footer, and any
 /// overlays.
 pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     let size = frame.area();
 
-    // Split into [main area, footer].
+    // Split into [breadcrumb, main area, footer].
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(3),
+            Constraint::Length(1),
+        ])
         .split(size);
 
-    let main_area = outer[0];
-    let footer_area = outer[1];
+    let breadcrumb_area = outer[0];
+    let main_area = outer[1];
+    let footer_area = outer[2];
 
-    // Main panes
-    let panes = main_layout(app.terminal_width, main_area);
+    // ── Breadcrumb header ────────────────────────────────────────────────
+    let breadcrumb = build_breadcrumb(app);
+    frame.render_widget(breadcrumb, breadcrumb_area);
 
-    // Left pane — tree browser
-    let left_title = pane_title(app);
-    let left_block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {left_title} "));
-    let left_text = build_tree_content(app);
-    let left_content = Paragraph::new(left_text).block(left_block);
-    frame.render_widget(left_content, panes[0]);
+    // ── Compute preview content for the right pane ───────────────────────
+    let preview_lines = build_preview_content(app);
+    let preview_line_count = preview_lines.len();
 
-    // Right pane — detail view (only if two-pane layout)
-    if panes.len() > 1 {
-        let right_block = Block::default().borders(Borders::ALL).title(" Detail ");
-        let mut detail_lines = match (&app.graph, app.nav.current()) {
-            (Some(graph), NavScreen::NodeDetail { node }) => {
-                detail::render_detail(graph, Some(node))
-            }
-            (Some(graph), NavScreen::NodeList { kind, selected }) if *kind == NodeKind::Test => {
-                let rows = build_test_rows(graph, &app.expanded_groups);
-                match rows.get(*selected) {
-                    Some(TestRow::GroupHeader { indices, .. }) => {
-                        detail::render_group_detail(graph, indices)
-                    }
-                    Some(TestRow::Standalone { index } | TestRow::Variant { index }) => {
-                        let node_ref = super::graph::NodeRef {
-                            kind: NodeKind::Test,
-                            index: *index,
-                        };
-                        detail::render_detail(graph, Some(&node_ref))
-                    }
-                    None => detail::render_detail(graph, None),
-                }
-            }
-            (Some(graph), NavScreen::History { selected }) => {
-                let node = app.history.get(*selected);
-                detail::render_detail(graph, node)
-            }
-            (Some(graph), _) => detail::render_detail(graph, None),
-            (None, _) => vec![Line::from("No data loaded")],
-        };
-        // Append loading indicator when fixture/plugin data is still arriving.
-        if app.is_loading() {
-            detail_lines.push(Line::from(""));
-            detail_lines.push(Line::from(Span::styled(
-                "Loading fixture and plugin data...",
-                Style::default().fg(Color::DarkGray),
-            )));
-        }
-        let right_content = Paragraph::new(detail_lines).block(right_block);
+    // ── Adaptive two-pane layout ─────────────────────────────────────────
+    let (left_width, right_width) = adaptive_layout(app.terminal_width, preview_line_count);
+
+    if right_width > 0 {
+        // Two-pane layout
+        let panes = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(left_width),
+                Constraint::Length(right_width),
+            ])
+            .split(main_area);
+
+        // Left pane
+        let left_block = Block::default().borders(Borders::ALL);
+        let left_text = build_left_pane(app);
+        let left_content = Paragraph::new(left_text).block(left_block);
+        frame.render_widget(left_content, panes[0]);
+
+        // Right pane — preview
+        let right_block = Block::default().borders(Borders::ALL).title(" Preview ");
+        let right_content = Paragraph::new(preview_lines).block(right_block);
         frame.render_widget(right_content, panes[1]);
+    } else {
+        // Single-pane layout
+        let left_block = Block::default().borders(Borders::ALL);
+        let left_text = build_left_pane(app);
+        let left_content = Paragraph::new(left_text).block(left_block);
+        frame.render_widget(left_content, main_area);
     }
 
-    // Footer
+    // ── Footer ───────────────────────────────────────────────────────────
     let footer = build_footer(app);
     frame.render_widget(footer, footer_area);
 
-    // Help overlay
+    // ── Help overlay ─────────────────────────────────────────────────────
     if app.show_help {
         draw_help_overlay(frame, size);
     }
 }
 
-/// Compute the left-pane title based on the current navigation screen.
-fn pane_title(app: &InspectApp) -> String {
-    match app.nav.current() {
-        NavScreen::Home { .. } => "Home".to_string(),
-        NavScreen::NodeList { kind, .. } => {
-            // Find the display label for this kind.
-            HOME_KINDS
-                .iter()
-                .find(|(k, _)| *k == *kind)
-                .map(|(_, label)| label.to_string())
-                .unwrap_or_else(|| format!("{kind:?}"))
-        }
-        NavScreen::NodeDetail { node } => match &app.graph {
-            Some(g) => format!("{} {}", node.kind.sigil(), g.node_name(node)),
-            None => "Detail".to_string(),
-        },
-        NavScreen::Disambiguation { query, .. } => {
-            format!("Jump: {query}")
-        }
-        NavScreen::History { .. } => "History".to_string(),
-    }
+/// Build the breadcrumb header line from the trail.
+fn build_breadcrumb(app: &InspectApp) -> Paragraph<'static> {
+    let crumbs = match &app.graph {
+        Some(graph) => app.nav.breadcrumb(graph),
+        None => vec![('\u{25CB}', "overview")],
+    };
+    let text: String = crumbs
+        .iter()
+        .map(|(sigil, name)| format!("{sigil} {name}"))
+        .collect::<Vec<_>>()
+        .join(" \u{203A} ");
+    Paragraph::new(Line::from(Span::styled(
+        format!(" {text}"),
+        Style::default().fg(Color::DarkGray),
+    )))
 }
 
-/// Build the left pane content based on the current navigation screen.
-fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
+/// Build the left pane content based on the current screen.
+fn build_left_pane(app: &InspectApp) -> Vec<Line<'static>> {
     let is_loading = app.is_loading();
 
     let graph = match &app.graph {
@@ -262,178 +256,146 @@ fn build_tree_content(app: &InspectApp) -> Vec<Line<'static>> {
     };
 
     match app.nav.current() {
-        NavScreen::Home { selected } => build_home_content(graph, *selected, is_loading),
-        NavScreen::NodeList { kind, selected } => {
-            build_node_list_content(graph, *kind, *selected, &app.expanded_groups)
+        Screen::Overview { selected } => {
+            build_overview_content(&app.overview_sections, *selected, is_loading)
         }
-        NavScreen::NodeDetail { node } => {
-            let name = graph.node_name(node);
-            let sigil = node.kind.sigil();
-            vec![
-                Line::from(format!(" {sigil}  {name}")),
-                Line::from(""),
-                Line::from(" (see detail pane)"),
-            ]
-        }
-        NavScreen::Disambiguation {
+        Screen::NodeFocus { node, selected } => build_node_focus_content(graph, node, *selected),
+        Screen::Disambiguation {
             matches, selected, ..
         } => build_disambiguation_content(graph, matches, *selected),
-        NavScreen::History { selected } => build_history_content(graph, &app.history, *selected),
+        Screen::History { selected } => build_history_content(graph, &app.history, *selected),
     }
 }
 
-/// Render the Home screen: one line per non-empty node kind.
-///
-/// When in `LoadingState::InstantOnly`, fixture and plugin counts show
-/// "loading..." instead of a number.
-fn build_home_content(
-    graph: &super::graph::InspectGraph,
+/// Render the Overview screen: sections with titles and selectable items.
+fn build_overview_content(
+    sections: &overview::OverviewSections,
     selected: usize,
     is_loading: bool,
 ) -> Vec<Line<'static>> {
-    HOME_KINDS
-        .iter()
-        .filter(|(kind, _)| {
-            // Always show fixture/plugin rows while loading
-            if is_loading && is_python_tier(*kind) {
-                return true;
-            }
-            graph.node_count(*kind) > 0
-        })
-        .enumerate()
-        .map(|(idx, (kind, label))| {
-            let sigil = kind.sigil();
-            if is_loading && is_python_tier(*kind) {
-                let text = format!(" {sigil}  {label} (");
-                let spans = vec![
-                    Span::raw(text),
-                    Span::styled("loading...", Style::default().fg(Color::DarkGray)),
-                    Span::raw(")"),
-                ];
-                if idx == selected {
-                    Line::from(spans).style(Style::default().fg(Color::Black).bg(Color::Cyan))
-                } else {
-                    Line::from(spans)
-                }
-            } else {
-                let count = graph.node_count(*kind);
-                let text = format!(" {sigil}  {label} ({count})");
-                if idx == selected {
-                    Line::from(Span::styled(
-                        text,
-                        Style::default().fg(Color::Black).bg(Color::Cyan),
-                    ))
-                } else {
-                    Line::from(text)
-                }
-            }
-        })
-        .collect()
-}
+    let mut lines = Vec::new();
+    let mut cursor = 0;
 
-/// Render a NodeList screen: one line per node of the given kind.
-///
-/// For `NodeKind::Test`, parametrized tests are grouped and collapsed
-/// by default.  Other kinds render a flat list.
-fn build_node_list_content(
-    graph: &super::graph::InspectGraph,
-    kind: NodeKind,
-    selected: usize,
-    expanded_groups: &HashSet<String>,
-) -> Vec<Line<'static>> {
-    if kind == NodeKind::Test {
-        return build_test_list_content(graph, selected, expanded_groups);
-    }
-
-    let count = graph.node_count(kind);
-    let sigil = kind.sigil();
-    (0..count)
-        .map(|idx| {
-            let node_ref = super::graph::NodeRef { kind, index: idx };
-            let name = graph.node_name(&node_ref);
-            let text = format!(" {sigil}  {name}");
-            if idx == selected {
+    // Gravity section (fixtures by consumer count)
+    if !sections.gravity.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " Fixture Gravity",
+            Style::default().fg(Color::Yellow),
+        )));
+        for entry in &sections.gravity {
+            let text = format!("  F  {} ({} consumers)", entry.name, entry.consumer_count);
+            lines.push(if cursor == selected {
                 Line::from(Span::styled(
-                    text,
+                    format!("\u{203A} {text}"),
                     Style::default().fg(Color::Black).bg(Color::Cyan),
                 ))
             } else {
-                Line::from(text)
-            }
-        })
-        .collect()
+                Line::from(format!("  {text}"))
+            });
+            cursor += 1;
+        }
+        lines.push(Line::from(""));
+    }
+
+    // Marks section
+    if !sections.marks.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " Marks",
+            Style::default().fg(Color::Yellow),
+        )));
+        for entry in &sections.marks {
+            let text = format!("  M  {} ({} tests)", entry.name, entry.test_count);
+            lines.push(if cursor == selected {
+                Line::from(Span::styled(
+                    format!("\u{203A} {text}"),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(format!("  {text}"))
+            });
+            cursor += 1;
+        }
+        lines.push(Line::from(""));
+    }
+
+    // Conftests section
+    if !sections.conftests.is_empty() {
+        lines.push(Line::from(Span::styled(
+            " Conftests",
+            Style::default().fg(Color::Yellow),
+        )));
+        for entry in &sections.conftests {
+            let text = format!(
+                "  C  {} ({} fixtures, {} helpers)",
+                entry.path, entry.fixture_count, entry.helper_count
+            );
+            lines.push(if cursor == selected {
+                Line::from(Span::styled(
+                    format!("\u{203A} {text}"),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))
+            } else {
+                Line::from(format!("  {text}"))
+            });
+            cursor += 1;
+        }
+    }
+
+    if lines.is_empty() {
+        if is_loading {
+            lines.push(Line::from(Span::styled(
+                " Loading...",
+                Style::default().fg(Color::DarkGray),
+            )));
+        } else {
+            lines.push(Line::from(" No data loaded"));
+        }
+    }
+
+    lines
 }
 
-/// Render the Test NodeList with parametrize group collapsing.
-fn build_test_list_content(
+/// Render the NodeFocus screen: node properties + selectable edge list.
+fn build_node_focus_content(
     graph: &super::graph::InspectGraph,
+    node: &NodeRef,
     selected: usize,
-    expanded_groups: &HashSet<String>,
 ) -> Vec<Line<'static>> {
-    let rows = build_test_rows(graph, expanded_groups);
+    // Show detailed properties from the detail module
+    let mut lines = detail::render_detail(graph, Some(node));
 
-    rows.iter()
-        .enumerate()
-        .map(|(row_idx, row)| {
-            let is_selected = row_idx == selected;
-            match row {
-                TestRow::Standalone { index } => {
-                    let name = graph.node_name(&super::graph::NodeRef {
-                        kind: NodeKind::Test,
-                        index: *index,
-                    });
-                    let text = format!(" T  {name}");
-                    if is_selected {
-                        Line::from(Span::styled(
-                            text,
-                            Style::default().fg(Color::Black).bg(Color::Cyan),
-                        ))
-                    } else {
-                        Line::from(text)
-                    }
-                }
-                TestRow::GroupHeader { base_name, indices } => {
-                    let count = indices.len();
-                    let text = format!(" T  {base_name} ({count} variants)");
-                    if is_selected {
-                        Line::from(Span::styled(
-                            text,
-                            Style::default().fg(Color::Black).bg(Color::Cyan),
-                        ))
-                    } else {
-                        Line::from(text)
-                    }
-                }
-                TestRow::Variant { index } => {
-                    let name = graph.node_name(&super::graph::NodeRef {
-                        kind: NodeKind::Test,
-                        index: *index,
-                    });
-                    // Extract just the param_id portion for display.
-                    let display = if let Some(bracket_pos) = name.rfind('[') {
-                        &name[bracket_pos..]
-                    } else {
-                        name
-                    };
-                    let text = format!("     T  {display}");
-                    if is_selected {
-                        Line::from(Span::styled(
-                            text,
-                            Style::default().fg(Color::Black).bg(Color::Cyan),
-                        ))
-                    } else {
-                        Line::from(text)
-                    }
-                }
+    // Append selectable edges with cursor indicators
+    let edge_count = detail::selectable_edge_count(graph, node);
+    if edge_count > 0 {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  Related",
+            Style::default().fg(Color::Yellow),
+        )));
+        for i in 0..edge_count {
+            if let Some(edge_ref) = detail::edge_node_at(graph, node, i) {
+                let sigil = edge_ref.kind.sigil();
+                let name = graph.node_name(&edge_ref);
+                let text = format!("  {sigil}  {name}");
+                lines.push(if i == selected {
+                    Line::from(Span::styled(
+                        format!("\u{203A} {text}"),
+                        Style::default().fg(Color::Black).bg(Color::Cyan),
+                    ))
+                } else {
+                    Line::from(format!("  {text}"))
+                });
             }
-        })
-        .collect()
+        }
+    }
+
+    lines
 }
 
 /// Render a Disambiguation screen: one line per matching node.
 fn build_disambiguation_content(
     graph: &super::graph::InspectGraph,
-    matches: &[super::graph::NodeRef],
+    matches: &[NodeRef],
     selected: usize,
 ) -> Vec<Line<'static>> {
     matches
@@ -484,9 +446,57 @@ fn build_history_content(
         .collect()
 }
 
-/// Returns `true` for node kinds that require the Python session (phase 2).
-fn is_python_tier(kind: NodeKind) -> bool {
-    matches!(kind, NodeKind::Fixture | NodeKind::Plugin)
+/// Build the preview content for the right pane based on current screen and
+/// cursor position.
+fn build_preview_content(app: &InspectApp) -> Vec<Line<'static>> {
+    let graph = match &app.graph {
+        Some(g) => g,
+        None => return vec![Line::from("No data loaded")],
+    };
+
+    let mut lines = match app.nav.current() {
+        Screen::Overview { selected } => {
+            if let Some(node_ref) = app.overview_sections.node_ref_at(*selected) {
+                detail::render_preview(graph, &node_ref)
+            } else {
+                vec![Line::from("Select an item to preview")]
+            }
+        }
+        Screen::NodeFocus { node, selected } => {
+            if let Some(edge_ref) = detail::edge_node_at(graph, node, *selected) {
+                detail::render_preview(graph, &edge_ref)
+            } else {
+                detail::render_preview(graph, node)
+            }
+        }
+        Screen::Disambiguation {
+            matches, selected, ..
+        } => {
+            if let Some(node_ref) = matches.get(*selected) {
+                detail::render_preview(graph, node_ref)
+            } else {
+                vec![Line::from("Select a match to preview")]
+            }
+        }
+        Screen::History { selected } => {
+            if let Some(node_ref) = app.history.get(*selected) {
+                detail::render_preview(graph, node_ref)
+            } else {
+                vec![Line::from(" No history yet")]
+            }
+        }
+    };
+
+    // Append loading indicator when fixture/plugin data is still arriving.
+    if app.is_loading() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Loading fixture and plugin data...",
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    lines
 }
 
 /// Build the footer bar with context-sensitive keybinding hints.
@@ -509,7 +519,8 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
                     Span::raw(format!("{count}/{total} matches")),
                 ]
             } else {
-                vec![
+                // Contextual hints based on current screen
+                let mut hints = vec![
                     Span::styled(" q", Style::default().fg(Color::Yellow)),
                     Span::raw(" Quit  "),
                     Span::styled("/", Style::default().fg(Color::Yellow)),
@@ -521,8 +532,19 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
                     Span::styled("l", Style::default().fg(Color::Yellow)),
                     Span::raw(" Enter  "),
                     Span::styled("h", Style::default().fg(Color::Yellow)),
+                    Span::raw(" Back  "),
+                    Span::styled("H", Style::default().fg(Color::Yellow)),
                     Span::raw(" History"),
-                ]
+                ];
+                // Add loading indicator on the right side
+                if app.is_loading() {
+                    hints.push(Span::raw("  "));
+                    hints.push(Span::styled(
+                        "loading...",
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+                hints
             }
         }
         InputMode::Search { query } => {
@@ -561,10 +583,9 @@ fn draw_help_overlay(frame: &mut Frame<'_>, area: Rect) {
         Line::from(" q / Esc     Quit"),
         Line::from(" j / Down    Move down"),
         Line::from(" k / Up      Move up"),
-        Line::from(" l / Right   Navigate into"),
-        Line::from(" h           History"),
-        Line::from(" Left        Back"),
-        Line::from(" Space       Navigate into"),
+        Line::from(" Enter / l   Navigate into"),
+        Line::from(" h / Left    Back"),
+        Line::from(" H           History"),
         Line::from(" Backspace   Back"),
         Line::from(" /           Search"),
         Line::from(" ?           Toggle this help"),
@@ -607,68 +628,61 @@ mod tests {
     use super::*;
 
     #[test]
-    fn layout_wide_two_panes() {
-        let area = Rect::new(0, 0, 120, 40);
-        let panes = main_layout(120, area);
-        assert_eq!(
-            panes.len(),
-            2,
-            "terminal width >= 100 should produce a two-pane layout"
+    fn adaptive_layout_wide_two_panes() {
+        let (left, right) = adaptive_layout(120, 15);
+        assert!(
+            right > 0,
+            "terminal width >= 80 should produce a two-pane layout"
         );
+        assert_eq!(left + right, 120, "left + right should equal total width");
     }
 
     #[test]
-    fn layout_medium_two_panes() {
-        let area = Rect::new(0, 0, 90, 40);
-        let panes = main_layout(90, area);
+    fn adaptive_layout_narrow_single_pane() {
+        let (left, right) = adaptive_layout(60, 15);
         assert_eq!(
-            panes.len(),
-            2,
-            "terminal width >= 80 but < 100 should produce a two-pane layout"
-        );
-    }
-
-    #[test]
-    fn layout_narrow_single_pane() {
-        let area = Rect::new(0, 0, 60, 40);
-        let panes = main_layout(60, area);
-        assert_eq!(
-            panes.len(),
-            1,
+            right, 0,
             "terminal width < 80 should produce a single-pane layout"
         );
+        assert_eq!(left, 60, "single-pane left should equal total width");
     }
 
     #[test]
-    fn layout_boundary_80_is_two_panes() {
-        let area = Rect::new(0, 0, 80, 40);
-        let panes = main_layout(80, area);
-        assert_eq!(
-            panes.len(),
-            2,
+    fn adaptive_layout_boundary_80() {
+        let (left, right) = adaptive_layout(80, 15);
+        assert!(
+            right > 0,
             "terminal width exactly 80 should produce a two-pane layout"
         );
+        assert_eq!(left + right, 80, "left + right should equal total width");
     }
 
     #[test]
-    fn layout_boundary_100_is_two_panes() {
-        let area = Rect::new(0, 0, 100, 40);
-        let panes = main_layout(100, area);
+    fn adaptive_layout_boundary_79_single_pane() {
+        let (_left, right) = adaptive_layout(79, 15);
         assert_eq!(
-            panes.len(),
-            2,
-            "terminal width exactly 100 should produce a two-pane layout"
+            right, 0,
+            "terminal width 79 should produce a single-pane layout"
         );
     }
 
     #[test]
-    fn layout_boundary_79_is_single_pane() {
-        let area = Rect::new(0, 0, 79, 40);
-        let panes = main_layout(79, area);
-        assert_eq!(
-            panes.len(),
-            1,
-            "terminal width 79 should produce a single-pane layout"
+    fn adaptive_layout_short_preview_widens_left() {
+        let (left_short, _) = adaptive_layout(120, 5);
+        let (left_long, _) = adaptive_layout(120, 25);
+        assert!(
+            left_short >= left_long,
+            "short preview (< 10 lines) should widen the left pane"
+        );
+    }
+
+    #[test]
+    fn adaptive_layout_long_preview_widens_right() {
+        let (_, right_long) = adaptive_layout(120, 25);
+        let (_, right_mid) = adaptive_layout(120, 15);
+        assert!(
+            right_long >= right_mid,
+            "long preview (> 20 lines) should widen the right pane"
         );
     }
 
@@ -910,8 +924,8 @@ mod snapshot_tests {
 
     // ── Navigation screen snapshots ─────────────────────────────────────
 
-    use crate::inspect::graph::InspectGraph;
     use crate::inspect::graph::nodes::{MarkNode, TestNode};
+    use crate::inspect::graph::{InspectGraph, NodeKind};
 
     /// Build a graph with 3 tests and 1 mark for snapshot tests.
     fn snapshot_graph() -> InspectGraph {
@@ -959,107 +973,29 @@ mod snapshot_tests {
     }
 
     #[test]
-    fn snap_home_screen_cursor_on_second() {
+    fn snap_overview_cursor_on_second() {
         let graph = snapshot_graph();
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 80;
-        if let NavScreen::Home { selected } = app.nav.current_mut() {
+        if let Screen::Overview { selected } = app.nav.current_mut() {
             *selected = 1;
         }
-        assert_snapshot!("home_screen_cursor_second", render_to_string(&app, 80, 12));
+        assert_snapshot!("overview_cursor_second", render_to_string(&app, 80, 12));
     }
 
     #[test]
-    fn snap_node_list_tests() {
+    fn snap_node_focus() {
         let graph = snapshot_graph();
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 80;
-        app.nav.push(super::NavScreen::NodeList {
-            kind: NodeKind::Test,
+        app.nav.push(Screen::NodeFocus {
+            node: crate::inspect::graph::NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
             selected: 0,
         });
-        assert_snapshot!("node_list_tests", render_to_string(&app, 80, 12));
-    }
-
-    #[test]
-    fn snap_node_list_cursor_moved() {
-        let graph = snapshot_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.terminal_width = 80;
-        app.nav.push(super::NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 2,
-        });
-        assert_snapshot!("node_list_cursor_moved", render_to_string(&app, 80, 12));
-    }
-
-    // ── Parametrize collapse snapshots ───────────────────────────────────
-
-    /// Build a graph with parametrized tests for collapsing snapshots.
-    fn parametrized_graph() -> InspectGraph {
-        let mut graph = InspectGraph::default();
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[1+2]".to_string(),
-            is_async: false,
-            param_id: Some("1+2".to_string()),
-            param_count: 3,
-            variants: vec![1, 2],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[3+4]".to_string(),
-            is_async: false,
-            param_id: Some("3+4".to_string()),
-            param_count: 3,
-            variants: vec![0, 2],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph.tests.push(TestNode {
-            node_id: "tests/test_math.py::test_add[5+6]".to_string(),
-            is_async: false,
-            param_id: Some("5+6".to_string()),
-            param_count: 3,
-            variants: vec![0, 1],
-            fixture_deps: vec![],
-            marks: vec![],
-        });
-        graph
-    }
-
-    #[test]
-    fn snap_node_list_parametrized_collapsed() {
-        let graph = parametrized_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.terminal_width = 80;
-        // No groups expanded — the 3-variant group shows as a single collapsed row.
-        app.nav.push(super::NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 0,
-        });
-        assert_snapshot!(
-            "node_list_parametrized_collapsed",
-            render_to_string(&app, 80, 12)
-        );
-    }
-
-    #[test]
-    fn snap_node_list_parametrized_expanded() {
-        let graph = parametrized_graph();
-        let mut app = InspectApp::new(Some(graph), None);
-        app.terminal_width = 80;
-        // Expand the parametrize group so variants appear below the header.
-        app.expanded_groups
-            .insert("tests/test_math.py::test_add".to_string());
-        app.nav.push(super::NavScreen::NodeList {
-            kind: NodeKind::Test,
-            selected: 0,
-        });
-        assert_snapshot!(
-            "node_list_parametrized_expanded",
-            render_to_string(&app, 80, 12)
-        );
+        assert_snapshot!("node_focus", render_to_string(&app, 80, 12));
     }
 
     // ── History screen snapshots ─────────────────────────────────────────
@@ -1085,7 +1021,7 @@ mod snapshot_tests {
             index: 0,
         });
         // Navigate to History screen with cursor on first entry.
-        app.nav.push(super::NavScreen::History { selected: 0 });
+        app.nav.push(Screen::History { selected: 0 });
         assert_snapshot!(
             "history_screen_with_entries",
             render_to_string(&app, 120, 24)
@@ -1098,7 +1034,7 @@ mod snapshot_tests {
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
         // No history pushes — history is empty.
-        app.nav.push(super::NavScreen::History { selected: 0 });
+        app.nav.push(Screen::History { selected: 0 });
         assert_snapshot!("history_screen_empty", render_to_string(&app, 120, 24));
     }
 }

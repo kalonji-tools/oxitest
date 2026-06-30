@@ -120,59 +120,21 @@ impl InspectGraph {
             && self.plugins.is_empty()
             && self.helpers.is_empty()
     }
-}
 
-// ── Searchable impl ──────────────────────────────────────────────────────────
-
-impl crate::inspect::search::Searchable for InspectGraph {
-    /// Return all nodes across all six typed vectors.
-    ///
-    /// Iteration order: fixtures → tests → marks → conftests → plugins → helpers.
-    /// The `index` in each `NodeRef` is the position within its own typed vector,
-    /// not a global flat index, so it can be used directly for O(1) lookups.
-    fn all_nodes(&self) -> Vec<NodeRef> {
-        use NodeKind::*;
-        [Fixture, Test, Mark, Conftest, Plugin, Helper]
-            .into_iter()
-            .flat_map(|kind| self.nodes_of_kind(kind))
-            .collect()
+    /// Return node refs for a specific kind.
+    pub(crate) fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
+        let count = self.node_count(kind);
+        (0..count).map(|i| NodeRef { kind, index: i }).collect()
     }
 
-    /// Return all nodes of the given kind.
-    ///
-    /// Each `NodeRef.index` is the position within the kind's typed vector,
-    /// matching the lookup semantics of `node_name` and `node_query_entry`.
-    fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
-        (0..self.node_count(kind))
-            .map(|i| NodeRef { kind, index: i })
-            .collect()
-    }
-
-    /// Return the display name for the node at `r`.
-    ///
-    /// Delegates to the existing `InspectGraph::node_name` method which
-    /// dispatches on kind to the appropriate typed vector.
-    fn node_name(&self, r: NodeRef) -> &str {
-        // The graph's existing node_name takes &NodeRef, so borrow temporarily.
-        InspectGraph::node_name(self, &r)
-    }
-
-    /// Return the kind of the node — read directly from the NodeRef discriminant.
-    ///
-    /// `NodeRef` already carries its kind, so no graph lookup is needed.
-    fn node_kind(&self, r: NodeRef) -> NodeKind {
-        r.kind
-    }
-
-    /// Build a `QueryEntry` for DSL evaluation against a node.
+    /// Build a [`QueryEntry`] for DSL evaluation against a node.
     ///
     /// All nodes get a `name` field.  Test nodes additionally get a `mark` field
     /// whose value is the comma-joined names of all marks applied to that test,
     /// enabling DSL expressions like `mark(slow)` to filter tests by mark name.
-    fn node_query_entry(&self, r: NodeRef) -> QueryEntry {
+    pub(crate) fn node_query_entry(&self, r: &NodeRef) -> QueryEntry {
         let mut fields = std::collections::HashMap::new();
-        // Call the inherent method (takes &NodeRef), not the trait method.
-        fields.insert("name".to_string(), self.node_name(&r).to_string());
+        fields.insert("name".to_string(), self.node_name(r).to_string());
 
         if r.kind == NodeKind::Test {
             let test = &self.tests[r.index];
@@ -186,12 +148,60 @@ impl crate::inspect::search::Searchable for InspectGraph {
 
         QueryEntry { fields }
     }
+
+    /// Return references to every node in the graph, in display order.
+    ///
+    /// Iteration order: tests → fixtures → marks → conftests → plugins → helpers.
+    /// Each `NodeRef.index` is the position within its own typed vector,
+    /// matching the O(1) lookup semantics of `node_name` and `node_sigil`.
+    #[allow(dead_code)] // wired into nav/overview in follow-up tasks
+    pub(crate) fn all_node_refs(&self) -> Vec<NodeRef> {
+        let mut refs = Vec::new();
+        for i in 0..self.tests.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Test,
+                index: i,
+            });
+        }
+        for i in 0..self.fixtures.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Fixture,
+                index: i,
+            });
+        }
+        for i in 0..self.marks.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Mark,
+                index: i,
+            });
+        }
+        for i in 0..self.conftests.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Conftest,
+                index: i,
+            });
+        }
+        for i in 0..self.plugins.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Plugin,
+                index: i,
+            });
+        }
+        for i in 0..self.helpers.len() {
+            refs.push(NodeRef {
+                kind: NodeKind::Helper,
+                index: i,
+            });
+        }
+        refs
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Extract the base function name from a node ID by stripping `[param_id]`.
 /// Returns the full node_id if no `[` is found.
+#[allow(dead_code)] // retained for future parametrize group collapsing
 pub(crate) fn base_test_name(node_id: &str) -> &str {
     node_id.rfind('[').map_or(node_id, |pos| &node_id[..pos])
 }
@@ -406,6 +416,49 @@ mod tests {
             super::base_test_name("tests/test_math.py::test_solo"),
             "tests/test_math.py::test_solo",
             "base_test_name should return the full node_id when no '[' is present"
+        );
+    }
+
+    #[test]
+    fn all_node_refs_returns_all_nodes() {
+        use crate::query::resource::QueryEntry;
+        use builder::GraphBuilder;
+
+        fn entry(pairs: &[(&str, &str)]) -> QueryEntry {
+            let fields = pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            QueryEntry { fields }
+        }
+
+        let mut builder = GraphBuilder::new();
+        // 1 fixture
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "fx"),
+            ("source", "conftest.py"),
+            ("type", "str"),
+            ("scope", "each"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+        // 1 test
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("mark", ""),
+            ("async", "false"),
+        ])]);
+        builder.resolve_edges();
+        let graph = builder.build();
+        let refs = graph.all_node_refs();
+        // resolve_edges auto-creates a ConftestNode for the fixture's source path,
+        // so the graph contains 1 test + 1 fixture + 1 conftest = 3 nodes total.
+        assert_eq!(
+            refs.len(),
+            3,
+            "1 test + 1 fixture + 1 auto-created conftest = 3 node refs"
         );
     }
 }
