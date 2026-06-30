@@ -124,6 +124,7 @@ enum Phase2State {
 pub(crate) struct Phase2Data {
     pub(crate) fixture_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
+    pub(crate) fixture_dep_entries: Vec<crate::query::resource::QueryEntry>,
 }
 
 // ── SessionHistory ──────────────────────────────────────────────────────────
@@ -370,6 +371,7 @@ impl InspectApp {
             let mut builder = GraphBuilder::from_graph(existing_graph);
             builder.add_fixture_entries(&data.fixture_entries);
             builder.add_plugin_entries(&data.plugin_entries);
+            builder.add_fixture_dep_entries(&data.fixture_dep_entries, &self.rootdir);
             builder.resolve_edges();
             let mut new_graph = builder.build();
             // Normalize paths from phase-2 (Python bridge sends absolute paths).
@@ -432,6 +434,9 @@ impl InspectApp {
             return;
         };
 
+        // Clone test files for phase 2 before phase 1 consumes the original.
+        let test_files_for_phase2 = test_files.clone();
+
         // Rebuild phase-1 graph.
         let Ok(mut graph) = super::build_phase1_graph(
             &rargs.inspect_args,
@@ -448,6 +453,7 @@ impl InspectApp {
         let (tx, rx) = std::sync::mpsc::channel();
         super::spawn_phase2(
             conftest_files,
+            test_files_for_phase2,
             rargs.config.features.plugins.clone(),
             rargs.config.features.plugin_settings.clone(),
             tx,
@@ -701,6 +707,7 @@ mod tests {
                 .collect(),
             }],
             plugin_entries: vec![],
+            fixture_dep_entries: vec![],
         };
 
         // merge_phase2 is called after phase2 is already set to Complete by poll_phase2;
@@ -755,6 +762,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             }],
+            fixture_dep_entries: vec![],
         })
         .expect("send should succeed while receiver exists");
 
@@ -931,6 +939,7 @@ mod tests {
         app.merge_phase2(Phase2Data {
             fixture_entries: vec![],
             plugin_entries: vec![],
+            fixture_dep_entries: vec![],
         });
 
         assert!(
