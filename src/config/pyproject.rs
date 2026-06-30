@@ -52,6 +52,7 @@ pub(super) struct OxitestConfig {
     pub(super) show_internals: Option<bool>,
     pub(super) use_gitignore: Option<bool>,
     pub(super) doctest_modules: Option<bool>,
+    pub(super) inspect_timeout: Option<u64>,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {

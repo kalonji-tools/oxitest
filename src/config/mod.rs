@@ -261,6 +261,8 @@ pub struct ExecConfig {
     pub retries_delay_secs: u64,
     /// Auto-arrange threshold percentage (0 = disabled).
     pub auto_arrange_threshold: u8,
+    /// Phase-2 (Python-tier) loading timeout for `oxitest inspect` in seconds.
+    pub inspect_timeout_secs: u64,
 }
 
 impl Default for ExecConfig {
@@ -275,6 +277,7 @@ impl Default for ExecConfig {
             retries: 0,
             retries_delay_secs: 0,
             auto_arrange_threshold: 70,
+            inspect_timeout_secs: 30,
         }
     }
 }

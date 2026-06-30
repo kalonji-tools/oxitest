@@ -135,6 +135,8 @@ impl Config {
             .unwrap_or(self.exec.spawn_overhead);
         self.exec.timeout_secs = tc.timeout;
         self.exec.timeout_multiplier = tc.timeout_multiplier;
+        self.exec.inspect_timeout_secs =
+            tc.inspect_timeout.unwrap_or(self.exec.inspect_timeout_secs);
 
         // ── Output (unique to TOML) ─────────────────────────────────────
         apply_if_some!(self.output, verbosity, tc.verbosity);
