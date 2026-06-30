@@ -172,8 +172,8 @@ class _Scope:
 
     cache: dict[str, Any] = field(default_factory=dict)
     teardowns: list[Callable[[], None]] = field(default_factory=list)
-    _hits: dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    _misses: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    _hits: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
+    _misses: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     def get_or_create(self, name: str, factory: Callable[[], Any]) -> Any:
         if name not in self.cache:
