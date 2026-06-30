@@ -182,6 +182,46 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     let breadcrumb = build_breadcrumb(app);
     frame.render_widget(breadcrumb, breadcrumb_area);
 
+    // ── Source view — full-screen, replaces the two-pane layout ─────────
+    if let Some(ref sv) = app.source_view {
+        let title = format!(" {} ", sv.path);
+        let source_block = Block::default().borders(Borders::ALL).title(title);
+        let content = Paragraph::new(sv.lines.clone())
+            .block(source_block)
+            .scroll((sv.scroll_offset, 0));
+        frame.render_widget(content, main_area);
+
+        // Source footer
+        let graph = app.graph.as_ref().expect(
+            "source_view can only be Some when graph is Some — enter_source_view guards this",
+        );
+        let node_label = format!(
+            "{} {}",
+            sv.node_ref.kind.sigil(),
+            graph.node_name(&sv.node_ref)
+        );
+        let footer_line = Line::from(vec![
+            Span::styled(
+                " \u{2191}\u{2193} scroll  e open in $EDITOR  Esc close",
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("  {node_label}"),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]);
+        frame.render_widget(
+            Paragraph::new(footer_line).style(Style::default().bg(Color::DarkGray)),
+            footer_area,
+        );
+
+        // Help overlay still works in source view
+        if app.show_help {
+            draw_help_overlay(frame, size);
+        }
+        return;
+    }
+
     // ── Compute preview content for the right pane ───────────────────────
     let preview_lines = build_preview_content(app);
     let preview_line_count = preview_lines.len();
@@ -234,11 +274,17 @@ fn build_breadcrumb(app: &InspectApp) -> Paragraph<'static> {
         Some(graph) => app.nav.breadcrumb(graph),
         None => vec![('\u{25CB}', "overview")],
     };
-    let text: String = crumbs
+    let mut text: String = crumbs
         .iter()
         .map(|(sigil, name)| format!("{sigil} {name}"))
         .collect::<Vec<_>>()
         .join(" \u{203A} ");
+
+    // Append source view indicator when the source overlay is active.
+    if app.source_view.is_some() {
+        text.push_str(" \u{203A} source");
+    }
+
     Paragraph::new(Line::from(Span::styled(
         format!(" {text}"),
         Style::default().fg(Color::DarkGray),
@@ -629,6 +675,21 @@ fn build_footer(app: &InspectApp) -> Paragraph<'static> {
                     Span::styled("H", Style::default().fg(Color::Yellow)),
                     Span::raw(" History"),
                 ];
+                // Show s/e hints when the focused node has source
+                let has_source = match app.nav.current() {
+                    Screen::NodeFocus { node, .. } => app
+                        .graph
+                        .as_ref()
+                        .is_some_and(|g| super::source::node_source_location(g, node).is_some()),
+                    _ => false,
+                };
+                if has_source {
+                    hints.push(Span::raw("  "));
+                    hints.push(Span::styled("s", Style::default().fg(Color::Yellow)));
+                    hints.push(Span::raw(" Source  "));
+                    hints.push(Span::styled("e", Style::default().fg(Color::Yellow)));
+                    hints.push(Span::raw(" Edit"));
+                }
                 // Add loading indicator on the right side
                 if app.is_loading() {
                     hints.push(Span::raw("  "));
@@ -690,7 +751,8 @@ fn draw_help_overlay(frame: &mut Frame<'_>, area: Rect) {
         Line::from(" /           Search"),
         Line::from(" ?           Toggle this help"),
         Line::from(" r           Refresh data"),
-        Line::from(" s           Toggle source view"),
+        Line::from(" s           Source view"),
+        Line::from(" e           Open in $EDITOR"),
         Line::from(""),
         Line::from(Span::styled(
             " Press ? to close ",

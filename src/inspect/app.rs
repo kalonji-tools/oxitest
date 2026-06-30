@@ -13,6 +13,20 @@ use super::nav::{self, Screen, Trail};
 use super::overview::OverviewSections;
 use super::ui;
 
+// ── SourceViewState ──────────────────────────────────────────────────────────
+
+/// State for the full-screen source view overlay.
+pub(crate) struct SourceViewState {
+    /// Display path of the source file.
+    pub path: String,
+    /// Pre-rendered lines (with line numbers) from the source file.
+    pub lines: Vec<ratatui::text::Line<'static>>,
+    /// Vertical scroll offset for the source view.
+    pub scroll_offset: u16,
+    /// The node this source view was opened for (used by `e` to open editor).
+    pub node_ref: super::graph::NodeRef,
+}
+
 // ── RefreshArgs ──────────────────────────────────────────────────────────────
 
 /// Arguments needed to re-run file collection and graph construction
@@ -203,6 +217,13 @@ pub(crate) struct InspectApp {
     /// Arguments needed for manual graph refresh (`r` key).
     /// `None` in test-only construction; `Some` when launched from `run()`.
     refresh_args: Option<RefreshArgs>,
+    /// Source view overlay state: `Some` when the user pressed `s` on a node
+    /// with viewable source.
+    pub(crate) source_view: Option<SourceViewState>,
+    /// Set by the `e` key to request opening the node's source in `$EDITOR`.
+    /// Consumed in the event loop after `handle_key` returns, because
+    /// terminal restore/setup cannot happen inside the key handler.
+    pub(crate) open_in_editor_request: Option<super::graph::NodeRef>,
 }
 
 impl InspectApp {
@@ -242,6 +263,8 @@ impl InspectApp {
             rootdir: String::new(),
             phase2_timeout: std::time::Duration::from_secs(30),
             refresh_args: None,
+            source_view: None,
+            open_in_editor_request: None,
         }
     }
 
@@ -288,6 +311,8 @@ impl InspectApp {
             rootdir: rootdir.to_string(),
             phase2_timeout: timeout,
             refresh_args,
+            source_view: None,
+            open_in_editor_request: None,
         }
     }
 
@@ -320,6 +345,17 @@ impl InspectApp {
                     Event::Mouse(mouse) => input::handle_mouse(self, mouse),
                     _ => {}
                 }
+            }
+
+            // Handle open-in-editor request outside the key handler so we can
+            // restore/re-setup the terminal around the editor subprocess.
+            if let Some(node) = self.open_in_editor_request.take()
+                && let Some(graph) = &self.graph
+                && let Some((path, line)) = super::source::node_source_location(graph, &node)
+            {
+                ui::restore_terminal(terminal)?;
+                let _ = super::source::open_in_editor(&path, line);
+                *terminal = ui::setup_terminal()?;
             }
         }
         Ok(())
@@ -413,6 +449,33 @@ impl InspectApp {
     #[allow(dead_code)] // convenience alias for future callers
     pub(crate) fn is_phase2_loading(&self) -> bool {
         self.is_loading()
+    }
+
+    /// Open the source view overlay for the given node.
+    ///
+    /// Reads the source file and stores rendered lines in `source_view`.
+    /// If the node kind has no viewable source, flashes a message instead.
+    pub(crate) fn enter_source_view(&mut self, node: &NodeRef) {
+        let graph = match &self.graph {
+            Some(g) => g,
+            None => return,
+        };
+        let Some((path, _line)) = super::source::node_source_location(graph, node) else {
+            self.flash(format!("no source available for {}s", node.kind.label()));
+            return;
+        };
+        let lines = super::source::read_source_lines(&path);
+        self.source_view = Some(SourceViewState {
+            path,
+            lines,
+            scroll_offset: 0,
+            node_ref: node.clone(),
+        });
+    }
+
+    /// Close the source view overlay, returning to the normal TUI.
+    pub(crate) fn exit_source_view(&mut self) {
+        self.source_view = None;
     }
 
     /// Re-collect files, rebuild the phase-1 graph, and spawn a new phase-2

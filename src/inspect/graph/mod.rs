@@ -37,6 +37,18 @@ impl NodeKind {
             Self::Helper => 'H',
         }
     }
+
+    /// Lowercase label for this node kind, used in flash messages.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Fixture => "fixture",
+            Self::Test => "test",
+            Self::Mark => "mark",
+            Self::Conftest => "conftest",
+            Self::Plugin => "plugin",
+            Self::Helper => "helper",
+        }
+    }
 }
 
 // ── NodeRef ──────────────────────────────────────────────────────────────────
