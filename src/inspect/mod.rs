@@ -24,7 +24,7 @@ use std::thread;
 use camino::Utf8PathBuf;
 
 use crate::config::{self, cli::InspectArgs};
-use app::Phase2Data;
+use app::{Phase2Data, RefreshArgs};
 use graph::InspectGraph;
 
 /// Phase 1: build the inspect graph from instant-tier data available without a
@@ -39,7 +39,7 @@ use graph::InspectGraph;
 /// 3. `-E` expression — evaluate DSL against test entries, discard non-matching
 /// 4. `--lf` — load TestCache, keep only previously-failed tests
 /// 5. Build graph from surviving entries
-fn build_phase1_graph(
+pub(crate) fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
     mut test_files: Vec<Utf8PathBuf>,
@@ -113,7 +113,7 @@ fn build_phase1_graph(
 /// Python session fails, the sender is simply dropped, which causes the
 /// receiver to see `Disconnected` — the TUI then transitions to
 /// `LoadingState::Complete` with whatever data it already has.
-fn spawn_phase2(
+pub(crate) fn spawn_phase2(
     conftest_files: Vec<Utf8PathBuf>,
     plugins: Vec<String>,
     plugin_settings: std::collections::HashMap<String, toml::Value>,
@@ -197,6 +197,10 @@ pub(crate) fn run(
     graph.relativize_paths(cfg.rootdir.as_str());
 
     let timeout = std::time::Duration::from_secs(cfg.exec.inspect_timeout_secs);
+    let refresh_args = RefreshArgs {
+        inspect_args: args.clone(),
+        config: cfg.clone(),
+    };
     let mut terminal = ui::setup_terminal()?;
     let result = app::InspectApp::with_progressive_loading(
         graph,
@@ -204,6 +208,7 @@ pub(crate) fn run(
         args.name.as_deref(),
         timeout,
         cfg.rootdir.as_str(),
+        Some(refresh_args),
     )
     .run(&mut terminal);
     ui::restore_terminal(&mut terminal)?;

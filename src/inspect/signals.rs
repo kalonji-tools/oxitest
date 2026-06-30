@@ -83,14 +83,15 @@ pub(crate) fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
 
 /// Flag every fixture that has no consumers and is not marked `autouse`.
 ///
-/// Autouse fixtures are always active, so lacking an explicit consumer is
-/// expected and should not be reported.
+/// Only conftest-defined fixtures are checked — builtins and plugin fixtures
+/// have runtime-wired consumers invisible to the graph.  Autouse fixtures are
+/// always active, so lacking an explicit consumer is expected.
 fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
     let affected: Vec<NodeRef> = graph
         .fixtures
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.consumers.is_empty() && !f.autouse)
+        .filter(|(_, f)| f.consumers.is_empty() && !f.autouse && f.source.ends_with("conftest.py"))
         .map(|(i, _)| NodeRef {
             kind: NodeKind::Fixture,
             index: i,
@@ -110,42 +111,10 @@ fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
     }
 }
 
-/// Flag helper functions whose parent conftest defines no fixtures.
-///
-/// A conftest with zero fixtures is unlikely to be imported by test modules,
-/// which means its helper functions are probably dead code.  This is a
-/// heuristic — a conftest can also be used for its side-effects (e.g.
-/// `pytest_configure` hooks), so this signal should be treated as advisory.
-fn detect_unused_helpers(graph: &InspectGraph, signals: &mut Vec<Signal>) {
-    let affected: Vec<NodeRef> = graph
-        .helpers
-        .iter()
-        .enumerate()
-        .filter(|(_, h)| {
-            graph
-                .conftests
-                .get(h.conftest_idx)
-                .map_or(false, |c| c.fixtures.is_empty())
-        })
-        .map(|(i, _)| NodeRef {
-            kind: NodeKind::Helper,
-            index: i,
-        })
-        .collect();
-
-    if !affected.is_empty() {
-        let count = affected.len();
-        signals.push(Signal {
-            kind: SignalKind::UnusedHelpers,
-            message: format!(
-                "{count} helper{s} in conftest{s2} with no fixtures",
-                s = if count == 1 { "" } else { "s" },
-                s2 = if count == 1 { "" } else { "s" },
-            ),
-            affected,
-        });
-    }
-}
+/// Unused helper detection requires scanning test file imports for
+/// `helpers.<namespace>.<name>` usage — deferred until import analysis
+/// is available.
+fn detect_unused_helpers(_graph: &InspectGraph, _signals: &mut Vec<Signal>) {}
 
 /// Report edges that the builder could not resolve.
 ///
@@ -238,7 +207,7 @@ mod tests {
     use super::*;
     use crate::inspect::graph::{
         BrokenEdge, InspectGraph, NodeKind, NodeRef,
-        nodes::{ConftestNode, FixtureNode, HelperNode, TestNode},
+        nodes::{ConftestNode, FixtureNode, TestNode},
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -249,11 +218,11 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse,
-            source: String::new(),
+            source: "conftest.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers,
-            conftest_idx: None,
+            conftest_idx: Some(0), // conftest-defined fixture
             plugin_idx: None,
         }
     }
@@ -287,6 +256,12 @@ mod tests {
     #[test]
     fn unused_fixture_detected() {
         let mut graph = InspectGraph::default();
+        // Conftest node so conftest_idx=Some(0) is valid.
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
         // Fixture with no consumers and autouse=false.
         graph
             .fixtures
@@ -335,11 +310,59 @@ mod tests {
         );
     }
 
+    // ── Test: builtin/plugin fixtures not flagged as unused ─────────────────
+
+    #[test]
+    fn builtin_fixture_not_flagged() {
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "_TempDir".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "<builtin>".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+        graph.fixtures.push(FixtureNode {
+            name: "cache".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "<plugin:cache>".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: None,
+            plugin_idx: None,
+        });
+
+        let signals = detect_signals(&graph);
+        let unused: Vec<_> = signals
+            .iter()
+            .filter(|s| s.kind == SignalKind::UnusedFixtures)
+            .collect();
+
+        assert!(
+            unused.is_empty(),
+            "builtin and plugin fixtures must not be flagged as unused"
+        );
+    }
+
     // ── Test: broken edges produce a BrokenEdges signal ──────────────────────
 
     #[test]
     fn broken_edges_detected() {
         let mut graph = InspectGraph::default();
+        // Conftest node so conftest_idx=Some(0) is valid.
+        graph.conftests.push(ConftestNode {
+            path: "conftest.py".to_string(),
+            fixtures: vec![],
+            helpers: vec![],
+        });
         // Need at least one fixture so detect_signals doesn't return early.
         graph
             .fixtures
@@ -462,51 +485,5 @@ mod tests {
         );
     }
 
-    // ── Test: unused helper in fixture-less conftest is detected ──────────────
-
-    #[test]
-    fn unused_helper_in_empty_conftest_detected() {
-        let mut graph = InspectGraph::default();
-
-        // A conftest with no fixtures.
-        graph.conftests.push(ConftestNode {
-            path: "tests/conftest.py".to_string(),
-            fixtures: vec![],
-            helpers: vec![0],
-        });
-
-        // A helper pointing to that conftest.
-        graph.helpers.push(HelperNode {
-            name: "make_thing".to_string(),
-            signature: "make_thing()".to_string(),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
-        });
-
-        // Need at least one fixture for detect_signals to proceed.
-        graph
-            .fixtures
-            .push(make_fixture("some_fixture", false, vec![]));
-
-        let signals = detect_signals(&graph);
-        let unused_helpers: Vec<_> = signals
-            .iter()
-            .filter(|s| s.kind == SignalKind::UnusedHelpers)
-            .collect();
-
-        assert_eq!(
-            unused_helpers.len(),
-            1,
-            "one UnusedHelpers signal should be emitted for a helper in a fixture-less conftest"
-        );
-        assert_eq!(
-            unused_helpers[0].affected,
-            vec![NodeRef {
-                kind: NodeKind::Helper,
-                index: 0
-            }],
-            "the affected NodeRef should point to the helper at index 0"
-        );
-    }
+    // unused_helper detector removed — requires import analysis (deferred)
 }

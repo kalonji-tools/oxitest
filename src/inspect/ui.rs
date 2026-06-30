@@ -689,6 +689,7 @@ fn draw_help_overlay(frame: &mut Frame<'_>, area: Rect) {
         Line::from(" Backspace   Back"),
         Line::from(" /           Search"),
         Line::from(" ?           Toggle this help"),
+        Line::from(" r           Refresh data"),
         Line::from(" s           Toggle source view"),
         Line::from(""),
         Line::from(Span::styled(

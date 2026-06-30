@@ -75,6 +75,11 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
             app.show_help = !app.show_help;
         }
 
+        // Refresh graph data from disk
+        KeyCode::Char('r') => {
+            app.refresh();
+        }
+
         // Toggle source view (no-op until #1117)
         KeyCode::Char('s') => {}
 
@@ -619,6 +624,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn r_key_triggers_refresh_noop_without_args() {
+        // InspectApp::new() sets refresh_args = None.
+        // Pressing 'r' calls refresh(), which returns immediately when
+        // refresh_args is None — no panic, no state change.
+        let mut app = InspectApp::new(None, None);
+        let initial_mode = app.input_mode.clone();
+        let initial_quit = app.should_quit;
+
+        handle_key(&mut app, key(KeyCode::Char('r')));
+
+        assert_eq!(
+            app.input_mode, initial_mode,
+            "pressing 'r' without refresh_args should leave input_mode unchanged"
+        );
+        assert_eq!(
+            app.should_quit, initial_quit,
+            "pressing 'r' without refresh_args should not set should_quit"
+        );
+    }
+
     // ── History key tests ──────────────────────────────────────────────
 
     #[test]
@@ -860,8 +886,14 @@ mod tests {
 
         let graph = three_test_graph();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
-        let app =
-            App::with_progressive_loading(graph, rx, None, std::time::Duration::from_secs(30), "");
+        let app = App::with_progressive_loading(
+            graph,
+            rx,
+            None,
+            std::time::Duration::from_secs(30),
+            "",
+            None,
+        );
         assert!(
             app.search.total_candidates > 0,
             "total_candidates must be set when the graph is loaded via with_progressive_loading(); \
