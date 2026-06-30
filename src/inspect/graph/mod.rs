@@ -10,6 +10,8 @@ pub(crate) mod nodes;
 
 use nodes::{ConftestNode, FixtureNode, HelperNode, MarkNode, PluginNode, TestNode};
 
+use crate::query::resource::QueryEntry;
+
 // ── NodeKind ─────────────────────────────────────────────────────────────────
 
 /// Discriminant for the six node types in the inspect graph.
@@ -117,6 +119,72 @@ impl InspectGraph {
             && self.conftests.is_empty()
             && self.plugins.is_empty()
             && self.helpers.is_empty()
+    }
+}
+
+// ── Searchable impl ──────────────────────────────────────────────────────────
+
+impl crate::inspect::search::Searchable for InspectGraph {
+    /// Return all nodes across all six typed vectors.
+    ///
+    /// Iteration order: fixtures → tests → marks → conftests → plugins → helpers.
+    /// The `index` in each `NodeRef` is the position within its own typed vector,
+    /// not a global flat index, so it can be used directly for O(1) lookups.
+    fn all_nodes(&self) -> Vec<NodeRef> {
+        use NodeKind::*;
+        [Fixture, Test, Mark, Conftest, Plugin, Helper]
+            .into_iter()
+            .flat_map(|kind| self.nodes_of_kind(kind))
+            .collect()
+    }
+
+    /// Return all nodes of the given kind.
+    ///
+    /// Each `NodeRef.index` is the position within the kind's typed vector,
+    /// matching the lookup semantics of `node_name` and `node_query_entry`.
+    fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
+        (0..self.node_count(kind))
+            .map(|i| NodeRef { kind, index: i })
+            .collect()
+    }
+
+    /// Return the display name for the node at `r`.
+    ///
+    /// Delegates to the existing `InspectGraph::node_name` method which
+    /// dispatches on kind to the appropriate typed vector.
+    fn node_name(&self, r: NodeRef) -> &str {
+        // The graph's existing node_name takes &NodeRef, so borrow temporarily.
+        InspectGraph::node_name(self, &r)
+    }
+
+    /// Return the kind of the node — read directly from the NodeRef discriminant.
+    ///
+    /// `NodeRef` already carries its kind, so no graph lookup is needed.
+    fn node_kind(&self, r: NodeRef) -> NodeKind {
+        r.kind
+    }
+
+    /// Build a `QueryEntry` for DSL evaluation against a node.
+    ///
+    /// All nodes get a `name` field.  Test nodes additionally get a `mark` field
+    /// whose value is the comma-joined names of all marks applied to that test,
+    /// enabling DSL expressions like `mark(slow)` to filter tests by mark name.
+    fn node_query_entry(&self, r: NodeRef) -> QueryEntry {
+        let mut fields = std::collections::HashMap::new();
+        // Call the inherent method (takes &NodeRef), not the trait method.
+        fields.insert("name".to_string(), self.node_name(&r).to_string());
+
+        if r.kind == NodeKind::Test {
+            let test = &self.tests[r.index];
+            let mark_names: Vec<&str> = test
+                .marks
+                .iter()
+                .filter_map(|&mi| self.marks.get(mi).map(|m| m.name.as_str()))
+                .collect();
+            fields.insert("mark".to_string(), mark_names.join(","));
+        }
+
+        QueryEntry { fields }
     }
 }
 

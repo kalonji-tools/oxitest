@@ -1,57 +1,44 @@
 //! Search engine for `oxitest inspect`: fuzzy matching and DSL auto-detection.
 //!
-//! Defines a [`Searchable`] trait that the graph data model (#1114) will
-//! implement, allowing this module to compile and test independently.
+//! Defines a [`Searchable`] trait implemented by [`super::graph::InspectGraph`],
+//! allowing search to operate on the live graph.
 
 use crate::query::{ast::Expr, compile, eval, resource::QueryEntry};
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-/// Opaque reference to a node in the inspect graph.
-///
-/// Wraps a `usize` index. The concrete `InspectGraph` (#1114) will use
-/// the same representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct NodeRef(pub usize);
-
-/// The kind of node in the inspect tree.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // consumed once the graph data model (#1114) lands
-pub(crate) enum NodeKind {
-    Test,
-    Fixture,
-    Mark,
-    Helper,
-    Plugin,
-    /// Non-leaf group node (e.g., a module or package).
-    Group,
-}
+// Re-export graph types so callers reference one set of types.
+pub(crate) use super::graph::{NodeKind, NodeRef};
 
 /// The scope to search within.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // consumed once the graph data model (#1114) lands
 pub(crate) enum SearchScope {
     /// Search all node kinds.
     All,
     /// Only search nodes of the given kind.
+    ///
+    /// Used by tests and by future UI filters; production `handle_search_key`
+    /// uses `All` for now.
+    #[allow(dead_code)]
     Kind(NodeKind),
 }
 
 // ── Searchable trait ───────────────────────────────────────────────────────
 
 /// Trait that the graph data model must implement for search to work.
-///
-/// Decouples search logic from the concrete `InspectGraph` so this module
-/// compiles and tests before #1114 lands.
-#[allow(dead_code)] // consumed once the graph data model (#1114) lands
 pub(crate) trait Searchable {
     /// Return references to every node in the graph.
     fn all_nodes(&self) -> Vec<NodeRef>;
     /// Return references to nodes matching a specific kind.
     fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef>;
     /// Return the display name for a node.
+    ///
+    /// Takes `r` by value because `NodeRef` is `Clone` but not `Copy`;
+    /// callers should `.clone()` before passing when they still need `r`.
     fn node_name(&self, r: NodeRef) -> &str;
     /// Return the kind of a node.
+    ///
+    /// Provided for completeness; not called from production search() because
+    /// `NodeRef` already carries its kind as a field.
+    #[allow(dead_code)]
     fn node_kind(&self, r: NodeRef) -> NodeKind;
     /// Build a [`QueryEntry`] for DSL evaluation against a node.
     fn node_query_entry(&self, r: NodeRef) -> QueryEntry;
@@ -68,7 +55,6 @@ pub(crate) trait Searchable {
 /// - If DSL parse succeeds, evaluate against nodes using `query::eval`.
 /// - If DSL parse fails or `query` has no `:`, fall back to
 ///   case-insensitive substring match on the node name.
-#[allow(dead_code)] // consumed once the graph data model (#1114) lands
 pub(crate) fn search<G: Searchable>(graph: &G, query: &str, scope: SearchScope) -> Vec<NodeRef> {
     if query.is_empty() {
         return Vec::new();
@@ -88,7 +74,7 @@ pub(crate) fn search<G: Searchable>(graph: &G, query: &str, scope: SearchScope) 
         return candidates
             .into_iter()
             .filter(|r| {
-                let entry = graph.node_query_entry(*r);
+                let entry = graph.node_query_entry(r.clone());
                 eval::eval(&expr, &entry)
             })
             .collect();
@@ -98,7 +84,12 @@ pub(crate) fn search<G: Searchable>(graph: &G, query: &str, scope: SearchScope) 
     let query_lower = query.to_lowercase();
     candidates
         .into_iter()
-        .filter(|r| graph.node_name(*r).to_lowercase().contains(&query_lower))
+        .filter(|r| {
+            graph
+                .node_name(r.clone())
+                .to_lowercase()
+                .contains(&query_lower)
+        })
         .collect()
 }
 
@@ -107,7 +98,6 @@ pub(crate) fn search<G: Searchable>(graph: &G, query: &str, scope: SearchScope) 
 /// The DSL grammar requires `predicate(...)` syntax, so any query
 /// containing `(` is a strong signal. We also accept queries containing
 /// `&`, `|`, or `!` as boolean operators.
-#[allow(dead_code)] // consumed via search(), which is consumed once #1114 lands
 fn looks_like_dsl(query: &str) -> bool {
     query.contains('(') || query.contains('&') || query.contains('|')
 }
@@ -115,7 +105,6 @@ fn looks_like_dsl(query: &str) -> bool {
 /// Try to lex + parse a query as a DSL expression.
 ///
 /// Returns `Some(expr)` on success, `None` on any parse failure.
-#[allow(dead_code)] // consumed via search(), which is consumed once #1114 lands
 fn try_compile_dsl(query: &str) -> Option<Expr> {
     let tokens = compile::lex(query).ok()?;
     compile::parse(tokens).ok()
@@ -129,6 +118,10 @@ mod tests {
     use std::collections::HashMap;
 
     // ── Mock graph ──────────────────────────────────────────────────────
+    //
+    // MockGraph stores nodes in a flat vec. Each entry is (name, kind, fields).
+    // NodeRef is a graph::NodeRef {kind, index} where index is position within
+    // nodes of that kind — so we track kind-relative indices by kind order.
 
     struct MockGraph {
         nodes: Vec<(String, NodeKind, HashMap<String, String>)>,
@@ -165,33 +158,64 @@ mod tests {
                     .collect(),
             }
         }
+
+        /// Return the flat index for a NodeRef (kind + kind-relative index → flat index).
+        fn flat_index(&self, r: &NodeRef) -> usize {
+            let mut count = 0usize;
+            for (i, (_, k, _)) in self.nodes.iter().enumerate() {
+                if *k == r.kind {
+                    if count == r.index {
+                        return i;
+                    }
+                    count += 1;
+                }
+            }
+            panic!(
+                "NodeRef {:?} not found in MockGraph (only {} nodes of that kind)",
+                r, count
+            );
+        }
     }
 
     impl Searchable for MockGraph {
         fn all_nodes(&self) -> Vec<NodeRef> {
-            (0..self.nodes.len()).map(NodeRef).collect()
+            // Build kind-relative indices: for each node, count how many of
+            // the same kind appeared before it to get its kind-relative index.
+            let mut kind_counters: HashMap<NodeKind, usize> = HashMap::new();
+            self.nodes
+                .iter()
+                .map(|(_, kind, _)| {
+                    let idx = kind_counters.entry(*kind).or_insert(0);
+                    let r = NodeRef {
+                        kind: *kind,
+                        index: *idx,
+                    };
+                    *idx += 1;
+                    r
+                })
+                .collect()
         }
 
         fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
             self.nodes
                 .iter()
+                .filter(|(_, k, _)| *k == kind)
                 .enumerate()
-                .filter(|(_, (_, k, _))| *k == kind)
-                .map(|(i, _)| NodeRef(i))
+                .map(|(i, _)| NodeRef { kind, index: i })
                 .collect()
         }
 
         fn node_name(&self, r: NodeRef) -> &str {
-            &self.nodes[r.0].0
+            &self.nodes[self.flat_index(&r)].0
         }
 
         fn node_kind(&self, r: NodeRef) -> NodeKind {
-            self.nodes[r.0].1
+            r.kind
         }
 
         fn node_query_entry(&self, r: NodeRef) -> QueryEntry {
             QueryEntry {
-                fields: self.nodes[r.0].2.clone(),
+                fields: self.nodes[self.flat_index(&r)].2.clone(),
             }
         }
     }
@@ -200,7 +224,7 @@ mod tests {
 
     fn names<G: Searchable>(graph: &G, refs: &[NodeRef]) -> Vec<String> {
         refs.iter()
-            .map(|r| graph.node_name(*r).to_string())
+            .map(|r| graph.node_name(r.clone()).to_string())
             .collect()
     }
 
