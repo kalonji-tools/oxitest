@@ -100,7 +100,17 @@
 
 **Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `list` (show collected tests), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
 
-**Inspect Node** — A navigable entity in the `inspect` TUI. One of six types: Fixture, Test, Mark, Conftest, Plugin, Helper. Each node has fields, connections to other nodes, and a detail view.
+**Inspect Node** — A navigable entity in the `inspect` TUI. One of six built-in kinds: Fixture, Test, Mark, Conftest, Plugin, Helper. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
+
+**Overview** — The cartographic landing screen of `inspect`. Shows curated sections (e.g., Fixture Gravity, Marks, Signals) that reveal the shape and hotspots of the test suite. Sections populate progressively as phase-2 data arrives.
+
+**Node Focus** — The diagnostic screen of `inspect`. Shows a single node's properties and its followable edges, with a preview pane for the cursor-selected edge target.
+
+**Preview** — The right pane in `inspect` that shows a summary of the cursor-selected item before navigating into it. Updates automatically as the cursor moves.
+
+**Edge** — A typed, directed connection between two inspect nodes (e.g., "depends on", "consumer of", "defined in"). Edges are followable — selecting one navigates to the target node.
+
+**Section** — A titled group of ranked items on the overview (e.g., Fixture Gravity, Marks, Conftests, Signals). Pluggable — plugins can contribute additional sections via `InspectSectionProvider`.
 
 ## Strict Mode
 
