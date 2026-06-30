@@ -1093,4 +1093,75 @@ mod tests {
             "conftest should still reference the helper"
         );
     }
+
+    // ── Missing-field / required-field validation ─────────────────────
+
+    #[test]
+    fn test_entry_missing_name_produces_empty_node_id() {
+        let mut builder = GraphBuilder::new();
+        let entry = QueryEntry {
+            fields: [("source".to_string(), "test.py".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        builder.add_test_entries(&[entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.tests.len(),
+            1,
+            "builder should create a test node even when 'name' is missing — \
+             progressive loading may produce partial entries"
+        );
+        assert_eq!(
+            graph.tests[0].node_id, "",
+            "missing 'name' field should default to empty string — \
+             unwrap_or_default produces \"\" for absent keys"
+        );
+    }
+
+    #[test]
+    fn fixture_entry_missing_name_produces_empty_name() {
+        let mut builder = GraphBuilder::new();
+        let entry = QueryEntry {
+            fields: [("scope".to_string(), "function".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        builder.add_fixture_entries(&[entry]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.fixtures.len(),
+            1,
+            "builder should create a fixture node even when 'name' is missing — \
+             progressive loading may produce partial entries"
+        );
+        assert_eq!(
+            graph.fixtures[0].name, "",
+            "missing 'name' field should default to empty string — \
+             unwrap_or_default produces \"\" for absent keys"
+        );
+    }
+
+    #[test]
+    fn two_nameless_test_entries_deduplicate_on_empty_key() {
+        let mut builder = GraphBuilder::new();
+        let entry_a = QueryEntry {
+            fields: [("source".to_string(), "a.py".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        let entry_b = QueryEntry {
+            fields: [("source".to_string(), "b.py".to_string())]
+                .into_iter()
+                .collect(),
+        };
+        builder.add_test_entries(&[entry_a, entry_b]);
+        let graph = builder.build();
+        assert_eq!(
+            graph.tests.len(),
+            1,
+            "two entries with missing 'name' both default to \"\" — \
+             deduplication on the empty key should keep only one node"
+        );
+    }
 }
