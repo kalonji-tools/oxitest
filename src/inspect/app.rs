@@ -10,6 +10,7 @@ use ratatui::backend::CrosstermBackend;
 use super::graph::{InspectGraph, NodeRef};
 use super::input;
 use super::nav::{self, Screen, Trail};
+use super::overview::OverviewSections;
 use super::ui;
 
 // ── InputMode ────────────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ pub(crate) struct InspectApp {
     /// Session history of visited nodes (most recent first).
     pub(crate) history: SessionHistory,
     /// Pre-sorted overview sections derived from the graph.
-    pub(crate) overview_sections: super::overview::OverviewSections,
+    pub(crate) overview_sections: OverviewSections,
     /// Flash message displayed briefly after user actions (e.g. "back to overview").
     #[allow(dead_code)] // wired up in event loop once flash messages are triggered
     pub(crate) flash_message: Option<(String, std::time::Instant)>,
@@ -170,6 +171,10 @@ pub(crate) struct InspectApp {
     /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
     #[allow(dead_code)] // retained for future parametrize collapsing in edge lists
     pub(crate) expanded_groups: HashSet<String>,
+    /// Vertical scroll offset for the left pane.
+    pub(crate) scroll_offset: u16,
+    /// Project root directory for stripping absolute paths in the TUI.
+    pub(crate) rootdir: String,
     /// How long to wait for phase-2 (Python-tier) data before giving up.
     phase2_timeout: std::time::Duration,
 }
@@ -187,12 +192,12 @@ impl InspectApp {
     #[cfg(test)]
     pub(crate) fn new(graph: Option<InspectGraph>, name: Option<&str>) -> Self {
         let nav = match (&graph, name) {
-            (Some(g), Some(n)) => nav::resolve_direct_jump_trail(g, n),
+            (Some(g), Some(n)) => nav::resolve_direct_jump(g, n),
             _ => Trail::new(),
         };
         let overview_sections = match &graph {
-            Some(g) => super::overview::OverviewSections::from_graph(g),
-            None => super::overview::OverviewSections::default(),
+            Some(g) => OverviewSections::from_graph(g),
+            None => OverviewSections::default(),
         };
         Self {
             should_quit: false,
@@ -207,6 +212,8 @@ impl InspectApp {
             flash_message: None,
             phase2: Phase2State::Complete,
             expanded_groups: HashSet::new(),
+            scroll_offset: 0,
+            rootdir: String::new(),
             phase2_timeout: std::time::Duration::from_secs(30),
         }
     }
@@ -223,15 +230,16 @@ impl InspectApp {
         rx: mpsc::Receiver<Phase2Data>,
         name: Option<&str>,
         timeout: std::time::Duration,
+        rootdir: &str,
     ) -> Self {
         let nav = match name {
-            Some(n) => nav::resolve_direct_jump_trail(&graph, n),
+            Some(n) => nav::resolve_direct_jump(&graph, n),
             None => Trail::new(),
         };
         let total_nodes = graph.all_node_refs().len();
         let mut search = SearchState::new();
         search.total_nodes = total_nodes;
-        let overview_sections = super::overview::OverviewSections::from_graph(&graph);
+        let overview_sections = OverviewSections::from_graph(&graph);
         Self {
             should_quit: false,
             terminal_width: 0,
@@ -248,6 +256,8 @@ impl InspectApp {
                 started: std::time::Instant::now(),
             },
             expanded_groups: HashSet::new(),
+            scroll_offset: 0,
+            rootdir: rootdir.to_string(),
             phase2_timeout: timeout,
         }
     }
@@ -261,8 +271,12 @@ impl InspectApp {
             // Check for phase-2 data from the background thread.
             self.poll_phase2();
 
-            // Update terminal width from the current frame size.
-            self.terminal_width = terminal.size()?.width;
+            // Update terminal dimensions and scroll offset before drawing.
+            let term_size = terminal.size()?;
+            self.terminal_width = term_size.width;
+            // Main area height = total - breadcrumb (1) - footer (1).
+            let viewport_height = term_size.height.saturating_sub(2);
+            ui::update_scroll(self, viewport_height);
 
             terminal.draw(|frame| ui::draw(frame, self))?;
 
@@ -328,12 +342,14 @@ impl InspectApp {
             builder.add_fixture_entries(&data.fixture_entries);
             builder.add_plugin_entries(&data.plugin_entries);
             builder.resolve_edges();
-            let new_graph = builder.build();
+            let mut new_graph = builder.build();
+            // Normalize paths from phase-2 (Python bridge sends absolute paths).
+            new_graph.relativize_paths(&self.rootdir);
             // Update total_nodes to reflect the now-complete graph so the
             // "N/M matches" display accounts for fixture and plugin nodes.
             self.search.total_nodes = new_graph.all_node_refs().len();
             // Rebuild overview sections from the now-complete graph.
-            self.overview_sections = super::overview::OverviewSections::from_graph(&new_graph);
+            self.overview_sections = OverviewSections::from_graph(&new_graph);
             self.graph = Some(new_graph);
         }
 
@@ -357,10 +373,10 @@ impl InspectApp {
     /// Clear the flash message if it has expired (> 2 seconds).
     #[allow(dead_code)] // wired up once flash messages are triggered from event loop
     pub(crate) fn clear_expired_flash(&mut self) {
-        if let Some((_, instant)) = &self.flash_message {
-            if instant.elapsed() > std::time::Duration::from_secs(2) {
-                self.flash_message = None;
-            }
+        if let Some((_, instant)) = &self.flash_message
+            && instant.elapsed() > std::time::Duration::from_secs(2)
+        {
+            self.flash_message = None;
         }
     }
 
@@ -540,6 +556,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
         assert!(
             app.is_loading(),
@@ -562,6 +579,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         let data = Phase2Data {
@@ -607,6 +625,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         tx.send(Phase2Data {
@@ -662,6 +681,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         // Drop the sender to simulate background thread failure.
@@ -688,6 +708,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         // Sender exists but hasn't sent anything yet.
@@ -712,6 +733,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         // Backdate the start time to 31 seconds ago to simulate an elapsed timeout.
@@ -750,6 +772,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         // started is set to Instant::now() by with_progressive_loading,
@@ -781,6 +804,7 @@ mod tests {
             rx,
             None,
             std::time::Duration::from_secs(30),
+            "",
         );
 
         // Push a NodeFocus screen (simulating user navigated to a node)

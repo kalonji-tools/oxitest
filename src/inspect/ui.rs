@@ -141,21 +141,19 @@ pub(super) fn adaptive_layout(width: u16, preview_line_count: usize) -> (u16, u1
     let min_left = (width as f32 * 0.30) as u16;
     let max_left = (width as f32 * 0.55) as u16;
     let min_right = (width as f32 * 0.30) as u16;
-    let mut left = width / 2;
-    let right;
-    if preview_line_count < 10 {
-        left = max_left.min(width - min_right);
-        right = width - left;
+
+    let left = if preview_line_count < 10 {
+        // Short preview: give left pane more space
+        max_left.min(width - min_right)
     } else if preview_line_count > 20 {
-        right = (width as f32 * 0.62) as u16;
-        left = width - right;
-        if left < min_left {
-            left = min_left;
-        }
+        // Long preview: give right pane ~62%, clamp left to minimum
+        let right = (width as f32 * 0.62) as u16;
+        (width - right).max(min_left)
     } else {
-        right = width - left;
-    }
-    let _ = right; // suppress unused warning in the > 20 branch
+        // Medium preview: equal split
+        width / 2
+    };
+
     (left, width - left)
 }
 
@@ -191,6 +189,9 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     // ── Adaptive two-pane layout ─────────────────────────────────────────
     let (left_width, right_width) = adaptive_layout(app.terminal_width, preview_line_count);
 
+    let left_text = build_left_pane(app);
+    let scroll = (app.scroll_offset, 0);
+
     if right_width > 0 {
         // Two-pane layout
         let panes = Layout::default()
@@ -203,8 +204,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
 
         // Left pane
         let left_block = Block::default().borders(Borders::ALL);
-        let left_text = build_left_pane(app);
-        let left_content = Paragraph::new(left_text).block(left_block);
+        let left_content = Paragraph::new(left_text).block(left_block).scroll(scroll);
         frame.render_widget(left_content, panes[0]);
 
         // Right pane — preview
@@ -214,8 +214,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     } else {
         // Single-pane layout
         let left_block = Block::default().borders(Borders::ALL);
-        let left_text = build_left_pane(app);
-        let left_content = Paragraph::new(left_text).block(left_block);
+        let left_content = Paragraph::new(left_text).block(left_block).scroll(scroll);
         frame.render_widget(left_content, main_area);
     }
 
@@ -264,6 +263,37 @@ fn build_left_pane(app: &InspectApp) -> Vec<Line<'static>> {
             matches, selected, ..
         } => build_disambiguation_content(graph, matches, *selected),
         Screen::History { selected } => build_history_content(graph, &app.history, *selected),
+    }
+}
+
+/// Update the scroll offset so the cursor is visible in the left pane.
+///
+/// Called from the event loop before `draw()`, since `draw()` receives
+/// an immutable reference to `InspectApp`.
+pub(crate) fn update_scroll(app: &mut InspectApp, viewport_height: u16) {
+    let lines = build_left_pane(app);
+    let cursor_line = lines
+        .iter()
+        .position(|line| {
+            line.spans
+                .iter()
+                .any(|span| span.content.contains('\u{203A}'))
+        })
+        .map(|pos| pos as u16);
+
+    let Some(cursor_line) = cursor_line else {
+        return;
+    };
+
+    // Account for border (1 line top, 1 line bottom)
+    let visible = viewport_height.saturating_sub(2);
+    if visible == 0 {
+        return;
+    }
+    if cursor_line < app.scroll_offset {
+        app.scroll_offset = cursor_line;
+    } else if cursor_line >= app.scroll_offset + visible {
+        app.scroll_offset = cursor_line - visible + 1;
     }
 }
 
@@ -684,6 +714,28 @@ mod tests {
             right_long >= right_mid,
             "long preview (> 20 lines) should widen the right pane"
         );
+    }
+
+    #[test]
+    fn adaptive_layout_width_invariant() {
+        for width in [80, 100, 120, 160, 200] {
+            for preview_lines in [0, 5, 9, 10, 15, 20, 21, 30, 50] {
+                let (left, right) = adaptive_layout(width, preview_lines);
+                assert_eq!(
+                    left + right,
+                    width,
+                    "left + right must equal width for width={width}, preview={preview_lines}"
+                );
+                assert!(
+                    left > 0,
+                    "left pane must have positive width for width={width}, preview={preview_lines}"
+                );
+                assert!(
+                    right > 0,
+                    "right pane must have positive width for width={width}, preview={preview_lines}"
+                );
+            }
+        }
     }
 
     // ── build_test_rows tests ─────────────────────────────────────────────

@@ -33,6 +33,8 @@ pub(crate) struct ConftestEntry {
 // ── OverviewItem ─────────────────────────────────────────────────────────────
 
 /// A single selectable item in the overview panel (flat cursor abstraction).
+#[cfg(test)]
+#[allow(dead_code)] // variants matched by pattern, fields not read directly
 pub(crate) enum OverviewItem {
     Gravity(GravityEntry),
     Mark(MarkEntry),
@@ -70,15 +72,12 @@ impl OverviewSections {
             .enumerate()
             .filter(|(_, f)| !f.consumers.is_empty())
             .map(|(i, f)| GravityEntry {
-                node_ref: NodeRef {
-                    kind: NodeKind::Fixture,
-                    index: i,
-                },
+                node_ref: NodeRef::new(NodeKind::Fixture, i),
                 name: f.name.clone(),
                 consumer_count: f.consumers.len(),
             })
             .collect();
-        gravity.sort_by(|a, b| b.consumer_count.cmp(&a.consumer_count));
+        gravity.sort_by_key(|e| std::cmp::Reverse(e.consumer_count));
 
         // ── Marks (by test count) ─────────────────────────────────────────
         let mut marks: Vec<MarkEntry> = graph
@@ -86,15 +85,12 @@ impl OverviewSections {
             .iter()
             .enumerate()
             .map(|(i, m)| MarkEntry {
-                node_ref: NodeRef {
-                    kind: NodeKind::Mark,
-                    index: i,
-                },
+                node_ref: NodeRef::new(NodeKind::Mark, i),
                 name: m.name.clone(),
                 test_count: m.used_by.len(),
             })
             .collect();
-        marks.sort_by(|a, b| b.test_count.cmp(&a.test_count));
+        marks.sort_by_key(|e| std::cmp::Reverse(e.test_count));
 
         // ── Conftests (by fixture count) ──────────────────────────────────
         let mut conftests: Vec<ConftestEntry> = graph
@@ -102,16 +98,13 @@ impl OverviewSections {
             .iter()
             .enumerate()
             .map(|(i, c)| ConftestEntry {
-                node_ref: NodeRef {
-                    kind: NodeKind::Conftest,
-                    index: i,
-                },
+                node_ref: NodeRef::new(NodeKind::Conftest, i),
                 path: c.path.clone(),
                 fixture_count: c.fixtures.len(),
                 helper_count: c.helpers.len(),
             })
             .collect();
-        conftests.sort_by(|a, b| b.fixture_count.cmp(&a.fixture_count));
+        conftests.sort_by_key(|e| std::cmp::Reverse(e.fixture_count));
 
         Self {
             gravity,
@@ -129,6 +122,7 @@ impl OverviewSections {
     ///
     /// Flat order: gravity entries, then mark entries, then conftest entries.
     /// Returns `None` if `index >= item_count()`.
+    #[cfg(test)]
     pub(crate) fn item_at(&self, index: usize) -> Option<OverviewItem> {
         let gravity_len = self.gravity.len();
         let marks_len = self.marks.len();
@@ -162,14 +156,20 @@ impl OverviewSections {
 
     /// Return the [`NodeRef`] at the given flat cursor `index`.
     ///
-    /// Convenience wrapper over [`item_at`] that extracts just the ref.
+    /// Indexes directly into the section vectors without cloning.
     /// Returns `None` if `index >= item_count()`.
     pub(crate) fn node_ref_at(&self, index: usize) -> Option<NodeRef> {
-        self.item_at(index).map(|item| match item {
-            OverviewItem::Gravity(e) => e.node_ref,
-            OverviewItem::Mark(e) => e.node_ref,
-            OverviewItem::Conftest(e) => e.node_ref,
-        })
+        let g = self.gravity.len();
+        let m = self.marks.len();
+        if index < g {
+            Some(self.gravity[index].node_ref.clone())
+        } else if index < g + m {
+            Some(self.marks[index - g].node_ref.clone())
+        } else if index < g + m + self.conftests.len() {
+            Some(self.conftests[index - g - m].node_ref.clone())
+        } else {
+            None
+        }
     }
 }
 
