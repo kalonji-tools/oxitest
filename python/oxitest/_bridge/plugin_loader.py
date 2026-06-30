@@ -13,7 +13,7 @@ __all__ = ["load_plugins", "PluginRegistry"]
 import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from oxitest._bridge._plugin_config import (
     CliExtension,
@@ -116,6 +116,17 @@ def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
 class PluginRegistry:
     """Holds all loaded plugin instances."""
 
+    _CACHED_PROPERTIES: ClassVar[tuple[str, ...]] = (
+        "log_backends",
+        "fixture_providers",
+        "execution_wrappers",
+        "collectors",
+        "reporters",
+        "async_backends",
+        "debugger_backends",
+        "coverage_providers",
+    )
+
     entries: list[PluginEntry] = field(default_factory=list)
     cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = field(
         default_factory=dict
@@ -172,6 +183,11 @@ class PluginRegistry:
             for entry in self.entries
             if entry.plugin is not None and entry.plugin.coverage_provider is not None
         )
+
+    def _invalidate_caches(self) -> None:
+        """Clear all cached protocol properties after plugin activation."""
+        for attr in self._CACHED_PROPERTIES:
+            self.__dict__.pop(attr, None)
 
     def register_deferred(self, entry: PluginEntry) -> None:
         """Append a deferred (not yet imported) plugin entry."""
@@ -235,20 +251,7 @@ class PluginRegistry:
             entry.is_loaded = True
 
         # Invalidate cached protocol properties so they pick up new plugins.
-        import contextlib
-
-        for attr in (
-            "log_backends",
-            "fixture_providers",
-            "execution_wrappers",
-            "collectors",
-            "reporters",
-            "async_backends",
-            "debugger_backends",
-            "coverage_providers",
-        ):
-            with contextlib.suppress(AttributeError):
-                delattr(self, attr)
+        self._invalidate_caches()
 
     def resolve_fixture_providers(self) -> list:
         """Return all fixture providers, loading deferred fixture_provider plugins."""

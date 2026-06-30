@@ -785,6 +785,7 @@ mod convert_tests {
             right: String::new(),
             op: String::new(),
             strict: false,
+            exc_type: String::new(),
             frames: vec![],
             field_diffs: vec![],
         }
