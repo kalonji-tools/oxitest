@@ -48,6 +48,12 @@ pub(crate) struct NodeRef {
     pub index: usize,
 }
 
+impl NodeRef {
+    pub(crate) fn new(kind: NodeKind, index: usize) -> Self {
+        Self { kind, index }
+    }
+}
+
 // ── BrokenEdge ───────────────────────────────────────────────────────────────
 
 /// An edge that could not be resolved during graph construction.
@@ -80,6 +86,41 @@ pub(crate) struct InspectGraph {
 }
 
 impl InspectGraph {
+    /// Strip an absolute rootdir prefix from all path fields in the graph.
+    ///
+    /// Normalizes `FixtureNode.source`, `ConftestNode.path`, `HelperNode.source`,
+    /// and `TestNode.node_id` to relative paths for display in the TUI.
+    pub(crate) fn relativize_paths(&mut self, rootdir: &str) {
+        if rootdir.is_empty() {
+            return;
+        }
+        let prefix = if rootdir.ends_with('/') {
+            rootdir.to_string()
+        } else {
+            format!("{rootdir}/")
+        };
+        for f in &mut self.fixtures {
+            if let Some(rest) = f.source.strip_prefix(&prefix) {
+                f.source = rest.to_string();
+            }
+        }
+        for t in &mut self.tests {
+            if let Some(rest) = t.node_id.strip_prefix(&prefix) {
+                t.node_id = rest.to_string();
+            }
+        }
+        for c in &mut self.conftests {
+            if let Some(rest) = c.path.strip_prefix(&prefix) {
+                c.path = rest.to_string();
+            }
+        }
+        for h in &mut self.helpers {
+            if let Some(rest) = h.source.strip_prefix(&prefix) {
+                h.source = rest.to_string();
+            }
+        }
+    }
+
     /// Return the display name for the node at the given reference.
     #[allow(dead_code)] // used by navigation (#1116), detail (#1117), and search (#1118)
     pub(crate) fn node_name(&self, r: &NodeRef) -> &str {

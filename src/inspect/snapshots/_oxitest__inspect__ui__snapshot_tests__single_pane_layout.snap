@@ -2,7 +2,8 @@
 source: src/inspect/ui.rs
 expression: "render_to_string(&app, 60, 24)"
 ---
-"┌ Home ────────────────────────────────────────────────────┐"
+" ○ overview                                                 "
+"┌──────────────────────────────────────────────────────────┐"
 "│No data loaded                                            │"
 "│                                                          │"
 "│                                                          │"
@@ -23,6 +24,5 @@ expression: "render_to_string(&app, 60, 24)"
 "│                                                          │"
 "│                                                          │"
 "│                                                          │"
-"│                                                          │"
 "└──────────────────────────────────────────────────────────┘"
-" q Quit  / Search  ? Help  j/k Navigate  l Enter  h History "
+" q Quit  / Search  ? Help  j/k Navigate  l Enter  h Back  H "

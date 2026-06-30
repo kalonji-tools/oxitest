@@ -192,13 +192,19 @@ pub(crate) fn run(
     );
 
     // Phase 1: instant-tier graph (synchronous, runs concurrently with Phase 2).
-    let graph = build_phase1_graph(args, cfg, test_files, &conftest_files)?;
+    let mut graph = build_phase1_graph(args, cfg, test_files, &conftest_files)?;
+    graph.relativize_paths(cfg.rootdir.as_str());
 
     let timeout = std::time::Duration::from_secs(cfg.exec.inspect_timeout_secs);
     let mut terminal = ui::setup_terminal()?;
-    let result =
-        app::InspectApp::with_progressive_loading(graph, rx, args.name.as_deref(), timeout)
-            .run(&mut terminal);
+    let result = app::InspectApp::with_progressive_loading(
+        graph,
+        rx,
+        args.name.as_deref(),
+        timeout,
+        cfg.rootdir.as_str(),
+    )
+    .run(&mut terminal);
     ui::restore_terminal(&mut terminal)?;
     result
 }

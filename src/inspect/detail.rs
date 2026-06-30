@@ -645,75 +645,52 @@ fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef
             let mut edges = Vec::new();
             edges.extend(f.consumers.iter().cloned());
             if let Some(idx) = f.conftest_idx {
-                edges.push(NodeRef {
-                    kind: NodeKind::Conftest,
-                    index: idx,
-                });
+                edges.push(NodeRef::new(NodeKind::Conftest, idx));
             }
             if let Some(idx) = f.plugin_idx {
-                edges.push(NodeRef {
-                    kind: NodeKind::Plugin,
-                    index: idx,
-                });
+                edges.push(NodeRef::new(NodeKind::Plugin, idx));
             }
             edges
         }
         NodeKind::Test => {
             let t = &graph.tests[node.index];
-            let mut edges = Vec::new();
-            for &idx in &t.fixture_deps {
-                edges.push(NodeRef {
-                    kind: NodeKind::Fixture,
-                    index: idx,
-                });
-            }
-            for &idx in &t.marks {
-                edges.push(NodeRef {
-                    kind: NodeKind::Mark,
-                    index: idx,
-                });
-            }
+            let mut edges: Vec<NodeRef> = t
+                .fixture_deps
+                .iter()
+                .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
+                .collect();
+            edges.extend(t.marks.iter().map(|&idx| NodeRef::new(NodeKind::Mark, idx)));
             edges
         }
         NodeKind::Mark => graph.marks[node.index]
             .used_by
             .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Test,
-                index: idx,
-            })
+            .map(|&idx| NodeRef::new(NodeKind::Test, idx))
             .collect(),
         NodeKind::Conftest => {
             let c = &graph.conftests[node.index];
-            let mut edges = Vec::new();
-            for &idx in &c.fixtures {
-                edges.push(NodeRef {
-                    kind: NodeKind::Fixture,
-                    index: idx,
-                });
-            }
-            for &idx in &c.helpers {
-                edges.push(NodeRef {
-                    kind: NodeKind::Helper,
-                    index: idx,
-                });
-            }
+            let mut edges: Vec<NodeRef> = c
+                .fixtures
+                .iter()
+                .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
+                .collect();
+            edges.extend(
+                c.helpers
+                    .iter()
+                    .map(|&idx| NodeRef::new(NodeKind::Helper, idx)),
+            );
             edges
         }
         NodeKind::Plugin => graph.plugins[node.index]
             .fixtures
             .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Fixture,
-                index: idx,
-            })
+            .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
             .collect(),
         NodeKind::Helper => {
-            let h = &graph.helpers[node.index];
-            vec![NodeRef {
-                kind: NodeKind::Conftest,
-                index: h.conftest_idx,
-            }]
+            vec![NodeRef::new(
+                NodeKind::Conftest,
+                graph.helpers[node.index].conftest_idx,
+            )]
         }
     }
 }

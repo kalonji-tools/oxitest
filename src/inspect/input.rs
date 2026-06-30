@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use super::app::{InputMode, InspectApp};
+use super::app::{InputMode, InspectApp, SearchState};
 use super::detail;
 use super::nav::Screen;
 
@@ -52,16 +52,18 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
         // Navigate back
         KeyCode::Char('h') | KeyCode::Left | KeyCode::Backspace => {
             app.nav.pop();
+            app.scroll_offset = 0;
         }
 
         // Open history screen
         KeyCode::Char('H') => {
             app.nav.push(Screen::History { selected: 0 });
+            app.scroll_offset = 0;
         }
 
         // Enter search mode
         KeyCode::Char('/') => {
-            app.search = super::app::SearchState::new();
+            app.search = SearchState::new();
             app.input_mode = InputMode::Search {
                 query: String::new(),
             };
@@ -94,7 +96,7 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
     match key.code {
         // Exit search mode, clear search state, return to normal
         KeyCode::Esc => {
-            app.search = super::app::SearchState::new();
+            app.search = SearchState::new();
             app.input_mode = InputMode::Normal;
         }
         // Accept search — navigate to selected result (no-op until #1116)
@@ -207,6 +209,7 @@ fn nav_cursor_up(app: &mut InspectApp) {
 
 /// Push into the currently selected item on the navigation stack.
 fn nav_push(app: &mut InspectApp) {
+    app.scroll_offset = 0;
     let graph = match &app.graph {
         Some(g) => g,
         None => return,
@@ -797,7 +800,7 @@ mod tests {
         let graph = three_test_graph();
         let (_tx, rx) = mpsc::channel::<Phase2Data>();
         let app =
-            App::with_progressive_loading(graph, rx, None, std::time::Duration::from_secs(30));
+            App::with_progressive_loading(graph, rx, None, std::time::Duration::from_secs(30), "");
         assert!(
             app.search.total_nodes > 0,
             "total_nodes must be set when the graph is loaded via with_progressive_loading(); \

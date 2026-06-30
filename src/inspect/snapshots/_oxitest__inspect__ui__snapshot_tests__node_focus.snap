@@ -2,12 +2,12 @@
 source: src/inspect/ui.rs
 expression: "render_to_string(&app, 80, 12)"
 ---
-" ○ overview                                                                     "
+" ○ overview › T tests/test_auth.py::test_login                                  "
 "┌──────────────────────────────────────────┐┌ Preview ─────────────────────────┐"
-"│ Marks                                    ││M slow                            │"
-"│›   M  slow (1 tests)                     ││                                  │"
-"│                                          ││  Tests (1)                       │"
-"│                                          ││    T tests/test_auth.py::test_log│"
+"│T tests/test_auth.py::test_login          ││T tests/test_auth.py::test_login  │"
+"│                                          ││                                  │"
+"│  async: no                               ││  async: no                       │"
+"│                                          ││                                  │"
 "│                                          ││                                  │"
 "│                                          ││                                  │"
 "│                                          ││                                  │"
