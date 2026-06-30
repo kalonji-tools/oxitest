@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use camino::Utf8PathBuf;
+use rayon::prelude::*;
 
 use crate::python_ast;
 use crate::query::resource::QueryEntry;
@@ -115,6 +116,76 @@ pub(crate) fn extract_mark_entries(
             QueryEntry { fields }
         })
         .collect()
+}
+
+// ── Combined extraction ────────────────────────────────────────────────────────
+
+/// Parse each file ONCE and return both test entries and mark entries.
+///
+/// This avoids double-parsing when both kinds of data are needed (e.g. in
+/// `oxitest inspect`).  The two returned `Vec`s are equivalent to calling
+/// [`extract_test_entries`] and [`extract_mark_entries`] separately on the
+/// same inputs.
+pub(crate) fn extract_test_and_mark_entries(
+    test_files: &[Utf8PathBuf],
+    registered_markers: &[String],
+) -> (Vec<QueryEntry>, Vec<QueryEntry>) {
+    // Parallel phase: parse each file independently on a rayon thread pool.
+    // Each worker returns (file_path, test_entries_for_file, mark_names_for_file).
+    let per_file: Vec<(String, Vec<QueryEntry>, Vec<String>)> = test_files
+        .par_iter()
+        .filter_map(|file| {
+            let (_, stmts) = python_ast::parse_file(file)?;
+
+            let mut tests = Vec::new();
+            python_ast::walk_test_defs(&stmts, |def, class| {
+                let marks = collect_fn_marks(def.decorator_list());
+                let class_name = class.map(|c| c.name.as_str());
+                tests.push(make_test_entry(
+                    file,
+                    def.name(),
+                    class_name,
+                    def.is_async(),
+                    &marks,
+                ));
+            });
+
+            let marks = python_ast::extract_decorator_marks(&stmts);
+            Some((file.to_string(), tests, marks))
+        })
+        .collect();
+
+    // Sequential merge phase (cheap — just Vec/BTreeMap insertions).
+    let mut test_entries = Vec::new();
+    let mut mark_sources: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+    // Seed with registered markers (source = empty set until we see them in files).
+    for marker in registered_markers {
+        mark_sources.entry(marker.clone()).or_default();
+    }
+
+    for (file_path, tests, marks) in per_file {
+        test_entries.extend(tests);
+        for mark in marks {
+            mark_sources
+                .entry(mark)
+                .or_default()
+                .insert(file_path.clone());
+        }
+    }
+
+    let mark_entries = mark_sources
+        .into_iter()
+        .map(|(name, sources)| {
+            let mut fields = HashMap::new();
+            let source_list: Vec<_> = sources.into_iter().collect();
+            fields.insert("name".to_string(), name);
+            fields.insert("used_in".to_string(), source_list.join(","));
+            QueryEntry { fields }
+        })
+        .collect();
+
+    (test_entries, mark_entries)
 }
 
 // ── Helper extraction ──────────────────────────────────────────────────────────
@@ -298,6 +369,29 @@ mod tests {
         let path = temp_path(&f);
         let entries = extract_mark_entries(&[path.clone()], &[]);
         assert_eq!(entries.len(), 0);
+    }
+
+    // ── extract_test_and_mark_entries ───────────────────────────────────────
+
+    #[test]
+    fn combined_extraction_matches_separate() {
+        let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
+        let path = temp_path(&f);
+        let files = vec![path.clone()];
+        let markers = vec!["integration".to_string()];
+
+        let (combined_tests, combined_marks) = extract_test_and_mark_entries(&files, &markers);
+        let separate_tests = extract_test_entries(&files);
+        let separate_marks = extract_mark_entries(&files, &markers);
+
+        assert_eq!(
+            combined_tests, separate_tests,
+            "combined test entries must match separate extraction"
+        );
+        assert_eq!(
+            combined_marks, separate_marks,
+            "combined mark entries must match separate extraction"
+        );
     }
 
     // ── extract_helper_entries ──────────────────────────────────────────────
