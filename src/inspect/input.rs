@@ -9,6 +9,11 @@ use super::nav::Screen;
 
 /// Process a key event and update application state.
 pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
+    // Source view intercept — when active, only source-view keys are handled.
+    if app.source_view.is_some() {
+        handle_source_view_key(app, key);
+        return;
+    }
     match &app.input_mode {
         InputMode::Normal => handle_normal_key(app, key),
         InputMode::Search { .. } => handle_search_key(app, key),
@@ -80,12 +85,75 @@ fn handle_normal_key(app: &mut InspectApp, key: KeyEvent) {
             app.refresh();
         }
 
-        // Toggle source view (no-op until #1117)
-        KeyCode::Char('s') => {}
+        // Source view — read the source file for the focused node
+        KeyCode::Char('s') => {
+            let node = match app.nav.current() {
+                Screen::NodeFocus { node, .. } => Some(node.clone()),
+                Screen::Overview { selected } => app.overview_sections.node_ref_at(*selected),
+                Screen::History { selected } => app.history.entries.get(*selected).cloned(),
+                Screen::Disambiguation {
+                    matches, selected, ..
+                } => matches.get(*selected).cloned(),
+            };
+            if let Some(ref n) = node {
+                app.enter_source_view(n);
+            }
+        }
+
+        // Open in $EDITOR — jump to source file at line in an external editor
+        KeyCode::Char('e') => {
+            let node = match app.nav.current() {
+                Screen::NodeFocus { node, .. } => Some(node.clone()),
+                Screen::Overview { selected } => app.overview_sections.node_ref_at(*selected),
+                Screen::History { selected } => app.history.entries.get(*selected).cloned(),
+                Screen::Disambiguation {
+                    matches, selected, ..
+                } => matches.get(*selected).cloned(),
+            };
+            if let Some(ref n) = node {
+                let graph = match &app.graph {
+                    Some(g) => g,
+                    None => return,
+                };
+                if super::source::node_source_location(graph, n).is_some() {
+                    app.open_in_editor_request = Some(n.clone());
+                } else {
+                    app.flash(format!("no source available for {}s", n.kind.label()));
+                }
+            }
+        }
 
         // Space — no-op (removed from navigate-into)
         KeyCode::Char(' ') => {}
 
+        _ => {}
+    }
+}
+
+// ── Source view mode ─────────────────────────────────────────────────────────
+
+fn handle_source_view_key(app: &mut InspectApp, key: KeyEvent) {
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        app.should_quit = true;
+        return;
+    }
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => app.exit_source_view(),
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let Some(ref mut sv) = app.source_view {
+                sv.scroll_offset = sv.scroll_offset.saturating_add(1);
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let Some(ref mut sv) = app.source_view {
+                sv.scroll_offset = sv.scroll_offset.saturating_sub(1);
+            }
+        }
+        KeyCode::Char('e') => {
+            if let Some(ref sv) = app.source_view {
+                app.open_in_editor_request = Some(sv.node_ref.clone());
+            }
+        }
         _ => {}
     }
 }
@@ -1283,6 +1351,344 @@ mod tests {
             "context search on Disambiguation for 'signup' must return empty — \
              'test_signup' is in the graph but not in the Disambiguation match list, \
              so Context scope must exclude it"
+        );
+    }
+
+    // ── Source view key tests ──────────────────────────────────────────
+
+    #[test]
+    fn s_key_enters_source_view_for_fixture() {
+        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode};
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "tests/conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: Some(0),
+            plugin_idx: None,
+        });
+        graph.conftests.push(ConftestNode {
+            path: "tests/conftest.py".to_string(),
+            fixtures: vec![0],
+            helpers: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Fixture,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        handle_key(&mut app, key(KeyCode::Char('s')));
+        assert!(
+            app.source_view.is_some(),
+            "pressing 's' on a fixture with source should enter source view"
+        );
+        assert_eq!(
+            app.source_view.as_ref().unwrap().path,
+            "tests/conftest.py",
+            "source view path should match the fixture's source field"
+        );
+    }
+
+    #[test]
+    fn s_key_flashes_on_mark() {
+        use crate::inspect::graph::nodes::MarkNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.marks.push(MarkNode {
+            name: "slow".to_string(),
+            used_by: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Mark,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        handle_key(&mut app, key(KeyCode::Char('s')));
+        assert!(
+            app.source_view.is_none(),
+            "pressing 's' on a mark should not enter source view — marks have no source"
+        );
+        assert!(
+            app.flash_message.is_some(),
+            "pressing 's' on a mark should flash a 'no source available' message"
+        );
+    }
+
+    #[test]
+    fn esc_exits_source_view() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_foo.py::test_bar".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        // Enter source view
+        handle_key(&mut app, key(KeyCode::Char('s')));
+        assert!(
+            app.source_view.is_some(),
+            "source view should be active after pressing 's' on a test"
+        );
+
+        // Exit source view with Esc
+        handle_key(&mut app, key(KeyCode::Esc));
+        assert!(
+            app.source_view.is_none(),
+            "pressing Esc should exit source view without quitting the app"
+        );
+        assert!(
+            !app.should_quit,
+            "Esc in source view should close the overlay, not quit the app"
+        );
+    }
+
+    #[test]
+    fn e_key_sets_editor_request() {
+        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode};
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: String::new(),
+            scope: "function".to_string(),
+            autouse: false,
+            source: "tests/conftest.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![],
+            conftest_idx: Some(0),
+            plugin_idx: None,
+        });
+        graph.conftests.push(ConftestNode {
+            path: "tests/conftest.py".to_string(),
+            fixtures: vec![0],
+            helpers: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Fixture,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        handle_key(&mut app, key(KeyCode::Char('e')));
+        assert!(
+            app.open_in_editor_request.is_some(),
+            "pressing 'e' on a fixture with source should set open_in_editor_request"
+        );
+        assert_eq!(
+            app.open_in_editor_request.as_ref().unwrap().kind,
+            NodeKind::Fixture,
+            "editor request should reference the focused fixture node"
+        );
+    }
+
+    #[test]
+    fn e_key_flashes_on_plugin() {
+        use crate::inspect::graph::nodes::PluginNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.plugins.push(PluginNode {
+            name: "capture".to_string(),
+            protocols: vec![],
+            fixtures: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Plugin,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        handle_key(&mut app, key(KeyCode::Char('e')));
+        assert!(
+            app.open_in_editor_request.is_none(),
+            "pressing 'e' on a plugin should not set editor request — plugins have no source"
+        );
+        assert!(
+            app.flash_message.is_some(),
+            "pressing 'e' on a plugin should flash a 'no source available' message"
+        );
+    }
+
+    #[test]
+    fn q_exits_source_view_without_quitting() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_foo.py::test_bar".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        // Enter source view
+        handle_key(&mut app, key(KeyCode::Char('s')));
+        assert!(
+            app.source_view.is_some(),
+            "source view should be active after pressing 's'"
+        );
+
+        // Press 'q' to exit source view (not quit app)
+        handle_key(&mut app, key(KeyCode::Char('q')));
+        assert!(
+            app.source_view.is_none(),
+            "'q' in source view should close the overlay"
+        );
+        assert!(
+            !app.should_quit,
+            "'q' in source view should not quit the app — it only closes the overlay"
+        );
+    }
+
+    #[test]
+    fn source_view_scroll_keys() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_foo.py::test_bar".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        // Enter source view
+        handle_key(&mut app, key(KeyCode::Char('s')));
+
+        // Scroll down
+        handle_key(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(
+            app.source_view.as_ref().unwrap().scroll_offset,
+            1,
+            "j in source view should scroll down by 1"
+        );
+
+        // Scroll up
+        handle_key(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(
+            app.source_view.as_ref().unwrap().scroll_offset,
+            0,
+            "k in source view should scroll up by 1"
+        );
+
+        // Scroll up at 0 should stay at 0 (saturating)
+        handle_key(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(
+            app.source_view.as_ref().unwrap().scroll_offset,
+            0,
+            "k at offset 0 should stay at 0 (saturating subtract)"
+        );
+    }
+
+    #[test]
+    fn e_key_in_source_view_sets_editor_request() {
+        use crate::inspect::graph::nodes::TestNode;
+        use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
+        use crate::inspect::nav::Screen;
+
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_foo.py::test_bar".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![],
+            marks: vec![],
+        });
+
+        let mut app = InspectApp::new(Some(graph), None);
+        app.nav.push(Screen::NodeFocus {
+            node: GraphNodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            },
+            selected: 0,
+        });
+
+        // Enter source view, then press 'e'
+        handle_key(&mut app, key(KeyCode::Char('s')));
+        handle_key(&mut app, key(KeyCode::Char('e')));
+        assert!(
+            app.open_in_editor_request.is_some(),
+            "'e' in source view should set open_in_editor_request for the viewed node"
         );
     }
 }

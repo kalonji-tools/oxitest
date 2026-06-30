@@ -16,6 +16,7 @@ pub(crate) mod nav;
 pub(crate) mod overview;
 pub(crate) mod search;
 pub(crate) mod signals;
+pub(crate) mod source;
 mod ui;
 
 use std::sync::mpsc;
