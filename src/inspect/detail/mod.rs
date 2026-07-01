@@ -4,12 +4,19 @@
 //! six node types has a dedicated renderer that shows its fields and
 //! navigable connections.
 
-use ratatui::{
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-};
+mod conftest;
+mod fixture;
+mod helper;
+mod mark;
+mod plugin;
+pub(crate) mod styles;
+mod test;
 
-use super::graph::{self, BrokenEdge, InspectGraph, NodeKind, NodeRef};
+use ratatui::text::{Line, Span};
+
+use super::graph::{self, InspectGraph, NodeKind, NodeRef};
+
+use styles::{bool_field, connection_line, field_line, section_header, sigil_style};
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -23,87 +30,56 @@ pub(crate) fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>
     };
 
     match node_ref.kind {
-        NodeKind::Fixture => render_fixture(graph, node_ref),
-        NodeKind::Test => render_test(graph, node_ref),
-        NodeKind::Mark => render_mark(graph, node_ref),
-        NodeKind::Conftest => render_conftest(graph, node_ref),
-        NodeKind::Plugin => render_plugin(graph, node_ref),
-        NodeKind::Helper => render_helper(graph, node_ref),
+        NodeKind::Fixture => fixture::render_fixture(graph, node_ref),
+        NodeKind::Test => test::render_test(graph, node_ref),
+        NodeKind::Mark => mark::render_mark(graph, node_ref),
+        NodeKind::Conftest => conftest::render_conftest(graph, node_ref),
+        NodeKind::Plugin => plugin::render_plugin(graph, node_ref),
+        NodeKind::Helper => helper::render_helper(graph, node_ref),
     }
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
-
-fn label_style() -> Style {
-    Style::default()
-        .fg(Color::DarkGray)
-        .add_modifier(Modifier::BOLD)
+/// Build compact preview content for the right pane.
+///
+/// Shows: node header, 2-3 key properties, top 3 edges per group.
+/// Omits: description text, some boolean fields.
+pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    match node_ref.kind {
+        NodeKind::Fixture => fixture::preview_fixture(graph, node_ref),
+        NodeKind::Test => test::preview_test(graph, node_ref),
+        NodeKind::Mark => mark::preview_mark(graph, node_ref),
+        NodeKind::Conftest => conftest::preview_conftest(graph, node_ref),
+        NodeKind::Plugin => plugin::preview_plugin(graph, node_ref),
+        NodeKind::Helper => helper::preview_helper(graph, node_ref),
+    }
 }
 
-fn value_style() -> Style {
-    Style::default().fg(Color::White)
+// ── Edge navigation helpers ──────────────────────────────────────────────────
+
+/// Collect all selectable edge NodeRefs for a node.
+fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
+    match node.kind {
+        NodeKind::Fixture => fixture::collect_edges(graph, node),
+        NodeKind::Test => test::collect_edges(graph, node),
+        NodeKind::Mark => mark::collect_edges(graph, node),
+        NodeKind::Conftest => conftest::collect_edges(graph, node),
+        NodeKind::Plugin => plugin::collect_edges(graph, node),
+        NodeKind::Helper => helper::collect_edges(graph, node),
+    }
 }
 
-fn sigil_style() -> Style {
-    Style::default().fg(Color::Cyan)
+/// Return the NodeRef of the selectable edge at `index` within a focused node.
+pub(crate) fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
+    let edges = collect_selectable_edges(graph, node);
+    edges.get(index).cloned()
 }
 
-fn warning_style() -> Style {
-    Style::default().fg(Color::Yellow)
+/// Count the number of selectable edge items for a focused node.
+pub(crate) fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usize {
+    collect_selectable_edges(graph, node).len()
 }
 
-fn header_style() -> Style {
-    Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::BOLD)
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/// Render a single `label: value` field line.
-fn field_line<'a>(label: &str, value: &str) -> Line<'a> {
-    Line::from(vec![
-        Span::styled(format!("  {label}: "), label_style()),
-        Span::styled(value.to_string(), value_style()),
-    ])
-}
-
-/// Render a boolean field as yes/no.
-fn bool_field<'a>(label: &str, value: bool) -> Line<'a> {
-    field_line(label, if value { "yes" } else { "no" })
-}
-
-/// Render a section header (e.g., "Depends On", "Consumers").
-fn section_header<'a>(title: &str) -> Line<'a> {
-    Line::from(Span::styled(format!("  {title}"), header_style()))
-}
-
-/// Render a connection entry: `sigil name`.
-fn connection_line<'a>(sigil: char, name: &str) -> Line<'a> {
-    Line::from(vec![
-        Span::raw("    "),
-        Span::styled(format!("{sigil}"), sigil_style()),
-        Span::raw(format!(" {name}")),
-    ])
-}
-
-/// Render a broken edge entry with warning sigil.
-fn broken_edge_line<'a>(qualifier: &str, binding_type: &str) -> Line<'a> {
-    Line::from(vec![
-        Span::raw("    "),
-        Span::styled("!", warning_style()),
-        Span::raw(format!(" {qualifier}")),
-        Span::styled(format!(" ({binding_type}, unresolved)"), warning_style()),
-    ])
-}
-
-/// Collect broken edges for a given node reference.
-fn broken_edges_for<'a>(broken_edges: &'a [BrokenEdge], node_ref: &NodeRef) -> Vec<&'a BrokenEdge> {
-    broken_edges
-        .iter()
-        .filter(|e| e.from == *node_ref)
-        .collect()
-}
+// ── Group detail (parametrize collapse) ──────────────────────────────────
 
 /// Compute the intersection of index slices across a set of test variants.
 ///
@@ -125,8 +101,6 @@ fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize
         .into_iter()
         .collect()
 }
-
-// ── Group detail (parametrize collapse) ──────────────────────────────────
 
 /// Render the detail pane for a collapsed parametrize group.
 ///
@@ -188,524 +162,6 @@ pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -
     lines
 }
 
-// ── Per-type renderers ──────────────────────────────────────────────────────
-
-fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let fixture = &graph.fixtures[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("F", sigil_style()),
-            Span::raw(format!(" {}", fixture.name)),
-        ]),
-        Line::from(""),
-        field_line("scope", &fixture.scope),
-        field_line("binding", &fixture.binding_type),
-        bool_field("autouse", fixture.autouse),
-        bool_field("async", fixture.is_async),
-        field_line("source", &fixture.source),
-    ];
-
-    if !fixture.description.is_empty() {
-        lines.push(field_line("description", &fixture.description));
-    }
-
-    // Broken edges (unresolved dependencies)
-    let broken = broken_edges_for(&graph.broken_edges, node_ref);
-    if !broken.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Depends On"));
-        for edge in &broken {
-            lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
-        }
-    }
-
-    // Consumers
-    if !fixture.consumers.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Consumers"));
-        for consumer in &fixture.consumers {
-            let sigil = consumer.kind.sigil();
-            lines.push(connection_line(sigil, graph.node_name(consumer)));
-        }
-    }
-
-    // Owner (conftest or plugin)
-    if let Some(conftest_idx) = fixture.conftest_idx {
-        lines.push(Line::from(""));
-        lines.push(section_header("Defined In"));
-        lines.push(connection_line('C', &graph.conftests[conftest_idx].path));
-    }
-    if let Some(plugin_idx) = fixture.plugin_idx {
-        lines.push(Line::from(""));
-        lines.push(section_header("Provided By"));
-        lines.push(connection_line('P', &graph.plugins[plugin_idx].name));
-    }
-
-    lines
-}
-
-fn render_test<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let test = &graph.tests[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("T", sigil_style()),
-            Span::raw(format!(" {}", test.node_id)),
-        ]),
-        Line::from(""),
-        bool_field("async", test.is_async),
-    ];
-
-    if let Some(param_id) = &test.param_id {
-        lines.push(field_line("param_id", param_id));
-        lines.push(field_line("param_count", &test.param_count.to_string()));
-    }
-
-    // Fixture dependencies
-    if !test.fixture_deps.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Fixture Dependencies"));
-        for &dep_idx in &test.fixture_deps {
-            lines.push(connection_line('F', &graph.fixtures[dep_idx].name));
-        }
-    }
-
-    // Broken edges (unresolved fixture deps)
-    let broken = broken_edges_for(&graph.broken_edges, node_ref);
-    if !broken.is_empty() {
-        if test.fixture_deps.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(section_header("Fixture Dependencies"));
-        }
-        for edge in &broken {
-            lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
-        }
-    }
-
-    // Marks
-    if !test.marks.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Marks"));
-        for &mark_idx in &test.marks {
-            lines.push(connection_line('M', &graph.marks[mark_idx].name));
-        }
-    }
-
-    // Variants
-    if !test.variants.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Variants"));
-        for &variant_idx in &test.variants {
-            lines.push(connection_line('T', &graph.tests[variant_idx].node_id));
-        }
-    }
-
-    lines
-}
-
-fn render_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let mark = &graph.marks[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("M", sigil_style()),
-            Span::raw(format!(" {}", mark.name)),
-        ]),
-        Line::from(""),
-        field_line("used_by_count", &mark.used_by.len().to_string()),
-    ];
-
-    // Tests using this mark
-    if !mark.used_by.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Used By"));
-        for &test_idx in &mark.used_by {
-            lines.push(connection_line('T', &graph.tests[test_idx].node_id));
-        }
-    }
-
-    lines
-}
-
-fn render_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.conftests[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("C", sigil_style()),
-            Span::raw(format!(" {}", conftest.path)),
-        ]),
-        Line::from(""),
-        field_line("fixtures_count", &conftest.fixtures.len().to_string()),
-        field_line("helpers_count", &conftest.helpers.len().to_string()),
-    ];
-
-    // Fixtures defined here
-    if !conftest.fixtures.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Fixtures"));
-        for &fix_idx in &conftest.fixtures {
-            lines.push(connection_line('F', &graph.fixtures[fix_idx].name));
-        }
-    }
-
-    // Helpers defined here
-    if !conftest.helpers.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Helpers"));
-        for &helper_idx in &conftest.helpers {
-            lines.push(connection_line('H', &graph.helpers[helper_idx].name));
-        }
-    }
-
-    lines
-}
-
-fn render_plugin<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let plugin = &graph.plugins[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("P", sigil_style()),
-            Span::raw(format!(" {}", plugin.name)),
-        ]),
-        Line::from(""),
-    ];
-
-    if !plugin.protocols.is_empty() {
-        lines.push(field_line("protocols", &plugin.protocols.join(", ")));
-    }
-
-    // Fixtures provided by this plugin
-    if !plugin.fixtures.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Fixtures"));
-        for &fix_idx in &plugin.fixtures {
-            lines.push(connection_line('F', &graph.fixtures[fix_idx].name));
-        }
-    }
-
-    lines
-}
-
-fn render_helper<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let helper = &graph.helpers[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("H", sigil_style()),
-            Span::raw(format!(" {}", helper.name)),
-        ]),
-        Line::from(""),
-        field_line("signature", &helper.signature),
-        field_line("source", &helper.source),
-    ];
-
-    if let Some(docstring) = &helper.docstring {
-        lines.push(field_line("docstring", docstring));
-    }
-
-    // Conftest owner
-    lines.push(Line::from(""));
-    lines.push(section_header("Defined In"));
-    lines.push(connection_line(
-        'C',
-        &graph.conftests[helper.conftest_idx].path,
-    ));
-
-    lines
-}
-
-// ── Preview API ─────────────────────────────────────────────────────────────
-
-/// Build compact preview content for the right pane.
-///
-/// Shows: node header, 2-3 key properties, top 3 edges per group.
-/// Omits: description text, some boolean fields.
-pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    match node_ref.kind {
-        NodeKind::Fixture => preview_fixture(graph, node_ref),
-        NodeKind::Test => preview_test(graph, node_ref),
-        NodeKind::Mark => preview_mark(graph, node_ref),
-        NodeKind::Conftest => preview_conftest(graph, node_ref),
-        NodeKind::Plugin => preview_plugin(graph, node_ref),
-        NodeKind::Helper => preview_helper(graph, node_ref),
-    }
-}
-
-// ── Preview helpers ──────────────────────────────────────────────────────────
-
-/// Append up to `max_shown` connection lines from `edges`, then a "N more"
-/// line if any are truncated.
-fn preview_edges<'a>(
-    lines: &mut Vec<Line<'a>>,
-    edges: &[NodeRef],
-    graph: &InspectGraph,
-    max_shown: usize,
-) {
-    for r in edges.iter().take(max_shown) {
-        lines.push(connection_line(r.kind.sigil(), graph.node_name(r)));
-    }
-    let remaining = edges.len().saturating_sub(max_shown);
-    if remaining > 0 {
-        lines.push(Line::from(Span::styled(
-            format!("  · · · {remaining} more"),
-            label_style(),
-        )));
-    }
-}
-
-fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let fixture = &graph.fixtures[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("F", sigil_style()),
-            Span::raw(format!(" {}", fixture.name)),
-        ]),
-        Line::from(""),
-        field_line("scope", &fixture.scope),
-        field_line("source", &fixture.source),
-    ];
-
-    if !fixture.consumers.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header(&format!(
-            "Consumers ({})",
-            fixture.consumers.len()
-        )));
-        preview_edges(&mut lines, &fixture.consumers, graph, 3);
-    }
-
-    lines
-}
-
-fn preview_test<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let test = &graph.tests[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("T", sigil_style()),
-            Span::raw(format!(" {}", test.node_id)),
-        ]),
-        Line::from(""),
-        bool_field("async", test.is_async),
-    ];
-
-    if !test.fixture_deps.is_empty() {
-        let edge_refs: Vec<NodeRef> = test
-            .fixture_deps
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Fixture,
-                index: idx,
-            })
-            .collect();
-        lines.push(Line::from(""));
-        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    if !test.marks.is_empty() {
-        let edge_refs: Vec<NodeRef> = test
-            .marks
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Mark,
-                index: idx,
-            })
-            .collect();
-        lines.push(Line::from(""));
-        lines.push(section_header(&format!("Marks ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    lines
-}
-
-fn preview_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let mark = &graph.marks[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("M", sigil_style()),
-            Span::raw(format!(" {}", mark.name)),
-        ]),
-        Line::from(""),
-    ];
-
-    if !mark.used_by.is_empty() {
-        let edge_refs: Vec<NodeRef> = mark
-            .used_by
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Test,
-                index: idx,
-            })
-            .collect();
-        lines.push(section_header(&format!("Tests ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    lines
-}
-
-fn preview_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.conftests[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("C", sigil_style()),
-            Span::raw(format!(" {}", conftest.path)),
-        ]),
-        Line::from(""),
-    ];
-
-    if !conftest.fixtures.is_empty() {
-        let edge_refs: Vec<NodeRef> = conftest
-            .fixtures
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Fixture,
-                index: idx,
-            })
-            .collect();
-        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    if !conftest.helpers.is_empty() {
-        let edge_refs: Vec<NodeRef> = conftest
-            .helpers
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Helper,
-                index: idx,
-            })
-            .collect();
-        lines.push(Line::from(""));
-        lines.push(section_header(&format!("Helpers ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    lines
-}
-
-fn preview_plugin<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let plugin = &graph.plugins[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("P", sigil_style()),
-            Span::raw(format!(" {}", plugin.name)),
-        ]),
-        Line::from(""),
-    ];
-
-    if !plugin.protocols.is_empty() {
-        lines.push(field_line("protocols", &plugin.protocols.join(", ")));
-    }
-
-    if !plugin.fixtures.is_empty() {
-        let edge_refs: Vec<NodeRef> = plugin
-            .fixtures
-            .iter()
-            .map(|&idx| NodeRef {
-                kind: NodeKind::Fixture,
-                index: idx,
-            })
-            .collect();
-        lines.push(Line::from(""));
-        lines.push(section_header(&format!("Fixtures ({})", edge_refs.len())));
-        preview_edges(&mut lines, &edge_refs, graph, 3);
-    }
-
-    lines
-}
-
-fn preview_helper<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let helper = &graph.helpers[node_ref.index];
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("H", sigil_style()),
-            Span::raw(format!(" {}", helper.name)),
-        ]),
-        Line::from(""),
-        field_line("signature", &helper.signature),
-    ];
-
-    // Defined In — always a single conftest, no truncation needed
-    lines.push(Line::from(""));
-    lines.push(section_header("Defined In (1)"));
-    lines.push(connection_line(
-        'C',
-        &graph.conftests[helper.conftest_idx].path,
-    ));
-
-    lines
-}
-
-// ── Edge navigation helpers ──────────────────────────────────────────────────
-
-/// Collect all selectable edge NodeRefs for a node.
-fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
-    match node.kind {
-        NodeKind::Fixture => {
-            let f = &graph.fixtures[node.index];
-            let mut edges = Vec::new();
-            edges.extend(f.consumers.iter().cloned());
-            if let Some(idx) = f.conftest_idx {
-                edges.push(NodeRef::new(NodeKind::Conftest, idx));
-            }
-            if let Some(idx) = f.plugin_idx {
-                edges.push(NodeRef::new(NodeKind::Plugin, idx));
-            }
-            edges
-        }
-        NodeKind::Test => {
-            let t = &graph.tests[node.index];
-            let mut edges: Vec<NodeRef> = t
-                .fixture_deps
-                .iter()
-                .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
-                .collect();
-            edges.extend(t.marks.iter().map(|&idx| NodeRef::new(NodeKind::Mark, idx)));
-            edges
-        }
-        NodeKind::Mark => graph.marks[node.index]
-            .used_by
-            .iter()
-            .map(|&idx| NodeRef::new(NodeKind::Test, idx))
-            .collect(),
-        NodeKind::Conftest => {
-            let c = &graph.conftests[node.index];
-            let mut edges: Vec<NodeRef> = c
-                .fixtures
-                .iter()
-                .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
-                .collect();
-            edges.extend(
-                c.helpers
-                    .iter()
-                    .map(|&idx| NodeRef::new(NodeKind::Helper, idx)),
-            );
-            edges
-        }
-        NodeKind::Plugin => graph.plugins[node.index]
-            .fixtures
-            .iter()
-            .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))
-            .collect(),
-        NodeKind::Helper => {
-            vec![NodeRef::new(
-                NodeKind::Conftest,
-                graph.helpers[node.index].conftest_idx,
-            )]
-        }
-    }
-}
-
-/// Return the NodeRef of the selectable edge at `index` within a focused node.
-pub(crate) fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
-    let edges = collect_selectable_edges(graph, node);
-    edges.get(index).cloned()
-}
-
-/// Count the number of selectable edge items for a focused node.
-pub(crate) fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usize {
-    collect_selectable_edges(graph, node).len()
-}
-
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -750,6 +206,8 @@ mod tests {
 
     /// Build a graph with a fixture that has broken edges.
     fn fixture_with_broken_edges_graph() -> InspectGraph {
+        use crate::inspect::graph::BrokenEdge;
+
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
             name: "db_session".to_string(),
@@ -1687,6 +1145,7 @@ mod tests {
 mod snapshot_tests {
     use super::*;
     use crate::inspect::app::InspectApp;
+    use crate::inspect::graph::BrokenEdge;
     use crate::inspect::graph::nodes::*;
     use crate::inspect::nav::Screen;
     use crate::inspect::ui::draw;
