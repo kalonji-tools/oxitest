@@ -146,6 +146,7 @@ in the inspect search box:
 | `mark(name)` | Test has the given mark |
 | `async()` | Test or fixture is an async function |
 | `source(pat)` | File path contains `pat` |
+| `uses(name)` | Test uses fixture `name`, or fixture depends on `name` |
 
 Combine with `&` (and), `|` (or), and `!` (not):
 
