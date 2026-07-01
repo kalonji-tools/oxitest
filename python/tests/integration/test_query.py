@@ -264,3 +264,113 @@ def test_query_fixtures_shows_docstring(tmp: TempDir):
     )
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains(out, "Provide a database connection.")
+
+
+def test_query_tests_uses_substring_match(tmp: TempDir):
+    """``query tests -E 'uses(~db)'`` matches fixtures by substring."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+from oxitest import Fixture
+
+def test_with_db(db_conn: Fixture[object]):
+    pass
+
+def test_without():
+    pass
+""",
+        },
+        conftest="""\
+from oxitest import Fixtures
+
+fx = Fixtures()
+
+@fx.fixture
+def db_conn() -> object:
+    return object()
+""",
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "tests", "-E", "uses(~db)"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "test_with_db")
+    helpers.integ.assert_excludes(out, "test_without")
+
+
+def test_query_tests_uses_exact_match(tmp: TempDir):
+    """``query tests -E 'uses(=db)'`` requires exact fixture name match."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+from oxitest import Fixture
+
+def test_db(db: Fixture[object]):
+    pass
+
+def test_db_conn(db_conn: Fixture[object]):
+    pass
+""",
+        },
+        conftest="""\
+from oxitest import Fixtures
+
+fx = Fixtures()
+
+@fx.fixture
+def db() -> object:
+    return object()
+
+@fx.fixture
+def db_conn() -> object:
+    return object()
+""",
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "tests", "-E", "uses(=db)"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "test_db")
+    helpers.integ.assert_excludes(out, "test_db_conn")
+
+
+def test_query_tests_uses_composed_with_mark(tmp: TempDir):
+    """``query tests -E 'uses(db) & mark(slow)'`` composes predicates."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+import oxitest as oxi
+from oxitest import Fixture
+
+@oxi.mark.slow
+def test_slow_db(db: Fixture[object]):
+    pass
+
+def test_fast_db(db: Fixture[object]):
+    pass
+
+@oxi.mark.slow
+def test_slow_no_db():
+    pass
+""",
+        },
+        conftest="""\
+from oxitest import Fixtures
+
+fx = Fixtures()
+
+@fx.fixture
+def db() -> object:
+    return object()
+""",
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "tests", "-E", "uses(db) & mark(slow)"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "test_slow_db")
+    helpers.integ.assert_excludes(out, "test_fast_db")
+    helpers.integ.assert_excludes(out, "test_slow_no_db")
