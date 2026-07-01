@@ -141,7 +141,7 @@ class OxiNamespaceProxy(_CachingProxy):
                 fn_name=self._fn_name,
                 node_id="",
             )
-            return self._session._inject_builtin(  # type: ignore[reportPrivateUsage]
+            return self._session.inject_builtin(
                 impl_cls,
                 meta,
                 "function",
@@ -188,7 +188,7 @@ class FixturesProxy(_CachingProxy):
                     self._fn_teardowns,
                     self._fn_name,
                 )
-            if not self._session._registry.has_namespace(name):  # type: ignore[reportPrivateUsage]
+            if not self._session.has_namespace(name):
                 raise AttributeError(
                     f"no fixture namespace '{name}' — did you define a "
                     f"Fixtures() instance named '{name}' in conftest.py?"

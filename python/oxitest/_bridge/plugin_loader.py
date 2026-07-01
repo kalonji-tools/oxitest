@@ -13,7 +13,7 @@ __all__ = ["load_plugins", "PluginRegistry"]
 import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from oxitest._bridge._plugin_config import (
     CliExtension,
@@ -58,6 +58,16 @@ LAZY_PROTOCOLS = frozenset(
 
 class PluginLoadError(Exception):
     """Raised when a plugin cannot be loaded or is invalid."""
+
+
+def _coerce_str_list(raw: object) -> list[str]:
+    """Convert a list/tuple of protocol names to list[str].
+
+    Returns an empty list if raw is not a list or tuple.
+    """
+    if isinstance(raw, (list, tuple)):
+        return [str(p) for p in raw]
+    return []
 
 
 @dataclass
@@ -322,9 +332,7 @@ def load_plugins(
         mod_settings = plugin_configs.get(module_name, {})
         _raw_protocols = mod_settings.get("protocols")
         declared_protocols: list[str] | None = (
-            cast("list[str]", list(_raw_protocols))
-            if isinstance(_raw_protocols, (list, tuple))
-            else None
+            _coerce_str_list(_raw_protocols) if _raw_protocols is not None else None
         )
 
         if declared_protocols and not PluginEntry.needs_eager_import(

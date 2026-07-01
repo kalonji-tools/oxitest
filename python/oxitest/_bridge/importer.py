@@ -56,7 +56,7 @@ def _propagate_class_marks(fn: object, cls: object) -> None:
     All marks on the class are propagated to each method.
     """
     for m in get_marks(cls):
-        _append_mark(cast(Any, fn), m)
+        _append_mark(fn, m)
 
 
 def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
@@ -146,7 +146,7 @@ def _apply_module_marks(
         existing_names = {m.name for m in get_marks(fn)}
         for mark in module_marks:
             if mark.name not in existing_names:
-                _append_mark(cast(Any, fn), mark)
+                _append_mark(fn, mark)
 
 
 def _validate_composition(layers: tuple[ComposedCases, ...]) -> None:

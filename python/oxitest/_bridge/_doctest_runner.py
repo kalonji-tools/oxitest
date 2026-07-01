@@ -6,6 +6,7 @@ import doctest
 import importlib
 import importlib.util
 import sys
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 from oxitest._bridge.result import ErrorResult, FailedResult, PassedResult, TestResult
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 __all__ = ["run_doctest"]
 
 
-def _resolve_object(module, dotted_name: str) -> object:  # type: ignore[type-arg]
+def _resolve_object(module: ModuleType, dotted_name: str) -> object:
     """Resolve a dotted name like 'module.Class.method' to the actual object."""
     parts = dotted_name.split(".")
     # First part is the module name itself, skip it
