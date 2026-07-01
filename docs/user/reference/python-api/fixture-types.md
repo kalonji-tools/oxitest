@@ -46,7 +46,7 @@ each for a different purpose:
 
 ## Fixtures
 
-::: oxitest._bridge._fixture_session.Fixtures
+::: oxitest._bridge._fixtures.Fixtures
     options:
       show_root_heading: false
       show_root_toc_entry: false
