@@ -293,6 +293,7 @@ vary by resource but the syntax is consistent:
 | `async()` | tests, fixtures | test or fixture is an async function |
 | `shared()` | fixtures | fixture is declared `shared=True` |
 | `autouse()` | fixtures | fixture is declared `autouse=True` |
+| `uses(name)` | tests, fixtures | test uses fixture `name`, or fixture depends on fixture `name` |
 | `used_in(id)` | marks | mark is applied to a test matching `id` |
 | `protocol(p)` | plugins | plugin implements protocol `p` |
 
