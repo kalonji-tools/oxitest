@@ -219,6 +219,24 @@ mod tests {
         assert!(validate_predicates(&expr, &ResourceKind::Plugins).is_ok());
     }
 
+    #[test]
+    fn validate_uses_valid_for_tests() {
+        let expr = lex_and_parse("uses(db)").unwrap();
+        assert!(
+            validate_predicates(&expr, &ResourceKind::Tests).is_ok(),
+            "uses() should be a valid predicate for Tests"
+        );
+    }
+
+    #[test]
+    fn validate_uses_valid_for_fixtures() {
+        let expr = lex_and_parse("uses(session)").unwrap();
+        assert!(
+            validate_predicates(&expr, &ResourceKind::Fixtures).is_ok(),
+            "uses() should be a valid predicate for Fixtures"
+        );
+    }
+
     // ── match_field_value tests ───────────────────────────────────────────────
 
     #[test]
