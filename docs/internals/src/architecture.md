@@ -68,7 +68,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | `pipeline::helpers` | `src/pipeline/helpers.rs` | Utility functions (e.g., `env_string()`). |
 | **Config** | | |
 | `config` | `src/config/mod.rs` | `Config` struct, `Command` enum, `Verbosity`, `WorkerCount`, `find_rootdir()`, `compute_optimal_workers()`. |
-| `config::cli` | `src/config/cli.rs` | clap `#[derive(Parser)]` definitions: `OxitestCli`, `RunArgs`, `DebugArgs`, `QueryArgs`, `DebugMode`, `QueryFormat`. |
+| `config::cli` | `src/config/cli/mod.rs` | clap definitions split across submodules: `mod.rs` (`OxitestCli`, `Command`), `run.rs` (`RunArgs`), `debug.rs` (`DebugArgs`), `query.rs` (`QueryArgs`), `shared.rs` (`FilteringArgs`, `VerbosityArgs`), `enums.rs` (`DebugMode`, `QueryFormat`), `plugin.rs`. |
 | `config::pyproject` | `src/config/pyproject.rs` | `PyprojectToml` and `OxitestConfig` serde structs for `[tool.oxitest]`. |
 | `config::merge` | `src/config/merge.rs` | `merge_run_args()`, `merge_debug_args()`, `merge_query_args()` -- CLI-over-TOML precedence. |
 | **Parallel** | | |
@@ -112,9 +112,9 @@ Every `.rs` file in `src/`, with its responsibility:
 | `query::bridge` | `src/query/bridge.rs` | Query-to-Python bridge for fixture/plugin introspection. |
 | **Inspect TUI** | | |
 | `inspect` | `src/inspect/mod.rs` | `oxitest inspect` entry point — graph building, startup filters, terminal lifecycle. |
-| `inspect::app` | `src/inspect/app.rs` | `InspectApp` state, `InputMode`, `LoadingState`, progressive loading. |
-| `inspect::nav` | `src/inspect/nav.rs` | `NavStack`, `NavScreen` (Home, NodeList, NodeDetail, Disambiguation), direct jump resolution. |
-| `inspect::detail` | `src/inspect/detail.rs` | Per-type detail renderers for the right pane (Fixture, Test, Mark, Conftest, Plugin, Helper). |
+| `inspect::app` | `src/inspect/app.rs` | `InspectApp` state, `InputMode`, `Phase2State`, progressive loading. |
+| `inspect::nav` | `src/inspect/nav.rs` | `Trail`, `Screen` (Overview, NodeFocus, Disambiguation, History), direct jump resolution. |
+| `inspect::detail` | `src/inspect/detail/mod.rs` | Per-type detail renderers split across submodules: `fixture.rs`, `test.rs`, `mark.rs`, `conftest.rs`, `plugin.rs`, `helper.rs`, `styles.rs`. |
 | `inspect::search` | `src/inspect/search.rs` | `Searchable` trait, fuzzy substring + DSL auto-detection search. |
 | `inspect::ui` | `src/inspect/ui.rs` | `draw()` function, adaptive pane layout, footer, help overlay, loading indicators. |
 | `inspect::input` | `src/inspect/input.rs` | Key and mouse event → action mapping, nav stack integration. |

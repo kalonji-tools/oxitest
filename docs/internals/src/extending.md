@@ -12,12 +12,12 @@ Each section follows the actual code paths with real examples from the codebase.
 
 Every CLI flag touches four files. We will trace `--retries` as a concrete example.
 
-### 1. Add the clap field in `src/config/cli.rs`
+### 1. Add the clap field in `src/config/cli/run.rs`
 
 The `RunArgs` struct derives `clap::Args`. Add your flag there:
 
 ```rust
-// src/config/cli.rs  (inside RunArgs)
+// src/config/cli/run.rs  (inside RunArgs)
 
 /// Retry failed tests up to N times
 #[arg(long, value_name = "N", help_heading = "Execution")]
@@ -140,12 +140,12 @@ pub fn validate(&self) -> Result<(), String> {
 
 ## Adding a subcommand
 
-Subcommands are variants of the `Command` enum in `src/config/cli.rs`.
+Subcommands are variants of the `Command` enum in `src/config/cli/mod.rs`.
 
 ### 1. Define the args struct
 
 ```rust
-// src/config/cli.rs
+// src/config/cli/mod.rs  (or a new submodule for the command)
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct MyNewArgs {
