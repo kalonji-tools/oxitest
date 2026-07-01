@@ -11,4 +11,5 @@
 - [Extending oxitest](extending.md)
 - [Config System](config.md)
 - [Testing Strategy](testing.md)
+- [Inspect TUI](inspect.md)
 - [Design Decisions](decisions.md)
