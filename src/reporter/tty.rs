@@ -893,13 +893,15 @@ mod tests {
             .lineno(10)
             .source("assert False")
             .build();
-        let ctx = crate::parallel_context::ParallelContext {
-            worker_id: 2,
-            concurrent_tests: vec![
-                "tests/test_db.py::test_read_user".into(),
-                "tests/test_db.py::test_delete_session".into(),
-            ],
-        };
+        let set: ahash::AHashSet<String> = [
+            "tests/test_db.py::test_read_user".to_string(),
+            "tests/test_db.py::test_delete_session".to_string(),
+        ]
+        .into();
+        let ctx = crate::parallel_context::ParallelContext::new(
+            2,
+            std::sync::Arc::new(parking_lot::Mutex::new(set)),
+        );
         let opts = ReporterOptsBuilder::new()
             .verbosity(Verbosity::Normal)
             .build();
