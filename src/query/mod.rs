@@ -72,7 +72,13 @@ pub(crate) fn collect_entries(
     cfg: &config::Config,
 ) -> Result<Vec<QueryEntry>, String> {
     match resource {
-        ResourceKind::Tests => Ok(extract::extract_test_entries(test_files)),
+        ResourceKind::Tests => {
+            let mut entries = extract::extract_test_entries(test_files);
+            if let Some(s) = session {
+                enrich_tests_with_fixture_deps(py, s, test_files, &mut entries)?;
+            }
+            Ok(entries)
+        }
         ResourceKind::Marks => Ok(extract::extract_mark_entries(
             test_files,
             &cfg.markers.registered_markers,
@@ -87,6 +93,46 @@ pub(crate) fn collect_entries(
             None => Ok(vec![]),
         },
     }
+}
+
+/// Merge fixture dependency data from the Python bridge into test entries.
+///
+/// Builds a lookup from test node-id to comma-separated fixture names,
+/// then inserts a `"uses"` field into each matching test entry.
+fn enrich_tests_with_fixture_deps(
+    py: pyo3::Python<'_>,
+    session: &crate::bridge::FixtureSession,
+    test_files: &[camino::Utf8PathBuf],
+    entries: &mut [QueryEntry],
+) -> Result<(), String> {
+    let deps =
+        self::bridge::test_fixture_deps(session, py, test_files).map_err(|e| e.to_string())?;
+
+    // Build lookup: strip "[param_id]" suffix so parametrized cases
+    // map to the same base function entry.
+    let mut fixture_map: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for dep in &deps {
+        let Some(node_id) = dep.get("test_node_id") else {
+            continue;
+        };
+        let Some(fixtures) = dep.get("fixture_names") else {
+            continue;
+        };
+        let base = node_id.split('[').next().unwrap_or(node_id);
+        fixture_map.entry(base).or_insert(fixtures);
+    }
+
+    for entry in entries.iter_mut() {
+        if let Some(name) = entry.fields.get("name")
+            && let Some(&fixtures) = fixture_map.get(name.as_str())
+        {
+            entry
+                .fields
+                .insert("uses".to_string(), fixtures.to_string());
+        }
+    }
+
+    Ok(())
 }
 
 fn extract_fixture_entries(
