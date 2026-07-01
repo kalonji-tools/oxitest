@@ -51,13 +51,11 @@ impl TestItemBuilder {
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn fixref_deps(mut self, deps: Vec<(String, String)>) -> Self {
         self.fixref_deps = deps;
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn module_path(mut self, path: &str) -> Self {
         self.module_path = Utf8PathBuf::from(path);
         self
@@ -93,7 +91,6 @@ impl TestItemBuilder {
 ///
 /// Created via [`TestOutcome::failed(msg)`]. All fields default to sensible
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
-#[allow(dead_code)]
 pub(crate) struct FailedOutcomeBuilder {
     pub(crate) message: String,
     pub(crate) file: Utf8PathBuf,
@@ -106,7 +103,6 @@ pub(crate) struct FailedOutcomeBuilder {
     pub(crate) field_diffs: Vec<FieldDiff>,
 }
 
-#[allow(dead_code)]
 impl FailedOutcomeBuilder {
     pub(crate) fn file(mut self, f: &str) -> Self {
         self.file = Utf8PathBuf::from(f);
@@ -164,7 +160,6 @@ impl FailedOutcomeBuilder {
 ///
 /// Created via [`TestOutcome::error(msg)`]. All fields default to sensible
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
-#[allow(dead_code)]
 pub(crate) struct ErrorOutcomeBuilder {
     pub(crate) message: String,
     pub(crate) file: Utf8PathBuf,
@@ -173,7 +168,6 @@ pub(crate) struct ErrorOutcomeBuilder {
     pub(crate) frames: Vec<Frame>,
 }
 
-#[allow(dead_code)]
 impl ErrorOutcomeBuilder {
     pub(crate) fn file(mut self, f: &str) -> Self {
         self.file = Utf8PathBuf::from(f);

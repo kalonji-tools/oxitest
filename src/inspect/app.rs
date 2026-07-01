@@ -1,6 +1,5 @@
 //! Application state and event loop for `oxitest inspect`.
 
-use std::collections::HashSet;
 use std::sync::mpsc;
 
 use crossterm::event::{self, Event};
@@ -203,11 +202,6 @@ pub(crate) struct InspectApp {
     /// Progressive-loading state: holds the background receiver while loading,
     /// transitions to `Complete` once data arrives (or times out / disconnects).
     phase2: Phase2State,
-    /// Base names of parametrize groups that are currently expanded in the
-    /// Test NodeList.  A group's base name is the node_id prefix before the
-    /// `[param_id]` bracket (e.g. `"tests/test_math.py::test_add"`).
-    #[allow(dead_code)] // retained for future parametrize collapsing in edge lists
-    pub(crate) expanded_groups: HashSet<String>,
     /// Vertical scroll offset for the left pane.
     pub(crate) scroll_offset: u16,
     /// Project root directory for stripping absolute paths in the TUI.
@@ -258,7 +252,6 @@ impl InspectApp {
             overview_sections,
             flash_message: None,
             phase2: Phase2State::Complete,
-            expanded_groups: HashSet::new(),
             scroll_offset: 0,
             rootdir: String::new(),
             phase2_timeout: std::time::Duration::from_secs(30),
@@ -306,7 +299,6 @@ impl InspectApp {
                 rx,
                 started: std::time::Instant::now(),
             },
-            expanded_groups: HashSet::new(),
             scroll_offset: 0,
             rootdir: rootdir.to_string(),
             phase2_timeout: timeout,

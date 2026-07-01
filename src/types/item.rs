@@ -89,7 +89,7 @@ pub struct MarkerSet {
     custom: HashSet<Arc<str>>,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // has_skip, has_xfail, has_usefixtures, has_timeout, has, is_empty, len are test-only
 impl MarkerSet {
     pub fn new() -> Self {
         Self {
