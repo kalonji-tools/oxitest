@@ -434,10 +434,11 @@ mod tests {
             .lineno(10)
             .source("assert False")
             .build();
-        let ctx = crate::parallel_context::ParallelContext {
-            worker_id: 2,
-            concurrent_tests: vec!["tests/test_db.py::test_read_user".into()],
-        };
+        let set: ahash::AHashSet<String> = ["tests/test_db.py::test_read_user".to_string()].into();
+        let ctx = crate::parallel_context::ParallelContext::new(
+            2,
+            std::sync::Arc::new(parking_lot::Mutex::new(set)),
+        );
         reporter.test_completed(&item, &outcome, DurationMs::new(1.0), Some(&ctx));
         assert_eq!(reporter.deferred_diags.len(), 1);
         let diag = &reporter.deferred_diags[0];

@@ -115,22 +115,15 @@ pub(crate) fn run_phase_parallel(
             resolved,
             worker_id,
         } = result;
-        // Snapshot concurrent tests (excluding the one that just completed)
         let node_id = resolved.node_id.clone(); // Arc refcount bump — cheap
-        let concurrent_tests: Vec<String> = {
-            let mut set = in_flight.lock();
-            set.remove(node_id.as_ref());
-            if set.is_empty() {
-                Vec::new()
-            } else {
-                set.iter().cloned().collect()
-            }
-        };
+        {
+            in_flight.lock().remove(node_id.as_ref());
+        }
 
-        let parallel_ctx = crate::parallel_context::ParallelContext {
-            worker_id: worker_id + 1, // 1-indexed for display
-            concurrent_tests,
-        };
+        let parallel_ctx = crate::parallel_context::ParallelContext::new(
+            worker_id + 1, // 1-indexed for display
+            Arc::clone(&in_flight),
+        );
 
         let Some(outcome) = handle_worker_result(
             resolved,
