@@ -71,7 +71,12 @@ pub(crate) fn setup_worker_process(
     // Offload blocking reads into a dedicated thread so the worker loop
     // can use recv_timeout() and remain responsive to the watchdog deadline.
     let (line_tx, line_rx) = crossbeam_channel::bounded::<String>(1024);
-    let _reader = std::thread::spawn(move || {
+    // Note: this thread is intentionally detached. It exits naturally when:
+    // 1. The worker process exits → stdout closes → read_line() returns Ok(0)
+    // 2. The channel receiver is dropped → send() returns Err → loop breaks
+    // The thread cannot outlive the worker process or the channel, so no
+    // explicit join is needed.
+    std::thread::spawn(move || {
         let mut stdout = worker_stdout;
         let mut buf = String::with_capacity(256);
         loop {
