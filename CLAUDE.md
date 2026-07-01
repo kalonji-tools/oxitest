@@ -155,7 +155,7 @@ prek run --all-files
 **Python bridge** (`python/oxitest/_bridge/`): Pure-Python layer that does the actual test execution. Key modules:
 - `executor.py` — `run_test()`: loads module, resolves fixtures/parametrize, runs test, returns `TestResult`
 - `_fixture_registry.py` — `FixtureDef`, `FixtureRegistry`, `_fixture_inner_type`; fixture definition and registry
-- `_fixture_session.py` — `FixtureSession`, `Fixtures`, `FixtureAccessor`; fixture lifecycle (scope caching, yield teardown, autouse)
+- `_fixture_session.py` — `FixtureSession`, `_SessionProtocol`, `_Scope`; fixture lifecycle (scope caching, yield teardown, autouse)
 - `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
 - `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances, builds a `FixtureSession`
 - `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
@@ -168,7 +168,7 @@ prek run --all-files
 
 ### PyO3 data contract
 
-`TestResult` in `src/bridge.rs` must stay in sync with `python/oxitest/_bridge/result.py`. `CollectedItem` fields must stay in sync with the Python `collect_module` return type. When adding fields to the Python result objects, update the Rust `#[derive(FromPyObject)]` structs too.
+Both the serial PyO3 path (`bridge.rs`) and the parallel JSON path (`worker_result/`) converge on `RawOutcome` (in `worker_result/convert.rs`) before producing a `TestOutcome`. `CollectedItem` fields must stay in sync with the Python `collect_module` return type. When adding fields to the Python result objects, update the corresponding `RawOutcome` variant and the PyO3 extraction logic in `bridge.rs`.
 
 ### Parallel execution
 
