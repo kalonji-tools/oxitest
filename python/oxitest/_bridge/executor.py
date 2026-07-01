@@ -100,7 +100,7 @@ def _resolve_debugger_backend(
     return _PdbBackend()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _ResolvedTest:
     module: Any
     fn_raw: Any

@@ -38,7 +38,7 @@ MarkWrapper = Callable[[Callable[[], TestResult]], TestResult]
 ExecutionWrapper = MarkWrapper
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class MarkEvalResult:
     """Result returned by a mark handler.
 
@@ -50,7 +50,7 @@ class MarkEvalResult:
     wrapper: MarkWrapper | None = None
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
 class _HandlerContext:
     """Context bundle passed to each mark handler.
 

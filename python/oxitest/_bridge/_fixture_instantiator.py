@@ -100,7 +100,7 @@ def _resolve_deps(
     return deps
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _FixtureOutcome:
     """Result of unpacking a fixture function call."""
 

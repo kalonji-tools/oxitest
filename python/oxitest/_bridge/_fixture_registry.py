@@ -39,19 +39,19 @@ class FixtureScope(StrEnum):
     SESSION = "session"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConftestSource:
     func: Callable  # type: ignore[type-arg]
     conftest_path: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PluginSource:
     provider: Any  # FixtureProvider — use Any to avoid circular import
     plugin_module: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BuiltinSource:
     impl_cls: type  # type[BuiltinFixture] — use type to avoid circular import
 
@@ -63,7 +63,7 @@ class FixtureShadowWarning(UserWarning):
     """Emitted when a child conftest shadows a parent conftest fixture."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FixtureDef(Generic[T]):
     name: str
     fixture_type: type  # binding type for type-based resolve

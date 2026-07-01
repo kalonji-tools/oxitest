@@ -37,7 +37,7 @@ def _should_keep(mode: str, result_cell: list | None) -> bool:
 
 
 @injectable
-@dataclass
+@dataclass(frozen=True, slots=True)
 class TempDir:
     """A temporary directory provided to a test.
 
