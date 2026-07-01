@@ -20,6 +20,7 @@ from typing import (
     Annotated,
     Any,
     Generic,
+    TypeAlias,
     TypeVar,
     get_args,
     get_origin,
@@ -32,6 +33,8 @@ from oxitest._bridge.result import CollectedViolation, ViolationKind
 
 T = TypeVar("T")
 
+ConftestFunc: TypeAlias = Callable[..., Any]
+
 
 class FixtureScope(StrEnum):
     EACH = "each"
@@ -41,7 +44,7 @@ class FixtureScope(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ConftestSource:
-    func: Callable  # type: ignore[type-arg]
+    func: ConftestFunc
     conftest_path: str
 
 

@@ -84,6 +84,16 @@ class _SessionProtocol(Protocol):
         func: Callable[..., Any],
     ) -> str | None: ...
 
+    def inject_builtin(
+        self,
+        impl_cls: type[BuiltinFixture],
+        meta: TestMeta,
+        inject_scope: str,
+        teardown_stack: list[Callable[[], None]],
+    ) -> Any: ...
+
+    def has_namespace(self, namespace: str) -> bool: ...
+
     def get_fixture_timings(self) -> list[FixtureTiming]: ...
 
 
@@ -125,6 +135,20 @@ class _NullFixtureSession:
         func: Callable[..., Any],
     ) -> str | None:
         return None
+
+    def inject_builtin(
+        self,
+        impl_cls: type[BuiltinFixture],
+        meta: TestMeta,
+        inject_scope: str,
+        teardown_stack: list[Callable[[], None]],
+    ) -> Any:
+        """Null implementation: raise since no session is available."""
+        raise FixtureNotFoundError(impl_cls.__name__)
+
+    def has_namespace(self, namespace: str) -> bool:
+        """Null implementation: no namespaces available."""
+        return False
 
     def get_cache_stats(self) -> CacheStats:
         """Return empty cache stats (null session has no shared fixtures)."""
@@ -440,6 +464,20 @@ class FixtureSession:
             teardown_stack,
             session_scope=self._session_scope,
         )
+
+    def inject_builtin(
+        self,
+        impl_cls: type[BuiltinFixture],
+        meta: TestMeta,
+        inject_scope: str,
+        teardown_stack: list[Callable[[], None]],
+    ) -> Any:
+        """Public accessor for _inject_builtin (used by proxy_ns)."""
+        return self._inject_builtin(impl_cls, meta, inject_scope, teardown_stack)
+
+    def has_namespace(self, namespace: str) -> bool:
+        """Return True if any registered fixture belongs to the given namespace."""
+        return self._registry.has_namespace(namespace)
 
     # ── Resolution ────────────────────────────────────────────────────────────
 

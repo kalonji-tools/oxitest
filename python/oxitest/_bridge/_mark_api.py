@@ -57,7 +57,7 @@ class MarkInfo:
     kwargs: MappingProxyType[str, object]
 
 
-def _append_mark(f: Callable[..., Any], info: MarkInfo) -> None:
+def _append_mark(f: object, info: MarkInfo) -> None:
     get_or_create(f).marks.append(info)
 
 
@@ -143,7 +143,7 @@ class _SkipMark:
             def identity(f: _F) -> _F:
                 return f
 
-            identity._oxitest_noop_mark = True  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+            setattr(identity, "_oxitest_noop_mark", True)
             return identity
 
         info = MarkInfo("skip", (), MappingProxyType({"reason": str(reason)}))
