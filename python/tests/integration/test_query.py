@@ -203,6 +203,39 @@ def conn(db: Fixture[object]) -> object:
     helpers.integ.assert_excludes(out, "db")
 
 
+def test_query_tests_uses_predicate(tmp: TempDir):
+    """``query tests -E 'uses(db)'`` filters tests by fixture usage."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+from oxitest import Fixture
+
+def test_with_db(db: Fixture[object]):
+    pass
+
+def test_without():
+    pass
+""",
+        },
+        conftest="""\
+from oxitest import Fixtures
+
+fx = Fixtures()
+
+@fx.fixture
+def db() -> object:
+    return object()
+""",
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "tests", "-E", "uses(db)"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "test_with_db")
+    helpers.integ.assert_excludes(out, "test_without")
+
+
 def test_query_fixtures_shows_docstring(tmp: TempDir):
     """``query fixtures --detail`` includes fixture docstrings."""
     helpers.integ.write_project(
