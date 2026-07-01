@@ -49,26 +49,6 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::types::FieldDiff {
     }
 }
 
-/// Test result extracted from Python. Field names MUST stay in sync with `python/oxitest/_bridge/result.py`.
-#[cfg(test)]
-#[derive(pyo3::FromPyObject)]
-struct TestResult {
-    status: String,
-    message: String,
-    file: String,
-    lineno: usize,
-    source_line: String,
-    no_message_lines: Vec<usize>,
-    left: String,
-    right: String,
-    op: String,
-    strict: bool,
-    #[allow(dead_code)] // Extracted for PyO3 contract sync; used only on the Python side.
-    exc_type: String,
-    frames: Vec<crate::worker_result::RawFrame>,
-    field_diffs: Vec<crate::types::FieldDiff>,
-}
-
 /// Long-lived Python fixture session held across the test loop.
 pub struct FixtureSession(Py<PyAny>);
 
@@ -622,220 +602,89 @@ fn try_run_test_with_session_obj(
 /// Two-phase extraction: extract status first, then only the fields needed
 /// for that outcome kind. Passed tests (the majority) go from 13 PyO3
 /// getattr() calls to 2.
+///
+/// Each status arm extracts PyO3 fields, builds a [`RawOutcome`], and calls
+/// [`RawOutcome::into_test_outcome()`] — the single conversion path shared
+/// with the JSON worker.
 fn extract_outcome(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
+    use crate::worker_result::RawOutcome;
+
     let status: String = py_result.getattr("status")?.extract()?;
 
     match status.as_str() {
         "passed" => {
             let no_message_lines: Vec<usize> = py_result.getattr("no_message_lines")?.extract()?;
-            Ok(TestOutcome::Passed {
-                tips: if no_message_lines.is_empty() {
-                    None
-                } else {
-                    Some(no_message_lines.into_boxed_slice())
-                },
-            })
+            Ok(RawOutcome::Passed { no_message_lines }.into_test_outcome())
         }
         "skipped" => {
             let message: String = py_result.getattr("message")?.extract()?;
-            Ok(TestOutcome::Skipped { reason: message })
+            Ok(RawOutcome::Skipped { reason: message }.into_test_outcome())
         }
         "xfailed" => {
             let message: String = py_result.getattr("message")?.extract()?;
-            Ok(TestOutcome::XFailed { reason: message })
+            Ok(RawOutcome::XFailed { reason: message }.into_test_outcome())
         }
         "xpassed" => {
             let strict: bool = py_result.getattr("strict")?.extract()?;
-            Ok(TestOutcome::XPassed { strict })
+            Ok(RawOutcome::XPassed { strict }.into_test_outcome())
         }
         "timeout" => {
             let message: String = py_result.getattr("message")?.extract()?;
-            Ok(TestOutcome::Timeout { message })
+            Ok(RawOutcome::Timeout { message }.into_test_outcome())
         }
         "warned" => {
             let message: String = py_result.getattr("message")?.extract()?;
             let no_message_lines: Vec<usize> = py_result.getattr("no_message_lines")?.extract()?;
-            Ok(TestOutcome::Warned {
+            Ok(RawOutcome::Warned {
                 reason: message,
-                tips: if no_message_lines.is_empty() {
-                    None
-                } else {
-                    Some(no_message_lines.into_boxed_slice())
+                no_message_lines,
+            }
+            .into_test_outcome())
+        }
+        "failed" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            let file: String = py_result.getattr("file")?.extract()?;
+            let lineno: usize = py_result.getattr("lineno")?.extract()?;
+            let source_line: String = py_result.getattr("source_line")?.extract()?;
+            let left: String = py_result.getattr("left")?.extract()?;
+            let right: String = py_result.getattr("right")?.extract()?;
+            let op: String = py_result.getattr("op")?.extract()?;
+            let raw_frames: Vec<crate::worker_result::RawFrame> =
+                py_result.getattr("frames")?.extract()?;
+            let field_diffs: Vec<crate::types::FieldDiff> =
+                py_result.getattr("field_diffs")?.extract()?;
+            let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
+            Ok(RawOutcome::Failed {
+                message,
+                file: Utf8PathBuf::from(file),
+                lineno: LineNo::new(lineno),
+                source_line,
+                frames,
+                comparison: crate::types::ComparisonDetail {
+                    left,
+                    right,
+                    op,
+                    field_diffs,
                 },
-            })
+            }
+            .into_test_outcome())
         }
-        "failed" => extract_failed(py_result),
-        _ => extract_error(py_result),
-    }
-}
-
-fn extract_failed(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
-    let message: String = py_result.getattr("message")?.extract()?;
-    let file: String = py_result.getattr("file")?.extract()?;
-    let lineno: usize = py_result.getattr("lineno")?.extract()?;
-    let source_line: String = py_result.getattr("source_line")?.extract()?;
-    let left: String = py_result.getattr("left")?.extract()?;
-    let right: String = py_result.getattr("right")?.extract()?;
-    let op: String = py_result.getattr("op")?.extract()?;
-    let raw_frames: Vec<crate::worker_result::RawFrame> = py_result.getattr("frames")?.extract()?;
-    let field_diffs: Vec<crate::types::FieldDiff> = py_result.getattr("field_diffs")?.extract()?;
-    let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
-    Ok(TestOutcome::Failed(Box::new(
-        crate::worker_result::build_diagnostic(
-            message,
-            Utf8PathBuf::from(file),
-            LineNo::new(lineno),
-            source_line,
-            frames,
-            Some(crate::types::ComparisonDetail {
-                left,
-                right,
-                op,
-                field_diffs,
-            }),
-        ),
-    )))
-}
-
-fn extract_error(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
-    let message: String = py_result.getattr("message")?.extract()?;
-    let file: String = py_result.getattr("file")?.extract()?;
-    let lineno: usize = py_result.getattr("lineno")?.extract()?;
-    let source_line: String = py_result.getattr("source_line")?.extract()?;
-    let raw_frames: Vec<crate::worker_result::RawFrame> = py_result.getattr("frames")?.extract()?;
-    let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
-    Ok(TestOutcome::Error(Box::new(
-        crate::worker_result::build_diagnostic(
-            message,
-            Utf8PathBuf::from(file),
-            LineNo::new(lineno),
-            source_line,
-            frames,
-            None,
-        ),
-    )))
-}
-
-/// Convert a Python [`TestResult`] into a [`TestOutcome`].
-///
-/// Pure function — testable without a Python runtime.
-#[cfg(test)]
-fn convert_test_result(r: TestResult) -> TestOutcome {
-    let frames: Vec<Frame> = r.frames.into_iter().map(Into::into).collect();
-    let lineno = LineNo::new(r.lineno);
-    let file = Utf8PathBuf::from(r.file);
-
-    match r.status.as_str() {
-        "passed" => TestOutcome::Passed {
-            tips: if r.no_message_lines.is_empty() {
-                None
-            } else {
-                Some(r.no_message_lines.into_boxed_slice())
-            },
-        },
-        "warned" => TestOutcome::Warned {
-            reason: r.message,
-            tips: if r.no_message_lines.is_empty() {
-                None
-            } else {
-                Some(r.no_message_lines.into_boxed_slice())
-            },
-        },
-        "failed" => TestOutcome::Failed(Box::new(crate::worker_result::build_diagnostic(
-            r.message,
-            file,
-            lineno,
-            r.source_line,
-            frames,
-            Some(crate::types::ComparisonDetail {
-                left: r.left,
-                right: r.right,
-                op: r.op,
-                field_diffs: r.field_diffs,
-            }),
-        ))),
-        "skipped" => TestOutcome::Skipped { reason: r.message },
-        "xfailed" => TestOutcome::XFailed { reason: r.message },
-        "xpassed" => TestOutcome::XPassed { strict: r.strict },
-        "timeout" => TestOutcome::Timeout { message: r.message },
-        _ => TestOutcome::Error(Box::new(crate::worker_result::build_diagnostic(
-            r.message,
-            file,
-            lineno,
-            r.source_line,
-            frames,
-            None,
-        ))),
-    }
-}
-
-#[cfg(test)]
-mod convert_tests {
-    use super::*;
-
-    fn make_test_result(status: &str) -> TestResult {
-        TestResult {
-            status: status.to_string(),
-            message: "test msg".to_string(),
-            file: "test.py".to_string(),
-            lineno: 42,
-            source_line: "assert True".to_string(),
-            no_message_lines: vec![],
-            left: String::new(),
-            right: String::new(),
-            op: String::new(),
-            strict: false,
-            exc_type: String::new(),
-            frames: vec![],
-            field_diffs: vec![],
+        _ => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            let file: String = py_result.getattr("file")?.extract()?;
+            let lineno: usize = py_result.getattr("lineno")?.extract()?;
+            let source_line: String = py_result.getattr("source_line")?.extract()?;
+            let raw_frames: Vec<crate::worker_result::RawFrame> =
+                py_result.getattr("frames")?.extract()?;
+            let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
+            Ok(RawOutcome::Error {
+                message,
+                file: Utf8PathBuf::from(file),
+                lineno: LineNo::new(lineno),
+                source_line,
+                frames,
+            }
+            .into_test_outcome())
         }
-    }
-
-    #[test]
-    fn convert_passed() {
-        let outcome = convert_test_result(make_test_result("passed"));
-        assert!(matches!(outcome, TestOutcome::Passed { .. }));
-    }
-
-    #[test]
-    fn convert_failed() {
-        let outcome = convert_test_result(make_test_result("failed"));
-        assert!(matches!(outcome, TestOutcome::Failed(..)));
-    }
-
-    #[test]
-    fn convert_skipped() {
-        let outcome = convert_test_result(make_test_result("skipped"));
-        assert!(matches!(outcome, TestOutcome::Skipped { .. }));
-    }
-
-    #[test]
-    fn convert_xfailed() {
-        let outcome = convert_test_result(make_test_result("xfailed"));
-        assert!(matches!(outcome, TestOutcome::XFailed { .. }));
-    }
-
-    #[test]
-    fn convert_xpassed() {
-        let outcome = convert_test_result(make_test_result("xpassed"));
-        assert!(matches!(outcome, TestOutcome::XPassed { .. }));
-    }
-
-    #[test]
-    fn convert_timeout() {
-        let outcome = convert_test_result(make_test_result("timeout"));
-        assert!(matches!(outcome, TestOutcome::Timeout { .. }));
-    }
-
-    #[test]
-    fn convert_warned() {
-        let outcome = convert_test_result(make_test_result("warned"));
-        assert!(matches!(outcome, TestOutcome::Warned { .. }));
-    }
-
-    #[test]
-    fn convert_unknown_status_becomes_error() {
-        let outcome = convert_test_result(make_test_result("banana"));
-        assert!(matches!(outcome, TestOutcome::Error(..)));
     }
 }

@@ -853,3 +853,360 @@ mod regression_955_tests {
         }
     }
 }
+
+mod raw_outcome_tests {
+    use super::*;
+    use crate::types::ComparisonDetail;
+
+    #[test]
+    fn passed_with_tips() {
+        let outcome = RawOutcome::Passed {
+            no_message_lines: vec![3, 7],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Passed { tips } => {
+                assert_eq!(
+                    tips.as_deref(),
+                    Some([3usize, 7].as_slice()),
+                    "Passed tips should carry through from no_message_lines"
+                );
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn passed_empty_no_message_lines_gives_none_tips() {
+        let outcome = RawOutcome::Passed {
+            no_message_lines: vec![],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Passed { tips } => {
+                assert!(
+                    tips.is_none(),
+                    "empty no_message_lines should produce None tips"
+                );
+            }
+            other => panic!("expected Passed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_carries_diagnostic_and_comparison() {
+        let outcome = RawOutcome::Failed {
+            message: "assert 1 == 2".to_string(),
+            file: Utf8PathBuf::from("test.py"),
+            lineno: LineNo::new(42),
+            source_line: "assert x == 2".to_string(),
+            frames: vec![],
+            comparison: ComparisonDetail {
+                left: "1".to_string(),
+                right: "2".to_string(),
+                op: "==".to_string(),
+                field_diffs: vec![],
+            },
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.message, "assert 1 == 2", "message should pass through");
+                assert_eq!(d.file, "test.py", "file should pass through");
+                assert_eq!(d.lineno, LineNo::new(42), "lineno should pass through");
+                assert_eq!(
+                    d.source_line, "assert x == 2",
+                    "source_line should pass through"
+                );
+                let cmp = d
+                    .comparison
+                    .as_ref()
+                    .expect("Failed should carry comparison");
+                assert_eq!(cmp.left, "1", "comparison left should pass through");
+                assert_eq!(cmp.right, "2", "comparison right should pass through");
+                assert_eq!(cmp.op, "==", "comparison op should pass through");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_with_frames() {
+        let outcome = RawOutcome::Failed {
+            message: "oops".to_string(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            frames: vec![Frame {
+                file: Utf8PathBuf::from("t.py"),
+                lineno: LineNo::new(10),
+                name: "test_fn".to_string(),
+                line: "do_thing()".to_string(),
+                locals: vec![],
+            }],
+            comparison: ComparisonDetail {
+                left: String::new(),
+                right: String::new(),
+                op: String::new(),
+                field_diffs: vec![],
+            },
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Failed(d) => {
+                assert_eq!(d.frames.len(), 1, "single frame should be preserved");
+                assert_eq!(
+                    d.frames[0].name, "test_fn",
+                    "frame name should pass through"
+                );
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_empty_frames() {
+        let outcome = RawOutcome::Failed {
+            message: "msg".to_string(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            frames: vec![],
+            comparison: ComparisonDetail {
+                left: String::new(),
+                right: String::new(),
+                op: String::new(),
+                field_diffs: vec![],
+            },
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Failed(d) => {
+                assert!(d.frames.is_empty(), "empty frames should remain empty");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_empty_comparison_fields() {
+        let outcome = RawOutcome::Failed {
+            message: "msg".to_string(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            frames: vec![],
+            comparison: ComparisonDetail {
+                left: String::new(),
+                right: String::new(),
+                op: String::new(),
+                field_diffs: vec![],
+            },
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Failed(d) => {
+                let cmp = d
+                    .comparison
+                    .as_ref()
+                    .expect("comparison should be Some even with empty fields");
+                assert!(cmp.left.is_empty(), "empty left should remain empty");
+                assert!(cmp.right.is_empty(), "empty right should remain empty");
+                assert!(cmp.op.is_empty(), "empty op should remain empty");
+                assert!(
+                    cmp.field_diffs.is_empty(),
+                    "empty field_diffs should remain empty"
+                );
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_carries_diagnostic_without_comparison() {
+        let outcome = RawOutcome::Error {
+            message: "RuntimeError: boom".to_string(),
+            file: Utf8PathBuf::from("mod.py"),
+            lineno: LineNo::new(7),
+            source_line: "raise RuntimeError".to_string(),
+            frames: vec![],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Error(d) => {
+                assert_eq!(
+                    d.message, "RuntimeError: boom",
+                    "message should pass through"
+                );
+                assert_eq!(d.file, "mod.py", "file should pass through");
+                assert_eq!(d.lineno, LineNo::new(7), "lineno should pass through");
+                assert!(
+                    d.comparison.is_none(),
+                    "Error should have no comparison detail"
+                );
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_with_frames() {
+        let outcome = RawOutcome::Error {
+            message: "ImportError".to_string(),
+            file: Utf8PathBuf::from("conftest.py"),
+            lineno: LineNo::new(3),
+            source_line: "import missing".to_string(),
+            frames: vec![
+                Frame {
+                    file: Utf8PathBuf::from("conftest.py"),
+                    lineno: LineNo::new(3),
+                    name: "<module>".to_string(),
+                    line: "import missing".to_string(),
+                    locals: vec![],
+                },
+                Frame {
+                    file: Utf8PathBuf::from("conftest.py"),
+                    lineno: LineNo::new(1),
+                    name: "setup".to_string(),
+                    line: "from missing import x".to_string(),
+                    locals: vec![],
+                },
+            ],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Error(d) => {
+                assert_eq!(d.frames.len(), 2, "two frames should be preserved");
+                assert_eq!(
+                    d.frames[0].name, "<module>",
+                    "first frame name should match"
+                );
+                assert_eq!(d.frames[1].name, "setup", "second frame name should match");
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn error_empty_frames() {
+        let outcome = RawOutcome::Error {
+            message: "msg".to_string(),
+            file: Utf8PathBuf::from("t.py"),
+            lineno: LineNo::new(1),
+            source_line: String::new(),
+            frames: vec![],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Error(d) => {
+                assert!(d.frames.is_empty(), "empty frames should remain empty");
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn skipped_carries_reason() {
+        let outcome = RawOutcome::Skipped {
+            reason: "needs network".to_string(),
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Skipped { reason } => {
+                assert_eq!(reason, "needs network", "reason should pass through");
+            }
+            other => panic!("expected Skipped, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn warned_with_tips() {
+        let outcome = RawOutcome::Warned {
+            reason: "DeprecationWarning".to_string(),
+            no_message_lines: vec![5],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Warned { reason, tips } => {
+                assert_eq!(reason, "DeprecationWarning", "reason should pass through");
+                assert_eq!(
+                    tips.as_deref(),
+                    Some([5usize].as_slice()),
+                    "tips should carry through from no_message_lines"
+                );
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn warned_empty_no_message_lines_gives_none_tips() {
+        let outcome = RawOutcome::Warned {
+            reason: "warning".to_string(),
+            no_message_lines: vec![],
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Warned { tips, .. } => {
+                assert!(
+                    tips.is_none(),
+                    "empty no_message_lines should produce None tips"
+                );
+            }
+            other => panic!("expected Warned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xfailed_carries_reason() {
+        let outcome = RawOutcome::XFailed {
+            reason: "known bug #42".to_string(),
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::XFailed { reason } => {
+                assert_eq!(reason, "known bug #42", "reason should pass through");
+            }
+            other => panic!("expected XFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xpassed_strict() {
+        let outcome = RawOutcome::XPassed { strict: true }.into_test_outcome();
+        match outcome {
+            TestOutcome::XPassed { strict } => {
+                assert!(strict, "strict flag should be true");
+            }
+            other => panic!("expected XPassed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn xpassed_lenient() {
+        let outcome = RawOutcome::XPassed { strict: false }.into_test_outcome();
+        match outcome {
+            TestOutcome::XPassed { strict } => {
+                assert!(!strict, "strict flag should be false");
+            }
+            other => panic!("expected XPassed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn timeout_carries_message() {
+        let outcome = RawOutcome::Timeout {
+            message: "Test timed out after 5s".to_string(),
+        }
+        .into_test_outcome();
+        match outcome {
+            TestOutcome::Timeout { message } => {
+                assert_eq!(
+                    message, "Test timed out after 5s",
+                    "message should pass through"
+                );
+            }
+            other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+}

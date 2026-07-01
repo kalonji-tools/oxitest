@@ -18,17 +18,12 @@ RUST_PATH = ROOT / "src" / "bridge.rs"
 PYTHON_PATH = ROOT / "python" / "oxitest" / "_bridge" / "result.py"
 
 # Rust struct name -> Python class name (or list of class names for union types)
+#
+# Note: TestResult was removed in #1206 — the runtime contract is enforced by
+# getattr() calls in extract_outcome(), and the unified conversion logic lives
+# in RawOutcome::into_test_outcome().  The wire-format check below still
+# validates the JSON worker ↔ Python to_wire() contract.
 PAIRS: dict[str, str | list[str]] = {
-    "TestResult": [
-        "PassedResult",
-        "FailedResult",
-        "ErrorResult",
-        "SkippedResult",
-        "WarnedResult",
-        "XFailedResult",
-        "XPassedResult",
-        "TimeoutResult",
-    ],
     "CollectedItem": "CollectedItem",
     "RawViolation": "CollectedViolation",
 }
