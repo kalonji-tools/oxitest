@@ -1,18 +1,18 @@
 ---
-source: src/inspect/detail.rs
+source: src/inspect/detail/mod.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
-" ○ overview › P capture                                                                                                 "
+" ○ overview                                                                                                             "
 "┌────────────────────────────────────────────────────────────────┐┌ Preview ───────────────────────────────────────────┐"
-"│P capture                                                       ││F std_capture                                       │"
+"│No data loaded                                                  ││Select an item to preview                           │"
 "│                                                                ││                                                    │"
-"│  protocols: CollectorProvider, ReporterProvider                ││  scope: function                                   │"
-"│                                                                ││  source: <plugin:capture>                          │"
-"│  Fixtures                                                      ││                                                    │"
-"│    F std_capture                                               ││                                                    │"
 "│                                                                ││                                                    │"
-"│  Related                                                       ││                                                    │"
-"│›   F  std_capture                                              ││                                                    │"
+"│                                                                ││                                                    │"
+"│                                                                ││                                                    │"
+"│                                                                ││                                                    │"
+"│                                                                ││                                                    │"
+"│                                                                ││                                                    │"
+"│                                                                ││                                                    │"
 "│                                                                ││                                                    │"
 "│                                                                ││                                                    │"
 "│                                                                ││                                                    │"

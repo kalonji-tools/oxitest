@@ -1,5 +1,5 @@
 ---
-source: src/inspect/detail.rs
+source: src/inspect/detail/mod.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
 " ○ overview › F db_session                                                                                              "
