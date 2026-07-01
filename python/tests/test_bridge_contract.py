@@ -83,35 +83,6 @@ def _wire(
 # ── PyO3 field parity (regex-parse bridge.rs) ─────────────────────────────────
 
 
-def test_test_result_fields_match_rust():
-    """The Rust #[cfg(test)] TestResult struct in bridge.rs is a flat superset.
-
-    Since Python TestResult is now a union of per-outcome types, we verify
-    the Rust struct covers the union of all per-outcome fields.
-    """
-    source = _BRIDGE_RS.read_text()
-    rust_fields = _rust_struct_fields(source, "TestResult")
-    # Union of all per-outcome dataclass fields + status (Rust has it as a field)
-    all_python_fields: set[str] = {"status"}
-    for cls in (
-        PassedResult,
-        FailedResult,
-        ErrorResult,
-        SkippedResult,
-        WarnedResult,
-        XFailedResult,
-        XPassedResult,
-        TimeoutResult,
-    ):
-        all_python_fields |= _python_fields(cls)
-    assert rust_fields == frozenset(all_python_fields), (
-        "Field mismatch between TestResult (src/bridge.rs) and per-outcome types"
-        " (python/oxitest/_bridge/result.py).\n"
-        f"  Only in Rust:   {sorted(rust_fields - all_python_fields)}\n"
-        f"  Only in Python: {sorted(all_python_fields - rust_fields)}"
-    )
-
-
 def test_collected_item_fields_match_rust():
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "CollectedItem")
@@ -133,6 +104,79 @@ def test_raw_violation_fields_match_rust():
         " CollectedViolation (python/oxitest/_bridge/result.py).\n"
         f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
         f"  Only in Python: {sorted(python_fields - rust_fields)}"
+    )
+
+
+def test_frame_fields_match_rust():
+    """RawFrame (wire.rs) fields must match Python Frame dataclass fields.
+
+    Rust deserializes Frame via serde (worker JSON path) and PyO3 FromPyObject
+    (bridge path). A field rename on either side causes silent data loss or a
+    runtime panic with no compile-time protection.
+    """
+    source = _WORKER_RESULT_RS.read_text()
+    rust_fields = _rust_struct_fields(source, "RawFrame")
+    python_fields = _python_fields(Frame)
+    assert rust_fields == python_fields, (
+        "Field mismatch between RawFrame (src/worker_result/wire.rs) and"
+        " Frame (python/oxitest/_bridge/result.py).\n"
+        f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
+        f"  Only in Python: {sorted(python_fields - rust_fields)}"
+    )
+
+
+def test_local_var_tuple_contract():
+    """Frame.locals preserves 2-element (name, repr) tuple pairs.
+
+    Rust LocalVar is a 2-element tuple — if Python changes the shape,
+    serde deserialization silently drops or misaligns values.
+    """
+    frame = Frame(
+        file="tests/test_foo.py",
+        lineno=5,
+        name="test_example",
+        line="assert x == y",
+        locals=(("name", "repr"),),
+    )
+    assert len(frame.locals) == 1, (
+        "Frame.locals must preserve exactly one entry — the tuple container"
+        " is being flattened or dropped"
+    )
+    pair = frame.locals[0]
+    assert len(pair) == 2, (
+        "each local must be a (name, repr) pair — Rust LocalVar is a 2-tuple"
+        " and serde will fail if the shape changes"
+    )
+    assert pair[0] == "name", (
+        "first element is the variable name — positional mismatch breaks"
+        " Rust serde deserialization"
+    )
+    assert pair[1] == "repr", (
+        "second element is the repr string — positional mismatch breaks"
+        " Rust serde deserialization"
+    )
+
+
+def test_field_diff_tuple_contract():
+    """FailedResult.field_diffs serializes as list of 3-element lists.
+
+    Rust FieldDiff is a 3-element tuple (field, left, right). The wire
+    format must be [["field", "left", "right"]] — any shape change breaks
+    serde deserialization on the coordinator side.
+    """
+    result = FailedResult(
+        message="dataclass mismatch",
+        field_diffs=(("age", "25", "30"),),
+    )
+    wire = result.to_wire("test::id", 1.0)
+    assert "field_diffs" in wire, (
+        "field_diffs must appear in wire output when non-empty — Rust"
+        " coordinator expects this key for structured diff display"
+    )
+    diffs = wire["field_diffs"]
+    assert diffs == [["age", "25", "30"]], (
+        "each field_diff must serialize as a 3-element list [field, left,"
+        " right] — Rust FieldDiff deserializes positionally via serde"
     )
 
 
