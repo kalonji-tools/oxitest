@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from oxitest._bridge._async_backend import AsyncioBackend
-from oxitest._bridge._fixture_session import SharedAsyncManager
+from oxitest._bridge._async_orchestrator import SharedAsyncManager
 
 # ── Stub backend / session ────────────────────────────────────────────────────
 

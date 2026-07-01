@@ -1417,7 +1417,7 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
     _fixture_context is not set (no active instantiation context).
     """
     from oxitest._bridge._fixture_context import _fixture_context
-    from oxitest._bridge._fixture_session import (
+    from oxitest._bridge._fixtures import (
         FixtureAccessor,
         Fixtures,
     )
