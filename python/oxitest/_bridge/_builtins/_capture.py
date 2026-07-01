@@ -23,7 +23,7 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_type import injectable
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CaptureResult:
     r"""Captured stdout and stderr returned by `readouterr()`.
 

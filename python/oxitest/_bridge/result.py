@@ -23,7 +23,7 @@ from enum import StrEnum
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Frame:
     """Single traceback frame for structured display."""
 
@@ -81,7 +81,7 @@ def _wire_optional(output: dict[str, Any], **kwargs: Any) -> None:
     output.update({k: v for k, v in kwargs.items() if v})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PassedResult:
     """Result for a passing test."""
 
@@ -97,7 +97,7 @@ class PassedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FailedResult:
     """Result for a failed assertion."""
 
@@ -155,7 +155,7 @@ class FailedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ErrorResult:
     """Result for an uncaught exception (non-assertion)."""
 
@@ -197,7 +197,7 @@ class ErrorResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SkippedResult:
     """Result for a skipped test."""
 
@@ -213,7 +213,7 @@ class SkippedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WarnedResult:
     """Result for a test that passed with warnings."""
 
@@ -234,7 +234,7 @@ class WarnedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class XFailedResult:
     """Result for an expected failure."""
 
@@ -250,7 +250,7 @@ class XFailedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class XPassedResult:
     """Result for an unexpected pass (xfail test that passed)."""
 
@@ -266,7 +266,7 @@ class XPassedResult:
         return output
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TimeoutResult:
     """Result for a timed-out test."""
 
@@ -305,7 +305,7 @@ def _error_result(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CollectedItem:
     """Bridge result returned by importer.collect_module and consumed by Rust bridge.
 
@@ -340,7 +340,7 @@ class ViolationKind(StrEnum):
     UNUSED_FIXTURE = "unused_fixture"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CollectedViolation:
     """Bridge result for a strict-mode violation detected at collection time.
 
@@ -352,21 +352,21 @@ class CollectedViolation:
     detail: str  # kind-specific payload; empty string when unused
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CacheEntry:
     name: str
     hits: int
     misses: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CacheStats:
     total_hits: int
     total_misses: int
     breakdown: tuple[CacheEntry, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FixtureTiming:
     name: str
     total_setup_ms: float

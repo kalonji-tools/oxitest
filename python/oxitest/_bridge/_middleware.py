@@ -34,7 +34,7 @@ def _compose(
     return lambda: wrapper(inner)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ExecutionPlan:
     """Immutable context passed through the middleware stack."""
 

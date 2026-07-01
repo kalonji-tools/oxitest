@@ -56,7 +56,7 @@ def _extract_fixture_ref_names(
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Partial:
     """A partial set of fields for a dataclass, used in parametrize composition."""
 
@@ -136,7 +136,7 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
     return False, ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DictCases:
     """Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``."""
 
@@ -162,7 +162,7 @@ class DictCases:
         return dict(self.cases[param_id]), frozenset()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DataclassCases:
     """Dataclass-mode parametrize: cases are ``dict[str, <frozen dataclass>]``."""
 
@@ -208,7 +208,7 @@ class DataclassCases:
         return param_kwargs, fixref_names
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ComposedCases:
     """Composition-mode parametrize: cases are ``dict[str, _Partial]``."""
 

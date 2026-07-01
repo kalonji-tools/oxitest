@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Cli:
     """Field is CLI-only. Not read from pyproject.toml."""
 
@@ -17,14 +17,14 @@ class Cli:
     short: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Conf:
     """Field is pyproject.toml-only. No CLI flag generated."""
 
     help: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Both:
     """Field is both CLI and pyproject.toml. CLI overrides config."""
 
@@ -36,7 +36,7 @@ class Both:
 SourceMarker = Cli | Conf | Both
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CliExtension:
     """Declares a plugin's CLI prefix and config type."""
 
@@ -44,7 +44,7 @@ class CliExtension:
     config_type: type
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FieldDescriptor:
     """Introspected field metadata from a config dataclass."""
 
