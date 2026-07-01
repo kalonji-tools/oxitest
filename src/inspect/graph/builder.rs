@@ -7,6 +7,8 @@
 
 use std::collections::HashMap;
 
+use ahash::{AHashMap, AHashSet};
+
 use crate::query::resource::QueryEntry;
 
 use super::InspectGraph;
@@ -271,6 +273,22 @@ impl GraphBuilder {
             format!("{rootdir}/")
         };
 
+        // Pre-seed seen-sets from existing edges so progressive loading
+        // (from_graph → add_fixture_dep_entries) does not re-add edges
+        // that were already wired in a previous build phase.
+        let mut seen_test_deps: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (test_idx, test) in self.graph.tests.iter().enumerate() {
+            if !test.fixture_deps.is_empty() {
+                seen_test_deps.insert(test_idx, test.fixture_deps.iter().copied().collect());
+            }
+        }
+        let mut seen_fix_consumers: AHashMap<usize, AHashSet<super::NodeRef>> = AHashMap::new();
+        for (fix_idx, fix) in self.graph.fixtures.iter().enumerate() {
+            if !fix.consumers.is_empty() {
+                seen_fix_consumers.insert(fix_idx, fix.consumers.iter().cloned().collect());
+            }
+        }
+
         for entry in entries {
             let raw_id = entry.get("test_node_id").unwrap_or_default();
             let test_node_id = if prefix.is_empty() {
@@ -293,15 +311,16 @@ impl GraphBuilder {
                     continue;
                 };
 
-                // Forward: test -> fixture
-                if !self.graph.tests[test_idx].fixture_deps.contains(&fix_idx) {
+                // Forward: test -> fixture (O(1) HashSet lookup instead of O(n) Vec::contains)
+                if seen_test_deps.entry(test_idx).or_default().insert(fix_idx) {
                     self.graph.tests[test_idx].fixture_deps.push(fix_idx);
                 }
                 // Inverse: fixture -> test (consumer)
                 let consumer_ref = super::NodeRef::new(super::NodeKind::Test, test_idx);
-                if !self.graph.fixtures[fix_idx]
-                    .consumers
-                    .contains(&consumer_ref)
+                if seen_fix_consumers
+                    .entry(fix_idx)
+                    .or_default()
+                    .insert(consumer_ref.clone())
                 {
                     self.graph.fixtures[fix_idx].consumers.push(consumer_ref);
                 }
@@ -369,15 +388,38 @@ impl GraphBuilder {
     /// Wire test -> mark edges using the mark data stored in `test_mark_names`.
     fn resolve_test_to_mark_edges(&mut self) {
         let mark_map = std::mem::take(&mut self.test_mark_names);
+
+        // Pre-seed seen-sets from existing edges (progressive loading support).
+        let mut seen_test_marks: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (test_idx, test) in self.graph.tests.iter().enumerate() {
+            if !test.marks.is_empty() {
+                seen_test_marks.insert(test_idx, test.marks.iter().copied().collect());
+            }
+        }
+        let mut seen_mark_users: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (mark_idx, mark) in self.graph.marks.iter().enumerate() {
+            if !mark.used_by.is_empty() {
+                seen_mark_users.insert(mark_idx, mark.used_by.iter().copied().collect());
+            }
+        }
+
         for (test_idx, mark_names) in mark_map {
             for name in mark_names {
                 let mark_idx = self.ensure_mark(&name);
                 // Forward: test -> mark
-                if !self.graph.tests[test_idx].marks.contains(&mark_idx) {
+                if seen_test_marks
+                    .entry(test_idx)
+                    .or_default()
+                    .insert(mark_idx)
+                {
                     self.graph.tests[test_idx].marks.push(mark_idx);
                 }
                 // Inverse: mark -> test
-                if !self.graph.marks[mark_idx].used_by.contains(&test_idx) {
+                if seen_mark_users
+                    .entry(mark_idx)
+                    .or_default()
+                    .insert(test_idx)
+                {
                     self.graph.marks[mark_idx].used_by.push(test_idx);
                 }
             }
@@ -385,6 +427,14 @@ impl GraphBuilder {
     }
 
     fn resolve_fixture_to_conftest_edges(&mut self) {
+        // Pre-seed seen-set from existing edges (progressive loading support).
+        let mut seen_conftest_fixtures: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (ct_idx, ct) in self.graph.conftests.iter().enumerate() {
+            if !ct.fixtures.is_empty() {
+                seen_conftest_fixtures.insert(ct_idx, ct.fixtures.iter().copied().collect());
+            }
+        }
+
         for fix_idx in 0..self.graph.fixtures.len() {
             let source = self.graph.fixtures[fix_idx].source.clone();
             if source.is_empty() || source.starts_with("<plugin:") {
@@ -393,9 +443,10 @@ impl GraphBuilder {
             let conftest_idx = self.ensure_conftest(&source);
             self.graph.fixtures[fix_idx].conftest_idx = Some(conftest_idx);
             // Inverse: conftest -> fixture
-            if !self.graph.conftests[conftest_idx]
-                .fixtures
-                .contains(&fix_idx)
+            if seen_conftest_fixtures
+                .entry(conftest_idx)
+                .or_default()
+                .insert(fix_idx)
             {
                 self.graph.conftests[conftest_idx].fixtures.push(fix_idx);
             }
@@ -403,6 +454,14 @@ impl GraphBuilder {
     }
 
     fn resolve_fixture_to_plugin_edges(&mut self) {
+        // Pre-seed seen-set from existing edges (progressive loading support).
+        let mut seen_plugin_fixtures: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (p_idx, p) in self.graph.plugins.iter().enumerate() {
+            if !p.fixtures.is_empty() {
+                seen_plugin_fixtures.insert(p_idx, p.fixtures.iter().copied().collect());
+            }
+        }
+
         for fix_idx in 0..self.graph.fixtures.len() {
             let source = self.graph.fixtures[fix_idx].source.clone();
             if let Some(plugin_name) = source
@@ -412,7 +471,11 @@ impl GraphBuilder {
             {
                 self.graph.fixtures[fix_idx].plugin_idx = Some(plugin_idx);
                 // Inverse: plugin -> fixture
-                if !self.graph.plugins[plugin_idx].fixtures.contains(&fix_idx) {
+                if seen_plugin_fixtures
+                    .entry(plugin_idx)
+                    .or_default()
+                    .insert(fix_idx)
+                {
                     self.graph.plugins[plugin_idx].fixtures.push(fix_idx);
                 }
             }
@@ -422,11 +485,20 @@ impl GraphBuilder {
     fn resolve_helper_to_conftest_edges(&mut self) {
         // Helpers already have conftest_idx set during add_helper_entries.
         // Here we wire the inverse: conftest -> helper.
+        // Pre-seed seen-set from existing edges (progressive loading support).
+        let mut seen_conftest_helpers: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        for (ct_idx, ct) in self.graph.conftests.iter().enumerate() {
+            if !ct.helpers.is_empty() {
+                seen_conftest_helpers.insert(ct_idx, ct.helpers.iter().copied().collect());
+            }
+        }
+
         for helper_idx in 0..self.graph.helpers.len() {
             let conftest_idx = self.graph.helpers[helper_idx].conftest_idx;
-            if !self.graph.conftests[conftest_idx]
-                .helpers
-                .contains(&helper_idx)
+            if seen_conftest_helpers
+                .entry(conftest_idx)
+                .or_default()
+                .insert(helper_idx)
             {
                 self.graph.conftests[conftest_idx].helpers.push(helper_idx);
             }
@@ -1416,6 +1488,72 @@ mod tests {
             graph.fixtures[0].consumers.len(),
             1,
             "duplicate consumer entries should not create duplicate inverse edges"
+        );
+    }
+
+    #[test]
+    fn fixture_dep_entries_deduplicates_across_repeated_calls() {
+        let mut builder = GraphBuilder::new();
+        builder.add_test_entries(&[entry(&[
+            ("name", "test_a.py::test_one"),
+            ("source", "test_a.py"),
+            ("async", "false"),
+            ("mark", ""),
+        ])]);
+        builder.add_fixture_entries(&[
+            entry(&[
+                ("name", "db"),
+                ("source", "conftest.py"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
+            ]),
+            entry(&[
+                ("name", "cache"),
+                ("source", "conftest.py"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
+            ]),
+        ]);
+        // First call: wire test→db and test→cache.
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_a.py::test_one"),
+                ("fixture_names", "db,cache"),
+            ])],
+            "",
+        );
+        // Second call with overlapping entries: db again + cache again.
+        builder.add_fixture_dep_entries(
+            &[entry(&[
+                ("test_node_id", "test_a.py::test_one"),
+                ("fixture_names", "db,cache"),
+            ])],
+            "",
+        );
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        assert_eq!(
+            graph.tests[0].fixture_deps.len(),
+            2,
+            "calling add_fixture_dep_entries twice with the same edges should not \
+             create duplicates — HashSet dedup must span across calls"
+        );
+        assert_eq!(
+            graph.fixtures[0].consumers.len(),
+            1,
+            "db fixture should have exactly one consumer despite two add_fixture_dep_entries calls"
+        );
+        assert_eq!(
+            graph.fixtures[1].consumers.len(),
+            1,
+            "cache fixture should have exactly one consumer despite two add_fixture_dep_entries calls"
         );
     }
 
