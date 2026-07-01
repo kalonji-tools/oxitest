@@ -169,6 +169,40 @@ def test_query_helpers_shows_docstring(tmp: TempDir):
     helpers.integ.assert_contains(out, "Create a test database.")
 
 
+def test_query_fixtures_uses_predicate(tmp: TempDir):
+    """``query fixtures -E 'uses(db)'`` filters fixtures by dependency."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_a.py": """\
+from oxitest import Fixture
+
+def test_one(conn: Fixture[object]):
+    pass
+""",
+        },
+        conftest="""\
+from oxitest import Fixtures, Fixture
+
+fx = Fixtures()
+
+@fx.fixture
+def db() -> object:
+    return object()
+
+@fx.fixture
+def conn(db: Fixture[object]) -> object:
+    return db
+""",
+    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(
+        tmp, "query", "fixtures", "-E", "uses(db)"
+    )
+    helpers.integ.assert_passed(out, rc)
+    helpers.integ.assert_contains(out, "conn")
+    helpers.integ.assert_excludes(out, "db")
+
+
 def test_query_fixtures_shows_docstring(tmp: TempDir):
     """``query fixtures --detail`` includes fixture docstrings."""
     helpers.integ.write_project(

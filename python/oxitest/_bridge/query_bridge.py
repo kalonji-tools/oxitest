@@ -45,6 +45,8 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
         elif isinstance(defn.source, BuiltinSource):
             doc = (defn.source.impl_cls.__doc__ or "").strip()
 
+        deps = ",".join(q for q, _ in defn.depends_on) if defn.depends_on else ""
+
         entries.append(
             {
                 "name": defn.name,
@@ -55,6 +57,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "description": doc,
                 "scope": defn.scope.value,
                 "type": getattr(defn.fixture_type, "__name__", "None"),
+                "uses": deps,
             }
         )
     return entries
