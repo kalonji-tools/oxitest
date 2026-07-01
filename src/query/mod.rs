@@ -161,8 +161,8 @@ pub(crate) fn run_query(
         return Ok(format!("{count} {word}\n"));
     }
 
-    // 5. Handle --format=jsonl
-    if let Some(config::QueryFormat::Jsonl) = args.format {
+    // 5. Handle --jsonl
+    if args.jsonl {
         return Ok(format::format_jsonl(&entries));
     }
 

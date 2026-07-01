@@ -148,6 +148,11 @@ class _PluginMarkHandler(MarkHandler):
         return MarkEvalResult(wrapper=wrapper)
 
 
+# Registry pattern: module-level dict comprehension. Appropriate for a
+# fixed set of handlers known at import time. Plugins extend this via
+# evaluate_marks(plugin_handlers=...) rather than mutating the dict.
+# Compare: BuiltinFixture._registry (auto-reg), FixtureRegistry (instance),
+# PluginRegistry (dataclass + cached_property).
 # NOTE: @oxitest.mark.timeout combined with @oxitest.mark.xfail is not supported.
 # Behaviour is undefined — see docs/superpowers/specs/2026-05-03-timeout-design.md.
 _MARK_REGISTRY: dict[str, MarkHandler] = {

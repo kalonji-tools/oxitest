@@ -23,7 +23,13 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._test_meta import TestMeta
 
 
-def _make_builtin_ctx(*, fn_name: str = "", keep_tmp: str | None = None):
+def _make_builtin_ctx(
+    *,
+    fn_name: str = "",
+    keep_tmp: str | None = None,
+    inject_scope: str = "function",
+    result_cell: list | None = None,
+):
     """Create a ``_BuiltinContext`` with sensible test defaults.
 
     Returns ``(ctx, teardowns)`` — the teardowns list is needed by
@@ -32,9 +38,10 @@ def _make_builtin_ctx(*, fn_name: str = "", keep_tmp: str | None = None):
     teardowns: list = []
     ctx = _BuiltinContext(
         meta=TestMeta(module_path="t.py", fn_name=fn_name, node_id=""),
-        inject_scope="function",
+        inject_scope=inject_scope,
         teardown_stack=teardowns,
         keep_tmp=keep_tmp,
+        result_cell=result_cell,
     )
     return ctx, teardowns
 
@@ -137,8 +144,9 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure():
     from oxitest._bridge.result import FailedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
-    ctx.result_cell = result_cell
+    ctx, teardowns = _make_builtin_ctx(
+        fn_name="fail_test", keep_tmp="failed", result_cell=result_cell
+    )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
     assert path.is_dir(), "TempDir should create a directory"
@@ -162,8 +170,9 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass():
     from oxitest._bridge.result import PassedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="failed")
-    ctx.result_cell = result_cell
+    ctx, teardowns = _make_builtin_ctx(
+        fn_name="pass_test", keep_tmp="failed", result_cell=result_cell
+    )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -181,8 +190,9 @@ def test_tempdir_keep_tmp_always_preserves_on_pass():
     from oxitest._bridge.result import PassedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    ctx, teardowns = _make_builtin_ctx(fn_name="pass_test", keep_tmp="always")
-    ctx.result_cell = result_cell
+    ctx, teardowns = _make_builtin_ctx(
+        fn_name="pass_test", keep_tmp="always", result_cell=result_cell
+    )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -202,8 +212,9 @@ def test_tempdir_keep_tmp_failed_preserves_on_error():
     from oxitest._bridge.result import ErrorResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    ctx, teardowns = _make_builtin_ctx(fn_name="err_test", keep_tmp="failed")
-    ctx.result_cell = result_cell
+    ctx, teardowns = _make_builtin_ctx(
+        fn_name="err_test", keep_tmp="failed", result_cell=result_cell
+    )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -231,8 +242,9 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
     from oxitest._bridge.result import FailedResult, TestResult
 
     result_cell: list[TestResult | None] = [None]
-    ctx, teardowns = _make_builtin_ctx(fn_name="fail_test", keep_tmp="failed")
-    ctx.result_cell = result_cell
+    ctx, teardowns = _make_builtin_ctx(
+        fn_name="fail_test", keep_tmp="failed", result_cell=result_cell
+    )
     tmp = _TempDirFixture().create(ctx)
     path = tmp.path
 
@@ -259,8 +271,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
 def test_tempdir_factory_mktemp_creates_distinct_dirs():
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
-    ctx, teardowns = _make_builtin_ctx()
-    ctx.inject_scope = "session"
+    ctx, teardowns = _make_builtin_ctx(inject_scope="session")
     factory = _TempDirFactoryFixture().create(ctx)
 
     a = factory.mktemp("a")
@@ -281,8 +292,7 @@ def test_tempdir_factory_mktemp_creates_distinct_dirs():
 def test_tempdir_factory_teardown_removes_all_dirs():
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
-    ctx, teardowns = _make_builtin_ctx()
-    ctx.inject_scope = "session"
+    ctx, teardowns = _make_builtin_ctx(inject_scope="session")
     factory = _TempDirFactoryFixture().create(ctx)
 
     a = factory.mktemp("x")

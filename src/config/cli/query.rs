@@ -1,7 +1,6 @@
 use camino::Utf8PathBuf;
 
 use super::super::ColorMode;
-use super::QueryFormat;
 use crate::query::resource::ResourceKind;
 
 /// Arguments for `oxitest query`.
@@ -36,7 +35,7 @@ EXAMPLES:
   oxitest query fixtures -E 'shared()'
   oxitest query tests --fzf                  Interactive fuzzy finder
   oxitest query tests --detail test_foo      Show details for test_foo
-  oxitest query tests --format jsonl         JSON lines output
+  oxitest query tests --jsonl                JSON lines output
   oxitest query tests --count                Just the count\
 ")]
 pub struct QueryArgs {
@@ -55,9 +54,9 @@ pub struct QueryArgs {
     #[arg(long, value_name = "ID")]
     pub detail: Option<String>,
 
-    /// Output format
-    #[arg(long, value_enum)]
-    pub format: Option<QueryFormat>,
+    /// Output results as JSON lines (one object per entry).
+    #[arg(long)]
+    pub jsonl: bool,
 
     /// Show only the count
     #[arg(long)]

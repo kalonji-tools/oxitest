@@ -153,7 +153,7 @@ These flags apply to all resources:
 | `-E` | — | `EXPR` | — | DSL filter expression. See [Query DSL](#query-dsl). |
 | `--fzf` | — | flag | `false` | Open results in an interactive fuzzy-finder. For tests: Tab to multi-select, Enter to run selected, Ctrl-R to debug focused item. |
 | `--detail` | — | `ID` | — | Show a single-item detail card for the given identifier. |
-| `--format` | — | `jsonl` | — | Output as JSON Lines (one JSON object per result). |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines (one JSON object per result). |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 ### `query tests`
@@ -167,7 +167,7 @@ oxitest query tests [OPTIONS] [PATHS...]
 | `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `source()`, `mark()`. |
 | `--count` | — | flag | `false` | Show only the total test count. Fast: uses Rust-side prescan without invoking Python. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. `-v` shows marks and fixtures per test. `-vv` groups parametrize cases with expanded values. |
-| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
 | `--detail` | — | `ID` | — | Show detail card for a single test. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
@@ -191,7 +191,7 @@ oxitest query fixtures [OPTIONS] [PATHS...]
 | `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `shared()`, `autouse()`, `async()`. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. With `--tree`: `-v` adds tags (`shared`, `async`, `autouse`); `-vv` also adds origin (`conftest.py` path). |
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail). |
-| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
 | `--detail` | — | `ID` | — | Show detail card for a single fixture. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
@@ -247,7 +247,7 @@ oxitest query marks [OPTIONS] [PATHS...]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`. |
-| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 ### `query helpers`
@@ -261,7 +261,7 @@ oxitest query helpers [OPTIONS] [PATHS...]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`. |
-| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 ### `query plugins`
@@ -277,7 +277,7 @@ oxitest query plugins [OPTIONS]
 | `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`, `protocol()`. |
 | `--verbose` | `-v` | flag | `false` | Show detailed protocol information. |
 | `--quiet` | `-q` | flag | `false` | Suppress header output. |
-| `--format` | — | `jsonl` | — | Output as JSON Lines. |
+| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
 ### Query DSL

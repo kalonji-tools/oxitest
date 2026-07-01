@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 pub(crate) mod cli;
-pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, QueryFormat, RunArgs};
+pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, RunArgs};
 
 mod merge;
 

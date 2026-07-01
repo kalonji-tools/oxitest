@@ -14,19 +14,17 @@ from oxitest import TempDir
 
 
 def _fixture_entries(tmp: TempDir) -> list[dict[str, str]]:
-    """Run ``query fixtures --format jsonl`` and return parsed entries."""
+    """Run ``query fixtures --jsonl`` and return parsed entries."""
     out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "fixtures", "--format", "jsonl"
+        tmp, "query", "fixtures", "--jsonl"
     )
     helpers.integ.assert_passed(out, rc)
     return [json.loads(line) for line in out.strip().splitlines() if line.strip()]
 
 
 def _test_entries(tmp: TempDir) -> list[dict[str, str]]:
-    """Run ``query tests --format jsonl`` and return parsed entries."""
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "--format", "jsonl"
-    )
+    """Run ``query tests --jsonl`` and return parsed entries."""
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
     helpers.integ.assert_passed(out, rc)
     return [json.loads(line) for line in out.strip().splitlines() if line.strip()]
 
