@@ -27,8 +27,8 @@ impl ResourceKind {
     /// Return the predicate names that are valid for this resource kind.
     pub(crate) fn valid_predicates(&self) -> &'static [&'static str] {
         match self {
-            ResourceKind::Tests => &["name", "source", "mark", "async"],
-            ResourceKind::Fixtures => &["name", "source", "shared", "autouse", "async"],
+            ResourceKind::Tests => &["name", "source", "mark", "async", "uses"],
+            ResourceKind::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
             ResourceKind::Marks => &["name", "used_in"],
             ResourceKind::Helpers => &["name", "source", "docstring", "signature"],
             ResourceKind::Plugins => &["name", "protocol"],

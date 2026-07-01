@@ -16,7 +16,7 @@ use resource::{QueryEntry, ResourceKind};
 ///
 /// Fixtures and plugins always need Python. Tests, marks, and helpers are
 /// instant-tier unless the DSL expression references predicates that require
-/// Python data (shared, autouse, protocol).
+/// Python data (shared, autouse, protocol, uses).
 pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bool {
     match resource {
         ResourceKind::Fixtures | ResourceKind::Plugins => true,
@@ -41,7 +41,7 @@ fn expr_needs_python(expr: &ast::Expr) -> bool {
         ast::Expr::And(a, b) | ast::Expr::Or(a, b) => expr_needs_python(a) || expr_needs_python(b),
         ast::Expr::Not(inner) => expr_needs_python(inner),
         ast::Expr::Predicate { name, .. } => {
-            matches!(name.as_str(), "shared" | "autouse" | "protocol")
+            matches!(name.as_str(), "shared" | "autouse" | "protocol" | "uses")
         }
     }
 }
@@ -212,6 +212,14 @@ mod tests {
     #[test]
     fn needs_python_with_invalid_expression_returns_true() {
         assert!(needs_python(ResourceKind::Tests, Some("unclosed(")));
+    }
+
+    #[test]
+    fn needs_python_tests_with_uses_expr_is_true() {
+        assert!(
+            needs_python(ResourceKind::Tests, Some("uses(db)")),
+            "uses() requires Python for fixture dependency resolution"
+        );
     }
 
     #[test]
