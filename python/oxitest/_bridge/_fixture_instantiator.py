@@ -16,7 +16,6 @@ __all__ = [
 
 import inspect
 import time
-import warnings
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -62,22 +61,6 @@ class ScopeRefs:
     teardowns: list[Callable[[], None]]
     hits: dict[str, int]
     misses: dict[str, int]
-
-
-def _warn_teardown(name: str, exc: Exception, *, node_id: str = "") -> None:
-    from oxitest._bridge._fixture_context import (
-        FixtureTeardownWarning,
-        _current_teardown_node_id,
-    )
-
-    effective_id = node_id or _current_teardown_node_id.get()
-    if name and effective_id:
-        msg = f"fixture '{name}' teardown failed during {effective_id}: {exc}"
-    elif name:
-        msg = f"error in teardown of fixture '{name}': {exc}"
-    else:
-        msg = f"error during teardown: {exc}"
-    warnings.warn(FixtureTeardownWarning(msg), stacklevel=2)
 
 
 def _resolve_deps(
@@ -136,6 +119,8 @@ def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
             except StopIteration:
                 pass
             except Exception as exc:
+                from oxitest._bridge._fixture_context import _warn_teardown
+
                 _warn_teardown(n, exc)
 
         return _FixtureOutcome(value, teardown)
