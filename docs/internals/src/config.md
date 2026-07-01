@@ -143,7 +143,7 @@ impl Default for ExecConfig {
 
 Access it as `config.exec.my_threshold` (not `config.my_threshold`).
 
-#### 3. Add CLI flag in `src/config/cli.rs`
+#### 3. Add CLI flag in `src/config/cli/run.rs`
 
 ```rust
 // Inside RunArgs:
