@@ -221,7 +221,7 @@ if matches!(command, config::Command::Env) {
 
 ### Reference: how `Query` is structured
 
-`Query` is the most complex subcommand. It takes a positional `ResourceKind` enum (`tests`, `fixtures`, `marks`, `helpers`, `plugins`) and optional flags (`--fzf`, `--detail`, `--format`, `--count`, `--tree`). Some resource kinds (`tests`, `marks`, `helpers`) work without a Python session (instant), while others (`fixtures`, `plugins`) require one. The pipeline dispatch checks this:
+`Query` is the most complex subcommand. It takes a positional `ResourceKind` enum (`tests`, `fixtures`, `marks`, `helpers`, `plugins`) and optional flags (`--fzf`, `--detail`, `--jsonl`, `--count`, `--tree`). Some resource kinds (`tests`, `marks`, `helpers`) work without a Python session (instant), while others (`fixtures`, `plugins`) require one. The pipeline dispatch checks this:
 
 ```rust
 config::Command::Query(ref args) => {

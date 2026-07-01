@@ -114,7 +114,16 @@ def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
 
 @dataclass
 class PluginRegistry:
-    """Holds all loaded plugin instances."""
+    """Holds all loaded plugin instances.
+
+    Registry pattern: dataclass with ``@functools.cached_property`` for
+    lazy protocol flattening. Appropriate when entries are added in two
+    phases (deferred registration, then activation) and computed views
+    must be invalidated on mutation. ``_CACHED_PROPERTIES`` enumerates
+    all cached views; ``_invalidate_caches()`` clears them. Compare with
+    ``BuiltinFixture._registry`` (auto-registration), ``FixtureRegistry``
+    (instance-based), and ``_MARK_REGISTRY`` (module-level dict).
+    """
 
     _CACHED_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "log_backends",

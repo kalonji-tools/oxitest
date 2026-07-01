@@ -108,6 +108,13 @@ class FixtureRegistry:
     conftest that defines it, from the root conftest to the most-local leaf.
     Resolution always picks the last (most-local) entry, implementing pytest's
     locality-wins override semantics.
+
+    Registry pattern: instance-based with dual-index dicts (by-name and
+    by-type). Appropriate when entries arrive at runtime (conftest loading),
+    need multiple lookup strategies, and the registry lifecycle is tied to
+    a session instance. Compare with ``BuiltinFixture._registry``
+    (auto-registration), ``_MARK_REGISTRY`` (module-level dict), and
+    ``PluginRegistry`` (dataclass with lazy cached_property).
     """
 
     def __init__(self) -> None:

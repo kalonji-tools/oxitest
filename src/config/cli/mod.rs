@@ -320,12 +320,11 @@ mod tests {
 
     #[test]
     fn query_with_format_jsonl() {
-        let (cmd, _) =
-            OxitestCli::resolve(&s(["oxitest", "query", "tests", "--format", "jsonl"])).unwrap();
+        let (cmd, _) = OxitestCli::resolve(&s(["oxitest", "query", "tests", "--jsonl"])).unwrap();
         let Command::Query(args) = cmd else {
             panic!("expected Command::Query");
         };
-        assert_eq!(args.format, Some(QueryFormat::Jsonl));
+        assert!(args.jsonl, "expected --jsonl flag to be set");
     }
 
     #[test]

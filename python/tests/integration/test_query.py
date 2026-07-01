@@ -69,16 +69,14 @@ def test_sub():
 
 
 def test_query_tests_jsonl(tmp: TempDir):
-    """``query tests --format jsonl`` emits valid JSON lines."""
+    """``query tests --jsonl`` emits valid JSON lines."""
     helpers.integ.write_project(
         tmp,
         tests={
             "test_one.py": "def test_solo(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "--format", "jsonl"
-    )
+    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
     helpers.integ.assert_passed(out, rc)
     lines = [ln for ln in out.strip().splitlines() if ln.strip()]
     assert len(lines) >= 1, f"expected at least 1 JSON line, got: {out}"

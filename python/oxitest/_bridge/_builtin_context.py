@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from oxitest._bridge.plugin_loader import PluginRegistry
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _BuiltinContext:
     """Passed to BuiltinFixture.create() — carries injection-site metadata."""
 

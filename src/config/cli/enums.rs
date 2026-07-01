@@ -8,15 +8,6 @@ pub enum DebugMode {
     Always,
 }
 
-// ── QueryFormat ──────────────────────────────────────────────────────────────
-
-/// Output format for the query subcommand.
-#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum QueryFormat {
-    /// JSON lines (one object per entry)
-    Jsonl,
-}
-
 // ── CovReportFormat ──────────────────────────────────────────────────────────
 
 /// Coverage report format.

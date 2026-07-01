@@ -222,6 +222,7 @@ class FixtureSession:
         plugin_registry: PluginRegistry | None = None,
         async_backend: AsyncBackend | None = None,
     ) -> None:
+        BuiltinFixture.ensure_registered()
         self._registry = FixtureRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
@@ -535,8 +536,3 @@ class FixtureSession:
         func: Callable[..., Any],
     ) -> str | None:
         return self._registry.get_namespace_for_func(name, func)
-
-
-# Trigger built-in fixture registrations by importing the _builtins package.
-# The import is at module scope so it runs once on first load.
-import oxitest._bridge._builtins  # noqa: F401, E402

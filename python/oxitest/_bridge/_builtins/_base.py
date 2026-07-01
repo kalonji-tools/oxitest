@@ -19,10 +19,18 @@ class BuiltinFixture:
         class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
             def create(self, ctx: _BuiltinContext) -> TempDir:
                 ...
+
+    Registry pattern: auto-registration via ``__init_subclass__``.
+    Appropriate when all registrants are known at import time (static
+    subclasses) and no runtime addition/removal is needed. Compare with
+    ``FixtureRegistry`` (instance-based, runtime), ``_MARK_REGISTRY``
+    (module-level dict, fixed set), and ``PluginRegistry`` (dataclass
+    with lazy cached_property).
     """
 
     scope: str = "function"  # override to "session" for session-scoped built-ins
     _registry: dict[type, type[BuiltinFixture]] = {}
+    _registered: bool = False
 
     def __init_subclass__(cls, *, fixture_type: type | None = None, **kw: Any) -> None:
         super().__init_subclass__(**kw)
@@ -33,6 +41,19 @@ class BuiltinFixture:
     def for_type(cls, inner: type) -> type[BuiltinFixture] | None:
         """Return the registered implementation class for `inner`, or None."""
         return cls._registry.get(inner)
+
+    @classmethod
+    def ensure_registered(cls) -> None:
+        """Import all builtin modules to trigger __init_subclass__ registration.
+
+        Idempotent — safe to call multiple times. Called by FixtureSession
+        before first fixture resolution.
+        """
+        if cls._registered:
+            return
+        import oxitest._bridge._builtins  # noqa: F401
+
+        cls._registered = True
 
     def create(self, ctx: _BuiltinContext) -> Any:
         raise NotImplementedError

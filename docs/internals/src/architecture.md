@@ -68,7 +68,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | `pipeline::helpers` | `src/pipeline/helpers.rs` | Utility functions (e.g., `env_string()`). |
 | **Config** | | |
 | `config` | `src/config/mod.rs` | `Config` struct, `Command` enum, `Verbosity`, `WorkerCount`, `find_rootdir()`, `compute_optimal_workers()`. |
-| `config::cli` | `src/config/cli/mod.rs` | clap definitions split across submodules: `mod.rs` (`OxitestCli`, `Command`), `run.rs` (`RunArgs`), `debug.rs` (`DebugArgs`), `query.rs` (`QueryArgs`), `shared.rs` (`FilteringArgs`, `VerbosityArgs`), `enums.rs` (`DebugMode`, `QueryFormat`), `plugin.rs`. |
+| `config::cli` | `src/config/cli/mod.rs` | clap definitions split across submodules: `mod.rs` (`OxitestCli`, `Command`), `run.rs` (`RunArgs`), `debug.rs` (`DebugArgs`), `query.rs` (`QueryArgs`), `shared.rs` (`FilteringArgs`, `VerbosityArgs`), `enums.rs` (`DebugMode`), `plugin.rs`. |
 | `config::pyproject` | `src/config/pyproject.rs` | `PyprojectToml` and `OxitestConfig` serde structs for `[tool.oxitest]`. |
 | `config::merge` | `src/config/merge.rs` | `merge_run_args()`, `merge_debug_args()`, `merge_query_args()` -- CLI-over-TOML precedence. |
 | **Parallel** | | |

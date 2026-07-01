@@ -52,7 +52,7 @@ _test_run_context: ContextVar[TestRunContext | None] = ContextVar(
 # ── Fixture resolution context ───────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class FixtureContext:
     """Context for fixture resolution during test execution.
 
