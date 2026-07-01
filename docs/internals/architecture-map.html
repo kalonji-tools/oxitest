@@ -846,7 +846,7 @@ window.oxiNavPaths = {
 
       <!-- Bridge -->
       <a href="book/bridge.html" target="_blank">
-        <g class="node" data-tip="Bridge: PyO3 boundary. TestResult, CollectedItem, RawViolation — data contracts synced between bridge.rs and result.py.">
+        <g class="node" data-tip="Bridge: PyO3 boundary. CollectedItem, RawViolation — extracts Python results into RawOutcome (shared with JSON worker path).">
           <rect x="80" y="660" width="140" height="40" rx="5" fill="#161b22" stroke="#e8856a" stroke-width="1"/>
           <text x="150" y="684" text-anchor="middle" fill="#e8856a" font-size="11" font-weight="500">Bridge</text>
         </g>
@@ -1009,16 +1009,15 @@ window.oxiNavPaths = {
       connects: ['TestItem', 'TimingCache', 'OutcomeCache']
     },
     {
-      kind: 'struct', name: 'TestResult', loc: 'bridge.rs',
-      summary: '#[derive(FromPyObject)] struct. Must stay in sync with python/oxitest/_bridge/result.py.',
+      kind: 'enum', name: 'RawOutcome', loc: 'worker_result/convert.rs',
+      summary: 'Shared intermediate type. Both PyO3 bridge and JSON worker paths produce RawOutcome before converting to TestOutcome.',
       fields: [
-        ['outcome', 'String', 'Outcome variant name'],
-        ['duration_ms', 'f64', 'Execution duration'],
-        ['diagnostics', 'Option<FailureDiagnostic>', 'Failure details (message, traceback, diff)'],
-        ['stdout', 'Option<String>', 'Captured stdout'],
-        ['stderr', 'Option<String>', 'Captured stderr'],
+        ['Passed', '{ no_message_lines }', 'Tips line numbers'],
+        ['Failed', '{ message, file, lineno, ... }', 'Failure with comparison detail'],
+        ['Error', '{ message, file, lineno, ... }', 'Error without comparison'],
+        ['Skipped/Warned/XFailed/XPassed/Timeout', '...', 'Simple outcome variants'],
       ],
-      connects: ['TestOutcome', 'TestItem', 'Reporter']
+      connects: ['TestOutcome', 'WireResult']
     },
     {
       kind: 'struct', name: 'CollectedItem', loc: 'bridge.rs',
