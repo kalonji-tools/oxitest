@@ -257,8 +257,8 @@ pub(crate) enum WireResult {
 
 Steps:
 
-1. Add the field to `TestResult` in `python/oxitest/_bridge/result.py` with a
-   default value. Emit it in the appropriate outcome branch of `to_wire()`.
+1. Add the field to the relevant result class in `python/oxitest/_bridge/result.py`
+   with a default value. Emit it in the appropriate outcome branch of `to_wire()`.
 
 2. Add the field to the relevant `WireResult` variant in `src/worker_result/wire.rs`.
    **Always** use `#[serde(default)]` so messages from older workers (which omit

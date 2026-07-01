@@ -129,13 +129,13 @@ Every `.rs` file in `src/`, with its responsibility:
 | `bare_asserts` | `src/bare_asserts.rs` | Pure-Rust bare-assert detection for strict mode. |
 | **Core types and services** | | |
 | `types` | `src/types/` | `NodeId`, `TestItem`, `TestOutcome`, `DurationMs`, `TestTiming`, `CollectError`, `ExitCode`. Split into submodules: `node_id.rs`, `item.rs`, `outcome.rs`, `exit.rs`; `mod.rs` re-exports all public types. |
-| `bridge` | `src/bridge.rs` | PyO3 boundary: `TestResult`, `CollectedItem`, `RawViolation`, `FixtureSession`. Data contracts that must stay in sync with `python/oxitest/_bridge/result.py`. |
+| `bridge` | `src/bridge.rs` | PyO3 boundary: `CollectedItem`, `RawViolation`, `FixtureSession`. Extracts Python results into `RawOutcome` (shared with JSON worker path). Data contracts stay in sync with `python/oxitest/_bridge/result.py`. |
 | `filter` | `src/filter.rs` | `BUILTIN_MARKERS`, `validate_markers()`, query DSL (`-E`) filtering, module grouping. |
 | `collector` | `src/collector.rs` | Filesystem walk for test files and conftest files. |
 | `scheduler` | `src/scheduler.rs` | `apply_schedule_strategy()` -- sorts groups by timing, failure status, or round-robin. |
 | `strict` | `src/strict.rs` | `StrictViolation` -- strict-mode violation types and classification. |
 | `worker_session` | `src/worker_session.rs` | `WorkerParams`, `setup_worker_process()`, `spawn_worker()` -- subprocess lifecycle and I/O. |
-| `worker_result` | `src/worker_result/` | `WorkerTask`, `WireResult`, `RawFrame` in `wire.rs`; `build_diagnostic`, `into_outcome` in `convert.rs`. |
+| `worker_result` | `src/worker_result/` | `WorkerTask`, `WireResult`, `RawFrame` in `wire.rs`; `RawOutcome`, `into_test_outcome` in `convert.rs`. |
 | `assert_rewriter` | `src/assert_rewriter.rs` | Transforms `assert` statements into `_OxitestAssertionError` raises via PyO3 AST manipulation. |
 | `retry` | `src/retry.rs` | Re-runs failed tests serially up to N times. Tests that pass on retry are marked flaky. |
 | `affected` | `src/affected.rs` | `--affected` git-aware test selection. Classifies changed files and filters test list. |

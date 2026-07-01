@@ -232,16 +232,15 @@ Adding a new field requires synchronized changes on both sides. The steps:
    }
    ```
 
-3. **Wire the field through** to where it is consumed. In bridge.rs, `TestResult`
-   fields are mapped to `WorkerOutcome` variants in the `convert_test_result()`
-   function. If the field affects the domain, add it to the appropriate
-   `WorkerOutcome` variant and update the `From<WorkerOutcome> for TestOutcome`
-   impl in `worker_result/convert.rs`.
+3. **Wire the field through** to where it is consumed. In bridge.rs,
+   `extract_outcome()` maps Python fields to `RawOutcome` variants (defined in
+   `worker_result/convert.rs`). If the field affects the domain, add it to the
+   appropriate `RawOutcome` variant and update `into_test_outcome()`.
 
 4. **Run both test suites** to verify sync:
 
    ```bash
-   just test-rust   # Rust unit tests, including convert_tests in bridge.rs
+   just test-rust   # Rust unit tests, including raw_outcome_tests in worker_result/tests.rs
    just test        # Python integration tests
    ```
 
@@ -265,16 +264,16 @@ Adding a new field requires synchronized changes on both sides. The steps:
 
 - **`StrEnum` vs plain `str`.** Python `StrEnum` values are `str` subclasses, so
   they extract as `String` without any special handling. The Rust side matches the
-  string value in a `match` expression (see `convert_test_result()`).
+  string value in a `match` expression (see `extract_outcome()` in `bridge.rs`).
 
 ## Testing the contract
 
 ### What tests exist
 
-- **`convert_tests` in `src/bridge.rs`**: Unit tests that construct a Rust
-  `TestResult` directly (no Python) and verify `convert_test_result()` maps every
-  status string to the correct `WorkerOutcome` variant. These catch logic errors
-  in the status dispatch.
+- **`raw_outcome_tests` in `src/worker_result/tests.rs`**: Unit tests that
+  construct `RawOutcome` variants directly and verify `into_test_outcome()` maps
+  each to the correct `TestOutcome`. These catch logic errors in the unified
+  conversion path shared by both PyO3 and JSON worker callers.
 
 - **Python integration tests** (`python/tests/`): End-to-end tests that exercise
   `collect_module` and `run_test` through the full PyO3 path. These catch field
