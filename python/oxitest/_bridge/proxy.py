@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from oxitest._bridge._errors import (
-    SharedFixtureMutationError as SharedFixtureMutationError,
+    SharedFixtureMutationError as SharedFixtureMutationError,  # noqa: PLC0414 — re-export for __all__
 )
 
 __all__ = ["FrozenProxy", "SharedFixtureMutationError"]

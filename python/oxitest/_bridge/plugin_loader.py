@@ -106,7 +106,7 @@ class PluginEntry:
             )
             return self.plugin
         module = importlib.import_module(self.module_name)
-        entry_fn = getattr(module, "oxitest_plugin")
+        entry_fn = getattr(module, "oxitest_plugin")  # noqa: B009 — dynamic module attr
         self.plugin = entry_fn()
         self.is_loaded = True
         assert self.plugin is not None, (

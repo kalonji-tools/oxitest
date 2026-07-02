@@ -22,10 +22,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._async_orchestrator import (
-    AsyncPolicy as AsyncPolicy,
-    _check_async_dep as _check_async_dep,
-    _reject_async_in_sync as _reject_async_in_sync,
-    _reject_nonshared_async as _reject_nonshared_async,
+    AsyncPolicy,
+    _check_async_dep,
+    _reject_async_in_sync,
+    _reject_nonshared_async,
 )
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture

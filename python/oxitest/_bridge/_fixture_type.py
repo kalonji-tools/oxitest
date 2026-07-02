@@ -127,7 +127,7 @@ def injectable(cls: _T) -> _T:
     harmless).  ``Fixture[T]`` remains the only mechanism for conftest
     fixtures whose types are generic (e.g. ``list[int]``).
     """
-    setattr(cls, "__oxitest_injectable__", True)
+    setattr(cls, "__oxitest_injectable__", True)  # noqa: B010 — dynamic marker not in type stubs
     return cls
 
 

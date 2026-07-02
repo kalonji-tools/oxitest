@@ -30,7 +30,7 @@ class WarnCapture:
     def __init__(self) -> None:
         self.list: list[warnings.WarningMessage] = []
         self._all_captured_ids: set[int] = set()
-        self._orig_showwarnmsg = getattr(warnings, "_showwarnmsg")
+        self._orig_showwarnmsg = getattr(warnings, "_showwarnmsg")  # noqa: B009 — private CPython API not in type stubs
         _captured = self.list
         _all_ids = self._all_captured_ids
 
@@ -39,14 +39,14 @@ class WarnCapture:
             _all_ids.add(id(msg))
             self._orig_showwarnmsg(msg)
 
-        setattr(warnings, "_showwarnmsg", _intercepting_showwarnmsg)
+        setattr(warnings, "_showwarnmsg", _intercepting_showwarnmsg)  # noqa: B010 — private CPython API
 
     def clear(self) -> None:
         """Clear all captured warnings, resetting `warn.list` to `[]`."""
         self.list.clear()
 
     def _teardown(self) -> None:
-        setattr(warnings, "_showwarnmsg", self._orig_showwarnmsg)
+        setattr(warnings, "_showwarnmsg", self._orig_showwarnmsg)  # noqa: B010 — private CPython API
 
 
 class _WarnCaptureFixture(BuiltinFixture, fixture_type=WarnCapture):

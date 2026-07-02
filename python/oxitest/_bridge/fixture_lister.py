@@ -95,6 +95,10 @@ def _origin_header(defn: FixtureDef[Any]) -> str:
     return defn.conftest_path
 
 
+# Graph coloring states for DFS cycle detection.
+_WHITE, _GRAY, _BLACK = 0, 1, 2
+
+
 def tree_fixtures_from_registry(
     registry: FixtureRegistry,
     verbosity: int = 0,
@@ -137,28 +141,27 @@ def tree_fixtures_from_registry(
         graph[name] = deps
 
     # Cycle detection via DFS (white/gray/black)
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = dict.fromkeys(all_defs, WHITE)
+    color: dict[str, int] = dict.fromkeys(all_defs, _WHITE)
     cycle_path: list[str] = []
 
     def _has_cycle(node: str, path: list[str]) -> bool:
-        if color[node] == GRAY:
+        if color[node] == _GRAY:
             cycle_path.extend(path[path.index(node) :])
             cycle_path.append(node)
             return True
-        if color[node] == BLACK:
+        if color[node] == _BLACK:
             return False
-        color[node] = GRAY
+        color[node] = _GRAY
         path.append(node)
         for dep in graph.get(node, []):
             if dep in color and _has_cycle(dep, path):
                 return True
         path.pop()
-        color[node] = BLACK
+        color[node] = _BLACK
         return False
 
     for name in sorted(all_defs):
-        if color[name] == WHITE and _has_cycle(name, []):
+        if color[name] == _WHITE and _has_cycle(name, []):
             cycle_str = " -> ".join(cycle_path)
             return f"error: Circular fixture dependency: {cycle_str}"
 

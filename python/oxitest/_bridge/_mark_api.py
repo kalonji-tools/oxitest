@@ -143,7 +143,7 @@ class _SkipMark:
             def identity(f: _F) -> _F:
                 return f
 
-            setattr(identity, "_oxitest_noop_mark", True)
+            setattr(identity, "_oxitest_noop_mark", True)  # noqa: B010 — dynamic marker not in type stubs
             return identity
 
         info = MarkInfo("skip", (), MappingProxyType({"reason": str(reason)}))
