@@ -4,8 +4,7 @@ import subprocess
 from pathlib import Path
 
 import oxitest
-from conftest import helpers
-from oxitest import Fixture, TempDir, Yields
+from oxitest import Fixture, TempDir, Yields, helpers
 
 fx = oxitest.Fixtures()
 

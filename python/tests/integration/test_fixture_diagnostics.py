@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_strict_abort_unused_fixture(tmp: TempDir):

@@ -12,8 +12,7 @@ import textwrap
 from dataclasses import dataclass, field
 
 import oxitest as oxi
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 @dataclass(frozen=True)

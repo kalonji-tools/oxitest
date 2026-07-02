@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import time
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,

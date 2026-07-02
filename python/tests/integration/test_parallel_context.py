@@ -1,7 +1,6 @@
 """Integration test: parallel failure output shows worker ID and concurrent tests."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_parallel_failure_shows_worker_context(tmp: TempDir):

@@ -1,29 +1,21 @@
 """Shared test infrastructure for the oxitest test suite.
 
 Fixtures and helper functions used across test files. Helpers are
-accessible via ``from conftest import helpers`` — see
+accessible via ``from oxitest import helpers`` — see
 docs/src/explanation/conftest-helpers.md.
 """
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, get_type_hints
-
-__helpers_namespace__ = "common"
 
 import subprocess
 import sys
 import textwrap
 from dataclasses import dataclass, field
 from types import TracebackType
-
-if TYPE_CHECKING:
-    from oxitest._bridge._helper_namespace import HelperNamespace
-
-    helpers: HelperNamespace
+from typing import get_type_hints
 
 import oxitest
-from oxitest import TempDir, Yields
+from oxitest import Helpers, TempDir, Yields
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -33,6 +25,8 @@ from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import TestResult
+
+common = Helpers()
 
 __all__ = [
     "exec_inline",
@@ -68,6 +62,7 @@ def clean_sys_modules() -> Yields[None]:
     sys.modules.update({k: v for k, v in saved.items() if k not in sys.modules})
 
 
+@common.helper
 def make_fixture_def(
     name: str,
     factory=None,
@@ -125,16 +120,19 @@ def make_fixture_def(
     )
 
 
+@common.helper
 def make_session(*defs: FixtureDef) -> FixtureSession:
     """Create a ``FixtureSession`` from one or more ``FixtureDef``s."""
     return FixtureSession(list(defs), PluginRegistry())
 
 
+@common.helper
 def make_session_with(name: str, factory) -> FixtureSession:
     """Shortcut: single-fixture session for quick tests."""
     return make_session(make_fixture_def(name, factory, conftest_path="/conftest.py"))
 
 
+@common.helper
 def run_oxitest(
     tmp_path,
     *extra_args: str,
@@ -169,6 +167,7 @@ def run_oxitest(
     return result.stdout, result.stderr, result.returncode
 
 
+@common.helper
 def run_oxitest_subcmd(
     tmp_path,
     *subcmd_and_args: str,
@@ -200,6 +199,7 @@ def run_oxitest_subcmd(
     return result.stdout, result.stderr, result.returncode
 
 
+@common.helper
 def make_meta(
     module_path: str = "t.py",
     fn_name: str = "test_fn",
@@ -214,6 +214,7 @@ def make_meta(
     )
 
 
+@common.helper
 def run_test(
     module_path: str,
     fn_name: str,
@@ -237,6 +238,7 @@ def run_test(
     return _run_test(meta, session=session, default_timeout=default_timeout)
 
 
+@common.helper
 def exec_inline(
     tmp,
     code: str,
@@ -265,6 +267,7 @@ def exec_inline(
     )
 
 
+@common.helper
 def write_test_file(
     tmp_path,
     code: str,
@@ -276,12 +279,14 @@ def write_test_file(
     return str(f)
 
 
+@common.helper
 def write_test_module(tmp, code: str, *, name: str = "test_auto.py") -> str:
     f = tmp / name
     f.write_text(textwrap.dedent(code))
     return str(f)
 
 
+@common.helper
 @dataclass
 class RecordingDebugger:
     """Test double for DebuggerBackend that records calls."""

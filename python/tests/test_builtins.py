@@ -5,11 +5,10 @@ from __future__ import annotations
 import sys
 
 import oxitest
-from conftest import helpers
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
-from oxitest import Fixture, TempDir, raises  # noqa: F401
+from oxitest import Fixture, TempDir, helpers, raises  # noqa: F401
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins import (  # noqa: F401
     FdCapture,

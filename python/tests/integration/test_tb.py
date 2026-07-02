@@ -1,7 +1,6 @@
 """Integration tests: --tb modes and --show-locals/--show-internals flags."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_tb_detail_shows_source_line(tmp: TempDir):

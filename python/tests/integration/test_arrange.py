@@ -1,7 +1,6 @@
 """Integration tests: auto-arrangement by shared fixture dependencies."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def _write_shared_suite(tmp: TempDir):

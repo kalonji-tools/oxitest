@@ -1,7 +1,6 @@
 """Integration tests: --retries flag behavior."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_persistent_failure_exits_1(tmp: TempDir):

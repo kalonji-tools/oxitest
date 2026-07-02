@@ -1,8 +1,7 @@
 """Integration tests: worker crash and timeout resilience."""
 
 import oxitest
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 @oxitest.mark.timeout(120)

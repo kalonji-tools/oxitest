@@ -1,7 +1,6 @@
 """Integration tests: module-level marks via oxi_mark."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_oxi_mark_applies_to_all_tests(tmp: TempDir):

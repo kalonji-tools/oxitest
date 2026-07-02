@@ -1,7 +1,6 @@
 """Integration tests: --show-locals and --show-internals wire behavior."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_show_locals_displays_variables(tmp: TempDir):

@@ -1,7 +1,6 @@
 """Integration tests: fixture name validation at collection time."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_fixture_typo_aborts_with_exit_code_3(tmp: TempDir):

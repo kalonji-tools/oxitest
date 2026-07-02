@@ -1,7 +1,6 @@
 """Integration tests: `oxitest query plugins` subcommand."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_plugins_no_plugins_configured(tmp: TempDir):

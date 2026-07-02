@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir):

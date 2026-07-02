@@ -1,7 +1,6 @@
 """Integration tests for lazy collection pipeline."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir):

@@ -1,77 +1,136 @@
-"""Integration tests: conftest helpers namespace."""
+"""Integration tests: explicit helper registration via Helpers()."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
-def test_helpers_accessible_from_test_file(tmp: TempDir):
-    """A test file can import helpers from conftest."""
-    project = tmp / "myproject"
-    project.mkdir()
-    (project / "conftest.py").write_text("def greet():\n    return 'hello'\n")
-    helpers.common.write_test_file(
-        project,
-        "from conftest import helpers\n"
-        "\n"
-        "def test_greet():\n"
-        "    assert helpers.myproject.greet() == 'hello'\n",
+def test_explicit_helper_registration(tmp: TempDir) -> None:
+    """Helpers registered via Helpers() are accessible via ``helpers``."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_it.py": """\
+                from oxitest import helpers
+
+                def test_helper_call() -> None:
+                    result = helpers.utils.greet("world")
+                    assert result == "hi world", f"expected greeting, got {result}"
+            """,
+        },
+        conftest="""\
+            from oxitest import Helpers
+
+            utils = Helpers()
+
+            @utils.helper
+            def greet(name: str) -> str:
+                return f"hi {name}"
+        """,
     )
-    stdout, _, rc = helpers.common.run_oxitest(project)
-    helpers.integ.assert_passed(stdout, rc, count=1)
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_nested_conftest_helpers_ancestor_only(tmp: TempDir):
-    """Test file sees both ancestor and local helpers when run from root."""
-    root = tmp / "myproject"
-    root.mkdir()
-    (root / "conftest.py").write_text("def root_fn():\n    return 'root'\n")
-    sub = root / "sub"
-    sub.mkdir()
-    (sub / "conftest.py").write_text("def sub_fn():\n    return 'sub'\n")
-    helpers.common.write_test_file(
-        sub,
-        "from conftest import helpers\n"
-        "\n"
-        "def test_sees_root():\n"
-        "    assert helpers.myproject.root_fn() == 'root'\n"
-        "\n"
-        "def test_sees_sub():\n"
-        "    assert helpers.sub.sub_fn() == 'sub'\n",
+def test_helpers_in_test_file_strict_violation(tmp: TempDir) -> None:
+    """Helpers() in a test file triggers registrar-in-test-module under --strict."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_it.py": """\
+                from oxitest import Helpers
+
+                h = Helpers()
+
+                @h.helper
+                def nope() -> str:
+                    return "nope"
+
+                def test_pass() -> None:
+                    assert True, "test body is fine"
+            """,
+        },
     )
-    # Run from root so oxitest walks the full conftest chain (root -> sub)
-    stdout, _, rc = helpers.common.run_oxitest(root)
-    helpers.integ.assert_passed(stdout, rc, count=2)
+    out, _, rc = helpers.common.run_oxitest(tmp, "--strict")
+    helpers.integ.assert_failed(out, rc)
+    helpers.integ.assert_contains(out, "registrar-in-test-module")
 
 
-def test_helpers_namespace_override(tmp: TempDir):
-    """__helpers_namespace__ overrides the directory-derived name."""
-    root = tmp / "myproject"
-    root.mkdir()
-    sub = root / "integration"
+def test_multiple_helper_namespaces(tmp: TempDir) -> None:
+    """Multiple Helpers() instances in one conftest create separate namespaces."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_it.py": """\
+                from oxitest import helpers
+
+                def test_math_add() -> None:
+                    result = helpers.math.add(2, 3)
+                    assert result == 5, f"expected 5, got {result}"
+
+                def test_str_shout() -> None:
+                    result = helpers.strings.shout("hi")
+                    assert result == "HI!", f"expected 'HI!', got {result}"
+            """,
+        },
+        conftest="""\
+            from oxitest import Helpers
+
+            math = Helpers()
+            strings = Helpers()
+
+            @math.helper
+            def add(a: int, b: int) -> int:
+                return a + b
+
+            @strings.helper
+            def shout(s: str) -> str:
+                return s.upper() + "!"
+        """,
+    )
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=2)
+
+
+def test_nested_conftest_helper_access(tmp: TempDir) -> None:
+    """Child conftest helpers accessible alongside parent conftest helpers."""
+    helpers.integ.write_project(
+        tmp,
+        tests={
+            "test_root.py": """\
+                from oxitest import helpers
+
+                def test_root_helper() -> None:
+                    result = helpers.root.ping()
+                    assert result == "pong", f"expected 'pong', got {result}"
+            """,
+        },
+        conftest="""\
+            from oxitest import Helpers
+
+            root = Helpers()
+
+            @root.helper
+            def ping() -> str:
+                return "pong"
+        """,
+    )
+    # Also write a sub-directory with its own conftest and test
+    sub = tmp / "sub"
     sub.mkdir()
     (sub / "conftest.py").write_text(
-        '__helpers_namespace__ = "integ"\n\ndef helper():\n    return 42\n'
+        "from oxitest import Helpers\n\n"
+        "child = Helpers()\n\n"
+        "@child.helper\n"
+        "def echo(msg: str) -> str:\n"
+        "    return msg\n"
     )
-    helpers.common.write_test_file(
-        sub,
-        "from conftest import helpers\n"
-        "\n"
-        "def test_override():\n"
-        "    assert helpers.integ.helper() == 42\n",
+    (sub / "test_sub.py").write_text(
+        "from oxitest import helpers\n\n"
+        "def test_child_helper() -> None:\n"
+        "    result = helpers.child.echo('hello')\n"
+        "    assert result == 'hello', f\"expected 'hello', got {result}\"\n\n"
+        "def test_root_from_sub() -> None:\n"
+        "    result = helpers.root.ping()\n"
+        "    assert result == 'pong', f\"expected 'pong', got {result}\"\n"
     )
-    stdout, _, rc = helpers.common.run_oxitest(sub)
-    helpers.integ.assert_passed(stdout, rc, count=1)
-
-
-def test_helpers_only_conftest_no_warning(tmp: TempDir):
-    """A conftest with only helpers produces no warning."""
-    root = tmp / "myproject"
-    root.mkdir()
-    (root / "conftest.py").write_text("def helper():\n    return 'ok'\n")
-    helpers.common.write_test_file(
-        root,
-        "def test_pass():\n    assert True\n",
-    )
-    stdout, _, rc = helpers.common.run_oxitest(root)
-    helpers.integ.assert_passed(stdout, rc)
-    helpers.integ.assert_excludes(stdout, "no Fixtures instance")
+    out, _, rc = helpers.common.run_oxitest(tmp)
+    helpers.integ.assert_passed(out, rc, count=3)

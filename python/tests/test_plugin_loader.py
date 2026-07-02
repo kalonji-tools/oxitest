@@ -6,7 +6,7 @@ import sys
 import types
 
 import oxitest
-from conftest import helpers
+from oxitest import helpers
 from oxitest._bridge._errors import ConflictingDebuggerError
 from oxitest._bridge._raises import raises
 from oxitest._bridge.plugin_loader import PluginLoadError, PluginRegistry, load_plugins

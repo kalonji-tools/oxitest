@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 from oxitest._bridge._assert_error import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge._diagnostics import (
     _handle_assertion_error,

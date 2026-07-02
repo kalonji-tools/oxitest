@@ -15,8 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import oxitest
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 # -- Helpers -------------------------------------------------------------------
 

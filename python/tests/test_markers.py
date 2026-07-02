@@ -4,8 +4,7 @@ import dataclasses
 from types import MappingProxyType
 
 import oxitest
-from conftest import helpers
-from oxitest import TempDir, parametrize
+from oxitest import TempDir, helpers, parametrize
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._mark_api import MarkInfo, _append_mark

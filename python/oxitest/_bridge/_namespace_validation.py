@@ -14,7 +14,7 @@ def validate_namespace_name(name: str, source_path: str) -> None:
             f"\n"
             f"Source: {source_path}\n"
             f"\n"
-            f'Rename the directory or add __helpers_namespace__ = "..." '
+            f"Rename the variable or directory "
             f"to pick a different name."
         )
     if name in vars(builtins):
@@ -23,6 +23,6 @@ def validate_namespace_name(name: str, source_path: str) -> None:
             f"\n"
             f"Source: {source_path}\n"
             f"\n"
-            f'Rename the directory or add __helpers_namespace__ = "..." '
+            f"Rename the variable or directory "
             f"to pick a different name."
         )
