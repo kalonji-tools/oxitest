@@ -7,12 +7,8 @@ import importlib
 import importlib.util
 import sys
 from types import ModuleType
-from typing import TYPE_CHECKING
 
 from oxitest._bridge.result import ErrorResult, FailedResult, PassedResult, TestResult
-
-if TYPE_CHECKING:
-    pass
 
 __all__ = ["run_doctest"]
 

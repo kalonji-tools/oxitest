@@ -99,9 +99,10 @@ def git_repo(tmp: TempDir) -> Yields[Path]:
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(
-        cmd, check=True, capture_output=True, env=clean_env
-    )
+
+    def run(*cmd):
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
+
     run(*git, "init")
     run(*git, "config", "user.email", "test@test.com")
     run(*git, "config", "user.name", "Test")

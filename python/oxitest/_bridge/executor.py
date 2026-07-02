@@ -79,7 +79,8 @@ from oxitest._bridge.result import TestResult, _error_result
 
 @functools.cache
 def _exec_unique_name(module_path: str) -> str:
-    return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"
+    digest = hashlib.md5(module_path.encode(), usedforsecurity=False)
+    return f"_oxitest_exec_{digest.hexdigest()[:12]}"
 
 
 def _resolve_debugger_backend(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 __all__ = ["BuiltinFixture"]
 
-from typing import Any
+from typing import Any, ClassVar
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 
@@ -28,9 +28,10 @@ class BuiltinFixture:
     with lazy cached_property).
     """
 
-    scope: str = "function"  # override to "session" for session-scoped built-ins
-    _registry: dict[type, type[BuiltinFixture]] = {}
-    _registered: bool = False
+    # Override to "session" for session-scoped built-ins.
+    scope: ClassVar[str] = "function"
+    _registry: ClassVar[dict[type, type[BuiltinFixture]]] = {}
+    _registered: ClassVar[bool] = False
 
     def __init_subclass__(cls, *, fixture_type: type | None = None, **kw: Any) -> None:
         super().__init_subclass__(**kw)

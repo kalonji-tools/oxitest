@@ -3,7 +3,10 @@ from __future__ import annotations
 __all__ = ["raises"]
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Self
+
+if TYPE_CHECKING:
+    import types
 
 _ExcType = type[BaseException] | tuple[type[BaseException], ...]
 
@@ -22,14 +25,14 @@ class _RaisesContext:
         self._match = match
         self.value: BaseException | None = None
 
-    def __enter__(self) -> _RaisesContext:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: types.TracebackType | None,
     ) -> bool:
         if exc_val is None:
             raise AssertionError(f"Expected {_exc_name(self._exc_type)} to be raised")

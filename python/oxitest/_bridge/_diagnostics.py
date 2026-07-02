@@ -135,7 +135,7 @@ def _compute_field_diffs(
     if not hasattr(left, "__dataclass_fields__"):
         return ()
     diffs: list[tuple[str, str, str]] = []
-    dc_fields = cast(dict[str, Any], left.__dataclass_fields__)
+    dc_fields = cast("dict[str, Any]", left.__dataclass_fields__)
     for name in dc_fields:
         lv = getattr(left, name, _FIELD_DIFF_SENTINEL)
         rv = getattr(right, name, _FIELD_DIFF_SENTINEL)
@@ -164,7 +164,7 @@ def _handle_assertion_error(
         op = exc.op
         field_diffs = _compute_field_diffs(exc.left, exc.right) if op == "==" else ()
     else:
-        msg = str(exc) if str(exc) else ""
+        msg = str(exc) or ""
         left_repr = right_repr = op = ""
         field_diffs = ()
     return FailedResult(

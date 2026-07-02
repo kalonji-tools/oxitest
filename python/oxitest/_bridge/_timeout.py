@@ -38,8 +38,8 @@ class _UnixTimeoutContext:
         signal.signal(signal.SIGALRM, self._old_handler)
 
     @staticmethod
-    def _raise(signum: int, frame: object) -> None:
-        raise OxitestTimeoutError()
+    def _raise(_signum: int, _frame: object) -> None:
+        raise OxitestTimeoutError
 
 
 class _WindowsTimeoutContext:

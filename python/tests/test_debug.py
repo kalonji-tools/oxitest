@@ -3,6 +3,7 @@
 import io
 import sys
 from dataclasses import dataclass
+from typing import ClassVar
 
 import oxitest
 from oxitest import helpers
@@ -186,7 +187,7 @@ def test_run_base_debug_mode(
     expect_trace: int,
     expect_post_mortem: int,
 ) -> None:
-    """Debug mode matrix: verify trace/post_mortem calls for each mode × outcome."""
+    """Debug mode matrix: verify trace/post_mortem calls for each mode x outcome."""
     rec = helpers.common.RecordingDebugger()
 
     fn = (lambda: None) if passing else _make_failing_fn()
@@ -245,7 +246,7 @@ def test_trace_before_test_suspends_capture_during_call():
 
     class SpyDebugger:
         trace_count = 0
-        post_mortem_tracebacks: list = []
+        post_mortem_tracebacks: ClassVar[list] = []
 
         def trace(self):
             nonlocal suspended_during_trace

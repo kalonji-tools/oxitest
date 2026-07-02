@@ -167,7 +167,7 @@ class AsyncBridgeMiddleware:
                             timeout=_timeout_secs,
                         )
                     except TimeoutError:
-                        raise OxitestTimeoutError() from None
+                        raise OxitestTimeoutError from None
                 return await run_base_async(plan.fn, resolved, plan.no_message_lines)
             # Phase 3: Teardown async generators in reverse order.
             finally:

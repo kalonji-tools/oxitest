@@ -11,7 +11,6 @@ from typing import Any, TypeVar
 from oxitest._bridge._fn_metadata import get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
-_T = TypeVar("_T")
 
 
 def skip(reason: str = "") -> None:
@@ -96,7 +95,8 @@ class _TimeoutMark:
             seconds = kwargs.get("seconds")
         if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
             raise ValueError(
-                f"@oxitest.mark.timeout requires an integer seconds > 0, got {seconds!r}"
+                "@oxitest.mark.timeout requires an integer"
+                f" seconds > 0, got {seconds!r}"
             )
         info = MarkInfo("timeout", (), MappingProxyType({"seconds": seconds}))
 

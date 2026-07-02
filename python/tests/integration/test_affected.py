@@ -40,9 +40,10 @@ def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(
-        cmd, check=True, capture_output=True, env=clean_env
-    )
+
+    def run(*cmd):
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
+
     git = ["git", "-C", str(main_repo)]
 
     # Create a baseline test file and commit it.
@@ -68,9 +69,9 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]):
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(
-        cmd, check=True, capture_output=True, env=clean_env
-    )
+
+    def run(*cmd):
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file in the worktree and stage it.
     (worktree_path / "test_new.py").write_text("def test_new(): assert True\n")
@@ -98,9 +99,10 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]):
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(
-        cmd, check=True, capture_output=True, env=clean_env
-    )
+
+    def run(*cmd):
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
+
     # Add a new test file.
     (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
     run("git", "-C", str(repo), "add", "test_new.py")
@@ -120,9 +122,10 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]):
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(
-        cmd, check=True, capture_output=True, env=clean_env
-    )
+
+    def run(*cmd):
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
+
     # Add a new test file.
     (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
     run("git", "-C", str(repo), "add", "test_new.py")

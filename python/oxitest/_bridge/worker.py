@@ -134,9 +134,9 @@ def main() -> None:
     # Rust watchdog — it expects one result line per test.
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
     for raw in sys.stdin:
-        raw = raw.strip()
-        if raw:
-            task: WorkerTask = json.loads(raw)
+        line = raw.strip()
+        if line:
+            task: WorkerTask = json.loads(line)
             run(task)
 
 

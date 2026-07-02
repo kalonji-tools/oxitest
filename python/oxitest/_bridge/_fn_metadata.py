@@ -13,10 +13,11 @@ from __future__ import annotations
 __all__ = ["FunctionMetadata", "get_metadata", "get_or_create"]
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from oxitest._bridge._mark_api import MarkInfo
+    from oxitest._bridge.parametrize import ResolvedCases
 
 _ATTR = "_oxitest_meta"
 
@@ -24,8 +25,7 @@ _ATTR = "_oxitest_meta"
 @dataclass
 class FunctionMetadata:
     marks: list[MarkInfo] = field(default_factory=list)
-    # tuple[ResolvedCases, ...] | None
-    param_cases: Any = None
+    param_cases: tuple[ResolvedCases, ...] | None = None
     fixture_name: str | None = None
 
 
