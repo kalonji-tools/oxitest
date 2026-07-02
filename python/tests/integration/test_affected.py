@@ -6,7 +6,7 @@ from pathlib import Path
 import oxitest
 from oxitest import Fixture, TempDir, Yields, helpers
 
-fx = oxitest.Fixtures()
+fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 
 def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir):

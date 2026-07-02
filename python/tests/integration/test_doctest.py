@@ -5,7 +5,7 @@ from pathlib import Path
 import oxitest
 from oxitest import Fixture, TempDir, Yields, helpers
 
-fx = oxitest.Fixtures()
+fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 
 @fx.fixture

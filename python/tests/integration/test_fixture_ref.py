@@ -13,7 +13,7 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
                 import oxitest
                 from oxitest import Fixture, FixtureRef
 
-                fx = oxitest.Fixtures()
+                fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
                 @fx.fixture
                 def greeting() -> str:

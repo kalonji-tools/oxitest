@@ -193,7 +193,7 @@ def test_one(conn: Fixture[object]):
         conftest="""\
 from oxitest import Fixtures, Fixture
 
-fx = Fixtures()
+fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> object:
@@ -230,7 +230,7 @@ def test_without():
         conftest="""\
 from oxitest import Fixtures
 
-fx = Fixtures()
+fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> object:
@@ -293,7 +293,7 @@ def test_without():
         conftest="""\
 from oxitest import Fixtures
 
-fx = Fixtures()
+fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db_conn() -> object:
@@ -326,7 +326,7 @@ def test_db_conn(db_conn: Fixture[object]):
         conftest="""\
 from oxitest import Fixtures
 
-fx = Fixtures()
+fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> object:
@@ -369,7 +369,7 @@ def test_slow_no_db():
         conftest="""\
 from oxitest import Fixtures
 
-fx = Fixtures()
+fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> object:

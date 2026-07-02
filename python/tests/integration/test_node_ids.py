@@ -240,7 +240,7 @@ def test_uses_db(db: Fixture[str]):
         conftest="""\
 import oxitest
 
-fx = oxitest.Fixtures()
+fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> str:
@@ -274,7 +274,7 @@ def test_uses_db(db: Fixture[str]):
         conftest="""\
 import oxitest
 
-fx = oxitest.Fixtures()
+fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @fx.fixture
 def db() -> str:
