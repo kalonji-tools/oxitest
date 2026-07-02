@@ -1,7 +1,6 @@
 """Integration test for FixtureRef[T] through the full CLI pipeline."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):

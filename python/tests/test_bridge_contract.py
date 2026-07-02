@@ -466,7 +466,7 @@ def test_get_fixture_timings_returns_expected_shape():
 
 def test_get_fixture_timings_entry_has_required_attrs():
     """Each timing entry has the 5 required attributes with correct types."""
-    from conftest import helpers
+    from oxitest import helpers
     from oxitest._bridge.result import FixtureTiming
 
     session = helpers.common.make_session_with("timed_fx", lambda: 1)

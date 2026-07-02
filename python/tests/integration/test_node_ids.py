@@ -7,8 +7,7 @@ miss (path canonicalization, conftest discovery, strict mode interaction).
 
 from __future__ import annotations
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 # ── Single node ID ───────────────────────────────────────────────────────────
 

@@ -1,7 +1,6 @@
 """Integration tests: fixture scope interactions."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_shared_fixture_with_parametrize(tmp: TempDir):

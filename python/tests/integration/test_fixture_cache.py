@@ -1,7 +1,6 @@
 """Integration tests: fixture cache hit rate reporting."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_no_shared_fixtures_no_cache_stats(tmp: TempDir):

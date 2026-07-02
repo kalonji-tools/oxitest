@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_query_tests_lists_all(tmp: TempDir):
@@ -140,6 +139,11 @@ def test_query_helpers(tmp: TempDir):
             "test_a.py": "def test_one(): pass\n",
         },
         conftest="""\
+            from oxitest import Helpers
+
+            utils = Helpers()
+
+            @utils.helper
             def my_helper():
                 return 42
         """,
@@ -157,6 +161,11 @@ def test_query_helpers_shows_docstring(tmp: TempDir):
             "test_a.py": "def test_one(): pass\n",
         },
         conftest="""\
+            from oxitest import Helpers
+
+            utils = Helpers()
+
+            @utils.helper
             def make_db():
                 \"\"\"Create a test database.\"\"\"
                 return {}

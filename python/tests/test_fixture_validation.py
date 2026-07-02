@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from oxitest._bridge._helper_namespace import HelperNamespace
-
-    helpers: HelperNamespace
-
-from conftest import helpers  # type: ignore[assignment]
+from oxitest import helpers
 
 # ── validate_fixture_names ───────────────────────────────────────────────────
 

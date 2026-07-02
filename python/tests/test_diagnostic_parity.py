@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import textwrap
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:

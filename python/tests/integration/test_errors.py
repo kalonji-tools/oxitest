@@ -1,7 +1,6 @@
 """Integration tests: error handling for bad inputs."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_import_error_exits_nonzero(tmp: TempDir):

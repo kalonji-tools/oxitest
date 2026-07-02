@@ -1,7 +1,6 @@
 """Integration tests: `query fixtures --tree` fixture dependency visualization."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 _TREE_ARGS = ("query", "fixtures", "--tree")
 

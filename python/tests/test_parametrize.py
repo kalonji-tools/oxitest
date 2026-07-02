@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from conftest import helpers
-from oxitest import Fixture, FixtureRef, TempDir, parametrize, partial, raises
+from oxitest import Fixture, FixtureRef, TempDir, helpers, parametrize, partial, raises
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest

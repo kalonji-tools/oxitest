@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import textwrap
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_default_hides_passing_tests(tmp: TempDir) -> None:

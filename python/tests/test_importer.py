@@ -4,8 +4,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
 
 import oxitest
-from conftest import helpers
-from oxitest import TempDir, WarnCapture, raises
+from oxitest import TempDir, WarnCapture, helpers, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
@@ -264,33 +263,43 @@ def test_collected_item_with_markers_and_param():
     )
 
 
-def test_collect_module_registers_fixtures_from_test_module(tmp: TempDir) -> None:
+def test_collect_module_emits_violation_for_helpers_in_test_module(
+    tmp: TempDir,
+) -> None:
+    """Helpers() instance in a test module emits REGISTRAR_IN_TEST_MODULE violation.
+
+    Fixtures() instances in test modules are silently registered (not violations)
+    because test-file-local fixtures are a valid pattern. Only Helpers() instances
+    are flagged because they need conftest-level registration for the helpers
+    system to work.
+    """
     path = helpers.common.write_test_module(
         tmp,
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def my_val():\n"
+        "from oxitest import Helpers\n"
+        "h = Helpers()\n"
+        "@h.helper\n"
+        "def my_helper():\n"
         "    return 42\n"
-        "def test_foo(my_val): pass\n",
-        name="test_self_contained.py",
+        "def test_foo(): pass\n",
+        name="test_with_helpers.py",
     )
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-
-    registry = FixtureRegistry()
-
-    class _FakeSession:
-        _registry = registry
-        _module_cache = None
-
-    collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
-    defn = registry.get("my_val")
-    assert defn is not None, (
-        "collect_module should register fixtures from test module's Fixtures() instance"
+    _, violations = collect_module(path)
+    registrar_viols = [
+        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
+    ]
+    assert len(registrar_viols) == 1, (
+        f"expected 1 REGISTRAR_IN_TEST_MODULE violation for Helpers() in test module, "
+        f"got {len(registrar_viols)}: {registrar_viols}"
     )
-    assert defn.conftest_path == path, (
-        f"registered fixture conftest_path should be {path!r}, got "
-        f"{defn.conftest_path!r}"
+    v = registrar_viols[0]
+    assert v.node_id == path, (
+        f"violation node_id should be the module path {path!r}, got {v.node_id!r}"
+    )
+    assert "Helpers" in v.detail, (
+        f"violation detail should mention Helpers, got {v.detail!r}"
+    )
+    assert "conftest.py" in v.detail, (
+        f"violation detail should mention conftest.py, got {v.detail!r}"
     )
 
 
@@ -449,8 +458,8 @@ def test_collect_mixed_sync_async(tmp: TempDir):
     assert by_name["test_async"].is_async is True, "async test should be is_async=True"
 
 
-def test_async_fixture_flagged_during_registration(tmp: TempDir):
-    """Async fixtures should have is_async=True on their FixtureDef."""
+def test_fixtures_in_test_module_are_registered(tmp: TempDir):
+    """Fixtures() in a test module are registered so local fixtures resolve."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -472,16 +481,20 @@ def test_async_fixture_flagged_during_registration(tmp: TempDir):
         _registry = registry
         _module_cache = None
 
-    collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
-    async_defn = registry.get("async_val")
-    sync_defn = registry.get("sync_val")
-    assert async_defn is not None, "async_val fixture should be registered"
-    assert sync_defn is not None, "sync_val fixture should be registered"
-    assert async_defn.is_async is True, (
-        f"async fixture should have is_async=True, got {async_defn.is_async!r}"
+    _, violations = collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
+    registrar_viols = [
+        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
+    ]
+    assert len(registrar_viols) == 0, (
+        "expected no REGISTRAR_IN_TEST_MODULE violations for Fixtures() "
+        f"in test module, got {len(registrar_viols)}: {registrar_viols}"
     )
-    assert sync_defn.is_async is False, (
-        f"sync fixture should have is_async=False, got {sync_defn.is_async!r}"
+    assert registry.get("async_val") is not None, (
+        "async_val should be registered — test module Fixtures() "
+        "are silently registered"
+    )
+    assert registry.get("sync_val") is not None, (
+        "sync_val should be registered — test module Fixtures() are silently registered"
     )
 
 

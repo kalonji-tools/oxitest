@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 
 import oxitest
-from conftest import helpers
+from oxitest import helpers
 from oxitest._bridge._builtins._capture import StdCapture
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._diagnostics import is_debuggable as _is_debuggable

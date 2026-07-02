@@ -4,8 +4,7 @@ import sys
 import unittest
 
 import oxitest
-from conftest import helpers
-from oxitest import Fixture, WarnCapture, raises
+from oxitest import Fixture, WarnCapture, helpers, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     FixtureCycleError,

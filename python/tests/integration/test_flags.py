@@ -6,8 +6,7 @@ import subprocess
 from pathlib import Path
 
 import oxitest
-from conftest import helpers
-from oxitest import Fixture, TempDir
+from oxitest import Fixture, TempDir, helpers
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir):

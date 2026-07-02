@@ -76,6 +76,7 @@ def test_lazy_protocols_constant_contains_expected_values():
         {
             "log_backend",
             "fixture_provider",
+            "helper_provider",
             "execution_wrapper",
             "debugger_backend",
         }

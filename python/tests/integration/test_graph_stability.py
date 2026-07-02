@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import json
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def _fixture_entries(tmp: TempDir) -> list[dict[str, str]]:

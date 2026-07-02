@@ -1,7 +1,6 @@
 """Integration tests: happy path exit codes and summary lines."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_all_pass_exits_zero(tmp: TempDir):

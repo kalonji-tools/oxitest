@@ -4,13 +4,13 @@ import sys
 import textwrap
 
 import oxitest
-from conftest import helpers
-from oxitest import Fixture, TempDir, Yields, raises, warns
+from oxitest import Fixture, TempDir, Yields, helpers, raises, warns
 from oxitest._bridge._fixture_session import FixtureSession
-from oxitest._bridge._helper_namespace import HelperNamespace
+from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge.conftest_loader import (
     _extract_depends_on,
     _extract_fixture_type,
+    _extract_helpers,
     create_session,
     find_conftest_paths,
     load_fixtures_from_conftest,
@@ -400,66 +400,58 @@ def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir):
 # ── Helpers integration ──────────────────────────────────────────────────────
 
 
-@oxitest.mark.inprocess
-def test_create_session_attaches_helpers_to_conftest_module(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
-):
+def test_create_conftest_fixtures_returns_helper_registry(tmp: TempDir):
+    """create_conftest_fixtures returns a HelperRegistry as its third element."""
+    from oxitest._bridge.conftest_loader import create_conftest_fixtures
+
     f = tmp / "conftest.py"
     f.write_text(
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def db():\n"
-        "    return 42\n"
-        "\n"
+        "from oxitest import Helpers\n"
+        "utils = Helpers()\n"
+        "@utils.helper\n"
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    import sys as _sys
-
-    _sys.modules.pop("conftest", None)
-    create_session([str(f)])  # side-effect: registers conftest module
-    conftest_mod = _sys.modules["conftest"]
-    assert hasattr(conftest_mod, "helpers"), (
-        "conftest module should have a 'helpers' attribute after create_session"
+    _defs, _violations, helper_registry = create_conftest_fixtures([str(f)])
+    assert isinstance(helper_registry, HelperRegistry), (
+        "third return value should be a HelperRegistry, got "
+        f"{type(helper_registry).__name__}"
     )
-    assert isinstance(conftest_mod.helpers, HelperNamespace), (
-        "helpers should be a HelperNamespace, got "
-        f"{type(conftest_mod.helpers).__name__}"
+    assert "make_thing" in helper_registry, (
+        "helper_registry should contain 'make_thing'"
     )
 
 
-@oxitest.mark.inprocess
-def test_create_session_helpers_contain_public_functions(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
-):
+def test_create_session_stores_helper_registry(tmp: TempDir):
+    """create_session should store HelperRegistry on the session."""
     f = tmp / "conftest.py"
     f.write_text(
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def db():\n"
-        "    return 42\n"
-        "\n"
+        "from oxitest import Helpers\n"
+        "utils = Helpers()\n"
+        "@utils.helper\n"
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    import sys as _sys
-
-    _sys.modules.pop("conftest", None)
-    create_session([str(f)])  # side-effect: registers conftest module
-    conftest_mod = _sys.modules["conftest"]
-    ns_name = tmp.path.name  # directory name
-    scope = getattr(conftest_mod.helpers, ns_name)
-    assert scope.make_thing() == "thing", (
-        f"expected make_thing() to return 'thing', got {scope.make_thing()!r}"
+    session, _ = create_session([str(f)])
+    assert hasattr(session, "_helper_registry"), (
+        "session should have a _helper_registry attribute after create_session"
+    )
+    assert isinstance(session._helper_registry, HelperRegistry), (
+        "_helper_registry should be a HelperRegistry, got "
+        f"{type(session._helper_registry).__name__}"
     )
 
 
 def test_create_session_helpers_only_conftest_no_fixtures_no_warning(tmp: TempDir):
-    """A conftest with only helpers (no Fixtures) should not warn."""
+    """A conftest with only Helpers() (no Fixtures) should not warn."""
     f = tmp / "conftest.py"
-    f.write_text("def make_thing():\n    return 'thing'\n")
+    f.write_text(
+        "from oxitest import Helpers\n"
+        "utils = Helpers()\n"
+        "@utils.helper\n"
+        "def make_thing():\n"
+        "    return 'thing'\n"
+    )
     import warnings
 
     with warnings.catch_warnings():
@@ -475,11 +467,8 @@ def test_create_session_empty_conftest_still_warns(tmp: TempDir):
         create_session([str(f)])
 
 
-@oxitest.mark.inprocess
-def test_create_session_helpers_empty_when_no_callables(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
-):
-    """helpers is present but scope has no attrs when conftest has only fixtures."""
+def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir):
+    """helper_registry is empty when conftest has only fixtures."""
     f = tmp / "conftest.py"
     f.write_text(
         "import oxitest\n"
@@ -488,13 +477,16 @@ def test_create_session_helpers_empty_when_no_callables(
         "def db():\n"
         "    return 42\n"
     )
-    import sys as _sys
-
-    _sys.modules.pop("conftest", None)
-    create_session([str(f)])
-    conftest_mod = _sys.modules["conftest"]
-    assert hasattr(conftest_mod, "helpers"), (
-        "conftest module should have 'helpers' even with no public callables"
+    session, _ = create_session([str(f)])
+    assert hasattr(session, "_helper_registry"), (
+        "session should have _helper_registry even with no Helpers() instances"
+    )
+    registry = session._helper_registry
+    assert isinstance(registry, HelperRegistry), (
+        "session._helper_registry should be a HelperRegistry"
+    )
+    assert list(registry) == [], (
+        "helper_registry should be empty when conftest has no Helpers() instances"
     )
 
 
@@ -562,4 +554,34 @@ def test_extract_depends_on_skips_unannotated():
     deps = _extract_depends_on(my_fixture)
     assert deps == (), (
         "unannotated and non-Fixture params should not appear in depends_on"
+    )
+
+
+# ── _extract_helpers ──────────────────────────────────────────────────────────
+
+
+def test_extract_helpers_from_conftest(tmp: TempDir) -> None:
+    """_extract_helpers should find Helpers() instances and extract defs."""
+    conftest = tmp / "conftest.py"
+    conftest.write_text(
+        "from oxitest import Helpers\n"
+        "utils = Helpers()\n"
+        "@utils.helper\n"
+        "def greet(name: str) -> str:\n"
+        "    return f'hi {name}'\n"
+    )
+    from oxitest._bridge._fixture_registry import ConftestSource
+    from oxitest._bridge.conftest_loader import _load_conftest_module
+
+    module = _load_conftest_module(str(conftest))
+    assert module is not None, "_load_conftest_module should return a module"
+    defs = _extract_helpers(module, str(conftest))
+    assert len(defs) == 1, "should extract one helper"
+    assert defs[0].name == "greet", "helper name should match function name"
+    assert defs[0].namespace == "utils", "namespace should come from variable name"
+    assert isinstance(defs[0].source, ConftestSource), (
+        "source should be a ConftestSource after stamping"
+    )
+    assert defs[0].source.conftest_path == str(conftest), (
+        "conftest_path should be stamped"
     )

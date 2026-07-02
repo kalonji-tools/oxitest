@@ -37,6 +37,6 @@ def test_error_message_includes_source_path():
         validate_namespace_name("for", "/my/conftest.py")
 
 
-def test_error_message_suggests_helpers_namespace_dunder():
-    with oxi.raises(ValueError, match="__helpers_namespace__"):
+def test_error_message_suggests_renaming():
+    with oxi.raises(ValueError, match="Rename the variable or directory"):
         validate_namespace_name("list", "/tmp/conftest.py")

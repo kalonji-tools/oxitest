@@ -8,17 +8,11 @@ from __future__ import annotations
 import subprocess
 import textwrap
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import oxitest
-from oxitest import TempDir, Yields
+from oxitest import Helpers, TempDir, Yields
 
-if TYPE_CHECKING:
-    from oxitest._bridge._helper_namespace import HelperNamespace
-
-    helpers: HelperNamespace
-
-__helpers_namespace__ = "integ"
+integ = Helpers()
 
 fx = oxitest.Fixtures()
 
@@ -35,6 +29,7 @@ __all__ = [
 ]
 
 
+@integ.helper
 def write_project(
     tmp,
     *,
@@ -58,6 +53,7 @@ def write_project(
         (tmp / name).write_text(textwrap.dedent(code))
 
 
+@integ.helper
 def assert_passed(out: str, rc: int, *, count: int | None = None):
     """Assert the run passed (exit 0)."""
     assert rc == 0, f"expected exit 0, got {rc}\n{out}"
@@ -65,6 +61,7 @@ def assert_passed(out: str, rc: int, *, count: int | None = None):
         assert f"{count} passed" in out, f"expected '{count} passed' in:\n{out}"
 
 
+@integ.helper
 def assert_failed(out: str, rc: int, *, count: int | None = None):
     """Assert the run had failures (non-zero exit)."""
     assert rc != 0, f"expected non-zero exit, got {rc}\n{out}"
@@ -72,17 +69,20 @@ def assert_failed(out: str, rc: int, *, count: int | None = None):
         assert f"{count} failed" in out, f"expected '{count} failed' in:\n{out}"
 
 
+@integ.helper
 def assert_collection_error(out: str, rc: int):
     """Assert collection error (exit 3)."""
     assert rc == 3, f"expected exit 3 (collection error), got {rc}\n{out}"
 
 
+@integ.helper
 def assert_contains(out: str, *terms: str):
     """Assert all terms are present in output."""
     for term in terms:
         assert term in out, f"expected {term!r} in:\n{out}"
 
 
+@integ.helper
 def assert_excludes(out: str, *terms: str):
     """Assert none of the terms are present in output."""
     for term in terms:

@@ -1,7 +1,6 @@
 """Integration tests: Unicode handling in test names and output."""
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_unicode_test_name_renders_correctly(tmp: TempDir):
