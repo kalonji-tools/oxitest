@@ -9,7 +9,8 @@ from types import ModuleType
 from unittest.mock import patch
 
 import oxitest
-from oxitest._bridge._coverage import CoveragePyProvider, CovReportFormat
+from oxitest import CovReportFormat
+from oxitest._bridge._coverage import CoveragePyProvider
 from oxitest.plugin import CoverageProvider, Plugin
 
 

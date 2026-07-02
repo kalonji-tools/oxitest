@@ -9,8 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import oxitest as oxi
-from oxitest._bridge._approx import approx
-from oxitest._bridge._raises import raises
+from oxitest import approx, raises
 
 # ── Scalar: default tolerance ────────────────────────────────────────────────
 

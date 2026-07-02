@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from oxitest import raises
-from oxitest._bridge.proxy import FrozenProxy, SharedFixtureMutationError
+from oxitest import SharedFixtureMutationError, raises
+from oxitest._bridge.proxy import FrozenProxy
 
 
 def test_frozen_proxy_reads_attribute_through():

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest._bridge._raises import raises
+from oxitest import raises
 
 
 def test_raises_catches_expected_exception():
