@@ -33,19 +33,14 @@ ignore = [
     "D213",           # multi-line summary second line — conflicts with D212
 
     # ── Intentional design decisions ─────────────────────────────────────
-    "A002",           # shadowing builtins (abs param in approx is intentional API)
-    "B009", "B010",   # getattr/setattr used intentionally for ty compatibility
     "C901",           # function too complex (acceptable for dispatchers)
     "D105", "D107",   # missing docstring in magic method / __init__
     "FBT001",         # boolean positional arg (internal API, not public-facing)
     "FBT002",         # boolean default value (intentional API: show_locals=False)
-    "N806",           # uppercase vars in functions (graph coloring constants, class refs)
-    "PLC0414",        # re-export aliases (Foo as Foo) are intentional public API
     "PLR0911",        # too many return statements (complex dispatchers)
     "PLR0912",        # too many branches (complex dispatchers)
     "PLR0913",        # too many arguments (internal functions with many params)
     "PLR0915",        # too many statements (complex dispatchers)
-    "PLR2004",        # magic value in comparison (bounds checks like len < 2)
     "S101",           # assert used for runtime invariants
     "S102",           # exec() used intentionally (module loader, test helpers)
     "S112",           # try-except-continue (intentional fallback in diagnostics)

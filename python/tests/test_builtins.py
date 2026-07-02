@@ -18,6 +18,8 @@ from oxitest._bridge._builtins import (
     TestContext,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._test_meta import TestMeta
 
 
@@ -634,16 +636,7 @@ def test_testcontext_registered_as_builtin():
 # ── FixtureSession integration ────────────────────────────────────────────────
 
 
-def _make_session():
-    """Import oxitest (triggers _builtins registration) and return session classes."""
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-    from oxitest._bridge._fixture_session import FixtureSession
-
-    return FixtureRegistry, FixtureSession
-
-
 def test_tempdir_injected_via_session():
-    FixtureRegistry, FixtureSession = _make_session()
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
@@ -667,7 +660,6 @@ def test_tempdir_injected_via_session():
 
 
 def test_tempdir_factory_session_scoped():
-    FixtureRegistry, FixtureSession = _make_session()
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
@@ -685,7 +677,6 @@ def test_tempdir_factory_session_scoped():
 
 
 def test_stdcapture_injected_via_session():
-    FixtureRegistry, FixtureSession = _make_session()
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
@@ -707,8 +698,6 @@ def test_stdcapture_injected_via_session():
 
 def test_patcher_injected_via_session():
     import types
-
-    FixtureRegistry, FixtureSession = _make_session()
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)
@@ -960,7 +949,6 @@ def test_logcapture_fixture_registers_teardown():
 
 
 def test_logcapture_injected_via_session():
-    FixtureRegistry, FixtureSession = _make_session()
 
     reg = FixtureRegistry()
     session = FixtureSession(reg)

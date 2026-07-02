@@ -21,7 +21,7 @@ def _parse_node_id(node_id: str) -> tuple[str, str] | None:
     Returns ``None`` if the node ID has no ``::`` separator.
     """
     parts = node_id.split("::", 1)
-    if len(parts) < 2:
+    if len(parts) < 2:  # noqa: PLR2004 — split("::", 1) produces 1 or 2 parts
         return None
     module_path = parts[0]
     fn_part = parts[1].split("[", 1)[0]  # strip param_id
