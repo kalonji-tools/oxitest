@@ -12,10 +12,6 @@ def parse_allow_rules(line: str) -> frozenset[str]:
 
     Returns a frozenset of kebab-case rule names. Empty if no allow comment found.
     """
-    match = _ALLOW_RE.search(line)
-    if not match:
-        return frozenset()
-    raw = match.group(1).strip()
-    if not raw:
+    if not ((match := _ALLOW_RE.search(line)) and (raw := match.group(1).strip())):
         return frozenset()
     return frozenset(rule.strip() for rule in raw.split(","))
