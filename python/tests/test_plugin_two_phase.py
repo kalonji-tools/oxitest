@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 import types
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
+from oxitest import Fixture
 from oxitest._bridge._plugin_config import (
     Both,
     CliExtension,
@@ -38,72 +39,58 @@ def _make_plugin_with_extension():
 
 
 @oxitest.mark.inprocess
-def test_discover_cli_extensions_reads_attribute():
+def test_discover_cli_extensions_reads_attribute(fake_module: Fixture[Callable]):
     mod = _make_plugin_with_extension()
-    sys.modules["fake_ext_plugin"] = mod
-    try:
-        registry = load_plugins(["fake_ext_plugin"], {})
-        extensions = registry.cli_extensions
-        assert "fake_ext_plugin" in extensions, (
-            f"expected fake_ext_plugin in cli_extensions, got {list(extensions)}"
-        )
-        ext, descs = extensions["fake_ext_plugin"]
-        assert ext.prefix == "fake", f"expected prefix 'fake', got '{ext.prefix}'"
-        assert len(descs) == 1, f"expected 1 field descriptor, got {len(descs)}"
-    finally:
-        sys.modules.pop("fake_ext_plugin", None)
+    fake_module("fake_ext_plugin", mod)
+    registry = load_plugins(["fake_ext_plugin"], {})
+    extensions = registry.cli_extensions
+    assert "fake_ext_plugin" in extensions, (
+        f"expected fake_ext_plugin in cli_extensions, got {list(extensions)}"
+    )
+    ext, descs = extensions["fake_ext_plugin"]
+    assert ext.prefix == "fake", f"expected prefix 'fake', got '{ext.prefix}'"
+    assert len(descs) == 1, f"expected 1 field descriptor, got {len(descs)}"
 
 
 @oxitest.mark.inprocess
-def test_user_prefix_override():
+def test_user_prefix_override(fake_module: Fixture[Callable]):
     mod = _make_plugin_with_extension()
-    sys.modules["fake_ext_plugin"] = mod
-    try:
-        registry = load_plugins(
-            ["fake_ext_plugin"],
-            {"fake_ext_plugin": {"cli_prefix": "custom"}},
-        )
-        ext, _ = registry.cli_extensions["fake_ext_plugin"]
-        assert ext.prefix == "custom", f"expected prefix 'custom', got '{ext.prefix}'"
-    finally:
-        sys.modules.pop("fake_ext_plugin", None)
+    fake_module("fake_ext_plugin", mod)
+    registry = load_plugins(
+        ["fake_ext_plugin"],
+        {"fake_ext_plugin": {"cli_prefix": "custom"}},
+    )
+    ext, _ = registry.cli_extensions["fake_ext_plugin"]
+    assert ext.prefix == "custom", f"expected prefix 'custom', got '{ext.prefix}'"
 
 
 @oxitest.mark.inprocess
-def test_plugin_without_extension_has_no_cli():
+def test_plugin_without_extension_has_no_cli(fake_module: Fixture[Callable]):
     mod = types.ModuleType("fake_simple")
     mod.oxitest_plugin = lambda config=None: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    sys.modules["fake_simple"] = mod
-    try:
-        registry = load_plugins(["fake_simple"], {})
-        assert "fake_simple" not in registry.cli_extensions, (
-            "plugin without oxitest_cli_extension should not appear in cli_extensions"
-        )
-    finally:
-        sys.modules.pop("fake_simple", None)
+    fake_module("fake_simple", mod)
+    registry = load_plugins(["fake_simple"], {})
+    assert "fake_simple" not in registry.cli_extensions, (
+        "plugin without oxitest_cli_extension should not appear in cli_extensions"
+    )
 
 
 @oxitest.mark.inprocess
-def test_activate_plugin_with_typed_config():
+def test_activate_plugin_with_typed_config(fake_module: Fixture[Callable]):
     mod = _make_plugin_with_extension()
-    sys.modules["fake_ext_plugin"] = mod
-    try:
-        registry = load_plugins(["fake_ext_plugin"], {})
-        plugin = registry.activate_plugin(
-            "fake_ext_plugin",
-            pyproject_values={},
-            cli_values={"host": "ssh://test"},
-        )
-        assert isinstance(plugin, Plugin), f"expected Plugin, got {type(plugin)}"
-        assert len(mod._call_tracker) == 1, (
-            "oxitest_plugin should have been called once"
-        )
-    finally:
-        sys.modules.pop("fake_ext_plugin", None)
+    fake_module("fake_ext_plugin", mod)
+    registry = load_plugins(["fake_ext_plugin"], {})
+    plugin = registry.activate_plugin(
+        "fake_ext_plugin",
+        pyproject_values={},
+        cli_values={"host": "ssh://test"},
+    )
+    assert isinstance(plugin, Plugin), f"expected Plugin, got {type(plugin)}"
+    assert len(mod._call_tracker) == 1, "oxitest_plugin should have been called once"
 
 
 @oxitest.mark.inprocess
-def test_backwards_compat_dict_config():
+def test_backwards_compat_dict_config(fake_module: Fixture[Callable]):
     received: dict = {}
 
     def entry(config=None):
@@ -112,11 +99,8 @@ def test_backwards_compat_dict_config():
 
     mod = types.ModuleType("fake_legacy")
     mod.oxitest_plugin = entry  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    sys.modules["fake_legacy"] = mod
-    try:
-        load_plugins(["fake_legacy"], {"fake_legacy": {"key": "val"}})
-        assert received.get("config") == {"key": "val"}, (
-            f"legacy plugin should receive dict config, got {received.get('config')}"
-        )
-    finally:
-        sys.modules.pop("fake_legacy", None)
+    fake_module("fake_legacy", mod)
+    load_plugins(["fake_legacy"], {"fake_legacy": {"key": "val"}})
+    assert received.get("config") == {"key": "val"}, (
+        f"legacy plugin should receive dict config, got {received.get('config')}"
+    )

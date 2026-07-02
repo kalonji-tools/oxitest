@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 import oxitest
 
@@ -48,7 +49,7 @@ def _make_builtin_ctx(
 # ── BuiltinFixture base ───────────────────────────────────────────────────────
 
 
-def test_builtin_fixture_registration():
+def test_builtin_fixture_registration(ctx: TestContext):
     class _Sentinel:
         pass
 
@@ -56,13 +57,13 @@ def test_builtin_fixture_registration():
         def create(self, ctx: _BuiltinContext) -> str:
             return "sentinel"
 
-    try:
-        assert BuiltinFixture.for_type(_Sentinel) is _SentinelFixture, (
-            "BuiltinFixture.for_type should return the registered subclass for "
-            "_Sentinel"
-        )
-    finally:
+    def _cleanup() -> None:
         BuiltinFixture._registry.pop(_Sentinel, None)
+
+    ctx.addfinalizer(_cleanup)
+    assert BuiltinFixture.for_type(_Sentinel) is _SentinelFixture, (
+        "BuiltinFixture.for_type should return the registered subclass for _Sentinel"
+    )
 
 
 def test_builtin_fixture_for_type_unknown_returns_none():
@@ -981,7 +982,7 @@ def test_logcapture_injected_via_session():
 
 
 @oxitest.mark.inprocess
-def test_logcapture_includes_plugin_backends():
+def test_logcapture_includes_plugin_backends(fake_module: Fixture[Callable]):
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
     import logging
     import types
@@ -1009,22 +1010,20 @@ def test_logcapture_includes_plugin_backends():
 
     mod = types.ModuleType("fake_log_plugin")
     mod.oxitest_plugin = lambda config=None: Plugin(log_backends=(fake_backend,))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    sys.modules["fake_log_plugin"] = mod
-    try:
-        registry = load_plugins(["fake_log_plugin"], {})
-        backends = [StdlibLogBackend()] + list(registry.log_backends)
-        cap = LogCapture(backends)
+    fake_module("fake_log_plugin", mod)
 
-        assert fake_backend.installed, (
-            "Plugin log backend should be installed when LogCapture is created"
-        )
-        assert len(cap._backends) == 2, (
-            f"Expected 2 backends (stdlib + plugin), got {len(cap._backends)}"
-        )
+    registry = load_plugins(["fake_log_plugin"], {})
+    backends = [StdlibLogBackend()] + list(registry.log_backends)
+    cap = LogCapture(backends)
 
-        cap._teardown()
-        assert not fake_backend.installed, (
-            "Plugin log backend should be uninstalled after teardown"
-        )
-    finally:
-        sys.modules.pop("fake_log_plugin", None)
+    assert fake_backend.installed, (
+        "Plugin log backend should be installed when LogCapture is created"
+    )
+    assert len(cap._backends) == 2, (
+        f"Expected 2 backends (stdlib + plugin), got {len(cap._backends)}"
+    )
+
+    cap._teardown()
+    assert not fake_backend.installed, (
+        "Plugin log backend should be uninstalled after teardown"
+    )

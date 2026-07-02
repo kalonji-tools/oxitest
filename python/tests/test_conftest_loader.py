@@ -4,7 +4,7 @@ import sys
 import textwrap
 
 import oxitest
-from oxitest import Fixture, TempDir, Yields, helpers, raises, warns
+from oxitest import Fixture, TempDir, WarnCapture, Yields, helpers, raises, warns
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge.conftest_loader import (
@@ -442,7 +442,9 @@ def test_create_session_stores_helper_registry(tmp: TempDir):
     )
 
 
-def test_create_session_helpers_only_conftest_no_fixtures_no_warning(tmp: TempDir):
+def test_create_session_helpers_only_conftest_no_fixtures_no_warning(
+    tmp: TempDir, warn: WarnCapture
+):
     """A conftest with only Helpers() (no Fixtures) should not warn."""
     f = tmp / "conftest.py"
     f.write_text(
@@ -452,11 +454,10 @@ def test_create_session_helpers_only_conftest_no_fixtures_no_warning(tmp: TempDi
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        create_session([str(f)])
+    create_session([str(f)])
+    assert warn.list == [], (
+        f"helpers-only conftest should not emit warnings, got: {warn.list}"
+    )
 
 
 def test_create_session_empty_conftest_still_warns(tmp: TempDir):

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 import types
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
-from oxitest import Both, Cli, CliExtension, Conf, Plugin
+from oxitest import Both, Cli, CliExtension, Conf, Fixture, Plugin
 from oxitest._bridge._plugin_config import introspect_config, merge_config
 from oxitest._bridge.plugin_loader import load_plugins
 
@@ -42,7 +42,9 @@ def test_full_flow_introspect_merge_construct():
 
 
 @oxitest.mark.inprocess
-def test_plugin_loader_discovers_and_activates_typed_config():
+def test_plugin_loader_discovers_and_activates_typed_config(
+    fake_module: Fixture[Callable],
+):
     mod = types.ModuleType("e2e_plugin")
     mod.oxitest_cli_extension = CliExtension(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
         prefix="e2e", config_type=TestConfig
@@ -55,35 +57,24 @@ def test_plugin_loader_discovers_and_activates_typed_config():
         return Plugin()
 
     mod.oxitest_plugin = oxitest_plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]  # noqa: E501
-    sys.modules["e2e_plugin"] = mod
+    fake_module("e2e_plugin", mod)
 
-    try:
-        registry = load_plugins(
-            ["e2e_plugin"], {"e2e_plugin": {"path": "/from/pyproject"}}
-        )
-        assert "e2e_plugin" in registry.cli_extensions, (
-            "plugin should have CLI extensions registered"
-        )
+    registry = load_plugins(["e2e_plugin"], {"e2e_plugin": {"path": "/from/pyproject"}})
+    assert "e2e_plugin" in registry.cli_extensions, (
+        "plugin should have CLI extensions registered"
+    )
 
-        registry.activate_plugin(
-            "e2e_plugin",
-            pyproject_values={"path": "/from/pyproject"},
-            cli_values={"host": "ssh://activated"},
-        )
+    registry.activate_plugin(
+        "e2e_plugin",
+        pyproject_values={"path": "/from/pyproject"},
+        cli_values={"host": "ssh://activated"},
+    )
 
-        assert len(received_configs) == 1, (
-            "oxitest_plugin should be called once on activation"
-        )
-        cfg = received_configs[0]
-        assert isinstance(cfg, TestConfig), (
-            f"config should be TestConfig, got {type(cfg)}"
-        )
-        assert cfg.host == "ssh://activated", f"expected CLI override, got {cfg.host}"
-        assert cfg.path == "/from/pyproject", (
-            f"expected pyproject value, got {cfg.path}"
-        )
-        assert cfg.verbose is False, (
-            f"verbose should default to False, got {cfg.verbose}"
-        )
-    finally:
-        sys.modules.pop("e2e_plugin", None)
+    assert len(received_configs) == 1, (
+        "oxitest_plugin should be called once on activation"
+    )
+    cfg = received_configs[0]
+    assert isinstance(cfg, TestConfig), f"config should be TestConfig, got {type(cfg)}"
+    assert cfg.host == "ssh://activated", f"expected CLI override, got {cfg.host}"
+    assert cfg.path == "/from/pyproject", f"expected pyproject value, got {cfg.path}"
+    assert cfg.verbose is False, f"verbose should default to False, got {cfg.verbose}"

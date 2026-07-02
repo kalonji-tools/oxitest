@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import sys
 import unittest
+from collections.abc import Callable
 
 import oxitest
 from oxitest import Fixture, WarnCapture, helpers, raises
@@ -1529,7 +1529,7 @@ def test_fixtures_namespace_name():
 
 
 @oxitest.mark.inprocess
-def test_plugin_fixture_provider_injected():
+def test_plugin_fixture_provider_injected(fake_module: Fixture[Callable]):
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
     import types
 
@@ -1572,18 +1572,15 @@ def test_plugin_fixture_provider_injected():
     mod.oxitest_plugin = lambda config=None: Plugin(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
         fixture_providers=(provider,)
     )
-    sys.modules["db_plugin"] = mod
+    fake_module("db_plugin", mod)
 
-    try:
-        registry = load_plugins(["db_plugin"], {})
-        assert len(registry.fixture_providers) == 1, (
-            f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
-        )
-        assert registry.fixture_providers[0].fixture_type is FakeDatabase, (
-            "Provider fixture_type should be FakeDatabase"
-        )
-    finally:
-        sys.modules.pop("db_plugin", None)
+    registry = load_plugins(["db_plugin"], {})
+    assert len(registry.fixture_providers) == 1, (
+        f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
+    )
+    assert registry.fixture_providers[0].fixture_type is FakeDatabase, (
+        "Provider fixture_type should be FakeDatabase"
+    )
 
 
 # ── FixtureRegistry: dual-index type-based resolve ────────────────────────────

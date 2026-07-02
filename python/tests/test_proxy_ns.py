@@ -7,6 +7,7 @@ from oxitest._bridge._builtins._logcapture import LogCapture
 from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._raises import raises
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
@@ -86,16 +87,12 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy():
 def test_fixtures_proxy_unknown_namespace_raises():
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
-    try:
+    with raises(AttributeError, match="unknown_ns") as exc_info:
         _ = proxy.unknown_ns
-        assert False, "expected AttributeError for unknown namespace 'unknown_ns'"
-    except AttributeError as exc:
-        assert "unknown_ns" in str(exc), (
-            f"AttributeError should mention 'unknown_ns', got: {exc}"
-        )
-        assert "conftest.py" in str(exc), (
-            f"AttributeError should mention 'conftest.py' for guidance, got: {exc}"
-        )
+    assert "conftest.py" in str(exc_info.value), (
+        f"AttributeError should mention 'conftest.py' for guidance, "
+        f"got: {exc_info.value}"
+    )
 
 
 # ── OxiNamespaceProxy ──────────────────────────────────────────────────────
@@ -151,17 +148,12 @@ def test_oxi_proxy_unknown_raises_with_available_list(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ):
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
-    try:
+    with raises(AttributeError, match="unknown") as exc_info:
         _ = proxy.unknown
-        assert False, "expected AttributeError for unknown oxi builtin 'unknown'"
-    except AttributeError as exc:
-        assert "unknown" in str(exc), (
-            f"AttributeError should mention the unknown name 'unknown', got: {exc}"
-        )
-        assert "tmp" in str(exc), (  # available list shown
-            f"AttributeError should show available builtins (including 'tmp'), got: "
-            f"{exc}"
-        )
+    assert "tmp" in str(exc_info.value), (
+        f"AttributeError should show available builtins (including 'tmp'), got: "
+        f"{exc_info.value}"
+    )
 
 
 # ── Shared fixtures ────────────────────────────────────────────────────────

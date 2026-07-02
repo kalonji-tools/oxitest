@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import oxitest
-from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
+from oxitest import Fixture
+from oxitest._bridge._read_fixtures import _FixturesProxy
 
 
-def test_proxy_resolves_namespace_and_accessor(tmp: oxitest.TempDir) -> None:
+def test_proxy_resolves_namespace_and_accessor(
+    tmp: oxitest.TempDir,
+    fixtures_registry: Fixture[Callable],
+) -> None:
     from oxitest._bridge._fixture_registry import (
         ConftestSource,
         FixtureDef,
@@ -25,24 +31,16 @@ def test_proxy_resolves_namespace_and_accessor(tmp: oxitest.TempDir) -> None:
             namespace="db",
         )
     )
-    token = _fixtures_registry_var.set(reg)
-    try:
-        proxy = _FixturesProxy()
-        accessor = proxy.db.conn
-        assert hasattr(accessor, "_oxitest_fixture_name"), (
-            "should return a FixtureAccessor with fixture name metadata"
-        )
-    finally:
-        _fixtures_registry_var.reset(token)
+    fixtures_registry(reg)
+    proxy = _FixturesProxy()
+    accessor = proxy.db.conn
+    assert hasattr(accessor, "_oxitest_fixture_name"), (
+        "should return a FixtureAccessor with fixture name metadata"
+    )
 
 
-def test_proxy_raises_outside_session() -> None:
-    token = _fixtures_registry_var.set(None)
-    try:
-        proxy = _FixturesProxy()
-        with oxitest.raises(
-            AttributeError, match="only available during a test session"
-        ):
-            proxy.db
-    finally:
-        _fixtures_registry_var.reset(token)
+def test_proxy_raises_outside_session(fixtures_registry: Fixture[Callable]) -> None:
+    fixtures_registry(None)
+    proxy = _FixturesProxy()
+    with oxitest.raises(AttributeError, match="only available during a test session"):
+        proxy.db

@@ -10,6 +10,8 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+import types
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import get_type_hints
@@ -19,9 +21,11 @@ from oxitest import Helpers, TempDir, Yields
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
+    FixtureRegistry,
     FixtureScope,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
+from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import TestResult
@@ -30,6 +34,7 @@ common = Helpers()
 
 __all__ = [
     "exec_inline",
+    "FakeModule",
     "make_fixture_def",
     "make_meta",
     "make_session",
@@ -60,6 +65,67 @@ def clean_sys_modules() -> Yields[None]:
         if key not in saved:
             del sys.modules[key]
     sys.modules.update({k: v for k, v in saved.items() if k not in sys.modules})
+
+
+@common.helper
+@dataclass(frozen=True, slots=True)
+class FakeModule:
+    """Handle returned by the ``fake_module`` fixture."""
+
+    name: str
+    module: types.ModuleType
+
+
+@fx.fixture
+def fake_module() -> Yields[Callable[[str, types.ModuleType], FakeModule]]:
+    """Install a fake module into ``sys.modules``; auto-cleanup on teardown."""
+    installed: list[str] = []
+
+    def _install(name: str, module: types.ModuleType) -> FakeModule:
+        sys.modules[name] = module
+        installed.append(name)
+        return FakeModule(name=name, module=module)
+
+    yield _install
+
+    for name in reversed(installed):
+        sys.modules.pop(name, None)
+
+
+@fx.fixture
+def fixtures_registry() -> Yields[Callable[[FixtureRegistry | None], None]]:
+    """Set ``_fixtures_registry_var`` and auto-reset on teardown."""
+    from contextvars import Token
+
+    from oxitest._bridge._read_fixtures import _fixtures_registry_var
+
+    tokens: list[Token[FixtureRegistry | None]] = []
+
+    def _set(value: FixtureRegistry | None) -> None:
+        tokens.append(_fixtures_registry_var.set(value))
+
+    yield _set
+
+    for token in reversed(tokens):
+        _fixtures_registry_var.reset(token)
+
+
+@fx.fixture
+def helpers_registry() -> Yields[Callable[[HelperRegistry | None], None]]:
+    """Set ``_helpers_registry_var`` and auto-reset on teardown."""
+    from contextvars import Token
+
+    from oxitest._bridge._read_helpers import _helpers_registry_var
+
+    tokens: list[Token[HelperRegistry | None]] = []
+
+    def _set(value: HelperRegistry | None) -> None:
+        tokens.append(_helpers_registry_var.set(value))
+
+    yield _set
+
+    for token in reversed(tokens):
+        _helpers_registry_var.reset(token)
 
 
 @common.helper
