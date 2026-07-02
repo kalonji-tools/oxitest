@@ -114,7 +114,7 @@ def test_dispatch_runtime_exception():
 def test_dispatch_skip_exception():
     """Skip-type exceptions map to SKIPPED."""
 
-    class Skipped(Exception):  # noqa: N818
+    class Skipped(Exception):
         pass
 
     exc = Skipped("not today")

@@ -54,7 +54,7 @@ def test_plugin_loader_discovers_and_activates_typed_config():
         received_configs.append(config)
         return Plugin()
 
-    mod.oxitest_plugin = oxitest_plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]  # noqa: E501
+    mod.oxitest_plugin = oxitest_plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["e2e_plugin"] = mod
 
     try:

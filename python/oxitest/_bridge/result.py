@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 __all__ = [
+    "PROTOCOL_VERSION",
     "CacheEntry",
     "CacheStats",
     "ErrorResult",
     "FailedResult",
-    "Frame",
     "FixtureTiming",
+    "Frame",
     "PassedResult",
     "SkippedResult",
     "TestResult",
@@ -15,7 +16,6 @@ __all__ = [
     "XFailedResult",
     "XPassedResult",
     "_error_result",
-    "PROTOCOL_VERSION",
 ]
 
 from dataclasses import asdict, dataclass

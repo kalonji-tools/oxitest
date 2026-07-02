@@ -48,7 +48,7 @@ def test_add():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, *_ = helpers.common.run_oxitest_subcmd(
         tmp,
         "run",
         "test_math.py::test_nonexistent",

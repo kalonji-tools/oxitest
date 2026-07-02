@@ -45,7 +45,7 @@ def test_glob_star_selects_all_in_file(tmp: TempDir):
 def test_glob_no_match_runs_nothing(tmp: TempDir):
     """Glob with no matches collects zero tests."""
     _write_project(tmp)
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, *_ = helpers.common.run_oxitest_subcmd(
         tmp,
         "run",
         "test_math.py::test_zzz*",

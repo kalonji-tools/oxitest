@@ -3,8 +3,8 @@ from __future__ import annotations
 __all__ = [
     "FixtureSession",
     "_NullFixtureSession",
-    "_SessionProtocol",
     "_Scope",
+    "_SessionProtocol",
 ]
 
 import inspect

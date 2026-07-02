@@ -43,7 +43,7 @@ def _safe_repr(obj: object, max_len: int = _REPR_MAX) -> str:
     r.maxother = max_len
     try:
         return r.repr(obj)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "<repr failed>"
 
 
@@ -144,7 +144,7 @@ def _compute_field_diffs(
         try:
             if lv != rv:
                 diffs.append((name, _repr_safe(lv), _repr_safe(rv)))
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
     return tuple(diffs)
 

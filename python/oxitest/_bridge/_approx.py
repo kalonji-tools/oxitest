@@ -25,7 +25,7 @@ class ApproxBase:
         expected: Any,
         *,
         rel: float = 1e-6,
-        abs: float = 1e-12,  # noqa: A002
+        abs: float = 1e-12,
         nan_ok: bool = False,
     ) -> None:
         self._expected = expected
@@ -142,7 +142,7 @@ def approx(
     expected: object,
     *,
     rel: float = 1e-6,
-    abs: float = 1e-12,  # noqa: A002
+    abs: float = 1e-12,
     nan_ok: bool = False,
 ) -> ApproxBase:
     """Build an approximate-equality wrapper for use in ``assert`` statements.

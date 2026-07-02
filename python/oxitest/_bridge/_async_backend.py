@@ -8,9 +8,9 @@ from __future__ import annotations
 
 __all__ = [
     "AsyncBackend",
-    "SharedAsyncSession",
     "AsyncioBackend",
     "AsyncioSharedSession",
+    "SharedAsyncSession",
     "resolve_backend",
 ]
 

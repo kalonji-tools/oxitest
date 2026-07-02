@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["LogBackend", "StdlibLogBackend", "LogCapture", "_LogCaptureFixture"]
+__all__ = ["LogBackend", "LogCapture", "StdlibLogBackend", "_LogCaptureFixture"]
 
 import logging
 from collections.abc import Generator

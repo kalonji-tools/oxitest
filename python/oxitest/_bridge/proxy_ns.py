@@ -59,7 +59,7 @@ class NamespaceProxy(_CachingProxy):
     the same instance within a single test.
     """
 
-    __slots__ = ("_namespace", "_session", "_module_path", "_fn_teardowns", "_cache")
+    __slots__ = ("_cache", "_fn_teardowns", "_module_path", "_namespace", "_session")
 
     def __init__(
         self,
@@ -98,7 +98,7 @@ class OxiNamespaceProxy(_CachingProxy):
     returns the same `LogCapture` instance within a single test.
     """
 
-    __slots__ = ("_session", "_module_path", "_fn_teardowns", "_fn_name", "_cache")
+    __slots__ = ("_cache", "_fn_name", "_fn_teardowns", "_module_path", "_session")
 
     def __init__(
         self,
@@ -161,7 +161,7 @@ class FixturesProxy(_CachingProxy):
     each return the same proxy object on repeated accesses within one test.
     """
 
-    __slots__ = ("_session", "_module_path", "_fn_teardowns", "_fn_name", "_cache")
+    __slots__ = ("_cache", "_fn_name", "_fn_teardowns", "_module_path", "_session")
 
     def __init__(
         self,

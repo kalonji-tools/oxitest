@@ -1601,7 +1601,7 @@ def test_registry_resolve_by_type_unique():
     """Single fixture for a type resolves regardless of qualifier."""
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def(
-        "db_session", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
+        "db_session", DBSession, conftest_path="/c.py", fixture_type=DBSession
     )
     reg.register(defn)
 
@@ -1616,10 +1616,10 @@ def test_registry_resolve_by_type_ambiguous_with_qualifier():
     """Two fixtures of same type -- qualifier disambiguates."""
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
-        "dev_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
+        "dev_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
     )
     prod = helpers.common.make_fixture_def(
-        "prod_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
+        "prod_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
     )
     reg.register(dev)
     reg.register(prod)
@@ -1634,10 +1634,10 @@ def test_registry_resolve_ambiguous_no_match():
 
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
-        "dev_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
+        "dev_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
     )
     prod = helpers.common.make_fixture_def(
-        "prod_db", lambda: DBSession(), conftest_path="/c.py", fixture_type=DBSession
+        "prod_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
     )
     reg.register(dev)
     reg.register(prod)

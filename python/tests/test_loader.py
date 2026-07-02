@@ -61,7 +61,7 @@ def test_resolve_fn_returns_callable(tmp: TempDir, clean_sys_modules: Fixture[No
     sys.modules["_test_mod_tmp"] = module
     spec.loader.exec_module(module)
 
-    fn_raw, fn = _resolve_fn(module, "test_bar", str(f))
+    _, fn = _resolve_fn(module, "test_bar", str(f))
     assert callable(fn), (
         f"resolved function should be callable, got {type(fn).__name__}"
     )
@@ -116,7 +116,7 @@ def test_resolve_fn_handles_class_method(
     sys.modules["_test_mod_tmp3"] = module
     spec.loader.exec_module(module)
 
-    fn_raw, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
+    _, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
     assert callable(fn), (
         f"resolved class method should be callable, got {type(fn).__name__}"
     )

@@ -14,7 +14,7 @@ def _exec_rewritten(src: str, ns: dict[str, Any]) -> None:
 
     tree, _bare = rewrite_asserts(src, "<test>")
     code = compile(tree, "<test>", "exec")
-    exec(code, ns)  # noqa: S102
+    exec(code, ns)
 
 
 def test_compare_equal_failure_carries_left_right_op():

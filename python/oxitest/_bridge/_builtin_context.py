@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["_BuiltinContext", "TestContext"]
+__all__ = ["TestContext", "_BuiltinContext"]
 
 from collections.abc import Callable
 from dataclasses import dataclass, field

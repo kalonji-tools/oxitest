@@ -539,7 +539,7 @@ def test_collect_items_returns_collected_items():
 
     lineno = fake_fn.__code__.co_firstlineno
     members = [("test_fake", fake_fn)]
-    items, violations = _collect_items(members, "/fake.py", collect_violations=False)
+    items, _ = _collect_items(members, "/fake.py", collect_violations=False)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].fn_name == "test_fake", (
         f"expected fn_name='test_fake', got {items[0].fn_name!r}"
@@ -587,7 +587,7 @@ def test_extract_module_marks_tuple():
     """oxi_mark as tuple is accepted."""
     module = ModuleType("test_tuple")
     module.oxi_mark = (MarkInfo("slow", (), MappingProxyType({})),)  # ty: ignore[unresolved-attribute]
-    marks, violations = _extract_module_marks(module, "/fake/test_tuple.py")
+    marks, _ = _extract_module_marks(module, "/fake/test_tuple.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
 
 
@@ -1083,7 +1083,7 @@ def test_get_fixture_deps_includes_builtins() -> None:
 
     # Use exec to avoid `from __future__ import annotations` stringification
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
-    exec(  # noqa: S102
+    exec(
         "def test_fn(db: Fixture[_MyDB], tmp: TempDir) -> None: ...",
         ns,
     )
@@ -1103,7 +1103,7 @@ def test_get_fixture_deps_skips_non_fixture() -> None:
     from oxitest._bridge._fixture_type import Fixture
 
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
-    exec(  # noqa: S102
+    exec(
         "def test_fn(x: int, db: Fixture[_MyDB]) -> None: ...",
         ns,
     )
@@ -1123,7 +1123,7 @@ def test_get_fixture_deps_returns_qualifier_and_type() -> None:
     from oxitest._bridge._fixture_type import Fixture
 
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
-    exec(  # noqa: S102
+    exec(
         "def test_fn(db: Fixture[_MyDB], tmp: Fixture[TempDir]) -> None: ...",
         ns,
     )
@@ -1142,7 +1142,7 @@ def test_get_fixture_deps_skips_return_annotation() -> None:
     from oxitest._bridge._fixture_type import Fixture
 
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
-    exec(  # noqa: S102
+    exec(
         "def test_fn(db: Fixture[_MyDB]) -> None: ...",
         ns,
     )

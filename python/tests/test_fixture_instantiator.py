@@ -145,7 +145,7 @@ def test_resolve_param_by_type_not_name():
         name="my_thing",
         fixture_type=MyType,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: MyType(), conftest_path="/c.py"),
+        source=ConftestSource(func=MyType, conftest_path="/c.py"),
     )
     inst, _reg = _make_instantiator(defn)
     teardowns: list = []

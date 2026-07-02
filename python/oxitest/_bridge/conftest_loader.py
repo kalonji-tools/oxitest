@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 __all__ = [
-    "find_conftest_paths",
-    "load_fixtures_from_conftest",
+    "_extract_depends_on",
+    "_extract_fixture_type",
+    "_extract_helpers",
     "create_conftest_fixtures",
     "create_session",
-    "_extract_fixture_type",
-    "_extract_depends_on",
-    "_extract_helpers",
+    "find_conftest_paths",
+    "load_fixtures_from_conftest",
 ]
 
 import collections.abc
@@ -74,7 +74,7 @@ def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...
     """
     try:
         hints = get_type_hints(func, include_extras=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Could not resolve type hints for %r: %s", func, exc)
         return ()
     deps: list[tuple[str, type]] = []

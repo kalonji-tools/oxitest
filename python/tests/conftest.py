@@ -29,12 +29,12 @@ from oxitest._bridge.result import TestResult
 common = Helpers()
 
 __all__ = [
+    "RecordingDebugger",
     "exec_inline",
     "make_fixture_def",
     "make_meta",
     "make_session",
     "make_session_with",
-    "RecordingDebugger",
     "run_oxitest",
     "run_oxitest_subcmd",
     "run_test",
@@ -106,7 +106,7 @@ def make_fixture_def(
         # Try to extract return type; fall back to object
         try:
             ft = get_type_hints(factory).get("return", object)
-        except Exception:  # noqa: BLE001
+        except Exception:
             ft = object
     return FixtureDef(
         name=name,
