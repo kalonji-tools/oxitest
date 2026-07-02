@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from types import ModuleType
 from typing import Any, cast, get_type_hints
 
-from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
+from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
@@ -336,31 +336,42 @@ def _import_test_module(
     return module
 
 
-def _register_module_fixtures(
+def _check_module_registrars(
     module: ModuleType,
     path: str,
     session: Any | None,
 ) -> list[CollectedViolation]:
-    """Scan module for Fixtures() instances and register them with the session."""
-    if session is None:
-        return []
-    registry = getattr(session, "_registry", None)
-    if registry is None:
-        return []
+    """Scan module for Fixtures()/Helpers() instances and emit violations.
 
+    Registrars are only valid in conftest.py. Finding them in test modules
+    is a strict-mode violation. However, Fixtures() instances are still
+    registered into the session so that test-file-local fixtures work
+    (the violation is informational, not blocking).
+    """
+    from oxitest._bridge._fixture_registry import ConftestSource
+    from oxitest._bridge._helpers import Helpers
+
+    registry = getattr(session, "_registry", None) if session else None
     violations: list[CollectedViolation] = []
     for attr_name in vars(module):
         obj = getattr(module, attr_name)
-        if isinstance(obj, Fixtures):
+        if isinstance(obj, Helpers):
+            violations.append(
+                CollectedViolation(
+                    node_id=path,
+                    kind=ViolationKind.REGISTRAR_IN_TEST_MODULE,
+                    detail=f"Helpers() instance '{attr_name}' — move to conftest.py",
+                )
+            )
+        elif isinstance(obj, Fixtures) and registry is not None:
+            # Register test-file Fixtures so local fixtures resolve.
             for defn in obj._defs:
-                violations.extend(
-                    registry.register(
-                        dataclasses.replace(
-                            defn,
-                            source=ConftestSource(
-                                func=defn.source.func, conftest_path=path
-                            ),
-                        )
+                registry.register(
+                    dataclasses.replace(
+                        defn,
+                        source=ConftestSource(
+                            func=defn.source.func, conftest_path=path
+                        ),
                     )
                 )
     return violations
@@ -417,7 +428,7 @@ def collect_module(
     """
     unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"  # noqa: S324
     module = _import_test_module(path, unique_name, session)
-    fixture_violations = _register_module_fixtures(module, path, session)
+    fixture_violations = _check_module_registrars(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)
     items: list[CollectedItem] = []
     violations: list[CollectedViolation] = list(mark_violations) + fixture_violations

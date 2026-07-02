@@ -8,6 +8,7 @@ Plugin authors import from here:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -122,6 +123,27 @@ class FixtureProvider(Protocol):
 
         Optional. Defaults to False if not implemented.
         """
+        ...
+
+
+@runtime_checkable
+class HelperProvider(Protocol):
+    """Protocol for plugin-provided helpers.
+
+    Plugins expose helpers by returning ``HelperProvider`` instances from
+    their ``helper_providers`` list.  Each provider contributes a single
+    named callable to the helper registry.  The namespace is derived from
+    ``provider.__module__`` at registration time.
+    """
+
+    @property
+    def name(self) -> str:
+        """Unique helper name (used for namespace-qualified access)."""
+        ...
+
+    @property
+    def helper(self) -> Callable[..., Any]:
+        """The callable to expose as a helper."""
         ...
 
 
@@ -246,6 +268,7 @@ class Plugin:
     # Fixture-adjacent hooks (lazy — activated on first use)
     log_backends: tuple[LogBackend, ...] = ()
     fixture_providers: tuple[FixtureProvider, ...] = ()
+    helper_providers: tuple[HelperProvider, ...] = ()
     execution_wrappers: tuple[ExecutionWrapper, ...] = ()
 
     # Global hooks (eager — activated at startup)

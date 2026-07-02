@@ -144,6 +144,7 @@ from oxitest._bridge._fixture_type import (
 from oxitest._bridge._fixtures import (
     Fixtures as Fixtures,
 )
+from oxitest._bridge._helpers import Helpers as Helpers
 from oxitest._bridge._importorskip import importorskip as importorskip
 from oxitest._bridge._mark_api import (
     mark as mark,
@@ -156,6 +157,8 @@ from oxitest._bridge._plugin_config import (
     Conf as Conf,
 )
 from oxitest._bridge._raises import raises as raises
+from oxitest._bridge._read_fixtures import _FixturesProxy as _FixturesProxy
+from oxitest._bridge._read_helpers import _HelpersProxy as _HelpersProxy
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.parametrize import (
     parametrize as parametrize,
@@ -187,6 +190,9 @@ __all__ = [
     "Fixtures",
     "FixtureShadowWarning",
     "FixtureTeardownWarning",
+    "fixtures",
+    "Helpers",
+    "helpers",
     "LogCapture",
     "Patcher",
     "parametrize",
@@ -210,6 +216,10 @@ __all__ = [
 ]
 
 
+helpers = _HelpersProxy()
+fixtures = _FixturesProxy()
+
+
 def fixture(*args: _Any, **kwargs: _Any) -> _NoReturn:
     """Sentinel: raises with instructions to use Fixtures() registry instead."""
     raise AttributeError(
@@ -220,6 +230,19 @@ def fixture(*args: _Any, **kwargs: _Any) -> _NoReturn:
         "    def my_fixture() -> MyType:\n"
         "        ...\n\n"
         "Define your Fixtures() instance in conftest.py and import the functions."
+    )
+
+
+def helper(*args: _Any, **kwargs: _Any) -> _NoReturn:
+    """Sentinel: raises with instructions to use Helpers() registry instead."""
+    raise AttributeError(
+        "oxitest.helper does not exist.\n"
+        "Helpers in oxitest are declared via a Helpers() registry:\n\n"
+        "    helpers = oxitest.Helpers()\n\n"
+        "    @helpers.helper\n"
+        "    def my_helper() -> MyType:\n"
+        "        ...\n\n"
+        "Define your Helpers() instance in conftest.py."
     )
 
 
