@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import oxitest
-from oxitest import helpers
-from oxitest._bridge._builtins._capture import StdCapture
-from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
+from oxitest import DebuggerBackend, StdCapture, helpers
+from oxitest._bridge._debugger import _PdbBackend
 from oxitest._bridge._diagnostics import is_debuggable as _is_debuggable
 from oxitest._bridge.executor import (
     _debug_post_mortem,

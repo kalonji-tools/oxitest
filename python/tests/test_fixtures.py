@@ -4,7 +4,7 @@ import sys
 import unittest
 
 import oxitest
-from oxitest import Fixture, WarnCapture, helpers, raises
+from oxitest import Fixture, Fixtures, WarnCapture, helpers, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     FixtureCycleError,
@@ -15,7 +15,6 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     FixtureShadowWarning,
 )
-from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge.result import ViolationKind
 
 # ── skip / mark ───────────────────────────────────────────────────────────────

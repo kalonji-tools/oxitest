@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from typing import Annotated, get_args, get_origin, get_type_hints
 
 import oxitest as oxi
+from oxitest import Fixture
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
     FixtureScope,
     PluginSource,
 )
-from oxitest._bridge._fixture_type import Fixture, _FixtureMarker, _FixtureType
+from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureType
 
 
 class _Database:

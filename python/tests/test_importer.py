@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
 
 import oxitest
-from oxitest import TempDir, WarnCapture, helpers, raises
+from oxitest import CollectedItem, TempDir, WarnCapture, helpers, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
@@ -19,7 +19,7 @@ from oxitest._bridge.importer import (
     collect_module,
 )
 from oxitest._bridge.parametrize import DictCases
-from oxitest._bridge.result import CollectedItem, ViolationKind
+from oxitest._bridge.result import ViolationKind
 
 
 def test_collect_empty_module(tmp: TempDir):

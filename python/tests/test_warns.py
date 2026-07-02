@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import warnings
 
-from oxitest._bridge._raises import raises
-from oxitest._bridge._warns import warns
+from oxitest import raises, warns
 
 
 def test_warns_catches_expected_warning():

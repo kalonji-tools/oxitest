@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from oxitest._bridge._importorskip import importorskip
-from oxitest._bridge._raises import raises
+from oxitest import importorskip, raises
 
 
 def test_importorskip_returns_module():

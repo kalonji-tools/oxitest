@@ -209,7 +209,7 @@ def test_keep_tmp_preserves_on_failure(tmp: TempDir):
         tmp,
         """\
 from oxitest import Fixture
-from oxitest._bridge._builtins import TempDir
+from oxitest import TempDir
 
 def test_uses_tmp(t: Fixture[TempDir]) -> None:
     (t / "artifact.txt").write_text("data")
@@ -228,7 +228,7 @@ def test_keep_tmp_cleans_on_pass(tmp: TempDir):
         tmp,
         """\
 from oxitest import Fixture
-from oxitest._bridge._builtins import TempDir
+from oxitest import TempDir
 
 def test_uses_tmp(t: Fixture[TempDir]) -> None:
     (t / "artifact.txt").write_text("data")

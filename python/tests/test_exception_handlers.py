@@ -6,12 +6,11 @@ import warnings
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest._bridge._builtins._warncapture import WarnCapture
+from oxitest import FixtureTeardownWarning, WarnCapture
 from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
 )
-from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge.result import StatusKind
 
 # ---------------------------------------------------------------------------

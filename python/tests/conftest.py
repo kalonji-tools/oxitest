@@ -15,7 +15,7 @@ from types import TracebackType
 from typing import get_type_hints
 
 import oxitest
-from oxitest import Helpers, TempDir, Yields
+from oxitest import Helpers, TempDir, TestResult, Yields
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -24,7 +24,6 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
-from oxitest._bridge.result import TestResult
 
 common = Helpers()
 

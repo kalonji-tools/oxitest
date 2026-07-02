@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import oxitest
-from oxitest._bridge._helpers import Helpers
+from oxitest import Helpers
 
 
 def test_helper_decorator_registers() -> None:

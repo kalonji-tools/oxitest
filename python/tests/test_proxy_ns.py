@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from oxitest import Fixture, TempDir, helpers
+from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir, helpers
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
-from oxitest._bridge._builtins._capture import StdCapture
-from oxitest._bridge._builtins._logcapture import LogCapture
-from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest

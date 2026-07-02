@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from oxitest import raises
 from oxitest._bridge._middleware import (
     AsyncBridgeMiddleware,
     AsyncDepGuardMiddleware,
     MiddlewareBuilder,
     TimeoutMiddleware,
 )
-from oxitest._bridge._raises import raises
 
 
 def test_default_pipeline_builds_without_error():
