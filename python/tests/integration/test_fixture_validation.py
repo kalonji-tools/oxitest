@@ -8,7 +8,7 @@ def test_fixture_typo_aborts_with_exit_code_3(tmp: TempDir):
     conftest = """\
 import oxitest
 
-db = oxitest.Fixtures()
+db = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @db.fixture
 def store() -> int:
@@ -32,7 +32,7 @@ def test_valid_fixture_names_pass(tmp: TempDir):
     conftest = """\
 import oxitest
 
-db = oxitest.Fixtures()
+db = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @db.fixture
 def store() -> int:
@@ -55,7 +55,7 @@ def test_did_you_mean_suggestion(tmp: TempDir):
     conftest = """\
 import oxitest
 
-db = oxitest.Fixtures()
+db = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 @db.fixture
 def store() -> int:

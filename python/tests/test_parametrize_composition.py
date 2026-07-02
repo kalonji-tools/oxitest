@@ -44,7 +44,7 @@ class DbCase:
 
 # ── Module-level fixture registry (for FixtureRef test) ────────────────────
 
-_fixtures = oxitest.Fixtures()
+_fixtures = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 
 @_fixtures.fixture
