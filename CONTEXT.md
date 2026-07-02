@@ -54,11 +54,11 @@
 
 **conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures and helpers scoped to that directory subtree.
 
-**Helpers** — Public callables (functions and classes) in a conftest.py that are not `Fixtures` instances and not `_`-prefixed. Accessed via `from conftest import helpers`.
+**Helpers** — Callables explicitly registered via a `Helpers()` instance in conftest.py. Accessed via `from oxitest import helpers` as `helpers.<namespace>.<fn>()`. Sources: conftest definitions and plugin providers.
 
-**Helpers Namespace** — A dot-accessible scope grouping helpers from a single conftest.py. Named after the directory by default, overridable via `__helpers_namespace__`.
+**Helpers (registry)** — An instance-based registry (`helpers = Helpers()`) that collects helper definitions via the `@helpers.helper` decorator.
 
-**`__helpers_namespace__`** — Module-level dunder in a conftest.py that overrides the auto-derived namespace name for that file's helpers.
+**HelperProvider** — Plugin protocol for providing helpers. Properties: `name` (str) and `helper` (callable). Namespace derived from `provider.__module__` at registration time.
 
 ## Marks
 

@@ -209,7 +209,7 @@ Tests in `python/tests/` must follow these rules:
    - `@oxi.parametrize` for multiple similar cases, not copy-pasted test functions
    - Dataclass-based test doubles not `unittest.mock.MagicMock`
    - Exception: when testing an oxitest feature itself requires bootstrapping (e.g., testing `Patcher` needs direct `os.environ` access), stdlib is acceptable in the arrange phase.
-4. **Import helpers from conftest.** Shared test utilities live in `python/tests/conftest.py` and are accessed via `from conftest import helpers`. Use `helpers.common.<function>()` — never `sys.path.insert`.
+4. **Import helpers from oxitest.** Shared test utilities live in `python/tests/conftest.py` and are accessed via `from oxitest import helpers`. Use `helpers.common.<function>()` — never `sys.path.insert`.
 
 ## Agent skills
 
