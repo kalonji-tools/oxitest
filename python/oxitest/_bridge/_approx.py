@@ -20,6 +20,8 @@ _builtins_abs = _builtins.abs
 class ApproxBase:
     """Abstract base for approximate comparisons."""
 
+    __hash__ = None  # type: ignore[assignment]  # unhashable: defines __eq__
+
     def __init__(
         self,
         expected: Any,
@@ -63,6 +65,8 @@ class ApproxBase:
 class ApproxScalar(ApproxBase):
     """Approximate comparison for a single numeric value."""
 
+    __hash__ = None  # type: ignore[assignment]  # unhashable: defines __eq__
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ApproxBase):
             raise TypeError(_APPROX_VS_APPROX_MSG)
@@ -89,6 +93,8 @@ class ApproxScalar(ApproxBase):
 class ApproxSequence(ApproxBase):
     """Approximate comparison for sequences (list, tuple)."""
 
+    __hash__ = None  # type: ignore[assignment]  # unhashable: defines __eq__
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ApproxBase):
             raise TypeError(_APPROX_VS_APPROX_MSG)
@@ -111,6 +117,8 @@ class ApproxSequence(ApproxBase):
 
 class ApproxMapping(ApproxBase):
     """Approximate comparison for mappings (dict)."""
+
+    __hash__ = None  # type: ignore[assignment]  # unhashable: defines __eq__
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ApproxBase):

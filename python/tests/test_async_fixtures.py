@@ -20,7 +20,7 @@ def _exhaust_coro(coro):
 class _StubSession:
     """Minimal SharedAsyncSession that synchronously exhausts coroutines."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.run_count = 0
 
     def run(self, coro):
@@ -36,7 +36,7 @@ class _StubBackend:
 
     name = "stub"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._session = _StubSession()
         self.create_count = 0
 

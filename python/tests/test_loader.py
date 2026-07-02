@@ -7,7 +7,8 @@ from oxitest import Fixture, TempDir, raises
 
 
 def _unique_name(path: str) -> str:
-    return f"_oxitest_exec_{hashlib.md5(path.encode()).hexdigest()[:12]}"
+    digest = hashlib.md5(path.encode(), usedforsecurity=False)
+    return f"_oxitest_exec_{digest.hexdigest()[:12]}"
 
 
 def test_load_module_returns_module_with_function(tmp: TempDir):

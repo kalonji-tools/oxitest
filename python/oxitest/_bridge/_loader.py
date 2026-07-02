@@ -5,7 +5,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
@@ -96,4 +96,4 @@ def _resolve_fn(
         raise _LoadError(
             _error_result(f"Function '{fn_name}' not found in {module_path}")
         )
-    return fn_raw, cast(Callable[..., Any], fn_raw)
+    return fn_raw, fn_raw

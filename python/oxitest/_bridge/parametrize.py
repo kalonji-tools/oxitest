@@ -19,7 +19,7 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
 from oxitest._bridge._fixture_registry import _fixture_inner_type
@@ -456,7 +456,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
                             " full dataclass or dict cases."
                             " All stacked @parametrize layers must use partial()."
                         )
-                existing_pt = existing[0].param_type
+                existing_pt = existing[0].param_type  # ty: ignore[unresolved-attribute]
                 new_pt = new_layer.param_type
                 if existing_pt is not new_pt:
                     assert (
@@ -470,7 +470,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
                         f" got '{new_pt.__name__}'."
                     )
                 for layer in existing:
-                    overlap = layer.provided_fields & new_layer.provided_fields
+                    overlap = layer.provided_fields & new_layer.provided_fields  # ty: ignore[unresolved-attribute]
                     if overlap:
                         raise TypeError(
                             "parametrize: field overlap between layers:"
@@ -503,9 +503,6 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     return dataclass_decorator
 
 
-_MISSING = object()
-
-
 def resolve_parametrize(
     fn_raw: object,
     fn: Callable[..., Any],
@@ -518,16 +515,14 @@ def resolve_parametrize(
     """
     if param_id is None:
         return {}, frozenset()
-    meta = get_metadata(fn_raw)
-    layers = meta.param_cases if meta.param_cases is not None else _MISSING
-    if layers is _MISSING:
+    layers = get_metadata(fn_raw).param_cases
+    if layers is None:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
         raise ParametrizeError(
             f"resolve_parametrize: {fn_name!r} has no parametrize cases"
             f" but param_id={param_id!r} was requested."
             " Use @oxitest.parametrize to register cases."
         )
-    layers = cast(tuple, layers)
     if len(layers) == 1 and not isinstance(layers[0], ComposedCases):
         return layers[0].resolve(fn, param_id)
-    return _resolve_composed(layers, fn, param_id)
+    return _resolve_composed(layers, fn, param_id)  # ty: ignore[invalid-argument-type]

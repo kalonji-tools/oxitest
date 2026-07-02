@@ -988,7 +988,7 @@ def test_logcapture_includes_plugin_backends():
     from oxitest.plugin import Plugin
 
     class FakePluginBackend:
-        def __init__(self):
+        def __init__(self) -> None:
             self.installed = False
             self._records: list[logging.LogRecord] = []
 
@@ -1009,7 +1009,7 @@ def test_logcapture_includes_plugin_backends():
     sys.modules["fake_log_plugin"] = mod
     try:
         registry = load_plugins(["fake_log_plugin"], {})
-        backends = [StdlibLogBackend()] + list(registry.log_backends)
+        backends = [StdlibLogBackend(), *registry.log_backends]
         cap = LogCapture(backends)
 
         assert fake_backend.installed, (

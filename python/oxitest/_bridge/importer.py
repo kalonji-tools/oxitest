@@ -11,7 +11,7 @@ import warnings
 from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast, get_type_hints
+from typing import Any, get_type_hints
 
 from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
@@ -277,19 +277,18 @@ def _expand_item(
                 fixture_deps=fixture_deps,
             )
         ]
-    layers = cast(tuple, raw)
     # Composition: all layers are ComposedCases (partial)
-    if len(layers) > 1 or isinstance(layers[0], ComposedCases):
+    if len(raw) > 1 or isinstance(raw[0], ComposedCases):
         # Merge fixref_deps from all composition layers
         all_fixref_deps: list[tuple[str, str]] = []
         seen: set[str] = set()
-        for layer in layers:
-            for dep in _get_fixref_deps(layer):
+        for layer in raw:
+            for dep in _get_fixref_deps(layer):  # ty: ignore[invalid-argument-type]
                 if dep[0] not in seen:
                     all_fixref_deps.append(dep)
                     seen.add(dep[0])
         return _expand_composed(
-            layers,
+            raw,  # ty: ignore[invalid-argument-type]
             fn_name,
             lineno,
             marker_names,
@@ -298,7 +297,7 @@ def _expand_item(
             fixref_deps=tuple(sorted(all_fixref_deps)),
         )
     # Single layer: existing behavior
-    fixref_deps = _get_fixref_deps(layers[0])
+    fixref_deps = _get_fixref_deps(raw[0])  # ty: ignore[invalid-argument-type]
     return [
         CollectedItem(
             fn_name=fn_name,
@@ -310,7 +309,7 @@ def _expand_item(
             fixture_deps=fixture_deps,
             fixref_deps=fixref_deps,
         )
-        for case_id, pv in layers[0].items()
+        for case_id, pv in raw[0].items()
     ]
 
 
@@ -460,7 +459,8 @@ def collect_module(
     If collect_violations is True, also detect strict-mode violations and return
     them as CollectedViolation objects alongside the items.
     """
-    unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"
+    digest = hashlib.md5(path.encode(), usedforsecurity=False)
+    unique_name = f"_oxitest_collect_{digest.hexdigest()[:12]}"
     module = _import_test_module(path, unique_name, session)
     fixture_violations = _check_module_registrars(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)

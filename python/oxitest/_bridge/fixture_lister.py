@@ -192,12 +192,12 @@ def tree_fixtures_from_registry(
         deps = graph.get(name, [])
         child_prefix = prefix if is_root else (prefix + ("    " if is_last else "│   "))
         for i, dep in enumerate(deps):
-            _render_node(dep, child_prefix, i == len(deps) - 1, False)
+            _render_node(dep, child_prefix, is_last=i == len(deps) - 1, is_root=False)
 
     for i, root in enumerate(roots):
         if i > 0:
             lines.append("")
-        _render_node(root, "", True, True)
+        _render_node(root, "", is_last=True, is_root=True)
 
     # Summary
     shown = len(roots)

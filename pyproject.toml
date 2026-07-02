@@ -35,85 +35,69 @@ ignore = [
     # ── Intentional design decisions ─────────────────────────────────────
     "A002",           # shadowing builtins (abs param in approx is intentional API)
     "B009", "B010",   # getattr/setattr used intentionally for ty compatibility
+    "B015",           # pointless comparison (intentional in raises() context)
     "D105", "D107",   # missing docstring in magic method / __init__
+    "ERA001",         # commented-out code (algorithm explanations, not dead code)
     "PLC0414",        # re-export aliases (Foo as Foo) are intentional public API
+    "PLR0911",        # too many return statements (complex dispatchers)
+    "RUF006",         # asyncio dangling task (intentional in leak-detection tests)
+    "FBT002",         # boolean default value (intentional API: show_locals=False)
     "S102",           # exec() used intentionally (module loader, test helpers)
+    "S112",           # try-except-continue (intentional fallback in diagnostics)
+    "T100",           # debugger breakpoint (intentional in _debugger.py)
+    "TRY203",         # re-raise in except (intentional propagation e.g. bdb.BdbQuit)
+    "TRY300",         # return in try (acceptable pattern in loaders)
 
     # ── Not yet addressed (TODO: fix incrementally) ──────────────────────
     "ANN001",         # missing type annotation for function argument
     "ANN002",         # missing type annotation for *args
     "ANN201",         # missing return type annotation for public function
     "ANN202",         # missing return type annotation for private function
-    "ANN204",         # missing return type annotation for __init__
     "ANN401",         # dynamically typed expressions (Any) disallowed
     "ARG001",         # unused function argument
     "ARG002",         # unused method argument
-    "ARG004",         # unused static method argument
     "ARG005",         # unused lambda argument
-    "B015",           # pointless comparison (used in raises() context)
     "BLE001",         # blind exception catch
     "C901",           # function too complex
-    "E501",           # line too long
-    "E731",           # lambda assignment
     "EM101",          # exception must not use string literal
     "EM102",          # exception must not use f-string literal
-    "EXE001",         # shebang present but not executable
     "FBT001",         # boolean positional arg in function def
-    "FURB110",        # replace ternary with or
-    "FBT002",         # boolean default value in function def
-    "FBT003",         # boolean positional value in function call
     "INP001",         # missing __init__.py (implicit namespace package)
     "N806",           # variable in function should be lowercase
-    "N818",           # exception name should end with Error
     "PLC0415",        # import outside top-level
-    "PLR0911",        # too many return statements
     "PLR0912",        # too many branches
     "PLR0913",        # too many arguments
     "PLR0915",        # too many statements
     "PLR2004",        # magic value in comparison
-    "PLW0177",        # comparison with NaN
-    "PLW1510",        # subprocess.run without check
-    "PLW1641",        # __eq__ without __hash__
-    "PLW2901",        # redefined loop variable
-    "PT015",          # assert always fails (for pytest)
-    "PT017",          # assert in except block (for pytest)
-    "PT018",          # composite assert (for pytest)
-    "PYI018",         # unused TypeVar
-    "PYI034",         # __aenter__ return type
-    "PYI036",         # __aexit__ arg type
-    "RET508",         # unnecessary elif after break
-    "RSE102",         # unnecessary parentheses on raised exception
-    "RUF002",         # ambiguous unicode character
-    "RUF005",         # consider unpacking instead of concatenation
-    "RUF006",         # asyncio dangling task
-    "RUF012",         # mutable class variable without ClassVar
     "S101",           # use of assert
-    "S108",           # insecure temp file usage
-    "S112",           # try-except-continue
-    "S324",           # insecure hash function
-    "S603",           # subprocess call without shell=False check
-    "S607",           # partial executable path in subprocess
     "SLF001",         # private member access
-    "T100",           # debugger breakpoint
     "TC001",          # move app import into TYPE_CHECKING
     "TC002",          # move third-party import into TYPE_CHECKING
     "TC003",          # move stdlib import into TYPE_CHECKING
-    "TC005",          # empty TYPE_CHECKING block
-    "TC006",          # cast to string instead of using quotes
     "TRY003",         # long exception message outside exception class
-    "TRY203",         # prefer raise from
-    "TRY300",         # consider else block for try
     "TRY301",         # raise within try
-    "ERA001",         # commented-out code
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "python/oxitest/_bridge/worker.py" = ["T201", "D"]
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/oxitest/_bridge/_*.py" = ["D100", "D101", "D102", "D103", "D104"]
-"python/tests/*" = ["T201", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D"]
+"python/tests/*" = [
+    "T201", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D",
+    "PLR2004",  # magic values in comparisons
+    "PT015",    # assert always fails
+    "PT017",    # assert in except block
+    "PT018",    # composite assert
+    "S108",     # insecure temp file usage
+    "S603",     # subprocess call
+    "S607",     # partial executable path
+    "PLW1510",  # subprocess.run without check
+    "PLW0177",  # comparison with NaN
+    "N818",     # exception name suffix (test doubles named Skipped etc.)
+    "FBT003",   # boolean positional value in function call
+]
 "scripts/*" = ["T201", "D"]
-"benchmarks/*.py" = ["T201", "E501", "D"]
+"benchmarks/*.py" = ["T201", "E501", "D", "PLR2004", "S101"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
