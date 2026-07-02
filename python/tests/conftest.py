@@ -21,11 +21,9 @@ from oxitest import Helpers, TempDir, Yields
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
-    FixtureRegistry,
     FixtureScope,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
-from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import TestResult
@@ -34,7 +32,6 @@ common = Helpers()
 
 __all__ = [
     "exec_inline",
-    "FakeModule",
     "make_fixture_def",
     "make_meta",
     "make_session",
@@ -67,24 +64,14 @@ def clean_sys_modules() -> Yields[None]:
     sys.modules.update({k: v for k, v in saved.items() if k not in sys.modules})
 
 
-@common.helper
-@dataclass(frozen=True, slots=True)
-class FakeModule:
-    """Handle returned by the ``fake_module`` fixture."""
-
-    name: str
-    module: types.ModuleType
-
-
 @fx.fixture
-def fake_module() -> Yields[Callable[[str, types.ModuleType], FakeModule]]:
+def fake_module() -> Yields[Callable[[str, types.ModuleType], None]]:
     """Install a fake module into ``sys.modules``; auto-cleanup on teardown."""
     installed: list[str] = []
 
-    def _install(name: str, module: types.ModuleType) -> FakeModule:
+    def _install(name: str, module: types.ModuleType) -> None:
         sys.modules[name] = module
         installed.append(name)
-        return FakeModule(name=name, module=module)
 
     yield _install
 
@@ -92,40 +79,39 @@ def fake_module() -> Yields[Callable[[str, types.ModuleType], FakeModule]]:
         sys.modules.pop(name, None)
 
 
+def _contextvar_setter(
+    var_path: str, var_name: str
+) -> Yields[Callable[[object], None]]:
+    """Shared implementation for context-variable fixtures."""
+    import importlib
+    from contextvars import Token
+
+    var = getattr(importlib.import_module(var_path), var_name)
+    tokens: list[Token[object]] = []
+
+    def _set(value: object) -> None:
+        tokens.append(var.set(value))
+
+    yield _set
+
+    for token in reversed(tokens):
+        var.reset(token)
+
+
 @fx.fixture
-def fixtures_registry() -> Yields[Callable[[FixtureRegistry | None], None]]:
+def fixtures_registry() -> Yields[Callable[[object], None]]:
     """Set ``_fixtures_registry_var`` and auto-reset on teardown."""
-    from contextvars import Token
-
-    from oxitest._bridge._read_fixtures import _fixtures_registry_var
-
-    tokens: list[Token[FixtureRegistry | None]] = []
-
-    def _set(value: FixtureRegistry | None) -> None:
-        tokens.append(_fixtures_registry_var.set(value))
-
-    yield _set
-
-    for token in reversed(tokens):
-        _fixtures_registry_var.reset(token)
+    yield from _contextvar_setter(
+        "oxitest._bridge._read_fixtures", "_fixtures_registry_var"
+    )
 
 
 @fx.fixture
-def helpers_registry() -> Yields[Callable[[HelperRegistry | None], None]]:
+def helpers_registry() -> Yields[Callable[[object], None]]:
     """Set ``_helpers_registry_var`` and auto-reset on teardown."""
-    from contextvars import Token
-
-    from oxitest._bridge._read_helpers import _helpers_registry_var
-
-    tokens: list[Token[HelperRegistry | None]] = []
-
-    def _set(value: HelperRegistry | None) -> None:
-        tokens.append(_helpers_registry_var.set(value))
-
-    yield _set
-
-    for token in reversed(tokens):
-        _helpers_registry_var.reset(token)
+    yield from _contextvar_setter(
+        "oxitest._bridge._read_helpers", "_helpers_registry_var"
+    )
 
 
 @common.helper
