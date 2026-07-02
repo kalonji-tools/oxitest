@@ -1004,7 +1004,7 @@ def test_async_yield_fixture_setup_error(tmp: TempDir):
 
     async def bad_factory():
         raise RuntimeError("setup failed")
-        yield  # noqa: RET503
+        yield
 
     session = helpers.common.make_session_with("bad", bad_factory)
     result = helpers.common.exec_inline(

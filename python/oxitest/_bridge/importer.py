@@ -34,7 +34,7 @@ def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
     """Extract (qualifier, type_name) pairs for all Fixture[T]-annotated params."""
     try:
         hints = get_type_hints(fn, include_extras=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Swallow type hint errors — user code may have unresolvable forward references
         logger.debug("Could not resolve type hints for %r: %s", fn, exc)
         return ()
@@ -79,7 +79,7 @@ def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
             entry(_sentinel)  # ty: ignore[call-top-callable]
             marks = get_marks(_sentinel)
             return marks[-1] if marks else None
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
     return None
 
@@ -231,7 +231,7 @@ def _get_fixref_deps(layer: ComposedCases) -> tuple[tuple[str, str], ...]:
     globalns.setdefault("FixtureRef", FixtureRef)
     try:
         field_hints = get_type_hints(param_type, globalns=globalns, include_extras=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Could not resolve type hints for %r: %s", param_type, exc)
         return ()
     from typing import Annotated, get_args, get_origin
@@ -460,7 +460,7 @@ def collect_module(
     If collect_violations is True, also detect strict-mode violations and return
     them as CollectedViolation objects alongside the items.
     """
-    unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"  # noqa: S324
+    unique_name = f"_oxitest_collect_{hashlib.md5(path.encode()).hexdigest()[:12]}"
     module = _import_test_module(path, unique_name, session)
     fixture_violations = _check_module_registrars(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)

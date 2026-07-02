@@ -8,7 +8,7 @@ C extensions holding the GIL without yielding may delay the Windows interrupt.
 
 from __future__ import annotations
 
-__all__ = ["make_timeout_wrapper", "OxitestTimeoutError"]
+__all__ = ["OxitestTimeoutError", "make_timeout_wrapper"]
 
 import ctypes
 import signal

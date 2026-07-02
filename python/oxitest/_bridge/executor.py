@@ -79,7 +79,7 @@ from oxitest._bridge.result import TestResult, _error_result
 
 @functools.cache
 def _exec_unique_name(module_path: str) -> str:
-    return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"  # noqa: S324
+    return f"_oxitest_exec_{hashlib.md5(module_path.encode()).hexdigest()[:12]}"
 
 
 def _resolve_debugger_backend(
@@ -193,7 +193,7 @@ def _build_execution_chain(
     """Build the composed execution callable via middleware pipeline."""
     # Resolve bare-assert lines (was BareAssertMiddleware)
     _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
-    _simple_fn_name = fn_name.split("::")[-1]
+    _simple_fn_name = fn_name.rsplit("::", maxsplit=1)[-1]
     no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
 
     plan = ExecutionPlan(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import functools
 import itertools
 
-__all__ = ["load_plugins", "PluginRegistry"]
+__all__ = ["PluginRegistry", "load_plugins"]
 import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field

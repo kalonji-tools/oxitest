@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["TempDir", "TempDirFactory", "_TempDirFixture", "_TempDirFactoryFixture"]
+__all__ = ["TempDir", "TempDirFactory", "_TempDirFactoryFixture", "_TempDirFixture"]
 
 import shutil
 import sys

@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 __all__ = [
+    "ComposedCases",
+    "DataclassCases",
+    "DictCases",
+    "ParametrizeError",
+    "ResolvedCases",
+    "_Partial",
     "parametrize",
     "partial",
     "resolve_parametrize",
-    "ParametrizeError",
-    "ResolvedCases",
-    "DictCases",
-    "DataclassCases",
-    "ComposedCases",
-    "_Partial",
 ]
 
 import dataclasses

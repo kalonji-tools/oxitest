@@ -163,14 +163,14 @@ class FixtureValidator:
 
     @staticmethod
     def _type_matches_plugin(
-        fn: Any,  # noqa: ANN401
+        fn: Any,
         param_name: str,
         plugin_types: set[type],
     ) -> bool:
         """Check if *param_name*'s hint on *fn* is a plugin Fixture type."""
         try:
             hints = get_type_hints(fn, include_extras=True)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
         hint = hints.get(param_name)
         if hint is None:

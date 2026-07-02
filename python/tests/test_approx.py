@@ -181,7 +181,7 @@ def test_ordering_raises(case: OrderingCase):
 
 def test_approx_vs_approx_raises():
     with raises(TypeError, match="cannot be compared"):
-        approx(1.0) == approx(2.0)  # noqa: B015
+        approx(1.0) == approx(2.0)
 
 
 @dataclass(frozen=True)

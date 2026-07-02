@@ -7,8 +7,8 @@ from typing import Any, get_type_hints as _stdlib_hints
 from oxitest._bridge._fn_metadata import get_metadata
 
 __all__ = [
-    "get_marks",
     "get_fixture_name",
+    "get_marks",
     "get_type_hints_cached",
 ]
 
@@ -26,7 +26,7 @@ def get_marks(obj: object) -> list[Any]:
 def get_fixture_name(fn: object, fallback: str = "") -> str:
     """Return the registered fixture name for fn, falling back to fallback."""
     name = get_metadata(fn).fixture_name
-    return name if name else (getattr(fn, "__name__", None) or fallback)
+    return name or (getattr(fn, "__name__", None) or fallback)
 
 
 def get_type_hints_cached(fn: Any) -> dict[str, Any]:

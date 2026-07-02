@@ -139,7 +139,7 @@ def test_resolve_passes_deps_to_fixture():
     mgr = SharedAsyncManager(backend)
     received = {}
 
-    async def my_fixture(a: int = 0, b: str = ""):  # noqa: D103
+    async def my_fixture(a: int = 0, b: str = ""):
         received["a"] = a
         received["b"] = b
         return "ok"

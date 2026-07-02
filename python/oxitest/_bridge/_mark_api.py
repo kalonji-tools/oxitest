@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__all__ = ["mark", "skip", "MarkInfo", "_append_mark"]
+__all__ = ["MarkInfo", "_append_mark", "mark", "skip"]
 
 import unittest
 from collections.abc import Callable
@@ -96,7 +96,7 @@ class _TimeoutMark:
             seconds = kwargs.get("seconds")
         if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
             raise ValueError(
-                f"@oxitest.mark.timeout requires an integer seconds > 0, got {seconds!r}"  # noqa: E501
+                f"@oxitest.mark.timeout requires an integer seconds > 0, got {seconds!r}"
             )
         info = MarkInfo("timeout", (), MappingProxyType({"seconds": seconds}))
 

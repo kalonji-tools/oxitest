@@ -151,7 +151,7 @@ def test_shared_fixture_created_once_across_workers(tmp: TempDir):
         )
 
     # Act: run with workers to exercise parallel fixture sharing.
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
 
     # Assert: all tests pass.
     helpers.integ.assert_passed(out, rc, count=3)

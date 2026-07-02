@@ -8,15 +8,14 @@ import oxitest
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
-from oxitest import Fixture, TempDir, helpers, raises  # noqa: F401
+from oxitest import Fixture, TempDir, helpers, raises
 from oxitest._bridge._builtin_context import _BuiltinContext
-from oxitest._bridge._builtins import (  # noqa: F401
-    FdCapture,
+from oxitest._bridge._builtins import (
     LogCapture,
     Patcher,
     StdCapture,
     TempDirFactory,
-    TestContext,  # noqa: F401
+    TestContext,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._test_meta import TestMeta
@@ -270,7 +269,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr():
 def test_tempdir_factory_mktemp_creates_distinct_dirs():
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
-    ctx, teardowns = _make_builtin_ctx(inject_scope="session")
+    ctx, _ = _make_builtin_ctx(inject_scope="session")
     factory = _TempDirFactoryFixture().create(ctx)
 
     a = factory.mktemp("a")
@@ -480,7 +479,7 @@ def test_patcher_setattr_overrides_attribute():
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
-    ctx, teardowns = _make_builtin_ctx()
+    ctx, _ = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     obj = types.SimpleNamespace(x=1)
@@ -623,7 +622,6 @@ def test_builtin_types_are_injectable():
 
 
 def test_testcontext_registered_as_builtin():
-    import oxitest._bridge._builtins  # noqa: F401 — trigger registrations
     from oxitest._bridge._builtin_context import TestContext
     from oxitest._bridge._builtins._base import BuiltinFixture
 
@@ -638,7 +636,6 @@ def test_testcontext_registered_as_builtin():
 
 def _make_session():
     """Import oxitest (triggers _builtins registration) and return session classes."""
-    import oxitest  # noqa: F401 — triggers _builtins registration
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
 

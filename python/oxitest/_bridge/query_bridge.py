@@ -125,7 +125,7 @@ def test_fixture_deps(
     for path in test_files:
         try:
             items, _ = collect_module(path, session)
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         for item in items:
             if not item.fixture_deps:

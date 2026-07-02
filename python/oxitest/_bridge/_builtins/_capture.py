@@ -2,11 +2,11 @@ from __future__ import annotations
 
 __all__ = [
     "CaptureResult",
-    "_CaptureBase",
-    "StdCapture",
     "FdCapture",
-    "_StdCaptureFixture",
+    "StdCapture",
+    "_CaptureBase",
     "_FdCaptureFixture",
+    "_StdCaptureFixture",
 ]
 
 import io

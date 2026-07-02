@@ -132,13 +132,13 @@ def injectable(cls: _T) -> _T:
 
 
 __all__ = [
-    "_FixtureMarker",
-    "_FixtureType",
     "Fixture",
+    "FixtureRef",
+    "Yields",
+    "_FixtureMarker",
     "_FixtureRefMarker",
     "_FixtureRefType",
-    "FixtureRef",
+    "_FixtureType",
     "_YieldsAlias",
-    "Yields",
     "injectable",
 ]

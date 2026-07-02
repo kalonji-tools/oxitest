@@ -9,12 +9,12 @@ set of built-in marker names defined by BUILTIN_MARKERS in filter.rs.
 from __future__ import annotations
 
 __all__ = [
-    "evaluate_marks",
     "ExecutionWrapper",
+    "MarkHandler",
     "MarkWrapper",
     "_HandlerContext",
-    "MarkHandler",
     "_PluginMarkHandler",
+    "evaluate_marks",
 ]
 
 import dataclasses

@@ -198,7 +198,7 @@ def test_frames_captured_on_assertion_error():
     """_handle_assertion_error populates frames from the traceback."""
 
     def inner():
-        assert False, "boom"  # noqa: B011
+        assert False, "boom"
 
     try:
         inner()

@@ -18,7 +18,7 @@ class _OxitestNoRhs:
 _OXITEST_NO_RHS = _OxitestNoRhs()
 
 __all__ = [
+    "_OXITEST_NO_RHS",
     "_OxitestAssertionError",
     "_OxitestNoRhs",
-    "_OXITEST_NO_RHS",
 ]

@@ -25,7 +25,7 @@ class CoveragePyProvider:
     def __init__(self) -> None:
         self._cov: Any = None
 
-    def start(self, config: dict) -> None:  # noqa: ARG002
+    def start(self, config: dict) -> None:
         """Begin coverage collection."""
         try:
             import coverage as _coverage

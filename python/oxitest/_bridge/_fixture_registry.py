@@ -154,7 +154,7 @@ class FixtureRegistry:
         violations: list[CollectedViolation] = []
         try:
             hints = get_type_hints(defn.source.func)
-        except Exception:  # noqa: BLE001
+        except Exception:
             hints = {}
         if "return" not in hints:
             violations.append(

@@ -272,7 +272,7 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]):
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(  # noqa: E731
+    run = lambda *cmd: subprocess.run(
         cmd, check=True, capture_output=True, env=clean_env
     )
 
@@ -306,7 +306,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]):
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(  # noqa: E731
+    run = lambda *cmd: subprocess.run(
         cmd, check=True, capture_output=True, env=clean_env
     )
 
@@ -428,7 +428,7 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir):
         "    assert True\n"
     )
     (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
     helpers.integ.assert_passed(out, rc, count=2)
 
 

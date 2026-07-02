@@ -526,7 +526,7 @@ def test_invalid_entrypoint_return_type_error(tmp: TempDir) -> None:
         '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["bad_plugin"]\n'
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, err, rc = _run(tmp)
+    *_, rc = _run(tmp)
     assert rc != 0, f"invalid entrypoint should produce non-zero exit, got {rc}"
 
 

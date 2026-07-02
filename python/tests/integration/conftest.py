@@ -20,12 +20,12 @@ fx = oxitest.Fixtures()
 # ── Helpers (helpers.integ namespace) ─────────────────────────────────────────
 
 __all__ = [
-    "write_project",
-    "assert_passed",
-    "assert_failed",
     "assert_collection_error",
     "assert_contains",
     "assert_excludes",
+    "assert_failed",
+    "assert_passed",
+    "write_project",
 ]
 
 
@@ -99,7 +99,7 @@ def git_repo(tmp: TempDir) -> Yields[Path]:
     clean_env = {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
-    run = lambda *cmd: subprocess.run(  # noqa: E731
+    run = lambda *cmd: subprocess.run(
         cmd, check=True, capture_output=True, env=clean_env
     )
     run(*git, "init")

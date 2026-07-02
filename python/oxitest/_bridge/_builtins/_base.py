@@ -51,7 +51,6 @@ class BuiltinFixture:
         """
         if cls._registered:
             return
-        import oxitest._bridge._builtins  # noqa: F401
 
         cls._registered = True
 

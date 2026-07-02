@@ -62,17 +62,17 @@ class _TestContextFixture(BuiltinFixture, fixture_type=TestContext):
 
 
 __all__ = [
+    "BuiltinFixture",
+    "CaptureResult",
+    "FdCapture",
+    "LogBackend",
+    "LogCapture",
+    "Patcher",
+    "StdCapture",
+    "StdlibLogBackend",
     "TempDir",
     "TempDirFactory",
-    "StdCapture",
-    "FdCapture",
-    "Patcher",
     "TestContext",
-    "LogCapture",
     "WarnCapture",
-    "LogBackend",
-    "StdlibLogBackend",
-    "CaptureResult",
-    "BuiltinFixture",
     "_BuiltinContext",
 ]

@@ -14,7 +14,7 @@ from oxitest._bridge._assert_error import (
 from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.result import _error_result
 
-__all__ = ["_load_module", "_resolve_fn", "_LoadError", "ModuleCache"]
+__all__ = ["ModuleCache", "_LoadError", "_load_module", "_resolve_fn"]
 
 
 class ModuleCache:
@@ -61,7 +61,7 @@ def _load_module(module_path: str, unique_name: str) -> Any:
         module.__dict__["_OxitestAssertionError"] = _OxitestAssertionError
         module.__dict__["_oxitest_no_rhs"] = _OXITEST_NO_RHS
         module.__dict__["_oxitest_bare_asserts"] = bare_asserts
-        exec(code, module.__dict__)  # noqa: S102
+        exec(code, module.__dict__)
         return module
     except Exception as exc:
         sys.modules.pop(unique_name, None)

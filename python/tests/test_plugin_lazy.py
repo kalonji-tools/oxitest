@@ -117,7 +117,7 @@ def test_plugin_entry_default_is_loaded():
 @oxitest.mark.inprocess
 def test_deferred_entry_ensure_loaded_imports_module():
     mod = types.ModuleType("lazy_fixture_plugin")
-    mod.oxitest_plugin = lambda: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.oxitest_plugin = Plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["lazy_fixture_plugin"] = mod
     try:
         entry = PluginEntry.deferred("lazy_fixture_plugin", ["fixture_provider"])
@@ -156,7 +156,7 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin():
 @oxitest.mark.inprocess
 def test_load_plugins_defers_lazy_only_plugin():
     mod = types.ModuleType("lazy_only_plugin")
-    mod.oxitest_plugin = lambda: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.oxitest_plugin = Plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
     sys.modules["lazy_only_plugin"] = mod
     try:
         registry = load_plugins(
