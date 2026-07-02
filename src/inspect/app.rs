@@ -138,6 +138,7 @@ pub(crate) struct Phase2Data {
     pub(crate) fixture_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) fixture_dep_entries: Vec<crate::query::resource::QueryEntry>,
+    pub(crate) helper_entries: Vec<crate::query::resource::QueryEntry>,
 }
 
 // ── SessionHistory ──────────────────────────────────────────────────────────
@@ -399,6 +400,7 @@ impl InspectApp {
             let mut builder = GraphBuilder::from_graph(existing_graph);
             builder.add_fixture_entries(&data.fixture_entries);
             builder.add_plugin_entries(&data.plugin_entries);
+            builder.add_helper_entries(&data.helper_entries);
             builder.add_fixture_dep_entries(&data.fixture_dep_entries, &self.rootdir);
             builder.resolve_edges();
             let mut new_graph = builder.build();
@@ -763,6 +765,7 @@ mod tests {
             }],
             plugin_entries: vec![],
             fixture_dep_entries: vec![],
+            helper_entries: vec![],
         };
 
         // merge_phase2 is called after phase2 is already set to Complete by poll_phase2;
@@ -818,6 +821,7 @@ mod tests {
                 .collect(),
             }],
             fixture_dep_entries: vec![],
+            helper_entries: vec![],
         })
         .expect("send should succeed while receiver exists");
 
@@ -995,6 +999,7 @@ mod tests {
             fixture_entries: vec![],
             plugin_entries: vec![],
             fixture_dep_entries: vec![],
+            helper_entries: vec![],
         });
 
         assert!(

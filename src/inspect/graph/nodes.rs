@@ -84,13 +84,16 @@ pub(crate) struct PluginNode {
 
 // ── HelperNode ───────────────────────────────────────────────────────────────
 
-/// A public helper function in a conftest file.
+/// A registered helper callable (conftest or plugin-provided).
 #[derive(Debug, Clone)]
 pub(crate) struct HelperNode {
     pub name: String,
     pub signature: String,
     pub docstring: Option<String>,
     pub source: String,
-    /// Index into `InspectGraph::conftests`.
-    pub conftest_idx: usize,
+    pub namespace: String,
+    /// Index into `InspectGraph::conftests` (if conftest-provided).
+    pub conftest_idx: Option<usize>,
+    /// Index into `InspectGraph::plugins` (if plugin-provided).
+    pub plugin_idx: Option<usize>,
 }

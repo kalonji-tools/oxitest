@@ -158,20 +158,18 @@ impl GraphBuilder {
         }
     }
 
-    /// Add helper nodes from instant-tier AST extraction.
+    /// Add helper nodes from Python-tier collection.
     ///
-    /// Expected entry fields: `name`, `source`, `docstring`, `signature`.
+    /// Expected entry fields: `name`, `source`, `namespace`, `docstring`, `signature`.
     pub(crate) fn add_helper_entries(&mut self, entries: &[QueryEntry]) {
         for entry in entries {
             let name = entry.get("name").unwrap_or_default().to_string();
             let source = entry.get("source").unwrap_or_default().to_string();
+            let namespace = entry.get("namespace").unwrap_or_default().to_string();
             let key = (name.clone(), source.clone());
             if self.helper_by_key.contains_key(&key) {
                 continue;
             }
-
-            // Ensure conftest node exists for this source.
-            let conftest_idx = self.ensure_conftest(&source);
 
             let docstring = entry.get("docstring").map(|s| s.to_string());
             let docstring = if docstring.as_deref() == Some("") {
@@ -181,13 +179,31 @@ impl GraphBuilder {
             };
             let signature = entry.get("signature").unwrap_or_default().to_string();
 
+            let is_plugin = source.starts_with("<plugin:");
+            let conftest_idx = if is_plugin {
+                None
+            } else {
+                Some(self.ensure_conftest(&source))
+            };
+            let plugin_idx = if is_plugin {
+                let module = source
+                    .strip_prefix("<plugin:")
+                    .and_then(|s| s.strip_suffix('>'))
+                    .unwrap_or(&source);
+                self.plugin_by_name.get(module).copied()
+            } else {
+                None
+            };
+
             let idx = self.graph.helpers.len();
             self.graph.helpers.push(HelperNode {
                 name,
                 signature,
                 docstring,
                 source,
+                namespace,
                 conftest_idx,
+                plugin_idx,
             });
             self.helper_by_key.insert(key, idx);
         }
@@ -494,7 +510,9 @@ impl GraphBuilder {
         }
 
         for helper_idx in 0..self.graph.helpers.len() {
-            let conftest_idx = self.graph.helpers[helper_idx].conftest_idx;
+            let Some(conftest_idx) = self.graph.helpers[helper_idx].conftest_idx else {
+                continue;
+            };
             if seen_conftest_helpers
                 .entry(conftest_idx)
                 .or_default()

@@ -134,7 +134,9 @@ mod tests {
             signature: "helper_fn()".to_string(),
             docstring: None,
             source: source.to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         }
     }
 

@@ -192,7 +192,9 @@ mod tests {
             signature: "make_db()".to_string(),
             docstring: None,
             source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         });
         graph
     }

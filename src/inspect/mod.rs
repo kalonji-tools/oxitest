@@ -4,9 +4,9 @@
 //! lets users browse tests, fixtures, marks, and other collected metadata.
 //!
 //! Graph construction uses **progressive loading** (#1119): instant-tier data
-//! (tests, marks, helpers) is collected synchronously before the TUI starts,
-//! while Python-tier data (fixtures, plugins) is collected in a background
-//! thread and merged into the graph when ready.
+//! (tests, marks) is collected synchronously before the TUI starts,
+//! while Python-tier data (fixtures, plugins, helpers) is collected in a
+//! background thread and merged into the graph when ready.
 
 mod app;
 mod detail;
@@ -44,7 +44,7 @@ pub(crate) fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
     mut test_files: Vec<Utf8PathBuf>,
-    conftest_files: &[Utf8PathBuf],
+    _conftest_files: &[Utf8PathBuf],
 ) -> Result<InspectGraph, Box<dyn std::error::Error>> {
     use crate::query::extract;
     use graph::builder::GraphBuilder;
@@ -101,14 +101,14 @@ pub(crate) fn build_phase1_graph(
     let mut builder = GraphBuilder::new();
     builder.add_test_entries(&test_entries);
     builder.add_mark_entries(&mark_entries);
-    builder.add_helper_entries(&extract::extract_helper_entries(conftest_files));
+    // Helpers moved to Phase 2 (Python bridge) — no longer AST-extracted.
     builder.resolve_edges();
 
     Ok(builder.build())
 }
 
 /// Phase 2: spawn a background thread that initializes the Python session and
-/// collects fixture, plugin, and test→fixture dependency entries.
+/// collects fixture, plugin, helper, and test→fixture dependency entries.
 ///
 /// Sends a [`Phase2Data`] payload through the channel when done.  If the
 /// Python session fails, the sender is simply dropped, which causes the
@@ -141,6 +141,8 @@ pub(crate) fn spawn_phase2(
                     .map_err(|e| e.to_string())?;
                 let plugin_raw = crate::query::bridge::plugin_entries(&session, py)
                     .map_err(|e| e.to_string())?;
+                let helper_raw = crate::query::bridge::helper_entries(&session, py)
+                    .map_err(|e| e.to_string())?;
                 let fixture_dep_raw =
                     crate::query::bridge::test_fixture_deps(&session, py, &test_files)
                         .map_err(|e| e.to_string())?;
@@ -153,6 +155,10 @@ pub(crate) fn spawn_phase2(
                     .into_iter()
                     .map(|fields| QueryEntry { fields })
                     .collect();
+                let helper_entries = helper_raw
+                    .into_iter()
+                    .map(|fields| QueryEntry { fields })
+                    .collect();
                 let fixture_dep_entries = fixture_dep_raw
                     .into_iter()
                     .map(|fields| QueryEntry { fields })
@@ -162,6 +168,7 @@ pub(crate) fn spawn_phase2(
                     fixture_entries,
                     plugin_entries,
                     fixture_dep_entries,
+                    helper_entries,
                 })
             })();
 
@@ -181,10 +188,10 @@ pub(crate) fn spawn_phase2(
 
 /// Launch the inspect TUI with progressive loading.
 ///
-/// Phase 1 collects instant-tier data (tests, marks, helpers) synchronously,
+/// Phase 1 collects instant-tier data (tests, marks) synchronously,
 /// then starts the TUI immediately.  Phase 2 spawns a background thread to
-/// collect fixture and plugin data from the Python session, which is merged
-/// into the graph when ready.
+/// collect fixture, plugin, and helper data from the Python session, which is
+/// merged into the graph when ready.
 pub(crate) fn run(
     args: &InspectArgs,
     cfg: &config::Config,
