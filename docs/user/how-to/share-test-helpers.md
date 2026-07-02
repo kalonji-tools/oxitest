@@ -8,22 +8,26 @@ see [Conftest helpers](../explanation/conftest-helpers.md).
 
 ## Define helpers in conftest.py
 
-Add public functions or classes to any `conftest.py`:
+Create a `Helpers()` instance and register functions with `@helpers.helper`:
 
 ```python
 # tests/conftest.py
 import oxitest
+from oxitest import Helpers
 
 fixtures = oxitest.Fixtures()
+utils = Helpers()
 
 @fixtures.fixture
 def db():
     return connect()
 
+@utils.helper
 def make_user(**overrides):
     defaults = {"name": "test", "email": "test@example.com"}
     return {**defaults, **overrides}
 
+@utils.helper
 class FakeMailer:
     def __init__(self):
         self.sent = []
@@ -32,28 +36,33 @@ class FakeMailer:
         self.sent.append(msg)
 ```
 
+The variable name (`utils`) becomes the namespace name.
+
 ## Use helpers in a test file
 
 ```python
 # tests/test_users.py
-from conftest import helpers
+from oxitest import helpers
 
 def test_user_defaults():
-    user = helpers.tests.make_user()
+    user = helpers.utils.make_user()
     assert user["name"] == "test"
 
 def test_mailer():
-    mailer = helpers.tests.FakeMailer()
+    mailer = helpers.utils.FakeMailer()
     mailer.send("hello")
     assert len(mailer.sent) == 1
 ```
-
-The sub-namespace (`tests`) is derived from the directory name.
 
 ## Add helpers at different directory levels
 
 ```python
 # tests/conftest.py
+from oxitest import Helpers
+
+common = Helpers()
+
+@common.helper
 def make_user(**overrides):
     defaults = {"name": "test", "email": "test@example.com"}
     return {**defaults, **overrides}
@@ -61,41 +70,40 @@ def make_user(**overrides):
 
 ```python
 # tests/integration/conftest.py
+from oxitest import Helpers
+
+integ = Helpers()
+
+@integ.helper
 def start_server(port=8080):
     ...
 ```
 
 ```python
 # tests/integration/test_api.py
-from conftest import helpers
+from oxitest import helpers
 
 def test_api_endpoint():
-    user = helpers.tests.make_user(name="alice")
-    server = helpers.integration.start_server()
+    user = helpers.common.make_user(name="alice")
+    server = helpers.integ.start_server()
     ...
 ```
 
-## Rename a namespace
+## Choose a namespace name
+
+The namespace is the variable name of the `Helpers()` instance:
 
 ```python
 # tests/integration/conftest.py
-__helpers_namespace__ = "integ"
-
-def start_server(port=8080):
-    ...
+integ = Helpers()  # namespace is "integ"
 ```
 
-Tests now use `helpers.integ.start_server()`.
+Tests use `helpers.integ.start_server()`.
 
-## Enable type checker support
+You can also set the name explicitly:
 
 ```python
-# tests/conftest.py
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from oxitest._bridge._helper_namespace import HelperNamespace
-    helpers: HelperNamespace
+integ = Helpers(name="integ")
 ```
 
 ## See also

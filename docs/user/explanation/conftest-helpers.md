@@ -28,40 +28,47 @@ and `sys.modules` registration. Introducing a second reserved filename would dup
 all of that. Keeping fixtures and helpers in one file means one place to look when
 debugging test infrastructure for a directory.
 
-## What qualifies as a helper
+## How helpers are registered
 
-The framework collects an attribute from a conftest module when all three conditions
-are true:
+Helpers use explicit registration via a `Helpers()` instance, mirroring how fixtures
+use `Fixtures()`:
 
-1. The name does **not** start with `_`
-2. The value is **callable** (function or class)
-3. The value is **not** a `Fixtures` instance
+```python
+# conftest.py
+from oxitest import Helpers
 
-Constants, private functions, and fixture registries are excluded.
+utils = Helpers()
+
+@utils.helper
+def make_user(**overrides):
+    defaults = {"name": "test", "email": "test@example.com"}
+    return {**defaults, **overrides}
+```
+
+Only functions decorated with `@helpers.helper` are registered. Other public functions
+in conftest.py are ignored — this is the opposite of the old implicit collection
+system and gives authors explicit control over what is exposed.
 
 ## Namespace scoping
 
-Each conftest.py in the ancestor chain contributes a sub-namespace to the `helpers`
-object, keyed by its directory name. Given this layout:
+Each `Helpers()` instance in the ancestor conftest chain contributes a sub-namespace
+to the `helpers` proxy, keyed by the variable name. Given this layout:
 
 ```
 tests/
-├── conftest.py          → namespace: "tests"
+├── conftest.py          → common = Helpers()  → namespace: "common"
 ├── unit/
-│   ├── conftest.py      → namespace: "unit"
+│   ├── conftest.py      → unit = Helpers()    → namespace: "unit"
 │   └── test_foo.py
 └── integration/
-    ├── conftest.py      → namespace: "integration"
+    ├── conftest.py      → integ = Helpers()   → namespace: "integ"
     └── test_bar.py
 ```
 
-`test_foo.py` sees `helpers.tests` and `helpers.unit` (its ancestors).
-`test_bar.py` sees `helpers.tests` and `helpers.integration` (its ancestors).
+`test_foo.py` sees `helpers.common` and `helpers.unit` (its ancestors).
+`test_bar.py` sees `helpers.common` and `helpers.integ` (its ancestors).
 Neither sees the other's sibling namespace. This matches how conftest fixtures
 are scoped.
-
-A namespace name can be overridden with `__helpers_namespace__ = "..."` at module
-scope when the directory name is too long or unclear.
 
 ## Validation
 
@@ -70,27 +77,31 @@ actionable error message:
 
 - **Python keywords** (`class`, `for`, `import`, `match`, etc.)
 - **Python builtins** (`int`, `list`, `print`, `type`, etc.)
-- **Duplicate names** — two conftest files in the same ancestor chain producing the
-  same namespace name
 
 This validation applies to both helper namespaces and fixture namespaces
 (`Fixtures()` variable names). See the [error reference](../reference/errors.md)
 for the exact messages.
 
-## Empty namespaces
+## Plugin-provided helpers
 
-`helpers` is always present on the conftest module, even when no helpers exist. A
-conftest that defines only fixtures still gets a namespace — it just has no
-attributes. This means `from conftest import helpers` never fails.
+Plugins can provide helpers via the `HelperProvider` protocol. Each provider contributes
+a single named callable. The namespace is derived from the plugin's module name
+(`provider.__module__`).
 
-A conftest with helpers but no `Fixtures` instance does not trigger the "no Fixtures
-instance" warning. Only a conftest with neither fixtures nor helpers warns.
+## Accessing helpers
 
-## Type checker support
+Helpers are accessed via a read-only proxy importable from oxitest:
 
-`helpers` is attached to the conftest module dynamically at runtime. Static type
-checkers (ty, mypy) read source files and cannot see it. Projects that type-check
-their test files need a `TYPE_CHECKING` stub in their conftest — this declares the
-type for static analysis with zero runtime cost. See the
-[how-to guide](../how-to/share-test-helpers.md#enable-type-checker-support) for the
-exact snippet.
+```python
+from oxitest import helpers
+
+helpers.common.make_user(name="alice")
+```
+
+The proxy resolves at attribute-access time via a contextvar set during session init.
+Accessing `helpers` outside a test session raises `AttributeError`.
+
+## See also
+
+- [Share test helpers](../how-to/share-test-helpers.md) — step-by-step how-to
+- [Error reference](../reference/errors.md) — namespace validation error messages

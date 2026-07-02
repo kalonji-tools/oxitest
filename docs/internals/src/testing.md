@@ -99,18 +99,17 @@ These rules are enforced by code review and documented in `CLAUDE.md`:
    assertions.
 3. **Dogfood oxitest features.** Prefer `oxi.raises()` over `try/except`,
    `TempDir` over `tempfile`, `@oxi.parametrize` over copy-pasted tests, etc.
-4. **Import helpers from conftest.** Shared utilities live in
+4. **Import helpers from oxitest.** Shared utilities live in
    `python/tests/conftest.py` (namespace `helpers.common`) and
    `python/tests/integration/conftest.py` (namespace `helpers.integ`).  Access
-   them via `from conftest import helpers`.
+   them via `from oxitest import helpers`.
 
 ### Integration test anatomy
 
 ```python
 # python/tests/integration/test_basic.py
 
-from conftest import helpers
-from oxitest import TempDir
+from oxitest import TempDir, helpers
 
 
 def test_all_pass_exits_zero(tmp: TempDir):
@@ -132,9 +131,9 @@ checks across all integration tests.
 
 ### Helper namespaces
 
-Each conftest declares a `__helpers_namespace__` string.  At collection time
-oxitest gathers all `__all__`-exported functions from conftest files and
-mounts them under `helpers.<namespace>`:
+Each conftest defines a `Helpers()` instance whose variable name becomes
+the namespace.  Helpers are registered via the `@helpers.helper` decorator
+and accessed via `from oxitest import helpers`:
 
 | Conftest | Namespace | Key helpers |
 |----------|-----------|-------------|
