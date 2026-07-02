@@ -266,13 +266,7 @@ def test_collected_item_with_markers_and_param():
 def test_collect_module_emits_violation_for_helpers_in_test_module(
     tmp: TempDir,
 ) -> None:
-    """Helpers() instance in a test module emits REGISTRAR_IN_TEST_MODULE violation.
-
-    Fixtures() instances in test modules are silently registered (not violations)
-    because test-file-local fixtures are a valid pattern. Only Helpers() instances
-    are flagged because they need conftest-level registration for the helpers
-    system to work.
-    """
+    """Helpers() instance without allow comment emits REGISTRAR_IN_TEST_MODULE."""
     path = helpers.common.write_test_module(
         tmp,
         "from oxitest import Helpers\n"
@@ -298,8 +292,8 @@ def test_collect_module_emits_violation_for_helpers_in_test_module(
     assert "Helpers" in v.detail, (
         f"violation detail should mention Helpers, got {v.detail!r}"
     )
-    assert "conftest.py" in v.detail, (
-        f"violation detail should mention conftest.py, got {v.detail!r}"
+    assert "allow[registrar-in-test-module]" in v.detail, (
+        f"violation detail should suggest allow comment, got {v.detail!r}"
     )
 
 
@@ -458,12 +452,13 @@ def test_collect_mixed_sync_async(tmp: TempDir):
     assert by_name["test_async"].is_async is True, "async test should be is_async=True"
 
 
-def test_fixtures_in_test_module_are_registered(tmp: TempDir):
-    """Fixtures() in a test module are registered so local fixtures resolve."""
+def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir):
+    """Fixtures() with allow comment registers silently — no violation."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
+        "fixtures = oxitest.Fixtures()  "
+        "# oxitest: allow[registrar-in-test-module]\n"
         "@fixtures.fixture\n"
         "async def async_val():\n"
         "    return 42\n"
@@ -486,15 +481,14 @@ def test_fixtures_in_test_module_are_registered(tmp: TempDir):
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
     assert len(registrar_viols) == 0, (
-        "expected no REGISTRAR_IN_TEST_MODULE violations for Fixtures() "
-        f"in test module, got {len(registrar_viols)}: {registrar_viols}"
+        "allow comment should suppress violation — "
+        f"got {len(registrar_viols)}: {registrar_viols}"
     )
     assert registry.get("async_val") is not None, (
-        "async_val should be registered — test module Fixtures() "
-        "are silently registered"
+        "async_val should be registered — allow comment authorizes registration"
     )
     assert registry.get("sync_val") is not None, (
-        "sync_val should be registered — test module Fixtures() are silently registered"
+        "sync_val should be registered — allow comment authorizes registration"
     )
 
 
@@ -1158,4 +1152,66 @@ def test_get_fixture_deps_skips_return_annotation() -> None:
     qualifiers = [q for q, _ in deps]
     assert "return" not in qualifiers, (
         f"return annotation should not be in deps, got {deps}"
+    )
+
+
+# --- allow-comment gate tests for _check_module_registrars ---
+
+
+def test_fixtures_without_allow_comment_blocked(tmp: TempDir):
+    """Fixtures() without allow comment emits violation and does NOT register."""
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "fixtures = oxitest.Fixtures()\n"
+        "@fixtures.fixture\n"
+        "def local_val():\n"
+        "    return 99\n"
+        "def test_foo(local_val): pass\n",
+        name="test_no_allow.py",
+    )
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+
+    registry = FixtureRegistry()
+
+    class _FakeSession:
+        _registry = registry
+        _module_cache = None
+
+    _, violations = collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
+    registrar_viols = [
+        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
+    ]
+    assert len(registrar_viols) == 1, (
+        "Fixtures() without allow comment should emit a violation — "
+        f"got {len(registrar_viols)}: {registrar_viols}"
+    )
+    assert "Fixtures" in registrar_viols[0].detail, (
+        f"violation detail should mention Fixtures, got {registrar_viols[0].detail!r}"
+    )
+    assert registry.get("local_val") is None, (
+        "local_val should NOT be registered — no allow comment means blocked"
+    )
+
+
+def test_helpers_with_allow_comment_suppressed(tmp: TempDir):
+    """Helpers() with allow comment emits no violation."""
+    path = helpers.common.write_test_module(
+        tmp,
+        "from oxitest import Helpers\n"
+        "h = Helpers()  "
+        "# oxitest: allow[registrar-in-test-module]\n"
+        "@h.helper\n"
+        "def my_helper():\n"
+        "    return 42\n"
+        "def test_foo(): pass\n",
+        name="test_helpers_allow.py",
+    )
+    _, violations = collect_module(path)
+    registrar_viols = [
+        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
+    ]
+    assert len(registrar_viols) == 0, (
+        "allow comment should suppress Helpers() violation — "
+        f"got {len(registrar_viols)}: {registrar_viols}"
     )

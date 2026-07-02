@@ -1670,3 +1670,10 @@ def test_registry_override_precedence():
     assert result.conftest_path == "/tests/conftest.py", (
         "leaf conftest should override root"
     )
+
+
+def test_fixtures_captures_source_line() -> None:
+    fx = oxitest.Fixtures()
+    assert hasattr(fx, "_source_line"), "Fixtures should capture source line"
+    assert isinstance(fx._source_line, int), "source line should be an int"
+    assert fx._source_line > 0, "source line should be positive"
