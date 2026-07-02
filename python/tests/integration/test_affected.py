@@ -91,3 +91,63 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]):
         f"--affected failed in worktree with ENOENT:\nstderr: {err}\nstdout: {out}"
     )
     helpers.integ.assert_passed(out, rc, count=1)
+
+
+def test_affected_verbose_summary(git_repo: Fixture[Path]):
+    """``-v --affected=HEAD`` prints a summary line to stderr."""
+    repo = git_repo
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
+    )
+    # Add a new test file.
+    (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
+    run("git", "-C", str(repo), "add", "test_new.py")
+
+    _out, err, rc = helpers.common.run_oxitest(
+        repo, "--affected=HEAD", "-v", env=clean_env, cwd=str(repo)
+    )
+    assert rc == 0, f"expected success, got rc={rc}"
+    assert "affected:" in err, (
+        f"expected 'affected:' summary in stderr at -v, got:\n{err}"
+    )
+
+
+def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]):
+    """``-vv --affected=HEAD`` prints stage-by-stage breakdown to stderr."""
+    repo = git_repo
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    run = lambda *cmd: subprocess.run(  # noqa: E731
+        cmd, check=True, capture_output=True, env=clean_env
+    )
+    # Add a new test file.
+    (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
+    run("git", "-C", str(repo), "add", "test_new.py")
+
+    _out, err, rc = helpers.common.run_oxitest(
+        repo, "--affected=HEAD", "-vv", env=clean_env, cwd=str(repo)
+    )
+    assert rc == 0, f"expected success, got rc={rc}"
+    assert "Stage 1:" in err, f"expected stage breakdown in stderr at -vv, got:\n{err}"
+    assert "Summary:" in err, f"expected summary in stderr at -vv, got:\n{err}"
+
+
+def test_affected_zero_results_shows_summary(git_repo: Fixture[Path]):
+    """When 0 tests affected, summary prints even without -v."""
+    repo = git_repo
+    clean_env = {
+        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
+    }
+    # No changes staged — 0 affected.
+    out, err, rc = helpers.common.run_oxitest(
+        repo, "--affected=HEAD", env=clean_env, cwd=str(repo)
+    )
+    # Should show "affected: 0 of N" instead of old "no changes detected"
+    assert "affected:" in (out + err), (
+        f"expected 'affected:' summary for zero results, got:\n"
+        f"stdout: {out}\nstderr: {err}"
+    )

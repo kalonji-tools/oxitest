@@ -13,25 +13,50 @@ impl Pipeline {
             unreachable!("affected called outside FilesCollected phase")
         };
         if let Some(base_ref) = self.cfg.filter.affected.as_ref() {
-            match affected::filter_affected_test_files(
+            match affected::filter_affected_with_diagnostics(
                 &self.shared.test_files,
                 &self.cfg.rootdir,
                 base_ref,
             ) {
-                Ok(Some(files)) => {
+                Ok((Some(files), diag)) => {
                     if files.is_empty() {
-                        println!("no changes detected — nothing to test");
+                        // Always show summary for zero-affected (even at Normal)
+                        eprintln!(
+                            "affected: 0 of {} test files selected [base: {}]",
+                            diag.total_tests, diag.base_ref,
+                        );
+                        if diag.total_changed == 0 {
+                            eprintln!("  (no files changed)");
+                        } else {
+                            eprintln!(
+                                "  ({} files changed, {} non-Python ignored)",
+                                diag.total_changed, diag.non_python_count,
+                            );
+                        }
                         return Err(ExitCode::Success);
                     }
-                    tracing::info!(
-                        affected = files.len(),
-                        total = self.shared.test_files.len(),
-                        base = base_ref.as_str(),
-                        "running affected tests only"
-                    );
+
+                    // -v: summary line
+                    if self.cfg.output.verbosity >= config::Verbosity::Detailed {
+                        eprintln!(
+                            "affected: {} of {} test files selected (direct: {}, conftest: {}, import: {}) [base: {}]",
+                            diag.affected_count,
+                            diag.total_tests,
+                            diag.direct_matches.len(),
+                            diag.conftest_matches.len(),
+                            diag.import_analysis.iter().filter(|a| a.affected).count(),
+                            diag.base_ref,
+                        );
+                    }
+
+                    // -vv: stage breakdown
+                    if self.cfg.output.verbosity >= config::Verbosity::Full {
+                        render_full_diagnostics(&diag);
+                    }
+
                     self.shared.test_files = files;
                 }
-                Ok(None) => {
+                Ok((None, _diag)) => {
                     tracing::info!("pyproject.toml changed — running all tests");
                 }
                 Err(e) => {
@@ -156,4 +181,76 @@ impl Pipeline {
             }
         }
     }
+}
+
+fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
+    eprintln!();
+    eprintln!("Stage 1: Git Diff (base: {})", diag.base_ref);
+    eprintln!("  Changed files: {}", diag.total_changed);
+    eprintln!();
+
+    eprintln!("Stage 2: Classification");
+    eprintln!("  conftest.py: {}", diag.conftest_files.len());
+    eprintln!(
+        "  Python source: {}{}",
+        diag.source_files.len(),
+        if diag.source_files.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", diag.source_files.join(", "))
+        },
+    );
+    eprintln!("  Non-Python (ignored): {}", diag.non_python_count);
+    eprintln!();
+
+    eprintln!("Stage 3: Direct Matches");
+    if diag.direct_matches.is_empty() {
+        eprintln!("  (none)");
+    } else {
+        for m in &diag.direct_matches {
+            eprintln!("  \u{2713} {m} (file itself changed)");
+        }
+    }
+    eprintln!();
+
+    eprintln!("Stage 4: Conftest Impact");
+    if diag.conftest_matches.is_empty() {
+        eprintln!("  (no conftest files changed)");
+    } else {
+        for m in &diag.conftest_matches {
+            eprintln!("  \u{2713} {m}");
+        }
+    }
+    eprintln!();
+
+    eprintln!("Stage 5: Import Graph");
+    if diag.import_analysis.is_empty() {
+        eprintln!("  (no source files to analyze)");
+    } else {
+        for entry in &diag.import_analysis {
+            if entry.affected {
+                eprintln!(
+                    "  \u{2713} {} \u{2014} via: {}",
+                    entry.test_file,
+                    entry.matched_imports.join(", "),
+                );
+            }
+        }
+        let unaffected = diag.import_analysis.iter().filter(|a| !a.affected).count();
+        if unaffected > 0 {
+            eprintln!("  ... and {unaffected} more not affected");
+        }
+    }
+    eprintln!();
+
+    eprintln!(
+        "Summary: {} of {} test files affected",
+        diag.affected_count, diag.total_tests,
+    );
+    eprintln!(
+        "  Direct: {}, Conftest: {}, Import: {}",
+        diag.direct_matches.len(),
+        diag.conftest_matches.len(),
+        diag.import_analysis.iter().filter(|a| a.affected).count(),
+    );
 }

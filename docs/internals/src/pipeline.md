@@ -259,7 +259,7 @@ the pipeline entirely, it returns `Err(ExitCode::...)`:
 ```rust
 // In affected(): no files changed, nothing to test
 if files.is_empty() {
-    println!("no changes detected -- nothing to test");
+    eprintln!("affected: 0 of {} test files selected [base: {}]", ...);
     return Err(ExitCode::Success);
 }
 

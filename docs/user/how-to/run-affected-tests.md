@@ -14,13 +14,20 @@ oxitest runs `git diff --name-only` against the default base ref (configured via
 `affected_base`, or `HEAD` when no base is configured), classifies the changed
 files, and runs only the test files that are affected by those changes.
 
-If no files have changed relative to the base ref, oxitest prints:
+If no files have changed relative to the base ref, oxitest prints a summary to
+stderr and exits with code 0:
 
 ```
-no changes detected — nothing to test
+affected: 0 of 12 test files selected [base: main]
+  (no files changed)
 ```
 
-and exits with code 0.
+When files changed but none are Python, the summary explains why:
+
+```
+affected: 0 of 12 test files selected [base: main]
+  (3 files changed, 3 non-Python ignored)
+```
 
 ## Specify a base ref
 
