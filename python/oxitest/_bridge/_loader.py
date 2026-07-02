@@ -13,6 +13,7 @@ from oxitest._bridge._assert_error import (
 )
 from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.result import _error_result
+from oxitest._oxitest import rewrite_asserts
 
 __all__ = ["ModuleCache", "_LoadError", "_load_module", "_resolve_fn"]
 
@@ -45,27 +46,32 @@ def _load_module(module_path: str, unique_name: str) -> Any:
     Raises _LoadError if the file cannot be read, parsed, or executed.
     unique_name is used as the sys.modules key; caller is responsible for cleanup.
     """
-    from oxitest._oxitest import rewrite_asserts
-
     path = Path(module_path)
     spec = importlib.util.spec_from_file_location(unique_name, path)
     if spec is None or spec.loader is None:
         raise _LoadError(_error_result(f"Cannot load module from {module_path}"))
 
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[unique_name] = module
     try:
         source = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise _LoadError(_error_result(traceback.format_exc())) from exc
+    try:
         tree, bare_asserts = rewrite_asserts(source, module_path)
         code = compile(tree, module_path, "exec")
-        module.__dict__["_OxitestAssertionError"] = _OxitestAssertionError
-        module.__dict__["_oxitest_no_rhs"] = _OXITEST_NO_RHS
-        module.__dict__["_oxitest_bare_asserts"] = bare_asserts
+    except SyntaxError as exc:
+        raise _LoadError(_error_result(traceback.format_exc())) from exc
+
+    module = importlib.util.module_from_spec(spec)
+    module.__dict__["_OxitestAssertionError"] = _OxitestAssertionError
+    module.__dict__["_oxitest_no_rhs"] = _OXITEST_NO_RHS
+    module.__dict__["_oxitest_bare_asserts"] = bare_asserts
+    sys.modules[unique_name] = module
+    try:
         exec(code, module.__dict__)
-        return module
     except Exception as exc:
         sys.modules.pop(unique_name, None)
         raise _LoadError(_error_result(traceback.format_exc())) from exc
+    return module
 
 
 def _resolve_fn(

@@ -64,7 +64,7 @@ def test_shared_session_cleans_stray_tasks():
         async def background():
             await asyncio.sleep(999)
 
-        asyncio.ensure_future(background())
+        asyncio.ensure_future(background())  # noqa: RUF006 — intentional leak for detection test
         return "done"
 
     with warns(UserWarning, match="(?i)leaked"):

@@ -161,9 +161,8 @@ def test_compose_chains_left_to_right():
     def base():
         return PassedResult()
 
-    # Simulates: for wrapper in reversed([w1, w2]):
-    #   execute = _compose(wrapper, execute)
-    # reversed([w1, w2]) = [w2, w1]
+    # Manually compose in reverse order (w2 then w1) to mirror the
+    # reversed iteration the executor uses at runtime.
     execute = base
     execute = _compose(w2, execute)
     execute = _compose(w1, execute)

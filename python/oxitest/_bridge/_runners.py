@@ -160,12 +160,7 @@ def run_base(
             and backend is not None
             and is_debuggable(exc)
         ):
-            import bdb
-
-            try:
-                _debug_post_mortem(all_kwargs, node_id, exc, backend, file=file)
-            except bdb.BdbQuit:
-                raise
+            _debug_post_mortem(all_kwargs, node_id, exc, backend, file=file)
         result = dispatch_exception(
             exc, show_internals=show_internals, show_locals=show_locals
         )
