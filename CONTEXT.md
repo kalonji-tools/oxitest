@@ -60,6 +60,8 @@
 
 **HelperProvider** — Plugin protocol for providing helpers. Properties: `name` (str) and `helper` (callable). Namespace derived from `provider.__module__` at registration time.
 
+**Allow Comment** — Inline comment `# oxitest: allow[rule-name]` that authorizes behavior that would otherwise be a strict-mode violation. Used to opt in to `Fixtures()` or `Helpers()` in test modules.
+
 ## Marks
 
 **Mark** — Metadata attached to a test function via `@oxi.mark.<name>`. Controls test behavior (skip, xfail, timeout) or categorization.
