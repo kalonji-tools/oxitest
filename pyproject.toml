@@ -35,10 +35,8 @@ ignore = [
     # ── Intentional design decisions ─────────────────────────────────────
     "A002",           # shadowing builtins (abs param in approx is intentional API)
     "B009", "B010",   # getattr/setattr used intentionally for ty compatibility
-    "B015",           # pointless comparison (intentional in raises() context)
     "C901",           # function too complex (acceptable for dispatchers)
     "D105", "D107",   # missing docstring in magic method / __init__
-    "ERA001",         # commented-out code (algorithm explanations, not dead code)
     "FBT001",         # boolean positional arg (internal API, not public-facing)
     "FBT002",         # boolean default value (intentional API: show_locals=False)
     "N806",           # uppercase vars in functions (graph coloring constants, class refs)
@@ -48,13 +46,10 @@ ignore = [
     "PLR0913",        # too many arguments (internal functions with many params)
     "PLR0915",        # too many statements (complex dispatchers)
     "PLR2004",        # magic value in comparison (bounds checks like len < 2)
-    "RUF006",         # asyncio dangling task (intentional in leak-detection tests)
     "S101",           # assert used for runtime invariants
     "S102",           # exec() used intentionally (module loader, test helpers)
     "S112",           # try-except-continue (intentional fallback in diagnostics)
     "T100",           # debugger breakpoint (intentional in _debugger.py)
-    "TRY203",         # re-raise in except (intentional propagation e.g. bdb.BdbQuit)
-    "TRY300",         # return in try (acceptable pattern in loaders)
     "BLE001",         # broad except Exception in test runner (must catch to report)
 
     "ARG001",         # unused function arg (protocol/callback signatures)

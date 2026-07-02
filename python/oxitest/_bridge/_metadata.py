@@ -36,15 +36,18 @@ def get_type_hints_cached(fn: Any) -> dict[str, Any]:
     the duration of a test session. The WeakKeyDictionary releases entries when
     a function is garbage-collected.
     """
-    try:
+    with contextlib.suppress(TypeError):
         cached = _hints_cache.get(fn)
         if cached is not None:
             return cached
+
+    try:
         hints = _stdlib_hints(fn, include_extras=True)
-        # fn is not weakly referenceable (e.g. C extension)
-        with contextlib.suppress(TypeError):
-            _hints_cache[fn] = hints
-        return hints
-    except Exception:
-        # Fall back to uncached on any error (e.g. unresolvable forward refs).
-        return _stdlib_hints(fn, include_extras=True)
+    except (NameError, AttributeError, TypeError):
+        # Unresolvable forward refs, missing attributes, or unhashable fn.
+        return {}
+
+    with contextlib.suppress(TypeError):
+        # fn may not be weakly referenceable (e.g. C extension)
+        _hints_cache[fn] = hints
+    return hints
