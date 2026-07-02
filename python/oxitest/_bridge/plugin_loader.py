@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         Collector,
         ExecutionWrapper,
         FixtureProvider,
+        HelperProvider,
         LogBackend,
         Reporter,
     )
@@ -50,6 +51,7 @@ LAZY_PROTOCOLS = frozenset(
     {
         "log_backend",
         "fixture_provider",
+        "helper_provider",
         "execution_wrapper",
         "debugger_backend",
     }
@@ -138,6 +140,7 @@ class PluginRegistry:
     _CACHED_PROPERTIES: ClassVar[tuple[str, ...]] = (
         "log_backends",
         "fixture_providers",
+        "helper_providers",
         "execution_wrappers",
         "collectors",
         "reporters",
@@ -160,6 +163,11 @@ class PluginRegistry:
     def fixture_providers(self) -> tuple[FixtureProvider, ...]:
         """All fixture providers from all plugins."""
         return _flatten_protocol(self.entries, "fixture_providers")
+
+    @functools.cached_property
+    def helper_providers(self) -> tuple[HelperProvider, ...]:
+        """All helper providers from all plugins."""
+        return _flatten_protocol(self.entries, "helper_providers")
 
     @functools.cached_property
     def execution_wrappers(self) -> tuple[ExecutionWrapper, ...]:

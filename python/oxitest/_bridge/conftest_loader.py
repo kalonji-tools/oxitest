@@ -7,6 +7,7 @@ __all__ = [
     "create_session",
     "_extract_fixture_type",
     "_extract_depends_on",
+    "_extract_helpers",
 ]
 
 import collections.abc
@@ -28,7 +29,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._helper_namespace import build_helpers
+from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
 from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge.result import CollectedViolation
 
@@ -147,12 +148,37 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
     return found
 
 
+def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
+    """Extract helper definitions from Helpers instances in a module."""
+    from oxitest._bridge._helpers import Helpers
+
+    found: list[HelperDef] = []
+    for attr_name, obj in vars(module).items():
+        if not isinstance(obj, Helpers):
+            continue
+        namespace_name = obj._namespace_name or attr_name
+        validate_namespace_name(namespace_name, path)
+        if namespace_name == "oxi":
+            raise ValueError(
+                f"'oxi' is a reserved namespace name in oxitest. "
+                f"Rename your Helpers() instance in {path}."
+            )
+        obj._namespace_name = namespace_name
+        for defn in obj._defs:
+            stamped = dataclasses.replace(
+                defn,
+                source=ConftestSource(func=defn.func, conftest_path=path),
+                namespace=namespace_name,
+            )
+            found.append(stamped)
+    return found
+
+
 def _has_helpers(module: ModuleType) -> bool:
-    """Return True if module has any public callables that aren't Fixtures."""
-    return any(
-        not name.startswith("_") and callable(obj) and not isinstance(obj, Fixtures)
-        for name, obj in vars(module).items()
-    )
+    """Return True if module has any Helpers() instances."""
+    from oxitest._bridge._helpers import Helpers
+
+    return any(isinstance(obj, Helpers) for obj in vars(module).values())
 
 
 def load_fixtures_from_conftest(
@@ -175,18 +201,17 @@ def load_fixtures_from_conftest(
 
 def create_conftest_fixtures(
     conftest_paths: Sequence[str],
-) -> tuple[list[FixtureDef], list[CollectedViolation]]:
+) -> tuple[list[FixtureDef], list[CollectedViolation], HelperRegistry]:
     """Load conftest files and return all fixture defs with any violations.
 
-    Also assembles a HelperNamespace from public callables in each conftest
-    and attaches it as ``sys.modules["conftest"].helpers``.
-
-    Returns a tuple of (fixture_defs, violations) where violations contains any
-    strict-mode issues detected during fixture registration.
+    Returns a tuple of (fixture_defs, violations, helper_registry) where
+    violations contains any strict-mode issues detected during fixture
+    registration and helper_registry contains all helpers extracted from
+    ``Helpers()`` instances in the conftest files.
     """
     all_defs: list[FixtureDef] = []
     all_violations: list[CollectedViolation] = []
-    conftest_chain: list[tuple[ModuleType, Path]] = []
+    helper_registry = HelperRegistry()
 
     # Intentional: _tmp_registry detects registration violations (e.g.
     # missing_return_annotation) here so they can be surfaced to the Rust
@@ -215,16 +240,11 @@ def create_conftest_fixtures(
             all_violations.extend(_tmp_registry.register(defn))
             all_defs.append(defn)
 
-        conftest_chain.append((module, Path(path).parent))
+        helper_defs = _extract_helpers(module, path)
+        for hdef in helper_defs:
+            helper_registry.register(hdef)
 
-    helpers = build_helpers(conftest_chain)
-
-    # Attach helpers to the last-registered conftest module (the one test files see)
-    conftest_mod = sys.modules.get("conftest")
-    if conftest_mod is not None:
-        conftest_mod.helpers = helpers  # ty: ignore[unresolved-attribute]
-
-    return all_defs, all_violations
+    return all_defs, all_violations, helper_registry
 
 
 def create_session(
@@ -235,5 +255,7 @@ def create_session(
     Convenience wrapper around ``create_conftest_fixtures`` that constructs
     the ``FixtureSession`` for callers that still expect one.
     """
-    defs, violations = create_conftest_fixtures(conftest_paths)
-    return FixtureSession(defs), violations
+    defs, violations, helper_registry = create_conftest_fixtures(conftest_paths)
+    session = FixtureSession(defs)
+    session.set_helper_registry(helper_registry)
+    return session, violations
