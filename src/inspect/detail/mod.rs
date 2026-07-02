@@ -347,7 +347,9 @@ mod tests {
             signature: "make_db(name: str)".to_string(),
             docstring: None,
             source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         });
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
@@ -396,7 +398,9 @@ mod tests {
             signature: "make_db(name: str)".to_string(),
             docstring: Some("Create a test database.".to_string()),
             source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         });
         graph
     }
@@ -1090,7 +1094,7 @@ mod tests {
             kind: NodeKind::Helper,
             index: 0,
         };
-        // helper_graph helper has conftest_idx=0
+        // helper_graph helper has conftest_idx=Some(0)
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
             1,
@@ -1338,7 +1342,9 @@ mod snapshot_tests {
             signature: "make_db(name: str)".to_string(),
             docstring: None,
             source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         });
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
@@ -1405,7 +1411,9 @@ mod snapshot_tests {
             signature: "make_db(name: str)".to_string(),
             docstring: Some("Create a test database.".to_string()),
             source: "tests/conftest.py".to_string(),
-            conftest_idx: 0,
+            namespace: "conftest".to_string(),
+            conftest_idx: Some(0),
+            plugin_idx: None,
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;

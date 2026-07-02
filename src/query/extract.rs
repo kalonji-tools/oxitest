@@ -188,37 +188,6 @@ pub(crate) fn extract_test_and_mark_entries(
     (test_entries, mark_entries)
 }
 
-// ── Helper extraction ──────────────────────────────────────────────────────────
-
-/// Build [`QueryEntry`] records for every public helper function in the given
-/// conftest files.
-///
-/// Each entry has fields:
-/// - `name`: the function name
-/// - `source`: the conftest file path
-/// - `docstring`: the function's docstring (empty string if none)
-/// - `signature`: the formatted signature, e.g. `"make_db(name: str)"`
-pub(crate) fn extract_helper_entries(conftest_files: &[Utf8PathBuf]) -> Vec<QueryEntry> {
-    let mut entries = Vec::new();
-
-    for file in conftest_files {
-        let Some((source, stmts)) = python_ast::parse_file(file) else {
-            continue;
-        };
-        let helpers = python_ast::extract_helpers(&stmts, &source);
-        for info in helpers {
-            let mut fields = HashMap::new();
-            fields.insert("name".to_string(), info.name);
-            fields.insert("source".to_string(), file.to_string());
-            fields.insert("docstring".to_string(), info.docstring.unwrap_or_default());
-            fields.insert("signature".to_string(), info.signature);
-            entries.push(QueryEntry { fields });
-        }
-    }
-
-    entries
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -391,83 +360,6 @@ mod tests {
         assert_eq!(
             combined_marks, separate_marks,
             "combined mark entries must match separate extraction"
-        );
-    }
-
-    // ── extract_helper_entries ──────────────────────────────────────────────
-
-    #[test]
-    fn helper_entries_public_functions() {
-        let f = write_temp_py("def make_thing(): pass\ndef _private(): pass\n");
-        let path = temp_path(&f);
-        let entries = extract_helper_entries(&[path.clone()]);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].get("name"), Some("make_thing"));
-        assert_eq!(entries[0].get("source"), Some(path.as_str()));
-    }
-
-    #[test]
-    fn helper_entries_skips_test_functions() {
-        let f = write_temp_py("def test_foo(): pass\ndef helper_fn(): pass\n");
-        let path = temp_path(&f);
-        let entries = extract_helper_entries(&[path.clone()]);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].get("name"), Some("helper_fn"));
-    }
-
-    #[test]
-    fn helper_entries_skips_dunder() {
-        let f = write_temp_py("def __helpers_namespace__(): pass\ndef public_fn(): pass\n");
-        let path = temp_path(&f);
-        let entries = extract_helper_entries(&[path.clone()]);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].get("name"), Some("public_fn"));
-    }
-
-    #[test]
-    fn helper_entries_nonexistent_file_skipped() {
-        let bad = Utf8PathBuf::from("/nonexistent/conftest.py");
-        let entries = extract_helper_entries(&[bad]);
-        assert_eq!(entries.len(), 0);
-    }
-
-    #[test]
-    fn helper_entries_multiple_conftest_files() {
-        let f1 = write_temp_py("def helper_a(): pass\n");
-        let f2 = write_temp_py("def helper_b(): pass\n");
-        let p1 = temp_path(&f1);
-        let p2 = temp_path(&f2);
-        let entries = extract_helper_entries(&[p1, p2]);
-        assert_eq!(entries.len(), 2);
-        let names: Vec<_> = entries.iter().filter_map(|e| e.get("name")).collect();
-        assert!(names.contains(&"helper_a"));
-        assert!(names.contains(&"helper_b"));
-    }
-
-    #[test]
-    fn helper_entries_include_docstring() {
-        let f =
-            write_temp_py("def make_db():\n    \"\"\"Create a test database.\"\"\"\n    pass\n");
-        let path = temp_path(&f);
-        let entries = extract_helper_entries(&[path]);
-        assert_eq!(entries.len(), 1, "should extract exactly one helper entry");
-        assert_eq!(
-            entries[0].get("docstring"),
-            Some("Create a test database."),
-            "QueryEntry should have docstring field populated from function docstring"
-        );
-    }
-
-    #[test]
-    fn helper_entries_include_signature() {
-        let f = write_temp_py("def make_db(name: str, shared: bool = False):\n    pass\n");
-        let path = temp_path(&f);
-        let entries = extract_helper_entries(&[path]);
-        assert_eq!(entries.len(), 1, "should extract exactly one helper entry");
-        assert_eq!(
-            entries[0].get("signature"),
-            Some("make_db(name: str, shared: bool = False)"),
-            "QueryEntry should have signature field populated from function parameters"
         );
     }
 }

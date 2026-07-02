@@ -53,6 +53,18 @@ pub(crate) fn plugin_entries(
     result.extract()
 }
 
+/// Return helper definitions as a list of field maps for the query engine.
+pub(crate) fn helper_entries(
+    session: &FixtureSession,
+    py: Python<'_>,
+) -> PyResult<Vec<HashMap<String, String>>> {
+    let obj = session.as_py_object(py);
+    let module = py.import("oxitest._bridge.query_bridge")?;
+    let registry = obj.getattr("_helper_registry")?;
+    let result = module.call_method1("helper_entries", (registry,))?;
+    result.extract()
+}
+
 /// Return test→fixture dependency associations for the inspect graph.
 ///
 /// Calls into Python's `collect_module` per test file, extracting
