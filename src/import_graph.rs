@@ -86,14 +86,14 @@ fn file_to_modules(rel_path: &str) -> Vec<String> {
         .collect()
 }
 
-/// Determine which test files are affected by changed source files.
+/// Determine which test files are affected, with per-file diagnostics.
 ///
-/// Parses each test file's imports and checks for overlap with the module
-/// names derived from `changed_sources`.
-pub(crate) fn resolve_affected(
+/// Like [`resolve_affected`], but returns an [`ImportAnalysis`] per test file
+/// showing which imports matched changed sources.
+pub(crate) fn resolve_affected_with_diagnostics(
     test_files: &[camino::Utf8PathBuf],
     changed_sources: &[String],
-) -> Vec<camino::Utf8PathBuf> {
+) -> Vec<crate::affected::ImportAnalysis> {
     let mut changed_modules = HashSet::new();
     for src in changed_sources {
         for m in file_to_modules(src) {
@@ -101,17 +101,17 @@ pub(crate) fn resolve_affected(
         }
     }
 
-    if changed_modules.is_empty() {
-        return vec![];
-    }
-
     test_files
         .iter()
-        .filter(|test_file| {
+        .map(|test_file| {
             let imports = extract_imported_modules(test_file);
-            !imports.is_disjoint(&changed_modules)
+            let matched: Vec<String> = imports.intersection(&changed_modules).cloned().collect();
+            crate::affected::ImportAnalysis {
+                test_file: test_file.to_string(),
+                affected: !matched.is_empty(),
+                matched_imports: matched,
+            }
         })
-        .cloned()
         .collect()
 }
 
@@ -119,6 +119,19 @@ pub(crate) fn resolve_affected(
 mod tests {
     use super::*;
     use crate::python_ast::tests::{temp_path, write_temp_py};
+
+    /// Test helper: delegates to `resolve_affected_with_diagnostics` and
+    /// returns only the affected file paths.
+    fn resolve_affected(
+        test_files: &[camino::Utf8PathBuf],
+        changed_sources: &[String],
+    ) -> Vec<camino::Utf8PathBuf> {
+        resolve_affected_with_diagnostics(test_files, changed_sources)
+            .into_iter()
+            .filter(|a| a.affected)
+            .map(|a| camino::Utf8PathBuf::from(a.test_file))
+            .collect()
+    }
 
     // ── extract_imported_modules ─────────────────────────────────────
 
@@ -273,5 +286,55 @@ mod tests {
 
         let affected = resolve_affected(&test_paths, &[]);
         assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn resolve_affected_with_diagnostics_reports_matches() {
+        // Create two test files: one imports "myapp.utils", the other doesn't.
+        let dir = tempfile::tempdir().unwrap();
+        let dir_path = camino::Utf8Path::from_path(dir.path()).unwrap();
+
+        let test_a = dir_path.join("test_a.py");
+        std::fs::write(&test_a, "import myapp.utils\ndef test_a(): pass\n").unwrap();
+
+        let test_b = dir_path.join("test_b.py");
+        std::fs::write(&test_b, "import os\ndef test_b(): pass\n").unwrap();
+
+        let test_files = vec![
+            camino::Utf8PathBuf::from(test_a.as_str()),
+            camino::Utf8PathBuf::from(test_b.as_str()),
+        ];
+        let changed = vec!["myapp/utils.py".to_string()];
+
+        let results = resolve_affected_with_diagnostics(&test_files, &changed);
+        assert_eq!(results.len(), 2, "should report on both test files");
+
+        let a_result = results
+            .iter()
+            .find(|r| r.test_file.contains("test_a"))
+            .unwrap();
+        assert!(
+            a_result.affected,
+            "test_a imports myapp.utils, should be affected"
+        );
+        assert!(
+            a_result
+                .matched_imports
+                .contains(&"myapp.utils".to_string()),
+            "should report myapp.utils as matched import"
+        );
+
+        let b_result = results
+            .iter()
+            .find(|r| r.test_file.contains("test_b"))
+            .unwrap();
+        assert!(
+            !b_result.affected,
+            "test_b only imports os, should not be affected"
+        );
+        assert!(
+            b_result.matched_imports.is_empty(),
+            "test_b should have no matched imports"
+        );
     }
 }
