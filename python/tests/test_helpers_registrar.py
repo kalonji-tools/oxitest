@@ -61,3 +61,10 @@ def test_helpers_namespace_from_init() -> None:
 def test_helpers_namespace_defaults_empty() -> None:
     h = Helpers()
     assert h._namespace_name == "", "default namespace should be empty string"
+
+
+def test_helpers_captures_source_line() -> None:
+    h = Helpers()
+    assert hasattr(h, "_source_line"), "Helpers should capture source line"
+    assert isinstance(h._source_line, int), "source line should be an int"
+    assert h._source_line > 0, "source line should be positive"

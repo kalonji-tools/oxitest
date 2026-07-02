@@ -116,9 +116,14 @@ class Fixtures:
     """
 
     def __init__(self, name: str | None = None) -> None:
+        import inspect
+
         self._defs: list[FixtureDef[Any]] = []
         self._defs_by_name: dict[str, FixtureDef[Any]] = {}
         self._namespace_name: str = name or ""
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        self._source_line: int = caller.f_lineno if caller is not None else 0
 
     @overload
     def fixture(self, fn: _F) -> _F: ...
