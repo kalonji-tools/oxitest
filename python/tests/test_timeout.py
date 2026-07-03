@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 import oxitest
 import oxitest as oxi
-from oxitest import raises
+from oxitest import helpers, raises
 from oxitest._bridge._fixture_session import _NullFixtureSession
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import _HandlerContext, _TimeoutHandler
@@ -149,12 +149,7 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry():
         return PassedResult()
 
     outcome = wrapper(slow_next)
-    assert outcome.status == "timeout", (
-        f"expected status='timeout' when test exceeds limit, got {outcome.status!r}"
-    )
-    assert isinstance(outcome, TimeoutResult), (
-        f"expected TimeoutResult, got {type(outcome).__name__}"
-    )
-    assert "1s" in outcome.message, (
-        f"timeout message should mention the limit '1s', got {outcome.message!r}"
+    r = helpers.common.assert_result(outcome, TimeoutResult)
+    assert "1s" in r.message, (
+        f"timeout message should mention the limit '1s', got {r.message!r}"
     )

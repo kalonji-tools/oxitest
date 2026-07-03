@@ -8,11 +8,12 @@ C extensions holding the GIL without yielding may delay the Windows interrupt.
 
 from __future__ import annotations
 
-__all__ = ["OxitestTimeoutError", "make_timeout_wrapper"]
+__all__ = ["OxitestTimeoutError", "extract_timeout_seconds", "make_timeout_wrapper"]
 
 import ctypes
 import signal
 import threading
+from collections.abc import Mapping
 from typing import Any
 
 from oxitest._bridge._errors import OxitestTimeoutError
@@ -94,6 +95,20 @@ def _timeout_context(seconds: int) -> _UnixTimeoutContext | _WindowsTimeoutConte
     if hasattr(signal, "alarm"):
         return _UnixTimeoutContext(seconds)
     return _WindowsTimeoutContext(seconds)
+
+
+def extract_timeout_seconds(mark_kwargs: Mapping[str, object]) -> int:
+    """Extract the ``seconds`` value from a timeout mark's kwargs.
+
+    Validated as ``int > 0`` at mark creation time (``_TimeoutMark``).
+    This accessor provides a typed return so callers don't need to
+    re-validate or cast.
+    """
+    seconds = mark_kwargs["seconds"]
+    if not isinstance(seconds, int):
+        msg = f"timeout seconds must be int, got {type(seconds).__name__}"
+        raise TypeError(msg)
+    return seconds
 
 
 def make_timeout_wrapper(seconds: int) -> Any:

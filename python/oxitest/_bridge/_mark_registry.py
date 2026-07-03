@@ -23,8 +23,10 @@ from typing import Any
 
 from oxitest._bridge._fixture_session import _SessionProtocol
 from oxitest._bridge._mark_api import MarkInfo
-from oxitest._bridge._timeout import make_timeout_wrapper
+from oxitest._bridge._timeout import extract_timeout_seconds, make_timeout_wrapper
 from oxitest._bridge.result import (
+    ErrorResult,
+    FailedResult,
     SkippedResult,
     StatusKind,
     TestResult,
@@ -103,7 +105,12 @@ class _XFailHandler(MarkHandler):
         """Wrap execution to convert failures to `xfailed` and passes to `xpassed`."""
         strict = mark.kwargs.get("strict", True)
         reason = mark.kwargs.get("reason", "")
-        raises = mark.kwargs.get("raises", None)
+        raises_raw = mark.kwargs.get("raises", None)
+        # Extract __name__ up front so the closure captures a plain str | None
+        # and ty does not need to resolve .__name__ on object inside the wrapper.
+        raises_name: str | None = (
+            getattr(raises_raw, "__name__", None) if raises_raw is not None else None
+        )
 
         def xfail_wrapper(next_fn: Callable[[], TestResult]) -> TestResult:
             result = next_fn()
@@ -111,7 +118,11 @@ class _XFailHandler(MarkHandler):
                 return result
             if result.status in (StatusKind.PASSED, StatusKind.WARNED):
                 return XPassedResult(strict=bool(strict))
-            if raises is not None and result.exc_type != raises.__name__:  # ty: ignore[unresolved-attribute]
+            if (
+                raises_name is not None
+                and isinstance(result, (FailedResult, ErrorResult))
+                and result.exc_type != raises_name
+            ):
                 return result
             return XFailedResult(message=str(reason))
 
@@ -123,7 +134,7 @@ class _TimeoutHandler(MarkHandler):
 
     def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
         """Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded."""
-        seconds = int(mark.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
+        seconds = extract_timeout_seconds(mark.kwargs)
         return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
 
 

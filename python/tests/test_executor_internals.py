@@ -71,16 +71,7 @@ def test_skipped_exception_returns_skipped():
 
     exc = Skipped("skip reason")
     result = _handle_runtime_exception(exc)
-    assert result is not None, "Skipped exception should return a TestResult, not None"
-    assert result.status == "skipped", (
-        f"Skipped exception should produce status='skipped', got {result.status!r}"
-    )
-    assert isinstance(result, SkippedResult), (
-        f"expected SkippedResult, got {type(result).__name__}"
-    )
-    assert result.message == "skip reason", (
-        f"skipped result message should be 'skip reason', got {result.message!r}"
-    )
+    helpers.common.assert_result(result, SkippedResult, message="skip reason")
 
 
 def test_skip_test_returns_skipped():
@@ -100,15 +91,9 @@ def test_regular_exception_returns_error():
         raise ValueError("something broke")
     except ValueError as exc:
         result = _handle_runtime_exception(exc)
-    assert result is not None, "ValueError should return a TestResult, not None"
-    assert result.status == "error", (
-        f"ValueError should produce status='error', got {result.status!r}"
-    )
-    assert isinstance(result, ErrorResult), (
-        f"expected ErrorResult, got {type(result).__name__}"
-    )
-    assert "ValueError" in result.message, (
-        f"error message should contain 'ValueError', got {result.message!r}"
+    r = helpers.common.assert_result(result, ErrorResult)
+    assert "ValueError" in r.message, (
+        f"error message should contain 'ValueError', got {r.message!r}"
     )
 
 
@@ -235,16 +220,10 @@ def test_frames_captured_on_runtime_exception():
     except Exception as exc:
         result = _handle_runtime_exception(exc)
 
-    assert result is not None, "runtime exception should return a result"
-    assert result.status == "error", f"expected error, got {result.status!r}"
-    assert isinstance(result, ErrorResult), (
-        f"expected ErrorResult, got {type(result).__name__}"
-    )
-    assert len(result.frames) >= 2, (
-        f"Expected at least 2 frames, got {len(result.frames)}"
-    )
-    assert result.frames[-1].name == "blow_up", (
-        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"
+    r = helpers.common.assert_result(result, ErrorResult)
+    assert len(r.frames) >= 2, f"Expected at least 2 frames, got {len(r.frames)}"
+    assert r.frames[-1].name == "blow_up", (
+        f"last frame should be 'blow_up', got {r.frames[-1].name!r}"
     )
 
 
@@ -253,11 +232,7 @@ def test_frames_empty_when_no_traceback():
     exc = ValueError("no tb")
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
-    assert result is not None, "should return a result even without traceback"
-    assert isinstance(result, ErrorResult), (
-        f"expected ErrorResult, got {type(result).__name__}"
-    )
-    assert result.frames == (), f"expected empty frames, got {result.frames!r}"
+    helpers.common.assert_result(result, ErrorResult, frames=())
 
 
 def test_bad_module_path_returns_error(tmp: TempDir):

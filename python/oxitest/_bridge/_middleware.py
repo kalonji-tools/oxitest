@@ -19,7 +19,11 @@ from typing import Any, Protocol
 
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import MarkWrapper
-from oxitest._bridge._timeout import OxitestTimeoutError, make_timeout_wrapper
+from oxitest._bridge._timeout import (
+    OxitestTimeoutError,
+    extract_timeout_seconds,
+    make_timeout_wrapper,
+)
 from oxitest._bridge.result import TestResult
 
 
@@ -128,7 +132,7 @@ class AsyncBridgeMiddleware:
         _timeout_secs: int | None = None
         for m in plan.marks:
             if m.name == "timeout":
-                _timeout_secs = int(m.kwargs["seconds"])  # type: ignore[arg-type]  # ty: ignore
+                _timeout_secs = extract_timeout_seconds(m.kwargs)
                 break
         if _timeout_secs is None:
             _timeout_secs = plan.default_timeout

@@ -41,6 +41,7 @@ from __future__ import annotations
 __all__ = ["main", "run"]
 
 import contextlib
+import io
 import json
 import os
 import sys
@@ -132,7 +133,8 @@ def main() -> None:
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the
     # Rust watchdog — it expects one result line per test.
-    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     for raw in sys.stdin:
         line = raw.strip()
         if line:

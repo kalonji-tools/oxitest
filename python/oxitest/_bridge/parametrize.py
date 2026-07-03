@@ -19,7 +19,7 @@ import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from oxitest._bridge._errors import ParametrizeError
 from oxitest._bridge._fixture_registry import _fixture_inner_type
@@ -242,8 +242,20 @@ class ComposedCases:
 ResolvedCases = DictCases | DataclassCases | ComposedCases
 
 
+def _as_composed(layers: tuple[ResolvedCases, ...]) -> tuple[ComposedCases, ...]:
+    """Narrow ResolvedCases to ComposedCases, raising TypeError on mismatch."""
+    for layer in layers:
+        if not isinstance(layer, ComposedCases):
+            msg = (
+                "parametrize: cannot mix partial() with full dataclass or dict cases."
+                " All stacked @parametrize layers must use partial()."
+            )
+            raise TypeError(msg)
+    return cast("tuple[ComposedCases, ...]", layers)
+
+
 def _resolve_composed(
-    layers: tuple[ComposedCases, ...],
+    layers: tuple[ResolvedCases, ...],
     fn: Callable[..., Any],
     param_id: str,
 ) -> tuple[dict[str, Any], frozenset[str]]:
@@ -254,11 +266,11 @@ def _resolve_composed(
             f"resolve_parametrize: compound param_id '{param_id}' has"
             f" {len(parts)} parts but there are {len(layers)} layers."
         )
+    composed_layers = _as_composed(layers)
     merged_fields: dict[str, Any] = {}
     all_fixref: list[str] = []
-    target_type = layers[0].param_type
-    assert target_type is not None  # composition always has a param_type
-    for layer, case_id in zip(layers, parts, strict=True):
+    target_type = composed_layers[0].param_type
+    for layer, case_id in zip(composed_layers, parts, strict=True):
         p = layer.cases.get(case_id)
         if p is None:
             raise ParametrizeError(
@@ -449,28 +461,18 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
             if existing is None:
                 meta.param_cases = (new_layer,)
             elif isinstance(existing, tuple):
-                for layer in existing:
-                    if not isinstance(layer, ComposedCases):
-                        raise TypeError(
-                            "parametrize: cannot mix partial() with"
-                            " full dataclass or dict cases."
-                            " All stacked @parametrize layers must use partial()."
-                        )
-                existing_pt = existing[0].param_type  # ty: ignore[unresolved-attribute]
+                composed = _as_composed(existing)
+                existing_pt = composed[0].param_type
                 new_pt = new_layer.param_type
                 if existing_pt is not new_pt:
-                    assert (
-                        existing_pt is not None
-                    )  # composed layers always have param_type
-                    assert new_pt is not None
                     raise TypeError(
                         "parametrize: all partial() calls must target the"
                         " same dataclass type."
                         f" Expected '{existing_pt.__name__}',"
                         f" got '{new_pt.__name__}'."
                     )
-                for layer in existing:
-                    overlap = layer.provided_fields & new_layer.provided_fields  # ty: ignore[unresolved-attribute]
+                for layer in composed:
+                    overlap = layer.provided_fields & new_layer.provided_fields
                     if overlap:
                         raise TypeError(
                             "parametrize: field overlap between layers:"
@@ -525,4 +527,4 @@ def resolve_parametrize(
         )
     if len(layers) == 1 and not isinstance(layers[0], ComposedCases):
         return layers[0].resolve(fn, param_id)
-    return _resolve_composed(layers, fn, param_id)  # ty: ignore[invalid-argument-type]
+    return _resolve_composed(layers, fn, param_id)
