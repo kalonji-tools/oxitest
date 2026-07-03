@@ -74,7 +74,7 @@ ignore = [
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/oxitest/_bridge/_*.py" = ["D100", "D101", "D102", "D103", "D104"]
 "python/tests/*" = [
-    "T201", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D",
+    "T201", "B009", "B010", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D",
     "PLR2004",  # magic values in comparisons
     "PT015",    # assert always fails
     "PT017",    # assert in except block

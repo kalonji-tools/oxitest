@@ -12,7 +12,7 @@ import sys
 import textwrap
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 import oxitest
 from oxitest import Helpers, TempDir, TestResult, Yields
@@ -28,6 +28,7 @@ from oxitest._bridge.plugin_loader import PluginRegistry
 common = Helpers()
 
 __all__ = [
+    "FakePluginModule",
     "RecordingDebugger",
     "exec_inline",
     "make_fixture_def",
@@ -42,6 +43,23 @@ __all__ = [
 ]
 
 fx = oxitest.Fixtures()
+
+
+@common.helper
+@dataclass
+class FakePluginModule:
+    """Typed stand-in for a dynamically-created plugin module.
+
+    Use this instead of ``types.ModuleType`` in tests that set attributes
+    like ``oxitest_plugin`` or ``oxitest_cli_extension`` on a fake module.
+    The dataclass fields give ty a concrete type to check against so
+    ``unresolved-attribute`` suppressors are not needed.
+    """
+
+    oxitest_plugin: Any = None
+    oxitest_cli_extension: Any = None
+    _call_tracker: Any = None
+    Coverage: Any = None  # mirrors coverage.py module attr (N815 globally ignored)
 
 
 @fx.fixture

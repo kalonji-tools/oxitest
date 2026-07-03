@@ -117,7 +117,7 @@ def test_plugin_entry_default_is_loaded():
 @oxitest.mark.inprocess
 def test_deferred_entry_ensure_loaded_imports_module():
     mod = types.ModuleType("lazy_fixture_plugin")
-    mod.oxitest_plugin = Plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", Plugin)
     sys.modules["lazy_fixture_plugin"] = mod
     try:
         entry = PluginEntry.deferred("lazy_fixture_plugin", ["fixture_provider"])
@@ -156,7 +156,7 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin():
 @oxitest.mark.inprocess
 def test_load_plugins_defers_lazy_only_plugin():
     mod = types.ModuleType("lazy_only_plugin")
-    mod.oxitest_plugin = Plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", Plugin)
     sys.modules["lazy_only_plugin"] = mod
     try:
         registry = load_plugins(
@@ -183,7 +183,7 @@ def test_load_plugins_defers_lazy_only_plugin():
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_eager_protocol():
     mod = types.ModuleType("eager_reporter_plugin")
-    mod.oxitest_plugin = lambda config=None: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
     sys.modules["eager_reporter_plugin"] = mod
     try:
         registry = load_plugins(
@@ -206,7 +206,7 @@ def test_load_plugins_eager_imports_plugin_with_eager_protocol():
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_no_protocols_declared():
     mod = types.ModuleType("no_protocols_plugin")
-    mod.oxitest_plugin = lambda config=None: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
     sys.modules["no_protocols_plugin"] = mod
     try:
         registry = load_plugins(["no_protocols_plugin"], {})
@@ -266,7 +266,11 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin():
         def autouse(self) -> bool:
             return False
 
-    mod.oxitest_plugin = lambda: Plugin(fixture_providers=(FakeFixtureProvider(),))  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(
+        mod,
+        "oxitest_plugin",
+        lambda: Plugin(fixture_providers=(FakeFixtureProvider(),)),
+    )
     sys.modules["deferred_fixture_plugin"] = mod
     try:
         registry = PluginRegistry()

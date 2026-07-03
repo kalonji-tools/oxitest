@@ -24,7 +24,9 @@ def _make_plugin_with_extension():
         host: Annotated[str, Both(help="host")] = "local"
 
     mod = types.ModuleType("fake_ext_plugin")
-    mod.oxitest_cli_extension = CliExtension(prefix="fake", config_type=FakeCfg)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(
+        mod, "oxitest_cli_extension", CliExtension(prefix="fake", config_type=FakeCfg)
+    )
 
     call_tracker: list[bool] = []
 
@@ -32,8 +34,8 @@ def _make_plugin_with_extension():
         call_tracker.append(True)
         return Plugin()
 
-    mod.oxitest_plugin = oxitest_plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    mod._call_tracker = call_tracker  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", oxitest_plugin)
+    setattr(mod, "_call_tracker", call_tracker)
     return mod
 
 
@@ -72,7 +74,7 @@ def test_user_prefix_override():
 @oxitest.mark.inprocess
 def test_plugin_without_extension_has_no_cli():
     mod = types.ModuleType("fake_simple")
-    mod.oxitest_plugin = lambda config=None: Plugin()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
     sys.modules["fake_simple"] = mod
     try:
         registry = load_plugins(["fake_simple"], {})
@@ -95,9 +97,8 @@ def test_activate_plugin_with_typed_config():
             cli_values={"host": "ssh://test"},
         )
         assert isinstance(plugin, Plugin), f"expected Plugin, got {type(plugin)}"
-        assert len(mod._call_tracker) == 1, (
-            "oxitest_plugin should have been called once"
-        )
+        call_tracker = getattr(mod, "_call_tracker")
+        assert len(call_tracker) == 1, "oxitest_plugin should have been called once"
     finally:
         sys.modules.pop("fake_ext_plugin", None)
 
@@ -111,7 +112,7 @@ def test_backwards_compat_dict_config():
         return Plugin()
 
     mod = types.ModuleType("fake_legacy")
-    mod.oxitest_plugin = entry  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", entry)
     sys.modules["fake_legacy"] = mod
     try:
         load_plugins(["fake_legacy"], {"fake_legacy": {"key": "val"}})

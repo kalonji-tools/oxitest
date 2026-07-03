@@ -30,7 +30,7 @@ def test_helper_def_is_frozen() -> None:
         source=ConftestSource(func=_dummy, conftest_path="/conftest.py"),
     )
     with oxitest.raises(AttributeError, match="cannot assign to field"):
-        defn.name = "other"  # type: ignore[misc]  # ty: ignore[invalid-assignment]
+        setattr(defn, "name", "other")
 
 
 def test_registry_register_and_get() -> None:

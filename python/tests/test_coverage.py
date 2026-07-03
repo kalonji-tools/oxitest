@@ -103,7 +103,7 @@ class _FakeCovInstance:
 def _make_fake_coverage_module(instance: _FakeCovInstance) -> ModuleType:
     """Build a fake ``coverage`` module whose ``Coverage()`` returns *instance*."""
     mod = ModuleType("coverage")
-    mod.Coverage = lambda: instance  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "Coverage", lambda: instance)
     return mod
 
 

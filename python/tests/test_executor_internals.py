@@ -10,8 +10,10 @@ from oxitest._bridge._diagnostics import (
 )
 from oxitest._bridge._middleware import _compose
 from oxitest._bridge.result import (
+    ErrorResult,
     FailedResult,
     PassedResult,
+    SkippedResult,
     WarnedResult,
 )
 
@@ -73,8 +75,11 @@ def test_skipped_exception_returns_skipped():
     assert result.status == "skipped", (
         f"Skipped exception should produce status='skipped', got {result.status!r}"
     )
-    assert result.message == "skip reason", (  # ty: ignore[unresolved-attribute]
-        f"skipped result message should be 'skip reason', got {result.message!r}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, SkippedResult), (
+        f"expected SkippedResult, got {type(result).__name__}"
+    )
+    assert result.message == "skip reason", (
+        f"skipped result message should be 'skip reason', got {result.message!r}"
     )
 
 
@@ -99,8 +104,11 @@ def test_regular_exception_returns_error():
     assert result.status == "error", (
         f"ValueError should produce status='error', got {result.status!r}"
     )
-    assert "ValueError" in result.message, (  # ty: ignore[unresolved-attribute]
-        f"error message should contain 'ValueError', got {result.message!r}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, ErrorResult), (
+        f"expected ErrorResult, got {type(result).__name__}"
+    )
+    assert "ValueError" in result.message, (
+        f"error message should contain 'ValueError', got {result.message!r}"
     )
 
 
@@ -229,11 +237,14 @@ def test_frames_captured_on_runtime_exception():
 
     assert result is not None, "runtime exception should return a result"
     assert result.status == "error", f"expected error, got {result.status!r}"
-    assert len(result.frames) >= 2, (  # ty: ignore[unresolved-attribute]
-        f"Expected at least 2 frames, got {len(result.frames)}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, ErrorResult), (
+        f"expected ErrorResult, got {type(result).__name__}"
     )
-    assert result.frames[-1].name == "blow_up", (  # ty: ignore[unresolved-attribute]
-        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"  # ty: ignore[unresolved-attribute]
+    assert len(result.frames) >= 2, (
+        f"Expected at least 2 frames, got {len(result.frames)}"
+    )
+    assert result.frames[-1].name == "blow_up", (
+        f"last frame should be 'blow_up', got {result.frames[-1].name!r}"
     )
 
 
@@ -243,7 +254,10 @@ def test_frames_empty_when_no_traceback():
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
     assert result is not None, "should return a result even without traceback"
-    assert result.frames == (), f"expected empty frames, got {result.frames!r}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, ErrorResult), (
+        f"expected ErrorResult, got {type(result).__name__}"
+    )
+    assert result.frames == (), f"expected empty frames, got {result.frames!r}"
 
 
 def test_bad_module_path_returns_error(tmp: TempDir):

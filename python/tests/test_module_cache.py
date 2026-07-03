@@ -27,7 +27,7 @@ oxi_mark = oxitest.mark.inprocess
 _KEY = "_oxitest_load_counter_test_module_cache"
 if _KEY not in sys.modules:
     counter = type(sys)(_KEY)
-    counter.n = 0  # type: ignore[attr-defined] # ty: ignore[unresolved-attribute]
+    setattr(counter, "n", 0)
     sys.modules[_KEY] = counter
 _counter = sys.modules[_KEY]
 _counter.n += 1  # type: ignore[attr-defined]

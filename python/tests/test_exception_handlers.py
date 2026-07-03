@@ -11,7 +11,7 @@ from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
 )
-from oxitest._bridge.result import StatusKind
+from oxitest._bridge.result import ErrorResult, FailedResult, StatusKind
 
 # ---------------------------------------------------------------------------
 # _check_warnings
@@ -96,7 +96,10 @@ def test_dispatch_assertion_error():
 
     assert result is not None, "AssertionError should return a result"
     assert result.status == StatusKind.FAILED, "expected FAILED status"
-    assert result.exc_type == "AssertionError", "expected AssertionError exc_type"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, FailedResult), (
+        f"expected FailedResult, got {type(result).__name__}"
+    )
+    assert result.exc_type == "AssertionError", "expected AssertionError exc_type"
 
 
 def test_dispatch_runtime_exception():
@@ -107,7 +110,10 @@ def test_dispatch_runtime_exception():
 
     assert result is not None, "ValueError should return a result"
     assert result.status == StatusKind.ERROR, "expected ERROR status"
-    assert "ValueError" in result.message, "expected ValueError in message"  # ty: ignore[unresolved-attribute]
+    assert isinstance(result, ErrorResult), (
+        f"expected ErrorResult, got {type(result).__name__}"
+    )
+    assert "ValueError" in result.message, "expected ValueError in message"
 
 
 def test_dispatch_skip_exception():
