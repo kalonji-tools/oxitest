@@ -162,7 +162,7 @@ def run_base(
         ):
             _debug_post_mortem(all_kwargs, node_id, exc, backend, file=file)
         result = dispatch_exception(
-            exc, show_internals=show_internals, show_locals=show_locals
+            exc, show_locals=show_locals, show_internals=show_internals
         )
         if result is not None:
             return result

@@ -78,15 +78,16 @@ def _get_location(exc: BaseException) -> tuple[str, int, str]:
 def _get_frames(
     exc: BaseException,
     *,
-    show_internals: bool = False,
     show_locals: bool = False,
+    show_internals: bool = False,
 ) -> tuple[Frame, ...]:
     """Extract structured traceback frames from an exception.
 
-    Single-pass walk over the raw traceback chain.  When *show_internals*
-    is False, frames from oxitest internals are filtered out (with a
-    fallback to the last frame if all are internal).  When *show_locals*
-    is True, each surviving frame includes captured local variables.
+    Single-pass walk over the raw traceback chain.  When
+    ``show_internals`` is False, frames from oxitest internals
+    are filtered out (with a fallback to the last frame if all are
+    internal).  When ``show_locals`` is True, each surviving
+    frame includes captured local variables.
     """
     tb = exc.__traceback__
     frames: list[Frame] = []
@@ -152,8 +153,8 @@ def _compute_field_diffs(
 def _handle_assertion_error(
     exc: AssertionError,
     *,
-    show_internals: bool = False,
     show_locals: bool = False,
+    show_internals: bool = False,
 ) -> FailedResult:
     """Map an AssertionError to a failed TestResult."""
     file, lineno, source_line = _get_location(exc)
@@ -177,15 +178,15 @@ def _handle_assertion_error(
         op=op,
         field_diffs=field_diffs,
         exc_type="AssertionError",
-        frames=_get_frames(exc, show_internals=show_internals, show_locals=show_locals),
+        frames=_get_frames(exc, show_locals=show_locals, show_internals=show_internals),
     )
 
 
 def _handle_runtime_exception(
     exc: BaseException,
     *,
-    show_internals: bool = False,
     show_locals: bool = False,
+    show_internals: bool = False,
 ) -> TestResult | None:
     """Map a non-assertion BaseException to a TestResult, or None to re-raise."""
     exc_type = type(exc).__name__
@@ -200,7 +201,7 @@ def _handle_runtime_exception(
             source_line=source_line,
             exc_type=type(exc).__name__,
             frames=_get_frames(
-                exc, show_internals=show_internals, show_locals=show_locals
+                exc, show_locals=show_locals, show_internals=show_internals
             ),
         )
     return None
@@ -240,14 +241,14 @@ def is_debuggable(exc: BaseException) -> bool:
 def dispatch_exception(
     exc: BaseException,
     *,
-    show_internals: bool = False,
     show_locals: bool = False,
+    show_internals: bool = False,
 ) -> TestResult | None:
     """Map exception to TestResult. Returns None to signal re-raise."""
     if isinstance(exc, AssertionError):
         return _handle_assertion_error(
-            exc, show_internals=show_internals, show_locals=show_locals
+            exc, show_locals=show_locals, show_internals=show_internals
         )
     return _handle_runtime_exception(
-        exc, show_internals=show_internals, show_locals=show_locals
+        exc, show_locals=show_locals, show_internals=show_internals
     )

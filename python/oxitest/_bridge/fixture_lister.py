@@ -24,6 +24,106 @@ _DIM_YELLOW = "\033[2;33m"
 _RESET = "\033[0m"
 
 
+class TreeRenderer:
+    """Renders fixture dependency trees with optional ANSI color and verbosity."""
+
+    def __init__(self, *, use_color: bool = True, verbosity: int = 0) -> None:
+        self._use_color = use_color
+        self._verbosity = verbosity
+
+    def _dim(self, text: str) -> str:
+        if self._use_color:
+            return f"{_DIM}{text}{_RESET}"
+        return text
+
+    def _tree_label(self, defn: FixtureDef[Any]) -> str:
+        """Format a single fixture node label based on verbosity."""
+        name = defn.name
+        if self._use_color:
+            name = f"{_BOLD_CYAN}{defn.name}{_RESET}"
+
+        if self._verbosity == 0:
+            return name
+
+        # Verbosity 1: name + tags
+        parts: list[str] = []
+        if defn.shared:
+            parts.append("shared")
+        if defn.is_async:
+            parts.append("async")
+        if defn.autouse:
+            parts.append("autouse")
+        tag_str = ""
+        if parts:
+            tag_str = f" [{', '.join(parts)}]"
+            if self._use_color:
+                tag_str = f" {_DIM_YELLOW}[{', '.join(parts)}]{_RESET}"
+
+        if self._verbosity == 1:
+            return f"{name}{tag_str}"
+
+        # Verbosity 2: name + tags + origin
+        origin = _origin_header(defn)
+        origin_str = f" ({origin})" if origin else ""
+        if self._use_color:
+            origin_str = f" {_DIM}({origin}){_RESET}" if origin else ""
+        return f"{name}{tag_str}{origin_str}"
+
+    def render(
+        self,
+        all_defs: dict[str, FixtureDef[Any]],
+        graph: dict[str, list[str]],
+        roots: list[str],
+        total: int,
+        pattern: str | None,
+    ) -> str:
+        """Render the fixture tree from pre-computed graph data."""
+        if not roots:
+            if pattern:
+                return self._dim(f"no fixtures match '{pattern}'")
+            return ""
+
+        lines: list[str] = []
+
+        def _render_node(
+            name: str, prefix: str, *, is_last: bool, is_root: bool
+        ) -> None:
+            defn = all_defs[name]
+            label = self._tree_label(defn)
+            if is_root:
+                lines.append(label)
+            else:
+                connector = "└── " if is_last else "├── "
+                if self._use_color:
+                    lines.append(f"{_DIM}{prefix}{connector}{_RESET}{label}")
+                else:
+                    lines.append(f"{prefix}{connector}{label}")
+
+            deps = graph.get(name, [])
+            child_prefix = (
+                prefix if is_root else (prefix + ("    " if is_last else "│   "))
+            )
+            for i, dep in enumerate(deps):
+                _render_node(
+                    dep, child_prefix, is_last=i == len(deps) - 1, is_root=False
+                )
+
+        for i, root in enumerate(roots):
+            if i > 0:
+                lines.append("")
+            _render_node(root, "", is_last=True, is_root=True)
+
+        # Summary
+        shown = len(roots)
+        if pattern:
+            lines.append(f"\n── {shown} of {total} fixtures")
+        else:
+            s = "" if total == 1 else "s"
+            lines.append(f"\n── {total} fixture{s}")
+
+        return "\n".join(lines)
+
+
 def _builtin_defs() -> list[FixtureDef[Any]]:
     """Create synthetic FixtureDefs for type-based built-in fixtures.
 
@@ -78,12 +178,6 @@ def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
     return (2, defn.conftest_path)
 
 
-def _dim(text: str, use_color: bool) -> str:
-    if use_color:
-        return f"{_DIM}{text}{_RESET}"
-    return text
-
-
 def _origin_header(defn: FixtureDef[Any]) -> str:
     if _is_builtin(defn):
         return "built-in"
@@ -103,6 +197,7 @@ def tree_fixtures_from_registry(
     registry: FixtureRegistry,
     verbosity: int = 0,
     pattern: str | None = None,
+    *,
     use_color: bool = True,
 ) -> str:
     """Format all fixtures as a dependency tree.
@@ -171,77 +266,5 @@ def tree_fixtures_from_registry(
     if pattern:
         roots = [r for r in roots if pattern in r]
 
-    if not roots:
-        if pattern:
-            return _dim(f"no fixtures match '{pattern}'", use_color)
-        return ""
-
-    # Render tree
-    lines: list[str] = []
-
-    def _render_node(name: str, prefix: str, is_last: bool, is_root: bool) -> None:
-        defn = all_defs[name]
-        label = _tree_label(defn, verbosity, use_color)
-        if is_root:
-            lines.append(label)
-        else:
-            connector = "└── " if is_last else "├── "
-            if use_color:
-                lines.append(f"{_DIM}{prefix}{connector}{_RESET}{label}")
-            else:
-                lines.append(f"{prefix}{connector}{label}")
-
-        # Recurse into deps
-        deps = graph.get(name, [])
-        child_prefix = prefix if is_root else (prefix + ("    " if is_last else "│   "))
-        for i, dep in enumerate(deps):
-            _render_node(dep, child_prefix, is_last=i == len(deps) - 1, is_root=False)
-
-    for i, root in enumerate(roots):
-        if i > 0:
-            lines.append("")
-        _render_node(root, "", is_last=True, is_root=True)
-
-    # Summary
-    shown = len(roots)
-    if pattern:
-        lines.append(f"\n── {shown} of {total} fixtures")
-    else:
-        s = "" if total == 1 else "s"
-        lines.append(f"\n── {total} fixture{s}")
-
-    return "\n".join(lines)
-
-
-def _tree_label(defn: FixtureDef[Any], verbosity: int, use_color: bool) -> str:
-    """Format a single fixture node label based on verbosity."""
-    name = defn.name
-    if use_color:
-        name = f"{_BOLD_CYAN}{defn.name}{_RESET}"
-
-    if verbosity == 0:
-        return name
-
-    # Verbosity 1: name + tags
-    parts: list[str] = []
-    if defn.shared:
-        parts.append("shared")
-    if defn.is_async:
-        parts.append("async")
-    if defn.autouse:
-        parts.append("autouse")
-    tag_str = ""
-    if parts:
-        tag_str = f" [{', '.join(parts)}]"
-        if use_color:
-            tag_str = f" {_DIM_YELLOW}[{', '.join(parts)}]{_RESET}"
-
-    if verbosity == 1:
-        return f"{name}{tag_str}"
-
-    # Verbosity 2: name + tags + origin
-    origin = _origin_header(defn)
-    origin_str = f" ({origin})" if origin else ""
-    if use_color:
-        origin_str = f" {_DIM}({origin}){_RESET}" if origin else ""
-    return f"{name}{tag_str}{origin_str}"
+    renderer = TreeRenderer(use_color=use_color, verbosity=verbosity)
+    return renderer.render(all_defs, graph, roots, total, pattern)

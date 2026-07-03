@@ -321,7 +321,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
                         'outcome': str(outcome),
                         'duration_ms': duration_ms,
                     })
-                def finish(self, collect_errors, interrupted):
+                def finish(self, collect_errors, *, interrupted):
                     self._events.append({'event': 'finish'})
                     self._path.write_text(json.dumps(self._events))
 

@@ -66,7 +66,7 @@ class MetricsReporter:
             }
         )
 
-    def finish(self, collect_errors: list[Any], interrupted: bool) -> None:
+    def finish(self, collect_errors: list[Any], *, interrupted: bool) -> None:
         self._events.append({"event": "finish", "interrupted": interrupted})
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(self._events, indent=2))

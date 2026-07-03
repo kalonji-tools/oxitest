@@ -277,6 +277,7 @@ def run_test(
     default_timeout: int | None = None,
     debug_mode: str | None = None,
     keep_tmp: str | None = None,
+    *,
     show_locals: bool = False,
     show_internals: bool = False,
 ) -> TestResult:
@@ -295,10 +296,8 @@ def run_test(
         keep_tmp: When set, preserve TempDir contents instead of cleaning up.
             ``"failed"`` preserves only on test failure; ``"always"`` preserves
             unconditionally.  ``None`` always cleans up (default).
-        show_locals: When ``True``, capture local variables in each traceback
-            frame and include them in the failure output.
-        show_internals: When ``True``, include oxitest-internal frames in the
-            traceback instead of filtering them out.
+        show_locals: When True, capture local variables per traceback frame.
+        show_internals: When True, include oxitest-internal frames in tracebacks.
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,

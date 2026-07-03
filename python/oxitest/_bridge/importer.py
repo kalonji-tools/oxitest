@@ -191,6 +191,7 @@ def _expand_composed(
     fn_name: str,
     lineno: int,
     marker_names: list[str],
+    *,
     is_async: bool,
     fixture_deps: tuple[tuple[str, str], ...],
     fixref_deps: tuple[tuple[str, str], ...] = (),
@@ -302,8 +303,8 @@ def _expand_item(
             fn_name,
             lineno,
             marker_names,
-            is_async,
-            fixture_deps,
+            is_async=is_async,
+            fixture_deps=fixture_deps,
             fixref_deps=tuple(sorted(all_fixref_deps)),
         )
     # Single layer: existing behavior
@@ -430,6 +431,7 @@ def _check_module_registrars(
 def _collect_items(
     members: Iterable[tuple[str, object]],
     path: str,
+    *,
     collect_violations: bool,
 ) -> tuple[list[CollectedItem], list[CollectedViolation]]:
     """Shared collection loop: expand items + check violations for each member."""
@@ -466,6 +468,7 @@ def _class_members(module: ModuleType) -> Iterable[tuple[str, object]]:
 def collect_module(
     path: str,
     session: Any | None = None,
+    *,
     collect_violations: bool = False,
 ) -> tuple[list[CollectedItem], list[CollectedViolation]]:
     """Import a Python file with AST rewriting and return items and violations.
@@ -486,7 +489,9 @@ def collect_module(
     for discover in (_module_members, _class_members):
         members = list(discover(module))
         _apply_module_marks(members, module_marks)
-        found_items, found_viols = _collect_items(members, path, collect_violations)
+        found_items, found_viols = _collect_items(
+            members, path, collect_violations=collect_violations
+        )
         items.extend(found_items)
         violations.extend(found_viols)
 

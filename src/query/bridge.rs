@@ -22,10 +22,11 @@ pub(crate) fn tree_fixtures(
     let obj = session.as_py_object(py);
     let lister = py.import("oxitest._bridge.fixture_lister")?;
     let registry = obj.getattr("_registry")?;
-    let result = lister.call_method1(
-        "tree_fixtures_from_registry",
-        (registry, verbosity, pattern, use_color),
-    )?;
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs.set_item("verbosity", verbosity)?;
+    kwargs.set_item("pattern", pattern)?;
+    kwargs.set_item("use_color", use_color)?;
+    let result = lister.call_method("tree_fixtures_from_registry", (registry,), Some(&kwargs))?;
     result.extract::<String>()
 }
 

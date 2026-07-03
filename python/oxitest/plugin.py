@@ -223,7 +223,7 @@ class Reporter(Protocol):
         """
         ...
 
-    def finish(self, collect_errors: list[Any], interrupted: bool) -> None:
+    def finish(self, collect_errors: list[Any], *, interrupted: bool) -> None:
         """Called once after all tests have completed and teardown is done.
 
         Args:

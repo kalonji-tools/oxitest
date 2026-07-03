@@ -182,6 +182,7 @@ class DebugModeCase:
 )
 def test_run_base_debug_mode(
     mode: str | None,
+    *,
     passing: bool,
     expect_trace: int,
     expect_post_mortem: int,
