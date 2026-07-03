@@ -53,9 +53,14 @@ impl super::Reporter for PyPluginReporter {
     ) -> super::ExitVote {
         Python::attach(|py| {
             let err_count = collect_errors.len();
+            let kwargs = pyo3::types::PyDict::new(py);
+            if let Err(e) = kwargs.set_item("interrupted", interrupted) {
+                tracing::warn!("Plugin reporter finish kwargs error: {e}");
+                return;
+            }
             if let Err(e) = self
                 .obj
-                .call_method1(py, "finish", (err_count, interrupted))
+                .call_method(py, "finish", (err_count,), Some(&kwargs))
             {
                 tracing::warn!("Plugin reporter finish error: {e}");
             }

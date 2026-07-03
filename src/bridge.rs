@@ -238,11 +238,12 @@ pub(crate) fn collect_module_with_session_obj(
         .map_err(py_collect_err)?;
 
     let path_str = path.as_str();
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs
+        .set_item("collect_violations", collect_violations)
+        .map_err(py_collect_err)?;
     let result = importer
-        .call_method1(
-            "collect_module",
-            (path_str, session_obj, collect_violations),
-        )
+        .call_method("collect_module", (path_str, session_obj), Some(&kwargs))
         .map_err(|e: PyErr| {
             // e.to_string() formats as "ImportError: <message>"; strip the redundant
             // type prefix because CollectError::ImportError already labels the context.
@@ -578,24 +579,14 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let show_locals_obj: Bound<'_, PyAny> = pyo3::types::PyBool::new(py, opts.show_locals)
-        .to_owned()
-        .into_any();
-    let show_internals_obj: Bound<'_, PyAny> = pyo3::types::PyBool::new(py, opts.show_internals)
-        .to_owned()
-        .into_any();
+    let show_kwargs = pyo3::types::PyDict::new(py);
+    show_kwargs.set_item("show_locals", opts.show_locals)?;
+    show_kwargs.set_item("show_internals", opts.show_internals)?;
 
-    let py_result = executor.call_method1(
+    let py_result = executor.call_method(
         "run_test",
-        (
-            meta_obj,
-            session_obj,
-            &timeout_obj,
-            debug_obj,
-            keep_tmp_obj,
-            show_locals_obj,
-            show_internals_obj,
-        ),
+        (meta_obj, session_obj, &timeout_obj, debug_obj, keep_tmp_obj),
+        Some(&show_kwargs),
     )?;
 
     extract_outcome(&py_result)

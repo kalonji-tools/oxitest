@@ -165,7 +165,7 @@ def _write_inline_reporter_plugin(tmp: TempDir) -> None:
         "        self._events.append({'event': 'completed', "
         "'outcome': str(outcome)})\n"
         "    def finish(self, collect_errors: list[Any], "
-        "interrupted: bool) -> None:\n"
+        "*, interrupted: bool) -> None:\n"
         "        self._events.append({'event': 'finish'})\n"
         "        Path.cwd().joinpath('reporter_output.json').write_text(\n"
         "            json.dumps(self._events, indent=2))\n\n"

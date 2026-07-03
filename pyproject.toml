@@ -35,8 +35,6 @@ ignore = [
     # ── Intentional design decisions ─────────────────────────────────────
     "C901",           # function too complex (acceptable for dispatchers)
     "D105", "D107",   # missing docstring in magic method / __init__
-    "FBT001",         # boolean positional arg (internal API, not public-facing)
-    "FBT002",         # boolean default value (intentional API: show_locals=False)
     "PLR0911",        # too many return statements (complex dispatchers)
     "PLR0912",        # too many branches (complex dispatchers)
     "PLR0913",        # too many arguments (internal functions with many params)
