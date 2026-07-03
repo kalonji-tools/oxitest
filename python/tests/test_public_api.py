@@ -13,15 +13,15 @@ def test_module_has_docstring():
 
 
 def test_module_docstring_mentions_fixtures_registry():
-    assert "Fixtures" in oxitest.__doc__, (  # ty: ignore[unsupported-operator]
-        "oxitest module docstring should mention 'Fixtures'"
-    )
+    doc = oxitest.__doc__
+    assert doc is not None, "oxitest module should have a docstring"
+    assert "Fixtures" in doc, "oxitest module docstring should mention 'Fixtures'"
 
 
 def test_module_docstring_mentions_fixture_injection():
-    assert "Fixture" in oxitest.__doc__, (  # ty: ignore[unsupported-operator]
-        "oxitest module docstring should mention 'Fixture'"
-    )
+    doc = oxitest.__doc__
+    assert doc is not None, "oxitest module should have a docstring"
+    assert "Fixture" in doc, "oxitest module docstring should mention 'Fixture'"
 
 
 def test_fixture_type_has_docstring():
@@ -34,10 +34,9 @@ def test_fixture_type_docstring_explains_injection():
     from oxitest import Fixture
 
     doc = Fixture.__doc__
-    assert "inject" in doc.lower(), (  # ty: ignore[unresolved-attribute]
-        "Fixture docstring should explain injection"
-    )
-    assert "Fixture[T]" in doc or "Fixture[" in doc, (  # ty: ignore[unsupported-operator]
+    assert doc is not None, "Fixture type should have a docstring"
+    assert "inject" in doc.lower(), "Fixture docstring should explain injection"
+    assert "Fixture[T]" in doc or "Fixture[" in doc, (
         "Fixture docstring should show Fixture[T] usage"
     )
 
@@ -46,8 +45,9 @@ def test_fixture_type_docstring_warns_unannotated_not_injected():
     from oxitest import Fixture
 
     doc = Fixture.__doc__
+    assert doc is not None, "Fixture type should have a docstring"
     # must make clear that unannotated params are NOT injected
-    assert "not" in doc.lower() or "required" in doc.lower(), (  # ty: ignore[unresolved-attribute]
+    assert "not" in doc.lower() or "required" in doc.lower(), (
         "Fixture docstring should clarify that unannotated params are NOT injected"
     )
 
@@ -60,22 +60,25 @@ def test_parametrize_decorator_has_docstring():
 
 def test_parametrize_docstring_explains_compact_mode():
     doc = oxitest.parametrize.__doc__
-    assert "compact" in doc.lower(), (  # ty: ignore[unresolved-attribute]
+    assert doc is not None, "oxitest.parametrize should have a docstring"
+    assert "compact" in doc.lower(), (
         "oxitest.parametrize docstring should explain compact mode"
     )
 
 
 def test_parametrize_docstring_explains_expanded_mode():
     doc = oxitest.parametrize.__doc__
-    assert "expanded" in doc.lower(), (  # ty: ignore[unresolved-attribute]
+    assert doc is not None, "oxitest.parametrize should have a docstring"
+    assert "expanded" in doc.lower(), (
         "oxitest.parametrize docstring should explain expanded mode"
     )
 
 
 def test_parametrize_docstring_explains_mode_detection():
     doc = oxitest.parametrize.__doc__
+    assert doc is not None, "oxitest.parametrize should have a docstring"
     # must mention that mode is inferred from the function signature
-    assert "signature" in doc.lower() or "annotate" in doc.lower(), (  # ty: ignore[unresolved-attribute]
+    assert "signature" in doc.lower() or "annotate" in doc.lower(), (
         "oxitest.parametrize docstring should explain mode detection from function"
         " signature"
     )

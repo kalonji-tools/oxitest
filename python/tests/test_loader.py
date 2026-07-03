@@ -91,9 +91,13 @@ def test_resolve_fn_raises_load_error_on_missing_function(
 
     with raises(_LoadError) as exc_info:
         _resolve_fn(module, "test_nonexistent", str(f))
-    assert exc_info.value.result.status == "error", (  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+    load_error = exc_info.value
+    assert isinstance(load_error, _LoadError), (
+        "raises(_LoadError) should capture a _LoadError instance"
+    )
+    assert load_error.result.status == "error", (
         f"_LoadError for missing function should have result.status='error', "
-        f"got {exc_info.value.result.status!r}"  # type: ignore[union-attr]  # ty: ignore[unresolved-attribute]
+        f"got {load_error.result.status!r}"
     )
 
 

@@ -179,12 +179,14 @@ def test_session_plugin_without_scope_autouse():
         def teardown(self, value):
             pass
 
-    class FakePluginRegistry:
-        """Stands in for PluginRegistry with a single fixture provider."""
+    class FakePluginRegistry(PluginRegistry):
+        """PluginRegistry subclass that injects a single fixture provider."""
 
-        fixture_providers = (MinimalProvider(),)
+        @property
+        def fixture_providers(self) -> tuple:  # type: ignore[override]
+            return (MinimalProvider(),)
 
-    session = FixtureSession([], FakePluginRegistry())  # ty: ignore[invalid-argument-type]
+    session = FixtureSession([], FakePluginRegistry())
 
     defn = session._registry.resolve(_MinimalType)
     assert defn.name == "minimal", (

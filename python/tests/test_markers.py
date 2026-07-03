@@ -442,9 +442,12 @@ def test_skip_handler_returns_short_circuit():
         f"_SkipHandler short_circuit status should be 'skipped', got "
         f"{result.short_circuit.status!r}"
     )
-    assert result.short_circuit.message == "not ready", (  # ty: ignore[unresolved-attribute]
-        f"_SkipHandler message should be 'not ready', got "
-        f"{result.short_circuit.message!r}"  # ty: ignore[unresolved-attribute]
+    sc = result.short_circuit
+    assert isinstance(sc, SkippedResult), (
+        f"expected SkippedResult short_circuit, got {type(sc).__name__}"
+    )
+    assert sc.message == "not ready", (
+        f"_SkipHandler message should be 'not ready', got {sc.message!r}"
     )
     assert result.wrapper is None, "_SkipHandler should not produce a wrapper"
 
@@ -626,8 +629,11 @@ def test_plugin_mark_handler_wraps_correctly():
     # Execute the wrapper — use WarnedResult since it has a message field
     inner_result = WarnedResult(message="original")
     wrapped_result = result.wrapper(lambda: inner_result)
-    assert "wrapped:" in wrapped_result.message, (  # ty: ignore[unresolved-attribute]
-        f"wrapper should modify message, got {wrapped_result.message!r}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(wrapped_result, WarnedResult), (
+        f"expected WarnedResult from wrapper, got {type(wrapped_result).__name__}"
+    )
+    assert "wrapped:" in wrapped_result.message, (
+        f"wrapper should modify message, got {wrapped_result.message!r}"
     )
 
 
@@ -645,8 +651,11 @@ def test_marker_composition_skip_takes_precedence_over_others():
     assert sc.status == "skipped", (
         f"skip should take precedence; expected status='skipped', got {sc.status!r}"
     )
-    assert sc.message == "not ready", (  # ty: ignore[unresolved-attribute]
-        f"skip message should be 'not ready', got {sc.message!r}"  # ty: ignore[unresolved-attribute]
+    assert isinstance(sc, SkippedResult), (
+        f"expected SkippedResult short-circuit, got {type(sc).__name__}"
+    )
+    assert sc.message == "not ready", (
+        f"skip message should be 'not ready', got {sc.message!r}"
     )
     assert wrappers == [], (
         f"skip short-circuits before xfail/timeout wrappers are added, got {wrappers!r}"

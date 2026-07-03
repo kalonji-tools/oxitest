@@ -44,8 +44,8 @@ def test_full_flow_introspect_merge_construct():
 @oxitest.mark.inprocess
 def test_plugin_loader_discovers_and_activates_typed_config():
     mod = types.ModuleType("e2e_plugin")
-    mod.oxitest_cli_extension = CliExtension(  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-        prefix="e2e", config_type=TestConfig
+    setattr(
+        mod, "oxitest_cli_extension", CliExtension(prefix="e2e", config_type=TestConfig)
     )
 
     received_configs: list[TestConfig] = []
@@ -54,7 +54,7 @@ def test_plugin_loader_discovers_and_activates_typed_config():
         received_configs.append(config)
         return Plugin()
 
-    mod.oxitest_plugin = oxitest_plugin  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    setattr(mod, "oxitest_plugin", oxitest_plugin)
     sys.modules["e2e_plugin"] = mod
 
     try:
