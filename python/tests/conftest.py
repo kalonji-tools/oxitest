@@ -12,7 +12,7 @@ import sys
 import textwrap
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, get_type_hints
+from typing import get_type_hints
 
 import oxitest
 from oxitest import Helpers, TempDir, TestResult, Yields
@@ -28,8 +28,8 @@ from oxitest._bridge.plugin_loader import PluginRegistry
 common = Helpers()
 
 __all__ = [
-    "FakePluginModule",
     "RecordingDebugger",
+    "assert_result",
     "exec_inline",
     "make_fixture_def",
     "make_meta",
@@ -46,20 +46,25 @@ fx = oxitest.Fixtures()
 
 
 @common.helper
-@dataclass
-class FakePluginModule:
-    """Typed stand-in for a dynamically-created plugin module.
+def assert_result(
+    result: TestResult | None,
+    expected_type: type[TestResult],
+    **fields: object,
+) -> TestResult:
+    """Narrow a TestResult to a specific variant and assert field values.
 
-    Use this instead of ``types.ModuleType`` in tests that set attributes
-    like ``oxitest_plugin`` or ``oxitest_cli_extension`` on a fake module.
-    The dataclass fields give ty a concrete type to check against so
-    ``unresolved-attribute`` suppressors are not needed.
+    Returns the narrowed result for further assertions.
     """
-
-    oxitest_plugin: Any = None
-    oxitest_cli_extension: Any = None
-    _call_tracker: Any = None
-    Coverage: Any = None  # mirrors coverage.py module attr (N815 globally ignored)
+    assert result is not None, f"expected {expected_type.__name__}, got None"
+    assert isinstance(result, expected_type), (
+        f"expected {expected_type.__name__}, got {type(result).__name__}"
+    )
+    for name, expected in fields.items():
+        actual = getattr(result, name)
+        assert actual == expected, (
+            f"{expected_type.__name__}.{name}: expected {expected!r}, got {actual!r}"
+        )
+    return result
 
 
 @fx.fixture

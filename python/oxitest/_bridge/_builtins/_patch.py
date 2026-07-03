@@ -49,7 +49,11 @@ class Patcher:
         old = os.environ.get(name)
         os.environ[name] = value
         if old is None:
-            self._undos.append(lambda n=name: os.environ.pop(n, None))  # ty: ignore[invalid-argument-type]
+
+            def _undo(n: str = name) -> None:
+                os.environ.pop(n, None)
+
+            self._undos.append(_undo)
         else:
             self._undos.append(lambda n=name, v=old: os.environ.__setitem__(n, v))
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 import dataclasses
 from types import MappingProxyType
 
+from oxitest import helpers
 from oxitest._bridge._middleware import (
     ExecutionPlan,
     build_pipeline,
 )
-from oxitest._bridge.result import StatusKind, WarnedResult
+from oxitest._bridge.result import WarnedResult
 
 
 class _UppercaseMiddleware:
@@ -46,11 +47,7 @@ def test_build_pipeline_no_middlewares():
 
     execute = build_pipeline([], plan, base)
     result = execute()
-    assert result.status == StatusKind.WARNED, f"expected WARNED, got {result.status}"
-    assert isinstance(result, WarnedResult), (
-        f"expected WarnedResult, got {type(result).__name__}"
-    )
-    assert result.message == "ok", f"expected 'ok', got {result.message!r}"
+    helpers.common.assert_result(result, WarnedResult, message="ok")
 
 
 def test_build_pipeline_single_middleware():
@@ -71,10 +68,7 @@ def test_build_pipeline_single_middleware():
 
     execute = build_pipeline([_UppercaseMiddleware()], plan, base)
     result = execute()
-    assert isinstance(result, WarnedResult), (
-        f"expected WarnedResult, got {type(result).__name__}"
-    )
-    assert result.message == "HELLO", f"expected 'HELLO', got {result.message!r}"
+    helpers.common.assert_result(result, WarnedResult, message="HELLO")
 
 
 def test_build_pipeline_ordering():
@@ -97,12 +91,7 @@ def test_build_pipeline_ordering():
     mws = [_SkipMiddleware(), _UppercaseMiddleware()]
     execute = build_pipeline(mws, plan, base)
     result = execute()
-    assert isinstance(result, WarnedResult), (
-        f"expected WarnedResult, got {type(result).__name__}"
-    )
-    assert result.message == "BASE", (
-        f"uppercase middleware should wrap the base, got {result.message!r}"
-    )
+    helpers.common.assert_result(result, WarnedResult, message="BASE")
 
 
 def test_build_pipeline_skip_middleware_is_noop():
@@ -123,9 +112,4 @@ def test_build_pipeline_skip_middleware_is_noop():
 
     execute = build_pipeline([_SkipMiddleware()], plan, base)
     result = execute()
-    assert isinstance(result, WarnedResult), (
-        f"expected WarnedResult, got {type(result).__name__}"
-    )
-    assert result.message == "unchanged", (
-        f"skip middleware should not change result, got {result.message!r}"
-    )
+    helpers.common.assert_result(result, WarnedResult, message="unchanged")

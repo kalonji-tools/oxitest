@@ -6,9 +6,8 @@ __all__ = ["ApproxBase", "approx"]
 
 import builtins as _builtins
 import math
-import numbers
 from collections.abc import Iterable, Mapping, Sized
-from typing import Any
+from typing import Any, SupportsFloat
 
 _ORDERING_MSG = "approx() does not support ordering comparisons"
 _APPROX_VS_APPROX_MSG = "approx() cannot be compared to another approx()"
@@ -70,9 +69,9 @@ class ApproxScalar(ApproxBase):
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ApproxBase):
             raise TypeError(_APPROX_VS_APPROX_MSG)
-        if not isinstance(other, numbers.Number):
+        if not isinstance(other, SupportsFloat):
             return NotImplemented
-        actual = float(other)  # ty: ignore[invalid-argument-type]
+        actual = float(other)
         expected = float(self._expected)
         if self._nan_ok and math.isnan(expected) and math.isnan(actual):
             return True
@@ -177,6 +176,6 @@ def approx(
         raise TypeError("approx() expects a number, sequence, or mapping")
     if isinstance(expected, Iterable) and isinstance(expected, Sized):
         return ApproxSequence(expected, rel=rel, abs=abs, nan_ok=nan_ok)
-    if isinstance(expected, numbers.Number):
+    if isinstance(expected, SupportsFloat):
         return ApproxScalar(expected, rel=rel, abs=abs, nan_ok=nan_ok)
     raise TypeError("approx() expects a number, sequence, or mapping")

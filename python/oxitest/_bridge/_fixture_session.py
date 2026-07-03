@@ -11,7 +11,7 @@ import inspect
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, Self
 
 from oxitest._bridge._async_backend import (
     AsyncBackend,
@@ -195,27 +195,53 @@ class _Scope:
         self.teardowns.clear()
 
 
+class _TrackedTaskGroup:
+    """Thin wrapper around ``asyncio.TaskGroup`` that records created tasks.
+
+    Replaces the monkey-patch on ``tg.create_task`` with a proper wrapper so
+    that type checkers do not see a method-assign violation.  Callers receive
+    this object from the ``task_group`` built-in fixture and use it as though
+    it were an ``asyncio.TaskGroup``.
+    """
+
+    def __init__(self, tg: Any, tasks: list[Any]) -> None:
+        self._tg = tg
+        self._tasks = tasks
+
+    def create_task(
+        self,
+        coro: Any,
+        *,
+        name: str | None = None,
+        context: Any = None,
+    ) -> Any:
+        t = self._tg.create_task(coro, name=name, context=context)
+        self._tasks.append(t)
+        return t
+
+    async def __aenter__(self) -> Self:
+        await self._tg.__aenter__()
+        return self
+
+    async def __aexit__(self, *args: object) -> Any:
+        return await self._tg.__aexit__(*args)
+
+
 async def _task_group_factory():  # type: ignore[return-value]
     """Built-in async yield fixture providing a managed asyncio.TaskGroup.
 
-    Tracks all tasks created via `task_group.create_task()` and cancels any
+    Tracks all tasks created via ``task_group.create_task()`` and cancels any
     that are still running when the test body returns, preventing hangs on
-    teardown.
+    teardown.  Yields a ``_TrackedTaskGroup`` wrapper rather than the raw
+    ``asyncio.TaskGroup`` to avoid monkey-patching ``create_task``.
     """
     import asyncio
 
     tasks: list[asyncio.Task[Any]] = []
     tg = asyncio.TaskGroup()
-    orig_create_task = tg.create_task
-
-    def _tracked_create(coro, *, name=None, context=None):  # type: ignore[misc]
-        t = orig_create_task(coro, name=name, context=context)
-        tasks.append(t)
-        return t
-
-    tg.create_task = _tracked_create  # type: ignore[method-assign]  # ty: ignore
-    async with tg:
-        yield tg
+    tracked = _TrackedTaskGroup(tg, tasks)
+    async with tracked:
+        yield tracked
         for t in tasks:
             if not t.done():
                 t.cancel()

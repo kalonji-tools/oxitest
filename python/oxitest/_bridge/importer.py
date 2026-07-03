@@ -8,10 +8,10 @@ import inspect
 import itertools
 import logging
 import warnings
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Any, get_type_hints
+from typing import Any, cast, get_type_hints
 
 from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
@@ -20,8 +20,13 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._violation_checkers import check_fn_violations
-from oxitest._bridge.parametrize import ComposedCases
-from oxitest._bridge.result import CollectedItem, CollectedViolation, ViolationKind
+from oxitest._bridge.parametrize import ComposedCases, ResolvedCases, _as_composed
+from oxitest._bridge.result import (
+    CollectedItem,
+    CollectedViolation,
+    ErrorResult,
+    ViolationKind,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +81,7 @@ def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
             pass
 
         try:
-            entry(_sentinel)  # ty: ignore[call-top-callable]
+            cast(Callable[..., object], entry)(_sentinel)  # noqa: TC006 — ty can't narrow callable()
             marks = get_marks(_sentinel)
             return marks[-1] if marks else None
         except Exception:
@@ -150,12 +155,15 @@ def _apply_module_marks(
                 _append_mark(fn, mark)
 
 
-def _validate_composition(layers: tuple[ComposedCases, ...]) -> None:
+def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
     """Validate composition rules for ComposedCases layers.
 
     Raises TypeError if:
     - Only 1 partial layer (needs 2+)
     - Fields are incomplete (union doesn't cover all dataclass fields)
+
+    All callers are guarded by ``isinstance(raw[0], ComposedCases)`` so every
+    element is guaranteed to be ``ComposedCases`` at runtime.
     """
     if len(layers) == 1:
         raise TypeError(
@@ -163,9 +171,11 @@ def _validate_composition(layers: tuple[ComposedCases, ...]) -> None:
             " @parametrize layers with partial() values."
             " Use a full dataclass instance for single-layer parametrize."
         )
-    target_type = layers[0].param_type
-    assert target_type is not None  # composed layers always have param_type
-    all_provided = frozenset().union(*(layer.provided_fields for layer in layers))
+    composed_layers = _as_composed(layers)
+    target_type = composed_layers[0].param_type
+    all_provided = frozenset().union(
+        *(layer.provided_fields for layer in composed_layers)
+    )
     all_fields = {f.name for f in dataclasses.fields(target_type)}
     missing = all_fields - all_provided
     if missing:
@@ -177,7 +187,7 @@ def _validate_composition(layers: tuple[ComposedCases, ...]) -> None:
 
 
 def _expand_composed(
-    layers: tuple[ComposedCases, ...],
+    layers: tuple[ResolvedCases, ...],
     fn_name: str,
     lineno: int,
     marker_names: list[str],
@@ -209,7 +219,7 @@ def _expand_composed(
     return items
 
 
-def _get_fixref_deps(layer: ComposedCases) -> tuple[tuple[str, str], ...]:
+def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     """Extract (qualifier, type_name) for FixtureRef fields.
 
     Inspects type hints on the layer's param_type to get the inner
@@ -283,12 +293,12 @@ def _expand_item(
         all_fixref_deps: list[tuple[str, str]] = []
         seen: set[str] = set()
         for layer in raw:
-            for dep in _get_fixref_deps(layer):  # ty: ignore[invalid-argument-type]
+            for dep in _get_fixref_deps(layer):
                 if dep[0] not in seen:
                     all_fixref_deps.append(dep)
                     seen.add(dep[0])
         return _expand_composed(
-            raw,  # ty: ignore[invalid-argument-type]
+            raw,
             fn_name,
             lineno,
             marker_names,
@@ -297,7 +307,7 @@ def _expand_item(
             fixref_deps=tuple(sorted(all_fixref_deps)),
         )
     # Single layer: existing behavior
-    fixref_deps = _get_fixref_deps(raw[0])  # ty: ignore[invalid-argument-type]
+    fixref_deps = _get_fixref_deps(raw[0])
     return [
         CollectedItem(
             fn_name=fn_name,
@@ -325,7 +335,14 @@ def _import_test_module(
     try:
         module = _load_module(path, unique_name)
     except _LoadError as e:
-        raise ImportError(e.result.message) from None  # ty: ignore[unresolved-attribute]
+        result = e.result
+        if not isinstance(result, ErrorResult):
+            # _load_module only raises _LoadError with _error_result(),
+            # which always produces an ErrorResult — this branch is unreachable.
+            raise TypeError(  # pragma: no cover
+                f"_LoadError.result expected ErrorResult, got {type(result).__name__}"
+            ) from None
+        raise ImportError(result.message) from None
 
     # Store in session module cache if available — executor will reuse this module.
     if session is not None:

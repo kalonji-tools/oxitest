@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest import FixtureTeardownWarning, WarnCapture
+from oxitest import FixtureTeardownWarning, WarnCapture, helpers
 from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
@@ -94,12 +94,7 @@ def test_dispatch_assertion_error():
 
     result = _dispatch_exception(exc)
 
-    assert result is not None, "AssertionError should return a result"
-    assert result.status == StatusKind.FAILED, "expected FAILED status"
-    assert isinstance(result, FailedResult), (
-        f"expected FailedResult, got {type(result).__name__}"
-    )
-    assert result.exc_type == "AssertionError", "expected AssertionError exc_type"
+    helpers.common.assert_result(result, FailedResult, exc_type="AssertionError")
 
 
 def test_dispatch_runtime_exception():
@@ -108,12 +103,8 @@ def test_dispatch_runtime_exception():
 
     result = _dispatch_exception(exc)
 
-    assert result is not None, "ValueError should return a result"
-    assert result.status == StatusKind.ERROR, "expected ERROR status"
-    assert isinstance(result, ErrorResult), (
-        f"expected ErrorResult, got {type(result).__name__}"
-    )
-    assert "ValueError" in result.message, "expected ValueError in message"
+    r = helpers.common.assert_result(result, ErrorResult)
+    assert "ValueError" in r.message, "expected ValueError in message"
 
 
 def test_dispatch_skip_exception():
