@@ -16,6 +16,7 @@ __all__ = [
     "_reject_nonshared_async",
 ]
 
+import contextlib
 import inspect
 from collections.abc import Callable
 from typing import Any
@@ -24,6 +25,7 @@ from oxitest._bridge._async_backend import (
     AsyncBackend,
     SharedAsyncSession,
 )
+from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown
 
@@ -140,12 +142,12 @@ class SharedAsyncManager:
         if self._session is None:
             return
         for name, gen in reversed(self._teardowns):
-            try:
-                self._session.run(anext(gen))
-            except StopAsyncIteration:
-                pass
-            except Exception as exc:
-                _warn_teardown(name, exc)
+
+            def _drain(session: Any = self._session, generator: Any = gen) -> None:
+                with contextlib.suppress(StopAsyncIteration):
+                    session.run(anext(generator))
+
+            safe_teardown(_drain, name, warn=_warn_teardown)
         self._session.close()
         self._session = None
         self._teardowns.clear()

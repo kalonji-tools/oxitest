@@ -12,10 +12,10 @@ import sys
 import textwrap
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import get_type_hints
 
 import oxitest
 from oxitest import Helpers, TempDir, TestResult, Yields
+from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -126,10 +126,8 @@ def make_fixture_def(
         ft: type = fixture_type
     else:
         # Try to extract return type; fall back to object
-        try:
-            ft = get_type_hints(factory).get("return", object)
-        except Exception:
-            ft = object
+        hints = safe_type_hints(factory)
+        ft = hints.get("return", object) if hints is not None else object
     return FixtureDef(
         name=name,
         fixture_type=ft,

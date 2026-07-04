@@ -24,9 +24,9 @@ from typing import (
     TypeVar,
     get_args,
     get_origin,
-    get_type_hints,
 )
 
+from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge.result import CollectedViolation, ViolationKind
@@ -152,10 +152,7 @@ class FixtureRegistry:
             return []
 
         violations: list[CollectedViolation] = []
-        try:
-            hints = get_type_hints(defn.source.func)
-        except Exception:
-            hints = {}
+        hints = safe_type_hints(defn.source.func) or {}
         if "return" not in hints:
             violations.append(
                 CollectedViolation(

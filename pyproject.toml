@@ -40,8 +40,6 @@ ignore = [
     "PLR0913",        # too many arguments (internal functions with many params)
     "PLR0915",        # too many statements (complex dispatchers)
     "S101",           # assert used for runtime invariants
-    "BLE001",         # broad except Exception in test runner (must catch to report)
-
     "ARG001",         # unused function arg (protocol/callback signatures)
     "ARG002",         # unused method arg (protocol/interface implementations)
     "ARG005",         # unused lambda arg (callback signatures)

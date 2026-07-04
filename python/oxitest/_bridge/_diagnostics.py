@@ -24,6 +24,7 @@ from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )
+from oxitest._bridge._boundary import safe_call
 from oxitest._bridge._builtins._warncapture import WarnCapture
 from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge.result import (
@@ -44,10 +45,7 @@ def _safe_repr(obj: object, max_len: int = _REPR_MAX) -> str:
     r = reprlib.Repr()
     r.maxstring = max_len
     r.maxother = max_len
-    try:
-        return r.repr(obj)
-    except Exception:
-        return "<repr failed>"
+    return safe_call(lambda: r.repr(obj), default="<repr failed>")
 
 
 #: Backward-compatible alias used by assertion error rendering (80-char cap).
@@ -145,12 +143,25 @@ def _compute_field_diffs(
         rv = getattr(right, name, _FIELD_DIFF_SENTINEL)
         if lv is _FIELD_DIFF_SENTINEL or rv is _FIELD_DIFF_SENTINEL:
             continue
-        try:
-            if lv != rv:
-                diffs.append((name, _repr_safe(lv), _repr_safe(rv)))
-        except Exception:
-            logger.debug("Field %r comparison failed, skipping diff", name)
-            continue
+
+        def _compare(
+            field_name: str = name, left_val: object = lv, right_val: object = rv
+        ) -> tuple[str, str, str] | None:
+            return (
+                (field_name, _repr_safe(left_val), _repr_safe(right_val))
+                if left_val != right_val
+                else None
+            )
+
+        diff = safe_call(
+            _compare,
+            default=None,
+            on_error=lambda exc, field_name=name: logger.debug(
+                "Field %r comparison failed, skipping diff", field_name
+            ),
+        )
+        if diff is not None:
+            diffs.append(diff)
     return tuple(diffs)
 
 

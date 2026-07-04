@@ -128,7 +128,7 @@ def test_fixture_deps(
     for path in test_files:
         try:
             items, _ = collect_module(path, session)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — skip unimportable files during query
             logger.debug("Skipping %s: %s", path, exc)
             continue
         for item in items:

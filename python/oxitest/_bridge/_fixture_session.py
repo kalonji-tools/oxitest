@@ -19,6 +19,7 @@ from oxitest._bridge._async_backend import (
     SharedAsyncSession,
 )
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
+from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
@@ -164,13 +165,6 @@ class _NullFixtureSession:
 # ── FixtureSession ────────────────────────────────────────────────────────────
 
 
-def _safe_call(fn: Callable[[], None], name: str = "") -> None:
-    try:
-        fn()
-    except Exception as exc:
-        _warn_teardown(name, exc)
-
-
 @dataclass
 class _Scope:
     """A single fixture scope: a cache dict and its associated teardown stack."""
@@ -191,7 +185,7 @@ class _Scope:
     def drain(self) -> None:
         """Run teardowns in reverse, then clear the stack."""
         for fn in reversed(self.teardowns):
-            _safe_call(fn)
+            safe_teardown(fn, warn=_warn_teardown)
         self.teardowns.clear()
 
 

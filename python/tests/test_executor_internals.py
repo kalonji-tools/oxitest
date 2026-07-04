@@ -217,7 +217,7 @@ def test_frames_captured_on_runtime_exception():
 
     try:
         blow_up()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — test intentionally catches to verify error handling
         result = _handle_runtime_exception(exc)
 
     r = helpers.common.assert_result(result, ErrorResult)

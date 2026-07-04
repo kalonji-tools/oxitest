@@ -11,8 +11,9 @@ import warnings
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast, get_type_hints
+from typing import Any, cast
 
+from oxitest._bridge._boundary import safe_call, safe_type_hints
 from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
@@ -37,11 +38,8 @@ class PluginCollectorWarning(UserWarning):
 
 def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
     """Extract (qualifier, type_name) pairs for all Fixture[T]-annotated params."""
-    try:
-        hints = get_type_hints(fn, include_extras=True)
-    except Exception as exc:
-        # Swallow type hint errors — user code may have unresolvable forward references
-        logger.debug("Could not resolve type hints for %r: %s", fn, exc)
+    hints = safe_type_hints(fn, include_extras=True)
+    if hints is None:
         return ()
     deps: list[tuple[str, str]] = []
     for param_name, hint in hints.items():
@@ -80,12 +78,12 @@ def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
         def _sentinel() -> None:
             pass
 
-        try:
+        def _try_coerce() -> MarkInfo | None:
             cast(Callable[..., object], entry)(_sentinel)  # noqa: TC006 — ty can't narrow callable()
             marks = get_marks(_sentinel)
             return marks[-1] if marks else None
-        except Exception:
-            return None
+
+        return safe_call(_try_coerce, default=None)
     return None
 
 
@@ -240,10 +238,8 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     mod = sys.modules.get(param_type.__module__)
     globalns = dict(vars(mod)) if mod else {}
     globalns.setdefault("FixtureRef", FixtureRef)
-    try:
-        field_hints = get_type_hints(param_type, globalns=globalns, include_extras=True)
-    except Exception as exc:
-        logger.debug("Could not resolve type hints for %r: %s", param_type, exc)
+    field_hints = safe_type_hints(param_type, globalns=globalns, include_extras=True)
+    if field_hints is None:
         return ()
     from typing import Annotated, get_args, get_origin
 
@@ -514,7 +510,7 @@ def collect_module(
                             PluginCollectorWarning,
                             stacklevel=1,
                         )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — plugin collector is external code
                 warnings.warn(
                     f"Plugin collector {collector_name!r} raised "
                     f"{type(exc).__name__}: {exc} while collecting {path!r}",

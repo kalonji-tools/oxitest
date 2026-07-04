@@ -46,7 +46,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     sys.modules[unique_name] = module
     try:
         spec.loader.exec_module(module)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — module execution can raise anything
         return ErrorResult(
             message=f"Import error: {exc}",
             file=module_path,
@@ -65,7 +65,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
     finder = doctest.DocTestFinder()
     try:
         tests = finder.find(obj, name)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — doctest introspection can raise anything
         return ErrorResult(
             message=f"DocTestFinder error: {exc}",
             file=module_path,
