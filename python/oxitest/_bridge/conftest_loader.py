@@ -21,6 +21,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, get_type_hints
 
+from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -72,10 +73,8 @@ def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...
     time by ``UnannotatedFixtureParamError`` in ``resolve_for_test``.
     Parameters with plain (non-fixture) type annotations are also ignored.
     """
-    try:
-        hints = get_type_hints(func, include_extras=True)
-    except Exception as exc:
-        logger.debug("Could not resolve type hints for %r: %s", func, exc)
+    hints = safe_type_hints(func, include_extras=True)
+    if hints is None:
         return ()
     deps: list[tuple[str, type]] = []
     for param_name, hint in hints.items():

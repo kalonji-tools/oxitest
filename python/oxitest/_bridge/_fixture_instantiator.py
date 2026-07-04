@@ -113,15 +113,17 @@ def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
     if inspect.isgenerator(result):
         value = next(result)
 
-        def teardown(gen: Any = result, n: str = name) -> None:
-            try:
-                next(gen)
-            except StopIteration:
-                pass
-            except Exception as exc:
-                from oxitest._bridge._fixture_context import _warn_teardown
+        def teardown(gen: Any = result, fixture_name: str = name) -> None:
+            import contextlib
 
-                _warn_teardown(n, exc)
+            from oxitest._bridge._boundary import safe_teardown
+            from oxitest._bridge._fixture_context import _warn_teardown
+
+            def _drain() -> None:
+                with contextlib.suppress(StopIteration):
+                    next(gen)
+
+            safe_teardown(_drain, fixture_name, warn=_warn_teardown)
 
         return _FixtureOutcome(value, teardown)
     return _FixtureOutcome(result)

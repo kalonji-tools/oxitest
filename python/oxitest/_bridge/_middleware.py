@@ -10,6 +10,7 @@ __all__ = [
     "build_pipeline",
 ]
 
+import contextlib
 import inspect
 import warnings
 from collections.abc import Callable, Sequence
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol
 
+from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import MarkWrapper
 from oxitest._bridge._timeout import (
@@ -147,14 +149,14 @@ class AsyncBridgeMiddleware:
                     try:
                         resolved[k] = await anext(v)
                         async_teardowns.append((k, v))
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
                         from oxitest._bridge.result import _error_result
 
                         return _error_result(str(FixtureSetupError(k, exc)))
                 elif inspect.iscoroutine(v):
                     try:
                         resolved[k] = await v
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
                         from oxitest._bridge.result import _error_result
 
                         return _error_result(str(FixtureSetupError(k, exc)))
@@ -176,17 +178,21 @@ class AsyncBridgeMiddleware:
             # Phase 3: Teardown async generators in reverse order.
             finally:
                 for name, gen in reversed(async_teardowns):
-                    try:
-                        await anext(gen)
-                    except StopAsyncIteration:
-                        pass
-                    except Exception as exc:
-                        warnings.warn(
+
+                    async def _drain(generator: Any = gen) -> None:
+                        with contextlib.suppress(StopAsyncIteration):
+                            await anext(generator)
+
+                    await async_safe_call(
+                        _drain(),
+                        default=None,
+                        on_error=lambda exc, fixture_name=name: warnings.warn(
                             FixtureTeardownWarning(
-                                f"error in teardown of fixture '{name}': {exc}"
+                                f"error in teardown of fixture '{fixture_name}': {exc}"
                             ),
                             stacklevel=2,
-                        )
+                        ),
+                    )
 
         if plan.shared_session is not None:
 

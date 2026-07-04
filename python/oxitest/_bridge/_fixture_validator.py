@@ -4,8 +4,9 @@ from __future__ import annotations
 
 __all__ = ["FixtureValidator"]
 
-from typing import Any, get_type_hints
+from typing import Any
 
+from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
@@ -168,9 +169,8 @@ class FixtureValidator:
         plugin_types: set[type],
     ) -> bool:
         """Check if *param_name*'s hint on *fn* is a plugin Fixture type."""
-        try:
-            hints = get_type_hints(fn, include_extras=True)
-        except Exception:
+        hints = safe_type_hints(fn, include_extras=True)
+        if hints is None:
             return False
         hint = hints.get(param_name)
         if hint is None:
