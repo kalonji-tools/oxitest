@@ -7,6 +7,7 @@ __all__ = [
     "FixtureInstantiator",
     "ScopeRefs",
     "_FixtureOutcome",
+    "_ResolutionContext",
     "_check_async_dep",
     "_reject_async_in_sync",
     "_reject_nonshared_async",
@@ -18,7 +19,7 @@ import inspect
 import time
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._async_orchestrator import (
@@ -41,10 +42,8 @@ from oxitest._bridge._fixture_registry import (
     PluginSource,
     _fixture_inner_type,
 )
-from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
-from oxitest._bridge.proxy_ns import FixturesProxy
 from oxitest._bridge.result import FixtureTiming
 
 if TYPE_CHECKING:
@@ -63,23 +62,27 @@ class ScopeRefs:
     misses: dict[str, int]
 
 
+@dataclass(frozen=True, slots=True)
+class _ResolutionContext:
+    """Shared context threaded through fixture resolution."""
+
+    module_path: str
+    fn_teardowns: list[Callable[[], None]]
+    resolving: frozenset[str]
+    scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None]
+
+
 def _resolve_deps(
     instantiator: FixtureInstantiator,
     fn: Callable[..., Any],
-    module_path: str,
-    fn_teardowns: list[Callable[[], None]],
+    ctx: _ResolutionContext,
     fn_name: str,
     resolve_user: Callable[[str], Any],
-    async_policy: AsyncPolicy | None = None,
 ) -> dict[str, Any]:
-    """Resolve fixture dependencies from type hints.
-
-    async_policy: if provided, called as policy(dep_name, dep_val, fn_name)
-    for each resolved dependency. Raises on invalid async dependency patterns.
-    """
+    """Resolve fixture dependencies from type hints."""
     # Build a minimal TestMeta for fixture-to-fixture resolution (builtins
     # only need module_path and fn_name; node_id/markers are test-level).
-    dep_meta = TestMeta(module_path=module_path, fn_name=fn_name, node_id="")
+    dep_meta = TestMeta(module_path=ctx.module_path, fn_name=fn_name, node_id="")
     hints = _get_hints(fn)
     deps: dict[str, Any] = {}
     for param_name, hint in hints.items():
@@ -89,14 +92,11 @@ def _resolve_deps(
             param_name,
             hint,
             dep_meta,
-            fn_teardowns=fn_teardowns,
+            fn_teardowns=ctx.fn_teardowns,
             resolve_user_fixture=resolve_user,
         )
         if resolved:
             deps[param_name] = value
-    if async_policy is not None:
-        for dep_name, dep_val in deps.items():
-            async_policy(dep_name, dep_val, fn_name)
     return deps
 
 
@@ -163,23 +163,16 @@ class FixtureInstantiator:
         meta: TestMeta,
         fn_teardowns: list[Callable[[], None]],
         resolve_user_fixture: Callable[[str], Any],
-        proxy_session: Any = None,
     ) -> tuple[bool, Any]:
         """Resolve a single parameter by its type hint.
 
         Returns (resolved, value) where resolved=True means the value should be
         injected for this parameter. Returns (False, None) if the hint is not
-        injectable (not Fixture[T], not bare Fixtures).
+        injectable (not Fixture[T]).
 
-        proxy_session: if provided, passed to FixturesProxy as the session
-        (the caller — typically FixtureSession — passes itself so that the proxy
-        can call back into it for namespace/builtin resolution).
+        Note: bare ``Fixtures`` hints are handled by the caller before this
+        method is called.
         """
-        if hint is Fixtures:
-            session: Any = proxy_session or self
-            return True, FixturesProxy(
-                session, meta.module_path, fn_teardowns, fn_name=meta.fn_name
-            )  # type: ignore[arg-type]
         is_fx, inner = _fixture_inner_type(hint)
         if not is_fx:
             return False, None
@@ -246,32 +239,27 @@ class FixtureInstantiator:
     def resolve_fixture(
         self,
         name: str,
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-        resolving: frozenset[str],
-        scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
+        ctx: _ResolutionContext,
     ) -> Any:
         """Resolve a fixture by name.
 
         Raises FixtureCycleError if a cycle is detected, FixtureNotFoundError
         if the fixture is not registered.
         """
-        if name in resolving:
-            raise FixtureCycleError(name, set(resolving))
+        if name in ctx.resolving:
+            raise FixtureCycleError(name, set(ctx.resolving))
         defn = self._registry.get(name)
         if defn is None:
             raise FixtureNotFoundError(name)
         return self._resolve_fixture_defn(
-            defn, module_path, fn_teardowns, resolving | {name}, scope_callback
+            defn, replace(ctx, resolving=ctx.resolving | {name})
         )
 
     def resolve_fixture_in_namespace(
         self,
         defn: FixtureDef[Any],
         name: str,
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-        scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
+        ctx: _ResolutionContext,
     ) -> Any:
         """Resolve a fixture definition found by namespace lookup.
 
@@ -279,19 +267,16 @@ class FixtureInstantiator:
         namespace fixtures are nonsensical and unsupported).
         """
         return self._resolve_fixture_defn(
-            defn, module_path, fn_teardowns, frozenset({name}), scope_callback
+            defn, replace(ctx, resolving=frozenset({name}))
         )
 
     def _resolve_fixture_defn(
         self,
         defn: FixtureDef[Any],
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-        resolving: frozenset[str],
-        scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
+        ctx: _ResolutionContext,
     ) -> Any:
         """Internal resolution of a fixture definition, handling scope caching."""
-        scope_refs = scope_callback(defn)
+        scope_refs = ctx.scope_callback(defn)
 
         if scope_refs is not None:
             # Shared fixture — check cache first
@@ -304,43 +289,22 @@ class FixtureInstantiator:
             scope_refs.misses[defn.name] = scope_refs.misses.get(defn.name, 0) + 1
 
             if defn.is_async:
-                return self._resolve_shared_async(
-                    defn,
-                    module_path,
-                    fn_teardowns,
-                    resolving,
-                    scope_refs,
-                    scope_callback,
-                )
+                return self._resolve_shared_async(defn, ctx, scope_refs)
 
             from oxitest._bridge.proxy import FrozenProxy
 
-            value = FrozenProxy(
-                self._instantiate(
-                    defn,
-                    module_path,
-                    scope_refs.teardowns,
-                    fn_teardowns,
-                    resolving,
-                    scope_callback,
-                )
-            )
+            value = FrozenProxy(self._instantiate(defn, ctx, scope_refs.teardowns))
             scope_refs.cache[defn.name] = value
             return value
 
         # Function scope — no caching
-        return self._instantiate(
-            defn, module_path, fn_teardowns, fn_teardowns, resolving, scope_callback
-        )
+        return self._instantiate(defn, ctx, ctx.fn_teardowns)
 
     def _resolve_shared_async(
         self,
         defn: FixtureDef[Any],
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-        resolving: frozenset[str],
+        ctx: _ResolutionContext,
         scope_refs: ScopeRefs,
-        scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
     ) -> Any:
         """Eagerly resolve a shared async fixture on the session event loop."""
         from oxitest._bridge._fixture_context import _fixture_scope
@@ -348,16 +312,14 @@ class FixtureInstantiator:
         deps = _resolve_deps(
             self,
             defn.func,
-            module_path,
-            fn_teardowns=fn_teardowns,
+            ctx,
             fn_name=defn.name,
-            resolve_user=lambda n: self.resolve_fixture(
-                n, module_path, fn_teardowns, resolving, scope_callback
-            ),
-            async_policy=_reject_nonshared_async,
+            resolve_user=lambda n: self.resolve_fixture(n, ctx),
         )
+        for dep_name, dep_val in deps.items():
+            _reject_nonshared_async(dep_name, dep_val, defn.name)
 
-        with _fixture_scope(self, module_path, fn_teardowns):
+        with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
             _start = time.monotonic()
             value = self._async_mgr.resolve(defn.func, deps)
             self._setup_times[defn.name].append((time.monotonic() - _start) * 1000.0)
@@ -371,11 +333,8 @@ class FixtureInstantiator:
     def _instantiate(
         self,
         defn: FixtureDef[Any],
-        module_path: str,
+        ctx: _ResolutionContext,
         scope_teardowns: list[Callable[[], None]],
-        fn_teardowns: list[Callable[[], None]],
-        resolving: frozenset[str],
-        scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None],
     ) -> Any:
         """Instantiate a fixture: resolve deps, call factory, track timing."""
         from oxitest._bridge._fixture_context import _fixture_scope
@@ -383,17 +342,16 @@ class FixtureInstantiator:
         deps = _resolve_deps(
             self,
             defn.func,
-            module_path,
-            fn_teardowns=fn_teardowns,
+            ctx,
             fn_name=defn.name,
-            resolve_user=lambda n: self.resolve_fixture(
-                n, module_path, fn_teardowns, resolving, scope_callback
-            ),
-            # async_policy=None allows async fixtures to depend on other async fixtures
-            async_policy=_reject_async_in_sync if not defn.is_async else None,
+            resolve_user=lambda n: self.resolve_fixture(n, ctx),
         )
+        # Async fixtures may depend on other async fixtures; only reject in sync context
+        if not defn.is_async:
+            for dep_name, dep_val in deps.items():
+                _reject_async_in_sync(dep_name, dep_val, defn.name)
 
-        with _fixture_scope(self, module_path, fn_teardowns):
+        with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
             try:
                 _start = time.monotonic()
                 result = defn.func(**deps)

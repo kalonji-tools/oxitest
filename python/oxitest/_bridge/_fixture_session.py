@@ -31,6 +31,7 @@ from oxitest._bridge._fixture_context import (
 )
 from oxitest._bridge._fixture_instantiator import (
     ScopeRefs,
+    _ResolutionContext,
 )
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
@@ -41,12 +42,14 @@ from oxitest._bridge._fixture_registry import (
     PluginSource,
     _fixture_inner_type,
 )
+from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
 from oxitest._bridge._read_helpers import _helpers_registry_var
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge.proxy_ns import FixturesProxy
 from oxitest._bridge.result import CacheEntry, CacheStats, FixtureTiming
 
 
@@ -589,6 +592,11 @@ class FixtureSession:
                     continue
                 if param_name in skip_names:
                     continue
+                if hint is Fixtures:
+                    kwargs[param_name] = FixturesProxy(
+                        self, meta.module_path, fn_teardowns, fn_name=meta.fn_name
+                    )
+                    continue
                 resolved, value = self._instantiator.resolve_param(
                     param_name,
                     hint,
@@ -597,7 +605,6 @@ class FixtureSession:
                     resolve_user_fixture=lambda n: self.get_fixture(
                         n, meta.module_path, fn_teardowns
                     ),
-                    proxy_session=self,
                 )
                 if resolved:
                     kwargs[param_name] = value
@@ -618,9 +625,10 @@ class FixtureSession:
     def get_fixture(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
     ) -> Any:
-        return self._instantiator.resolve_fixture(
-            name, module_path, fn_teardowns, frozenset(), self._scope_for
+        ctx = _ResolutionContext(
+            module_path, fn_teardowns, frozenset(), self._scope_for
         )
+        return self._instantiator.resolve_fixture(name, ctx)
 
     def get_fixture_in_namespace(
         self,
@@ -632,9 +640,10 @@ class FixtureSession:
         defn = self._registry.get_in_namespace(name, namespace)
         if defn is None:
             raise FixtureNotFoundError(name, namespace=namespace)
-        return self._instantiator.resolve_fixture_in_namespace(
-            defn, name, module_path, fn_teardowns, self._scope_for
+        ctx = _ResolutionContext(
+            module_path, fn_teardowns, frozenset(), self._scope_for
         )
+        return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
 
     def get_namespace_for_func(
         self,
