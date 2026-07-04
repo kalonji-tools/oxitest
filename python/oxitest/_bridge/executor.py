@@ -24,12 +24,11 @@ import hashlib
 import inspect
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from oxitest._bridge._async_backend import SharedAsyncSession
     from oxitest._bridge._debugger import DebuggerBackend
 
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
@@ -65,6 +64,8 @@ from oxitest._bridge._middleware import (
     _compose,
 )
 from oxitest._bridge._runners import (
+    NO_DEBUG,
+    DebugContext,
     DebugMode,
     _debug_post_mortem,
     _print_banner,
@@ -102,10 +103,19 @@ def _resolve_debugger_backend(
 
 
 @dataclass(frozen=True, slots=True)
+class _MarkResult:
+    """Output of mark evaluation — marks metadata + execution wrappers."""
+
+    marks: tuple[MarkInfo, ...]
+    wrappers: tuple[MarkWrapper, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class _ResolvedTest:
     module: Any
     fn_raw: Any
     fn: Callable[..., Any]
+    fn_name: str
     all_kwargs: dict[str, Any]
     fn_teardowns: list[Callable[[], None]]
 
@@ -170,61 +180,52 @@ def _load_and_resolve(
         return _error_result(str(exc))
 
     all_kwargs: dict[str, Any] = {**fixture_kwargs, **param_kwargs}
-    return _ResolvedTest(module, fn_raw, fn, all_kwargs, fn_teardowns)
+    return _ResolvedTest(module, fn_raw, fn, meta.fn_name, all_kwargs, fn_teardowns)
 
 
 def _build_execution_chain(
-    module: Any,
-    fn_raw: object,
-    fn_name: str,
-    fn: Callable[..., Any],
-    all_kwargs: dict[str, Any],
-    marks: list[MarkInfo],
-    wrappers: list[MarkWrapper],
+    resolved: _ResolvedTest,
+    mark_result: _MarkResult,
     default_timeout: int | None,
-    shared_session: SharedAsyncSession | None = None,
     session: _SessionProtocol | None = None,
     *,
-    debug_mode: str | None = None,
-    node_id: str = "",
-    backend: DebuggerBackend | None = None,
-    show_locals: bool = False,
-    show_internals: bool = False,
+    debug: DebugContext = NO_DEBUG,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
     # Resolve bare-assert lines (was BareAssertMiddleware)
-    _bare_map: dict[str, list[int]] = getattr(module, "_oxitest_bare_asserts", {})
-    _simple_fn_name = fn_name.rsplit("::", maxsplit=1)[-1]
+    _bare_map: dict[str, list[int]] = getattr(
+        resolved.module, "_oxitest_bare_asserts", {}
+    )
+    _simple_fn_name = resolved.fn_name.rsplit("::", maxsplit=1)[-1]
     no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
 
+    _used_shared = getattr(session, "_used_shared_async", False)
+    _shared = getattr(session, "_shared_session", None) if _used_shared else None
+
     plan = ExecutionPlan(
-        fn=fn,
-        fn_name=fn_name,
-        kwargs=MappingProxyType(all_kwargs),
-        marks=tuple(marks),
+        fn=resolved.fn,
+        fn_name=resolved.fn_name,
+        kwargs=MappingProxyType(resolved.all_kwargs),
+        marks=mark_result.marks,
         no_message_lines=no_message_lines,
-        is_async=inspect.iscoroutinefunction(fn),
+        is_async=inspect.iscoroutinefunction(resolved.fn),
         default_timeout=default_timeout,
         backend=getattr(session, "_async_backend", None),
-        shared_session=shared_session,
+        shared_session=_shared,
     )
 
     def _base() -> TestResult:
         return _run_base(
-            fn,
-            all_kwargs,
+            resolved.fn,
+            resolved.all_kwargs,
             plan.no_message_lines,
-            debug_mode=debug_mode,
-            node_id=node_id,
-            backend=backend,
-            show_locals=show_locals,
-            show_internals=show_internals,
+            debug=debug,
         )
 
     execute = MiddlewareBuilder().build(plan, _base, default_timeout)
 
     # Apply mark wrappers (from evaluate_marks) around the pipeline result
-    for wrapper in reversed(wrappers):
+    for wrapper in reversed(mark_result.wrappers):
         execute = _compose(wrapper, execute)
 
     return execute
@@ -275,11 +276,9 @@ def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
-    debug_mode: str | None = None,
     keep_tmp: str | None = None,
     *,
-    show_locals: bool = False,
-    show_internals: bool = False,
+    debug: DebugContext = NO_DEBUG,
 ) -> TestResult:
     """Load, resolve, and execute a single test function.
 
@@ -290,14 +289,12 @@ def run_test(
             a null session is used, meaning no user fixtures are available.
         default_timeout: Per-test timeout in seconds inherited from config.
             Overridden by a ``@mark.timeout`` decorator on the test.
-        debug_mode: When set, drop into an interactive debugger.
-            ``"post-mortem"`` enters pdb after failure; ``"always"`` enters
-            pdb before every test.  ``None`` disables debugging.
         keep_tmp: When set, preserve TempDir contents instead of cleaning up.
             ``"failed"`` preserves only on test failure; ``"always"`` preserves
             unconditionally.  ``None`` always cleans up (default).
-        show_locals: When True, capture local variables per traceback frame.
-        show_internals: When True, include oxitest-internal frames in tracebacks.
+        debug: Debug/trace and diagnostic display configuration. Controls
+            interactive debugger mode, traceback local variables, and
+            internal frame visibility.
 
     Returns:
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
@@ -323,15 +320,14 @@ def run_test(
         else None
     )
     _run_ctx_token = _test_run_context.set(_run_ctx)
-    backend = _resolve_debugger_backend(effective_session, debug_mode)
+    backend = _resolve_debugger_backend(effective_session, debug.mode)
+    # Enrich debug context with resolved backend and test node_id
+    debug = replace(debug, node_id=meta.node_id, backend=backend)
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
     if not isinstance(resolved, _ResolvedTest):
         return resolved
-    module = resolved.module
     fn_raw = resolved.fn_raw
-    fn = resolved.fn
-    all_kwargs = resolved.all_kwargs
     fn_teardowns = resolved.fn_teardowns
 
     try:
@@ -342,25 +338,12 @@ def run_test(
         if short_circuit is not None:
             return short_circuit
 
-        _shared_session = getattr(effective_session, "_shared_session", None)
-        _used_shared = getattr(effective_session, "_used_shared_async", False)
-
         execute = _build_execution_chain(
-            module,
-            fn_raw,
-            meta.fn_name,
-            fn,
-            all_kwargs,
-            marks,
-            wrappers,
+            resolved,
+            _MarkResult(marks=tuple(marks), wrappers=tuple(wrappers)),
             default_timeout,
-            shared_session=_shared_session if _used_shared else None,
             session=effective_session,
-            debug_mode=debug_mode,
-            node_id=meta.node_id,
-            backend=backend,
-            show_locals=show_locals,
-            show_internals=show_internals,
+            debug=debug,
         )
         result = execute()
         _active_ctx = _test_run_context.get()
