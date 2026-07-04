@@ -37,7 +37,6 @@ ignore = [
     "D105", "D107",   # missing docstring in magic method / __init__
     "PLR0911",        # too many return statements (complex dispatchers)
     "PLR0912",        # too many branches (complex dispatchers)
-    "PLR0913",        # too many arguments (internal functions with many params)
     "PLR0915",        # too many statements (complex dispatchers)
     "S101",           # assert used for runtime invariants
     "ARG001",         # unused function arg (protocol/callback signatures)
@@ -82,6 +81,7 @@ ignore = [
     "TRY301",   # raise within try (testing exception handling)
     "INP001",   # no __init__.py (test dirs are not packages)
     "S102",     # exec() needed to test AST rewriter and live type annotations
+    "PLR0913",  # test helpers and parametrized tests have many params by nature
     "PLC0415",  # lazy imports in tests (each test imports what it tests)
 ]
 "python/oxitest/_bridge/_debugger.py" = ["T100"]
