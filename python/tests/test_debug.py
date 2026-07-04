@@ -9,6 +9,7 @@ import oxitest
 from oxitest import DebuggerBackend, StdCapture, helpers
 from oxitest._bridge._debugger import _PdbBackend
 from oxitest._bridge._diagnostics import is_debuggable as _is_debuggable
+from oxitest._bridge._runners import DebugContext
 from oxitest._bridge.executor import (
     _debug_post_mortem,
     _print_banner,
@@ -195,10 +196,12 @@ def test_run_base_debug_mode(
         fn,
         {},
         (),
-        debug_mode=mode,
-        node_id="t.py::test_x",
-        backend=rec if mode else None,
-        file=io.StringIO(),
+        debug=DebugContext(
+            mode=mode,
+            node_id="t.py::test_x",
+            backend=rec if mode else None,
+            file=io.StringIO(),
+        ),
     )
 
     expected_status = StatusKind.PASSED if passing else StatusKind.FAILED
@@ -228,10 +231,12 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
         skip_test,
         {},
         (),
-        debug_mode="always",
-        node_id="t.py::test_skip",
-        backend=rec,
-        file=io.StringIO(),
+        debug=DebugContext(
+            mode="always",
+            node_id="t.py::test_skip",
+            backend=rec,
+            file=io.StringIO(),
+        ),
     )
     assert rec.trace_count == 1, "trace should still be called before test"
     assert len(rec.post_mortem_tracebacks) == 0, (

@@ -7,6 +7,8 @@ dependency chain: ``_diagnostics`` <- ``_runners`` <- ``_middleware`` <- ``execu
 from __future__ import annotations
 
 __all__ = [
+    "NO_DEBUG",
+    "DebugContext",
     "DebugMode",
     "run_base",
     "run_base_async",
@@ -15,6 +17,7 @@ __all__ = [
 import contextlib
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +31,21 @@ from oxitest._bridge.result import PassedResult, TestResult, WarnedResult
 
 if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
+
+
+@dataclass(frozen=True, slots=True)
+class DebugContext:
+    """Debug/trace and diagnostic display configuration."""
+
+    mode: str | None = None
+    node_id: str = ""
+    backend: DebuggerBackend | None = None
+    file: Any = None
+    show_locals: bool = False
+    show_internals: bool = False
+
+
+NO_DEBUG = DebugContext()
 
 
 class DebugMode(StrEnum):
@@ -140,29 +158,28 @@ def run_base(
     all_kwargs: dict[str, Any],
     no_message_lines: tuple[int, ...],
     *,
-    debug_mode: str | None = None,
-    node_id: str = "",
-    backend: DebuggerBackend | None = None,
-    show_locals: bool = False,
-    show_internals: bool = False,
-    file: Any = None,
+    debug: DebugContext = NO_DEBUG,
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
-    if debug_mode == DebugMode.ALWAYS and backend is not None:
-        _trace_before_test(all_kwargs, node_id, backend, file=file)
+    if debug.mode == DebugMode.ALWAYS and debug.backend is not None:
+        _trace_before_test(all_kwargs, debug.node_id, debug.backend, file=debug.file)
     try:
         return _call_with_warnings(fn, all_kwargs, no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
         if (
-            debug_mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS)
-            and backend is not None
+            debug.mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS)
+            and debug.backend is not None
             and is_debuggable(exc)
         ):
-            _debug_post_mortem(all_kwargs, node_id, exc, backend, file=file)
+            _debug_post_mortem(
+                all_kwargs, debug.node_id, exc, debug.backend, file=debug.file
+            )
         result = dispatch_exception(
-            exc, show_locals=show_locals, show_internals=show_internals
+            exc,
+            show_locals=debug.show_locals,
+            show_internals=debug.show_internals,
         )
         if result is not None:
             return result

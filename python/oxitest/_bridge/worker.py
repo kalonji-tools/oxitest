@@ -92,8 +92,12 @@ def run(task: WorkerTask) -> None:
     conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str | None = task.get("keep_tmp")
-    show_locals: bool = task.get("show_locals", False)
-    show_internals: bool = task.get("show_internals", False)
+    from oxitest._bridge._runners import DebugContext
+
+    debug = DebugContext(
+        show_locals=task.get("show_locals", False),
+        show_internals=task.get("show_internals", False),
+    )
 
     session, _violations = create_session(conftest_paths)
 
@@ -120,8 +124,7 @@ def run(task: WorkerTask) -> None:
             session=session,
             default_timeout=timeout_secs,
             keep_tmp=keep_tmp,
-            show_locals=show_locals,
-            show_internals=show_internals,
+            debug=debug,
         )
         duration_ms = (time.monotonic() - start) * 1000.0
         print(json.dumps(result.to_wire(meta.node_id, duration_ms)))

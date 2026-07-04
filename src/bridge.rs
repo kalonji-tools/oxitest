@@ -569,24 +569,29 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let debug_obj: Bound<'_, PyAny> = match opts.debug_mode {
-        Some(mode) => mode.into_pyobject(py)?.into_any(),
-        None => py.None().into_bound(py),
-    };
-
     let keep_tmp_obj: Bound<'_, PyAny> = match opts.keep_tmp {
         Some(mode) => mode.into_pyobject(py)?.into_any(),
         None => py.None().into_bound(py),
     };
 
-    let show_kwargs = pyo3::types::PyDict::new(py);
-    show_kwargs.set_item("show_locals", opts.show_locals)?;
-    show_kwargs.set_item("show_internals", opts.show_internals)?;
+    // Construct DebugContext Python object
+    let runners_mod = py.import("oxitest._bridge._runners")?;
+    let debug_ctx_cls = runners_mod.getattr("DebugContext")?;
+    let debug_kwargs = pyo3::types::PyDict::new(py);
+    if let Some(mode) = opts.debug_mode {
+        debug_kwargs.set_item("mode", mode)?;
+    }
+    debug_kwargs.set_item("show_locals", opts.show_locals)?;
+    debug_kwargs.set_item("show_internals", opts.show_internals)?;
+    let debug_obj = debug_ctx_cls.call((), Some(&debug_kwargs))?;
+
+    let run_kwargs = pyo3::types::PyDict::new(py);
+    run_kwargs.set_item("debug", &debug_obj)?;
 
     let py_result = executor.call_method(
         "run_test",
-        (meta_obj, session_obj, &timeout_obj, debug_obj, keep_tmp_obj),
-        Some(&show_kwargs),
+        (meta_obj, session_obj, &timeout_obj, keep_tmp_obj),
+        Some(&run_kwargs),
     )?;
 
     extract_outcome(&py_result)
