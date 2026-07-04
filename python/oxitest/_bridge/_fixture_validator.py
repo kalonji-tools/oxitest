@@ -29,6 +29,28 @@ def _parse_node_id(node_id: str) -> tuple[str, str] | None:
     return module_path, fn_part
 
 
+def _expand_fixture_deps(names: set[str], registry: FixtureRegistry) -> set[str]:
+    """Expand fixture names transitively via depends_on qualifiers.
+
+    Uses iterative stack-based traversal. Returns the full set of
+    transitively-used fixture names (including the seed names).
+    """
+    used: set[str] = set()
+    stack = list(names)
+    while stack:
+        name = stack.pop()
+        if name in used:
+            continue
+        used.add(name)
+        defn = registry.get(name)
+        if defn is None:
+            continue
+        for qualifier, _binding_type in defn.depends_on:
+            if qualifier in registry and qualifier not in used:
+                stack.append(qualifier)
+    return used
+
+
 class FixtureValidator:
     """Validates and queries fixture registrations. Stateless, no side effects."""
 
@@ -109,27 +131,13 @@ class FixtureValidator:
         for item in items:
             referenced.update(item.get("fixture_names", ()))
 
-        # 2. Expand transitively via depends_on (populated at registration)
-        def _expand_deps(name: str, visited: set[str]) -> None:
-            if name in visited:
-                return
-            visited.add(name)
-            defn = self._registry.get(name)
-            if defn is None:
-                return
-            for qualifier, _binding_type in defn.depends_on:
-                if qualifier in self._registry:
-                    _expand_deps(qualifier, visited)
-
-        all_used: set[str] = set()
-        for name in referenced:
-            _expand_deps(name, all_used)
-
-        # 3. Also expand autouse fixtures and their deps
+        # 2. Expand transitively: referenced fixtures + autouse fixtures + all deps
+        seed_names = set(referenced)
         for defn in self._registry.get_autouse():
-            _expand_deps(defn.name, all_used)
+            seed_names.add(defn.name)
+        all_used = _expand_fixture_deps(seed_names, self._registry)
 
-        # 4. Find unused (skip builtins, autouse, and non-conftest fixtures)
+        # 3. Find unused (skip builtins, autouse, and non-conftest fixtures)
         unused: list[tuple[str, str]] = []
         for name in self._registry:
             defs = self._registry.all_defs(name)

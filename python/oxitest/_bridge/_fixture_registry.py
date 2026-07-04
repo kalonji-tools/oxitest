@@ -104,6 +104,100 @@ class FixtureDef(Generic[T]):
         return self.scope == FixtureScope.SHARED
 
 
+def _build_dependency_graph(registry: FixtureRegistry) -> dict[str, set[str]]:
+    """Build adjacency dict: fixture_name -> set of dependency names."""
+    graph: dict[str, set[str]] = {}
+    for defn in registry.all():
+        deps: set[str] = set()
+        for _qualifier, dep_type in defn.depends_on:
+            dep_defs = registry._by_type.get(dep_type, [])
+            for dep in dep_defs:
+                if dep.name != defn.name:
+                    deps.add(dep.name)
+        graph[defn.name] = deps
+    return graph
+
+
+def _compute_shared_ancestors(
+    start: str,
+    graph: dict[str, set[str]],
+    by_name: dict[str, list[FixtureDef[Any]]],
+    computed: dict[str, frozenset[str]],
+) -> frozenset[str]:
+    """Iterative DFS from *start* collecting transitively reachable shared fixtures.
+
+    Results are memoised in *computed* to avoid redundant traversals.
+    """
+    if start in computed:
+        return computed[start]
+    result: set[str] = set()
+    stack = [start]
+    visited: set[str] = set()
+    while stack:
+        name = stack.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        defs = by_name.get(name)
+        if defs and defs[-1].shared:
+            result.add(name)
+        for dep in graph.get(name, ()):
+            if dep in visited:
+                continue
+            if dep in computed:
+                result |= computed[dep]
+            else:
+                stack.append(dep)
+    frozen = frozenset(result)
+    computed[start] = frozen
+    return frozen
+
+
+def _transitive_shared(
+    graph: dict[str, set[str]],
+    by_name: dict[str, list[FixtureDef[Any]]],
+) -> dict[str, frozenset[str]]:
+    """For each fixture, find all transitively reachable shared fixtures.
+
+    Uses iterative DFS with a results cache. Returns only entries with
+    non-empty shared ancestor sets.
+    """
+    computed: dict[str, frozenset[str]] = {}
+    shared_ancestors: dict[str, frozenset[str]] = {}
+    for name in by_name:
+        ancestors = _compute_shared_ancestors(name, graph, by_name, computed)
+        if ancestors:
+            shared_ancestors[name] = ancestors
+    return shared_ancestors
+
+
+def _merge_components(shared_ancestors: dict[str, frozenset[str]]) -> list[list[str]]:
+    """Merge overlapping shared-ancestor sets into connected components via union-find.
+
+    Returns sorted list of sorted groups.
+    """
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]  # path compression
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        parent[find(a)] = find(b)
+
+    for name, ancestors in shared_ancestors.items():
+        for ancestor in ancestors:
+            union(name, ancestor)
+
+    groups: dict[str, set[str]] = {}
+    for name in shared_ancestors:
+        groups.setdefault(find(name), set()).add(name)
+
+    return sorted(sorted(comp) for comp in groups.values())
+
+
 class FixtureRegistry:
     """Registry of all fixture definitions collected from conftest files.
 
@@ -225,62 +319,11 @@ class FixtureRegistry:
         linked by shared fixture dependencies. Returns sorted list of sorted
         groups.
         """
-        graph: dict[str, set[str]] = {}
-        for defn in self.all():
-            deps: set[str] = set()
-            for _qualifier, dep_type in defn.depends_on:
-                dep_defs = self._by_type.get(dep_type, [])
-                for dep in dep_defs:
-                    if dep.name != defn.name:
-                        deps.add(dep.name)
-            graph[defn.name] = deps
-
-        # Find which shared fixtures each fixture transitively reaches.
-        def _transitive_shared(name: str, visited: set[str] | None = None) -> set[str]:
-            if visited is None:
-                visited = set()
-            if name in visited:
-                return set()
-            visited.add(name)
-            result: set[str] = set()
-            defs = self._by_name.get(name)
-            if defs and defs[-1].shared:
-                result.add(name)
-            for dep in graph.get(name, ()):
-                result |= _transitive_shared(dep, visited)
-            return result
-
-        # Collect fixtures with shared ancestors.
-        shared_ancestors: dict[str, frozenset[str]] = {}
-        for name in self._by_name:
-            ancestors = _transitive_shared(name)
-            if ancestors:
-                shared_ancestors[name] = frozenset(ancestors)
-
+        graph = _build_dependency_graph(self)
+        shared_ancestors = _transitive_shared(graph, self._by_name)
         if not shared_ancestors:
             return []
-
-        # Union-Find to merge overlapping ancestor sets into connected components.
-        parent: dict[str, str] = {}
-
-        def find(x: str) -> str:
-            while parent.setdefault(x, x) != x:
-                parent[x] = parent[parent[x]]  # path compression
-                x = parent[x]
-            return x
-
-        def union(a: str, b: str) -> None:
-            parent[find(a)] = find(b)
-
-        for name, ancestors in shared_ancestors.items():
-            for ancestor in ancestors:
-                union(name, ancestor)
-
-        groups: dict[str, set[str]] = {}
-        for name in shared_ancestors:
-            groups.setdefault(find(name), set()).add(name)
-
-        return sorted(sorted(comp) for comp in groups.values())
+        return _merge_components(shared_ancestors)
 
     def has_shared(self) -> bool:
         """Return True if any effective fixture definition has shared=True."""
