@@ -10,6 +10,7 @@ __all__ = [
     "build_pipeline",
 ]
 
+import asyncio
 import contextlib
 import inspect
 import warnings
@@ -18,15 +19,19 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol
 
+from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._boundary import async_safe_call
+from oxitest._bridge._errors import FixtureSetupError
+from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import MarkWrapper
+from oxitest._bridge._runners import run_base_async
 from oxitest._bridge._timeout import (
     OxitestTimeoutError,
     extract_timeout_seconds,
     make_timeout_wrapper,
 )
-from oxitest._bridge.result import TestResult
+from oxitest._bridge.result import TestResult, _error_result
 
 
 def _compose(
@@ -115,6 +120,73 @@ class AsyncDepGuardMiddleware:
         return next_fn
 
 
+async def _unpack_async_fixtures(
+    kwargs: Any,
+) -> tuple[dict[str, Any], list[tuple[str, Any]]] | TestResult:
+    """Phase 1: await coroutines and advance async generators.
+
+    Returns (resolved_kwargs, async_teardowns) on success, or a TestResult
+    on fixture setup error.
+    """
+    resolved: dict[str, Any] = {}
+    async_teardowns: list[tuple[str, Any]] = []
+    for k, v in kwargs.items():
+        if inspect.isasyncgen(v):
+            try:
+                resolved[k] = await anext(v)
+                async_teardowns.append((k, v))
+            except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
+                return _error_result(str(FixtureSetupError(k, exc)))
+        elif inspect.iscoroutine(v):
+            try:
+                resolved[k] = await v
+            except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
+                return _error_result(str(FixtureSetupError(k, exc)))
+        else:
+            resolved[k] = v
+    return resolved, async_teardowns
+
+
+async def _run_with_timeout(
+    fn: Any,
+    resolved: dict[str, Any],
+    no_message_lines: tuple[int, ...],
+    timeout_secs: int | None,
+) -> TestResult:
+    """Phase 2: run the async test body with optional asyncio timeout."""
+    if timeout_secs is not None:
+        try:
+            return await asyncio.wait_for(
+                run_base_async(fn, resolved, no_message_lines),
+                timeout=timeout_secs,
+            )
+        except TimeoutError:
+            raise OxitestTimeoutError from None
+    return await run_base_async(fn, resolved, no_message_lines)
+
+
+async def _teardown_async_generators(
+    async_teardowns: list[tuple[str, Any]],
+) -> None:
+    """Phase 3: teardown async generators in reverse order."""
+    for name, gen in reversed(async_teardowns):
+
+        async def _drain(generator: Any = gen) -> None:
+            with contextlib.suppress(StopAsyncIteration):
+                await anext(generator)
+
+        await async_safe_call(
+            _drain(),
+            default=None,
+            on_error=lambda exc, fixture_name=name: warnings.warn(
+                FixtureTeardownWarning(
+                    f"error in teardown of fixture '{fixture_name}': {exc}"
+                ),
+                stacklevel=2,
+            ),
+        )
+
+
 class AsyncBridgeMiddleware:
     """Replaces base runner with async bridge when fn is async."""
 
@@ -124,75 +196,26 @@ class AsyncBridgeMiddleware:
         if not inspect.iscoroutinefunction(plan.fn):
             return next_fn
 
-        from oxitest._bridge._async_backend import AsyncioBackend
-        from oxitest._bridge._errors import FixtureSetupError
-        from oxitest._bridge._fixture_context import FixtureTeardownWarning
-        from oxitest._bridge._runners import run_base_async
-
         backend = plan.backend or AsyncioBackend()
 
-        _timeout_secs: int | None = None
-        for m in plan.marks:
-            if m.name == "timeout":
-                _timeout_secs = extract_timeout_seconds(m.kwargs)
-                break
-        if _timeout_secs is None:
-            _timeout_secs = plan.default_timeout
+        timeout_mark = next((m for m in plan.marks if m.name == "timeout"), None)
+        _timeout_secs = (
+            extract_timeout_seconds(timeout_mark.kwargs)
+            if timeout_mark
+            else plan.default_timeout
+        )
 
         async def _async_core() -> TestResult:
-            # Phase 1: Unpack async fixtures — await coroutines and advance
-            # async generators to their first yielded value.
-            resolved: dict[str, Any] = {}
-            async_teardowns: list[tuple[str, Any]] = []
-            for k, v in plan.kwargs.items():
-                if inspect.isasyncgen(v):
-                    try:
-                        resolved[k] = await anext(v)
-                        async_teardowns.append((k, v))
-                    except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
-                        from oxitest._bridge.result import _error_result
-
-                        return _error_result(str(FixtureSetupError(k, exc)))
-                elif inspect.iscoroutine(v):
-                    try:
-                        resolved[k] = await v
-                    except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
-                        from oxitest._bridge.result import _error_result
-
-                        return _error_result(str(FixtureSetupError(k, exc)))
-                else:
-                    resolved[k] = v
-            # Phase 2: Run the test body, applying optional timeout.
+            unpacked = await _unpack_async_fixtures(plan.kwargs)
+            if isinstance(unpacked, TestResult):
+                return unpacked
+            resolved, async_teardowns = unpacked
             try:
-                if _timeout_secs is not None:
-                    import asyncio
-
-                    try:
-                        return await asyncio.wait_for(
-                            run_base_async(plan.fn, resolved, plan.no_message_lines),
-                            timeout=_timeout_secs,
-                        )
-                    except TimeoutError:
-                        raise OxitestTimeoutError from None
-                return await run_base_async(plan.fn, resolved, plan.no_message_lines)
-            # Phase 3: Teardown async generators in reverse order.
+                return await _run_with_timeout(
+                    plan.fn, resolved, plan.no_message_lines, _timeout_secs
+                )
             finally:
-                for name, gen in reversed(async_teardowns):
-
-                    async def _drain(generator: Any = gen) -> None:
-                        with contextlib.suppress(StopAsyncIteration):
-                            await anext(generator)
-
-                    await async_safe_call(
-                        _drain(),
-                        default=None,
-                        on_error=lambda exc, fixture_name=name: warnings.warn(
-                            FixtureTeardownWarning(
-                                f"error in teardown of fixture '{fixture_name}': {exc}"
-                            ),
-                            stacklevel=2,
-                        ),
-                    )
+                await _teardown_async_generators(async_teardowns)
 
         if plan.shared_session is not None:
 
