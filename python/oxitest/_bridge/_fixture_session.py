@@ -244,6 +244,42 @@ async def _task_group_factory():  # type: ignore[return-value]
                 t.cancel()
 
 
+def _collect_requested_names(
+    hints: dict[str, Any], skip_names: frozenset[str]
+) -> set[str]:
+    """Return names of explicitly-requested fixtures from type hints."""
+    names: set[str] = set()
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        is_fx, _inner = _fixture_inner_type(hint)
+        if is_fx and param_name not in skip_names:
+            names.add(param_name)
+    return names
+
+
+def _check_unannotated_params(
+    fn: Callable[..., Any],
+    hints: dict[str, Any],
+    kwargs: dict[str, Any],
+    skip_names: frozenset[str],
+    registry: FixtureRegistry,
+) -> None:
+    """Raise UnannotatedFixtureParamError if a param matches a known fixture.
+
+    Only raised when the parameter lacks a ``Fixture[T]`` annotation.
+    """
+    for param_name in inspect.signature(fn).parameters:
+        if param_name in skip_names or param_name in kwargs:
+            continue
+        hint = hints.get(param_name)
+        is_fx = _fixture_inner_type(hint)[0] if hint is not None else False
+        if not is_fx and registry.get(param_name) is not None:
+            raise UnannotatedFixtureParamError(
+                param_name, getattr(fn, "__name__", repr(fn))
+            )
+
+
 class FixtureSession:
     """Manages fixture lifecycle for a single oxitest run.
 
@@ -569,15 +605,7 @@ class FixtureSession:
         self._async_mgr.was_used = False  # reset per-test
         with _fixture_scope(self, meta.module_path, fn_teardowns):
             hints = _get_hints(fn)
-
-            # Collect names of explicitly-requested fixtures (to skip in autouse check)
-            requested_names: set[str] = set()
-            for param_name, hint in hints.items():
-                if param_name == "return":
-                    continue
-                is_fx, _inner = _fixture_inner_type(hint)
-                if is_fx and param_name not in skip_names:
-                    requested_names.add(param_name)
+            requested_names = _collect_requested_names(hints, skip_names)
 
             # Autouse: run for side effects; value NOT injected unless
             # explicitly requested
@@ -609,17 +637,7 @@ class FixtureSession:
                 if resolved:
                     kwargs[param_name] = value
 
-            # Check for unannotated params whose name matches a known fixture
-            for param_name in inspect.signature(fn).parameters:
-                if param_name in skip_names or param_name in kwargs:
-                    continue
-                hint = hints.get(param_name)
-                is_fx = _fixture_inner_type(hint)[0] if hint is not None else False
-                if not is_fx and self._registry.get(param_name) is not None:
-                    raise UnannotatedFixtureParamError(
-                        param_name, getattr(fn, "__name__", repr(fn))
-                    )
-
+            _check_unannotated_params(fn, hints, kwargs, skip_names, self._registry)
             return kwargs, fn_teardowns
 
     def get_fixture(

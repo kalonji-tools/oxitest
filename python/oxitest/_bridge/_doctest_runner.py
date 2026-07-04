@@ -23,17 +23,11 @@ def _resolve_object(module: ModuleType, dotted_name: str) -> object:
     return obj
 
 
-def run_doctest(module_path: str, name: str) -> TestResult:
-    """Run doctests for a single object identified by dotted name.
+def _import_doctest_module(module_path: str) -> ModuleType | ErrorResult:
+    """Import a module by file path for doctest execution.
 
-    Args:
-        module_path: Filesystem path to the Python module.
-        name: Dotted name of the object (e.g. "mymodule.Calculator.add").
-
-    Returns:
-        TestResult with pass/fail status and diagnostic info.
+    Returns the imported module on success, or an ErrorResult on failure.
     """
-    # Import the module
     unique_name = f"_oxitest_doctest_{id(module_path)}"
     spec = importlib.util.spec_from_file_location(unique_name, module_path)
     if spec is None or spec.loader is None:
@@ -41,7 +35,6 @@ def run_doctest(module_path: str, name: str) -> TestResult:
             message=f"Cannot import {module_path}",
             file=module_path,
         )
-
     module = importlib.util.module_from_spec(spec)
     sys.modules[unique_name] = module
     try:
@@ -51,8 +44,16 @@ def run_doctest(module_path: str, name: str) -> TestResult:
             message=f"Import error: {exc}",
             file=module_path,
         )
+    return module
 
-    # Resolve the target object
+
+def _find_doctests(
+    module: ModuleType, module_path: str, name: str
+) -> list[doctest.DocTest] | ErrorResult:
+    """Resolve the target object and find its doctests.
+
+    Returns a list of DocTest objects on success, or an ErrorResult on failure.
+    """
     try:
         obj = _resolve_object(module, name)
     except AttributeError as exc:
@@ -60,21 +61,18 @@ def run_doctest(module_path: str, name: str) -> TestResult:
             message=f"Cannot resolve {name}: {exc}",
             file=module_path,
         )
-
-    # Find and run doctests
     finder = doctest.DocTestFinder()
     try:
-        tests = finder.find(obj, name)
+        return finder.find(obj, name)
     except Exception as exc:  # noqa: BLE001 — doctest introspection can raise anything
         return ErrorResult(
             message=f"DocTestFinder error: {exc}",
             file=module_path,
         )
 
-    if not tests:
-        return PassedResult()
 
-    # Run the first test (there's typically one per object)
+def _run_doctests(tests: list[doctest.DocTest], module_path: str) -> TestResult:
+    """Run discovered doctests and return pass/fail result with diagnostics."""
     runner = doctest.DocTestRunner(verbose=False)
     failures: list[doctest.DocTestFailure] = []
 
@@ -86,26 +84,50 @@ def run_doctest(module_path: str, name: str) -> TestResult:
         except doctest.DocTestFailure as f:
             failures.append(f)
 
-    if runner.summarize(verbose=False).failed > 0 or failures:
-        # Re-run to capture output for diagnostics
-        output_lines: list[str] = []
-        capture_runner = doctest.DocTestRunner(
-            verbose=False, optionflags=doctest.ELLIPSIS
-        )
-        for test in tests:
-            if not test.examples:
-                continue
-            capture_runner.run(test, out=output_lines.append)
+    if runner.summarize(verbose=False).failed == 0 and not failures:
+        return PassedResult()
 
-        message = "".join(output_lines).strip()
-        if not message:
-            message = "Doctest failed"
+    # Re-run to capture output for diagnostics
+    output_lines: list[str] = []
+    capture_runner = doctest.DocTestRunner(verbose=False, optionflags=doctest.ELLIPSIS)
+    for test in tests:
+        if not test.examples:
+            continue
+        capture_runner.run(test, out=output_lines.append)
 
-        lineno = tests[0].lineno or 0
-        return FailedResult(
-            message=message,
-            file=module_path,
-            lineno=lineno + 1,  # 0-indexed to 1-indexed
-        )
+    message = "".join(output_lines).strip()
+    if not message:
+        message = "Doctest failed"
 
-    return PassedResult()
+    lineno = tests[0].lineno or 0
+    return FailedResult(
+        message=message,
+        file=module_path,
+        lineno=lineno + 1,  # 0-indexed to 1-indexed
+    )
+
+
+def run_doctest(module_path: str, name: str) -> TestResult:
+    """Run doctests for a single object identified by dotted name.
+
+    Args:
+        module_path: Filesystem path to the Python module.
+        name: Dotted name of the object (e.g. "mymodule.Calculator.add").
+
+    Returns:
+        TestResult with pass/fail status and diagnostic info.
+    """
+    result = _import_doctest_module(module_path)
+    if isinstance(result, ErrorResult):
+        return result
+    module = result
+
+    found = _find_doctests(module, module_path, name)
+    if isinstance(found, ErrorResult):
+        return found
+    tests = found
+
+    if not tests:
+        return PassedResult()
+
+    return _run_doctests(tests, module_path)

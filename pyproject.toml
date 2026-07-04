@@ -33,11 +33,7 @@ ignore = [
     "D213",           # multi-line summary second line — conflicts with D212
 
     # ── Intentional design decisions ─────────────────────────────────────
-    "C901",           # function too complex (acceptable for dispatchers)
     "D105", "D107",   # missing docstring in magic method / __init__
-    "PLR0911",        # too many return statements (complex dispatchers)
-    "PLR0912",        # too many branches (complex dispatchers)
-    "PLR0915",        # too many statements (complex dispatchers)
     "S101",           # assert used for runtime invariants
     "ARG001",         # unused function arg (protocol/callback signatures)
     "ARG002",         # unused method arg (protocol/interface implementations)
