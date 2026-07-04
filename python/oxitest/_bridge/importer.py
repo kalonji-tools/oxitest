@@ -184,18 +184,23 @@ def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
         )
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ItemTemplate:
+    """Shared fields for every CollectedItem produced from a single function."""
+
+    fn_name: str
+    lineno: int
+    markers: tuple[str, ...]
+    is_async: bool
+    fixture_deps: tuple[tuple[str, str], ...]
+
+
 def _expand_composed(
     layers: tuple[ResolvedCases, ...],
-    fn_name: str,
-    lineno: int,
-    marker_names: list[str],
-    *,
-    is_async: bool,
-    fixture_deps: tuple[tuple[str, str], ...],
+    template: _ItemTemplate,
     fixref_deps: tuple[tuple[str, str], ...] = (),
 ) -> list[CollectedItem]:
     """Expand composed ResolvedCases layers via cartesian product."""
-    _validate_composition(layers)
     layer_items = [layer.items() for layer in layers]
     items: list[CollectedItem] = []
     for combo in itertools.product(*layer_items):
@@ -205,13 +210,13 @@ def _expand_composed(
             merged_pv.extend(pv)
         items.append(
             CollectedItem(
-                fn_name=fn_name,
-                lineno=lineno,
-                markers=tuple(marker_names),
+                fn_name=template.fn_name,
+                lineno=template.lineno,
+                markers=template.markers,
                 param_id=compound_id,
                 param_values=tuple(merged_pv),
-                is_async=is_async,
-                fixture_deps=fixture_deps,
+                is_async=template.is_async,
+                fixture_deps=template.fixture_deps,
                 fixref_deps=fixref_deps,
             )
         )
@@ -269,19 +274,24 @@ def _expand_item(
     fn: object,
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
-    is_async = inspect.iscoroutinefunction(fn)
-    fixture_deps = _get_fixture_deps(fn)
+    template = _ItemTemplate(
+        fn_name=fn_name,
+        lineno=lineno,
+        markers=tuple(marker_names),
+        is_async=inspect.iscoroutinefunction(fn),
+        fixture_deps=_get_fixture_deps(fn),
+    )
     raw = get_metadata(fn).param_cases
     if raw is None:
         return [
             CollectedItem(
-                fn_name=fn_name,
-                lineno=lineno,
-                markers=tuple(marker_names),
+                fn_name=template.fn_name,
+                lineno=template.lineno,
+                markers=template.markers,
                 param_id=None,
                 param_values=(),
-                is_async=is_async,
-                fixture_deps=fixture_deps,
+                is_async=template.is_async,
+                fixture_deps=template.fixture_deps,
             )
         ]
     # Composition: all layers are ComposedCases (partial)
@@ -294,26 +304,23 @@ def _expand_item(
                 if dep[0] not in seen:
                     all_fixref_deps.append(dep)
                     seen.add(dep[0])
+        _validate_composition(raw)
         return _expand_composed(
             raw,
-            fn_name,
-            lineno,
-            marker_names,
-            is_async=is_async,
-            fixture_deps=fixture_deps,
+            template,
             fixref_deps=tuple(sorted(all_fixref_deps)),
         )
     # Single layer: existing behavior
     fixref_deps = _get_fixref_deps(raw[0])
     return [
         CollectedItem(
-            fn_name=fn_name,
-            lineno=lineno,
-            markers=tuple(marker_names),
+            fn_name=template.fn_name,
+            lineno=template.lineno,
+            markers=template.markers,
             param_id=case_id,
             param_values=tuple(pv),
-            is_async=is_async,
-            fixture_deps=fixture_deps,
+            is_async=template.is_async,
+            fixture_deps=template.fixture_deps,
             fixref_deps=fixref_deps,
         )
         for case_id, pv in raw[0].items()
