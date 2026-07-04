@@ -401,6 +401,74 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
     )
 
 
+def _dict_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
+    """Create a parametrize decorator for dict-mode cases."""
+
+    def decorator(fn: _F) -> _F:
+        meta = get_or_create(fn)
+        layer = _build_dict_cases(cases, fn)
+        if meta.param_cases is not None:
+            raise TypeError(
+                "parametrize: cannot mix dict-mode with stacked decorators."
+                " Use a single @parametrize call for dict mode."
+            )
+        meta.param_cases = (layer,)
+        return fn
+
+    return decorator
+
+
+def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
+    """Create a parametrize decorator for partial-mode (composition) cases."""
+    new_layer = _build_partial_cases(cases)
+
+    def decorator(fn: _F) -> _F:
+        meta = get_or_create(fn)
+        existing = meta.param_cases
+        if existing is None:
+            meta.param_cases = (new_layer,)
+            return fn
+        composed = _as_composed(existing)
+        existing_pt = composed[0].param_type
+        new_pt = new_layer.param_type
+        if existing_pt is not new_pt:
+            raise TypeError(
+                "parametrize: all partial() calls must target the"
+                " same dataclass type."
+                f" Expected '{existing_pt.__name__}',"
+                f" got '{new_pt.__name__}'."
+            )
+        for layer in composed:
+            overlap = layer.provided_fields & new_layer.provided_fields
+            if overlap:
+                raise TypeError(
+                    "parametrize: field overlap between layers:"
+                    f" {sorted(overlap)!r}."
+                    " Each layer must provide disjoint fields."
+                )
+        meta.param_cases = (new_layer, *existing)
+        return fn
+
+    return decorator
+
+
+def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
+    """Create a parametrize decorator for dataclass-mode cases."""
+    param_cases_layer = _build_dataclass_cases(cases)
+
+    def decorator(fn: _F) -> _F:
+        meta = get_or_create(fn)
+        if meta.param_cases is not None:
+            raise TypeError(
+                "parametrize: cannot mix full dataclass cases with stacked"
+                " decorators. Use partial() for composition."
+            )
+        meta.param_cases = (param_cases_layer,)
+        return fn
+
+    return decorator
+
+
 def parametrize(**cases: Any) -> Callable[[_F], _F]:
     """Register named test cases on a test function.
 
@@ -438,51 +506,10 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     first = next(iter(cases.values()))
 
     if isinstance(first, dict):
-
-        def dict_decorator(fn: _F) -> _F:
-            meta = get_or_create(fn)
-            layer = _build_dict_cases(cases, fn)
-            if meta.param_cases is not None:
-                raise TypeError(
-                    "parametrize: cannot mix dict-mode with stacked decorators."
-                    " Use a single @parametrize call for dict mode."
-                )
-            meta.param_cases = (layer,)
-            return fn
-
-        return dict_decorator
+        return _dict_decorator(cases)
 
     if isinstance(first, _Partial):
-        new_layer = _build_partial_cases(cases)
-
-        def partial_decorator(fn: _F) -> _F:
-            meta = get_or_create(fn)
-            existing = meta.param_cases
-            if existing is None:
-                meta.param_cases = (new_layer,)
-            elif isinstance(existing, tuple):
-                composed = _as_composed(existing)
-                existing_pt = composed[0].param_type
-                new_pt = new_layer.param_type
-                if existing_pt is not new_pt:
-                    raise TypeError(
-                        "parametrize: all partial() calls must target the"
-                        " same dataclass type."
-                        f" Expected '{existing_pt.__name__}',"
-                        f" got '{new_pt.__name__}'."
-                    )
-                for layer in composed:
-                    overlap = layer.provided_fields & new_layer.provided_fields
-                    if overlap:
-                        raise TypeError(
-                            "parametrize: field overlap between layers:"
-                            f" {sorted(overlap)!r}."
-                            " Each layer must provide disjoint fields."
-                        )
-                meta.param_cases = (new_layer, *existing)
-            return fn
-
-        return partial_decorator
+        return _partial_decorator(cases)
 
     if not dataclasses.is_dataclass(first):
         raise TypeError(
@@ -490,19 +517,7 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
             f" or partial() instances, got {type(first)!r}"
         )
 
-    param_cases_layer = _build_dataclass_cases(cases)
-
-    def dataclass_decorator(fn: _F) -> _F:
-        meta = get_or_create(fn)
-        if meta.param_cases is not None:
-            raise TypeError(
-                "parametrize: cannot mix full dataclass cases with stacked"
-                " decorators. Use partial() for composition."
-            )
-        meta.param_cases = (param_cases_layer,)
-        return fn
-
-    return dataclass_decorator
+    return _dataclass_decorator(cases)
 
 
 def resolve_parametrize(
