@@ -193,6 +193,42 @@ def _origin_header(defn: FixtureDef[Any]) -> str:
 _WHITE, _GRAY, _BLACK = 0, 1, 2
 
 
+def _detect_cycle(
+    graph: dict[str, list[str]],
+    all_defs: dict[str, FixtureDef[Any]],
+) -> list[str] | None:
+    """Detect circular dependencies via DFS (white/gray/black).
+
+    Returns the cycle path as a list of names if found, or None.
+    """
+    color: dict[str, int] = dict.fromkeys(all_defs, _WHITE)
+
+    def _dfs(node: str, path: list[str]) -> list[str] | None:
+        if color[node] == _GRAY:
+            cycle = path[path.index(node) :]
+            cycle.append(node)
+            return cycle
+        if color[node] == _BLACK:
+            return None
+        color[node] = _GRAY
+        path.append(node)
+        for dep in graph.get(node, []):
+            if dep in color:
+                found = _dfs(dep, path)
+                if found is not None:
+                    return found
+        path.pop()
+        color[node] = _BLACK
+        return None
+
+    for name in sorted(all_defs):
+        if color[name] == _WHITE:
+            found = _dfs(name, [])
+            if found is not None:
+                return found
+    return None
+
+
 def tree_fixtures_from_registry(
     registry: FixtureRegistry,
     verbosity: int = 0,
@@ -235,30 +271,11 @@ def tree_fixtures_from_registry(
         ]
         graph[name] = deps
 
-    # Cycle detection via DFS (white/gray/black)
-    color: dict[str, int] = dict.fromkeys(all_defs, _WHITE)
-    cycle_path: list[str] = []
-
-    def _has_cycle(node: str, path: list[str]) -> bool:
-        if color[node] == _GRAY:
-            cycle_path.extend(path[path.index(node) :])
-            cycle_path.append(node)
-            return True
-        if color[node] == _BLACK:
-            return False
-        color[node] = _GRAY
-        path.append(node)
-        for dep in graph.get(node, []):
-            if dep in color and _has_cycle(dep, path):
-                return True
-        path.pop()
-        color[node] = _BLACK
-        return False
-
-    for name in sorted(all_defs):
-        if color[name] == _WHITE and _has_cycle(name, []):
-            cycle_str = " -> ".join(cycle_path)
-            return f"error: Circular fixture dependency: {cycle_str}"
+    # Cycle detection
+    cycle_path = _detect_cycle(graph, all_defs)
+    if cycle_path is not None:
+        cycle_str = " -> ".join(cycle_path)
+        return f"error: Circular fixture dependency: {cycle_str}"
 
     # Determine roots
     total = len(all_defs)
