@@ -9,7 +9,11 @@ from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
 )
-from oxitest._bridge._fixture_instantiator import FixtureInstantiator, ScopeRefs
+from oxitest._bridge._fixture_instantiator import (
+    FixtureInstantiator,
+    ScopeRefs,
+    _ResolutionContext,
+)
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
@@ -38,9 +42,8 @@ def test_resolve_simple_fixture():
     )
     teardowns: list = []
 
-    result = inst.resolve_fixture(
-        "db", "test.py", teardowns, frozenset(), lambda _defn: None
-    )
+    ctx = _ResolutionContext("test.py", teardowns, frozenset(), lambda _defn: None)
+    result = inst.resolve_fixture("db", ctx)
 
     assert result == "conn", f"expected 'conn', got {result!r}"
 
@@ -58,14 +61,18 @@ def test_resolve_cycle_raises():
     )
 
     with raises(FixtureCycleError):
-        inst.resolve_fixture("a", "test.py", [], frozenset(), lambda _defn: None)
+        inst.resolve_fixture(
+            "a", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+        )
 
 
 def test_resolve_not_found_raises():
     inst, _reg = _make_instantiator()
 
     with raises(FixtureNotFoundError):
-        inst.resolve_fixture("nope", "test.py", [], frozenset(), lambda _defn: None)
+        inst.resolve_fixture(
+            "nope", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+        )
 
 
 def test_resolve_shared_uses_scope_refs():
@@ -80,9 +87,8 @@ def test_resolve_shared_uses_scope_refs():
     shared_misses: dict = {}
     scope_refs = ScopeRefs(shared_cache, shared_teardowns, shared_hits, shared_misses)
 
-    inst.resolve_fixture(
-        "shared_db", "test.py", [], frozenset(), lambda _defn: scope_refs
-    )
+    ctx = _ResolutionContext("test.py", [], frozenset(), lambda _defn: scope_refs)
+    inst.resolve_fixture("shared_db", ctx)
 
     assert "shared_db" in shared_cache, (
         f"expected 'shared_db' in cache, got {shared_cache}"
@@ -94,7 +100,9 @@ def test_timing_recorded():
         helpers.common.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
     )
 
-    inst.resolve_fixture("fast", "test.py", [], frozenset(), lambda _defn: None)
+    inst.resolve_fixture(
+        "fast", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+    )
 
     timings = inst.get_fixture_timings()
     assert len(timings) == 1, f"expected 1 timing entry, got {len(timings)}"
@@ -156,7 +164,7 @@ def test_resolve_param_by_type_not_name():
         meta,
         fn_teardowns=teardowns,
         resolve_user_fixture=lambda n: inst.resolve_fixture(
-            n, "t.py", teardowns, frozenset(), lambda _defn: None
+            n, _ResolutionContext("t.py", teardowns, frozenset(), lambda _defn: None)
         ),
     )
     assert resolved is True, "should resolve by type"
