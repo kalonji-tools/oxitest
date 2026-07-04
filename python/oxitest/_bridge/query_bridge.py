@@ -4,7 +4,10 @@ from __future__ import annotations
 
 __all__ = ["fixture_entries", "helper_entries", "plugin_entries", "test_fixture_deps"]
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Protocol fields in display order, matching Plugin dataclass field names.
 _PROTOCOL_FIELDS = (
@@ -125,7 +128,8 @@ def test_fixture_deps(
     for path in test_files:
         try:
             items, _ = collect_module(path, session)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Skipping %s: %s", path, exc)
             continue
         for item in items:
             if not item.fixture_deps:

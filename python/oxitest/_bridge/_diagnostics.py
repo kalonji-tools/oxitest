@@ -15,6 +15,7 @@ __all__ = [
 ]
 
 import linecache
+import logging
 import reprlib
 import warnings
 from typing import Any, cast
@@ -32,6 +33,8 @@ from oxitest._bridge.result import (
     SkippedResult,
     TestResult,
 )
+
+logger = logging.getLogger(__name__)
 
 _REPR_MAX = 80
 
@@ -146,6 +149,7 @@ def _compute_field_diffs(
             if lv != rv:
                 diffs.append((name, _repr_safe(lv), _repr_safe(rv)))
         except Exception:
+            logger.debug("Field %r comparison failed, skipping diff", name)
             continue
     return tuple(diffs)
 

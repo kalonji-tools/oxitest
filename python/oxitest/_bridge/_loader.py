@@ -67,7 +67,7 @@ def _load_module(module_path: str, unique_name: str) -> Any:
     module.__dict__["_oxitest_bare_asserts"] = bare_asserts
     sys.modules[unique_name] = module
     try:
-        exec(code, module.__dict__)
+        exec(code, module.__dict__)  # noqa: S102 — exec required for AST-rewritten module loading
     except Exception as exc:
         sys.modules.pop(unique_name, None)
         raise _LoadError(_error_result(traceback.format_exc())) from exc
