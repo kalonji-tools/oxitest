@@ -42,9 +42,6 @@ ignore = [
     "PLR0913",        # too many arguments (internal functions with many params)
     "PLR0915",        # too many statements (complex dispatchers)
     "S101",           # assert used for runtime invariants
-    "S102",           # exec() used intentionally (module loader, test helpers)
-    "S112",           # try-except-continue (intentional fallback in diagnostics)
-    "T100",           # debugger breakpoint (intentional in _debugger.py)
     "BLE001",         # broad except Exception in test runner (must catch to report)
 
     "ARG001",         # unused function arg (protocol/callback signatures)
@@ -88,8 +85,10 @@ ignore = [
     "FBT003",   # boolean positional value in function call
     "TRY301",   # raise within try (testing exception handling)
     "INP001",   # no __init__.py (test dirs are not packages)
+    "S102",     # exec() needed to test AST rewriter and live type annotations
     "PLC0415",  # lazy imports in tests (each test imports what it tests)
 ]
+"python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201", "D"]
 "benchmarks/*.py" = ["T201", "E501", "D", "PLR2004", "S101"]
 
