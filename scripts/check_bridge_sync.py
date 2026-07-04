@@ -175,41 +175,45 @@ def parse_to_wire_fields(path: Path) -> set[str]:
     return fields
 
 
-def main() -> int:
-    rust = parse_rust_structs(RUST_PATH)
-    python = parse_python_classes(PYTHON_PATH)
-    errors = 0
+def _resolve_py_fields(
+    py_name: str | list[str], python: dict[str, set[str]]
+) -> tuple[set[str] | None, list[str]]:
+    """Resolve Python field set for a single or union py_name.
 
+    Returns (fields, missing_classes). fields is None on error (single class missing).
+    """
+    if isinstance(py_name, list):
+        py_fields: set[str] = {"status"}
+        missing: list[str] = []
+        for cls_name in py_name:
+            cls_fields = python.get(cls_name)
+            if cls_fields is None:
+                missing.append(cls_name)
+            else:
+                py_fields |= cls_fields
+        return (None if missing else py_fields), missing
+    cls_fields = python.get(py_name)
+    return cls_fields, []
+
+
+def _check_main_pairs(rust: dict[str, set[str]], python: dict[str, set[str]]) -> int:
+    """Check main bridge pairs (CollectedItem, RawViolation)."""
+    errors = 0
     for rust_name, py_name in PAIRS.items():
         rust_fields = rust.get(rust_name)
         if rust_fields is None:
             print(f"ERROR: Rust struct '{rust_name}' not found in {RUST_PATH}")
             errors += 1
             continue
-        if isinstance(py_name, list):
-            # Union type: collect fields from all per-outcome dataclasses + "status"
-            py_fields: set[str] = {"status"}
-            missing_classes = []
-            for cls_name in py_name:
-                cls_fields = python.get(cls_name)
-                if cls_fields is None:
-                    missing_classes.append(cls_name)
-                else:
-                    py_fields |= cls_fields
-            if missing_classes:
-                print(
-                    f"ERROR: Python classes {missing_classes} not found "
-                    f"in {PYTHON_PATH}"
-                )
-                errors += 1
-                continue
-        else:
-            cls_fields = python.get(py_name)
-            if cls_fields is None:
-                print(f"ERROR: Python class '{py_name}' not found in {PYTHON_PATH}")
-                errors += 1
-                continue
-            py_fields = cls_fields
+        py_fields, missing_classes = _resolve_py_fields(py_name, python)
+        if missing_classes:
+            print(f"ERROR: Python classes {missing_classes} not found in {PYTHON_PATH}")
+            errors += 1
+            continue
+        if py_fields is None:
+            print(f"ERROR: Python class '{py_name}' not found in {PYTHON_PATH}")
+            errors += 1
+            continue
         rust_only = rust_fields - py_fields
         py_only = py_fields - rust_fields
         label = py_name if isinstance(py_name, str) else "per-outcome union"
@@ -220,8 +224,12 @@ def main() -> int:
             if py_only:
                 print(f"  Python-only fields: {sorted(py_only)}")
             errors += 1
+    return errors
 
-    # ── Reporter bridge check ──────────────────────────────────────────
+
+def _check_reporter_pairs(python: dict[str, set[str]]) -> int:
+    """Check reporter bridge pairs."""
+    errors = 0
     reporter_rust = parse_rust_structs(REPORTER_RUST_PATH)
     for rust_name, py_name in REPORTER_PAIRS.items():
         rust_fields = reporter_rust.get(rust_name)
@@ -243,71 +251,86 @@ def main() -> int:
             if py_only:
                 print(f"  Python-only fields: {sorted(py_only)}")
             errors += 1
+    return errors
 
-    # ── RawFrame check (manual FromPyObject impl, lives in worker_result.rs) ──
+
+def _check_raw_frame(python: dict[str, set[str]]) -> int:
+    """Check RawFrame (Rust) vs Frame (Python)."""
     raw_frame_fields = _parse_serde_struct_fields(
         WIRE_RUST_PATH.read_text(), "RawFrame"
     )
     py_frame_fields = python.get("Frame")
     if not raw_frame_fields:
         print(f"ERROR: RawFrame not found in {WIRE_RUST_PATH}")
-        errors += 1
-    elif py_frame_fields is None:
+        return 1
+    if py_frame_fields is None:
         print(f"ERROR: Python class 'Frame' not found in {PYTHON_PATH}")
-        errors += 1
-    else:
-        rust_only = raw_frame_fields - py_frame_fields
-        py_only = py_frame_fields - raw_frame_fields
-        if rust_only or py_only:
-            print("MISMATCH: RawFrame (Rust) vs Frame (Python)")
-            if rust_only:
-                print(f"  Rust-only fields: {sorted(rust_only)}")
-            if py_only:
-                print(f"  Python-only fields: {sorted(py_only)}")
-            errors += 1
+        return 1
+    rust_only = raw_frame_fields - py_frame_fields
+    py_only = py_frame_fields - raw_frame_fields
+    if rust_only or py_only:
+        print("MISMATCH: RawFrame (Rust) vs Frame (Python)")
+        if rust_only:
+            print(f"  Rust-only fields: {sorted(rust_only)}")
+        if py_only:
+            print(f"  Python-only fields: {sorted(py_only)}")
+        return 1
+    return 0
 
-    # ── Wire format check ─────────────────────────────────────────────
+
+def _check_wire_format() -> int:
+    """Check WireResult (Rust) vs to_wire() (Python)."""
     rust_wire = parse_worker_result_fields(WIRE_RUST_PATH)
     py_wire = parse_to_wire_fields(PYTHON_PATH)
-
     if not rust_wire:
         print(f"ERROR: WireResult not found in {WIRE_RUST_PATH}")
-        errors += 1
-    elif not py_wire:
+        return 1
+    if not py_wire:
         print(f"ERROR: to_wire() fields not found in {PYTHON_PATH}")
-        errors += 1
-    else:
-        rust_only = rust_wire - py_wire
-        py_only = py_wire - rust_wire
-        if rust_only or py_only:
-            print("MISMATCH: WireResult (Rust wire) vs to_wire() (Python wire)")
-            if rust_only:
-                print(f"  Rust-only wire fields: {sorted(rust_only)}")
-            if py_only:
-                print(f"  Python-only wire fields: {sorted(py_only)}")
-            errors += 1
+        return 1
+    rust_only = rust_wire - py_wire
+    py_only = py_wire - rust_wire
+    if rust_only or py_only:
+        print("MISMATCH: WireResult (Rust wire) vs to_wire() (Python wire)")
+        if rust_only:
+            print(f"  Rust-only wire fields: {sorted(rust_only)}")
+        if py_only:
+            print(f"  Python-only wire fields: {sorted(py_only)}")
+        return 1
+    return 0
 
-    # ── Task input format check ────────────────────────────────────────
+
+def _check_task_format() -> int:
+    """Check WorkerTaskItem (Rust) vs worker.py item reads."""
     rust_task_fields = parse_worker_task_item_fields(WIRE_RUST_PATH)
     py_task_fields = parse_worker_item_reads(WORKER_PY_PATH)
-
     if not rust_task_fields:
         print(f"ERROR: WorkerTaskItem not found in {WIRE_RUST_PATH}")
-        errors += 1
-    elif not py_task_fields:
+        return 1
+    if not py_task_fields:
         print(f"ERROR: item field reads not found in {WORKER_PY_PATH}")
-        errors += 1
-    else:
-        rust_only = rust_task_fields - py_task_fields
-        py_only = py_task_fields - rust_task_fields
-        if rust_only or py_only:
-            print("MISMATCH: WorkerTaskItem (Rust) vs worker.py item reads (Python)")
-            if rust_only:
-                print(f"  Rust-only task fields: {sorted(rust_only)}")
-            if py_only:
-                print(f"  Python-only task fields: {sorted(py_only)}")
-            errors += 1
+        return 1
+    rust_only = rust_task_fields - py_task_fields
+    py_only = py_task_fields - rust_task_fields
+    if rust_only or py_only:
+        print("MISMATCH: WorkerTaskItem (Rust) vs worker.py item reads (Python)")
+        if rust_only:
+            print(f"  Rust-only task fields: {sorted(rust_only)}")
+        if py_only:
+            print(f"  Python-only task fields: {sorted(py_only)}")
+        return 1
+    return 0
 
+
+def main() -> int:
+    rust = parse_rust_structs(RUST_PATH)
+    python = parse_python_classes(PYTHON_PATH)
+    errors = 0
+    errors += _check_main_pairs(rust, python)
+    errors += _check_reporter_pairs(python)
+    errors += _check_raw_frame(python)
+    errors += _check_wire_format()
+    errors += _check_task_format()
     if errors == 0:
         total = len(PAIRS) + len(REPORTER_PAIRS) + 1  # +1 for RawFrame
         print(f"OK: all {total} bridge contracts + wire format + task format in sync")
