@@ -131,14 +131,10 @@ def dogfood_summary(tier_results: list[dict]) -> dict | None:
     return {"serial": serial, "parallel": parallel, "speedup": speedup}
 
 
-def main() -> int:
-    results = load_results("benchmarks/results.json")
-
-    # Startup
+def _print_startup(results: list[dict]) -> None:
     startup = find_commands(results, tier="startup")
     ox_startup = find_command_mean(startup, "oxitest")
     py_startup = find_command_mean(startup, "pytest")
-
     print("STARTUP")
     if ox_startup and py_startup:
         print(f"  oxitest: {ox_startup * 1000:.0f}ms")
@@ -146,10 +142,19 @@ def main() -> int:
         print(f"  speedup: {speedup_ratio(ox_startup, py_startup):.2f}x")
     print()
 
-    # Per-tier summaries
+
+def _print_tier_cache(results: list[dict], tier: str, warm_mean: float | None) -> None:
+    cold_results = find_commands(results, tier=f"{tier}_cold")
+    if not cold_results:
+        return
+    ox_cold = find_command_mean(cold_results, "oxitest")
+    if ox_cold and warm_mean:
+        print(f"  cache cold: {ox_cold * 1000:.0f}ms  warm: {warm_mean * 1000:.0f}ms")
+
+
+def _print_tiers(results: list[dict]) -> bool:
     tiers = ["below_threshold", "s", "m", "l"]
     has_regression = False
-
     for tier in tiers:
         tier_results = find_commands(results, tier=tier)
         if not tier_results:
@@ -169,19 +174,12 @@ def main() -> int:
         if s["oxitest_serial"] and s["oxitest_parallel"]:
             par_gain = speedup_ratio(s["oxitest_parallel"], s["oxitest_serial"])
             print(f"  parallel gain:      {par_gain:.2f}x over serial")
-
-        # Cache cold vs warm
-        cold_results = find_commands(results, tier=f"{tier}_cold")
-        if cold_results:
-            ox_cold = find_command_mean(cold_results, "oxitest")
-            if ox_cold and s["oxitest_parallel"]:
-                cold_ms = f"{ox_cold * 1000:.0f}ms"
-                warm_ms = f"{s['oxitest_parallel'] * 1000:.0f}ms"
-                print(f"  cache cold: {cold_ms}  warm: {warm_ms}")
-
+        _print_tier_cache(results, tier, s["oxitest_parallel"])
         print()
+    return has_regression
 
-    # Lazy collection
+
+def _print_lazy(results: list[dict]) -> bool:
     l_tier_results = find_commands(results, tier="l")
     l_parallel = None
     for r in l_tier_results:
@@ -192,13 +190,13 @@ def main() -> int:
         ):
             l_parallel = r["mean"]
             break
-
     lazy_tiers = ["lazy_node_id", "lazy_name", "lazy_mark"]
     lazy_labels = {
         "lazy_node_id": "node ID",
         "lazy_name": "name()",
         "lazy_mark": "mark()",
     }
+    has_regression = False
     lazy_printed = False
     for lt in lazy_tiers:
         lr = find_commands(results, tier=lt)
@@ -219,8 +217,10 @@ def main() -> int:
             has_regression = True
     if lazy_printed:
         print()
+    return has_regression
 
-    # Realistic (worker sweep)
+
+def _print_realistic(results: list[dict]) -> None:
     realistic_results = find_commands(results, tier="realistic")
     rs = realistic_summary(realistic_results)
     if rs is not None:
@@ -232,7 +232,8 @@ def main() -> int:
             print(f"  {entry['label']:>12}: {entry['mean'] * 1000:.0f}ms{speedup_str}")
         print()
 
-    # Dogfood (oxitest's own test suite)
+
+def _print_dogfood(results: list[dict]) -> None:
     dogfood_results = find_commands(results, tier="dogfood")
     ds = dogfood_summary(dogfood_results)
     if ds is not None:
@@ -245,35 +246,51 @@ def main() -> int:
             print(f"  speedup:  {ds['speedup']:.2f}x")
         print()
 
-    # Regression check against baseline
-    baseline_path = Path("benchmarks/baseline.json")
-    if baseline_path.exists():
-        baseline = load_results(str(baseline_path))
-        print("REGRESSION CHECK")
-        for tier in tiers:
-            tier_results = find_commands(results, tier=tier)
-            base_results = find_commands(baseline, tier=tier)
-            if not tier_results or not base_results:
-                continue
-            ox_current = find_command_mean(
-                tier_results, "oxitest --serial"
-            ) or find_command_mean(tier_results, "oxitest")
-            ox_baseline = find_command_mean(
-                base_results, "oxitest --serial"
-            ) or find_command_mean(base_results, "oxitest")
-            if ox_current and ox_baseline:
-                is_reg, pct = check_regression(
-                    ox_current, ox_baseline, REGRESSION_THRESHOLD
-                )
-                marker = "REGRESSION" if is_reg else "ok"
-                print(
-                    f"  {tier}: {ox_current * 1000:.0f}ms"
-                    f" (baseline: {ox_baseline * 1000:.0f}ms) {pct:+.1%} {marker}"
-                )
-                if is_reg:
-                    has_regression = True
-        print()
 
+def _check_regressions(results: list[dict]) -> bool:
+    baseline_path = Path("benchmarks/baseline.json")
+    if not baseline_path.exists():
+        return False
+    baseline = load_results(str(baseline_path))
+    tiers = ["below_threshold", "s", "m", "l"]
+    has_regression = False
+    print("REGRESSION CHECK")
+    for tier in tiers:
+        tier_results = find_commands(results, tier=tier)
+        base_results = find_commands(baseline, tier=tier)
+        if not tier_results or not base_results:
+            continue
+        ox_current = find_command_mean(
+            tier_results, "oxitest --serial"
+        ) or find_command_mean(tier_results, "oxitest")
+        ox_baseline = find_command_mean(
+            base_results, "oxitest --serial"
+        ) or find_command_mean(base_results, "oxitest")
+        if ox_current and ox_baseline:
+            is_reg, pct = check_regression(
+                ox_current, ox_baseline, REGRESSION_THRESHOLD
+            )
+            marker = "REGRESSION" if is_reg else "ok"
+            print(
+                f"  {tier}: {ox_current * 1000:.0f}ms"
+                f" (baseline: {ox_baseline * 1000:.0f}ms) {pct:+.1%} {marker}"
+            )
+            if is_reg:
+                has_regression = True
+    print()
+    return has_regression
+
+
+def main() -> int:
+    results = load_results("benchmarks/results.json")
+    _print_startup(results)
+    has_regression = _print_tiers(results)
+    if _print_lazy(results):
+        has_regression = True
+    _print_realistic(results)
+    _print_dogfood(results)
+    if _check_regressions(results):
+        has_regression = True
     if has_regression:
         print("Regression detected.")
         return 1
