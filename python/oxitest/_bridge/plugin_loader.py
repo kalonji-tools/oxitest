@@ -315,6 +315,92 @@ class PluginRegistry:
             raise ConflictingCoverageError(providers)
 
 
+def _load_single_plugin(
+    module_name: str,
+    plugin_configs: dict[str, dict[str, object]],
+    registry: PluginRegistry,
+) -> None:
+    """Load and register a single plugin module into the registry.
+
+    Raises:
+        PluginLoadError: If the plugin cannot be loaded or is invalid.
+    """
+    # Check if this plugin declares only lazy protocols and can be deferred.
+    mod_settings = plugin_configs.get(module_name, {})
+    _raw_protocols = mod_settings.get("protocols")
+    declared_protocols: list[str] | None = (
+        _coerce_str_list(_raw_protocols) if _raw_protocols is not None else None
+    )
+
+    if declared_protocols and not PluginEntry.needs_eager_import(declared_protocols):
+        entry = PluginEntry.deferred(module_name, list(declared_protocols))
+        registry.register_deferred(entry)
+        return
+
+    # Import the module
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as e:
+        raise PluginLoadError(
+            f'plugin "{module_name}" not found. Is it installed?\n  {e}'
+        ) from e
+
+    # Find the entry point function
+    entry_fn = getattr(module, "oxitest_plugin", None)
+    if entry_fn is None:
+        raise PluginLoadError(
+            f'plugin "{module_name}" has no oxitest_plugin() function'
+        )
+    if not callable(entry_fn):
+        raise PluginLoadError(f'plugin "{module_name}" oxitest_plugin is not callable')
+
+    # Discover CLI extension if present
+    cli_ext = getattr(module, "oxitest_cli_extension", None)
+    if cli_ext is not None:
+        if not isinstance(cli_ext, CliExtension):
+            raise PluginLoadError(
+                f'plugin "{module_name}" oxitest_cli_extension must be '
+                f"CliExtension, got {type(cli_ext).__name__}"
+            )
+        settings = plugin_configs.get(module_name, {})
+        prefix: str = (
+            str(settings.get("cli_prefix", cli_ext.prefix))
+            if isinstance(settings, dict)
+            else cli_ext.prefix
+        )
+        try:
+            descriptors = introspect_config(cli_ext.config_type)
+        except IntrospectionError as e:
+            raise PluginLoadError(
+                f'plugin "{module_name}" config dataclass error: {e}'
+            ) from e
+        overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
+        registry.cli_extensions[module_name] = (overridden_ext, descriptors)
+        # Phase 1 complete — defer activation to activate_plugin()
+        registry.entries.append(
+            PluginEntry(module_name=module_name, plugin=None, is_loaded=False)
+        )
+        return
+
+    # Call the entry point with config
+    config = plugin_configs.get(module_name)
+    try:
+        result = entry_fn(config=config)
+    except Exception as e:
+        raise PluginLoadError(
+            f'plugin "{module_name}" oxitest_plugin() raised: {e}'
+        ) from e
+
+    # Validate return type
+    if not isinstance(result, Plugin):
+        raise PluginLoadError(
+            f'plugin "{module_name}" oxitest_plugin() must return '
+            f"oxitest.Plugin, got {type(result).__name__}"
+        )
+
+    registry.entries.append(PluginEntry(module_name=module_name, plugin=result))
+
+
 def load_plugins(
     plugin_modules: Sequence[str],
     plugin_configs: dict[str, dict[str, object]],
@@ -334,88 +420,7 @@ def load_plugins(
         PluginLoadError: If any plugin cannot be loaded or is invalid.
     """
     registry = PluginRegistry()
-
     for module_name in plugin_modules:
-        # Check if this plugin declares only lazy protocols and can be deferred.
-        mod_settings = plugin_configs.get(module_name, {})
-        _raw_protocols = mod_settings.get("protocols")
-        declared_protocols: list[str] | None = (
-            _coerce_str_list(_raw_protocols) if _raw_protocols is not None else None
-        )
-
-        if declared_protocols and not PluginEntry.needs_eager_import(
-            declared_protocols
-        ):
-            entry = PluginEntry.deferred(module_name, list(declared_protocols))
-            registry.register_deferred(entry)
-            continue
-
-        # Import the module
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError as e:
-            raise PluginLoadError(
-                f'plugin "{module_name}" not found. Is it installed?\n  {e}'
-            ) from e
-
-        # Find the entry point function
-        entry_fn = getattr(module, "oxitest_plugin", None)
-        if entry_fn is None:
-            raise PluginLoadError(
-                f'plugin "{module_name}" has no oxitest_plugin() function'
-            )
-        if not callable(entry_fn):
-            raise PluginLoadError(
-                f'plugin "{module_name}" oxitest_plugin is not callable'
-            )
-
-        # Discover CLI extension if present
-        cli_ext = getattr(module, "oxitest_cli_extension", None)
-        if cli_ext is not None:
-            if not isinstance(cli_ext, CliExtension):
-                raise PluginLoadError(
-                    f'plugin "{module_name}" oxitest_cli_extension must be '
-                    f"CliExtension, got {type(cli_ext).__name__}"
-                )
-            settings = plugin_configs.get(module_name, {})
-            prefix: str = (
-                str(settings.get("cli_prefix", cli_ext.prefix))
-                if isinstance(settings, dict)
-                else cli_ext.prefix
-            )
-            try:
-                descriptors = introspect_config(cli_ext.config_type)
-            except IntrospectionError as e:
-                raise PluginLoadError(
-                    f'plugin "{module_name}" config dataclass error: {e}'
-                ) from e
-            overridden_ext = CliExtension(
-                prefix=prefix, config_type=cli_ext.config_type
-            )
-            registry.cli_extensions[module_name] = (overridden_ext, descriptors)
-            # Phase 1 complete — defer activation to activate_plugin()
-            registry.entries.append(
-                PluginEntry(module_name=module_name, plugin=None, is_loaded=False)
-            )
-            continue
-
-        # Call the entry point with config
-        config = plugin_configs.get(module_name)
-        try:
-            result = entry_fn(config=config)
-        except Exception as e:
-            raise PluginLoadError(
-                f'plugin "{module_name}" oxitest_plugin() raised: {e}'
-            ) from e
-
-        # Validate return type
-        if not isinstance(result, Plugin):
-            raise PluginLoadError(
-                f'plugin "{module_name}" oxitest_plugin() must return '
-                f"oxitest.Plugin, got {type(result).__name__}"
-            )
-
-        registry.entries.append(PluginEntry(module_name=module_name, plugin=result))
-
+        _load_single_plugin(module_name, plugin_configs, registry)
     registry.validate()
     return registry
