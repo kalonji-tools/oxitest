@@ -26,9 +26,12 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
+from oxitest._bridge._debugger import _PdbBackend
+
+if TYPE_CHECKING:
+    from oxitest._bridge._debugger import DebuggerBackend
 from oxitest._bridge._doctest_runner import run_doctest
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_context import (
