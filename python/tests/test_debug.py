@@ -136,7 +136,8 @@ def test_recording_debugger_records_post_mortem():
     """RecordingDebugger should record traceback objects."""
     rec = helpers.common.RecordingDebugger()
     try:
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
     except ValueError:
         import sys
 
@@ -153,7 +154,8 @@ def test_recording_debugger_records_post_mortem():
 
 def _make_failing_fn():
     def failing():
-        raise AssertionError("boom")
+        msg = "boom"
+        raise AssertionError(msg)
 
     return failing
 
@@ -225,7 +227,8 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
         pass
 
     def skip_test():
-        raise Skipped("not today")
+        msg = "not today"
+        raise Skipped(msg)
 
     _run_base(
         skip_test,
@@ -285,7 +288,8 @@ def test_debug_post_mortem_permanently_suspends_capture():
     rec = helpers.common.RecordingDebugger()
 
     try:
-        raise AssertionError("test failure")
+        msg = "test failure"
+        raise AssertionError(msg)
     except AssertionError as exc:
         _debug_post_mortem(
             {"cap": cap}, "t.py::test_fail", exc, rec, file=io.StringIO()
@@ -302,7 +306,8 @@ def test_debug_post_mortem_no_capture_kwargs():
     """_debug_post_mortem should work when no capture fixtures in kwargs."""
     rec = helpers.common.RecordingDebugger()
     try:
-        raise ValueError("oops")
+        msg = "oops"
+        raise ValueError(msg)
     except ValueError as exc:
         _debug_post_mortem({}, "t.py::test_err", exc, rec, file=io.StringIO())
     assert len(rec.post_mortem_tracebacks) == 1, "post_mortem should be called once"

@@ -52,7 +52,8 @@ def _rust_struct_fields(source: str, struct_name: str) -> frozenset[str]:
     pattern = rf"struct\s+{re.escape(struct_name)}\s*\{{([^}}]*)}}"
     match = re.search(pattern, source, re.DOTALL)
     if not match:
-        raise AssertionError(f"struct {struct_name!r} not found in Rust source")
+        msg = f"struct {struct_name!r} not found in Rust source"
+        raise AssertionError(msg)
     body = match.group(1)
     return frozenset(re.findall(r"^\s+(?:pub\s+)?(\w+)\s*:", body, re.MULTILINE))
 

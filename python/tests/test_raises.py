@@ -8,7 +8,8 @@ from oxitest import raises
 
 def test_raises_catches_expected_exception():
     with raises(ValueError):
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
 
 
 def test_raises_no_exception_raises_assertion_error():
@@ -18,23 +19,27 @@ def test_raises_no_exception_raises_assertion_error():
 
 def test_raises_wrong_type_reraises():
     with raises(TypeError), raises(ValueError):
-        raise TypeError("wrong type")
+        msg = "wrong type"
+        raise TypeError(msg)
 
 
 def test_raises_match_passes_when_pattern_found():
     with raises(ValueError, match="boom"):
-        raise ValueError("oh boom, something broke")
+        msg = "oh boom, something broke"
+        raise ValueError(msg)
 
 
 def test_raises_match_fails_when_pattern_not_found():
     with raises(AssertionError, match="not found"):
         with raises(ValueError, match="boom"):
-            raise ValueError("nothing matches here")
+            msg = "nothing matches here"
+            raise ValueError(msg)
 
 
 def test_raises_exc_info_value_holds_exception():
     with raises(ValueError) as exc_info:
-        raise ValueError("stored")
+        msg = "stored"
+        raise ValueError(msg)
     assert isinstance(exc_info.value, ValueError), (
         f"exc_info.value should be ValueError, got {type(exc_info.value).__name__}"
     )
@@ -46,13 +51,15 @@ def test_raises_exc_info_value_holds_exception():
 def test_raises_match_uses_regex_search_not_full_match():
     # "boom" must match anywhere in the string, not require a full match
     with raises(ValueError, match="boom"):
-        raise ValueError("oh boom!")
+        msg = "oh boom!"
+        raise ValueError(msg)
 
 
 def test_raises_subclass_caught_by_parent_type():
     # ValueError is a subclass of Exception — parent type must catch it
     with raises(Exception):
-        raise ValueError("subclass")
+        msg = "subclass"
+        raise ValueError(msg)
 
 
 def test_raises_exported_from_oxitest():
@@ -75,12 +82,14 @@ class TupleCatchCase:
 )
 def test_raises_tuple_catches_matching_type(exc_class):
     with raises((ValueError, TypeError)):
-        raise exc_class("msg")
+        msg = "msg"
+        raise exc_class(msg)
 
 
 def test_raises_tuple_wrong_type_reraises():
     with raises(KeyError), raises((ValueError, TypeError)):
-        raise KeyError("neither")
+        msg = "neither"
+        raise KeyError(msg)
 
 
 def test_raises_tuple_no_exception_names_all_types():

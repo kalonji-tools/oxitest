@@ -25,7 +25,8 @@ def test_asyncio_backend_propagates_exception():
     backend = AsyncioBackend()
 
     async def coro():
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
 
     with raises(ValueError, match="boom"):
         backend.run(coro())

@@ -27,7 +27,8 @@ def test_fixture_scope_resets_on_exception():
     teardowns: list[Callable[[], None]] = []
     try:
         with _fixture_scope(object(), "/test.py", teardowns):
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
     except RuntimeError:
         pass
     assert _fixture_context.get(None) is None, "context should be reset after exception"

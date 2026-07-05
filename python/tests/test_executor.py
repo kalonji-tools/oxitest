@@ -322,7 +322,8 @@ def test_run_test_with_fixture_injected(tmp: TempDir):
 
 def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
     def bad_factory():
-        raise RuntimeError("db is down")
+        msg = "db is down"
+        raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("bad", bad_factory)
     result = helpers.common.exec_inline(
@@ -396,7 +397,8 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
     def factory():
         yield 42
         torn_down.append("ran")
-        raise RuntimeError("teardown exploded")
+        msg = "teardown exploded"
+        raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("val", factory)
     result = helpers.common.exec_inline(
@@ -428,7 +430,8 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
     def factory_a():
         yield 1
         log.append("a_teardown")
-        raise RuntimeError("a teardown exploded")
+        msg = "a teardown exploded"
+        raise RuntimeError(msg)
 
     def factory_b():
         yield 2
@@ -470,12 +473,14 @@ def test_multiple_teardown_failures_all_reported(
     def factory_a():
         yield 1
         log.append("a_teardown")
-        raise RuntimeError("a exploded")
+        msg = "a exploded"
+        raise RuntimeError(msg)
 
     def factory_b():
         yield 2
         log.append("b_teardown")
-        raise ValueError("b exploded")
+        msg = "b exploded"
+        raise ValueError(msg)
 
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
@@ -799,7 +804,8 @@ def test_async_test_with_sync_fixture(tmp: TempDir):
 
 def test_async_fixture_setup_error(tmp: TempDir):
     async def bad_factory():
-        raise RuntimeError("db is down")
+        msg = "db is down"
+        raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("bad", bad_factory)
     result = helpers.common.exec_inline(
@@ -979,7 +985,8 @@ def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCaptur
 
     async def async_yield_factory():
         yield 42
-        raise RuntimeError("teardown exploded")
+        msg = "teardown exploded"
+        raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("val", async_yield_factory)
     result = helpers.common.exec_inline(
@@ -1003,7 +1010,8 @@ def test_async_yield_fixture_setup_error(tmp: TempDir):
     """Error during async yield fixture setup should produce error result."""
 
     async def bad_factory():
-        raise RuntimeError("setup failed")
+        msg = "setup failed"
+        raise RuntimeError(msg)
         yield
 
     session = helpers.common.make_session_with("bad", bad_factory)

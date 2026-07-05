@@ -14,7 +14,8 @@ def _exhaust_coro(coro):
         coro.send(None)
     except StopIteration as e:
         return e.value
-    raise RuntimeError("coroutine did not complete in one step")
+    msg = "coroutine did not complete in one step"
+    raise RuntimeError(msg)
 
 
 class _StubSession:

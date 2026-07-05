@@ -23,7 +23,8 @@ def test_unpack_sync_generator():
 def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture):
     def gen():
         yield "val"
-        raise RuntimeError("teardown boom")
+        msg = "teardown boom"
+        raise RuntimeError(msg)
 
     outcome = _unpack_sync(gen(), "exploding")
     assert outcome.value == "val", f"expected 'val', got {outcome.value!r}"
