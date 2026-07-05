@@ -40,11 +40,7 @@ ignore = [
     "TC003",          # same: stdlib types used in annotations resolved by get_type_hints()
 
     # ── Not yet addressed (TODO: fix incrementally) ──────────────────────
-    "ANN001",         # missing type annotation for function argument
-    "ANN002",         # missing type annotation for *args
-    "ANN201",         # missing return type annotation for public function
-    "ANN202",         # missing return type annotation for private function
-    "ANN401",         # dynamically typed expressions (Any) disallowed
+    "ANN401",         # dynamically typed expressions (Any) — legitimately Any in fixture/plugin system
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -73,6 +69,10 @@ ignore = [
     "ARG002",   # unused method args in protocol test doubles (structural conformance)
     "SLF001",   # tests legitimately inspect private state to verify internals
     "S101",     # assert is the primary assertion mechanism in tests
+    "ANN001",   # test functions/helpers often omit arg annotations
+    "ANN002",   # test *args often untyped
+    "ANN201",   # test functions return None implicitly
+    "ANN202",   # test helpers return None implicitly
 ]
 "python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201", "D"]

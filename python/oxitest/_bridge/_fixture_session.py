@@ -9,7 +9,7 @@ __all__ = [
 import asyncio
 import inspect
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
@@ -168,7 +168,7 @@ class _TrackedTaskGroup:
         return await self._tg.__aexit__(*args)
 
 
-async def _task_group_factory():  # type: ignore[return-value]
+async def _task_group_factory() -> AsyncGenerator[_TrackedTaskGroup, None]:
     """Built-in async yield fixture providing a managed asyncio.TaskGroup.
 
     Tracks all tasks created via ``task_group.create_task()`` and cancels any
