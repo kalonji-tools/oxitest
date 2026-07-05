@@ -17,15 +17,17 @@ import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import FixtureTeardownWarning
-from oxitest._bridge._mark_api import MarkInfo
-from oxitest._bridge._mark_registry import MarkWrapper
 from oxitest._bridge._runners import run_base_async
+
+if TYPE_CHECKING:
+    from oxitest._bridge._mark_api import MarkInfo
+    from oxitest._bridge._mark_registry import MarkWrapper
 from oxitest._bridge._timeout import (
     OxitestTimeoutError,
     extract_timeout_seconds,

@@ -29,10 +29,11 @@ from oxitest._bridge._diagnostics import (
     is_debuggable,
 )
 from oxitest._bridge._timeout import OxitestTimeoutError
-from oxitest._bridge.result import PassedResult, TestResult, WarnedResult
+from oxitest._bridge.result import PassedResult, WarnedResult
 
 if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
+    from oxitest._bridge.result import TestResult
 
 
 @dataclass(frozen=True, slots=True)

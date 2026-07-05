@@ -4,16 +4,16 @@ from __future__ import annotations
 
 __all__ = ["FixtureValidator"]
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._fixture_registry import (
-    FixtureRegistry,
-    _fixture_inner_type,
-)
-from oxitest._bridge._loader import ModuleCache
-from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge._fixture_registry import _fixture_inner_type
+
+if TYPE_CHECKING:
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge._loader import ModuleCache
+    from oxitest._bridge.plugin_loader import PluginRegistry
 
 
 def _parse_node_id(node_id: str) -> tuple[str, str] | None:

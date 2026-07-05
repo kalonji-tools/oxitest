@@ -17,9 +17,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+
+if TYPE_CHECKING:
+    from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._fixture_type import injectable
 
 

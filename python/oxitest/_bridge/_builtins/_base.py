@@ -2,9 +2,10 @@ from __future__ import annotations
 
 __all__ = ["BuiltinFixture"]
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from oxitest._bridge._builtin_context import _BuiltinContext
+if TYPE_CHECKING:
+    from oxitest._bridge._builtin_context import _BuiltinContext
 
 
 class BuiltinFixture:
