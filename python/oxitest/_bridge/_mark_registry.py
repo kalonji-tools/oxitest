@@ -12,12 +12,12 @@ __all__ = [
     "ExecutionWrapper",
     "MarkHandler",
     "MarkWrapper",
-    "_HandlerContext",
     "_PluginMarkHandler",
     "evaluate_marks",
 ]
 
 import dataclasses
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
@@ -52,47 +52,19 @@ class MarkEvalResult:
     wrapper: MarkWrapper | None = None
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class _HandlerContext:
-    """Context bundle passed to each mark handler.
-
-    All mutable state (fn_teardowns, all_kwargs) is passed by reference;
-    handlers mutate in place for usefixtures injection.
-    """
-
-    fn_raw: object
-    fn: Callable[..., Any]
-    all_kwargs: dict[str, Any]
-    session: _SessionProtocol
-    module_path: str
-    fn_teardowns: list[Callable[[], None]]
-    default_timeout: int | None = None
-
-
-class MarkHandler:
+class MarkHandler(ABC):
     """Base class for mark handlers in the registry."""
 
     mark_name: str = ""  # subclasses must override
 
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
-        return MarkEvalResult()
-
-
-class _UsefixturesHandler(MarkHandler):
-    mark_name = "usefixtures"
-
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
-        """Resolve each named fixture for side effects, without injecting its value."""
-        # NOTE: name guard removed — registry dispatch already filtered by name
-        for fx_name in mark.args:
-            ctx.session.get_fixture(str(fx_name), ctx.module_path, ctx.fn_teardowns)
-        return MarkEvalResult()
+    @abstractmethod
+    def handle(self, mark: MarkInfo) -> MarkEvalResult: ...
 
 
 class _SkipHandler(MarkHandler):
     mark_name = "skip"
 
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkEvalResult:
         """Short-circuit test execution with a `skipped` result."""
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
         return MarkEvalResult(short_circuit=SkippedResult(message=str(reason)))
@@ -101,7 +73,7 @@ class _SkipHandler(MarkHandler):
 class _XFailHandler(MarkHandler):
     mark_name = "xfail"
 
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkEvalResult:
         """Wrap execution to convert failures to `xfailed` and passes to `xpassed`."""
         strict = mark.kwargs.get("strict", True)
         reason = mark.kwargs.get("reason", "")
@@ -132,7 +104,7 @@ class _XFailHandler(MarkHandler):
 class _TimeoutHandler(MarkHandler):
     mark_name = "timeout"
 
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkEvalResult:
         """Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded."""
         seconds = extract_timeout_seconds(mark.kwargs)
         return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
@@ -145,7 +117,7 @@ class _PluginMarkHandler(MarkHandler):
         self.mark_name = pw.marker
         self._pw = pw
 
-    def handle(self, mark: MarkInfo, ctx: _HandlerContext) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkEvalResult:
         args = {**dict(enumerate(mark.args)), **mark.kwargs}
         pw = self._pw
 
@@ -169,7 +141,6 @@ class _PluginMarkHandler(MarkHandler):
 _MARK_REGISTRY: dict[str, MarkHandler] = {
     h.mark_name: h
     for h in [
-        _UsefixturesHandler(),
         _SkipHandler(),
         _XFailHandler(),
         _TimeoutHandler(),
@@ -181,7 +152,9 @@ _BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
 
 def evaluate_marks(
     marks: list[MarkInfo],
-    ctx: _HandlerContext,
+    session: _SessionProtocol,
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
     plugin_handlers: list[MarkHandler] | None = None,
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Run marks through the handler registry.
@@ -196,10 +169,14 @@ def evaluate_marks(
         registry = {**_MARK_REGISTRY, **{h.mark_name: h for h in plugin_handlers}}
     wrappers: list[MarkWrapper] = []
     for mark in marks:
+        if mark.name == "usefixtures":
+            for fx_name in mark.args:
+                session.get_fixture(str(fx_name), module_path, fn_teardowns)
+            continue
         handler = registry.get(mark.name)
         if handler is None:
             continue
-        result = handler.handle(mark, ctx)
+        result = handler.handle(mark)
         if result.short_circuit is not None:
             return result.short_circuit, []
         if result.wrapper is not None:

@@ -12,10 +12,8 @@ from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
     MarkEvalResult,
     MarkHandler,
-    _HandlerContext,
     _PluginMarkHandler,
     _SkipHandler,
-    _UsefixturesHandler,
     _XFailHandler,
     evaluate_marks,
 )
@@ -381,27 +379,6 @@ def test_usefixtures_resolves_fixture(tmp: TempDir):
     )
 
 
-def _make_ctx(fn=None):
-    """Minimal _HandlerContext for mark tests."""
-    from oxitest._bridge._fixture_session import _NullFixtureSession
-    from oxitest._bridge._mark_registry import _HandlerContext
-
-    if fn is None:
-
-        def fn():
-            pass
-
-    return _HandlerContext(
-        fn_raw=fn,
-        fn=fn,
-        all_kwargs={},
-        session=_NullFixtureSession(),
-        module_path="test_fake.py",
-        fn_teardowns=[],
-        default_timeout=None,
-    )
-
-
 def test_mark_eval_result_defaults():
     r = MarkEvalResult()
     assert r.short_circuit is None, (
@@ -413,27 +390,18 @@ def test_mark_eval_result_defaults():
     )
 
 
-def test_handler_context_is_dataclass():
-    assert dataclasses.is_dataclass(_HandlerContext), (
-        "_HandlerContext should be a dataclass"
-    )
-
-
-def test_usefixtures_handler_always_returns_none():
-    ctx = _make_ctx()
-    result = _UsefixturesHandler().handle(
-        MarkInfo("usefixtures", (), MappingProxyType({})), ctx
-    )
-    assert result.short_circuit is None, (
-        "_UsefixturesHandler should never short-circuit"
-    )
-    assert result.wrapper is None, "_UsefixturesHandler should return no wrapper"
+def test_usefixtures_mark_resolves_via_evaluate_marks():
+    """usefixtures mark is handled inline in evaluate_marks, not via a handler."""
+    session = FixtureSession(FixtureRegistry())
+    marks = [MarkInfo("usefixtures", (), MappingProxyType({}))]
+    sc, wrappers = evaluate_marks(marks, session, "test_fake.py", [])
+    assert sc is None, "usefixtures should not short-circuit"
+    assert wrappers == [], "usefixtures should not produce wrappers"
 
 
 def test_skip_handler_returns_short_circuit():
-    ctx = _make_ctx()
     result = _SkipHandler().handle(
-        MarkInfo("skip", (), MappingProxyType({"reason": "not ready"})), ctx
+        MarkInfo("skip", (), MappingProxyType({"reason": "not ready"}))
     )
     assert result.short_circuit is not None, (
         "_SkipHandler should produce a short_circuit result"
@@ -463,18 +431,16 @@ def test_skip_when_false_not_in_marks():
 
 
 def test_xfail_handler_returns_wrapper():
-    ctx = _make_ctx()
     result = _XFailHandler().handle(
-        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})), ctx
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
     assert result.short_circuit is None, "_XFailHandler should not short-circuit"
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper function"
 
 
 def test_xfail_wrapper_converts_failed_to_xfailed():
-    ctx = _make_ctx()
     result = _XFailHandler().handle(
-        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})), ctx
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
@@ -485,9 +451,8 @@ def test_xfail_wrapper_converts_failed_to_xfailed():
 
 
 def test_xfail_wrapper_converts_passed_to_xpassed():
-    ctx = _make_ctx()
     result = _XFailHandler().handle(
-        MarkInfo("xfail", (), MappingProxyType({"reason": "known"})), ctx
+        MarkInfo("xfail", (), MappingProxyType({"reason": "known"}))
     )
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
@@ -498,8 +463,7 @@ def test_xfail_wrapper_converts_passed_to_xpassed():
 
 
 def test_xfail_wrapper_passes_through_skipped():
-    ctx = _make_ctx()
-    result = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})), ctx)
+    result = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})))
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
     skipped_result = SkippedResult(message="not my test")
@@ -511,7 +475,9 @@ def test_xfail_wrapper_passes_through_skipped():
 
 
 def test_evaluate_marks_returns_tuple():
-    sc, wrappers = evaluate_marks([], _make_ctx())
+    sc, wrappers = evaluate_marks(
+        [], FixtureSession(FixtureRegistry()), "test_fake.py", []
+    )
     assert sc is None, f"evaluate_marks with no marks should return sc=None, got {sc!r}"
     assert wrappers == [], (
         f"evaluate_marks with no marks should return empty wrappers, got {wrappers!r}"
@@ -520,7 +486,10 @@ def test_evaluate_marks_returns_tuple():
 
 def test_evaluate_marks_skip_returns_short_circuit():
     sc, wrappers = evaluate_marks(
-        [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))], _make_ctx()
+        [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))],
+        FixtureSession(FixtureRegistry()),
+        "test_fake.py",
+        [],
     )
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
@@ -536,7 +505,7 @@ def test_evaluate_marks_skip_returns_short_circuit():
 
 
 def test_all_builtin_handlers_registered():
-    expected = {"usefixtures", "skip", "xfail", "timeout"}
+    expected = {"skip", "xfail", "timeout"}
     assert set(_MARK_REGISTRY.keys()) == expected, (
         f"expected builtin mark handlers {expected}, got {set(_MARK_REGISTRY.keys())}"
     )
@@ -610,15 +579,7 @@ def test_plugin_mark_handler_wraps_correctly():
         f"expected mark_name='custom_mark', got {handler.mark_name!r}"
     )
     mark = MarkInfo("custom_mark", ("arg1",), MappingProxyType({"key": "val"}))
-    ctx = _HandlerContext(
-        fn_raw=lambda: None,
-        fn=lambda: None,
-        all_kwargs={},
-        session=FixtureSession(FixtureRegistry()),
-        module_path="/fake.py",
-        fn_teardowns=[],
-    )
-    result = handler.handle(mark, ctx)
+    result = handler.handle(mark)
     assert result.wrapper is not None, "handler should produce a wrapper"
     assert result.short_circuit is None, "handler should not short-circuit"
 
@@ -636,8 +597,9 @@ def test_marker_composition_skip_takes_precedence_over_others():
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})),
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5})),
     ]
-    ctx = _make_ctx()
-    sc, wrappers = evaluate_marks(marks, ctx)
+    sc, wrappers = evaluate_marks(
+        marks, FixtureSession(FixtureRegistry()), "test_fake.py", []
+    )
 
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
@@ -653,15 +615,13 @@ def test_evaluate_marks_dispatches_plugin_handlers():
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     marks = [MarkInfo("custom_mark", (), MappingProxyType({}))]
-    ctx = _HandlerContext(
-        fn_raw=lambda: None,
-        fn=lambda: None,
-        all_kwargs={},
-        session=FixtureSession(FixtureRegistry()),
-        module_path="/fake.py",
-        fn_teardowns=[],
+    short_circuit, wrappers = evaluate_marks(
+        marks,
+        FixtureSession(FixtureRegistry()),
+        "/fake.py",
+        [],
+        plugin_handlers=[handler],
     )
-    short_circuit, wrappers = evaluate_marks(marks, ctx, plugin_handlers=[handler])
     assert short_circuit is None, "should not short-circuit"
     assert len(wrappers) == 1, (
         f"expected 1 wrapper from plugin handler, got {len(wrappers)}"

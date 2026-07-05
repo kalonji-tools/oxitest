@@ -19,11 +19,13 @@ def test_python_markers_are_subset_of_rust() -> None:
 def test_no_unexpected_rust_only_markers() -> None:
     """Document which Rust markers have no Python handler.
 
-    Currently only 'inprocess' is Rust-only.
+    'inprocess' is Rust-only (no-op sentinel).
+    'usefixtures' is handled inline in evaluate_marks, not via a registry handler.
     """
     rust_markers = set(builtin_markers())
     python_markers = _BUILTIN_HANDLER_NAMES
     rust_only = rust_markers - python_markers
-    assert rust_only == {"inprocess"}, (
-        f"Unexpected Rust-only markers: {rust_only - {'inprocess'}}"
+    expected_rust_only = {"inprocess", "usefixtures"}
+    assert rust_only == expected_rust_only, (
+        f"Unexpected Rust-only markers: {rust_only - expected_rust_only}"
     )

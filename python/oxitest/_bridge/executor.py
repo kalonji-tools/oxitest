@@ -49,7 +49,6 @@ from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import (
     MarkHandler,
     MarkWrapper,
-    _HandlerContext,
     _PluginMarkHandler,
     evaluate_marks,
 )
@@ -246,16 +245,13 @@ def _evaluate_marks_phase(
             _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
         ]
 
-    ctx = _HandlerContext(
-        fn_raw=resolved.fn_raw,
-        fn=resolved.fn,
-        all_kwargs=resolved.all_kwargs,
-        session=session,
-        module_path=module_path,
-        fn_teardowns=resolved.fn_teardowns,
-        default_timeout=default_timeout,
+    return evaluate_marks(
+        marks,
+        session,
+        module_path,
+        resolved.fn_teardowns,
+        plugin_handlers=_plugin_handlers or None,
     )
-    return evaluate_marks(marks, ctx, plugin_handlers=_plugin_handlers or None)
 
 
 def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None:
