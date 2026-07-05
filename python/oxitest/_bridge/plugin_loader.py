@@ -232,9 +232,8 @@ class PluginRegistry:
         mod = importlib.import_module(module_name)
         entry_fn = getattr(mod, "oxitest_plugin", None)
         if entry_fn is None:
-            raise PluginLoadError(
-                f"plugin '{module_name}' has no oxitest_plugin() function"
-            )
+            msg = f"plugin '{module_name}' has no oxitest_plugin() function"
+            raise PluginLoadError(msg)
 
         if module_name in self.cli_extensions:
             ext, descriptors = self.cli_extensions[module_name]
@@ -336,27 +335,27 @@ def _load_single_plugin(
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
-        raise PluginLoadError(
-            f'plugin "{module_name}" not found. Is it installed?\n  {e}'
-        ) from e
+        msg = f'plugin "{module_name}" not found. Is it installed?\n  {e}'
+        raise PluginLoadError(msg) from e
 
     # Find the entry point function
     entry_fn = getattr(module, "oxitest_plugin", None)
     if entry_fn is None:
-        raise PluginLoadError(
-            f'plugin "{module_name}" has no oxitest_plugin() function'
-        )
+        msg = f'plugin "{module_name}" has no oxitest_plugin() function'
+        raise PluginLoadError(msg)
     if not callable(entry_fn):
-        raise PluginLoadError(f'plugin "{module_name}" oxitest_plugin is not callable')
+        msg = f'plugin "{module_name}" oxitest_plugin is not callable'
+        raise PluginLoadError(msg)
 
     # Discover CLI extension if present
     cli_ext = getattr(module, "oxitest_cli_extension", None)
     if cli_ext is not None:
         if not isinstance(cli_ext, CliExtension):
-            raise PluginLoadError(
+            msg = (
                 f'plugin "{module_name}" oxitest_cli_extension must be '
                 f"CliExtension, got {type(cli_ext).__name__}"
             )
+            raise PluginLoadError(msg)
         settings = plugin_configs.get(module_name, {})
         prefix: str = (
             str(settings.get("cli_prefix", cli_ext.prefix))
@@ -366,9 +365,8 @@ def _load_single_plugin(
         try:
             descriptors = introspect_config(cli_ext.config_type)
         except IntrospectionError as e:
-            raise PluginLoadError(
-                f'plugin "{module_name}" config dataclass error: {e}'
-            ) from e
+            msg = f'plugin "{module_name}" config dataclass error: {e}'
+            raise PluginLoadError(msg) from e
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
         registry.cli_extensions[module_name] = (overridden_ext, descriptors)
         # Phase 1 complete — defer activation to activate_plugin()
@@ -382,16 +380,16 @@ def _load_single_plugin(
     try:
         result = entry_fn(config=config)
     except Exception as e:
-        raise PluginLoadError(
-            f'plugin "{module_name}" oxitest_plugin() raised: {e}'
-        ) from e
+        msg = f'plugin "{module_name}" oxitest_plugin() raised: {e}'
+        raise PluginLoadError(msg) from e
 
     # Validate return type
     if not isinstance(result, Plugin):
-        raise PluginLoadError(
+        msg = (
             f'plugin "{module_name}" oxitest_plugin() must return '
             f"oxitest.Plugin, got {type(result).__name__}"
         )
+        raise PluginLoadError(msg)
 
     registry.entries.append(PluginEntry(module_name=module_name, plugin=result))
 

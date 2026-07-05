@@ -32,13 +32,15 @@ def warns(category: type[Warning], *, match: str | None = None):
         yield
     matching = [w for w in caught if issubclass(w.category, category)]
     if not matching:
-        raise AssertionError(f"No warning of type {category.__name__!r} was raised")
+        msg = f"No warning of type {category.__name__!r} was raised"
+        raise AssertionError(msg)
     if match is not None:
         pattern_matches = [w for w in matching if re.search(match, str(w.message))]
         if not pattern_matches:
             messages = [str(w.message) for w in matching]
-            raise AssertionError(
+            msg = (
                 f"Pattern {match!r} not found in any "
                 f"{category.__name__!r} warning messages. "
                 f"Got: {messages!r}"
             )
+            raise AssertionError(msg)

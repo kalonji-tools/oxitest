@@ -62,7 +62,8 @@ class IntrospectionError(Exception):
 def introspect_config(config_type: type) -> list[FieldDescriptor]:
     """Extract field descriptors from a frozen config dataclass."""
     if not dataclasses.is_dataclass(config_type):
-        raise IntrospectionError(f"{config_type.__name__} is not a dataclass")
+        msg = f"{config_type.__name__} is not a dataclass"
+        raise IntrospectionError(msg)
 
     hints = get_type_hints(config_type, include_extras=True)
     descriptors: list[FieldDescriptor] = []
@@ -132,10 +133,11 @@ def merge_config(
             if desc.optional:
                 value = None
             else:
-                raise ValueError(
+                msg = (
                     f"config field '{desc.name}' is required but no value provided "
                     f"(no default, not in pyproject, not on CLI)"
                 )
+                raise ValueError(msg)
 
         merged[desc.name] = value
 
@@ -145,18 +147,18 @@ def merge_config(
 def _extract_source(field_name: str, hint: Any) -> SourceMarker:
     """Pull the Cli/Conf/Both annotation from an Annotated type."""
     if get_origin(hint) is not Annotated:
-        raise IntrospectionError(
+        msg = (
             f"field '{field_name}' has no source annotation. "
             f"Every field must be annotated with Cli, Conf, or Both."
         )
+        raise IntrospectionError(msg)
 
     for arg in get_args(hint):
         if isinstance(arg, (Cli, Conf, Both)):
             return arg
 
-    raise IntrospectionError(
-        f"field '{field_name}' is Annotated but has no Cli/Conf/Both marker."
-    )
+    msg = f"field '{field_name}' is Annotated but has no Cli/Conf/Both marker."
+    raise IntrospectionError(msg)
 
 
 def _unwrap_type(hint: Any) -> tuple[type, bool]:

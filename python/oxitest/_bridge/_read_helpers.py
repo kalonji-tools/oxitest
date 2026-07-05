@@ -27,9 +27,8 @@ class _HelperNamespaceProxy:
         defn = self._registry.get_in_namespace(name, self._namespace)
         if defn is not None:
             return defn.func
-        raise AttributeError(
-            f"helper namespace '{self._namespace}' has no helper '{name}'"
-        )
+        msg = f"helper namespace '{self._namespace}' has no helper '{name}'"
+        raise AttributeError(msg)
 
 
 class _HelpersProxy:
@@ -42,13 +41,15 @@ class _HelpersProxy:
             raise AttributeError(name)
         registry = _helpers_registry_var.get()
         if registry is None:
-            raise AttributeError(
+            msg = (
                 f"helpers are only available during a test session — "
                 f"cannot access helpers.{name} outside of a test run"
             )
+            raise AttributeError(msg)
         if not registry.has_namespace(name):
-            raise AttributeError(
+            msg = (
                 f"no helper namespace '{name}' — did you define a "
                 f"Helpers() instance named '{name}' in conftest.py?"
             )
+            raise AttributeError(msg)
         return _HelperNamespaceProxy(name, registry)

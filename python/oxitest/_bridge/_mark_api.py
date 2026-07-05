@@ -94,10 +94,11 @@ class _TimeoutMark:
         if seconds is None:
             seconds = kwargs.get("seconds")
         if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds <= 0:
-            raise ValueError(
+            msg = (
                 "@oxitest.mark.timeout requires an integer"
                 f" seconds > 0, got {seconds!r}"
             )
+            raise ValueError(msg)
         info = MarkInfo("timeout", (), MappingProxyType({"seconds": seconds}))
 
         def decorator(f: _F) -> _F:

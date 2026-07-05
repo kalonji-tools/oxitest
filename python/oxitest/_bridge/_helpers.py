@@ -83,7 +83,8 @@ class Helpers:
         if defn is not None:
             return defn.func
         available = [d.name for d in self._defs]
-        raise AttributeError(
+        msg = (
             f"'{type(self).__name__}' has no registered helper '{name}'. "
             f"Available: {available}"
         )
+        raise AttributeError(msg)

@@ -52,11 +52,12 @@ def _extract_fixture_type(func: Callable[..., Any]) -> type:
     hints = get_type_hints(func)
     ret = hints.get("return")
     if ret is None:
-        raise ValueError(
+        msg = (
             f"fixture '{getattr(func, '__name__', repr(func))}' has no return type "
             f"annotation. All fixtures must declare their return type for "
             f"type-based resolution."
         )
+        raise ValueError(msg)
     # Yields[T] resolves to Generator[T, None, None] via get_type_hints.
     # Unwrap to the yielded type T (first type argument).
     origin = getattr(ret, "__origin__", None)
@@ -129,10 +130,11 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
         namespace_name = obj.namespace_name or attr_name
         validate_namespace_name(namespace_name, path)
         if namespace_name == "oxi":
-            raise ValueError(
+            msg = (
                 f"'oxi' is a reserved namespace name in oxitest. "
                 f"Rename your Fixtures() instance in {path}."
             )
+            raise ValueError(msg)
         obj.namespace_name = namespace_name
         for defn in obj.defs:
             try:
@@ -160,10 +162,11 @@ def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
         namespace_name = obj.namespace_name or attr_name
         validate_namespace_name(namespace_name, path)
         if namespace_name == "oxi":
-            raise ValueError(
+            msg = (
                 f"'oxi' is a reserved namespace name in oxitest. "
                 f"Rename your Helpers() instance in {path}."
             )
+            raise ValueError(msg)
         obj.namespace_name = namespace_name
         for defn in obj.defs:
             stamped = dataclasses.replace(

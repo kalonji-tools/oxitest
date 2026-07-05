@@ -256,33 +256,37 @@ class MiddlewareBuilder:
 
     def insert_after(self, target: type, new: type) -> None:
         if target is AsyncBridgeMiddleware:
-            raise ValueError(
+            msg = (
                 "Cannot insert after AsyncBridgeMiddleware"
                 " — it must remain last in the pipeline"
             )
+            raise ValueError(msg)
         idx = self._pipeline.index(target)
         self._pipeline.insert(idx + 1, new)
 
     def insert_before(self, target: type, new: type) -> None:
         if target is AsyncDepGuardMiddleware:
-            raise ValueError(
+            msg = (
                 "Cannot insert before AsyncDepGuardMiddleware"
                 " — it must remain first in the pipeline"
             )
+            raise ValueError(msg)
         idx = self._pipeline.index(target)
         self._pipeline.insert(idx, new)
 
     def remove(self, target: type) -> None:
         if target is AsyncBridgeMiddleware:
-            raise ValueError(
+            msg = (
                 "AsyncBridgeMiddleware cannot be removed"
                 " — it must remain last in the pipeline"
             )
+            raise ValueError(msg)
         if target is AsyncDepGuardMiddleware:
-            raise ValueError(
+            msg = (
                 "AsyncDepGuardMiddleware cannot be removed"
                 " — it must remain first in the pipeline"
             )
+            raise ValueError(msg)
         self._pipeline.remove(target)
 
     def build(
