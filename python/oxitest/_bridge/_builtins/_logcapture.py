@@ -44,6 +44,10 @@ class _CapturingHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         self._records.append(record)
 
+    @property
+    def records(self) -> list[logging.LogRecord]:
+        return self._records
+
 
 class StdlibLogBackend:
     """Captures records from Python's stdlib `logging` module.
@@ -75,7 +79,7 @@ class StdlibLogBackend:
 
     @property
     def records(self) -> list[logging.LogRecord]:
-        return list(self._handler._records)
+        return list(self._handler.records)
 
     def set_level(self, level: int, logger: str | None = None) -> None:
         """Set capture threshold on the named logger (None = root)."""
@@ -154,7 +158,7 @@ class LogCapture:
         finally:
             self.set_level(old_level, logger)
 
-    def _teardown(self) -> None:
+    def close(self) -> None:
         for b in reversed(self._backends):
             b.uninstall()
 
@@ -165,5 +169,5 @@ class _LogCaptureFixture(BuiltinFixture, fixture_type=LogCapture):
         if ctx.plugin_registry is not None:
             backends.extend(ctx.plugin_registry.log_backends)
         cap = LogCapture(backends)
-        ctx.teardown_stack.append(cap._teardown)
+        ctx.teardown_stack.append(cap.close)
         return cap

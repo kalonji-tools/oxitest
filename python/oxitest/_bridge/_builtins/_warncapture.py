@@ -45,12 +45,17 @@ class WarnCapture:
         """Clear all captured warnings, resetting `warn.list` to `[]`."""
         self.list.clear()
 
-    def _teardown(self) -> None:
+    @property
+    def captured_ids(self) -> set[int]:
+        """Return IDs of all captured warning messages."""
+        return self._all_captured_ids
+
+    def close(self) -> None:
         setattr(warnings, "_showwarnmsg", self._orig_showwarnmsg)  # noqa: B010 — private CPython API
 
 
 class _WarnCaptureFixture(BuiltinFixture, fixture_type=WarnCapture):
     def create(self, ctx: _BuiltinContext) -> WarnCapture:
         cap = WarnCapture()
-        ctx.teardown_stack.append(cap._teardown)
+        ctx.teardown_stack.append(cap.close)
         return cap

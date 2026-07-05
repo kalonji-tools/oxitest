@@ -232,7 +232,7 @@ def check_warnings(
     warn_capture = next(
         (v for v in all_kwargs.values() if isinstance(v, WarnCapture)), None
     )
-    captured_ids = warn_capture._all_captured_ids if warn_capture else set()
+    captured_ids = warn_capture.captured_ids if warn_capture else set()
     relevant = "\n".join(
         f"{wi.category.__name__}: {wi.message}"
         for wi in caught

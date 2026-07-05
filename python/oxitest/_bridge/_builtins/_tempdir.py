@@ -90,7 +90,7 @@ class TempDirFactory:
     """
 
     def __init__(self) -> None:
-        self._dirs: list[Path] = []
+        self.dirs: list[Path] = []
 
     def mktemp(self, label: str) -> TempDir:
         """Create a new temp directory and return it as a TempDir.
@@ -103,13 +103,13 @@ class TempDirFactory:
             A new `TempDir` pointing at the created directory.
         """
         d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
-        self._dirs.append(d)
+        self.dirs.append(d)
         return TempDir(d)
 
-    def _cleanup(self) -> None:
-        for d in self._dirs:
+    def close(self) -> None:
+        for d in self.dirs:
             shutil.rmtree(d, ignore_errors=True)
-        self._dirs.clear()
+        self.dirs.clear()
 
 
 class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
@@ -140,12 +140,12 @@ class _TempDirFactoryFixture(BuiltinFixture, fixture_type=TempDirFactory):
     def create(self, ctx: _BuiltinContext) -> TempDirFactory:
         factory = TempDirFactory()
         if ctx.keep_tmp is None:
-            ctx.teardown_stack.append(factory._cleanup)
+            ctx.teardown_stack.append(factory.close)
         else:
             # Session-scoped: no per-test result cell at teardown time.
             # Preserve all factory dirs when --keep-tmp is set (any mode).
             def _teardown() -> None:
-                for d in factory._dirs:
+                for d in factory.dirs:
                     sys.stderr.write(f"KEPT {d} (--keep-tmp)\n")
 
             ctx.teardown_stack.append(_teardown)

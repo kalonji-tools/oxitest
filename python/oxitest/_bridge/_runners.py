@@ -66,7 +66,7 @@ def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
     """Restore real stdout/stderr by suspending any active capture fixtures."""
     for v in all_kwargs.values():
         if isinstance(v, _CaptureBase):
-            v._restore()
+            v.close()
 
 
 def _print_banner(

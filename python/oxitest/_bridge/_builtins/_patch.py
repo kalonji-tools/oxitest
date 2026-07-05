@@ -82,7 +82,7 @@ class Patcher:
         os.chdir(path)
         self._undos.append(lambda p=old: os.chdir(p))
 
-    def _undo_all(self) -> None:
+    def close(self) -> None:
         for fn in reversed(self._undos):
             fn()
         self._undos.clear()
@@ -91,5 +91,5 @@ class Patcher:
 class _PatcherFixture(BuiltinFixture, fixture_type=Patcher):
     def create(self, ctx: _BuiltinContext) -> Patcher:
         patcher = Patcher()
-        ctx.teardown_stack.append(patcher._undo_all)
+        ctx.teardown_stack.append(patcher.close)
         return patcher
