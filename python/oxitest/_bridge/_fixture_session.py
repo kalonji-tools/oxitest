@@ -2,7 +2,6 @@ from __future__ import annotations
 
 __all__ = [
     "FixtureSession",
-    "_NullFixtureSession",
     "_Scope",
     "_SessionProtocol",
 ]
@@ -63,9 +62,9 @@ if TYPE_CHECKING:
 class _SessionProtocol(Protocol):
     """Structural protocol for objects that can provide fixtures to a test.
 
-    Both `FixtureSession` (full session with a registry) and `_NullFixtureSession`
-    (no-op used when no conftest is present) satisfy this protocol, allowing
-    `run_test` to treat them uniformly without None guards.
+    `FixtureSession` satisfies this protocol, allowing `run_test` to treat
+    session as always present without None guards. The null case is handled
+    by constructing `FixtureSession([])` when no conftest is present.
     """
 
     def resolve_for_test(
@@ -108,68 +107,6 @@ class _SessionProtocol(Protocol):
     def has_namespace(self, namespace: str) -> bool: ...
 
     def get_fixture_timings(self) -> list[FixtureTiming]: ...
-
-
-class _NullFixtureSession:
-    """Null Object for when no conftest session is available.
-
-    Allows run_test to treat session as always present, eliminating guards.
-    """
-
-    _plugin_registry: PluginRegistry = PluginRegistry()
-    _async_backend: AsyncBackend = AsyncioBackend()
-
-    def resolve_for_test(
-        self,
-        fn: Callable[..., Any],
-        meta: TestMeta,
-        *,
-        skip_names: frozenset[str] = frozenset(),
-    ) -> tuple[dict[str, Any], list[Callable[[], None]]]:
-        return {}, []
-
-    def get_fixture(
-        self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
-    ) -> Any:
-        raise FixtureNotFoundError(name)
-
-    def get_fixture_in_namespace(
-        self,
-        name: str,
-        namespace: str,
-        module_path: str,
-        fn_teardowns: list[Callable[[], None]],
-    ) -> Any:
-        raise FixtureNotFoundError(name, namespace=namespace)
-
-    def get_namespace_for_func(
-        self,
-        name: str,
-        func: Callable[..., Any],
-    ) -> str | None:
-        return None
-
-    def inject_builtin(
-        self,
-        impl_cls: type[BuiltinFixture],
-        meta: TestMeta,
-        inject_scope: str,
-        teardown_stack: list[Callable[[], None]],
-    ) -> Any:
-        """Null implementation: raise since no session is available."""
-        raise FixtureNotFoundError(impl_cls.__name__)
-
-    def has_namespace(self, namespace: str) -> bool:
-        """Null implementation: no namespaces available."""
-        return False
-
-    def get_cache_stats(self) -> CacheStats:
-        """Return empty cache stats (null session has no shared fixtures)."""
-        return CacheStats(total_hits=0, total_misses=0, breakdown=())
-
-    def get_fixture_timings(self) -> list[FixtureTiming]:
-        """Return empty fixture timings (null session has no fixtures)."""
-        return []
 
 
 # ── FixtureSession ────────────────────────────────────────────────────────────

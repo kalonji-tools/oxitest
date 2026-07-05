@@ -958,7 +958,7 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
     """FixtureRef with namespace and session=None returns error.
 
     When no session is available (session=None), the executor uses a
-    _NullFixtureSession which has no registry. Loading the conftest via
+    FixtureSession([]) which has no registry. Loading the conftest via
     create_session provides the registry and namespace. Without it, the
     fixture resolution fails.
     """

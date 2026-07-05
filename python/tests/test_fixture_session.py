@@ -12,7 +12,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureScope,
     PluginSource,
 )
-from oxitest._bridge._fixture_session import FixtureSession, _NullFixtureSession
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.plugin_loader import PluginRegistry
 
 
@@ -46,13 +46,13 @@ def test_setup_timing_recorded_for_function_scoped_fixture():
     )
 
 
-def test_null_session_returns_empty_timings():
-    """_NullFixtureSession.get_fixture_timings() returns an empty list."""
-    session = _NullFixtureSession()
+def test_empty_session_returns_empty_timings():
+    """FixtureSession([]) with no fixtures returns empty timings list."""
+    session = FixtureSession([])
 
     timings = session.get_fixture_timings()
 
-    assert timings == [], f"expected empty list from null session, got {timings!r}"
+    assert timings == [], f"expected empty list from empty session, got {timings!r}"
 
 
 def test_teardown_timing_recorded_for_yield_fixture():

@@ -8,9 +8,8 @@ from types import MappingProxyType
 import oxitest
 import oxitest as oxi
 from oxitest import helpers, raises
-from oxitest._bridge._fixture_session import _NullFixtureSession
 from oxitest._bridge._mark_api import MarkInfo
-from oxitest._bridge._mark_registry import _HandlerContext, _TimeoutHandler
+from oxitest._bridge._mark_registry import _TimeoutHandler
 from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
 from oxitest._bridge.result import PassedResult, TimeoutResult
 
@@ -58,21 +57,6 @@ def test_timeout_context_type_matches_platform():
         )
 
 
-def _timeout_ctx(default_timeout=None):
-    def fn():
-        pass
-
-    return _HandlerContext(
-        fn_raw=fn,
-        fn=fn,
-        all_kwargs={},
-        session=_NullFixtureSession(),
-        module_path="fake.py",
-        fn_teardowns=[],
-        default_timeout=default_timeout,
-    )
-
-
 @dataclass(frozen=True)
 class InvalidTimeout:
     seconds: int
@@ -110,9 +94,8 @@ def test_timeout_mark_stores_seconds():
 
 
 def test_timeout_handler_returns_wrapper():
-    ctx = _timeout_ctx()
     result = _TimeoutHandler().handle(
-        MarkInfo("timeout", (), MappingProxyType({"seconds": 3})), ctx
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 3}))
     )
     assert result.wrapper is not None, (
         "TimeoutHandler.handle() should return a wrapper, got None"
@@ -124,9 +107,8 @@ def test_timeout_handler_returns_wrapper():
 
 
 def test_timeout_handler_wrapper_passes_fast_test():
-    ctx = _timeout_ctx()
     result = _TimeoutHandler().handle(
-        MarkInfo("timeout", (), MappingProxyType({"seconds": 5})), ctx
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 5}))
     )
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
@@ -137,9 +119,8 @@ def test_timeout_handler_wrapper_passes_fast_test():
 
 
 def test_timeout_handler_wrapper_returns_timeout_on_expiry():
-    ctx = _timeout_ctx()
     result = _TimeoutHandler().handle(
-        MarkInfo("timeout", (), MappingProxyType({"seconds": 1})), ctx
+        MarkInfo("timeout", (), MappingProxyType({"seconds": 1}))
     )
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
