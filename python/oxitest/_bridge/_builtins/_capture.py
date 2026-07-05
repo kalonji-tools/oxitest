@@ -72,7 +72,7 @@ class _CaptureBase(ABC):
         finally:
             self._resume()
 
-    def _restore(self) -> None:
+    def close(self) -> None:
         """Permanently restore original streams/fds and release resources."""
         self._suspend()
 
@@ -167,7 +167,7 @@ class FdCapture(_CaptureBase):
         os.dup2(self._stdout_tmp.fileno(), 1)
         os.dup2(self._stderr_tmp.fileno(), 2)
 
-    def _restore(self) -> None:
+    def close(self) -> None:
         self._suspend()
         os.close(self._old_stdout_fd)
         os.close(self._old_stderr_fd)
@@ -178,12 +178,12 @@ class FdCapture(_CaptureBase):
 class _StdCaptureFixture(BuiltinFixture, fixture_type=StdCapture):
     def create(self, ctx: _BuiltinContext) -> StdCapture:
         cap = StdCapture()
-        ctx.teardown_stack.append(cap._restore)
+        ctx.teardown_stack.append(cap.close)
         return cap
 
 
 class _FdCaptureFixture(BuiltinFixture, fixture_type=FdCapture):
     def create(self, ctx: _BuiltinContext) -> FdCapture:
         cap = FdCapture()
-        ctx.teardown_stack.append(cap._restore)
+        ctx.teardown_stack.append(cap.close)
         return cap

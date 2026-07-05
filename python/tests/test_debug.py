@@ -268,7 +268,7 @@ def test_trace_before_test_suspends_capture_during_call():
     assert sys.stdout is not cap._old_stdout, (
         "capture should be re-enabled after trace returns"
     )
-    cap._restore()  # cleanup
+    cap.close()  # cleanup
 
 
 def test_trace_before_test_no_capture_kwargs():

@@ -837,7 +837,7 @@ def test_logcapture_records_aggregates_backends():
     cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
     logging.getLogger().debug("agg test")
     recs = cap.records
-    cap._teardown()
+    cap.close()
 
     assert any("agg test" in r.getMessage() for r in recs), (
         f"LogCapture.records should aggregate records from all backends; 'agg test' "
@@ -853,7 +853,7 @@ def test_logcapture_text_formats_records():
     cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
     logging.getLogger().warning("formatted")
     text = cap.text
-    cap._teardown()
+    cap.close()
 
     assert "WARNING" in text, (
         f"LogCapture.text should include 'WARNING' level label, got {text!r}"
@@ -873,7 +873,7 @@ def test_logcapture_set_level_changes_threshold():
     cap.set_level(logging.DEBUG)
     logging.getLogger().debug("captured")
     recs = cap.records
-    cap._teardown()
+    cap.close()
 
     messages = [r.getMessage() for r in recs]
     assert "filtered" not in messages, (
@@ -897,7 +897,7 @@ def test_logcapture_at_level_captures_and_restores():
         logging.getLogger().debug("inside block")
     level_after = root.level
     recs = cap.records
-    cap._teardown()
+    cap.close()
 
     assert any("inside block" in r.getMessage() for r in recs), (
         f"at_level(DEBUG) context manager should capture debug records, "
@@ -921,9 +921,9 @@ def test_logcapture_teardown_uninstalls_backends():
         f"LogCapture should add 1 handler on creation, got {len(root.handlers)} (was "
         f"{handler_count})"
     )
-    cap._teardown()
+    cap.close()
     assert len(root.handlers) == handler_count, (
-        f"LogCapture._teardown() should remove the handler, restoring count to "
+        f"LogCapture.close() should remove the handler, restoring count to "
         f"{handler_count}, got {len(root.handlers)}"
     )
 
@@ -1007,7 +1007,7 @@ def test_logcapture_includes_plugin_backends():
             f"Expected 2 backends (stdlib + plugin), got {len(cap._backends)}"
         )
 
-        cap._teardown()
+        cap.close()
         assert not fake_backend.installed, (
             "Plugin log backend should be uninstalled after teardown"
         )
