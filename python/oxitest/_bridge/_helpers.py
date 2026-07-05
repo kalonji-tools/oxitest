@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __all__ = ["Helpers"]
 
+import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
@@ -24,8 +25,6 @@ class Helpers:
     """
 
     def __init__(self, name: str | None = None) -> None:
-        import inspect
-
         self._defs: list[HelperDef] = []
         self._defs_by_name: dict[str, HelperDef] = {}
         self._namespace_name: str = name or ""

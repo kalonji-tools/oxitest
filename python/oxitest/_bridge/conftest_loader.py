@@ -31,6 +31,7 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
+from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge.result import CollectedViolation
 
@@ -149,8 +150,6 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
 
 def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
     """Extract helper definitions from Helpers instances in a module."""
-    from oxitest._bridge._helpers import Helpers
-
     found: list[HelperDef] = []
     for attr_name, obj in vars(module).items():
         if not isinstance(obj, Helpers):
@@ -175,8 +174,6 @@ def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
 
 def _has_helpers(module: ModuleType) -> bool:
     """Return True if module has any Helpers() instances."""
-    from oxitest._bridge._helpers import Helpers
-
     return any(isinstance(obj, Helpers) for obj in vars(module).values())
 
 

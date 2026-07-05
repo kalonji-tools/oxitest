@@ -7,6 +7,7 @@ __all__ = [
     "_SessionProtocol",
 ]
 
+import asyncio
 import inspect
 from collections import defaultdict
 from collections.abc import Callable
@@ -30,6 +31,7 @@ from oxitest._bridge._fixture_context import (
     _warn_teardown,
 )
 from oxitest._bridge._fixture_instantiator import (
+    FixtureInstantiator as _FixtureInstantiator,
     ScopeRefs,
     _ResolutionContext,
 )
@@ -42,7 +44,9 @@ from oxitest._bridge._fixture_registry import (
     PluginSource,
     _fixture_inner_type,
 )
+from oxitest._bridge._fixture_validator import FixtureValidator as _FixtureValidator
 from oxitest._bridge._fixtures import Fixtures
+from oxitest._bridge._helper_registry import HelperDef
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
@@ -232,8 +236,6 @@ async def _task_group_factory():  # type: ignore[return-value]
     teardown.  Yields a ``_TrackedTaskGroup`` wrapper rather than the raw
     ``asyncio.TaskGroup`` to avoid monkey-patching ``create_task``.
     """
-    import asyncio
-
     tasks: list[asyncio.Task[Any]] = []
     tg = asyncio.TaskGroup()
     tracked = _TrackedTaskGroup(tg, tasks)
@@ -362,13 +364,6 @@ class FixtureSession:
             )
         )
 
-        from oxitest._bridge._fixture_instantiator import (
-            FixtureInstantiator as _FixtureInstantiator,
-        )
-        from oxitest._bridge._fixture_validator import (
-            FixtureValidator as _FixtureValidator,
-        )
-
         self._instantiator = _FixtureInstantiator(
             self._registry,
             self._plugin_registry,
@@ -417,8 +412,6 @@ class FixtureSession:
 
     def _register_plugin_helpers(self, helper_registry: Any) -> None:
         """Register all helpers from the current plugin registry."""
-        from oxitest._bridge._helper_registry import HelperDef
-
         for provider in getattr(self._plugin_registry, "helper_providers", ()):
             namespace = getattr(provider, "__module__", "<plugin>")
             helper_registry.register(

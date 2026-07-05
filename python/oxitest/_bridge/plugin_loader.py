@@ -6,15 +6,17 @@ plugin module paths and their per-plugin config dicts.
 
 from __future__ import annotations
 
-import functools
-import itertools
-
 __all__ = ["PluginRegistry", "load_plugins"]
+
+import functools
 import importlib
+import itertools
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from oxitest._bridge._errors import ConflictingCoverageError, ConflictingDebuggerError
 from oxitest._bridge._plugin_config import (
     CliExtension,
     FieldDescriptor,
@@ -257,8 +259,6 @@ class PluginRegistry:
             plugin_settings_json: JSON dict of per-module pyproject settings.
             cli_values_json: JSON dict of per-module CLI-provided values.
         """
-        import json
-
         plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
         cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
 
@@ -301,11 +301,6 @@ class PluginRegistry:
             ConflictingDebuggerError: if multiple plugins provide a debugger backend.
             ConflictingCoverageError: if multiple plugins provide a coverage provider.
         """
-        from oxitest._bridge._errors import (
-            ConflictingCoverageError,
-            ConflictingDebuggerError,
-        )
-
         if len(self.debugger_backends) > 1:
             providers = [name for name, _ in self.debugger_backends]
             raise ConflictingDebuggerError(providers)

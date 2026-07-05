@@ -15,12 +15,14 @@ __all__ = [
 ]
 
 import contextlib
+import sys as _sys
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._builtins._capture import _CaptureBase
 from oxitest._bridge._diagnostics import (
     check_warnings,
     dispatch_exception,
@@ -61,8 +63,6 @@ class DebugMode(StrEnum):
 
 def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
     """Restore real stdout/stderr by suspending any active capture fixtures."""
-    from oxitest._bridge._builtins._capture import _CaptureBase
-
     for v in all_kwargs.values():
         if isinstance(v, _CaptureBase):
             v._restore()
@@ -75,8 +75,6 @@ def _print_banner(
     file: Any = None,
 ) -> None:
     """Print a debug/trace banner with optional body lines."""
-    import sys as _sys
-
     out = file if file is not None else _sys.__stderr__
     width = max(60, len(node_id) + 12)
     header = f"── {mode} {node_id} "
@@ -94,8 +92,6 @@ def _trace_before_test(
     file: Any = None,
 ) -> None:
     """Suspend capture, print trace banner, call backend.trace(), restore."""
-    from oxitest._bridge._builtins._capture import _CaptureBase
-
     managers = [
         v.disabled() for v in all_kwargs.values() if isinstance(v, _CaptureBase)
     ]

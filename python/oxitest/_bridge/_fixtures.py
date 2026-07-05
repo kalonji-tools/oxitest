@@ -116,8 +116,6 @@ class Fixtures:
     """
 
     def __init__(self, name: str | None = None) -> None:
-        import inspect
-
         self._defs: list[FixtureDef[Any]] = []
         self._defs_by_name: dict[str, FixtureDef[Any]] = {}
         self._namespace_name: str = name or ""

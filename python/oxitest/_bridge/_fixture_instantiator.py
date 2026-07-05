@@ -15,6 +15,7 @@ __all__ = [
     "_unpack_sync",
 ]
 
+import contextlib
 import inspect
 import time
 from collections import defaultdict
@@ -28,12 +29,18 @@ from oxitest._bridge._async_orchestrator import (
     _reject_async_in_sync,
     _reject_nonshared_async,
 )
+from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,
+)
+from oxitest._bridge._fixture_context import (
+    _fixture_scope,
+    _test_run_context,
+    _warn_teardown,
 )
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
@@ -44,6 +51,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._test_meta import TestMeta
+from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.result import FixtureTiming
 
 if TYPE_CHECKING:
@@ -114,11 +122,6 @@ def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
         value = next(result)
 
         def teardown(gen: Any = result, fixture_name: str = name) -> None:
-            import contextlib
-
-            from oxitest._bridge._boundary import safe_teardown
-            from oxitest._bridge._fixture_context import _warn_teardown
-
             def _drain() -> None:
                 with contextlib.suppress(StopIteration):
                     next(gen)
@@ -291,8 +294,6 @@ class FixtureInstantiator:
             if defn.is_async:
                 return self._resolve_shared_async(defn, ctx, scope_refs)
 
-            from oxitest._bridge.proxy import FrozenProxy
-
             value = FrozenProxy(self._instantiate(defn, ctx, scope_refs.teardowns))
             scope_refs.cache[defn.name] = value
             return value
@@ -307,8 +308,6 @@ class FixtureInstantiator:
         scope_refs: ScopeRefs,
     ) -> Any:
         """Eagerly resolve a shared async fixture on the session event loop."""
-        from oxitest._bridge._fixture_context import _fixture_scope
-
         deps = _resolve_deps(
             self,
             defn.func,
@@ -324,8 +323,6 @@ class FixtureInstantiator:
             value = self._async_mgr.resolve(defn.func, deps)
             self._setup_times[defn.name].append((time.monotonic() - _start) * 1000.0)
 
-        from oxitest._bridge.proxy import FrozenProxy
-
         proxy = FrozenProxy(value)
         scope_refs.cache[defn.name] = proxy
         return proxy
@@ -337,8 +334,6 @@ class FixtureInstantiator:
         scope_teardowns: list[Callable[[], None]],
     ) -> Any:
         """Instantiate a fixture: resolve deps, call factory, track timing."""
-        from oxitest._bridge._fixture_context import _fixture_scope
-
         deps = _resolve_deps(
             self,
             defn.func,
@@ -390,8 +385,6 @@ class FixtureInstantiator:
         session_scope: _Scope | None = None,
     ) -> Any:
         """Create and return a built-in fixture value, respecting its declared scope."""
-        from oxitest._bridge._fixture_context import _test_run_context
-
         run_ctx = _test_run_context.get()
         _keep_tmp = run_ctx.keep_tmp if run_ctx else None
         _result_cell = run_ctx.result_cell if run_ctx else None

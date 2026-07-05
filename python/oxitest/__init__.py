@@ -169,6 +169,7 @@ from oxitest._bridge.result import (
     TestResult as TestResult,
 )
 from oxitest._exit_code import ExitCode as ExitCode
+from oxitest._oxitest import run
 from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugin
 
 __all__ = [
@@ -247,11 +248,4 @@ def helper(*args: _Any, **kwargs: _Any) -> _NoReturn:
 
 
 def main() -> None:
-    try:
-        from oxitest._oxitest import run
-    except ImportError:
-        msg = "Error: oxitest._oxitest module not found. "
-        msg += "Ensure the Rust extension is built.\n"
-        sys.stderr.write(msg)
-        sys.exit(1)
     sys.exit(run(sys.argv[1:]))

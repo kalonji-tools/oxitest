@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass, field
 from types import ModuleType
 from unittest.mock import patch
@@ -109,12 +108,14 @@ def _make_fake_coverage_module(instance: _FakeCovInstance) -> ModuleType:
 
 def test_provider_start_sets_env_var(patcher: oxitest.Patcher) -> None:
     """start() sets COVERAGE_PROCESS_START in os.environ."""
+    import oxitest._bridge._coverage as _cov_mod
+
     fake_cov = _FakeCovInstance()
     fake_mod = _make_fake_coverage_module(fake_cov)
 
     provider = CoveragePyProvider()
     patcher.setenv("COVERAGE_PROCESS_START", "")
-    with patch.dict(sys.modules, {"coverage": fake_mod}):
+    with patch.object(_cov_mod, "_coverage", fake_mod):
         provider.start({})
 
     assert fake_cov.started, "coverage.start() should have been called"
@@ -173,8 +174,10 @@ def test_provider_report_none_skips() -> None:
 
 def test_provider_import_error_without_coverage() -> None:
     """start() raises ImportError when coverage.py is not installed."""
+    import oxitest._bridge._coverage as _cov_mod
+
     provider = CoveragePyProvider()
-    with patch.dict(sys.modules, {"coverage": None}):
+    with patch.object(_cov_mod, "_coverage", None):
         with oxitest.raises(ImportError, match="pip install coverage"):
             provider.start({})
 
@@ -196,11 +199,12 @@ def test_worker_coverage_startup_when_env_set(
     patcher: oxitest.Patcher,
 ) -> None:
     """_maybe_start_coverage calls coverage.process_startup() when env var set."""
+    import oxitest._bridge.worker as worker_mod
     from oxitest._bridge.worker import _maybe_start_coverage
 
     fake_mod = _FakeCoverageModule()
     patcher.setenv("COVERAGE_PROCESS_START", "/path/to/config")
-    with patch.dict(sys.modules, {"coverage": fake_mod}):  # type: ignore[dict-item]
+    with patch.object(worker_mod, "_coverage", fake_mod):
         _maybe_start_coverage()
 
     assert fake_mod.startup_called, "process_startup() should have been called"

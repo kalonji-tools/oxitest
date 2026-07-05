@@ -26,11 +26,10 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from oxitest._bridge._debugger import DebuggerBackend
-
+from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
+from oxitest._bridge._doctest_runner import run_doctest
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
 from oxitest._bridge._fixture_context import (
     TestRunContext,
@@ -97,8 +96,6 @@ def _resolve_debugger_backend(
     registry = getattr(session, "_plugin_registry", None)
     if registry is not None and registry.debugger_backends:
         return registry.debugger_backends[0][1]
-    from oxitest._bridge._debugger import _PdbBackend
-
     return _PdbBackend()
 
 
@@ -303,8 +300,6 @@ def run_test(
     """
     # Doctest dispatch — bypass normal fixture/mark pipeline
     if meta.fn_name.startswith("<doctest>"):
-        from oxitest._bridge._doctest_runner import run_doctest
-
         doctest_name = meta.fn_name.removeprefix("<doctest>")
         return run_doctest(meta.module_path, doctest_name)
 

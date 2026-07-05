@@ -54,11 +54,10 @@ ignore = [
     "ANN201",         # missing return type annotation for public function
     "ANN202",         # missing return type annotation for private function
     "ANN401",         # dynamically typed expressions (Any) disallowed
-    "PLC0415",        # import outside top-level
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"python/oxitest/_bridge/worker.py" = ["T201", "D"]
+"python/oxitest/_bridge/worker.py" = ["T201", "D", "PLC0415"]
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/oxitest/_bridge/_*.py" = ["D100", "D101", "D102", "D103", "D104"]
 "python/tests/*" = [

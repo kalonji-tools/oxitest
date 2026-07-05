@@ -13,10 +13,12 @@ __all__ = ["OxitestTimeoutError", "extract_timeout_seconds", "make_timeout_wrapp
 import ctypes
 import signal
 import threading
+import warnings
 from collections.abc import Mapping
 from typing import Any
 
 from oxitest._bridge._errors import OxitestTimeoutError
+from oxitest._bridge.result import TimeoutResult
 
 
 class _UnixTimeoutContext:
@@ -75,8 +77,6 @@ class _WindowsTimeoutContext:
         # result == 1: success
         # result > 1: set on multiple threads (should not happen)
         if result == 0:
-            import warnings
-
             warnings.warn(
                 "OxitestTimeoutError could not be injected: thread not found",
                 RuntimeWarning,
@@ -123,8 +123,6 @@ def make_timeout_wrapper(seconds: int) -> Any:
             with _timeout_context(seconds):
                 return next_fn()
         except OxitestTimeoutError:
-            from oxitest._bridge.result import TimeoutResult
-
             return TimeoutResult(message=f"Timed out after {seconds}s")
 
     return wrapper
