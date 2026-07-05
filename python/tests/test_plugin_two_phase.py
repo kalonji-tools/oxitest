@@ -30,7 +30,7 @@ def _make_plugin_with_extension():
 
     call_tracker: list[bool] = []
 
-    def oxitest_plugin(*, config):
+    def oxitest_plugin(**_: object):
         call_tracker.append(True)
         return Plugin()
 
@@ -74,7 +74,7 @@ def test_user_prefix_override():
 @oxitest.mark.inprocess
 def test_plugin_without_extension_has_no_cli():
     mod = types.ModuleType("fake_simple")
-    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["fake_simple"] = mod
     try:
         registry = load_plugins(["fake_simple"], {})

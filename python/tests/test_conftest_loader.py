@@ -277,7 +277,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir):
 
 @oxitest.mark.inprocess
 def test_load_fixtures_registers_conftest_in_sys_modules(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
+    tmp: TempDir, _clean_sys_modules: Fixture[None]
 ):
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
 

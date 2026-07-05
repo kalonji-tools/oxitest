@@ -1568,9 +1568,7 @@ def test_plugin_fixture_provider_injected():
 
     provider = FakeDatabaseProvider()
     mod = types.ModuleType("db_plugin")
-    setattr(
-        mod, "oxitest_plugin", lambda config=None: Plugin(fixture_providers=(provider,))
-    )
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin(fixture_providers=(provider,)))
     sys.modules["db_plugin"] = mod
 
     try:

@@ -33,7 +33,7 @@ def test_load_empty_plugins_returns_empty_registry():
 @oxitest.mark.inprocess
 def test_load_valid_plugin():
     mod = types.ModuleType("fake_plugin")
-    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     _install_fake_module("fake_plugin", mod)
     try:
         registry = load_plugins(["fake_plugin"], {})
@@ -87,7 +87,7 @@ def test_load_no_entry_function_raises():
 @oxitest.mark.inprocess
 def test_load_wrong_return_type_raises():
     mod = types.ModuleType("bad_return")
-    setattr(mod, "oxitest_plugin", lambda config=None: "not a Plugin")
+    setattr(mod, "oxitest_plugin", lambda **_: "not a Plugin")
     _install_fake_module("bad_return", mod)
     try:
         with raises(PluginLoadError, match="must return oxitest.Plugin"):
@@ -98,7 +98,7 @@ def test_load_wrong_return_type_raises():
 
 @oxitest.mark.inprocess
 def test_load_entry_raises_wraps_error():
-    def bad_entry(config=None):
+    def bad_entry(**_: object):
         raise ValueError("boom")
 
     mod = types.ModuleType("raises_plugin")
@@ -128,13 +128,13 @@ def test_registry_aggregates_across_plugins():
     setattr(
         mod1,
         "oxitest_plugin",
-        lambda config=None: Plugin(log_backends=(FakeBackend(),)),
+        lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
     mod2 = types.ModuleType("plug2")
     setattr(
         mod2,
         "oxitest_plugin",
-        lambda config=None: Plugin(log_backends=(FakeBackend(),)),
+        lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
     _install_fake_module("plug1", mod1)
     _install_fake_module("plug2", mod2)
@@ -155,13 +155,13 @@ def test_conflicting_debugger_backends_raises():
     setattr(
         mod_a,
         "oxitest_plugin",
-        lambda config=None: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
     mod_b = types.ModuleType("dbg_plugin_b")
     setattr(
         mod_b,
         "oxitest_plugin",
-        lambda config=None: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
     _install_fake_module("dbg_plugin_a", mod_a)
     _install_fake_module("dbg_plugin_b", mod_b)
@@ -199,7 +199,7 @@ def test_single_debugger_backend_is_valid():
     setattr(
         mod,
         "oxitest_plugin",
-        lambda config=None: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
     _install_fake_module("solo_dbg", mod)
     try:

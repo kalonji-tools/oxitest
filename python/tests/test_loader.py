@@ -26,7 +26,7 @@ def test_load_module_returns_module_with_function(tmp: TempDir):
     )
 
 
-def test_load_module_raises_load_error_on_bad_path(tmp: TempDir):
+def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir):
     from oxitest._bridge._loader import _load_module, _LoadError
 
     unique = _unique_name("/nonexistent/path/test_x.py")
@@ -45,7 +45,7 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir):
 
 
 @oxitest.mark.inprocess
-def test_resolve_fn_returns_callable(tmp: TempDir, clean_sys_modules: Fixture[None]):
+def test_resolve_fn_returns_callable(tmp: TempDir, _clean_sys_modules: Fixture[None]):
     import importlib.util
     import sys
 
@@ -71,7 +71,7 @@ def test_resolve_fn_returns_callable(tmp: TempDir, clean_sys_modules: Fixture[No
 
 @oxitest.mark.inprocess
 def test_resolve_fn_raises_load_error_on_missing_function(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
+    tmp: TempDir, _clean_sys_modules: Fixture[None]
 ):
     import importlib.util
     import sys
@@ -103,7 +103,7 @@ def test_resolve_fn_raises_load_error_on_missing_function(
 
 @oxitest.mark.inprocess
 def test_resolve_fn_handles_class_method(
-    tmp: TempDir, clean_sys_modules: Fixture[None]
+    tmp: TempDir, _clean_sys_modules: Fixture[None]
 ):
     import importlib.util
     import sys
