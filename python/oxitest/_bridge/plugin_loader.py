@@ -80,16 +80,18 @@ class PluginEntry:
 
     module_name: str
     plugin: Plugin | None = None
-    is_loaded: bool = True
     declared_protocols: list[str] | None = None
+
+    @property
+    def is_loaded(self) -> bool:
+        """A plugin is loaded when its Plugin instance is available."""
+        return self.plugin is not None
 
     @classmethod
     def deferred(cls, module_name: str, declared_protocols: list[str]) -> PluginEntry:
         """Create an entry that is not yet imported."""
         return cls(
             module_name=module_name,
-            plugin=None,
-            is_loaded=False,
             declared_protocols=declared_protocols,
         )
 
@@ -102,19 +104,19 @@ class PluginEntry:
 
     def ensure_loaded(self) -> Plugin:
         """Import and initialise the plugin if it has not been loaded yet."""
-        if self.is_loaded:
-            assert self.plugin is not None, (
-                f"plugin {self.module_name!r} marked loaded but plugin is None"
-            )
+        if self.plugin is not None:
             return self.plugin
         module = importlib.import_module(self.module_name)
         entry_fn = getattr(module, "oxitest_plugin")  # noqa: B009 — dynamic module attr
-        self.plugin = entry_fn()
-        self.is_loaded = True
-        assert self.plugin is not None, (
-            f"oxitest_plugin() in {self.module_name!r} returned None"
-        )
-        return self.plugin
+        result = entry_fn()
+        if not isinstance(result, Plugin):
+            msg = (
+                f"oxitest_plugin() in {self.module_name!r} must return"
+                f" oxitest.Plugin, got {type(result).__name__}"
+            )
+            raise PluginLoadError(msg)
+        self.plugin = result
+        return result
 
 
 def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
@@ -274,7 +276,6 @@ class PluginRegistry:
                 cli_values=cli_values.get(entry.module_name, {}),
             )
             entry.plugin = plugin
-            entry.is_loaded = True
 
         # Invalidate cached protocol properties so they pick up new plugins.
         self._invalidate_caches()
@@ -289,7 +290,7 @@ class PluginRegistry:
                 and "fixture_provider" in entry.declared_protocols
             ):
                 entry.ensure_loaded()
-            if entry.is_loaded and entry.plugin:
+            if entry.plugin:
                 providers.extend(entry.plugin.fixture_providers)
         return providers
 
@@ -370,9 +371,7 @@ def _load_single_plugin(
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
         registry.cli_extensions[module_name] = (overridden_ext, descriptors)
         # Phase 1 complete — defer activation to activate_plugin()
-        registry.entries.append(
-            PluginEntry(module_name=module_name, plugin=None, is_loaded=False)
-        )
+        registry.entries.append(PluginEntry(module_name=module_name))
         return
 
     # Call the entry point with config
