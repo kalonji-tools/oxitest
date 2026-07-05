@@ -126,9 +126,9 @@ def _debug_post_mortem(
         "Entering debugger (type 'h' for help, 'q' to quit)",
         file=file,
     )
-    tb = exc.__traceback__
-    assert tb is not None  # guaranteed inside except block
-    backend.post_mortem(tb)
+    *_, tb = _sys.exc_info()
+    if tb:
+        backend.post_mortem(tb)
 
 
 def _call_with_warnings(
