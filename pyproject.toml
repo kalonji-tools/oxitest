@@ -35,7 +35,6 @@ ignore = [
     # ── Intentional design decisions ─────────────────────────────────────
     "D105", "D107",   # missing docstring in magic method / __init__
     "S101",           # assert used for runtime invariants
-    "SLF001",         # private member access (cross-module in bridge + test internals)
 
     "TC001",          # get_type_hints() resolves annotations at runtime — imports must stay
     "TC002",          # same: runtime annotation resolution needs imports in namespace
@@ -77,10 +76,7 @@ ignore = [
     "PLC0415",  # lazy imports in tests (each test imports what it tests)
     "PT019",    # underscore-prefixed fixture params (oxitest, not pytest — rule doesn't apply)
     "ARG002",   # unused method args in protocol test doubles (structural conformance)
-]
-"python/tests/fixtures/**/*.py" = [
-    "ARG002",   # unused method args in protocol test doubles (structural conformance)
-    "INP001",   # no __init__.py
+    "SLF001",   # tests legitimately inspect private state to verify internals
 ]
 "python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201", "D"]
