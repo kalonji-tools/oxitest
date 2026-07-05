@@ -404,7 +404,7 @@ def _check_module_registrars(
         if allowed:
             # Authorized — register silently
             if isinstance(obj, Fixtures) and registry is not None:
-                for defn in obj._defs:
+                for defn in obj.defs:
                     registry.register(
                         dataclasses.replace(
                             defn,

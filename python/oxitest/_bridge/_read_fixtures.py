@@ -32,7 +32,7 @@ class _FixtureNamespaceProxy:
             )
         # Build a minimal Fixtures() shell to wrap the accessor
         shell = Fixtures.__new__(Fixtures)
-        shell._namespace_name = self._namespace
+        shell.namespace_name = self._namespace
         return FixtureAccessor(name, shell, defn.func)
 
 

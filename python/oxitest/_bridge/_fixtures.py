@@ -85,7 +85,7 @@ class FixtureAccessor:
         session = ctx.session
         module_path = ctx.module_path
         fn_teardowns = ctx.fn_teardowns
-        namespace = self._fa_fixtures._namespace_name
+        namespace = self._fa_fixtures.namespace_name
         if namespace:
             resolved = session.get_fixture_in_namespace(
                 self._oxitest_fixture_name, namespace, module_path, fn_teardowns
@@ -122,6 +122,18 @@ class Fixtures:
         frame = inspect.currentframe()
         caller = frame.f_back if frame is not None else None
         self._source_line: int = caller.f_lineno if caller is not None else 0
+
+    @property
+    def namespace_name(self) -> str:
+        return self._namespace_name
+
+    @namespace_name.setter
+    def namespace_name(self, value: str) -> None:
+        self._namespace_name = value
+
+    @property
+    def defs(self) -> list[FixtureDef[Any]]:
+        return self._defs
 
     @overload
     def fixture(self, fn: _F) -> _F: ...
