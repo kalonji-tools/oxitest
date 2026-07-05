@@ -169,13 +169,16 @@ def approx(
         assert [0.1, 0.2] == approx([0.1, 0.2], abs=1e-9)
     """
     if isinstance(expected, set):
-        raise TypeError("approx() does not support sets")
+        msg = "approx() does not support sets"
+        raise TypeError(msg)
     if isinstance(expected, Mapping):
         return ApproxMapping(expected, rel=rel, abs=abs, nan_ok=nan_ok)
     if isinstance(expected, (str, bytes)):
-        raise TypeError("approx() expects a number, sequence, or mapping")
+        msg = "approx() expects a number, sequence, or mapping"
+        raise TypeError(msg)
     if isinstance(expected, Iterable) and isinstance(expected, Sized):
         return ApproxSequence(expected, rel=rel, abs=abs, nan_ok=nan_ok)
     if isinstance(expected, SupportsFloat):
         return ApproxScalar(expected, rel=rel, abs=abs, nan_ok=nan_ok)
-    raise TypeError("approx() expects a number, sequence, or mapping")
+    msg = "approx() expects a number, sequence, or mapping"
+    raise TypeError(msg)

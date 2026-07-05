@@ -29,27 +29,23 @@ class FrozenProxy:
         return getattr(object.__getattribute__(self, "_wrapped"), name)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        raise SharedFixtureMutationError(
-            f"shared fixture is immutable: cannot set attribute '{name}'"
-        )
+        msg = f"shared fixture is immutable: cannot set attribute '{name}'"
+        raise SharedFixtureMutationError(msg)
 
     def __delattr__(self, name: str) -> None:
-        raise SharedFixtureMutationError(
-            f"shared fixture is immutable: cannot delete attribute '{name}'"
-        )
+        msg = f"shared fixture is immutable: cannot delete attribute '{name}'"
+        raise SharedFixtureMutationError(msg)
 
     def __getitem__(self, key: Any) -> Any:
         return object.__getattribute__(self, "_wrapped")[key]
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        raise SharedFixtureMutationError(
-            f"shared fixture is immutable: cannot set item {key!r}"
-        )
+        msg = f"shared fixture is immutable: cannot set item {key!r}"
+        raise SharedFixtureMutationError(msg)
 
     def __delitem__(self, key: Any) -> None:
-        raise SharedFixtureMutationError(
-            f"shared fixture is immutable: cannot delete item {key!r}"
-        )
+        msg = f"shared fixture is immutable: cannot delete item {key!r}"
+        raise SharedFixtureMutationError(msg)
 
     def __len__(self) -> int:
         return len(object.__getattribute__(self, "_wrapped"))

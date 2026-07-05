@@ -35,13 +35,13 @@ class _RaisesContext:
         exc_tb: types.TracebackType | None,
     ) -> bool:
         if exc_val is None:
-            raise AssertionError(f"Expected {_exc_name(self._exc_type)} to be raised")
+            msg = f"Expected {_exc_name(self._exc_type)} to be raised"
+            raise AssertionError(msg)
         if not isinstance(exc_val, self._exc_type):
             return False  # wrong type — let it propagate
         if self._match is not None and not re.search(self._match, str(exc_val)):
-            raise AssertionError(
-                f"Pattern {self._match!r} not found in {str(exc_val)!r}"
-            )
+            msg = f"Pattern {self._match!r} not found in {str(exc_val)!r}"
+            raise AssertionError(msg)
         self.value = exc_val
         return True  # suppress the exception
 

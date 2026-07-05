@@ -133,7 +133,8 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
     if name == "asyncio":
         conflicts = [m for m, b in plugin_backends if b.name == "asyncio"]
         if conflicts:
-            raise ConflictingBackendError("asyncio", conflicts)
+            msg = "asyncio"
+            raise ConflictingBackendError(msg, conflicts)
         return AsyncioBackend()
 
     candidates = [(m, b) for m, b in plugin_backends if b.name == name]

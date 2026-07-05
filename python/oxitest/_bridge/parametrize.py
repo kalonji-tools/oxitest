@@ -79,28 +79,32 @@ def partial(target_type: type, **fields: Any) -> _Partial:
         def test_math(db: Fixture[str], x: int, y: int) -> None: ...
     """
     if not dataclasses.is_dataclass(target_type):
-        raise TypeError(f"partial: {target_type!r} must be a dataclass")
+        msg = f"partial: {target_type!r} must be a dataclass"
+        raise TypeError(msg)
     if not fields:
-        raise TypeError("partial requires at least one field")
+        msg = "partial requires at least one field"
+        raise TypeError(msg)
 
     valid_field_names = {f.name for f in dataclasses.fields(target_type)}
     unknown = set(fields.keys()) - valid_field_names
     if unknown:
-        raise TypeError(
+        msg = (
             f"partial({target_type.__name__}): unknown field(s)"
             f" {sorted(unknown)!r}\n"
             f"valid fields: {sorted(valid_field_names)!r}"
         )
+        raise TypeError(msg)
 
     fixref_fields = _extract_fixture_ref_names(target_type, fields)
     for field_name in fixref_fields:
         value = fields[field_name]
         if not callable(value):
-            raise TypeError(
+            msg = (
                 f"partial({target_type.__name__}): field '{field_name}' is annotated"
                 f" FixtureRef[...] but got {type(value)!r}"
                 f" — pass a fixture function, e.g. {field_name}=my_fixture."
             )
+            raise TypeError(msg)
 
     return _Partial(
         target_type=target_type,
@@ -126,10 +130,11 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
         and hint is case_type
     ]
     if len(matches) > 1:
-        raise ParametrizeError(
+        msg = (
             "compact parametrize: multiple parameters annotated with"
             f" '{case_type.__name__}': {matches!r}. Use at most one."
         )
+        raise ParametrizeError(msg)
     if matches:
         return True, matches[0]
     return False, ""
@@ -193,12 +198,13 @@ class DataclassCases:
         is_compact, compact_param = _detect_compact_mode(fn, case)
         if is_compact:
             if fixref_names:
-                raise ParametrizeError(
+                msg = (
                     "parametrize: compact mode is incompatible with FixtureRef fields"
                     f" ({', '.join(sorted(fixref_names))})."
                     " Use expanded mode — annotate individual fields in the test"
                     " function."
                 )
+                raise ParametrizeError(msg)
             return {compact_param: case}, fixref_names
         param_kwargs = {
             f.name: getattr(case, f.name)
@@ -232,10 +238,11 @@ class ComposedCases:
         self, _fn: Callable[..., Any], _param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
         """Not for direct use — goes through ``_resolve_composed``."""
-        raise ParametrizeError(
+        msg = (
             "ComposedCases.resolve() must not be called directly."
             " Use _resolve_composed() for composition layers."
         )
+        raise ParametrizeError(msg)
 
 
 ResolvedCases = DictCases | DataclassCases | ComposedCases
@@ -261,10 +268,11 @@ def _resolve_composed(
     """Resolve a composed param_id into merged kwargs and fixref names."""
     parts = param_id.split("-")
     if len(parts) != len(layers):
-        raise ParametrizeError(
+        msg = (
             f"resolve_parametrize: compound param_id '{param_id}' has"
             f" {len(parts)} parts but there are {len(layers)} layers."
         )
+        raise ParametrizeError(msg)
     composed_layers = _as_composed(layers)
     merged_fields: dict[str, Any] = {}
     all_fixref: list[str] = []
@@ -272,10 +280,11 @@ def _resolve_composed(
     for layer, case_id in zip(composed_layers, parts, strict=True):
         p = layer.cases.get(case_id)
         if p is None:
-            raise ParametrizeError(
+            msg = (
                 f"resolve_parametrize: case '{case_id}' not found in layer"
                 f" with cases {sorted(layer.cases.keys())!r}."
             )
+            raise ParametrizeError(msg)
         merged_fields.update(p.fields)
         all_fixref.extend(p.fixref_fields)
 
@@ -286,12 +295,13 @@ def _resolve_composed(
     is_compact, compact_param = _detect_compact_mode(fn, instance)
     if is_compact:
         if fixref_names:
-            raise ParametrizeError(
+            msg = (
                 "parametrize: compact mode is incompatible with FixtureRef fields"
                 f" ({', '.join(sorted(fixref_names))})."
                 " Use expanded mode — annotate individual fields in the test"
                 " function."
             )
+            raise ParametrizeError(msg)
         return {compact_param: instance}, fixref_names
     param_kwargs = {
         f.name: getattr(instance, f.name) for f in dataclasses.fields(instance)
@@ -302,24 +312,28 @@ def _resolve_composed(
 def _build_partial_cases(cases: dict[str, Any]) -> ComposedCases:
     """Validate and build a ComposedCases object from Partial values."""
     if not cases:
-        raise TypeError("parametrize requires at least one case")
+        msg = "parametrize requires at least one case"
+        raise TypeError(msg)
     first = next(iter(cases.values()))
     if not isinstance(first, _Partial):
-        raise TypeError("internal error: expected _Partial instances")
+        msg = "internal error: expected _Partial instances"
+        raise TypeError(msg)
     target_type = first.target_type
     for case_id, case in cases.items():
         if not isinstance(case, _Partial):
-            raise TypeError(
+            msg = (
                 f"parametrize: all case values must be partial instances,"
                 f" case '{case_id}' is {type(case)!r}."
                 " Do not mix partial() with full dataclass instances."
             )
+            raise TypeError(msg)
         if case.target_type is not target_type:
-            raise TypeError(
+            msg = (
                 f"parametrize: all partial() calls must target the same dataclass type."
                 f" Expected '{target_type.__name__}', case '{case_id}'"
                 f" targets '{case.target_type.__name__}'."
             )
+            raise TypeError(msg)
     provided = first.provided_fields
     fixref = first.fixref_fields
     return ComposedCases(
@@ -340,47 +354,53 @@ def _build_dict_cases(cases: dict[str, Any], fn: Callable[..., Any]) -> DictCase
     )
     for case_id, case in cases.items():
         if not isinstance(case, dict):
-            raise TypeError(
+            msg = (
                 f"parametrize dict mode: case '{case_id}' must be a dict,"
                 f" got {type(case)!r}. All cases must be dicts or all must"
                 " be dataclass instances — mixing is not allowed."
             )
+            raise TypeError(msg)
         extra = set(case.keys()) - valid_keys
         if extra:
-            raise TypeError(
+            msg = (
                 f"parametrize case '{case_id}': unexpected key(s)"
                 f" {sorted(extra)!r}\n"
                 f"valid keys: {sorted(valid_keys)!r}"
             )
+            raise TypeError(msg)
         missing = valid_keys - set(case.keys())
         if missing:
-            raise TypeError(
+            msg = (
                 f"parametrize case '{case_id}': missing key(s)"
                 f" {sorted(missing)!r}\n"
                 f"provided: {sorted(case.keys())!r}"
             )
+            raise TypeError(msg)
     return DictCases(cases=MappingProxyType(cases))
 
 
 def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
     """Validate and build a DataclassCases object for dataclass mode."""
     if not cases:
-        raise TypeError("parametrize requires at least one case")
+        msg = "parametrize requires at least one case"
+        raise TypeError(msg)
     first = next(iter(cases.values()))
     values_type = type(first)
     dc_params = getattr(values_type, "__dataclass_params__", None)
     if not getattr(dc_params, "frozen", False):
-        raise TypeError(
+        msg = (
             f"parametrize case type '{values_type.__name__}'"
             " must be a frozen dataclass.\n"
             "Hint: use @dataclass(frozen=True)"
         )
+        raise TypeError(msg)
     for case_id, case in cases.items():
         if not isinstance(case, values_type):
-            raise TypeError(
+            msg = (
                 f"parametrize case '{case_id}' must be an instance"
                 f" of '{values_type.__name__}'"
             )
+            raise TypeError(msg)
     fixref_fields = _extract_fixture_ref_names(
         values_type, [f.name for f in dataclasses.fields(values_type)]
     )
@@ -388,11 +408,12 @@ def _build_dataclass_cases(cases: dict[str, Any]) -> DataclassCases:
         for field_name in fixref_fields:
             value = getattr(case, field_name)
             if not callable(value):
-                raise TypeError(
+                msg = (
                     f"parametrize case '{case_id}': field '{field_name}' is annotated"
                     f" FixtureRef[...] but got {type(value)!r}"
                     f" — pass a fixture function, e.g. {field_name}=my_fixture."
                 )
+                raise TypeError(msg)
     return DataclassCases(
         cases=MappingProxyType(cases),
         param_type=values_type,
@@ -407,10 +428,11 @@ def _dict_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
         meta = get_or_create(fn)
         layer = _build_dict_cases(cases, fn)
         if meta.param_cases is not None:
-            raise TypeError(
+            msg = (
                 "parametrize: cannot mix dict-mode with stacked decorators."
                 " Use a single @parametrize call for dict mode."
             )
+            raise TypeError(msg)
         meta.param_cases = (layer,)
         return fn
 
@@ -431,20 +453,22 @@ def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
         existing_pt = composed[0].param_type
         new_pt = new_layer.param_type
         if existing_pt is not new_pt:
-            raise TypeError(
+            msg = (
                 "parametrize: all partial() calls must target the"
                 " same dataclass type."
                 f" Expected '{existing_pt.__name__}',"
                 f" got '{new_pt.__name__}'."
             )
+            raise TypeError(msg)
         for layer in composed:
             overlap = layer.provided_fields & new_layer.provided_fields
             if overlap:
-                raise TypeError(
+                msg = (
                     "parametrize: field overlap between layers:"
                     f" {sorted(overlap)!r}."
                     " Each layer must provide disjoint fields."
                 )
+                raise TypeError(msg)
         meta.param_cases = (new_layer, *existing)
         return fn
 
@@ -458,10 +482,11 @@ def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
         if meta.param_cases is not None:
-            raise TypeError(
+            msg = (
                 "parametrize: cannot mix full dataclass cases with stacked"
                 " decorators. Use partial() for composition."
             )
+            raise TypeError(msg)
         meta.param_cases = (param_cases_layer,)
         return fn
 
@@ -500,7 +525,8 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
     expresses intent.
     """
     if not cases:
-        raise TypeError("parametrize requires at least one case")
+        msg = "parametrize requires at least one case"
+        raise TypeError(msg)
 
     first = next(iter(cases.values()))
 
@@ -511,10 +537,11 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
         return _partial_decorator(cases)
 
     if not dataclasses.is_dataclass(first):
-        raise TypeError(
+        msg = (
             "parametrize: case values must be dicts, frozen dataclass instances,"
             f" or partial() instances, got {type(first)!r}"
         )
+        raise TypeError(msg)
 
     return _dataclass_decorator(cases)
 
@@ -534,11 +561,12 @@ def resolve_parametrize(
     layers = get_metadata(fn_raw).param_cases
     if layers is None:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
-        raise ParametrizeError(
+        msg = (
             f"resolve_parametrize: {fn_name!r} has no parametrize cases"
             f" but param_id={param_id!r} was requested."
             " Use @oxitest.parametrize to register cases."
         )
+        raise ParametrizeError(msg)
     if len(layers) == 1 and not isinstance(layers[0], ComposedCases):
         return layers[0].resolve(fn, param_id)
     return _resolve_composed(layers, fn, param_id)

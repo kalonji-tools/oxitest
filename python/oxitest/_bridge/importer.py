@@ -171,11 +171,12 @@ def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
     element is guaranteed to be ``ComposedCases`` at runtime.
     """
     if len(layers) == 1:
-        raise TypeError(
+        msg = (
             "parametrize composition requires at least 2 stacked"
             " @parametrize layers with partial() values."
             " Use a full dataclass instance for single-layer parametrize."
         )
+        raise TypeError(msg)
     composed_layers = _as_composed(layers)
     target_type = composed_layers[0].param_type
     all_provided = frozenset().union(
@@ -184,11 +185,12 @@ def _validate_composition(layers: tuple[ResolvedCases, ...]) -> None:
     all_fields = {f.name for f in dataclasses.fields(target_type)}
     missing = all_fields - all_provided
     if missing:
-        raise TypeError(
+        msg = (
             f"parametrize composition: missing field(s) {sorted(missing)!r}"
             f" on '{target_type.__name__}'."
             " The union of all layers must cover every field."
         )
+        raise TypeError(msg)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -344,9 +346,10 @@ def _import_test_module(
         if not isinstance(result, ErrorResult):
             # _load_module only raises _LoadError with _error_result(),
             # which always produces an ErrorResult — this branch is unreachable.
-            raise TypeError(  # pragma: no cover
+            msg = (  # pragma: no cover
                 f"_LoadError.result expected ErrorResult, got {type(result).__name__}"
-            ) from None
+            )
+            raise TypeError(msg) from None  # pragma: no cover
         raise ImportError(result.message) from None
 
     # Store in session module cache if available — executor will reuse this module.

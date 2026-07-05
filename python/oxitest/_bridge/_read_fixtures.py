@@ -27,9 +27,8 @@ class _FixtureNamespaceProxy:
             raise AttributeError(name)
         defn = self._registry.get_in_namespace(name, self._namespace)
         if defn is None:
-            raise AttributeError(
-                f"fixture namespace '{self._namespace}' has no fixture '{name}'"
-            )
+            msg = f"fixture namespace '{self._namespace}' has no fixture '{name}'"
+            raise AttributeError(msg)
         # Build a minimal Fixtures() shell to wrap the accessor
         shell = Fixtures.__new__(Fixtures)
         shell.namespace_name = self._namespace
@@ -46,13 +45,15 @@ class _FixturesProxy:
             raise AttributeError(name)
         registry = _fixtures_registry_var.get()
         if registry is None:
-            raise AttributeError(
+            msg = (
                 f"fixtures are only available during a test session — "
                 f"cannot access fixtures.{name} outside of a test run"
             )
+            raise AttributeError(msg)
         if not registry.has_namespace(name):
-            raise AttributeError(
+            msg = (
                 f"no fixture namespace '{name}' — did you define a "
                 f"Fixtures() instance named '{name}' in conftest.py?"
             )
+            raise AttributeError(msg)
         return _FixtureNamespaceProxy(name, registry)

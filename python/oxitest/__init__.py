@@ -223,7 +223,7 @@ fixtures = _FixturesProxy()
 
 def fixture(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
     """Sentinel: raises with instructions to use Fixtures() registry instead."""
-    raise AttributeError(
+    msg = (
         "oxitest.fixture does not exist.\n"
         "Fixtures in oxitest are declared via a Fixtures() registry:\n\n"
         "    fixtures = oxitest.Fixtures()\n\n"
@@ -232,11 +232,12 @@ def fixture(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
         "        ...\n\n"
         "Define your Fixtures() instance in conftest.py and import the functions."
     )
+    raise AttributeError(msg)
 
 
 def helper(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
     """Sentinel: raises with instructions to use Helpers() registry instead."""
-    raise AttributeError(
+    msg = (
         "oxitest.helper does not exist.\n"
         "Helpers in oxitest are declared via a Helpers() registry:\n\n"
         "    helpers = oxitest.Helpers()\n\n"
@@ -245,6 +246,7 @@ def helper(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
         "        ...\n\n"
         "Define your Helpers() instance in conftest.py."
     )
+    raise AttributeError(msg)
 
 
 def main() -> None:

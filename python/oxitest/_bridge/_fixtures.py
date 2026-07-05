@@ -76,12 +76,13 @@ class FixtureAccessor:
             raise AttributeError(attr)
         ctx = _fixture_context.get(None)
         if ctx is None:
-            raise AttributeError(
+            msg = (
                 f"Attribute '{attr}' of fixture '{self._fa_name}' can only be accessed "
                 f"inside a test or fixture body (no active instantiation context). "
                 f"If you meant to use the fixture value, annotate with "
                 f"fx: Fixtures and access via fx.<namespace>.{self._fa_name}.{attr}."
             )
+            raise AttributeError(msg)
         session = ctx.session
         module_path = ctx.module_path
         fn_teardowns = ctx.fn_teardowns
@@ -242,7 +243,8 @@ class Fixtures:
         if defn is not None:
             return FixtureAccessor(name, self, defn.func)
         available = [d.name for d in self._defs]
-        raise AttributeError(
+        msg = (
             f"'{type(self).__name__}' has no registered fixture '{name}'. "
             f"Available: {available}"
         )
+        raise AttributeError(msg)

@@ -82,10 +82,11 @@ class FixtureDef(Generic[T]):
         """Backward-compat: conftest fixture callable."""
         if isinstance(self.source, ConftestSource):
             return self.source.func
-        raise AttributeError(
+        msg = (
             f"FixtureDef '{self.name}' has no func "
             f"(source: {type(self.source).__name__})"
         )
+        raise AttributeError(msg)
 
     @property
     def conftest_path(self) -> str:

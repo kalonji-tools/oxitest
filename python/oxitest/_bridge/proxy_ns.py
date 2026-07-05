@@ -120,9 +120,8 @@ class OxiNamespaceProxy(_CachingProxy):
                 inner = _OXI_NAMES.get(name)
             if inner is None:
                 available = ", ".join(sorted([*_OXI_NAMES, _CTX_NAME]))
-                raise AttributeError(
-                    f"fx.oxi has no builtin '{name}'. Available: {available}"
-                )
+                msg = f"fx.oxi has no builtin '{name}'. Available: {available}"
+                raise AttributeError(msg)
             impl_cls = BuiltinFixture.for_type(inner)
             if impl_cls is None:
                 msg = (
@@ -183,10 +182,11 @@ class FixturesProxy(_CachingProxy):
                     self._fn_name,
                 )
             if not self._session.has_namespace(name):
-                raise AttributeError(
+                msg = (
                     f"no fixture namespace '{name}' — did you define a "
                     f"Fixtures() instance named '{name}' in conftest.py?"
                 )
+                raise AttributeError(msg)
             return NamespaceProxy(
                 name,
                 self._session,
