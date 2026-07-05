@@ -118,15 +118,15 @@ class _Scope:
 
     cache: dict[str, Any] = field(default_factory=dict)
     teardowns: list[Callable[[], None]] = field(default_factory=list)
-    _hits: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
-    _misses: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
+    hits: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
+    misses: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     def get_or_create(self, name: str, factory: Callable[[], Any]) -> Any:
         if name not in self.cache:
             self.cache[name] = factory()
-            self._misses[name] += 1
+            self.misses[name] += 1
         else:
-            self._hits[name] += 1
+            self.hits[name] += 1
         return self.cache[name]
 
     def drain(self) -> None:
@@ -261,7 +261,7 @@ class FixtureSession:
 
         # ── Register all fixture sources into the unified registry ──
         # 1. Builtins (lowest priority)
-        for fixture_type, impl_cls in BuiltinFixture._registry.items():
+        for fixture_type, impl_cls in BuiltinFixture.registered_types().items():
             scope = (
                 FixtureScope.SESSION
                 if getattr(impl_cls, "scope", "function") == "session"
@@ -328,7 +328,7 @@ class FixtureSession:
         # re-register plugin fixtures into the unified registry and propagate
         # to the instantiator.
         if name == "_plugin_registry" and hasattr(self, "_instantiator"):
-            self._instantiator._plugin_registry = value
+            self._instantiator.plugin_registry = value
             # Register any new plugin fixture providers into the unified registry
             self._register_plugin_fixtures()
 
@@ -382,7 +382,7 @@ class FixtureSession:
         """Map a fixture def to its scope refs. None = function scope."""
         if defn.shared:
             s = self._shared_scope
-            return ScopeRefs(s.cache, s.teardowns, s._hits, s._misses)
+            return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         return None
 
     # ── Async delegation properties (used by executor.py via getattr) ────────
@@ -395,7 +395,7 @@ class FixtureSession:
     def _async_backend(self, value: AsyncBackend) -> None:
         self._async_mgr.cleanup()
         self._async_mgr = SharedAsyncManager(value)
-        self._instantiator._async_mgr = self._async_mgr
+        self._instantiator.async_mgr = self._async_mgr
 
     @property
     def _shared_session(self) -> SharedAsyncSession | None:
@@ -429,15 +429,15 @@ class FixtureSession:
     def get_cache_stats(self) -> CacheStats:
         """Return shared fixture cache hit/miss statistics."""
         s = self._shared_scope
-        names = sorted(set(s._hits.keys()) | set(s._misses.keys()))
+        names = sorted(set(s.hits.keys()) | set(s.misses.keys()))
         return CacheStats(
-            total_hits=sum(s._hits.values()),
-            total_misses=sum(s._misses.values()),
+            total_hits=sum(s.hits.values()),
+            total_misses=sum(s.misses.values()),
             breakdown=tuple(
                 CacheEntry(
                     name=n,
-                    hits=s._hits.get(n, 0),
-                    misses=s._misses.get(n, 0),
+                    hits=s.hits.get(n, 0),
+                    misses=s.misses.get(n, 0),
                 )
                 for n in names
             ),

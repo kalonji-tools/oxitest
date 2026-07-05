@@ -110,7 +110,7 @@ def _build_dependency_graph(registry: FixtureRegistry) -> dict[str, set[str]]:
     for defn in registry.all():
         deps: set[str] = set()
         for _qualifier, dep_type in defn.depends_on:
-            dep_defs = registry._by_type.get(dep_type, [])
+            dep_defs = registry.get_by_type(dep_type)
             for dep in dep_defs:
                 if dep.name != defn.name:
                     deps.add(dep.name)
@@ -275,6 +275,10 @@ class FixtureRegistry:
         """Return the most-local (last-registered) FixtureDef for name."""
         defs = self._by_name.get(name)
         return defs[-1] if defs else None
+
+    def get_by_type(self, t: type) -> list[FixtureDef[Any]]:
+        """Return fixture definitions registered for the given type."""
+        return self._by_type.get(t, [])
 
     def get_autouse(self) -> Iterator[FixtureDef[Any]]:
         """Yield all autouse fixtures (most-local version of each name)."""

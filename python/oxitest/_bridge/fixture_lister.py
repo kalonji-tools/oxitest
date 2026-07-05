@@ -132,7 +132,7 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
     them alongside registry fixtures.
     """
     defs = []
-    for fixture_type, impl_cls in BuiltinFixture._registry.items():
+    for fixture_type, impl_cls in BuiltinFixture.registered_types().items():
         name = fixture_type.__name__.lstrip("_")
         doc = inspect.getdoc(fixture_type) or ""
 

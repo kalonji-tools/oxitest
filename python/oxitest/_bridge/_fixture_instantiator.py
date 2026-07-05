@@ -156,6 +156,22 @@ class FixtureInstantiator:
         self._setup_times: dict[str, list[float]] = defaultdict(list)
         self._teardown_times: dict[str, list[float]] = defaultdict(list)
 
+    @property
+    def plugin_registry(self) -> PluginRegistry:
+        return self._plugin_registry
+
+    @plugin_registry.setter
+    def plugin_registry(self, value: PluginRegistry) -> None:
+        self._plugin_registry = value
+
+    @property
+    def async_mgr(self) -> Any:
+        return self._async_mgr
+
+    @async_mgr.setter
+    def async_mgr(self, value: Any) -> None:
+        self._async_mgr = value
+
     # ── Parameter resolution ─────────────────────────────────────────────
 
     def resolve_param(
