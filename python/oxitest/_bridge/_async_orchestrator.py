@@ -33,7 +33,7 @@ from oxitest._bridge._fixture_context import _warn_teardown
 # ── Async dependency policy functions ─────────────────────────────────────────
 
 
-def _check_async_dep(dep_name: str, dep_val: Any, fixture_name: str, msg: str) -> None:
+def _check_async_dep(_dep_name: str, dep_val: Any, fixture_name: str, msg: str) -> None:
     """Reject an async dependency value with a descriptive error message."""
     if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
         if inspect.iscoroutine(dep_val):

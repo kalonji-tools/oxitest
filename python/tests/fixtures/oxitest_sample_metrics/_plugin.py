@@ -100,7 +100,7 @@ class MetricsCoverageProvider:
     def __init__(self, output_dir: str) -> None:
         self._dir = Path(output_dir)
 
-    def start(self, config: dict[str, Any]) -> None:
+    def start(self) -> None:
         marker = self._dir / "coverage_started.txt"
         marker.write_text("started")
 

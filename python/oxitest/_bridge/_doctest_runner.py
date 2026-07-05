@@ -84,7 +84,7 @@ def _run_doctests(tests: list[doctest.DocTest], module_path: str) -> TestResult:
         if not test.examples:
             continue
         try:
-            runner.run(test, out=lambda x: None)
+            runner.run(test, out=lambda _: None)
         except doctest.DocTestFailure as f:
             failures.append(f)
 

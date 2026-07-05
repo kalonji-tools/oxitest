@@ -30,7 +30,7 @@ def test_cov_report_format_from_string() -> None:
 
 
 class _FakeProvider:
-    def start(self, config: dict) -> None:
+    def start(self) -> None:
         pass
 
     def stop(self) -> None:
@@ -116,7 +116,7 @@ def test_provider_start_sets_env_var(patcher: oxitest.Patcher) -> None:
     provider = CoveragePyProvider()
     patcher.setenv("COVERAGE_PROCESS_START", "")
     with patch.object(_cov_mod, "_coverage", fake_mod):
-        provider.start({})
+        provider.start()
 
     assert fake_cov.started, "coverage.start() should have been called"
     assert os.environ.get("COVERAGE_PROCESS_START") is not None, (
@@ -179,7 +179,7 @@ def test_provider_import_error_without_coverage() -> None:
     provider = CoveragePyProvider()
     with patch.object(_cov_mod, "_coverage", None):
         with oxitest.raises(ImportError, match="pip install coverage"):
-            provider.start({})
+            provider.start()
 
 
 # ─── Worker coverage auto-detection tests ────────────────────────────────────

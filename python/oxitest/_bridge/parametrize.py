@@ -155,7 +155,7 @@ class DictCases:
             yield case_id, [(str(k), repr(v)) for k, v in case.items()]
 
     def resolve(
-        self, fn: Callable[..., Any], param_id: str
+        self, _fn: Callable[..., Any], param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
         """Resolve a single dict case into ``(kwargs_dict, frozenset())``."""
         return dict(self.cases[param_id]), frozenset()
@@ -229,7 +229,7 @@ class ComposedCases:
             )
 
     def resolve(
-        self, fn: Callable[..., Any], param_id: str
+        self, _fn: Callable[..., Any], _param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
         """Not for direct use — goes through ``_resolve_composed``."""
         raise ParametrizeError(

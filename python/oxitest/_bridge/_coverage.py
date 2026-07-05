@@ -31,7 +31,7 @@ class CoveragePyProvider:
     def __init__(self) -> None:
         self._cov: Any = None
 
-    def start(self, config: dict) -> None:
+    def start(self) -> None:
         """Begin coverage collection."""
         if _coverage is None:
             msg = "--cov requires coverage.py: pip install coverage"
