@@ -12,7 +12,7 @@ import warnings
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Annotated, Any, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 
 from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
@@ -25,13 +25,16 @@ from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._violation_checkers import check_fn_violations
-from oxitest._bridge.parametrize import ComposedCases, ResolvedCases, _as_composed
+from oxitest._bridge.parametrize import ComposedCases, _as_composed
 from oxitest._bridge.result import (
     CollectedItem,
     CollectedViolation,
     ErrorResult,
     ViolationKind,
 )
+
+if TYPE_CHECKING:
+    from oxitest._bridge.parametrize import ResolvedCases
 
 logger = logging.getLogger(__name__)
 

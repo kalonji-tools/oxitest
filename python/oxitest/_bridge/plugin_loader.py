@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from oxitest._bridge._errors import ConflictingCoverageError, ConflictingDebuggerError
 from oxitest._bridge._plugin_config import (
     CliExtension,
-    FieldDescriptor,
     IntrospectionError,
     introspect_config,
     merge_config,
@@ -28,6 +27,7 @@ from oxitest.plugin import Plugin
 
 if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
+    from oxitest._bridge._plugin_config import FieldDescriptor
     from oxitest.plugin import (
         Collector,
         ExecutionWrapper,

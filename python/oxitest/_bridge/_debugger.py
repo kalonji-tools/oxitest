@@ -9,8 +9,10 @@ from __future__ import annotations
 __all__ = ["DebuggerBackend", "_PdbBackend"]
 
 import pdb
-from types import TracebackType
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 
 @runtime_checkable

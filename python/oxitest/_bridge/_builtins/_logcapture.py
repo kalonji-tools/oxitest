@@ -5,10 +5,12 @@ __all__ = ["LogBackend", "LogCapture", "StdlibLogBackend", "_LogCaptureFixture"]
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
+
+if TYPE_CHECKING:
+    from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._fixture_type import injectable
 
 

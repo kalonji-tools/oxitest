@@ -19,12 +19,13 @@ __all__ = [
 import contextlib
 import inspect
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._async_backend import (
-    AsyncBackend,
-    SharedAsyncSession,
-)
+if TYPE_CHECKING:
+    from oxitest._bridge._async_backend import (
+        AsyncBackend,
+        SharedAsyncSession,
+    )
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown

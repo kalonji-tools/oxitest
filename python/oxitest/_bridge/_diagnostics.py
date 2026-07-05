@@ -18,7 +18,7 @@ import linecache
 import logging
 import reprlib
 import warnings
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
@@ -32,8 +32,10 @@ from oxitest._bridge.result import (
     FailedResult,
     Frame,
     SkippedResult,
-    TestResult,
 )
+
+if TYPE_CHECKING:
+    from oxitest._bridge.result import TestResult
 
 logger = logging.getLogger(__name__)
 

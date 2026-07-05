@@ -12,12 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from oxitest._bridge._coverage import CovReportFormat
-from oxitest._bridge.result import CollectedItem, TestResult
-
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import AsyncBackend
+    from oxitest._bridge._coverage import CovReportFormat
     from oxitest._bridge._debugger import DebuggerBackend
+    from oxitest._bridge.result import CollectedItem, TestResult
 
 
 @runtime_checkable

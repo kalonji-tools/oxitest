@@ -12,13 +12,9 @@ import inspect
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Self
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
-from oxitest._bridge._async_backend import (
-    AsyncBackend,
-    AsyncioBackend,
-    SharedAsyncSession,
-)
+from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtins._base import BuiltinFixture
@@ -51,10 +47,17 @@ from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
 from oxitest._bridge._read_helpers import _helpers_registry_var
-from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.proxy_ns import FixturesProxy
-from oxitest._bridge.result import CacheEntry, CacheStats, FixtureTiming
+from oxitest._bridge.result import CacheEntry, CacheStats
+
+if TYPE_CHECKING:
+    from oxitest._bridge._async_backend import (
+        AsyncBackend,
+        SharedAsyncSession,
+    )
+    from oxitest._bridge._test_meta import TestMeta
+    from oxitest._bridge.result import FixtureTiming
 
 
 class _SessionProtocol(Protocol):

@@ -19,7 +19,7 @@ import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
@@ -30,10 +30,13 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
+from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
-from oxitest._bridge.result import CollectedViolation
+
+if TYPE_CHECKING:
+    from oxitest._bridge._helper_registry import HelperDef
+    from oxitest._bridge.result import CollectedViolation
 
 logger = logging.getLogger(__name__)
 

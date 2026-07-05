@@ -31,7 +31,6 @@ from oxitest._bridge._async_orchestrator import (
 )
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtin_context import _BuiltinContext
-from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
@@ -45,7 +44,6 @@ from oxitest._bridge._fixture_context import (
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
-    FixtureDef,
     PluginSource,
     _fixture_inner_type,
 )
@@ -55,7 +53,8 @@ from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.result import FixtureTiming
 
 if TYPE_CHECKING:
-    from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge._builtins._base import BuiltinFixture
+    from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
     from oxitest._bridge._fixture_session import _Scope
     from oxitest._bridge.plugin_loader import PluginRegistry
 
