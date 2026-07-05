@@ -87,7 +87,7 @@ class FixtureValidator:
             plugin_types.add(provider.fixture_type)
 
         # Precompute builtin type names once for the entire validation pass
-        builtin_type_names = {t.__name__ for t in BuiltinFixture._registry}
+        builtin_type_names = {t.__name__ for t in BuiltinFixture.registered_types()}
 
         errors: list[tuple[str, str]] = []
         for item in items:

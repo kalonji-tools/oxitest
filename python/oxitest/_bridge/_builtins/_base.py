@@ -40,6 +40,11 @@ class BuiltinFixture:
             BuiltinFixture._registry[fixture_type] = cls
 
     @classmethod
+    def registered_types(cls) -> dict[type, type[BuiltinFixture]]:
+        """Return the registry of fixture type -> implementation class mappings."""
+        return cls._registry
+
+    @classmethod
     def for_type(cls, inner: type) -> type[BuiltinFixture] | None:
         """Return the registered implementation class for `inner`, or None."""
         return cls._registry.get(inner)
