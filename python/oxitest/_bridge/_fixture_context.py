@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -76,7 +76,7 @@ def _fixture_scope(
     session: Any,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
-):
+) -> Iterator[None]:
     """Scoped fixture context — handles parent lookup and guaranteed reset."""
     parent = _fixture_context.get(None)
     effective = parent.fn_teardowns if parent is not None else fn_teardowns

@@ -4,11 +4,12 @@ __all__ = ["warns"]
 
 import re
 import warnings
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 
 @contextmanager
-def warns(category: type[Warning], *, match: str | None = None):
+def warns(category: type[Warning], *, match: str | None = None) -> Iterator[None]:
     """Assert that a block of code emits a warning of the expected category.
 
     Args:
