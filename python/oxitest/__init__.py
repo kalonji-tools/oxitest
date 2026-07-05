@@ -221,7 +221,7 @@ helpers = _HelpersProxy()
 fixtures = _FixturesProxy()
 
 
-def fixture(*args: _Any, **kwargs: _Any) -> _NoReturn:
+def fixture(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
     """Sentinel: raises with instructions to use Fixtures() registry instead."""
     raise AttributeError(
         "oxitest.fixture does not exist.\n"
@@ -234,7 +234,7 @@ def fixture(*args: _Any, **kwargs: _Any) -> _NoReturn:
     )
 
 
-def helper(*args: _Any, **kwargs: _Any) -> _NoReturn:
+def helper(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
     """Sentinel: raises with instructions to use Helpers() registry instead."""
     raise AttributeError(
         "oxitest.helper does not exist.\n"

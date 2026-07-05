@@ -244,7 +244,7 @@ class CoverageProvider(Protocol):
     At most one provider is allowed across all plugins.
     """
 
-    def start(self, config: dict[str, Any]) -> None:
+    def start(self) -> None:
         """Begin coverage collection. Called before any test execution."""
         ...
 

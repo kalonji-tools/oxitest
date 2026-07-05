@@ -390,12 +390,12 @@ pub(crate) fn find_unused_fixtures(
 /// Start coverage collection via the Python bridge.
 ///
 /// Calls `resolve_provider_standalone()` to get the default provider,
-/// then calls `provider.start({})`.
+/// then calls `provider.start()`.
 /// Returns the Python provider object for later stop/report calls.
 pub fn start_coverage(py: Python<'_>) -> PyResult<Py<PyAny>> {
     let module = py.import("oxitest._bridge._coverage")?;
     let provider = module.call_method0("resolve_provider_standalone")?;
-    provider.call_method1("start", (py.None(),))?;
+    provider.call_method0("start")?;
     Ok(provider.into())
 }
 

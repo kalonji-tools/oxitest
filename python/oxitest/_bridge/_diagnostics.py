@@ -158,7 +158,7 @@ def _compute_field_diffs(
         diff = safe_call(
             _compare,
             default=None,
-            on_error=lambda exc, field_name=name: logger.debug(
+            on_error=lambda _, field_name=name: logger.debug(
                 "Field %r comparison failed, skipping diff", field_name
             ),
         )
