@@ -7,16 +7,20 @@ import hashlib
 import inspect
 import itertools
 import logging
+import sys
 import warnings
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
-from typing import Any, cast
+from typing import Annotated, Any, cast, get_args, get_origin
 
+from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
-from oxitest._bridge._fixture_registry import _fixture_inner_type
+from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
+from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import get_metadata
+from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
@@ -229,10 +233,6 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     Inspects type hints on the layer's param_type to get the inner
     type T from FixtureRef[T].
     """
-    import sys
-
-    from oxitest._bridge._fixture_type import FixtureRef
-
     fixref_fields = layer.fixref_fields
     if not fixref_fields:
         return ()
@@ -246,8 +246,6 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     field_hints = safe_type_hints(param_type, globalns=globalns, include_extras=True)
     if field_hints is None:
         return ()
-    from typing import Annotated, get_args, get_origin
-
     deps: list[tuple[str, str]] = []
     for name in fixref_fields:
         hint = field_hints.get(name)
@@ -371,10 +369,6 @@ def _check_module_registrars(
     Without the allow comment: emit violation, do NOT register.
     With the allow comment: register silently, no violation.
     """
-    from oxitest._bridge._allow_comment import parse_allow_rules
-    from oxitest._bridge._fixture_registry import ConftestSource
-    from oxitest._bridge._helpers import Helpers
-
     registry = getattr(session, "_registry", None) if session else None
     violations: list[CollectedViolation] = []
 

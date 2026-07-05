@@ -5,11 +5,13 @@ __all__ = ["FixturesProxy", "NamespaceProxy", "OxiNamespaceProxy"]
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._builtin_context import TestContext
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import FdCapture, StdCapture
 from oxitest._bridge._builtins._logcapture import LogCapture
 from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._builtins._tempdir import TempDir, TempDirFactory
+from oxitest._bridge._test_meta import TestMeta
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_session import FixtureSession
@@ -21,16 +23,10 @@ _OXI_NAMES: dict[str, type] = {
     "fd_cap": FdCapture,
     "patch": Patcher,
     "log": LogCapture,
-    # "ctx" handled separately via _get_ctx_type() to avoid circular import
+    # "ctx" handled separately via _CTX_NAME / TestContext (not in this dict)
 }
 
 _CTX_NAME = "ctx"
-
-
-def _get_ctx_type() -> type:
-    from oxitest._bridge._builtin_context import TestContext
-
-    return TestContext
 
 
 class _CachingProxy:
@@ -119,7 +115,7 @@ class OxiNamespaceProxy(_CachingProxy):
 
         def _resolve() -> Any:
             if name == _CTX_NAME:
-                inner: type | None = _get_ctx_type()
+                inner: type | None = TestContext
             else:
                 inner = _OXI_NAMES.get(name)
             if inner is None:
@@ -134,8 +130,6 @@ class OxiNamespaceProxy(_CachingProxy):
                     " — this is a bug"
                 )
                 raise RuntimeError(msg)
-            from oxitest._bridge._test_meta import TestMeta
-
             meta = TestMeta(
                 module_path=self._module_path,
                 fn_name=self._fn_name,

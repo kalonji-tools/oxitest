@@ -5,8 +5,14 @@ from __future__ import annotations
 __all__ = ["CovReportFormat", "CoveragePyProvider", "resolve_provider_standalone"]
 
 import os
+import types
 from enum import Enum
 from typing import Any
+
+try:
+    import coverage as _coverage
+except ImportError:
+    _coverage: types.ModuleType | None = None
 
 
 class CovReportFormat(Enum):
@@ -27,11 +33,9 @@ class CoveragePyProvider:
 
     def start(self, config: dict) -> None:
         """Begin coverage collection."""
-        try:
-            import coverage as _coverage
-        except ImportError:
+        if _coverage is None:
             msg = "--cov requires coverage.py: pip install coverage"
-            raise ImportError(msg) from None
+            raise ImportError(msg)
         self._cov = _coverage.Coverage()
         self._cov.start()
         config_file = self._find_config_file()

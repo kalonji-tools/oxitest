@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
 
 _fixtures_registry_var: ContextVar[FixtureRegistry | None] = ContextVar(
     "_fixtures_registry_var", default=None
@@ -24,8 +25,6 @@ class _FixtureNamespaceProxy:
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
-        from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
-
         defn = self._registry.get_in_namespace(name, self._namespace)
         if defn is None:
             raise AttributeError(

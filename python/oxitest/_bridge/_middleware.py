@@ -110,8 +110,6 @@ class AsyncDepGuardMiddleware:
                     if inspect.iscoroutine(v):
                         v.close()
 
-                    from oxitest._bridge.result import _error_result
-
                     _msg = (
                         f"async fixture '{k}' cannot be used by sync test "
                         f"'{plan.fn_name}' \u2014 make the test async def"

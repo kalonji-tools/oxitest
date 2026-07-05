@@ -23,6 +23,7 @@ from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type
 
 from oxitest._bridge._errors import ParametrizeError
 from oxitest._bridge._fixture_registry import _fixture_inner_type
+from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
 from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 
@@ -39,8 +40,6 @@ def _extract_fixture_ref_names(
     sentinel inside ``Annotated`` metadata.  Only *field_names* are
     checked — pass ``hints.keys()`` to scan all fields.
     """
-    from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
-
     mod = sys.modules.get(target_type.__module__)
     globalns = dict(vars(mod)) if mod else {}
     globalns.setdefault("FixtureRef", FixtureRef)

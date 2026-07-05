@@ -20,6 +20,8 @@ import warnings
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
+from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
+
 if TYPE_CHECKING:
     from oxitest._bridge.plugin_loader import PluginRegistry
 
@@ -122,8 +124,6 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
         BackendNotFoundError: if no backend matches the config name.
         ConflictingBackendError: if multiple plugins register the same name.
     """
-    from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
-
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)
         for entry in registry.entries

@@ -46,7 +46,13 @@ import json
 import os
 import sys
 import time
+import types
 from typing import NotRequired, TypedDict
+
+try:
+    import coverage as _coverage
+except ImportError:
+    _coverage: types.ModuleType | None = None
 
 
 class WorkerTaskItem(TypedDict):
@@ -75,13 +81,14 @@ class WorkerTask(TypedDict):
 
 def _maybe_start_coverage() -> None:
     """Activate coverage collection if the parent process requested it."""
-    if os.environ.get("COVERAGE_PROCESS_START"):
-        import coverage
-
-        coverage.process_startup()
+    if os.environ.get("COVERAGE_PROCESS_START") and _coverage is not None:
+        _coverage.process_startup()
 
 
 def run(task: WorkerTask) -> None:
+    # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
+    # PLC0415 is suppressed for this file in ruff per-file-ignores.
+    from oxitest._bridge._runners import DebugContext
     from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.conftest_loader import create_session
     from oxitest._bridge.executor import run_test
@@ -92,8 +99,6 @@ def run(task: WorkerTask) -> None:
     conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str | None = task.get("keep_tmp")
-    from oxitest._bridge._runners import DebugContext
-
     debug = DebugContext(
         show_locals=task.get("show_locals", False),
         show_internals=task.get("show_internals", False),

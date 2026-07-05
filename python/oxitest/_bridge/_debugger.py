@@ -8,6 +8,7 @@ from __future__ import annotations
 
 __all__ = ["DebuggerBackend", "_PdbBackend"]
 
+import pdb
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
@@ -45,11 +46,7 @@ class _PdbBackend:
     """Default debugger backend wrapping stdlib ``pdb``."""
 
     def trace(self) -> None:
-        import pdb
-
         pdb.set_trace()
 
     def post_mortem(self, tb: TracebackType) -> None:
-        import pdb
-
         pdb.post_mortem(tb)

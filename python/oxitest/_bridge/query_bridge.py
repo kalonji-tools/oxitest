@@ -4,8 +4,17 @@ from __future__ import annotations
 
 __all__ = ["fixture_entries", "helper_entries", "plugin_entries", "test_fixture_deps"]
 
+import inspect
 import logging
 from typing import Any
+
+from oxitest._bridge._fixture_registry import (
+    BuiltinSource,
+    ConftestSource,
+    FixtureScope,
+    PluginSource,
+)
+from oxitest._bridge.importer import collect_module
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +32,6 @@ _PROTOCOL_FIELDS = (
 
 def fixture_entries(registry: Any) -> list[dict[str, str]]:
     """Return all fixture defs as dicts for the Rust query engine."""
-    from oxitest._bridge._fixture_registry import (
-        BuiltinSource,
-        ConftestSource,
-        FixtureScope,
-        PluginSource,
-    )
-
     entries = []
     for defn in registry.all():
         match defn.source:
@@ -68,10 +70,6 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
 
 def helper_entries(registry: Any) -> list[dict[str, str]]:
     """Return all helper defs as dicts for the Rust query engine."""
-    import inspect
-
-    from oxitest._bridge._fixture_registry import ConftestSource, PluginSource
-
     entries = []
     for defn in registry.all():
         match defn.source:
@@ -122,8 +120,6 @@ def test_fixture_deps(
 
     Each entry has 'test_node_id' and 'fixture_names' (comma-separated).
     """
-    from oxitest._bridge.importer import collect_module
-
     entries: list[dict[str, str]] = []
     for path in test_files:
         try:
