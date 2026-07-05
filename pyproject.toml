@@ -40,10 +40,6 @@ ignore = [
     "TC002",          # same: runtime annotation resolution needs imports in namespace
     "TC003",          # same: stdlib types used in annotations resolved by get_type_hints()
 
-    "EM101",          # inline exception messages are readable; extracting adds noise
-    "EM102",          # same: f-string exception messages are fine inline
-    "TRY003",         # same: descriptive exception messages belong at the raise site
-
     # ── Not yet addressed (TODO: fix incrementally) ──────────────────────
     "ANN001",         # missing type annotation for function argument
     "ANN002",         # missing type annotation for *args

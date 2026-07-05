@@ -435,7 +435,8 @@ def test_cycle_raises_fixture_cycle_error():
 
 def test_setup_error_raises_fixture_setup_error():
     def bad():
-        raise ValueError("oops")
+        msg = "oops"
+        raise ValueError(msg)
 
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("bad", bad, conftest_path="/c.py")

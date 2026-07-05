@@ -99,7 +99,8 @@ def test_load_wrong_return_type_raises():
 @oxitest.mark.inprocess
 def test_load_entry_raises_wraps_error():
     def bad_entry(**_: object):
-        raise ValueError("boom")
+        msg = "boom"
+        raise ValueError(msg)
 
     mod = types.ModuleType("raises_plugin")
     setattr(mod, "oxitest_plugin", bad_entry)

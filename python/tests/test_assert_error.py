@@ -22,7 +22,8 @@ def test_compare_equal_failure_carries_left_right_op():
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except _OxitestAssertionError as e:
         assert e.left == 41, f"expected e.left == 41, got {e.left!r}"
         assert e.right == 42, f"expected e.right == 42, got {e.right!r}"
@@ -34,7 +35,8 @@ def test_compare_in_failure_carries_operands():
     _exec_rewritten('def test_f():\n    assert x in ["alice", "carol"]\n', ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except _OxitestAssertionError as e:
         assert e.left == "bob", f"expected e.left == 'bob', got {e.left!r}"
         assert e.right == ["alice", "carol"], (
@@ -52,7 +54,8 @@ def test_bool_assert_failure_carries_value():
     _exec_rewritten("def test_f():\n    assert flag\n", ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except _OxitestAssertionError as e:
         assert e.left is False, f"expected e.left is False, got {e.left!r}"
         assert e.right is _OXITEST_NO_RHS, (
@@ -66,7 +69,8 @@ def test_assert_with_message_carries_why():
     _exec_rewritten('def test_f():\n    assert x == 42, "should be 42"\n', ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except _OxitestAssertionError as e:
         assert e.args[0] == "should be 42", (
             f"expected error message 'should be 42', got {e.args[0]!r}"
@@ -80,7 +84,8 @@ def test_chained_compare_left_untouched():
     _exec_rewritten("def test_f():\n    assert 1 < x < 10\n", ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except AssertionError as e:
         assert not isinstance(e, _OxitestAssertionError), (
             "chained comparison should fall back to plain AssertionError, not "
@@ -98,7 +103,8 @@ def test_bool_op_assert_left_untouched():
     _exec_rewritten("def test_f():\n    assert a and b\n", ns)
     try:
         ns["test_f"]()
-        raise AssertionError("should have raised")
+        msg = "should have raised"
+        raise AssertionError(msg)
     except AssertionError as e:
         assert not isinstance(e, _OxitestAssertionError), (
             "boolean 'and' assert should fall back to plain AssertionError, not "

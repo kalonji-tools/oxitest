@@ -88,7 +88,8 @@ def test_skip_test_returns_skipped():
 
 def test_regular_exception_returns_error():
     try:
-        raise ValueError("something broke")
+        msg = "something broke"
+        raise ValueError(msg)
     except ValueError as exc:
         result = _handle_runtime_exception(exc)
     r = helpers.common.assert_result(result, ErrorResult)
@@ -213,7 +214,8 @@ def test_frames_captured_on_runtime_exception():
     """_handle_runtime_exception populates frames from the traceback."""
 
     def blow_up():
-        raise ValueError("kaboom")
+        msg = "kaboom"
+        raise ValueError(msg)
 
     try:
         blow_up()
