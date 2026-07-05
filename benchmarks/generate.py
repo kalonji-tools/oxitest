@@ -51,7 +51,7 @@ def _oxitest_conftest() -> str:
     """)
 
 
-def _oxitest_file(file_idx: int, test_offset: int) -> str:
+def _oxitest_file(_file_idx: int, test_offset: int) -> str:
     lines = [
         "from __future__ import annotations",
         "",
@@ -106,7 +106,7 @@ def _oxitest_file(file_idx: int, test_offset: int) -> str:
     return "\n".join(lines)
 
 
-def _oxitest_realistic_file(file_idx: int, test_offset: int) -> str:
+def _oxitest_realistic_file(_file_idx: int, test_offset: int) -> str:
     """Like _oxitest_file but every test body includes time.sleep(0.01)."""
     lines = [
         "from __future__ import annotations",
@@ -167,7 +167,7 @@ def _oxitest_realistic_file(file_idx: int, test_offset: int) -> str:
     return "\n".join(lines)
 
 
-def _pytest_file(file_idx: int, test_offset: int) -> str:
+def _pytest_file(_file_idx: int, test_offset: int) -> str:
     lines = [
         "from __future__ import annotations",
         "",

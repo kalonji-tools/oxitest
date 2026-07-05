@@ -68,14 +68,14 @@ def assert_result(
 
 
 @fx.fixture
-def fixture_session(tmp: TempDir) -> Yields[FixtureSession]:
+def fixture_session(_tmp: TempDir) -> Yields[FixtureSession]:
     session = FixtureSession([], PluginRegistry())
     yield session
     session.end_session()
 
 
 @fx.fixture
-def clean_sys_modules() -> Yields[None]:
+def _clean_sys_modules() -> Yields[None]:
     saved = sys.modules.copy()
     yield
     for key in list(sys.modules):

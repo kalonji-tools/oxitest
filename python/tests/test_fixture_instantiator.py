@@ -214,7 +214,7 @@ def test_resolve_by_source_plugin():
         defn,
         TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x"),
         teardowns,
-        lambda n: None,
+        lambda _: None,
     )
     assert value == "plugin_value", (
         "should return provider.create() result for PluginSource fixture"

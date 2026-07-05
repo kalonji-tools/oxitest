@@ -19,7 +19,7 @@ def _run_version_flag(*args: str) -> tuple[str, str, int]:
     return result.stdout, result.stderr, result.returncode
 
 
-def test_version_flag_prints_version_and_exits_zero(tmp: TempDir) -> None:
+def test_version_flag_prints_version_and_exits_zero(_tmp: TempDir) -> None:
     """``oxitest --version`` prints the version string and exits 0."""
     out, _stderr, rc = _run_version_flag("--version")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
@@ -30,7 +30,7 @@ def test_version_flag_prints_version_and_exits_zero(tmp: TempDir) -> None:
     assert any("." in p for p in parts), f"no version number found in: {version_line}"
 
 
-def test_short_version_flag(tmp: TempDir) -> None:
+def test_short_version_flag(_tmp: TempDir) -> None:
     """``oxitest -V`` is equivalent to ``--version``."""
     out_long, _, rc_long = _run_version_flag("--version")
     out_short, _, rc_short = _run_version_flag("-V")

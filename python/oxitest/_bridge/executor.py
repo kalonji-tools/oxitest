@@ -234,7 +234,6 @@ def _evaluate_marks_phase(
     resolved: _ResolvedTest,
     session: _SessionProtocol,
     module_path: str,
-    default_timeout: int | None,
     marks: list[MarkInfo],
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Evaluate marks and return (short_circuit, wrappers)."""
@@ -324,7 +323,7 @@ def run_test(
     try:
         marks: list[MarkInfo] = get_marks(fn_raw)
         short_circuit, wrappers = _evaluate_marks_phase(
-            resolved, effective_session, meta.module_path, default_timeout, marks
+            resolved, effective_session, meta.module_path, marks
         )
         if short_circuit is not None:
             return short_circuit

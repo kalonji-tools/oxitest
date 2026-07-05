@@ -4,7 +4,7 @@ import oxitest
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
 
 
-def test_proxy_resolves_namespace_and_accessor(tmp: oxitest.TempDir) -> None:
+def test_proxy_resolves_namespace_and_accessor(_tmp: oxitest.TempDir) -> None:
     from oxitest._bridge._fixture_registry import (
         ConftestSource,
         FixtureDef,

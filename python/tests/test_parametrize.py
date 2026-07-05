@@ -837,7 +837,7 @@ def test_dict_cases_items_yields_repr_pairs():
 
 def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs():
     dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
-    kwargs, fixrefs = dc.resolve(lambda x, y: None, "basic")
+    kwargs, fixrefs = dc.resolve(lambda _x, _y: None, "basic")
     assert kwargs == {"x": 1, "y": 2}, f"resolve should return case dict, got {kwargs}"
     assert fixrefs == frozenset(), f"dict mode fixrefs should be empty, got {fixrefs}"
 

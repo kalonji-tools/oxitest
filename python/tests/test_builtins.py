@@ -358,7 +358,7 @@ def test_stdcapture_readouterr_resets_buffer():
     )
 
 
-def test_stdcapture_disabled_passes_through(cap_outer: StdCapture):
+def test_stdcapture_disabled_passes_through(_cap_outer: StdCapture):
 
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
@@ -726,7 +726,7 @@ def test_testcontext_still_works_via_builtin_dispatch():
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
 
-    def factory(ctx: Fixture[TestContext]) -> str:
+    def factory(_ctx: Fixture[TestContext]) -> str:
         return "ok"
 
     reg = FixtureRegistry()
@@ -993,9 +993,7 @@ def test_logcapture_includes_plugin_backends():
     fake_backend = FakePluginBackend()
 
     mod = types.ModuleType("fake_log_plugin")
-    setattr(
-        mod, "oxitest_plugin", lambda config=None: Plugin(log_backends=(fake_backend,))
-    )
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin(log_backends=(fake_backend,)))
     sys.modules["fake_log_plugin"] = mod
     try:
         registry = load_plugins(["fake_log_plugin"], {})

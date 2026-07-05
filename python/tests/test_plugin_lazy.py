@@ -183,7 +183,7 @@ def test_load_plugins_defers_lazy_only_plugin():
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_eager_protocol():
     mod = types.ModuleType("eager_reporter_plugin")
-    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["eager_reporter_plugin"] = mod
     try:
         registry = load_plugins(
@@ -206,7 +206,7 @@ def test_load_plugins_eager_imports_plugin_with_eager_protocol():
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_no_protocols_declared():
     mod = types.ModuleType("no_protocols_plugin")
-    setattr(mod, "oxitest_plugin", lambda config=None: Plugin())
+    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["no_protocols_plugin"] = mod
     try:
         registry = load_plugins(["no_protocols_plugin"], {})
