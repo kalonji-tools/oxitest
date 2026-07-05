@@ -126,15 +126,15 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
     for attr_name, obj in vars(module).items():
         if not isinstance(obj, Fixtures):
             continue
-        namespace_name = obj._namespace_name or attr_name
+        namespace_name = obj.namespace_name or attr_name
         validate_namespace_name(namespace_name, path)
         if namespace_name == "oxi":
             raise ValueError(
                 f"'oxi' is a reserved namespace name in oxitest. "
                 f"Rename your Fixtures() instance in {path}."
             )
-        obj._namespace_name = namespace_name
-        for defn in obj._defs:
+        obj.namespace_name = namespace_name
+        for defn in obj.defs:
             try:
                 ft = _extract_fixture_type(defn.source.func)
             except ValueError:
@@ -157,15 +157,15 @@ def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
     for attr_name, obj in vars(module).items():
         if not isinstance(obj, Helpers):
             continue
-        namespace_name = obj._namespace_name or attr_name
+        namespace_name = obj.namespace_name or attr_name
         validate_namespace_name(namespace_name, path)
         if namespace_name == "oxi":
             raise ValueError(
                 f"'oxi' is a reserved namespace name in oxitest. "
                 f"Rename your Helpers() instance in {path}."
             )
-        obj._namespace_name = namespace_name
-        for defn in obj._defs:
+        obj.namespace_name = namespace_name
+        for defn in obj.defs:
             stamped = dataclasses.replace(
                 defn,
                 source=ConftestSource(func=defn.func, conftest_path=path),

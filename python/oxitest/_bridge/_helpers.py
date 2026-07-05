@@ -32,6 +32,18 @@ class Helpers:
         caller = frame.f_back if frame is not None else None
         self._source_line: int = caller.f_lineno if caller is not None else 0
 
+    @property
+    def namespace_name(self) -> str:
+        return self._namespace_name
+
+    @namespace_name.setter
+    def namespace_name(self, value: str) -> None:
+        self._namespace_name = value
+
+    @property
+    def defs(self) -> list[HelperDef]:
+        return self._defs
+
     @overload
     def helper(self, fn: _F) -> _F: ...
 
