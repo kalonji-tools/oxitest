@@ -18,7 +18,7 @@ class AddCase:
     expected: int
 
 
-def test_parametrize_stamps_function():
+def test_parametrize_stamps_function() -> None:
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
     def test_foo(x, y, expected):
         pass
@@ -45,7 +45,7 @@ def test_parametrize_stamps_function():
     )
 
 
-def test_parametrize_multiple_cases():
+def test_parametrize_multiple_cases() -> None:
     @parametrize(
         basic=AddCase(x=1, y=2, expected=3),
         zero_sum=AddCase(x=0, y=0, expected=0),
@@ -71,7 +71,7 @@ def test_parametrize_multiple_cases():
     )
 
 
-def test_parametrize_rejects_non_dataclass():
+def test_parametrize_rejects_non_dataclass() -> None:
     with raises(
         TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
@@ -81,7 +81,7 @@ def test_parametrize_rejects_non_dataclass():
             pass
 
 
-def test_parametrize_rejects_non_frozen_dataclass():
+def test_parametrize_rejects_non_frozen_dataclass() -> None:
     @dataclass
     class Mutable:
         x: int
@@ -93,7 +93,7 @@ def test_parametrize_rejects_non_frozen_dataclass():
             pass
 
 
-def test_parametrize_rejects_empty_cases():
+def test_parametrize_rejects_empty_cases() -> None:
     with raises(TypeError, match="at least one case"):
 
         @parametrize()
@@ -101,7 +101,7 @@ def test_parametrize_rejects_empty_cases():
             pass
 
 
-def test_parametrize_rejects_wrong_instance_type():
+def test_parametrize_rejects_wrong_instance_type() -> None:
     @dataclass(frozen=True)
     class OtherCase:
         z: int
@@ -116,7 +116,7 @@ def test_parametrize_rejects_wrong_instance_type():
             pass
 
 
-def test_collect_parametrize_expands_to_n_items(tmp: TempDir):
+def test_collect_parametrize_expands_to_n_items(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -146,7 +146,7 @@ def test_collect_parametrize_expands_to_n_items(tmp: TempDir):
     assert "neg" in param_ids, f"'neg' param_id should be collected, got {param_ids}"
 
 
-def test_collect_parametrize_item_has_param_values(tmp: TempDir):
+def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -175,7 +175,7 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir):
     )
 
 
-def test_collect_non_parametrize_has_none_param_id(tmp: TempDir):
+def test_collect_non_parametrize_has_none_param_id(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(tmp, "def test_foo(): pass\n")
     items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
@@ -188,7 +188,7 @@ def test_collect_non_parametrize_has_none_param_id(tmp: TempDir):
     )
 
 
-def test_plain_typed_param_not_resolved_as_fixture():
+def test_plain_typed_param_not_resolved_as_fixture() -> None:
     """Plain-typed params (no Fixture[T] annotation) must not be resolved."""
     registry = FixtureRegistry()
     session = FixtureSession(registry)
@@ -205,7 +205,7 @@ def test_plain_typed_param_not_resolved_as_fixture():
     )
 
 
-def test_fixture_annotated_param_resolved_alongside_plain_param():
+def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
     """Fixture[T]-annotated params are resolved; plain-typed params are skipped."""
     registry = FixtureRegistry()
 
@@ -227,7 +227,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param():
     )
 
 
-def test_plain_typed_param_matching_fixture_raises_unannotated_error():
+def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
     """A param with a wrong annotation (e.g. int instead of Fixture[int]) whose name
     matches a registered fixture raises UnannotatedFixtureParamError — the check covers
     both no-annotation and wrong-annotation cases."""
@@ -258,7 +258,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error():
     )
 
 
-def test_executor_runs_parametrize_case(tmp: TempDir):
+def test_executor_runs_parametrize_case(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -280,7 +280,7 @@ def test_executor_runs_parametrize_case(tmp: TempDir):
     )
 
 
-def test_executor_parametrize_failure(tmp: TempDir):
+def test_executor_parametrize_failure(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -301,7 +301,7 @@ def test_executor_parametrize_failure(tmp: TempDir):
     )
 
 
-def test_executor_parametrize_case_with_fixture(tmp: TempDir):
+def test_executor_parametrize_case_with_fixture(tmp: TempDir) -> None:
     """param_id + session: param values injected, fixture resolved, no collision."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
@@ -335,7 +335,7 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir):
     )
 
 
-def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
+def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
     """FixtureRef[T] field is resolved via the fixture session per case."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
@@ -390,7 +390,7 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
     assert result_sq.status == "passed", result_sq.message
 
 
-def test_fixture_ref_compact_mode_raises(tmp: TempDir):
+def test_fixture_ref_compact_mode_raises(tmp: TempDir) -> None:
     """FixtureRef fields are incompatible with compact mode — must return error."""
     result = helpers.common.exec_inline(
         tmp,
@@ -417,7 +417,7 @@ def test_fixture_ref_compact_mode_raises(tmp: TempDir):
     )
 
 
-def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir):
+def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
     """Passing an unregistered fixture function as FixtureRef value → error result."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\nfixtures = oxitest.Fixtures()\n")
@@ -445,7 +445,7 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir):
     )
 
 
-def test_fixture_ref_no_session_returns_error(tmp: TempDir):
+def test_fixture_ref_no_session_returns_error(tmp: TempDir) -> None:
     """FixtureRef field with session=None returns error result, not None injection."""
     result = helpers.common.exec_inline(
         tmp,
@@ -472,7 +472,7 @@ def test_fixture_ref_no_session_returns_error(tmp: TempDir):
     )
 
 
-def test_parametrize_rejects_non_callable_for_fixture_ref_field():
+def test_parametrize_rejects_non_callable_for_fixture_ref_field() -> None:
     """FixtureRef[T] fields must hold callables — non-callable raises TypeError."""
 
     @dataclass(frozen=True)
@@ -486,7 +486,7 @@ def test_parametrize_rejects_non_callable_for_fixture_ref_field():
             pass
 
 
-def test_parametrize_dict_mode_stamps_function():
+def test_parametrize_dict_mode_stamps_function() -> None:
     @parametrize(basic=dict(x=1, y=2, expected=3))
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
@@ -506,7 +506,7 @@ def test_parametrize_dict_mode_stamps_function():
     )
 
 
-def test_parametrize_dict_mode_multiple_cases():
+def test_parametrize_dict_mode_multiple_cases() -> None:
     @parametrize(
         basic=dict(x=1, y=2, expected=3),
         zero_sum=dict(x=0, y=0, expected=0),
@@ -529,7 +529,7 @@ def test_parametrize_dict_mode_multiple_cases():
     )
 
 
-def test_parametrize_dict_mode_rejects_extra_key():
+def test_parametrize_dict_mode_rejects_extra_key() -> None:
     with raises(TypeError, match="unexpected key"):
 
         @parametrize(basic=dict(x=1, y=2, expeced=3))  # codespell:ignore expeced
@@ -537,7 +537,7 @@ def test_parametrize_dict_mode_rejects_extra_key():
             pass
 
 
-def test_parametrize_dict_mode_rejects_missing_key():
+def test_parametrize_dict_mode_rejects_missing_key() -> None:
     with raises(TypeError, match="missing key"):
 
         @parametrize(basic=dict(x=1, y=2))
@@ -545,7 +545,7 @@ def test_parametrize_dict_mode_rejects_missing_key():
             pass
 
 
-def test_parametrize_dict_mode_rejects_non_dict_case():
+def test_parametrize_dict_mode_rejects_non_dict_case() -> None:
     with raises(TypeError, match="must be a dict"):
 
         @parametrize(
@@ -556,7 +556,7 @@ def test_parametrize_dict_mode_rejects_non_dict_case():
             pass
 
 
-def test_parametrize_dict_mode_excludes_fixture_params_from_schema():
+def test_parametrize_dict_mode_excludes_fixture_params_from_schema() -> None:
     """Fixture[T] params are not required in the dict — session resolves them."""
 
     @parametrize(basic=dict(x=2, expected=20))
@@ -579,7 +579,7 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema():
     )
 
 
-def test_executor_dict_mode_passes(tmp: TempDir):
+def test_executor_dict_mode_passes(tmp: TempDir) -> None:
     """Dict mode: case values injected as individual kwargs, test passes."""
     code = (
         "import oxitest\n"
@@ -596,7 +596,7 @@ def test_executor_dict_mode_passes(tmp: TempDir):
     assert result_neg.status == "passed", result_neg.message
 
 
-def test_executor_dict_mode_failure(tmp: TempDir):
+def test_executor_dict_mode_failure(tmp: TempDir) -> None:
     """Dict mode: failing assertion produces 'failed' status."""
     result = helpers.common.exec_inline(
         tmp,
@@ -613,7 +613,7 @@ def test_executor_dict_mode_failure(tmp: TempDir):
     )
 
 
-def test_executor_dict_mode_with_fixture(tmp: TempDir):
+def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
     """Dict mode: Fixture[T] params resolved from session alongside dict values."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
@@ -639,7 +639,7 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir):
     assert result.status == "passed", result.message
 
 
-def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir):
+def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -661,7 +661,7 @@ def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir):
     assert "neg" in param_ids, f"'neg' param_id should be collected, got {param_ids}"
 
 
-def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir):
+def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -682,7 +682,7 @@ def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir):
     )
 
 
-def test_parametrize_inferred_type_stamps_function():
+def test_parametrize_inferred_type_stamps_function() -> None:
     """Dataclass mode: type inferred from first case value, no explicit type arg."""
 
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
@@ -707,7 +707,7 @@ def test_parametrize_inferred_type_stamps_function():
     )
 
 
-def test_parametrize_rejects_invalid_case_type():
+def test_parametrize_rejects_invalid_case_type() -> None:
     """Non-dict, non-dataclass case value raises TypeError at decoration time."""
     with raises(
         TypeError, match="case values must be dicts, frozen dataclass instances"
@@ -723,7 +723,7 @@ def test_parametrize_rejects_invalid_case_type():
 
 def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
     tmp: TempDir,
-):
+) -> None:
     """FixtureRef function with FixtureDef.namespace uses namespace-qualified lookup.
 
     Two namespaces 'db' and 'http' both define a fixture named 'conn'.  'http'
@@ -778,7 +778,7 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
     assert result.status == "passed", result.message
 
 
-def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
+def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -> None:
     """FixtureRef function without a namespace falls back to flat get_fixture.
 
     The fixture function is not registered in the session's registry (defined
@@ -825,7 +825,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir):
 # ── Mode class unit tests ──────────────────────────────────────────────────────
 
 
-def test_dict_cases_items_yields_repr_pairs():
+def test_dict_cases_items_yields_repr_pairs() -> None:
     dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     result = list(dc.items())
     assert result == [("basic", [("x", "1"), ("y", "2")])], (
@@ -835,14 +835,14 @@ def test_dict_cases_items_yields_repr_pairs():
     )
 
 
-def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs():
+def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs() -> None:
     dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     kwargs, fixrefs = dc.resolve(lambda _x, _y: None, "basic")
     assert kwargs == {"x": 1, "y": 2}, f"resolve should return case dict, got {kwargs}"
     assert fixrefs == frozenset(), f"dict mode fixrefs should be empty, got {fixrefs}"
 
 
-def test_dataclass_cases_items_yields_field_repr_pairs():
+def test_dataclass_cases_items_yields_field_repr_pairs() -> None:
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -856,7 +856,7 @@ def test_dataclass_cases_items_yields_field_repr_pairs():
     )
 
 
-def test_dataclass_cases_resolve_expanded_mode():
+def test_dataclass_cases_resolve_expanded_mode() -> None:
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -873,7 +873,7 @@ def test_dataclass_cases_resolve_expanded_mode():
     assert fixrefs == frozenset(), f"no FixtureRef fields, got {fixrefs}"
 
 
-def test_dataclass_cases_resolve_compact_mode():
+def test_dataclass_cases_resolve_compact_mode() -> None:
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -890,7 +890,7 @@ def test_dataclass_cases_resolve_compact_mode():
     assert fixrefs == frozenset(), f"no FixtureRef fields, got {fixrefs}"
 
 
-def test_dict_parametrize_rejects_extra_key(tmp: TempDir):
+def test_dict_parametrize_rejects_extra_key(tmp: TempDir) -> None:
     code = (
         "import oxitest\n"
         "\n"
@@ -902,7 +902,7 @@ def test_dict_parametrize_rejects_extra_key(tmp: TempDir):
         collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_dict_parametrize_rejects_missing_key(tmp: TempDir):
+def test_dict_parametrize_rejects_missing_key(tmp: TempDir) -> None:
     code = (
         "import oxitest\n"
         "\n"
@@ -914,7 +914,7 @@ def test_dict_parametrize_rejects_missing_key(tmp: TempDir):
         collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir):
+def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir) -> None:
     code = (
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -931,7 +931,7 @@ def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir):
         collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir):
+def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
     code = (
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -954,7 +954,7 @@ def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir):
         collect_module(helpers.common.write_test_module(tmp, code))
 
 
-def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
+def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> None:
     """FixtureRef with namespace and session=None returns error.
 
     When no session is available (session=None), the executor uses a
@@ -1007,7 +1007,7 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir):
     )
 
 
-def test_parametrize_rejects_empty_cases_direct():
+def test_parametrize_rejects_empty_cases_direct() -> None:
     from oxitest import raises
     from oxitest._bridge.parametrize import parametrize
 
@@ -1015,7 +1015,7 @@ def test_parametrize_rejects_empty_cases_direct():
         parametrize()
 
 
-def test_parametrize_rejects_non_dataclass_non_dict_direct():
+def test_parametrize_rejects_non_dataclass_non_dict_direct() -> None:
     from oxitest import raises
     from oxitest._bridge.parametrize import parametrize
 
@@ -1038,7 +1038,7 @@ class MathCase:
     expected: int
 
 
-def test_partial_stores_target_type_and_fields():
+def test_partial_stores_target_type_and_fields() -> None:
     p = partial(MathCase, x=1, y=2)
 
     assert p.target_type is MathCase, (
@@ -1052,22 +1052,22 @@ def test_partial_stores_target_type_and_fields():
     )
 
 
-def test_partial_rejects_non_dataclass():
+def test_partial_rejects_non_dataclass() -> None:
     with raises(TypeError, match="must be a dataclass"):
         partial(int, x=1)
 
 
-def test_partial_rejects_empty_fields():
+def test_partial_rejects_empty_fields() -> None:
     with raises(TypeError, match="at least one field"):
         partial(MathCase)
 
 
-def test_partial_rejects_unknown_field():
+def test_partial_rejects_unknown_field() -> None:
     with raises(TypeError, match="unknown field"):
         partial(MathCase, x=1, typo=2)
 
 
-def test_partial_detects_fixref_fields():
+def test_partial_detects_fixref_fields() -> None:
     @dataclass
     class DbCase:
         db: FixtureRef[str]
@@ -1082,7 +1082,7 @@ def test_partial_detects_fixref_fields():
     )
 
 
-def test_partial_rejects_non_callable_fixref():
+def test_partial_rejects_non_callable_fixref() -> None:
     @dataclass
     class DbCase:
         db: FixtureRef[str]
@@ -1094,7 +1094,7 @@ def test_partial_rejects_non_callable_fixref():
 # ── ResolvedCases (partial/composed) tests ───────────────────────────────────
 
 
-def test_partial_cases_items_yields_field_repr_pairs():
+def test_partial_cases_items_yields_field_repr_pairs() -> None:
     p = partial(MathCase, x=1, y=2, expected=3)
     pc = ComposedCases(
         cases=MappingProxyType({"add": p}),
@@ -1111,7 +1111,7 @@ def test_partial_cases_items_yields_field_repr_pairs():
     )
 
 
-def test_parametrize_stacks_partial_layers():
+def test_parametrize_stacks_partial_layers() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(pg=partial(MathCase, x=1))
@@ -1132,7 +1132,7 @@ def test_parametrize_stacks_partial_layers():
     )
 
 
-def test_parametrize_single_full_dataclass_is_1_tuple():
+def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
@@ -1152,7 +1152,7 @@ def test_parametrize_single_full_dataclass_is_1_tuple():
     )
 
 
-def test_parametrize_single_dict_is_1_tuple():
+def test_parametrize_single_dict_is_1_tuple() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic=dict(x=1, y=2, expected=3))
@@ -1173,7 +1173,7 @@ def test_parametrize_single_dict_is_1_tuple():
     )
 
 
-def test_parametrize_rejects_mixing_partial_and_full():
+def test_parametrize_rejects_mixing_partial_and_full() -> None:
     with raises(TypeError, match="cannot mix"):
 
         @parametrize(pg=partial(MathCase, x=1))
@@ -1182,7 +1182,7 @@ def test_parametrize_rejects_mixing_partial_and_full():
             pass
 
 
-def test_parametrize_rejects_partial_different_target_type():
+def test_parametrize_rejects_partial_different_target_type() -> None:
     @dataclass
     class OtherCase:
         z: int
@@ -1195,7 +1195,7 @@ def test_parametrize_rejects_partial_different_target_type():
             pass
 
 
-def test_parametrize_rejects_overlapping_fields():
+def test_parametrize_rejects_overlapping_fields() -> None:
     with raises(TypeError, match="overlap"):
 
         @parametrize(pg=partial(MathCase, x=1, y=2))
@@ -1207,7 +1207,7 @@ def test_parametrize_rejects_overlapping_fields():
 # ── Cartesian product expansion tests ────────────────────────────────────────
 
 
-def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
+def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1233,7 +1233,7 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir):
     )
 
 
-def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
+def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1260,7 +1260,7 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir):
     )
 
 
-def test_collect_composed_rejects_single_partial_layer(tmp: TempDir):
+def test_collect_composed_rejects_single_partial_layer(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1278,7 +1278,7 @@ def test_collect_composed_rejects_single_partial_layer(tmp: TempDir):
         collect_module(path)
 
 
-def test_collect_composed_rejects_incomplete_fields(tmp: TempDir):
+def test_collect_composed_rejects_incomplete_fields(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1298,7 +1298,7 @@ def test_collect_composed_rejects_incomplete_fields(tmp: TempDir):
         collect_module(path)
 
 
-def test_collect_composed_3_layers(tmp: TempDir):
+def test_collect_composed_3_layers(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1323,7 +1323,7 @@ def test_collect_composed_3_layers(tmp: TempDir):
 # ── Composed resolution tests ─────────────────────────────────────────────────
 
 
-def test_executor_composed_parametrize_passes(tmp: TempDir):
+def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1347,7 +1347,7 @@ def test_executor_composed_parametrize_passes(tmp: TempDir):
     )
 
 
-def test_executor_composed_parametrize_failure(tmp: TempDir):
+def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1370,7 +1370,7 @@ def test_executor_composed_parametrize_failure(tmp: TempDir):
     )
 
 
-def test_executor_composed_with_fixture(tmp: TempDir):
+def test_executor_composed_with_fixture(tmp: TempDir) -> None:
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -1401,7 +1401,7 @@ def test_executor_composed_with_fixture(tmp: TempDir):
     assert result.status == "passed", result.message
 
 
-def test_executor_composed_compact_mode(tmp: TempDir):
+def test_executor_composed_compact_mode(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1424,7 +1424,7 @@ def test_executor_composed_compact_mode(tmp: TempDir):
     )
 
 
-def test_executor_composed_with_fixture_ref(tmp: TempDir):
+def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"

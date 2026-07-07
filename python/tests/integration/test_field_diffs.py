@@ -5,7 +5,7 @@ from __future__ import annotations
 from oxitest import TempDir, helpers
 
 
-def test_dataclass_field_diffs_shown(tmp: TempDir):
+def test_dataclass_field_diffs_shown(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={
@@ -30,7 +30,7 @@ def test_dataclass_field_diffs_shown(tmp: TempDir):
     helpers.integ.assert_contains(out, "field diffs", "email", "age")
 
 
-def test_non_dataclass_no_field_diffs(tmp: TempDir):
+def test_non_dataclass_no_field_diffs(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={

@@ -4,13 +4,13 @@ from oxitest import WarnCapture
 from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _unpack_sync
 
 
-def test_unpack_sync_plain_value():
+def test_unpack_sync_plain_value() -> None:
     outcome = _unpack_sync(42, "my_fix")
     assert outcome.value == 42, f"expected 42, got {outcome.value!r}"
     assert outcome.teardown is None, "plain value should have no teardown"
 
 
-def test_unpack_sync_generator():
+def test_unpack_sync_generator() -> None:
     def gen():
         yield "setup_val"
 
@@ -20,7 +20,7 @@ def test_unpack_sync_generator():
     outcome.teardown()
 
 
-def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture):
+def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) -> None:
     def gen():
         yield "val"
         msg = "teardown boom"
@@ -37,7 +37,7 @@ def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture):
     )
 
 
-def test_fixture_outcome_dataclass():
+def test_fixture_outcome_dataclass() -> None:
     o = _FixtureOutcome(value="x")
     assert o.value == "x", f"expected 'x', got {o.value!r}"
     assert o.teardown is None, "default teardown should be None"

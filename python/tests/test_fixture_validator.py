@@ -21,7 +21,7 @@ def _factory_no_dep() -> None:
     """A fixture factory with no dependencies."""
 
 
-def test_validate_valid_names_returns_empty():
+def test_validate_valid_names_returns_empty() -> None:
     v = _make_validator(
         helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
@@ -33,7 +33,7 @@ def test_validate_valid_names_returns_empty():
     assert errors == [], f"expected no errors, got {errors}"
 
 
-def test_validate_invalid_name_returns_error():
+def test_validate_invalid_name_returns_error() -> None:
     v = _make_validator(
         helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
@@ -45,7 +45,7 @@ def test_validate_invalid_name_returns_error():
     assert errors == [("test.py::test_a", "nope")], f"unexpected: {errors}"
 
 
-def test_find_unused_detects_unreferenced():
+def test_find_unused_detects_unreferenced() -> None:
     v = _make_validator(
         helpers.common.make_fixture_def(
             "unused_db", conftest_path="/project/conftest.py", factory=_factory_no_dep
@@ -60,7 +60,7 @@ def test_find_unused_detects_unreferenced():
     )
 
 
-def test_find_unused_excludes_autouse():
+def test_find_unused_excludes_autouse() -> None:
     v = _make_validator(
         helpers.common.make_fixture_def(
             "auto_setup",
@@ -75,7 +75,7 @@ def test_find_unused_excludes_autouse():
     assert result == [], f"autouse should not be unused: {result}"
 
 
-def test_find_unused_excludes_transitive_deps():
+def test_find_unused_excludes_transitive_deps() -> None:
     def _parent(dep: object = None) -> None:
         pass
 
@@ -96,7 +96,7 @@ def test_find_unused_excludes_transitive_deps():
     assert result == [], f"transitive dep should not be unused: {result}"
 
 
-def test_validate_builtin_qualifier_not_flagged():
+def test_validate_builtin_qualifier_not_flagged() -> None:
     """fixture_deps with builtin type_name are not flagged missing."""
     v = _make_validator()
 

@@ -20,22 +20,22 @@ from oxitest._bridge.executor import (
 from oxitest._bridge.result import StatusKind
 
 
-def test_is_debuggable_assertion_error():
+def test_is_debuggable_assertion_error() -> None:
     """AssertionError should trigger the debugger."""
     assert _is_debuggable(AssertionError("fail")), "AssertionError should be debuggable"
 
 
-def test_is_debuggable_runtime_error():
+def test_is_debuggable_runtime_error() -> None:
     """RuntimeError should trigger the debugger."""
     assert _is_debuggable(RuntimeError("boom")), "RuntimeError should be debuggable"
 
 
-def test_is_debuggable_value_error():
+def test_is_debuggable_value_error() -> None:
     """ValueError should trigger the debugger."""
     assert _is_debuggable(ValueError("bad")), "ValueError should be debuggable"
 
 
-def test_is_debuggable_skipped_false():
+def test_is_debuggable_skipped_false() -> None:
     """Skipped exceptions (by name) should not trigger pdb."""
 
     class Skipped(Exception):
@@ -44,7 +44,7 @@ def test_is_debuggable_skipped_false():
     assert not _is_debuggable(Skipped("reason")), "Skipped should not be debuggable"
 
 
-def test_is_debuggable_skip_test_false():
+def test_is_debuggable_skip_test_false() -> None:
     """SkipTest exceptions (by name) should not trigger pdb."""
 
     class SkipTest(Exception):
@@ -53,18 +53,18 @@ def test_is_debuggable_skip_test_false():
     assert not _is_debuggable(SkipTest("reason")), "SkipTest should not be debuggable"
 
 
-def test_is_debuggable_keyboard_interrupt_false():
+def test_is_debuggable_keyboard_interrupt_false() -> None:
     """KeyboardInterrupt should not trigger the debugger."""
     result = _is_debuggable(KeyboardInterrupt())
     assert not result, "KeyboardInterrupt should not be debuggable"
 
 
-def test_is_debuggable_system_exit_false():
+def test_is_debuggable_system_exit_false() -> None:
     """SystemExit should not trigger the debugger."""
     assert not _is_debuggable(SystemExit(1)), "SystemExit should not be debuggable"
 
 
-def test_suspend_capture_restores_std_capture():
+def test_suspend_capture_restores_std_capture() -> None:
     """_suspend_capture should call _restore on StdCapture instances."""
     cap = StdCapture()
     old_stdout = cap._old_stdout
@@ -72,12 +72,12 @@ def test_suspend_capture_restores_std_capture():
     assert sys.stdout is old_stdout, "stdout should be restored after _suspend_capture"
 
 
-def test_suspend_capture_ignores_non_capture_kwargs():
+def test_suspend_capture_ignores_non_capture_kwargs() -> None:
     """_suspend_capture should not fail on kwargs without capture objects."""
     _suspend_capture({"x": 42, "name": "test"})
 
 
-def test_print_debug_banner_contains_node_id():
+def test_print_debug_banner_contains_node_id() -> None:
     """Banner should include node ID, exception type/message, and help text."""
     exc = AssertionError("expected 3, got 5")
     buf = io.StringIO()
@@ -95,7 +95,7 @@ def test_print_debug_banner_contains_node_id():
     assert "'h' for help" in output, f"missing help hint: {output!r}"
 
 
-def test_print_trace_banner_contains_node_id():
+def test_print_trace_banner_contains_node_id() -> None:
     """Trace banner should include node ID and stepping message."""
     buf = io.StringIO()
     _print_banner(
@@ -110,21 +110,21 @@ def test_print_trace_banner_contains_node_id():
     assert "'c' to run" in output, f"missing help hint: {output!r}"
 
 
-def test_pdb_backend_satisfies_protocol():
+def test_pdb_backend_satisfies_protocol() -> None:
     """_PdbBackend must be a valid DebuggerBackend."""
     assert isinstance(_PdbBackend(), DebuggerBackend), (
         "_PdbBackend should satisfy DebuggerBackend protocol"
     )
 
 
-def test_recording_debugger_satisfies_protocol():
+def test_recording_debugger_satisfies_protocol() -> None:
     """RecordingDebugger test double must be a valid DebuggerBackend."""
     assert isinstance(helpers.common.RecordingDebugger(), DebuggerBackend), (
         "RecordingDebugger should satisfy DebuggerBackend protocol"
     )
 
 
-def test_recording_debugger_records_trace():
+def test_recording_debugger_records_trace() -> None:
     """RecordingDebugger should count trace() calls."""
     rec = helpers.common.RecordingDebugger()
     rec.trace()
@@ -132,7 +132,7 @@ def test_recording_debugger_records_trace():
     assert rec.trace_count == 2, f"expected 2 trace calls, got {rec.trace_count}"
 
 
-def test_recording_debugger_records_post_mortem():
+def test_recording_debugger_records_post_mortem() -> None:
     """RecordingDebugger should record traceback objects."""
     rec = helpers.common.RecordingDebugger()
     try:
@@ -219,7 +219,7 @@ def test_run_base_debug_mode(
     )
 
 
-def test_run_base_non_debuggable_exception_skips_post_mortem():
+def test_run_base_non_debuggable_exception_skips_post_mortem() -> None:
     """Skipped exceptions should not trigger post_mortem."""
     rec = helpers.common.RecordingDebugger()
 
@@ -247,7 +247,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem():
     )
 
 
-def test_trace_before_test_suspends_capture_during_call():
+def test_trace_before_test_suspends_capture_during_call() -> None:
     """Capture should be suspended when backend.trace() is called."""
     cap = StdCapture()
     suspended_during_trace = False
@@ -274,14 +274,14 @@ def test_trace_before_test_suspends_capture_during_call():
     cap.close()  # cleanup
 
 
-def test_trace_before_test_no_capture_kwargs():
+def test_trace_before_test_no_capture_kwargs() -> None:
     """_trace_before_test should work when no capture fixtures in kwargs."""
     rec = helpers.common.RecordingDebugger()
     _trace_before_test({"x": 42}, "t.py::test_x", rec, file=io.StringIO())
     assert rec.trace_count == 1, "trace should be called once"
 
 
-def test_debug_post_mortem_permanently_suspends_capture():
+def test_debug_post_mortem_permanently_suspends_capture() -> None:
     """_debug_post_mortem should permanently restore capture."""
     cap = StdCapture()
     old_stdout = cap._old_stdout
@@ -302,7 +302,7 @@ def test_debug_post_mortem_permanently_suspends_capture():
     assert rec.post_mortem_tracebacks[0] is not None, "traceback should be present"
 
 
-def test_debug_post_mortem_no_capture_kwargs():
+def test_debug_post_mortem_no_capture_kwargs() -> None:
     """_debug_post_mortem should work when no capture fixtures in kwargs."""
     rec = helpers.common.RecordingDebugger()
     try:

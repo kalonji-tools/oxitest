@@ -69,10 +69,9 @@ ignore = [
     "ARG002",   # unused method args in protocol test doubles (structural conformance)
     "SLF001",   # tests legitimately inspect private state to verify internals
     "S101",     # assert is the primary assertion mechanism in tests
-    "ANN001",   # test functions/helpers often omit arg annotations
-    "ANN002",   # test *args often untyped
-    "ANN201",   # test functions return None implicitly
-    "ANN202",   # test helpers return None implicitly
+    "ANN001",   # test functions/helpers — tracked in #1274
+    "ANN002",   # test *args — tracked in #1274
+    "ANN202",   # test helper return types — tracked in #1274
 ]
 "python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201", "D"]

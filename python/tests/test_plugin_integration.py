@@ -53,7 +53,7 @@ def _scaffold_plugin_project(
     return project
 
 
-def test_plugin_loads_and_entry_called(tmp: TempDir):
+def test_plugin_loads_and_entry_called(tmp: TempDir) -> None:
     """A declared plugin's oxitest_plugin() is called at startup."""
     marker_file = Path(str(tmp)) / "plugin_loaded.txt"
 
@@ -94,7 +94,7 @@ def test_plugin_loads_and_entry_called(tmp: TempDir):
     )
 
 
-def test_missing_plugin_exits_with_error(tmp: TempDir):
+def test_missing_plugin_exits_with_error(tmp: TempDir) -> None:
     """A missing plugin produces a clear error message."""
     project = Path(str(tmp))
 
@@ -124,7 +124,7 @@ def test_missing_plugin_exits_with_error(tmp: TempDir):
     )
 
 
-def test_plugin_receives_config(tmp: TempDir):
+def test_plugin_receives_config(tmp: TempDir) -> None:
     """Plugin config from [tool.oxitest.plugin_settings.*] is passed correctly."""
     output_file = Path(str(tmp)) / "config_received.json"
 
@@ -170,7 +170,7 @@ def test_plugin_receives_config(tmp: TempDir):
     )
 
 
-def test_plugin_log_backend_captures_records(tmp: TempDir):
+def test_plugin_log_backend_captures_records(tmp: TempDir) -> None:
     """A plugin-provided LogBackend is installed and captures log records."""
     marker_file = Path(str(tmp)) / "backend_state.txt"
 
@@ -231,7 +231,7 @@ def test_plugin_log_backend_captures_records(tmp: TempDir):
     )
 
 
-def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
+def test_plugin_fixture_provider_injected_in_test(tmp: TempDir) -> None:
     """A plugin-provided fixture is injectable via Fixture[T] in a test."""
     marker_file = Path(str(tmp)) / "test_result.txt"
 
@@ -296,7 +296,7 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir):
     )
 
 
-def test_plugin_reporter_receives_events(tmp: TempDir):
+def test_plugin_reporter_receives_events(tmp: TempDir) -> None:
     """A plugin-provided reporter receives test_started/test_completed/finish events."""
     output_file = Path(str(tmp)) / "reporter_events.json"
 
@@ -366,7 +366,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir):
     assert len(finished) == 1, f"Expected 1 finish event, got {len(finished)}"
 
 
-def test_plugin_collector_discovers_extra_items(tmp: TempDir):
+def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
     """A plugin collector adds items that appear in the test run."""
     marker_file = Path(str(tmp)) / "collector_result.txt"
 
@@ -432,7 +432,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir):
     )
 
 
-def test_plugin_execution_wrapper_retries(tmp: TempDir):
+def test_plugin_execution_wrapper_retries(tmp: TempDir) -> None:
     """A plugin ExecutionWrapper wraps test execution based on a marker."""
     marker_file = Path(str(tmp)) / "attempt_count.txt"
 

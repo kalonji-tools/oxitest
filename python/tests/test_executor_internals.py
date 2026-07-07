@@ -18,7 +18,7 @@ from oxitest._bridge.result import (
 )
 
 
-def test_plain_assertion_returns_failed():
+def test_plain_assertion_returns_failed() -> None:
     exc = AssertionError("plain message")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -29,7 +29,7 @@ def test_plain_assertion_returns_failed():
     )
 
 
-def test_plain_assertion_no_message_gives_empty_message():
+def test_plain_assertion_no_message_gives_empty_message() -> None:
     exc = AssertionError()
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -41,7 +41,7 @@ def test_plain_assertion_no_message_gives_empty_message():
     )
 
 
-def test_oxitest_assertion_with_lhs_rhs_populates_fields():
+def test_oxitest_assertion_with_lhs_rhs_populates_fields() -> None:
     exc = _OxitestAssertionError(1, 2, "==", "mismatch")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -56,7 +56,7 @@ def test_oxitest_assertion_with_lhs_rhs_populates_fields():
     assert result.op == "==", f"result.op should be '==', got {result.op!r}"
 
 
-def test_oxitest_assertion_no_rhs_gives_empty_right():
+def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
     exc = _OxitestAssertionError(42, _OXITEST_NO_RHS, "==", "")
     result = _handle_assertion_error(exc)
     assert result.right == "", (
@@ -65,7 +65,7 @@ def test_oxitest_assertion_no_rhs_gives_empty_right():
     )
 
 
-def test_skipped_exception_returns_skipped():
+def test_skipped_exception_returns_skipped() -> None:
     class Skipped(Exception):
         pass
 
@@ -74,7 +74,7 @@ def test_skipped_exception_returns_skipped():
     helpers.common.assert_result(result, SkippedResult, message="skip reason")
 
 
-def test_skip_test_returns_skipped():
+def test_skip_test_returns_skipped() -> None:
     class SkipTest(Exception):
         pass
 
@@ -86,7 +86,7 @@ def test_skip_test_returns_skipped():
     )
 
 
-def test_regular_exception_returns_error():
+def test_regular_exception_returns_error() -> None:
     try:
         msg = "something broke"
         raise ValueError(msg)
@@ -98,7 +98,7 @@ def test_regular_exception_returns_error():
     )
 
 
-def test_base_exception_not_exception_returns_none():
+def test_base_exception_not_exception_returns_none() -> None:
     class MyBase(BaseException):
         pass
 
@@ -109,7 +109,7 @@ def test_base_exception_not_exception_returns_none():
     )
 
 
-def test_compose_wraps_inner():
+def test_compose_wraps_inner() -> None:
     """wrapper sees inner's result and can transform it."""
 
     def inner():
@@ -126,7 +126,7 @@ def test_compose_wraps_inner():
     )
 
 
-def test_compose_passes_through():
+def test_compose_passes_through() -> None:
     def inner():
         return FailedResult()
 
@@ -140,7 +140,7 @@ def test_compose_passes_through():
     )
 
 
-def test_compose_chains_left_to_right():
+def test_compose_chains_left_to_right() -> None:
     """Last appended wrapper = outermost. _compose is called in reversed."""
     calls = []
 
@@ -166,7 +166,7 @@ def test_compose_chains_left_to_right():
     )
 
 
-def test_repr_max_is_positive_int():
+def test_repr_max_is_positive_int() -> None:
     from oxitest._bridge._diagnostics import _REPR_MAX
 
     assert isinstance(_REPR_MAX, int), (
@@ -175,7 +175,7 @@ def test_repr_max_is_positive_int():
     assert _REPR_MAX > 0, f"_REPR_MAX should be positive, got {_REPR_MAX}"
 
 
-def test_repr_safe_truncates_long_string():
+def test_repr_safe_truncates_long_string() -> None:
     from oxitest._bridge._diagnostics import _REPR_MAX, _repr_safe
 
     long_str = "x" * (_REPR_MAX * 10)
@@ -187,7 +187,7 @@ def test_repr_safe_truncates_long_string():
     )
 
 
-def test_frames_captured_on_assertion_error():
+def test_frames_captured_on_assertion_error() -> None:
     """_handle_assertion_error populates frames from the traceback."""
 
     def inner():
@@ -210,7 +210,7 @@ def test_frames_captured_on_assertion_error():
     )
 
 
-def test_frames_captured_on_runtime_exception():
+def test_frames_captured_on_runtime_exception() -> None:
     """_handle_runtime_exception populates frames from the traceback."""
 
     def blow_up():
@@ -229,7 +229,7 @@ def test_frames_captured_on_runtime_exception():
     )
 
 
-def test_frames_empty_when_no_traceback():
+def test_frames_empty_when_no_traceback() -> None:
     """An exception without __traceback__ produces empty frames."""
     exc = ValueError("no tb")
     exc.__traceback__ = None
@@ -237,7 +237,7 @@ def test_frames_empty_when_no_traceback():
     helpers.common.assert_result(result, ErrorResult, frames=())
 
 
-def test_bad_module_path_returns_error(tmp: TempDir):
+def test_bad_module_path_returns_error(tmp: TempDir) -> None:
     result = helpers.common.run_test(str(tmp / "nonexistent.py"), "test_foo")
     assert result.status == "error", (
         f"run_test with nonexistent module should return status='error', got "
@@ -245,7 +245,7 @@ def test_bad_module_path_returns_error(tmp: TempDir):
     )
 
 
-def test_bad_fn_name_returns_error(tmp: TempDir):
+def test_bad_fn_name_returns_error(tmp: TempDir) -> None:
     module = tmp / "test_mod.py"
     module.write_text("def test_real(): pass\n")
     result = helpers.common.run_test(str(module), "test_missing")

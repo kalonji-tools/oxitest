@@ -16,18 +16,18 @@ class _FakeBackend:
         raise NotImplementedError
 
 
-def test_plugin_accepts_async_backend():
+def test_plugin_accepts_async_backend() -> None:
     fake = _FakeBackend()
     p = Plugin(async_backend=fake)
     assert p.async_backend is fake, f"expected fake, got {p.async_backend!r}"
 
 
-def test_plugin_async_backend_default_none():
+def test_plugin_async_backend_default_none() -> None:
     p = Plugin()
     assert p.async_backend is None, f"expected None, got {p.async_backend!r}"
 
 
-def test_registry_async_backends_property():
+def test_registry_async_backends_property() -> None:
     fake = _FakeBackend()
     reg = PluginRegistry()
     reg.entries.append(

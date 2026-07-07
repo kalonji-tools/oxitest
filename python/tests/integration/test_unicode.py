@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_unicode_test_name_renders_correctly(tmp: TempDir):
+def test_unicode_test_name_renders_correctly(tmp: TempDir) -> None:
     """Test with Unicode characters in its name runs and appears in output."""
     (tmp / "test_unicode.py").write_text(
         "def test_café_résultat():\n    assert 1 == 1\n"

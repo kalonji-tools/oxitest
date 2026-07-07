@@ -17,7 +17,7 @@ from oxitest._bridge.result import (
 # ── failure_repr ─────────────────────────────────────────────────────────
 
 
-def test_failure_repr_not_present_on_non_failure_types():
+def test_failure_repr_not_present_on_non_failure_types() -> None:
     for r in (
         PassedResult(),
         SkippedResult(),
@@ -31,40 +31,40 @@ def test_failure_repr_not_present_on_non_failure_types():
         )
 
 
-def test_failure_repr_includes_message():
+def test_failure_repr_includes_message() -> None:
     r = FailedResult(message="oops")
     assert r.failure_repr == "oops", "failure_repr should be the message"
 
 
-def test_failure_repr_includes_file_and_lineno():
+def test_failure_repr_includes_file_and_lineno() -> None:
     r = FailedResult(file="test.py", lineno=7)
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "test.py:7" in repr_, "should contain file:lineno"
 
 
-def test_failure_repr_includes_source_line():
+def test_failure_repr_includes_source_line() -> None:
     r = FailedResult(file="test.py", lineno=7, source_line="assert x")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "test.py:7  assert x" in repr_, "should contain file:lineno  source_line"
 
 
-def test_failure_repr_includes_left_right_op():
+def test_failure_repr_includes_left_right_op() -> None:
     r = FailedResult(left="1", right="2", op="==")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "assert 1 == 2" in repr_, "should contain assert left op right"
 
 
-def test_failure_repr_left_only_without_right():
+def test_failure_repr_left_only_without_right() -> None:
     r = FailedResult(left="False")
     repr_ = r.failure_repr
     assert repr_ is not None, "failed result must have failure_repr"
     assert "assert False" in repr_, "should contain assert left"
 
 
-def test_failure_repr_all_fields():
+def test_failure_repr_all_fields() -> None:
     r = FailedResult(
         message="AssertionError",
         file="test.py",
@@ -81,7 +81,7 @@ def test_failure_repr_all_fields():
     assert "assert 1 == 2" in repr_, "should contain comparison"
 
 
-def test_failure_repr_no_fields_falls_back_to_status():
+def test_failure_repr_no_fields_falls_back_to_status() -> None:
     r = ErrorResult()
     assert r.failure_repr == "Test error", "empty error should fall back to status"
 
@@ -89,7 +89,7 @@ def test_failure_repr_no_fields_falls_back_to_status():
 # ── to_wire ──────────────────────────────────────────────────────────────
 
 
-def test_to_wire_passing_test_is_compact():
+def test_to_wire_passing_test_is_compact() -> None:
     r = PassedResult()
     wire = r.to_wire("test.py::test_a", 1.5)
     assert wire["node_id"] == "test.py::test_a", "node_id mismatch"
@@ -102,7 +102,7 @@ def test_to_wire_passing_test_is_compact():
     assert "frames" not in wire, "frames should be omitted"
 
 
-def test_to_wire_includes_non_falsy_fields():
+def test_to_wire_includes_non_falsy_fields() -> None:
     r = FailedResult(
         message="oops",
         file="test.py",
@@ -122,7 +122,7 @@ def test_to_wire_includes_non_falsy_fields():
     assert wire["op"] == "==", "op mismatch"
 
 
-def test_to_wire_includes_frames():
+def test_to_wire_includes_frames() -> None:
     r = FailedResult(
         message="err",
         frames=(Frame(file="t.py", lineno=3, name="test_f", line="assert x"),),
@@ -138,31 +138,31 @@ def test_to_wire_includes_frames():
     }, "frame content mismatch"
 
 
-def test_to_wire_omits_empty_frames():
+def test_to_wire_omits_empty_frames() -> None:
     r = PassedResult()
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "frames" not in wire, "empty frames should be omitted"
 
 
-def test_to_wire_includes_strict_when_true():
+def test_to_wire_includes_strict_when_true() -> None:
     r = XPassedResult(strict=True)
     wire = r.to_wire("t.py::test_a", 1.0)
     assert wire["strict"] is True, "strict=True should be included"
 
 
-def test_to_wire_omits_strict_when_false():
+def test_to_wire_omits_strict_when_false() -> None:
     r = XPassedResult(strict=False)
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "strict" not in wire, "strict=False should be omitted"
 
 
-def test_to_wire_includes_no_message_lines():
+def test_to_wire_includes_no_message_lines() -> None:
     r = PassedResult(no_message_lines=(5, 10))
     wire = r.to_wire("t.py::test_a", 1.0)
     assert wire["no_message_lines"] == (5, 10), "no_message_lines mismatch"
 
 
-def test_to_wire_omits_empty_no_message_lines():
+def test_to_wire_omits_empty_no_message_lines() -> None:
     r = PassedResult()
     wire = r.to_wire("t.py::test_a", 1.0)
     assert "no_message_lines" not in wire, "empty no_message_lines should be omitted"

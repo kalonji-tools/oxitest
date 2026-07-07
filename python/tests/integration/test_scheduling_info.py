@@ -5,7 +5,7 @@ from __future__ import annotations
 from oxitest import TempDir, helpers
 
 
-def test_verbose_shows_scheduling_decision(tmp: TempDir):
+def test_verbose_shows_scheduling_decision(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -15,7 +15,7 @@ def test_verbose_shows_scheduling_decision(tmp: TempDir):
     helpers.integ.assert_contains(err, "scheduling:")
 
 
-def test_verbose_shows_serial_reason(tmp: TempDir):
+def test_verbose_shows_serial_reason(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -25,7 +25,7 @@ def test_verbose_shows_serial_reason(tmp: TempDir):
     helpers.integ.assert_contains(err, "serial")
 
 
-def test_verbose_shows_strategy(tmp: TempDir):
+def test_verbose_shows_strategy(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -35,7 +35,7 @@ def test_verbose_shows_strategy(tmp: TempDir):
     helpers.integ.assert_contains(err, "strategy")
 
 
-def test_no_scheduling_info_without_verbose(tmp: TempDir):
+def test_no_scheduling_info_without_verbose(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},

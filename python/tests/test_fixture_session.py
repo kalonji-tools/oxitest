@@ -20,7 +20,7 @@ class _MinimalType:
     """Marker type for minimal plugin provider tests."""
 
 
-def test_setup_timing_recorded_for_function_scoped_fixture():
+def test_setup_timing_recorded_for_function_scoped_fixture() -> None:
     """Fixture setup time is tracked on the session."""
 
     def slow_fixture() -> int:
@@ -46,7 +46,7 @@ def test_setup_timing_recorded_for_function_scoped_fixture():
     )
 
 
-def test_empty_session_returns_empty_timings():
+def test_empty_session_returns_empty_timings() -> None:
     """FixtureSession([]) with no fixtures returns empty timings list."""
     session = FixtureSession([])
 
@@ -55,7 +55,7 @@ def test_empty_session_returns_empty_timings():
     assert timings == [], f"expected empty list from empty session, got {timings!r}"
 
 
-def test_teardown_timing_recorded_for_yield_fixture():
+def test_teardown_timing_recorded_for_yield_fixture() -> None:
     """Fixture teardown time is tracked on the session."""
 
     def yield_fixture():
@@ -81,7 +81,7 @@ def test_teardown_timing_recorded_for_yield_fixture():
     )
 
 
-def test_shared_fixture_setup_timed_once():
+def test_shared_fixture_setup_timed_once() -> None:
     """Shared fixture setup is only timed once; second resolve is cached."""
 
     def shared_fixture() -> int:
@@ -106,7 +106,7 @@ def test_shared_fixture_setup_timed_once():
     )
 
 
-def test_multiple_fixtures_each_tracked_separately():
+def test_multiple_fixtures_each_tracked_separately() -> None:
     """Each fixture gets its own timing entry."""
     session = helpers.common.make_session_with("fast_a", lambda: 1)
     teardowns: list = []
@@ -133,7 +133,7 @@ def test_multiple_fixtures_each_tracked_separately():
 # ── FixtureSession unification ────────────────────────────────────────────────
 
 
-def test_session_builtins_registered():
+def test_session_builtins_registered() -> None:
     """Builtins appear in the unified registry after session init."""
     session = FixtureSession([], PluginRegistry())
     defn = session._registry.resolve(TempDir)
@@ -143,7 +143,7 @@ def test_session_builtins_registered():
     )
 
 
-def test_session_conftest_overrides_builtin():
+def test_session_conftest_overrides_builtin() -> None:
     """A conftest fixture with the same binding type overrides a builtin."""
     custom = FixtureDef(
         name="TempDir",
@@ -159,7 +159,7 @@ def test_session_conftest_overrides_builtin():
     )
 
 
-def test_session_plugin_without_scope_autouse():
+def test_session_plugin_without_scope_autouse() -> None:
     """Plugin provider without scope/autouse attrs uses defaults (each, False)."""
 
     class MinimalProvider:

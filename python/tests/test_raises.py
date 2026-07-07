@@ -1,42 +1,43 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Never
 
 import oxitest as oxi
 from oxitest import raises
 
 
-def test_raises_catches_expected_exception():
+def test_raises_catches_expected_exception() -> Never:
     with raises(ValueError):
         msg = "boom"
         raise ValueError(msg)
 
 
-def test_raises_no_exception_raises_assertion_error():
+def test_raises_no_exception_raises_assertion_error() -> None:
     with raises(AssertionError, match="Expected ValueError"), raises(ValueError):
         pass  # nothing raised
 
 
-def test_raises_wrong_type_reraises():
+def test_raises_wrong_type_reraises() -> Never:
     with raises(TypeError), raises(ValueError):
         msg = "wrong type"
         raise TypeError(msg)
 
 
-def test_raises_match_passes_when_pattern_found():
+def test_raises_match_passes_when_pattern_found() -> Never:
     with raises(ValueError, match="boom"):
         msg = "oh boom, something broke"
         raise ValueError(msg)
 
 
-def test_raises_match_fails_when_pattern_not_found():
+def test_raises_match_fails_when_pattern_not_found() -> Never:
     with raises(AssertionError, match="not found"):
         with raises(ValueError, match="boom"):
             msg = "nothing matches here"
             raise ValueError(msg)
 
 
-def test_raises_exc_info_value_holds_exception():
+def test_raises_exc_info_value_holds_exception() -> Never:
     with raises(ValueError) as exc_info:
         msg = "stored"
         raise ValueError(msg)
@@ -48,21 +49,21 @@ def test_raises_exc_info_value_holds_exception():
     )
 
 
-def test_raises_match_uses_regex_search_not_full_match():
+def test_raises_match_uses_regex_search_not_full_match() -> Never:
     # "boom" must match anywhere in the string, not require a full match
     with raises(ValueError, match="boom"):
         msg = "oh boom!"
         raise ValueError(msg)
 
 
-def test_raises_subclass_caught_by_parent_type():
+def test_raises_subclass_caught_by_parent_type() -> Never:
     # ValueError is a subclass of Exception — parent type must catch it
     with raises(Exception):
         msg = "subclass"
         raise ValueError(msg)
 
 
-def test_raises_exported_from_oxitest():
+def test_raises_exported_from_oxitest() -> None:
     import oxitest
 
     assert hasattr(oxitest, "raises"), (
@@ -80,19 +81,19 @@ class TupleCatchCase:
     first_type=TupleCatchCase(exc_class=ValueError),
     second_type=TupleCatchCase(exc_class=TypeError),
 )
-def test_raises_tuple_catches_matching_type(exc_class):
+def test_raises_tuple_catches_matching_type(exc_class) -> Never:
     with raises((ValueError, TypeError)):
         msg = "msg"
         raise exc_class(msg)
 
 
-def test_raises_tuple_wrong_type_reraises():
+def test_raises_tuple_wrong_type_reraises() -> Never:
     with raises(KeyError), raises((ValueError, TypeError)):
         msg = "neither"
         raise KeyError(msg)
 
 
-def test_raises_tuple_no_exception_names_all_types():
+def test_raises_tuple_no_exception_names_all_types() -> None:
     with raises(AssertionError, match=r"\(ValueError \| TypeError\)"):
         with raises((ValueError, TypeError)):
             pass

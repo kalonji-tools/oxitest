@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir):
+def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir) -> None:
     """Running a single test by node ID should not import unmatched modules."""
     helpers.integ.write_project(
         tmp,
@@ -22,7 +22,7 @@ def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_lazy_collection_expression_filter(tmp: TempDir):
+def test_lazy_collection_expression_filter(tmp: TempDir) -> None:
     """Expression filter should only import modules with matching tests."""
     helpers.integ.write_project(
         tmp,
@@ -42,7 +42,7 @@ def test_lazy_collection_expression_filter(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_lazy_collection_dynamic_file_falls_back_to_eager(tmp: TempDir):
+def test_lazy_collection_dynamic_file_falls_back_to_eager(tmp: TempDir) -> None:
     """File with exec() should fall back to eager import and still work."""
     helpers.integ.write_project(
         tmp,
@@ -54,7 +54,7 @@ def test_lazy_collection_dynamic_file_falls_back_to_eager(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_lazy_collection_no_filter_imports_all(tmp: TempDir):
+def test_lazy_collection_no_filter_imports_all(tmp: TempDir) -> None:
     """Running without any filter should import all modules (no regression)."""
     helpers.integ.write_project(
         tmp,
@@ -67,7 +67,7 @@ def test_lazy_collection_no_filter_imports_all(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir):
+def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir) -> None:
     """--failed=only should only import modules with previously failed tests."""
     helpers.integ.write_project(
         tmp,
@@ -88,7 +88,7 @@ def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir):
+def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir) -> None:
     """Filtered run should only load ancestor-chain conftests."""
     (tmp / "pyproject.toml").write_text("[tool.oxitest]\n")
     (tmp / "conftest.py").write_text(

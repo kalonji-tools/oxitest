@@ -11,7 +11,7 @@ from oxitest._bridge._middleware import (
 )
 
 
-def test_default_pipeline_builds_without_error():
+def test_default_pipeline_builds_without_error() -> None:
     builder = MiddlewareBuilder()
     assert builder._pipeline[0] is AsyncDepGuardMiddleware, (
         "AsyncDepGuardMiddleware must be first in default pipeline"
@@ -21,19 +21,19 @@ def test_default_pipeline_builds_without_error():
     )
 
 
-def test_remove_async_dep_guard_raises():
+def test_remove_async_dep_guard_raises() -> None:
     builder = MiddlewareBuilder()
     with raises(ValueError, match="AsyncDepGuardMiddleware cannot be removed"):
         builder.remove(AsyncDepGuardMiddleware)
 
 
-def test_remove_async_bridge_raises():
+def test_remove_async_bridge_raises() -> None:
     builder = MiddlewareBuilder()
     with raises(ValueError, match="AsyncBridgeMiddleware cannot be removed"):
         builder.remove(AsyncBridgeMiddleware)
 
 
-def test_remove_non_pinned_middleware_succeeds():
+def test_remove_non_pinned_middleware_succeeds() -> None:
     builder = MiddlewareBuilder()
     builder.remove(TimeoutMiddleware)
     assert TimeoutMiddleware not in builder._pipeline, (
@@ -41,13 +41,13 @@ def test_remove_non_pinned_middleware_succeeds():
     )
 
 
-def test_insert_before_async_dep_guard_raises():
+def test_insert_before_async_dep_guard_raises() -> None:
     builder = MiddlewareBuilder()
     with raises(ValueError, match="Cannot insert before AsyncDepGuardMiddleware"):
         builder.insert_before(AsyncDepGuardMiddleware, TimeoutMiddleware)
 
 
-def test_insert_after_async_bridge_raises():
+def test_insert_after_async_bridge_raises() -> None:
     builder = MiddlewareBuilder()
     with raises(ValueError, match="Cannot insert after AsyncBridgeMiddleware"):
         builder.insert_after(AsyncBridgeMiddleware, TimeoutMiddleware)

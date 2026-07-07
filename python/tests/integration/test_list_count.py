@@ -5,7 +5,7 @@ from __future__ import annotations
 from oxitest import TempDir, helpers
 
 
-def test_list_count_basic(tmp: TempDir):
+def test_list_count_basic(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={
@@ -23,7 +23,7 @@ def test_sub():
     helpers.integ.assert_contains(out, "2 tests")
 
 
-def test_list_count_multiple_files(tmp: TempDir):
+def test_list_count_multiple_files(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={
@@ -36,7 +36,7 @@ def test_list_count_multiple_files(tmp: TempDir):
     helpers.integ.assert_contains(out, "3 tests")
 
 
-def test_list_count_with_class(tmp: TempDir):
+def test_list_count_with_class(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={
@@ -52,7 +52,7 @@ class TestGroup:
     helpers.integ.assert_contains(out, "2 tests")
 
 
-def test_list_count_no_tests(tmp: TempDir):
+def test_list_count_no_tests(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={
@@ -64,7 +64,7 @@ def test_list_count_no_tests(tmp: TempDir):
     helpers.integ.assert_contains(out, "0 tests")
 
 
-def test_list_count_singular(tmp: TempDir):
+def test_list_count_singular(tmp: TempDir) -> None:
     helpers.integ.write_project(
         tmp,
         tests={

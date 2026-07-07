@@ -9,14 +9,14 @@ from oxitest._bridge.fixture_lister import tree_fixtures_from_registry
 # All tests use use_color=False to avoid ANSI codes in assertions.
 
 
-def test_tree_empty_registry_shows_builtins():
+def test_tree_empty_registry_shows_builtins() -> None:
     reg = FixtureRegistry()
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     assert "TempDir" in result, f"built-in TempDir missing: {result!r}"
     assert "fixtures" in result, f"summary line missing: {result!r}"
 
 
-def test_tree_single_no_deps():
+def test_tree_single_no_deps() -> None:
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("db", conftest_path="conftest.py"))
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
@@ -27,7 +27,7 @@ def test_tree_single_no_deps():
     )
 
 
-def test_tree_linear_chain():
+def test_tree_linear_chain() -> None:
     def _config():
         pass
 
@@ -65,7 +65,7 @@ def test_tree_linear_chain():
     assert "└── config" in lines[db_idx + 2], f"config not child of connection: {lines}"
 
 
-def test_tree_diamond():
+def test_tree_diamond() -> None:
     def _base():
         pass
 
@@ -116,7 +116,7 @@ def test_tree_diamond():
     assert "base" in subtree, f"base not in top subtree: {subtree!r}"
 
 
-def test_tree_cycle_detection():
+def test_tree_cycle_detection() -> None:
     def _a(b):
         pass
 
@@ -140,7 +140,7 @@ def test_tree_cycle_detection():
     )
 
 
-def test_tree_keyword_filter():
+def test_tree_keyword_filter() -> None:
     def _config():
         pass
 
@@ -174,7 +174,7 @@ def test_tree_keyword_filter():
     assert "config" in result, "config should appear as dep of db"
 
 
-def test_tree_verbosity_1_shows_tags():
+def test_tree_verbosity_1_shows_tags() -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.common.make_fixture_def(
@@ -186,7 +186,7 @@ def test_tree_verbosity_1_shows_tags():
     assert "async" in result, f"async tag missing: {result!r}"
 
 
-def test_tree_verbosity_2_shows_origin():
+def test_tree_verbosity_2_shows_origin() -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.common.make_fixture_def("db", conftest_path="tests/conftest.py")

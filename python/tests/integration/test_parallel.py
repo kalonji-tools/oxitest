@@ -13,7 +13,7 @@ def _parse_counts(out: str) -> dict[str, int]:
     return counts
 
 
-def test_serial_and_default_same_counts(tmp: TempDir):
+def test_serial_and_default_same_counts(tmp: TempDir) -> None:
     """Serial and default (parallel) runs produce the same outcome counts."""
     (tmp / "test_a.py").write_text(
         "def test_one(): assert True\ndef test_two(): assert True\n"
@@ -30,7 +30,7 @@ def test_serial_and_default_same_counts(tmp: TempDir):
     )
 
 
-def test_serial_and_default_both_pass(tmp: TempDir):
+def test_serial_and_default_both_pass(tmp: TempDir) -> None:
     """Serial and default runs both exit 0 when all tests pass."""
     (tmp / "test_all_pass.py").write_text(
         "def test_alpha(): assert True\n"

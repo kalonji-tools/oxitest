@@ -9,7 +9,7 @@ from oxitest import Fixture, TempDir, Yields, helpers
 fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 
-def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir):
+def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
     """Nested oxitest subprocesses work in parallel workers.
 
     Regression test for #642: workers used PYO3_PYTHON (build-time Python)
@@ -58,7 +58,7 @@ def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
 
 
 @oxitest.mark.timeout(120)
-def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]):
+def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
     """--affected does not fail with ENOENT in a git worktree.
 
     Regression test for #778: `git rev-parse --show-toplevel` may return
@@ -93,7 +93,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_affected_verbose_summary(git_repo: Fixture[Path]):
+def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
     """``-v --affected=HEAD`` prints a summary line to stderr."""
     repo = git_repo
     clean_env = {
@@ -116,7 +116,7 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]):
     )
 
 
-def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]):
+def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
     """``-vv --affected=HEAD`` prints stage-by-stage breakdown to stderr."""
     repo = git_repo
     clean_env = {
@@ -138,7 +138,7 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]):
     assert "Summary:" in err, f"expected summary in stderr at -vv, got:\n{err}"
 
 
-def test_affected_zero_results_shows_summary(git_repo: Fixture[Path]):
+def test_affected_zero_results_shows_summary(git_repo: Fixture[Path]) -> None:
     """When 0 tests affected, summary prints even without -v."""
     repo = git_repo
     clean_env = {

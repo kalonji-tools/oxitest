@@ -7,7 +7,7 @@ import json
 from oxitest import TempDir, helpers
 
 
-def test_query_tests_lists_all(tmp: TempDir):
+def test_query_tests_lists_all(tmp: TempDir) -> None:
     """``query tests`` lists all collected test names."""
     helpers.integ.write_project(
         tmp,
@@ -26,7 +26,7 @@ def test_sub():
     helpers.integ.assert_contains(out, "test_add", "test_sub")
 
 
-def test_query_tests_with_expression(tmp: TempDir):
+def test_query_tests_with_expression(tmp: TempDir) -> None:
     """``query tests -E 'name(~add)'`` filters by name predicate."""
     helpers.integ.write_project(
         tmp,
@@ -48,7 +48,7 @@ def test_sub():
     helpers.integ.assert_excludes(out, "test_sub")
 
 
-def test_query_tests_count(tmp: TempDir):
+def test_query_tests_count(tmp: TempDir) -> None:
     """``query tests --count`` shows only the count."""
     helpers.integ.write_project(
         tmp,
@@ -67,7 +67,7 @@ def test_sub():
     helpers.integ.assert_contains(out, "2")
 
 
-def test_query_tests_jsonl(tmp: TempDir):
+def test_query_tests_jsonl(tmp: TempDir) -> None:
     """``query tests --jsonl`` emits valid JSON lines."""
     helpers.integ.write_project(
         tmp,
@@ -83,7 +83,7 @@ def test_query_tests_jsonl(tmp: TempDir):
     assert "name" in obj, f"expected 'name' field in JSON: {obj}"
 
 
-def test_query_marks(tmp: TempDir):
+def test_query_marks(tmp: TempDir) -> None:
     """``query marks`` includes marks used in test files."""
     helpers.integ.write_project(
         tmp,
@@ -102,7 +102,7 @@ def test_heavy():
     helpers.integ.assert_contains(out, "slow")
 
 
-def test_query_detail_single(tmp: TempDir):
+def test_query_detail_single(tmp: TempDir) -> None:
     """``query tests --detail test_one`` shows a detail card."""
     helpers.integ.write_project(
         tmp,
@@ -117,7 +117,7 @@ def test_query_detail_single(tmp: TempDir):
     helpers.integ.assert_contains(out, "test_one")
 
 
-def test_query_invalid_predicate(tmp: TempDir):
+def test_query_invalid_predicate(tmp: TempDir) -> None:
     """``query tests -E 'shared()'`` fails — shared is not valid for tests."""
     helpers.integ.write_project(
         tmp,
@@ -131,7 +131,7 @@ def test_query_invalid_predicate(tmp: TempDir):
     assert rc != 0, f"expected non-zero exit for invalid predicate, got {rc}"
 
 
-def test_query_helpers(tmp: TempDir):
+def test_query_helpers(tmp: TempDir) -> None:
     """``query helpers`` shows helper functions from conftest."""
     helpers.integ.write_project(
         tmp,
@@ -153,7 +153,7 @@ def test_query_helpers(tmp: TempDir):
     helpers.integ.assert_contains(out, "my_helper")
 
 
-def test_query_helpers_shows_docstring(tmp: TempDir):
+def test_query_helpers_shows_docstring(tmp: TempDir) -> None:
     """``query helpers --detail`` includes helper docstrings."""
     helpers.integ.write_project(
         tmp,
@@ -178,7 +178,7 @@ def test_query_helpers_shows_docstring(tmp: TempDir):
     helpers.integ.assert_contains(out, "Create a test database.")
 
 
-def test_query_fixtures_uses_predicate(tmp: TempDir):
+def test_query_fixtures_uses_predicate(tmp: TempDir) -> None:
     """``query fixtures -E 'uses(db)'`` filters fixtures by dependency."""
     helpers.integ.write_project(
         tmp,
@@ -212,7 +212,7 @@ def conn(db: Fixture[object]) -> object:
     helpers.integ.assert_excludes(out, "db")
 
 
-def test_query_tests_uses_predicate(tmp: TempDir):
+def test_query_tests_uses_predicate(tmp: TempDir) -> None:
     """``query tests -E 'uses(db)'`` filters tests by fixture usage."""
     helpers.integ.write_project(
         tmp,
@@ -245,7 +245,7 @@ def db() -> object:
     helpers.integ.assert_excludes(out, "test_without")
 
 
-def test_query_fixtures_shows_docstring(tmp: TempDir):
+def test_query_fixtures_shows_docstring(tmp: TempDir) -> None:
     """``query fixtures --detail`` includes fixture docstrings."""
     helpers.integ.write_project(
         tmp,
@@ -275,7 +275,7 @@ def test_query_fixtures_shows_docstring(tmp: TempDir):
     helpers.integ.assert_contains(out, "Provide a database connection.")
 
 
-def test_query_tests_uses_substring_match(tmp: TempDir):
+def test_query_tests_uses_substring_match(tmp: TempDir) -> None:
     """``query tests -E 'uses(~db)'`` matches fixtures by substring."""
     helpers.integ.write_project(
         tmp,
@@ -308,7 +308,7 @@ def db_conn() -> object:
     helpers.integ.assert_excludes(out, "test_without")
 
 
-def test_query_tests_uses_exact_match(tmp: TempDir):
+def test_query_tests_uses_exact_match(tmp: TempDir) -> None:
     """``query tests -E 'uses(=db)'`` requires exact fixture name match."""
     helpers.integ.write_project(
         tmp,
@@ -345,7 +345,7 @@ def db_conn() -> object:
     helpers.integ.assert_excludes(out, "test_db_conn")
 
 
-def test_query_tests_uses_composed_with_mark(tmp: TempDir):
+def test_query_tests_uses_composed_with_mark(tmp: TempDir) -> None:
     """``query tests -E 'uses(db) & mark(slow)'`` composes predicates."""
     helpers.integ.write_project(
         tmp,

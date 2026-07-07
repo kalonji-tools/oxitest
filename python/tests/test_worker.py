@@ -42,7 +42,7 @@ def _run_worker(task: dict) -> list[dict]:
     return [json.loads(line) for line in lines]
 
 
-def test_worker_runs_passing_test(tmp: TempDir):
+def test_worker_runs_passing_test(tmp: TempDir) -> None:
     test_file = tmp / "test_pass.py"
     test_file.write_text("def test_pass():\n    assert 1 == 1\n")
 
@@ -57,7 +57,7 @@ def test_worker_runs_passing_test(tmp: TempDir):
     )
 
 
-def test_worker_runs_failing_test(tmp: TempDir):
+def test_worker_runs_failing_test(tmp: TempDir) -> None:
     test_file = tmp / "test_fail.py"
     test_file.write_text("def test_fail():\n    assert 1 == 2\n")
 
@@ -70,7 +70,7 @@ def test_worker_runs_failing_test(tmp: TempDir):
     )
 
 
-def test_worker_result_has_required_fields(tmp: TempDir):
+def test_worker_result_has_required_fields(tmp: TempDir) -> None:
     test_file = tmp / "test_fields.py"
     test_file.write_text("def test_x():\n    pass\n")
 
@@ -87,7 +87,7 @@ def test_worker_result_has_required_fields(tmp: TempDir):
     )
 
 
-def test_worker_emits_structured_failure_fields(tmp: TempDir):
+def test_worker_emits_structured_failure_fields(tmp: TempDir) -> None:
     test_file = tmp / "test_structured.py"
     test_file.write_text(
         "def test_simple_assert():\n    x = 1\n    y = 2\n    assert x == y\n"

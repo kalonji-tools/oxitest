@@ -12,7 +12,7 @@ def _clean_env():
     }
 
 
-def test_gitignore_respected(tmp: TempDir):
+def test_gitignore_respected(tmp: TempDir) -> None:
     """Files in .gitignore'd directories are not collected."""
     (tmp / "test_visible.py").write_text("def test_ok(): pass\n")
     (tmp / "ignored_dir").mkdir()
@@ -29,7 +29,7 @@ def test_gitignore_respected(tmp: TempDir):
     assert "test_hidden" not in out, f"ignored test should not appear in output: {out}"
 
 
-def test_no_use_gitignore_disables_filtering(tmp: TempDir):
+def test_no_use_gitignore_disables_filtering(tmp: TempDir) -> None:
     """--no-use-gitignore includes git-ignored files."""
     (tmp / "test_visible.py").write_text("def test_ok(): pass\n")
     (tmp / "ignored_dir").mkdir()
@@ -45,7 +45,7 @@ def test_no_use_gitignore_disables_filtering(tmp: TempDir):
     assert "2 passed" in out, f"expected 2 passed, got: {out}"
 
 
-def test_no_git_repo_works_normally(tmp: TempDir):
+def test_no_git_repo_works_normally(tmp: TempDir) -> None:
     """Without a .git directory, file discovery works as before."""
     (tmp / "test_ok.py").write_text("def test_pass(): pass\n")
 

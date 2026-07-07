@@ -18,7 +18,7 @@ from oxitest._bridge.result import ErrorResult, FailedResult, StatusKind
 # ---------------------------------------------------------------------------
 
 
-def test_check_warnings_no_warnings():
+def test_check_warnings_no_warnings() -> None:
     """Empty warning list returns (False, '')."""
     has, msg = _check_warnings([], {})
 
@@ -26,7 +26,7 @@ def test_check_warnings_no_warnings():
     assert msg == "", "expected empty message"
 
 
-def test_check_warnings_with_relevant_warning():
+def test_check_warnings_with_relevant_warning() -> None:
     """A normal UserWarning is reported."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -39,7 +39,7 @@ def test_check_warnings_with_relevant_warning():
     assert "something fishy" in msg, "expected warning text in message"
 
 
-def test_check_warnings_excludes_teardown_warnings():
+def test_check_warnings_excludes_teardown_warnings() -> None:
     """FixtureTeardownWarning is filtered out."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -51,7 +51,7 @@ def test_check_warnings_excludes_teardown_warnings():
     assert msg == "", "expected empty message for teardown-only warnings"
 
 
-def test_check_warnings_excludes_captured_ids():
+def test_check_warnings_excludes_captured_ids() -> None:
     """Warnings already captured by WarnCapture are filtered out."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -67,7 +67,7 @@ def test_check_warnings_excludes_captured_ids():
     assert msg == "", "expected empty message for captured warnings"
 
 
-def test_check_warnings_mixed():
+def test_check_warnings_mixed() -> None:
     """Only non-teardown, non-captured warnings are returned."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -88,7 +88,7 @@ def test_check_warnings_mixed():
 # ---------------------------------------------------------------------------
 
 
-def test_dispatch_assertion_error():
+def test_dispatch_assertion_error() -> None:
     """AssertionError maps to a FAILED TestResult."""
     exc = AssertionError("expected 1 got 2")
 
@@ -97,7 +97,7 @@ def test_dispatch_assertion_error():
     helpers.common.assert_result(result, FailedResult, exc_type="AssertionError")
 
 
-def test_dispatch_runtime_exception():
+def test_dispatch_runtime_exception() -> None:
     """A normal Exception maps to an ERROR TestResult."""
     exc = ValueError("bad value")
 
@@ -107,7 +107,7 @@ def test_dispatch_runtime_exception():
     assert "ValueError" in r.message, "expected ValueError in message"
 
 
-def test_dispatch_skip_exception():
+def test_dispatch_skip_exception() -> None:
     """Skip-type exceptions map to SKIPPED."""
 
     class Skipped(Exception):
@@ -121,7 +121,7 @@ def test_dispatch_skip_exception():
     assert result.status == StatusKind.SKIPPED, "expected SKIPPED status"
 
 
-def test_dispatch_keyboard_interrupt():
+def test_dispatch_keyboard_interrupt() -> None:
     """Non-Exception BaseException returns None (signals re-raise)."""
     exc = KeyboardInterrupt()
 
@@ -140,7 +140,7 @@ class _BaseExcCase:
     system_exit=_BaseExcCase(exc_class=SystemExit),
     generator_exit=_BaseExcCase(exc_class=GeneratorExit),
 )
-def test_dispatch_base_exceptions_return_none(exc_class: type):
+def test_dispatch_base_exceptions_return_none(exc_class: type) -> None:
     """All non-Exception BaseExceptions return None."""
     result = _dispatch_exception(exc_class())
 

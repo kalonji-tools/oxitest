@@ -84,7 +84,7 @@ def _wire(
 # ── PyO3 field parity (regex-parse bridge.rs) ─────────────────────────────────
 
 
-def test_collected_item_fields_match_rust():
+def test_collected_item_fields_match_rust() -> None:
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "CollectedItem")
     python_fields = _python_fields(CollectedItem)
@@ -96,7 +96,7 @@ def test_collected_item_fields_match_rust():
     )
 
 
-def test_raw_violation_fields_match_rust():
+def test_raw_violation_fields_match_rust() -> None:
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "RawViolation")
     python_fields = _python_fields(CollectedViolation)
@@ -108,7 +108,7 @@ def test_raw_violation_fields_match_rust():
     )
 
 
-def test_frame_fields_match_rust():
+def test_frame_fields_match_rust() -> None:
     """RawFrame (wire.rs) fields must match Python Frame dataclass fields.
 
     Rust deserializes Frame via serde (worker JSON path) and PyO3 FromPyObject
@@ -126,7 +126,7 @@ def test_frame_fields_match_rust():
     )
 
 
-def test_local_var_tuple_contract():
+def test_local_var_tuple_contract() -> None:
     """Frame.locals preserves 2-element (name, repr) tuple pairs.
 
     Rust LocalVar is a 2-element tuple — if Python changes the shape,
@@ -158,7 +158,7 @@ def test_local_var_tuple_contract():
     )
 
 
-def test_field_diff_tuple_contract():
+def test_field_diff_tuple_contract() -> None:
     """FailedResult.field_diffs serializes as list of 3-element lists.
 
     Rust FieldDiff is a 3-element tuple (field, left, right). The wire
@@ -184,7 +184,7 @@ def test_field_diff_tuple_contract():
 # ── PyO3 manual construction (catch TypeError on rename) ─────────────────────
 
 
-def test_failed_result_manual_construction():
+def test_failed_result_manual_construction() -> None:
     """Constructing FailedResult with all fields catches renames at import time."""
     result = FailedResult(
         message="",
@@ -220,7 +220,7 @@ def test_failed_result_manual_construction():
     )
 
 
-def test_collected_item_manual_construction():
+def test_collected_item_manual_construction() -> None:
     """Constructing CollectedItem with all fields catches renames at import time."""
     item = CollectedItem(
         fn_name="test_foo",
@@ -252,7 +252,7 @@ def test_collected_item_manual_construction():
 # ── PyO3 enum parity ─────────────────────────────────────────────────────────
 
 
-def test_violation_kind_variants_match_rust():
+def test_violation_kind_variants_match_rust() -> None:
     """Every Python ViolationKind value has a Rust match arm (not Unknown)."""
     source = _BRIDGE_RS.read_text()
     rust_values = _rust_violation_kind_values(source)
@@ -267,7 +267,7 @@ def test_violation_kind_variants_match_rust():
 # ── Wire shape (to_wire round-trip) ──────────────────────────────────────────
 
 
-def test_required_fields_passed_has_required_fields():
+def test_required_fields_passed_has_required_fields() -> None:
     wire = _wire(PassedResult())
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
@@ -277,7 +277,7 @@ def test_required_fields_passed_has_required_fields():
     assert wire["duration_ms"] == 42.5, "wrong duration_ms"
 
 
-def test_required_fields_failed_has_required_fields():
+def test_required_fields_failed_has_required_fields() -> None:
     wire = _wire(FailedResult(message="boom"))
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
@@ -287,7 +287,7 @@ def test_required_fields_failed_has_required_fields():
     assert wire["duration_ms"] == 42.5, "wrong duration_ms"
 
 
-def test_compact_passed_omits_all_optional_fields():
+def test_compact_passed_omits_all_optional_fields() -> None:
     wire = _wire(PassedResult())
     optional_keys = {
         "failure_repr",
@@ -306,13 +306,13 @@ def test_compact_passed_omits_all_optional_fields():
     assert not present, f"optional fields present: {present}"
 
 
-def test_compact_strict_true_is_included():
+def test_compact_strict_true_is_included() -> None:
     wire = _wire(XPassedResult(strict=True))
     assert "strict" in wire, "strict=True must be present"
     assert wire["strict"] is True, "strict must be True"
 
 
-def test_failed_shape_includes_diagnostic_fields():
+def test_failed_shape_includes_diagnostic_fields() -> None:
     result = FailedResult(
         message="AssertionError: values differ",
         file="tests/test_foo.py",
@@ -341,7 +341,7 @@ def test_failed_shape_includes_diagnostic_fields():
     assert "frames" in wire, "frames must be present"
 
 
-def test_failed_shape_error_includes_message_and_frames():
+def test_failed_shape_error_includes_message_and_frames() -> None:
     result = ErrorResult(
         message="ImportError: no module named foo",
         frames=(
@@ -377,7 +377,7 @@ class StatusCase:
     warned=StatusCase(status="warned", expected="warned"),
     timeout=StatusCase(status="timeout", expected="timeout"),
 )
-def test_status_round_trip(status, expected):
+def test_status_round_trip(status, expected) -> None:
     """Each per-outcome type maps to the correct outcome string in the wire payload."""
     _factories: dict[str, TestResult] = {
         "passed": PassedResult(),
@@ -398,7 +398,7 @@ def test_status_round_trip(status, expected):
 # ── Frame serialization ──────────────────────────────────────────────────────
 
 
-def test_frame_keys():
+def test_frame_keys() -> None:
     result = FailedResult(
         message="err",
         frames=(
@@ -412,7 +412,7 @@ def test_frame_keys():
     assert set(frame.keys()) == expected, f"wrong frame keys: {set(frame.keys())}"
 
 
-def test_frame_multiple_frames_preserved():
+def test_frame_multiple_frames_preserved() -> None:
     result = FailedResult(
         message="err",
         frames=(
@@ -430,7 +430,7 @@ def test_frame_multiple_frames_preserved():
 # ── Cross-language constants ─────────────────────────────────────────────────
 
 
-def test_protocol_version_always_present():
+def test_protocol_version_always_present() -> None:
     result = PassedResult()
     wire = _wire(result, "t.py::test_a", 1.0)
     assert "protocol_version" in wire, "protocol_version must always be in wire output"
@@ -439,7 +439,7 @@ def test_protocol_version_always_present():
     )
 
 
-def test_protocol_version_matches_rust_constant():
+def test_protocol_version_matches_rust_constant() -> None:
     """Python PROTOCOL_VERSION must equal Rust PROTOCOL_VERSION."""
     source = _WORKER_RESULT_RS.read_text()
     match = re.search(r"PROTOCOL_VERSION:\s*u32\s*=\s*(\d+)", source)
@@ -454,7 +454,7 @@ def test_protocol_version_matches_rust_constant():
 # ── Fixture timing shape ─────────────────────────────────────────────────────
 
 
-def test_get_fixture_timings_returns_expected_shape():
+def test_get_fixture_timings_returns_expected_shape() -> None:
     """get_fixture_timings() returns list of FixtureTiming dataclasses."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
@@ -465,7 +465,7 @@ def test_get_fixture_timings_returns_expected_shape():
     assert timings == [], "empty session should produce empty timings"
 
 
-def test_get_fixture_timings_entry_has_required_attrs():
+def test_get_fixture_timings_entry_has_required_attrs() -> None:
     """Each timing entry has the 5 required attributes with correct types."""
     from oxitest import helpers
     from oxitest._bridge.result import FixtureTiming
@@ -489,7 +489,7 @@ def test_get_fixture_timings_entry_has_required_attrs():
 # ── FixtureSession bridge contract ────────────────────────────────────────────
 
 
-def test_fixture_session_has_bridge_methods():
+def test_fixture_session_has_bridge_methods() -> None:
     """FixtureSession exposes the methods called by the Rust bridge."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
@@ -511,7 +511,7 @@ def test_fixture_session_has_bridge_methods():
         )
 
 
-def test_fixture_session_end_module_does_not_raise():
+def test_fixture_session_end_module_does_not_raise() -> None:
     """end_module accepts a module path without raising."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession

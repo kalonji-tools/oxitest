@@ -33,7 +33,7 @@ class Case:
     none=Case(inner_type=type(None), expected_inner=type(None)),
     test_context=Case(inner_type=_TestCtx, expected_inner=_TestCtx),
 )
-def test_fixture_type_is_annotated(inner_type, expected_inner):
+def test_fixture_type_is_annotated(inner_type, expected_inner) -> None:
     result = Fixture[inner_type]
     assert get_origin(result) is Annotated, (
         f"Fixture[{inner_type.__name__}] should have Annotated origin, "
@@ -49,7 +49,7 @@ def test_fixture_type_is_annotated(inner_type, expected_inner):
     )
 
 
-def test_bare_fixture_is_not_annotated():
+def test_bare_fixture_is_not_annotated() -> None:
     assert get_origin(Fixture) is None, (
         f"bare Fixture (without type arg) should have no origin, got "
         f"{get_origin(Fixture)!r}"
@@ -59,7 +59,7 @@ def test_bare_fixture_is_not_annotated():
     )
 
 
-def test_get_type_hints_detects_fixture_marker():
+def test_get_type_hints_detects_fixture_marker() -> None:
     def fn(db: Fixture[_Database], x: int) -> None:
         pass
 
@@ -81,7 +81,7 @@ def test_get_type_hints_detects_fixture_marker():
     )
 
 
-def test_two_fixture_markers_are_independent():
+def test_two_fixture_markers_are_independent() -> None:
     a = Fixture[int]
     b = Fixture[int]
     _, *meta_a = get_args(a)
@@ -91,7 +91,7 @@ def test_two_fixture_markers_are_independent():
     )
 
 
-def test_fixture_ref_database_is_annotated():
+def test_fixture_ref_database_is_annotated() -> None:
     from oxitest import FixtureRef
     from oxitest._bridge._fixture_type import _FixtureRefMarker
 
@@ -115,7 +115,7 @@ def test_fixture_ref_database_is_annotated():
     )
 
 
-def test_fixture_ref_marker_distinct_from_fixture_marker():
+def test_fixture_ref_marker_distinct_from_fixture_marker() -> None:
     from oxitest import Fixture, FixtureRef
     from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
 
@@ -129,7 +129,7 @@ def test_fixture_ref_marker_distinct_from_fixture_marker():
     )
 
 
-def test_two_fixture_ref_markers_are_independent():
+def test_two_fixture_ref_markers_are_independent() -> None:
     from oxitest import FixtureRef
 
     a = FixtureRef[int]
@@ -142,7 +142,7 @@ def test_two_fixture_ref_markers_are_independent():
     )
 
 
-def test_yields_produces_generator_annotation():
+def test_yields_produces_generator_annotation() -> None:
     """Yields[T] expands to Generator[T, None, None]."""
     from collections.abc import Generator
     from typing import get_args, get_origin
@@ -165,7 +165,7 @@ def test_yields_produces_generator_annotation():
     )
 
 
-def test_yields_does_not_carry_fixture_marker():
+def test_yields_does_not_carry_fixture_marker() -> None:
     """Yields[T] is a return-type annotation, not an injection signal."""
     from oxitest import Yields
     from oxitest._bridge._fixture_registry import _fixture_inner_type
@@ -176,7 +176,7 @@ def test_yields_does_not_carry_fixture_marker():
     )
 
 
-def test_fixture_ref_exported_from_oxitest():
+def test_fixture_ref_exported_from_oxitest() -> None:
     import oxitest
 
     assert hasattr(oxitest, "FixtureRef"), (
@@ -187,7 +187,7 @@ def test_fixture_ref_exported_from_oxitest():
     )
 
 
-def test_injectable_stamps_attribute():
+def test_injectable_stamps_attribute() -> None:
     from oxitest._bridge._fixture_type import injectable
 
     @injectable
@@ -199,7 +199,7 @@ def test_injectable_stamps_attribute():
     )
 
 
-def test_injectable_returns_the_class_unchanged():
+def test_injectable_returns_the_class_unchanged() -> None:
     from oxitest._bridge._fixture_type import injectable
 
     @injectable
@@ -211,7 +211,7 @@ def test_injectable_returns_the_class_unchanged():
     )
 
 
-def test_fixture_inner_type_detects_injectable():
+def test_fixture_inner_type_detects_injectable() -> None:
     from oxitest._bridge._fixture_registry import _fixture_inner_type
     from oxitest._bridge._fixture_type import injectable
 
@@ -228,7 +228,7 @@ def test_fixture_inner_type_detects_injectable():
     )
 
 
-def test_fixture_inner_type_ignores_plain_class():
+def test_fixture_inner_type_ignores_plain_class() -> None:
     from oxitest._bridge._fixture_registry import _fixture_inner_type
 
     class PlainClass:
@@ -241,7 +241,7 @@ def test_fixture_inner_type_ignores_plain_class():
     )
 
 
-def test_fixture_wrapper_on_injectable_still_works():
+def test_fixture_wrapper_on_injectable_still_works() -> None:
     from oxitest._bridge._fixture_registry import _fixture_inner_type
     from oxitest._bridge._fixture_type import Fixture, injectable
 
@@ -261,7 +261,7 @@ def test_fixture_wrapper_on_injectable_still_works():
 # ── FixtureScope ─────────────────────────────────────────────────────────────
 
 
-def test_fixture_scope_values():
+def test_fixture_scope_values() -> None:
     """FixtureScope has three tiers: each, shared, session."""
     assert FixtureScope.EACH == "each", "EACH should be 'each'"
     assert FixtureScope.SHARED == "shared", "SHARED should be 'shared'"
@@ -300,7 +300,7 @@ class SourceCase:
         expected=int,
     ),
 )
-def test_source_variant_stores_fields(case: SourceCase):
+def test_source_variant_stores_fields(case: SourceCase) -> None:
     """Source variant dataclasses store their fields correctly."""
     actual = getattr(case.source, case.field)
     assert actual == case.expected, f"{case.label} source should store {case.field}"

@@ -15,7 +15,7 @@ def _write_project(tmp: TempDir) -> None:
     )
 
 
-def test_detail_color_always_has_ansi(tmp: TempDir):
+def test_detail_color_always_has_ansi(tmp: TempDir) -> None:
     """--color always produces ANSI escape codes in detail output."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(
@@ -32,7 +32,7 @@ def test_detail_color_always_has_ansi(tmp: TempDir):
     assert ANSI_ESCAPE in out, f"expected ANSI escapes in output: {out!r}"
 
 
-def test_detail_color_never_no_ansi(tmp: TempDir):
+def test_detail_color_never_no_ansi(tmp: TempDir) -> None:
     """--color never produces no ANSI escape codes."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(
@@ -49,7 +49,7 @@ def test_detail_color_never_no_ansi(tmp: TempDir):
     assert ANSI_ESCAPE not in out, f"unexpected ANSI in output: {out!r}"
 
 
-def test_detail_shows_source_with_highlighting(tmp: TempDir):
+def test_detail_shows_source_with_highlighting(tmp: TempDir) -> None:
     """Detail card includes source code when --color always."""
     _write_project(tmp)
     out, err, rc = helpers.common.run_oxitest_subcmd(

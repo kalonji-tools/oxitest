@@ -31,7 +31,7 @@ def _test_entries(tmp: TempDir) -> list[dict[str, str]]:
 # ── test_fixture_edges_are_reciprocal ─────────────────────────────────────────
 
 
-def test_fixture_edges_are_reciprocal(tmp: TempDir):
+def test_fixture_edges_are_reciprocal(tmp: TempDir) -> None:
     """Each test depending on a fixture must have that fixture present in the graph.
 
     Sets up a conftest defining two fixtures and a test file that uses both via
@@ -104,7 +104,7 @@ def test_fixture_edges_are_reciprocal(tmp: TempDir):
 # ── test_fixture_scope_reflected_in_graph ─────────────────────────────────────
 
 
-def test_fixture_scope_reflected_in_graph(tmp: TempDir):
+def test_fixture_scope_reflected_in_graph(tmp: TempDir) -> None:
     """A ``shared=True`` fixture must report scope ``"shared"`` in query output.
 
     Ensures the Python fixture registry correctly propagates ``shared=True``
@@ -157,7 +157,7 @@ def test_fixture_scope_reflected_in_graph(tmp: TempDir):
 # ── test_cross_conftest_dependency_edges ──────────────────────────────────────
 
 
-def test_cross_conftest_dependency_edges(tmp: TempDir):
+def test_cross_conftest_dependency_edges(tmp: TempDir) -> None:
     """Inner conftest fixture depending on outer conftest fixture via ``Fixture[T]``.
 
     Sets up nested directories each with their own conftest.  The inner conftest

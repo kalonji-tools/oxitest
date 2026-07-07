@@ -6,7 +6,7 @@ from oxitest._bridge._fn_metadata import FunctionMetadata, get_metadata, get_or_
 from oxitest._bridge._mark_api import MarkInfo
 
 
-def test_get_or_create_creates_on_first_access():
+def test_get_or_create_creates_on_first_access() -> None:
     def fn():
         pass
 
@@ -28,7 +28,7 @@ def test_get_or_create_creates_on_first_access():
     )
 
 
-def test_get_or_create_returns_same_instance():
+def test_get_or_create_returns_same_instance() -> None:
     def fn():
         pass
 
@@ -40,7 +40,7 @@ def test_get_or_create_returns_same_instance():
     )
 
 
-def test_get_metadata_returns_default_for_unknown_function():
+def test_get_metadata_returns_default_for_unknown_function() -> None:
     def fn():
         pass
 
@@ -60,7 +60,7 @@ def test_get_metadata_returns_default_for_unknown_function():
     )
 
 
-def test_get_metadata_returns_registered_metadata():
+def test_get_metadata_returns_registered_metadata() -> None:
     def fn():
         pass
 
@@ -76,7 +76,7 @@ def test_get_metadata_returns_registered_metadata():
     )
 
 
-def test_mutations_persist_across_calls():
+def test_mutations_persist_across_calls() -> None:
     def fn():
         pass
 
@@ -89,7 +89,7 @@ def test_mutations_persist_across_calls():
     )
 
 
-def test_different_functions_get_independent_metadata():
+def test_different_functions_get_independent_metadata() -> None:
     def fn_a():
         pass
 

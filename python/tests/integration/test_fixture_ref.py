@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir):
+def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
     """FixtureRef in parametrize kwargs should resolve to the fixture value."""
     helpers.integ.write_project(
         tmp,
