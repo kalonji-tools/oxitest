@@ -487,7 +487,7 @@ def test_parametrize_rejects_non_callable_for_fixture_ref_field() -> None:
 
 
 def test_parametrize_dict_mode_stamps_function() -> None:
-    @parametrize(basic=dict(x=1, y=2, expected=3))
+    @parametrize(basic={"x": 1, "y": 2, "expected": 3})
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
@@ -508,8 +508,8 @@ def test_parametrize_dict_mode_stamps_function() -> None:
 
 def test_parametrize_dict_mode_multiple_cases() -> None:
     @parametrize(
-        basic=dict(x=1, y=2, expected=3),
-        zero_sum=dict(x=0, y=0, expected=0),
+        basic={"x": 1, "y": 2, "expected": 3},
+        zero_sum={"x": 0, "y": 0, "expected": 0},
     )
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
@@ -532,7 +532,7 @@ def test_parametrize_dict_mode_multiple_cases() -> None:
 def test_parametrize_dict_mode_rejects_extra_key() -> None:
     with raises(TypeError, match="unexpected key"):
 
-        @parametrize(basic=dict(x=1, y=2, expeced=3))  # codespell:ignore expeced
+        @parametrize(basic={"x": 1, "y": 2, "expeced": 3})  # codespell:ignore expeced
         def test_foo(x: int, y: int, expected: int) -> None:
             pass
 
@@ -540,7 +540,7 @@ def test_parametrize_dict_mode_rejects_extra_key() -> None:
 def test_parametrize_dict_mode_rejects_missing_key() -> None:
     with raises(TypeError, match="missing key"):
 
-        @parametrize(basic=dict(x=1, y=2))
+        @parametrize(basic={"x": 1, "y": 2})
         def test_foo(x: int, y: int, expected: int) -> None:
             pass
 
@@ -549,7 +549,7 @@ def test_parametrize_dict_mode_rejects_non_dict_case() -> None:
     with raises(TypeError, match="must be a dict"):
 
         @parametrize(
-            basic=dict(x=1),
+            basic={"x": 1},
             bad=42,
         )
         def test_foo(x: int) -> None:
@@ -559,7 +559,7 @@ def test_parametrize_dict_mode_rejects_non_dict_case() -> None:
 def test_parametrize_dict_mode_excludes_fixture_params_from_schema() -> None:
     """Fixture[T] params are not required in the dict — session resolves them."""
 
-    @parametrize(basic=dict(x=2, expected=20))
+    @parametrize(basic={"x": 2, "expected": 20})
     def test_foo(x: int, expected: int, multiplier: Fixture[int]) -> None:
         pass
 
@@ -1155,7 +1155,7 @@ def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
 def test_parametrize_single_dict_is_1_tuple() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
-    @parametrize(basic=dict(x=1, y=2, expected=3))
+    @parametrize(basic={"x": 1, "y": 2, "expected": 3})
     def test_fn(x: int, y: int, expected: int) -> None:
         pass
 

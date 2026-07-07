@@ -194,7 +194,8 @@ def test_frames_captured_on_assertion_error() -> None:
     """_handle_assertion_error populates frames from the traceback."""
 
     def inner() -> None:
-        assert False, "boom"
+        msg = "boom"
+        raise AssertionError(msg)
 
     try:
         inner()

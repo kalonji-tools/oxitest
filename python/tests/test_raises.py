@@ -31,10 +31,9 @@ def test_raises_match_passes_when_pattern_found() -> Never:
 
 
 def test_raises_match_fails_when_pattern_not_found() -> Never:
-    with raises(AssertionError, match="not found"):
-        with raises(ValueError, match="boom"):
-            msg = "nothing matches here"
-            raise ValueError(msg)
+    with raises(AssertionError, match="not found"), raises(ValueError, match="boom"):
+        msg = "nothing matches here"
+        raise ValueError(msg)
 
 
 def test_raises_exc_info_value_holds_exception() -> Never:
@@ -94,6 +93,8 @@ def test_raises_tuple_wrong_type_reraises() -> Never:
 
 
 def test_raises_tuple_no_exception_names_all_types() -> None:
-    with raises(AssertionError, match=r"\(ValueError \| TypeError\)"):
-        with raises((ValueError, TypeError)):
-            pass
+    with (
+        raises(AssertionError, match=r"\(ValueError \| TypeError\)"),
+        raises((ValueError, TypeError)),
+    ):
+        pass

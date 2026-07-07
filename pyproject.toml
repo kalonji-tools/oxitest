@@ -33,8 +33,6 @@ ignore = [
     "D213",           # multi-line summary second line — conflicts with D212
 
     # ── Intentional design decisions ─────────────────────────────────────
-    "D105", "D107",   # missing docstring in magic method / __init__
-
     "TC001",          # get_type_hints() resolves annotations at runtime — imports must stay
     "TC002",          # same: runtime annotation resolution needs imports in namespace
     "TC003",          # same: stdlib types used in annotations resolved by get_type_hints()
@@ -48,7 +46,7 @@ ignore = [
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/oxitest/_bridge/_*.py" = ["D100", "D101", "D102", "D103", "D104"]
 "python/tests/*" = [
-    "T201", "B009", "B010", "B011", "B017", "B018", "B028", "C408", "SIM117", "PTH109", "D",
+    "T201", "B010", "B017", "B018", "B028", "D",
     "PLR2004",  # magic values in comparisons
     "PT015",    # assert always fails
     "PT017",    # assert in except block
@@ -59,7 +57,6 @@ ignore = [
     "PLW1510",  # subprocess.run without check
     "PLW0177",  # comparison with NaN
     "N818",     # exception name suffix (test doubles named Skipped etc.)
-    "FBT003",   # boolean positional value in function call
     "TRY301",   # raise within try (testing exception handling)
     "INP001",   # no __init__.py (test dirs are not packages)
     "S102",     # exec() needed to test AST rewriter and live type annotations

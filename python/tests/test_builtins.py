@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 import oxitest
 
@@ -557,23 +558,23 @@ def test_patcher_delenv_removes_and_restores() -> None:
 
 
 def test_patcher_chdir_changes_and_restores(tmp: TempDir) -> None:
-    import os
-
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
-    original = os.getcwd()
+    original = Path.cwd()
 
     ctx, teardowns = _make_builtin_ctx()
     patch = _PatcherFixture().create(ctx)
 
     patch.chdir(tmp)
-    assert os.getcwd() == str(tmp), (
-        f"patch.chdir(tmp) should change cwd to {str(tmp)!r}, got {os.getcwd()!r}"
+    assert Path.cwd() == Path(tmp), (
+        f"patch.chdir(tmp) should change cwd to {str(tmp)!r}, got {str(Path.cwd())!r}"
     )
 
     teardowns[0]()
-    assert os.getcwd() == original, (
-        f"patch.chdir teardown should restore cwd to {original!r}, got {os.getcwd()!r}"
+    restored = Path.cwd()
+    assert restored == original, (
+        f"patch.chdir teardown should restore cwd to {str(original)!r},"
+        f" got {str(restored)!r}"
     )
 
 
