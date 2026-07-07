@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Generator
 
 from oxitest import TempDir, helpers
 from oxitest._bridge._fixture_registry import (
@@ -28,7 +29,7 @@ def test_setup_timing_recorded_for_function_scoped_fixture() -> None:
         return 42
 
     session = helpers.common.make_session_with("slow_fixture", slow_fixture)
-    teardowns: list = []
+    teardowns: list[Callable[[], None]] = []
     session.get_fixture("slow_fixture", "test_mod.py", teardowns)
 
     timings = session.get_fixture_timings()
@@ -58,12 +59,12 @@ def test_empty_session_returns_empty_timings() -> None:
 def test_teardown_timing_recorded_for_yield_fixture() -> None:
     """Fixture teardown time is tracked on the session."""
 
-    def yield_fixture():
+    def yield_fixture() -> Generator[int]:
         yield 42
         time.sleep(0.01)
 
     session = helpers.common.make_session_with("yield_fx", yield_fixture)
-    teardowns: list = []
+    teardowns: list[Callable[[], None]] = []
     session.get_fixture("yield_fx", "test_mod.py", teardowns)
 
     # Run teardowns (simulates end-of-test cleanup)
@@ -93,7 +94,7 @@ def test_shared_fixture_setup_timed_once() -> None:
             "shared_fx", shared_fixture, conftest_path="/conftest.py", shared=True
         )
     )
-    teardowns: list = []
+    teardowns: list[Callable[[], None]] = []
 
     session.get_fixture("shared_fx", "test_mod.py", teardowns)
     session.get_fixture("shared_fx", "test_mod.py", teardowns)
@@ -109,7 +110,7 @@ def test_shared_fixture_setup_timed_once() -> None:
 def test_multiple_fixtures_each_tracked_separately() -> None:
     """Each fixture gets its own timing entry."""
     session = helpers.common.make_session_with("fast_a", lambda: 1)
-    teardowns: list = []
+    teardowns: list[Callable[[], None]] = []
 
     session._registry.register(
         helpers.common.make_fixture_def(
@@ -166,17 +167,17 @@ def test_session_plugin_without_scope_autouse() -> None:
         """Provider with only the required protocol methods."""
 
         @property
-        def name(self):
+        def name(self) -> str:
             return "minimal"
 
         @property
-        def fixture_type(self):
+        def fixture_type(self) -> type[_MinimalType]:
             return _MinimalType
 
-        def create(self, ctx):
+        def create(self, ctx: object) -> int:
             return 42
 
-        def teardown(self, value):
+        def teardown(self, value: object) -> None:
             pass
 
     class FakePluginRegistry(PluginRegistry):

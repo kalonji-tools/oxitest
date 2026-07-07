@@ -31,7 +31,7 @@ __all__ = [
 
 @integ.helper
 def write_project(
-    tmp,
+    tmp: TempDir,
     *,
     tests: dict[str, str],
     pyproject: str | None = None,
@@ -100,7 +100,7 @@ def git_repo(tmp: TempDir) -> Yields[Path]:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     run(*git, "init")

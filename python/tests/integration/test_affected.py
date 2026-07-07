@@ -41,7 +41,7 @@ def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     git = ["git", "-C", str(main_repo)]
@@ -70,7 +70,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file in the worktree and stage it.
@@ -100,7 +100,7 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file.
@@ -123,7 +123,7 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file.

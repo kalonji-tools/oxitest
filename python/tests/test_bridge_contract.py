@@ -377,7 +377,7 @@ class StatusCase:
     warned=StatusCase(status="warned", expected="warned"),
     timeout=StatusCase(status="timeout", expected="timeout"),
 )
-def test_status_round_trip(status, expected) -> None:
+def test_status_round_trip(status: str, expected: str) -> None:
     """Each per-outcome type maps to the correct outcome string in the wire payload."""
     _factories: dict[str, TestResult] = {
         "passed": PassedResult(),

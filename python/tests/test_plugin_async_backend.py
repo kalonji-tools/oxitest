@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Coroutine
+from typing import Any, Never
+
 from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
 from oxitest.plugin import Plugin
 
@@ -9,10 +12,10 @@ class _FakeBackend:
     def name(self) -> str:
         return "fake"
 
-    def run(self, coro):
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Never:
         raise NotImplementedError
 
-    def create_shared_session(self):
+    def create_shared_session(self) -> Never:
         raise NotImplementedError
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 
 from oxitest import raises
 from oxitest._bridge._errors import FixtureSetupError
@@ -11,7 +12,7 @@ from oxitest._bridge._fixture_instantiator import (
 
 
 def test_reject_async_in_sync_raises_on_coroutine() -> None:
-    async def coro():
+    async def coro() -> None:
         pass
 
     c = coro()
@@ -20,7 +21,7 @@ def test_reject_async_in_sync_raises_on_coroutine() -> None:
 
 
 def test_reject_async_in_sync_raises_on_async_gen() -> None:
-    async def agen():
+    async def agen() -> AsyncGenerator[int, None]:
         yield 1
 
     g = agen()
@@ -36,7 +37,7 @@ def test_reject_async_in_sync_passes_on_sync_value() -> None:
 
 
 def test_reject_nonshared_async_raises_on_coroutine() -> None:
-    async def coro():
+    async def coro() -> None:
         pass
 
     c = coro()

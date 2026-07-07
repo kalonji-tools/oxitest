@@ -24,7 +24,7 @@ def test_namespace_proxy_resolves_fixture() -> None:
 def test_namespace_proxy_is_lazy() -> None:
     called = []
 
-    def make_conn():
+    def make_conn() -> str:
         called.append(1)
         return "val"
 

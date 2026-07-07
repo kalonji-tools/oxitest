@@ -16,7 +16,7 @@ from oxitest._bridge.plugin_loader import load_plugins
 from oxitest.plugin import Plugin
 
 
-def _make_plugin_with_extension():
+def _make_plugin_with_extension() -> types.ModuleType:
     """Create a fake plugin module with oxitest_cli_extension."""
 
     @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def _make_plugin_with_extension():
 
     call_tracker: list[bool] = []
 
-    def oxitest_plugin(**_: object):
+    def oxitest_plugin(**_: object) -> Plugin:
         call_tracker.append(True)
         return Plugin()
 
@@ -107,7 +107,7 @@ def test_activate_plugin_with_typed_config() -> None:
 def test_backwards_compat_dict_config() -> None:
     received: dict = {}
 
-    def entry(config=None):
+    def entry(config: dict[str, str] | None = None) -> Plugin:
         received["config"] = config
         return Plugin()
 

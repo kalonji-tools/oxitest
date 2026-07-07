@@ -50,7 +50,7 @@ def test_plugin_loader_discovers_and_activates_typed_config() -> None:
 
     received_configs: list[TestConfig] = []
 
-    def oxitest_plugin(*, config):
+    def oxitest_plugin(*, config: TestConfig) -> Plugin:
         received_configs.append(config)
         return Plugin()
 

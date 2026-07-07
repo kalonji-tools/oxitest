@@ -5,7 +5,7 @@ import subprocess
 from oxitest import TempDir, helpers
 
 
-def _clean_env():
+def _clean_env() -> dict[str, str]:
     """Strip GIT_* vars that leak from pre-push hooks."""
     return {
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")

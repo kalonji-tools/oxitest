@@ -81,7 +81,7 @@ class TupleCatchCase:
     first_type=TupleCatchCase(exc_class=ValueError),
     second_type=TupleCatchCase(exc_class=TypeError),
 )
-def test_raises_tuple_catches_matching_type(exc_class) -> Never:
+def test_raises_tuple_catches_matching_type(exc_class: type) -> Never:
     with raises((ValueError, TypeError)):
         msg = "msg"
         raise exc_class(msg)

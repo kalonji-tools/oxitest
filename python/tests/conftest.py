@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
 
@@ -87,7 +88,7 @@ def _clean_sys_modules() -> Yields[None]:
 @common.helper
 def make_fixture_def(
     name: str,
-    factory=None,
+    factory: Callable[..., object] | None = None,
     *,
     namespace: str = "",
     shared: bool = False,
@@ -147,14 +148,14 @@ def make_session(*defs: FixtureDef) -> FixtureSession:
 
 
 @common.helper
-def make_session_with(name: str, factory) -> FixtureSession:
+def make_session_with(name: str, factory: Callable[..., object]) -> FixtureSession:
     """Shortcut: single-fixture session for quick tests."""
     return make_session(make_fixture_def(name, factory, conftest_path="/conftest.py"))
 
 
 @common.helper
 def run_oxitest(
-    tmp_path,
+    tmp_path: TempDir | None,
     *extra_args: str,
     env: dict[str, str] | None = None,
     cwd: str | None = None,
@@ -189,7 +190,7 @@ def run_oxitest(
 
 @common.helper
 def run_oxitest_subcmd(
-    tmp_path,
+    tmp_path: TempDir | None,
     *subcmd_and_args: str,
     timeout: int = 60,
     cwd: str | None = None,
@@ -260,7 +261,7 @@ def run_test(
 
 @common.helper
 def exec_inline(
-    tmp,
+    tmp: TempDir,
     code: str,
     fn_name: str = "test_ok",
     *,
@@ -289,7 +290,7 @@ def exec_inline(
 
 @common.helper
 def write_test_file(
-    tmp_path,
+    tmp_path: TempDir,
     code: str,
     name: str = "test_auto.py",
 ) -> str:
@@ -300,7 +301,7 @@ def write_test_file(
 
 
 @common.helper
-def write_test_module(tmp, code: str, *, name: str = "test_auto.py") -> str:
+def write_test_module(tmp: TempDir, code: str, *, name: str = "test_auto.py") -> str:
     f = tmp / name
     f.write_text(textwrap.dedent(code))
     return str(f)

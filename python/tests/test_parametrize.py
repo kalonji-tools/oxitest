@@ -20,7 +20,7 @@ class AddCase:
 
 def test_parametrize_stamps_function() -> None:
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
-    def test_foo(x, y, expected):
+    def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -50,7 +50,7 @@ def test_parametrize_multiple_cases() -> None:
         basic=AddCase(x=1, y=2, expected=3),
         zero_sum=AddCase(x=0, y=0, expected=0),
     )
-    def test_foo(x, y, expected):
+    def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -77,7 +77,7 @@ def test_parametrize_rejects_non_dataclass() -> None:
     ):
 
         @parametrize(basic=object())
-        def test_foo(x):
+        def test_foo(x: int) -> None:
             pass
 
 
@@ -89,7 +89,7 @@ def test_parametrize_rejects_non_frozen_dataclass() -> None:
     with raises(TypeError, match="frozen=True"):
 
         @parametrize(basic=Mutable(x=1))
-        def test_foo(x):
+        def test_foo(x: int) -> None:
             pass
 
 
@@ -97,7 +97,7 @@ def test_parametrize_rejects_empty_cases() -> None:
     with raises(TypeError, match="at least one case"):
 
         @parametrize()
-        def test_foo(x):
+        def test_foo(x: int) -> None:
             pass
 
 
@@ -112,7 +112,7 @@ def test_parametrize_rejects_wrong_instance_type() -> None:
             good=AddCase(x=1, y=2, expected=3),
             bad=OtherCase(z=1),
         )
-        def test_foo(x):
+        def test_foo(x: int) -> None:
             pass
 
 
@@ -193,7 +193,7 @@ def test_plain_typed_param_not_resolved_as_fixture() -> None:
     registry = FixtureRegistry()
     session = FixtureSession(registry)
 
-    def test_fn(x: int, y: int):
+    def test_fn(x: int, y: int) -> None:
         pass
 
     # x and y are NOT annotated with Fixture[T] — should not raise FixtureNotFoundError
@@ -209,7 +209,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
     """Fixture[T]-annotated params are resolved; plain-typed params are skipped."""
     registry = FixtureRegistry()
 
-    def my_fixture():
+    def my_fixture() -> int:
         return 42
 
     registry.register(helpers.common.make_fixture_def("db", my_fixture))
@@ -235,13 +235,13 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
 
     registry = FixtureRegistry()
 
-    def x_fixture():
+    def x_fixture() -> int:
         return 99
 
     registry.register(helpers.common.make_fixture_def("x", x_fixture))
     session = FixtureSession(registry)
 
-    def test_fn(x: int):
+    def test_fn(x: int) -> None:
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
@@ -686,7 +686,7 @@ def test_parametrize_inferred_type_stamps_function() -> None:
     """Dataclass mode: type inferred from first case value, no explicit type arg."""
 
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
-    def test_foo(x, y, expected):
+    def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -1073,7 +1073,7 @@ def test_partial_detects_fixref_fields() -> None:
         db: FixtureRef[str]
         label: str
 
-    def my_db():
+    def my_db() -> str:
         return "pg"
 
     p = partial(DbCase, db=my_db)

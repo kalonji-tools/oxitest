@@ -273,7 +273,7 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Create and commit a baseline test file (on top of git_repo's init commit)
@@ -307,7 +307,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
         k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
     }
 
-    def run(*cmd):
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Create a subdirectory with a test file and commit

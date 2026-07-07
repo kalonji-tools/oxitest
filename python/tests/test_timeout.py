@@ -66,17 +66,17 @@ class InvalidTimeout:
     zero=InvalidTimeout(seconds=0),
     negative=InvalidTimeout(seconds=-1),
 )
-def test_timeout_mark_rejects_invalid_seconds(seconds) -> None:
+def test_timeout_mark_rejects_invalid_seconds(seconds: int) -> None:
     with raises(ValueError, match="seconds > 0"):
 
         @oxitest.mark.timeout(seconds=seconds)
-        def test_bad():
+        def test_bad() -> None:
             pass
 
 
 def test_timeout_mark_stores_seconds() -> None:
     @oxitest.mark.timeout(seconds=5)
-    def test_ok():
+    def test_ok() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -125,7 +125,7 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
     wrapper = result.wrapper
     assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
 
-    def slow_next():
+    def slow_next() -> PassedResult:
         time.sleep(5)
         return PassedResult()
 

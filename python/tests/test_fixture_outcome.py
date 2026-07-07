@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+
 from oxitest import WarnCapture
 from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _unpack_sync
 
@@ -11,7 +13,7 @@ def test_unpack_sync_plain_value() -> None:
 
 
 def test_unpack_sync_generator() -> None:
-    def gen():
+    def gen() -> Generator[str, None, None]:
         yield "setup_val"
 
     outcome = _unpack_sync(gen(), "my_fix")
@@ -21,7 +23,7 @@ def test_unpack_sync_generator() -> None:
 
 
 def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) -> None:
-    def gen():
+    def gen() -> Generator[str, None, None]:
         yield "val"
         msg = "teardown boom"
         raise RuntimeError(msg)
