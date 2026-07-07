@@ -5,7 +5,7 @@ from __future__ import annotations
 from oxitest import TempDir, helpers
 
 
-def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir):
+def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir) -> None:
     """``oxitest fixtures`` emits a deprecation warning to stderr."""
     helpers.integ.write_project(
         tmp,
@@ -32,7 +32,7 @@ def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir):
     assert "deprecated" in err, f"expected deprecation warning in stderr, got: {err!r}"
 
 
-def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir):
+def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir) -> None:
     """``oxitest fixtures`` still outputs fixture listing despite being deprecated."""
     helpers.integ.write_project(
         tmp,
@@ -59,7 +59,7 @@ def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir):
     assert "db" in out, f"expected fixture 'db' in stdout, got: {out!r}"
 
 
-def test_fixtures_subcmd_hidden_from_help():
+def test_fixtures_subcmd_hidden_from_help() -> None:
     """``oxitest --help`` does not list the deprecated ``fixtures`` subcommand."""
     import subprocess
     import sys

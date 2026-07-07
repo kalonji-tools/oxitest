@@ -12,7 +12,7 @@ from oxitest import TempDir, helpers
 # ── Single node ID ───────────────────────────────────────────────────────────
 
 
-def test_run_single_node_id(tmp: TempDir):
+def test_run_single_node_id(tmp: TempDir) -> None:
     """``oxitest run path::test_name`` runs exactly one test."""
     helpers.integ.write_project(
         tmp,
@@ -36,7 +36,7 @@ def test_sub():
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_run_node_id_nonexistent_test_collects_zero(tmp: TempDir):
+def test_run_node_id_nonexistent_test_collects_zero(tmp: TempDir) -> None:
     """Targeting a test that doesn't exist collects zero items."""
     helpers.integ.write_project(
         tmp,
@@ -60,7 +60,7 @@ def test_add():
 # ── Class-based node IDs ─────────────────────────────────────────────────────
 
 
-def test_run_class_method_node_id(tmp: TempDir):
+def test_run_class_method_node_id(tmp: TempDir) -> None:
     """``oxitest run path::TestClass::test_method`` targets a class method."""
     helpers.integ.write_project(
         tmp,
@@ -88,7 +88,7 @@ def test_standalone():
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_run_class_prefix_selects_all_methods(tmp: TempDir):
+def test_run_class_prefix_selects_all_methods(tmp: TempDir) -> None:
     """``oxitest run path::TestClass`` runs all methods in the class."""
     helpers.integ.write_project(
         tmp,
@@ -119,7 +119,7 @@ def test_standalone():
 # ── Parametrized node IDs ────────────────────────────────────────────────────
 
 
-def test_run_parametrized_prefix_matches_all_cases(tmp: TempDir):
+def test_run_parametrized_prefix_matches_all_cases(tmp: TempDir) -> None:
     """Node ID without brackets matches all parametrized variants."""
     helpers.integ.write_project(
         tmp,
@@ -153,7 +153,7 @@ def test_math(x: int, y: int, expected: int):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_run_parametrized_exact_case(tmp: TempDir):
+def test_run_parametrized_exact_case(tmp: TempDir) -> None:
     """Node ID with brackets matches only that parametrized case."""
     helpers.integ.write_project(
         tmp,
@@ -189,7 +189,7 @@ def test_mul(x: int, expected: int):
 # ── Mixed paths and node IDs ────────────────────────────────────────────────
 
 
-def test_run_mixed_path_and_node_id(tmp: TempDir):
+def test_run_mixed_path_and_node_id(tmp: TempDir) -> None:
     """Bare path runs all tests; node ID runs just one. Mixed works."""
     helpers.integ.write_project(
         tmp,
@@ -221,7 +221,7 @@ def test_three():
 # ── Strict mode with subset targeting ────────────────────────────────────────
 
 
-def test_strict_with_single_file_no_false_unused(tmp: TempDir):
+def test_strict_with_single_file_no_false_unused(tmp: TempDir) -> None:
     """Strict mode doesn't flag unused fixtures when targeting a file subset."""
     helpers.integ.write_project(
         tmp,
@@ -256,7 +256,7 @@ strict = "abort"
     helpers.integ.assert_excludes(out, "unused-fixture")
 
 
-def test_strict_with_node_id_no_false_unused(tmp: TempDir):
+def test_strict_with_node_id_no_false_unused(tmp: TempDir) -> None:
     """Strict mode doesn't flag unused fixtures when targeting via node ID."""
     helpers.integ.write_project(
         tmp,
@@ -298,7 +298,7 @@ strict = "abort"
 # ── Conftest ancestor discovery ──────────────────────────────────────────────
 
 
-def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir):
+def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
     """Node ID targeting a file in a subdirectory loads all ancestor conftests."""
     (tmp / "pyproject.toml").write_text("")
     (tmp / "conftest.py").write_text(
@@ -332,7 +332,7 @@ def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir):
 # ── Multiple node IDs ────────────────────────────────────────────────────────
 
 
-def test_run_multiple_node_ids(tmp: TempDir):
+def test_run_multiple_node_ids(tmp: TempDir) -> None:
     """Multiple node IDs from different files run exactly those tests."""
     helpers.integ.write_project(
         tmp,

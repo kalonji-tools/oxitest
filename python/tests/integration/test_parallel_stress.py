@@ -20,7 +20,7 @@ def _parse_counts(out: str) -> dict[str, int]:
 
 
 @oxitest.mark.timeout(120)
-def test_parallel_matches_serial_at_scale(tmp: TempDir):
+def test_parallel_matches_serial_at_scale(tmp: TempDir) -> None:
     """200+ tests across 10 files produce identical counts in serial and parallel."""
     # Arrange: generate 10 test files with 20 passing tests each (200 total).
     for file_idx in range(10):
@@ -54,7 +54,7 @@ def test_parallel_matches_serial_at_scale(tmp: TempDir):
 
 
 @oxitest.mark.timeout(120)
-def test_worker_crash_reports_errors(tmp: TempDir):
+def test_worker_crash_reports_errors(tmp: TempDir) -> None:
     """A worker that crashes via os._exit reports a non-zero exit from oxitest."""
     # Arrange: one test crashes the worker process, others are normal.
     (tmp / "test_crash.py").write_text(
@@ -81,7 +81,7 @@ def test_worker_crash_reports_errors(tmp: TempDir):
 
 
 @oxitest.mark.timeout(120)
-def test_maxfail_stops_early_under_load(tmp: TempDir):
+def test_maxfail_stops_early_under_load(tmp: TempDir) -> None:
     """--maxfail 3 with 50 tests (10 failing) stops before running all 50."""
     # Arrange: 50 tests total, 10 of which always fail.
     lines = []
@@ -113,7 +113,7 @@ def test_maxfail_stops_early_under_load(tmp: TempDir):
 
 
 @oxitest.mark.timeout(120)
-def test_shared_fixture_created_once_across_workers(tmp: TempDir):
+def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
     """A shared fixture writes a counter file; parallel run creates it exactly once."""
     # Arrange: conftest with a shared fixture that increments a file counter.
     (tmp / "conftest.py").write_text(

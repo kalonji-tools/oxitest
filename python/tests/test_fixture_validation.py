@@ -7,7 +7,7 @@ from oxitest import helpers
 # ── validate_fixture_names ───────────────────────────────────────────────────
 
 
-def test_valid_names_return_empty():
+def test_valid_names_return_empty() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -23,7 +23,7 @@ def test_valid_names_return_empty():
     assert errors == [], f"expected no errors, got {errors}"
 
 
-def test_invalid_name_returns_error():
+def test_invalid_name_returns_error() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -39,7 +39,7 @@ def test_invalid_name_returns_error():
     assert errors == [("test.py::test_a", "no_such_fx")], f"unexpected errors: {errors}"
 
 
-def test_fixref_names_excluded():
+def test_fixref_names_excluded() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -55,7 +55,7 @@ def test_fixref_names_excluded():
     assert errors == [], f"fixref names should be excluded, got {errors}"
 
 
-def test_mixed_valid_and_invalid():
+def test_mixed_valid_and_invalid() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -82,7 +82,7 @@ def test_mixed_valid_and_invalid():
     assert errors == expected, f"expected {expected}, got {errors}"
 
 
-def test_empty_items_return_empty():
+def test_empty_items_return_empty() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names([])
@@ -90,7 +90,7 @@ def test_empty_items_return_empty():
     assert errors == [], f"expected no errors for empty items, got {errors}"
 
 
-def test_no_fixture_names_return_empty():
+def test_no_fixture_names_return_empty() -> None:
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(

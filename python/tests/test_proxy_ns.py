@@ -11,7 +11,7 @@ from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespace
 # ── NamespaceProxy ─────────────────────────────────────────────────────────
 
 
-def test_namespace_proxy_resolves_fixture():
+def test_namespace_proxy_resolves_fixture() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-val", namespace="db")
     )
@@ -21,7 +21,7 @@ def test_namespace_proxy_resolves_fixture():
     )
 
 
-def test_namespace_proxy_is_lazy():
+def test_namespace_proxy_is_lazy() -> None:
     called = []
 
     def make_conn():
@@ -40,7 +40,7 @@ def test_namespace_proxy_is_lazy():
     )
 
 
-def test_namespace_proxy_isolates_namespaces():
+def test_namespace_proxy_isolates_namespaces() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
         helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
@@ -59,7 +59,7 @@ def test_namespace_proxy_isolates_namespaces():
 # ── FixturesProxy ──────────────────────────────────────────────────────────
 
 
-def test_fixtures_proxy_getattr_returns_namespace_proxy():
+def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     )
@@ -70,7 +70,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy():
     )
 
 
-def test_fixtures_proxy_getattr_returns_oxi_proxy():
+def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     oxi = proxy.oxi
@@ -80,7 +80,7 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy():
     )
 
 
-def test_fixtures_proxy_unknown_namespace_raises():
+def test_fixtures_proxy_unknown_namespace_raises() -> None:
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     try:
@@ -100,7 +100,7 @@ def test_fixtures_proxy_unknown_namespace_raises():
 
 def test_oxi_proxy_tmp_injects_tempdir(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.tmp
     assert isinstance(result, TempDir), (
@@ -110,7 +110,7 @@ def test_oxi_proxy_tmp_injects_tempdir(
 
 def test_oxi_proxy_cap_injects_stdcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.cap
@@ -123,7 +123,7 @@ def test_oxi_proxy_cap_injects_stdcapture(
 
 def test_oxi_proxy_patch_injects_patcher(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.patch
     assert isinstance(result, Patcher), (
@@ -133,7 +133,7 @@ def test_oxi_proxy_patch_injects_patcher(
 
 def test_oxi_proxy_log_injects_logcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.log
@@ -146,7 +146,7 @@ def test_oxi_proxy_log_injects_logcapture(
 
 def test_oxi_proxy_unknown_raises_with_available_list(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     try:
         _ = proxy.unknown
@@ -164,7 +164,7 @@ def test_oxi_proxy_unknown_raises_with_available_list(
 # ── Shared fixtures ────────────────────────────────────────────────────────
 
 
-def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
+def test_shared_fixture_accessed_via_namespace_is_frozen_proxy() -> None:
     """shared=True fixture accessed via fx.db.conn should be FrozenProxy-wrapped."""
     session = helpers.common.make_session(
         helpers.common.make_fixture_def(
@@ -185,7 +185,9 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy():
 # ── OxiNamespaceProxy ctx ──────────────────────────────────────────────────
 
 
-def test_oxi_proxy_ctx_returns_test_context(fixture_session: Fixture[FixtureSession]):
+def test_oxi_proxy_ctx_returns_test_context(
+    fixture_session: Fixture[FixtureSession],
+) -> None:
     """fx.oxi.ctx should return a TestContext instance."""
     proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", [])
     result = proxy.ctx
@@ -196,7 +198,7 @@ def test_oxi_proxy_ctx_returns_test_context(fixture_session: Fixture[FixtureSess
 
 def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
-):
+) -> None:
     """FixturesProxy.oxi caches and returns same OxiNamespaceProxy on
     repeated access."""
     proxy = FixturesProxy(fixture_session, "/fake/test.py", [])
@@ -210,7 +212,7 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
 
 def test_oxi_proxy_caches_builtin_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
-):
+) -> None:
     """OxiNamespaceProxy caches builtin instances; repeated access returns
     the same object."""
     teardowns: list = []
@@ -227,7 +229,7 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
 # ── Integration: full pipeline ──────────────────────────────────────────────
 
 
-def test_full_pipeline_fx_namespace_access(tmp: TempDir):
+def test_full_pipeline_fx_namespace_access(tmp: TempDir) -> None:
     """Full pipeline: conftest defines namespaced fixtures; test accesses via
     fx.db.conn. Covers: conftest load → registry → proxy → test execution.
     """
@@ -259,7 +261,7 @@ def test_full_pipeline_fx_namespace_access(tmp: TempDir):
 
 def test_full_pipeline_fx_oxi_tmp(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     """End-to-end: test accesses fx.oxi.tmp and writes to it."""
     test_file = tmp / "test_oxi.py"
     test_file.write_text(
@@ -275,7 +277,7 @@ def test_full_pipeline_fx_oxi_tmp(
     assert result.status == "passed", result.message
 
 
-def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir):
+def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
     """Two namespaces with the same fixture name are independent."""
     conftest = tmp / "conftest.py"
     conftest.write_text(

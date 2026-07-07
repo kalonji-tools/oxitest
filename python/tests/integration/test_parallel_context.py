@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_parallel_failure_shows_worker_context(tmp: TempDir):
+def test_parallel_failure_shows_worker_context(tmp: TempDir) -> None:
     """A failing test in parallel mode should show worker # and concurrent tests."""
     # Write enough test files to force parallel execution with multiple workers
     (tmp / "test_a.py").write_text(

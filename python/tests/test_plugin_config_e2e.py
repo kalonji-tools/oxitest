@@ -23,7 +23,7 @@ class TestConfig:
 
 
 @oxitest.mark.inprocess
-def test_full_flow_introspect_merge_construct():
+def test_full_flow_introspect_merge_construct() -> None:
     descs = introspect_config(TestConfig)
     config = merge_config(
         TestConfig,
@@ -42,7 +42,7 @@ def test_full_flow_introspect_merge_construct():
 
 
 @oxitest.mark.inprocess
-def test_plugin_loader_discovers_and_activates_typed_config():
+def test_plugin_loader_discovers_and_activates_typed_config() -> None:
     mod = types.ModuleType("e2e_plugin")
     setattr(
         mod, "oxitest_cli_extension", CliExtension(prefix="e2e", config_type=TestConfig)

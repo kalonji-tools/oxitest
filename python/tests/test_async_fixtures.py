@@ -56,13 +56,13 @@ def _make_stub_backend():
 # ── Initial state ─────────────────────────────────────────────────────────────
 
 
-def test_initial_state_session_is_none():
+def test_initial_state_session_is_none() -> None:
     mgr = SharedAsyncManager(AsyncioBackend())
 
     assert mgr.session is None, "session should be None before any resolve"
 
 
-def test_initial_state_was_used_is_false():
+def test_initial_state_was_used_is_false() -> None:
     mgr = SharedAsyncManager(AsyncioBackend())
 
     assert mgr.was_used is False, "was_used should be False initially"
@@ -71,7 +71,7 @@ def test_initial_state_was_used_is_false():
 # ── was_used flag ─────────────────────────────────────────────────────────────
 
 
-def test_was_used_setter():
+def test_was_used_setter() -> None:
     mgr = SharedAsyncManager(AsyncioBackend())
 
     mgr.was_used = True
@@ -79,7 +79,7 @@ def test_was_used_setter():
     assert mgr.was_used is True, "was_used should be True after setting"
 
 
-def test_was_used_can_be_reset():
+def test_was_used_can_be_reset() -> None:
     mgr = SharedAsyncManager(AsyncioBackend())
     mgr.was_used = True
 
@@ -91,7 +91,7 @@ def test_was_used_can_be_reset():
 # ── resolve ───────────────────────────────────────────────────────────────────
 
 
-def test_resolve_creates_session_lazily():
+def test_resolve_creates_session_lazily() -> None:
     backend, session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -107,7 +107,7 @@ def test_resolve_creates_session_lazily():
     assert backend.create_count == 1, "session should be created exactly once"
 
 
-def test_resolve_reuses_existing_session():
+def test_resolve_reuses_existing_session() -> None:
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -123,7 +123,7 @@ def test_resolve_reuses_existing_session():
     assert backend.create_count == 1, "session should be created exactly once"
 
 
-def test_resolve_sets_was_used():
+def test_resolve_sets_was_used() -> None:
     backend, _ = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -135,7 +135,7 @@ def test_resolve_sets_was_used():
     assert mgr.was_used is True, "was_used should be True after resolve"
 
 
-def test_resolve_passes_deps_to_fixture():
+def test_resolve_passes_deps_to_fixture() -> None:
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
     received = {}
@@ -150,7 +150,7 @@ def test_resolve_passes_deps_to_fixture():
     assert received == {"a": 10, "b": "hello"}, "deps should be forwarded"
 
 
-def test_resolve_async_generator_tracks_teardown():
+def test_resolve_async_generator_tracks_teardown() -> None:
     """Async generator fixtures have their teardown tracked for cleanup."""
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
@@ -170,7 +170,7 @@ def test_resolve_async_generator_tracks_teardown():
     assert torn_down == [True], "teardown should have run"
 
 
-def test_resolve_plain_coroutine():
+def test_resolve_plain_coroutine() -> None:
     """Plain async def (not generator) returns the value directly."""
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
@@ -184,7 +184,7 @@ def test_resolve_plain_coroutine():
     assert len(mgr._teardowns) == 0, "no teardowns for plain coroutines"
 
 
-def test_resolve_sync_function_passthrough():
+def test_resolve_sync_function_passthrough() -> None:
     """If a fixture func returns a sync value, pass it through."""
     backend, _ = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
@@ -200,7 +200,7 @@ def test_resolve_sync_function_passthrough():
 # ── cleanup ───────────────────────────────────────────────────────────────────
 
 
-def test_cleanup_closes_session():
+def test_cleanup_closes_session() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
@@ -215,7 +215,7 @@ def test_cleanup_closes_session():
     assert mgr.session is None, "session should be None after cleanup"
 
 
-def test_cleanup_noop_without_session():
+def test_cleanup_noop_without_session() -> None:
     """Cleanup when no async fixtures were resolved should not raise."""
     mgr = SharedAsyncManager(AsyncioBackend())
 
@@ -224,7 +224,7 @@ def test_cleanup_noop_without_session():
     assert mgr.session is None, "session should remain None"
 
 
-def test_cleanup_drains_teardowns_in_reverse():
+def test_cleanup_drains_teardowns_in_reverse() -> None:
     """Teardowns run in LIFO order."""
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
@@ -249,7 +249,7 @@ def test_cleanup_drains_teardowns_in_reverse():
 # ── backend property ──────────────────────────────────────────────────────────
 
 
-def test_backend_property():
+def test_backend_property() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
@@ -259,7 +259,7 @@ def test_backend_property():
 # ── error handling ────────────────────────────────────────────────────────────
 
 
-def test_resolve_raises_fixture_setup_error_on_exception():
+def test_resolve_raises_fixture_setup_error_on_exception() -> None:
     """resolve() wraps exceptions in FixtureSetupError."""
     import oxitest as oxi
     from oxitest._bridge._errors import FixtureSetupError
@@ -275,7 +275,7 @@ def test_resolve_raises_fixture_setup_error_on_exception():
         mgr.resolve(bad_fixture, {})
 
 
-def test_async_generator_fixture_teardown_exception_reported():
+def test_async_generator_fixture_teardown_exception_reported() -> None:
     """Async fixture raising during teardown should report the error."""
     import oxitest as oxi
     from oxitest._bridge._fixture_context import FixtureTeardownWarning

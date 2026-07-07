@@ -5,7 +5,7 @@ from pathlib import Path
 from oxitest import TempDir, helpers
 
 
-def test_strict_abort_unused_fixture(tmp: TempDir):
+def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
     """Unused fixture in strict=abort mode exits non-zero with 'unused' in output."""
     # Arrange — conftest defines a fixture that no test uses
     (tmp / "conftest.py").write_text(
@@ -28,7 +28,7 @@ def test_strict_abort_unused_fixture(tmp: TempDir):
     helpers.integ.assert_contains(combined.lower(), "unused")
 
 
-def test_strict_abort_missing_return_annotation(tmp: TempDir):
+def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
     """Fixture missing return annotation in strict=abort mode exits non-zero."""
     # Arrange — conftest defines a fixture without return type annotation
     (tmp / "conftest.py").write_text(
@@ -57,7 +57,7 @@ def test_strict_abort_missing_return_annotation(tmp: TempDir):
     )
 
 
-def test_fixture_shadow_warning_in_output(tmp: TempDir):
+def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
     """Shadow warning appears in stderr when child conftest overrides parent fixture."""
     # Arrange — root conftest defines 'db', sub/ conftest overrides it
     root = tmp / "proj"
@@ -92,7 +92,7 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir):
     helpers.integ.assert_contains((out + stderr).lower(), "shadow")
 
 
-def test_teardown_warning_includes_test_name(tmp: TempDir):
+def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
     """Teardown error warning includes the test node_id for attribution."""
     # Arrange — yield fixture that raises during teardown
     (tmp / "conftest.py").write_text(

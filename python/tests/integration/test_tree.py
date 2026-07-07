@@ -5,7 +5,7 @@ from oxitest import TempDir, helpers
 _TREE_ARGS = ("query", "fixtures", "--tree")
 
 
-def test_tree_basic_output(tmp: TempDir):
+def test_tree_basic_output(tmp: TempDir) -> None:
     """`fixtures --tree` shows fixture dependency tree and exits 0."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixture, Fixtures\n\n"
@@ -24,7 +24,7 @@ def test_tree_basic_output(tmp: TempDir):
     assert "└── " in out or "├── " in out, f"tree chars missing: {out!r}"
 
 
-def test_tree_shared_fixture(tmp: TempDir):
+def test_tree_shared_fixture(tmp: TempDir) -> None:
     """`query fixtures --tree` includes shared fixtures."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
@@ -39,7 +39,7 @@ def test_tree_shared_fixture(tmp: TempDir):
     helpers.integ.assert_contains(out, "db")
 
 
-def test_tree_cycle_exits_failure(tmp: TempDir):
+def test_tree_cycle_exits_failure(tmp: TempDir) -> None:
     """`fixtures --tree` detects circular deps and exits 1."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixture, Fixtures\n\n"
@@ -57,7 +57,7 @@ def test_tree_cycle_exits_failure(tmp: TempDir):
     assert "ircular" in out + err, f"cycle error missing: {out + err!r}"
 
 
-def test_tree_no_fixtures_shows_builtins(tmp: TempDir):
+def test_tree_no_fixtures_shows_builtins(tmp: TempDir) -> None:
     """`fixtures --tree` with no conftest still shows built-in fixtures."""
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = helpers.common.run_oxitest_subcmd(tmp, *_TREE_ARGS, cwd=".")

@@ -17,7 +17,7 @@ def _exec_rewritten(src: str, ns: dict[str, Any]) -> None:
     exec(code, ns)
 
 
-def test_compare_equal_failure_carries_left_right_op():
+def test_compare_equal_failure_carries_left_right_op() -> None:
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     try:
@@ -30,7 +30,7 @@ def test_compare_equal_failure_carries_left_right_op():
         assert e.op == "==", f"expected e.op == '==', got {e.op!r}"
 
 
-def test_compare_in_failure_carries_operands():
+def test_compare_in_failure_carries_operands() -> None:
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": "bob"}
     _exec_rewritten('def test_f():\n    assert x in ["alice", "carol"]\n', ns)
     try:
@@ -45,7 +45,7 @@ def test_compare_in_failure_carries_operands():
         assert e.op == "in", f"expected e.op == 'in', got {e.op!r}"
 
 
-def test_bool_assert_failure_carries_value():
+def test_bool_assert_failure_carries_value() -> None:
     ns: dict[str, Any] = {
         "_OxitestAssertionError": _OxitestAssertionError,
         "_oxitest_no_rhs": _OXITEST_NO_RHS,
@@ -64,7 +64,7 @@ def test_bool_assert_failure_carries_value():
         assert e.op == "", f"expected e.op == '' for bool assert, got {e.op!r}"
 
 
-def test_assert_with_message_carries_why():
+def test_assert_with_message_carries_why() -> None:
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten('def test_f():\n    assert x == 42, "should be 42"\n', ns)
     try:
@@ -78,7 +78,7 @@ def test_assert_with_message_carries_why():
         assert e.op == "==", f"expected e.op == '==', got {e.op!r}"
 
 
-def test_chained_compare_left_untouched():
+def test_chained_compare_left_untouched() -> None:
     """Chained comparisons (a < b < c) are not rewritten — fall back gracefully."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 20}
     _exec_rewritten("def test_f():\n    assert 1 < x < 10\n", ns)
@@ -93,7 +93,7 @@ def test_chained_compare_left_untouched():
         )
 
 
-def test_bool_op_assert_left_untouched():
+def test_bool_op_assert_left_untouched() -> None:
     """assert a and b is not rewritten."""
     ns: dict[str, Any] = {
         "_OxitestAssertionError": _OxitestAssertionError,
@@ -112,13 +112,13 @@ def test_bool_op_assert_left_untouched():
         )
 
 
-def test_passing_assert_does_not_raise():
+def test_passing_assert_does_not_raise() -> None:
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 42}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     ns["test_f"]()  # must not raise
 
 
-def test_bare_assert_map_returned():
+def test_bare_assert_map_returned() -> None:
     """Rust rewriter returns bare-assert-by-function map."""
     from oxitest._oxitest import rewrite_asserts
 
@@ -133,7 +133,7 @@ def test_bare_assert_map_returned():
     assert bare["test_b"] == [6], f"expected [6], got {bare.get('test_b')}"
 
 
-def test_bare_assert_nested_fn_attributed_to_outer():
+def test_bare_assert_nested_fn_attributed_to_outer() -> None:
     """Bare asserts in nested functions attribute to outermost function."""
     from oxitest._oxitest import rewrite_asserts
 

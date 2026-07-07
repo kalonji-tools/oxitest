@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_shared_fixture_with_parametrize(tmp: TempDir):
+def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
     """shared=True fixture is instantiated once across all parametrize cases."""
     (tmp / "conftest.py").write_text(
         "import oxitest as oxi\n"
@@ -37,7 +37,7 @@ def test_shared_fixture_with_parametrize(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=3)
 
 
-def test_shared_and_autouse_both_apply(tmp: TempDir):
+def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
     """shared=True fixture combined with autouse fixture — both are injected."""
     (tmp / "conftest.py").write_text(
         "import oxitest as oxi\n"
@@ -68,7 +68,7 @@ def test_shared_and_autouse_both_apply(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_yield_fixture_teardown_lifo(tmp: TempDir):
+def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
     """Yield fixtures tear down in LIFO order (reverse of setup)."""
     (tmp / "conftest.py").write_text(
         "import oxitest as oxi\n"
@@ -108,7 +108,7 @@ def test_yield_fixture_teardown_lifo(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_skip_takes_precedence_over_xfail(tmp: TempDir):
+def test_skip_takes_precedence_over_xfail(tmp: TempDir) -> None:
     """When both @mark.skip and @mark.xfail are applied, skip takes precedence."""
     (tmp / "test_marks.py").write_text(
         "import oxitest as oxi\n"

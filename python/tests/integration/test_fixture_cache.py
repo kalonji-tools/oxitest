@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_no_shared_fixtures_no_cache_stats(tmp: TempDir):
+def test_no_shared_fixtures_no_cache_stats(tmp: TempDir) -> None:
     """Without shared fixtures, no cache stats line appears."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
@@ -22,7 +22,7 @@ def test_no_shared_fixtures_no_cache_stats(tmp: TempDir):
     helpers.integ.assert_excludes(out, "shared fixture cache")
 
 
-def test_shared_fixture_shows_cache_stats(tmp: TempDir):
+def test_shared_fixture_shows_cache_stats(tmp: TempDir) -> None:
     """With shared fixtures used by multiple tests, cache stats appear."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"
@@ -43,7 +43,7 @@ def test_shared_fixture_shows_cache_stats(tmp: TempDir):
     helpers.integ.assert_contains(out, "shared fixture cache", "hits")
 
 
-def test_verbose_shows_per_fixture_breakdown(tmp: TempDir):
+def test_verbose_shows_per_fixture_breakdown(tmp: TempDir) -> None:
     """With -v, per-fixture breakdown appears."""
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n\n"

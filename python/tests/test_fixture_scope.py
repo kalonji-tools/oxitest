@@ -8,7 +8,7 @@ from oxitest._bridge._fixture_context import (
 )
 
 
-def test_fixture_scope_sets_and_resets_context():
+def test_fixture_scope_sets_and_resets_context() -> None:
     """Context should be set inside the block and reset after."""
     assert _fixture_context.get(None) is None, "precondition: no active context"
     teardowns: list[Callable[[], None]] = []
@@ -22,7 +22,7 @@ def test_fixture_scope_sets_and_resets_context():
     assert _fixture_context.get(None) is None, "context should be reset after block"
 
 
-def test_fixture_scope_resets_on_exception():
+def test_fixture_scope_resets_on_exception() -> None:
     """Context must be reset even if the block raises."""
     teardowns: list[Callable[[], None]] = []
     try:
@@ -34,7 +34,7 @@ def test_fixture_scope_resets_on_exception():
     assert _fixture_context.get(None) is None, "context should be reset after exception"
 
 
-def test_fixture_scope_uses_parent_teardowns_when_nested():
+def test_fixture_scope_uses_parent_teardowns_when_nested() -> None:
     """Nested _fixture_scope should use the parent's fn_teardowns."""
     outer_teardowns: list[Callable[[], None]] = []
     inner_teardowns: list[Callable[[], None]] = []
@@ -51,7 +51,7 @@ def test_fixture_scope_uses_parent_teardowns_when_nested():
             )
 
 
-def test_fixture_scope_uses_own_teardowns_when_no_parent():
+def test_fixture_scope_uses_own_teardowns_when_no_parent() -> None:
     """When there is no parent context, use the provided fn_teardowns directly."""
     teardowns: list[Callable[[], None]] = []
     with _fixture_scope(object(), "/test.py", teardowns):

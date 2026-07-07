@@ -20,7 +20,7 @@ from oxitest._bridge.result import ViolationKind
 # ── skip / mark ───────────────────────────────────────────────────────────────
 
 
-def test_skip_raises_skip_test():
+def test_skip_raises_skip_test() -> None:
     with raises(unittest.SkipTest) as exc_info:
         oxitest.skip("not ready")
     assert str(exc_info.value) == "not ready", (
@@ -29,18 +29,18 @@ def test_skip_raises_skip_test():
     )
 
 
-def test_skip_no_reason():
+def test_skip_no_reason() -> None:
     with raises(unittest.SkipTest):
         oxitest.skip()
 
 
-def test_mark_attribute_callable_without_error():
+def test_mark_attribute_callable_without_error() -> None:
     oxitest.mark.skip(reason="reason")
     oxitest.mark.xfail
     oxitest.mark.anything("value")
 
 
-def test_mark_used_as_decorator_returns_function():
+def test_mark_used_as_decorator_returns_function() -> None:
     @oxitest.mark.skip
     def fn():
         pass
@@ -54,14 +54,14 @@ def test_mark_used_as_decorator_returns_function():
 # ── FixtureRegistry ───────────────────────────────────────────────────────────
 
 
-def test_registry_get_returns_none_for_unknown():
+def test_registry_get_returns_none_for_unknown() -> None:
     reg = FixtureRegistry()
     assert reg.get("missing") is None, (
         "FixtureRegistry.get() for an unregistered name should return None"
     )
 
 
-def test_registry_register_and_get():
+def test_registry_register_and_get() -> None:
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def("db", conftest_path="/c.py")
     reg.register(defn)
@@ -71,7 +71,7 @@ def test_registry_register_and_get():
     )
 
 
-def test_registry_most_local_wins():
+def test_registry_most_local_wins() -> None:
     reg = FixtureRegistry()
     root = helpers.common.make_fixture_def(
         "db", lambda: 1, conftest_path="/root/conftest.py"
@@ -87,7 +87,7 @@ def test_registry_most_local_wins():
     )
 
 
-def test_registry_get_autouse_returns_only_autouse():
+def test_registry_get_autouse_returns_only_autouse() -> None:
     reg = FixtureRegistry()
     auto = helpers.common.make_fixture_def("setup", autouse=True, conftest_path="/c.py")
     manual = helpers.common.make_fixture_def("db", conftest_path="/c.py")
@@ -103,7 +103,7 @@ def test_registry_get_autouse_returns_only_autouse():
     )
 
 
-def test_registry_get_autouse_empty():
+def test_registry_get_autouse_empty() -> None:
     reg = FixtureRegistry()
     assert list(reg.get_autouse()) == [], (
         "get_autouse() on an empty registry should return an empty list"
@@ -113,7 +113,7 @@ def test_registry_get_autouse_empty():
 # ── FixtureRegistry: strict violations ─────────────────────────────────────────
 
 
-def test_register_returns_violation_for_untyped_fixture():
+def test_register_returns_violation_for_untyped_fixture() -> None:
     # Arrange
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def(
@@ -140,7 +140,7 @@ def test_register_returns_violation_for_untyped_fixture():
     )
 
 
-def test_register_returns_empty_for_typed_fixture():
+def test_register_returns_empty_for_typed_fixture() -> None:
     # Arrange
     reg = FixtureRegistry()
 
@@ -229,7 +229,7 @@ def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
 # ── FixtureSession: function scope ────────────────────────────────────────────
 
 
-def test_function_scope_new_instance_per_resolve():
+def test_function_scope_new_instance_per_resolve() -> None:
     calls = []
 
     def factory():
@@ -257,7 +257,7 @@ def test_function_scope_new_instance_per_resolve():
 # ── Yield teardown ────────────────────────────────────────────────────────────
 
 
-def test_yield_fixture_function_scope_teardown():
+def test_yield_fixture_function_scope_teardown() -> None:
     torn_down = []
 
     def factory():
@@ -290,7 +290,7 @@ def test_yield_fixture_function_scope_teardown():
 # ── request fixture ───────────────────────────────────────────────────────────
 
 
-def test_addfinalizer_runs_in_teardown():
+def test_addfinalizer_runs_in_teardown() -> None:
     calls = []
 
     def factory(ctx: Fixture[OxiTestContext]) -> str:  # type: ignore[type-arg]
@@ -324,7 +324,7 @@ def test_addfinalizer_runs_in_teardown():
 # ── DAG resolution ────────────────────────────────────────────────────────────
 
 
-def test_dag_fixture_depending_on_fixture():
+def test_dag_fixture_depending_on_fixture() -> None:
     def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
         return base * 2
 
@@ -346,7 +346,7 @@ def test_dag_fixture_depending_on_fixture():
 # ── Autouse ───────────────────────────────────────────────────────────────────
 
 
-def test_autouse_runs_side_effects_without_being_in_kwargs():
+def test_autouse_runs_side_effects_without_being_in_kwargs() -> None:
     calls = []
 
     def setup():
@@ -372,7 +372,7 @@ def test_autouse_runs_side_effects_without_being_in_kwargs():
     )
 
 
-def test_autouse_teardown_still_runs():
+def test_autouse_teardown_still_runs() -> None:
     torn_down = []
 
     def setup():
@@ -400,7 +400,7 @@ def test_autouse_teardown_still_runs():
 # ── Error cases ───────────────────────────────────────────────────────────────
 
 
-def test_missing_fixture_raises_not_found():
+def test_missing_fixture_raises_not_found() -> None:
     session = helpers.common.make_session()
 
     def fn(nonexistent: Fixture[int]) -> None:  # type: ignore[type-arg]
@@ -414,7 +414,7 @@ def test_missing_fixture_raises_not_found():
     )
 
 
-def test_cycle_raises_fixture_cycle_error():
+def test_cycle_raises_fixture_cycle_error() -> None:
     def a(b: Fixture[int]) -> int:  # type: ignore[type-arg]
         return b
 
@@ -433,7 +433,7 @@ def test_cycle_raises_fixture_cycle_error():
         session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
 
 
-def test_setup_error_raises_fixture_setup_error():
+def test_setup_error_raises_fixture_setup_error() -> None:
     def bad():
         msg = "oops"
         raise ValueError(msg)
@@ -460,7 +460,7 @@ def test_setup_error_raises_fixture_setup_error():
 # ── Annotation-based resolution ───────────────────────────────────────────────
 
 
-def test_fixture_marker_param_resolved_by_name():
+def test_fixture_marker_param_resolved_by_name() -> None:
 
     calls = []
 
@@ -486,7 +486,7 @@ def test_fixture_marker_param_resolved_by_name():
     )
 
 
-def test_non_fixture_param_ignored_by_resolver():
+def test_non_fixture_param_ignored_by_resolver() -> None:
     session = helpers.common.make_session()
 
     def fn(x: int) -> None:
@@ -499,7 +499,7 @@ def test_non_fixture_param_ignored_by_resolver():
     )
 
 
-def test_fixture_test_context_injected_directly():
+def test_fixture_test_context_injected_directly() -> None:
     session = helpers.common.make_session()
 
     def fn(ctx: Fixture[OxiTestContext]) -> None:  # type: ignore[type-arg]
@@ -512,7 +512,7 @@ def test_fixture_test_context_injected_directly():
     )
 
 
-def test_fixture_dep_resolved_via_annotation():
+def test_fixture_dep_resolved_via_annotation() -> None:
 
     def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
         return base * 3
@@ -532,7 +532,7 @@ def test_fixture_dep_resolved_via_annotation():
     )
 
 
-def test_autouse_not_double_invoked_when_explicitly_requested():
+def test_autouse_not_double_invoked_when_explicitly_requested() -> None:
 
     calls = []
 
@@ -563,7 +563,7 @@ def test_autouse_not_double_invoked_when_explicitly_requested():
 # ── Fixtures class ────────────────────────────────────────────────────────────
 
 
-def test_fixtures_bare_decorator_registers_def():
+def test_fixtures_bare_decorator_registers_def() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
@@ -589,7 +589,7 @@ def test_fixtures_bare_decorator_registers_def():
     )
 
 
-def test_fixtures_autouse():
+def test_fixtures_autouse() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(autouse=True)
@@ -602,7 +602,7 @@ def test_fixtures_autouse():
     )
 
 
-def test_fixtures_name_override():
+def test_fixtures_name_override() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(name="renamed")
@@ -615,7 +615,7 @@ def test_fixtures_name_override():
     )
 
 
-def test_fixtures_stamps_fixture_name_for_inject_compat():
+def test_fixtures_stamps_fixture_name_for_inject_compat() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
@@ -630,7 +630,7 @@ def test_fixtures_stamps_fixture_name_for_inject_compat():
     )
 
 
-def test_fixtures_name_override_stamps_fixture_name():
+def test_fixtures_name_override_stamps_fixture_name() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(name="renamed")
@@ -645,7 +645,7 @@ def test_fixtures_name_override_stamps_fixture_name():
     )
 
 
-def test_fixtures_does_not_stamp_oxitest_fixture_attr():
+def test_fixtures_does_not_stamp_oxitest_fixture_attr() -> None:
     """Fixtures.fixture does NOT stamp _oxitest_fixture (old attribute-scan marker)."""
     fx = oxitest.Fixtures()
 
@@ -659,7 +659,7 @@ def test_fixtures_does_not_stamp_oxitest_fixture_attr():
     )
 
 
-def test_fixtures_multiple_registrations():
+def test_fixtures_multiple_registrations() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
@@ -679,7 +679,7 @@ def test_fixtures_multiple_registrations():
     )
 
 
-def test_resolve_for_test_skip_names_prevents_resolution():
+def test_resolve_for_test_skip_names_prevents_resolution() -> None:
     """skip_names prevents resolving Fixture[T] params by those names."""
     called: list[str] = []
 
@@ -702,7 +702,7 @@ def test_resolve_for_test_skip_names_prevents_resolution():
     assert called == [], "fixture must not be called when name is in skip_names"
 
 
-def test_unannotated_param_matching_fixture_raises_helpful_error():
+def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
     from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     session = helpers.common.make_session(
@@ -732,7 +732,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error():
     )
 
 
-def test_wrong_annotation_matching_fixture_raises_helpful_error():
+def test_wrong_annotation_matching_fixture_raises_helpful_error() -> None:
     from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     session = helpers.common.make_session(
@@ -765,7 +765,7 @@ def test_wrong_annotation_matching_fixture_raises_helpful_error():
 # ── oxitest.fixture sentinel ──────────────────────────────────────────────────
 
 
-def test_oxitest_fixture_sentinel_raises_with_instructions():
+def test_oxitest_fixture_sentinel_raises_with_instructions() -> None:
     with raises((AttributeError, RuntimeError)) as exc_info:
         oxitest.fixture(lambda: None)
     msg = str(exc_info.value)
@@ -778,7 +778,7 @@ def test_oxitest_fixture_sentinel_raises_with_instructions():
     )
 
 
-def test_oxitest_fixture_sentinel_exists_as_attribute():
+def test_oxitest_fixture_sentinel_exists_as_attribute() -> None:
     assert hasattr(oxitest, "fixture"), (
         "'fixture' should be exported as an attribute of the oxitest module"
     )
@@ -787,7 +787,7 @@ def test_oxitest_fixture_sentinel_exists_as_attribute():
 # ── TestContext.on_teardown alias ────────────────────────────────────────────
 
 
-def test_test_context_has_on_teardown_alias():
+def test_test_context_has_on_teardown_alias() -> None:
     assert hasattr(OxiTestContext, "on_teardown"), (
         "OxiTestContext should have an 'on_teardown' attribute (alias for addfinalizer)"
     )
@@ -797,7 +797,7 @@ def test_test_context_has_on_teardown_alias():
     )
 
 
-def test_on_teardown_registers_cleanup():
+def test_on_teardown_registers_cleanup() -> None:
     calls: list[str] = []
 
     def factory(ctx: Fixture[OxiTestContext]) -> str:  # type: ignore[type-arg]
@@ -831,7 +831,7 @@ def test_on_teardown_registers_cleanup():
 # ── shared= fixture tier ───────────────────────────────────────────────────────
 
 
-def test_fixture_decorator_accepts_shared_kwarg():
+def test_fixture_decorator_accepts_shared_kwarg() -> None:
     from oxitest._bridge._fixtures import Fixtures
 
     reg_obj = Fixtures()
@@ -847,7 +847,7 @@ def test_fixture_decorator_accepts_shared_kwarg():
     assert defn.name == "my_val", f"fixture name should be 'my_val', got {defn.name!r}"
 
 
-def test_fixture_decorator_default_shared_is_false():
+def test_fixture_decorator_default_shared_is_false() -> None:
     from oxitest._bridge._fixtures import Fixtures
 
     reg_obj = Fixtures()
@@ -863,7 +863,7 @@ def test_fixture_decorator_default_shared_is_false():
     )
 
 
-def test_shared_fixture_is_called_once_across_tests():
+def test_shared_fixture_is_called_once_across_tests() -> None:
     calls: list[int] = []
 
     def factory() -> int:
@@ -886,7 +886,7 @@ def test_shared_fixture_is_called_once_across_tests():
     assert k1["db"] is k2["db"], "same FrozenProxy instance expected on cache hit"
 
 
-def test_shared_fixture_value_is_wrapped_in_frozen_proxy():
+def test_shared_fixture_value_is_wrapped_in_frozen_proxy() -> None:
     from oxitest._bridge.proxy import FrozenProxy
 
     def factory() -> dict[str, int]:
@@ -908,7 +908,7 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy():
     )
 
 
-def test_shared_fixture_proxy_raises_on_item_mutation():
+def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
     from oxitest._bridge.proxy import SharedFixtureMutationError
 
     def factory() -> dict[str, int]:
@@ -928,7 +928,7 @@ def test_shared_fixture_proxy_raises_on_item_mutation():
         k["cfg"]["x"] = 2  # type: ignore[index]
 
 
-def test_shared_fixture_teardown_runs_on_end_session():
+def test_shared_fixture_teardown_runs_on_end_session() -> None:
     torn_down: list[bool] = []
 
     def factory():  # type: ignore[return]
@@ -954,7 +954,7 @@ def test_shared_fixture_teardown_runs_on_end_session():
 # ── FixtureNotFoundError namespace field ──────────────────────────────────────
 
 
-def test_fixture_not_found_error_with_namespace():
+def test_fixture_not_found_error_with_namespace() -> None:
     exc = FixtureNotFoundError("conn", namespace="db")
     assert "conn" in str(exc), (
         f"FixtureNotFoundError with namespace should mention fixture name 'conn', got "
@@ -970,7 +970,7 @@ def test_fixture_not_found_error_with_namespace():
     assert exc.namespace == "db", f"exc.namespace should be 'db', got {exc.namespace!r}"
 
 
-def test_fixture_not_found_error_without_namespace():
+def test_fixture_not_found_error_without_namespace() -> None:
     exc = FixtureNotFoundError("conn")
     assert str(exc) == "fixture 'conn' not found", (
         f"FixtureNotFoundError without namespace should format as \"fixture 'conn' not "
@@ -985,7 +985,7 @@ def test_fixture_not_found_error_without_namespace():
 # ── FixtureDef.namespace field ────────────────────────────────────────────────
 
 
-def test_fixture_def_has_namespace_field():
+def test_fixture_def_has_namespace_field() -> None:
     defn = helpers.common.make_fixture_def(
         "conn", namespace="db", conftest_path="/path/conftest.py"
     )
@@ -995,7 +995,7 @@ def test_fixture_def_has_namespace_field():
     )
 
 
-def test_fixture_def_namespace_defaults_to_empty():
+def test_fixture_def_namespace_defaults_to_empty() -> None:
     defn = helpers.common.make_fixture_def("conn")
     assert defn.namespace == "", (
         f"FixtureDef without namespace should default to '', got {defn.namespace!r}"
@@ -1005,7 +1005,7 @@ def test_fixture_def_namespace_defaults_to_empty():
 # ── FixtureRegistry.get_in_namespace + has_namespace ─────────────────────────
 
 
-def test_registry_get_in_namespace_returns_matching_def():
+def test_registry_get_in_namespace_returns_matching_def() -> None:
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     reg.register(defn)
@@ -1016,7 +1016,7 @@ def test_registry_get_in_namespace_returns_matching_def():
     )
 
 
-def test_registry_get_in_namespace_ignores_other_namespace():
+def test_registry_get_in_namespace_ignores_other_namespace() -> None:
     reg = FixtureRegistry()
     db_def = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     http_def = helpers.common.make_fixture_def("conn", lambda: 2, namespace="http")
@@ -1032,7 +1032,7 @@ def test_registry_get_in_namespace_ignores_other_namespace():
     )
 
 
-def test_registry_get_in_namespace_returns_none_when_missing():
+def test_registry_get_in_namespace_returns_none_when_missing() -> None:
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     reg.register(defn)
@@ -1044,7 +1044,7 @@ def test_registry_get_in_namespace_returns_none_when_missing():
     )
 
 
-def test_registry_has_namespace_true():
+def test_registry_has_namespace_true() -> None:
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("conn", lambda: 1, namespace="db"))
     assert reg.has_namespace("db") is True, (
@@ -1053,7 +1053,7 @@ def test_registry_has_namespace_true():
     )
 
 
-def test_registry_has_namespace_false():
+def test_registry_has_namespace_false() -> None:
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("conn", lambda: 1, namespace="db"))
     assert reg.has_namespace("http") is False, (
@@ -1062,7 +1062,7 @@ def test_registry_has_namespace_false():
     )
 
 
-def test_registry_has_namespace_empty_registry():
+def test_registry_has_namespace_empty_registry() -> None:
     reg = FixtureRegistry()
     assert reg.has_namespace("db") is False, (
         "has_namespace('db') should return False on an empty registry"
@@ -1072,32 +1072,32 @@ def test_registry_has_namespace_empty_registry():
 # ── FixtureRegistry: __contains__, __iter__, all_defs ─────────────────────────
 
 
-def test_registry_contains_registered_name():
+def test_registry_contains_registered_name() -> None:
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("db", conftest_path="conftest.py"))
     assert "db" in reg, "__contains__ should return True for a registered fixture name"
 
 
-def test_registry_contains_returns_false_for_unknown():
+def test_registry_contains_returns_false_for_unknown() -> None:
     reg = FixtureRegistry()
     assert "missing" not in reg, (
         "__contains__ should return False for an unregistered fixture name"
     )
 
 
-def test_registry_iter_yields_registered_names():
+def test_registry_iter_yields_registered_names() -> None:
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("a", conftest_path="conftest.py"))
     reg.register(helpers.common.make_fixture_def("b", conftest_path="conftest.py"))
     assert set(reg) == {"a", "b"}, "__iter__ should yield all registered fixture names"
 
 
-def test_registry_iter_empty():
+def test_registry_iter_empty() -> None:
     reg = FixtureRegistry()
     assert list(reg) == [], "__iter__ on an empty registry should yield nothing"
 
 
-def test_registry_all_defs_returns_all_entries():
+def test_registry_all_defs_returns_all_entries() -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.common.make_fixture_def(
@@ -1121,7 +1121,7 @@ def test_registry_all_defs_returns_all_entries():
     )
 
 
-def test_registry_all_defs_returns_empty_for_unknown():
+def test_registry_all_defs_returns_empty_for_unknown() -> None:
     reg = FixtureRegistry()
     assert reg.all_defs("missing") == [], (
         "all_defs for an unregistered name should return an empty list"
@@ -1131,7 +1131,7 @@ def test_registry_all_defs_returns_empty_for_unknown():
 # ── FixtureSession.get_fixture_in_namespace ──────────────────────────────────
 
 
-def test_get_fixture_in_namespace_resolves_correct_fixture():
+def test_get_fixture_in_namespace_resolves_correct_fixture() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
         helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
@@ -1150,7 +1150,7 @@ def test_get_fixture_in_namespace_resolves_correct_fixture():
     )
 
 
-def test_get_fixture_in_namespace_raises_not_found_with_namespace():
+def test_get_fixture_in_namespace_raises_not_found_with_namespace() -> None:
     session = helpers.common.make_session()
 
     with raises(FixtureNotFoundError) as exc_info:
@@ -1169,7 +1169,7 @@ def test_get_fixture_in_namespace_raises_not_found_with_namespace():
 # ── Fixtures name parameter ───────────────────────────────────────────────────
 
 
-def test_fixtures_default_namespace_name_is_empty():
+def test_fixtures_default_namespace_name_is_empty() -> None:
     fx = oxitest.Fixtures()
     assert fx._namespace_name == "", (
         f"Fixtures() with no name should have _namespace_name='', got "
@@ -1177,7 +1177,7 @@ def test_fixtures_default_namespace_name_is_empty():
     )
 
 
-def test_fixtures_explicit_name_is_stored():
+def test_fixtures_explicit_name_is_stored() -> None:
     fx = oxitest.Fixtures(name="db")
     assert fx._namespace_name == "db", (
         f"Fixtures(name='db') should store _namespace_name='db', got "
@@ -1188,7 +1188,7 @@ def test_fixtures_explicit_name_is_stored():
 # ── resolve_for_test bare Fixtures annotation ─────────────────────────────────
 
 
-def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
+def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation() -> None:
     """Test that resolve_for_test injects FixturesProxy for bare Fixtures annotation."""
     from oxitest._bridge.proxy_ns import FixturesProxy
 
@@ -1212,7 +1212,7 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation():
     )
 
 
-def test_resolve_for_test_fixtures_proxy_has_correct_session():
+def test_resolve_for_test_fixtures_proxy_has_correct_session() -> None:
     """Verify that FixturesProxy holds reference to the correct session."""
     session = helpers.common.make_session()
 
@@ -1232,14 +1232,14 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session():
 # ── Shared fixtures introspection ──────────────────────────────────────────────
 
 
-def test_has_shared_fixtures_empty_registry():
+def test_has_shared_fixtures_empty_registry() -> None:
     session = helpers.common.make_session()
     assert session.has_shared_fixtures() is False, (
         "has_shared_fixtures() on an empty registry should return False"
     )
 
 
-def test_has_shared_fixtures_false_when_no_fixture_is_shared():
+def test_has_shared_fixtures_false_when_no_fixture_is_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("db", conftest_path="/c.py")
     )
@@ -1248,7 +1248,7 @@ def test_has_shared_fixtures_false_when_no_fixture_is_shared():
     )
 
 
-def test_has_shared_fixtures_true_when_any_fixture_is_shared():
+def test_has_shared_fixtures_true_when_any_fixture_is_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("db", shared=True, conftest_path="/c.py")
     )
@@ -1257,7 +1257,7 @@ def test_has_shared_fixtures_true_when_any_fixture_is_shared():
     )
 
 
-def test_has_shared_fixtures_uses_most_local_definition():
+def test_has_shared_fixtures_uses_most_local_definition() -> None:
     # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
     # The effective definition is the last-registered one (leaf), so
     # has_shared_fixtures() should return False.
@@ -1273,7 +1273,7 @@ def test_has_shared_fixtures_uses_most_local_definition():
     )
 
 
-def test_shared_fixture_names_uses_most_local_definition():
+def test_shared_fixture_names_uses_most_local_definition() -> None:
     # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
     # shared_fixture_names() should NOT include "db" because the effective definition
     # (defs[-1]) has shared=False.
@@ -1289,7 +1289,7 @@ def test_shared_fixture_names_uses_most_local_definition():
     )
 
 
-def test_shared_fixture_names_returns_empty_when_no_shared():
+def test_shared_fixture_names_returns_empty_when_no_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("client", conftest_path="/c.py")
     )
@@ -1298,7 +1298,7 @@ def test_shared_fixture_names_returns_empty_when_no_shared():
     )
 
 
-def test_shared_fixture_names_returns_only_shared_names():
+def test_shared_fixture_names_returns_only_shared_names() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("db", shared=True, conftest_path="/c.py"),
         helpers.common.make_fixture_def("cache", shared=True, conftest_path="/c.py"),
@@ -1313,14 +1313,14 @@ def test_shared_fixture_names_returns_only_shared_names():
 # ── Shared fixture groups (connected components) ──────────────────────────────
 
 
-def test_shared_fixture_groups_empty_registry():
+def test_shared_fixture_groups_empty_registry() -> None:
     session = helpers.common.make_session()
     assert session.shared_fixture_groups() == [], (
         "empty registry should return no fixture groups"
     )
 
 
-def test_shared_fixture_groups_no_shared_fixtures():
+def test_shared_fixture_groups_no_shared_fixtures() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("store", conftest_path="/conftest.py")
     )
@@ -1329,7 +1329,7 @@ def test_shared_fixture_groups_no_shared_fixtures():
     )
 
 
-def test_shared_fixture_groups_single_shared():
+def test_shared_fixture_groups_single_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("db", shared=True, conftest_path="/conftest.py")
     )
@@ -1339,7 +1339,7 @@ def test_shared_fixture_groups_single_shared():
     )
 
 
-def test_shared_fixture_groups_transitive_dependency():
+def test_shared_fixture_groups_transitive_dependency() -> None:
     class _DbType:
         pass
 
@@ -1359,7 +1359,7 @@ def test_shared_fixture_groups_transitive_dependency():
     )
 
 
-def test_shared_fixture_groups_two_independent_shared():
+def test_shared_fixture_groups_two_independent_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def(
             "db", shared=True, conftest_path="/conftest.py"
@@ -1378,7 +1378,7 @@ def test_shared_fixture_groups_two_independent_shared():
     )
 
 
-def test_shared_fixture_groups_transitive_merge():
+def test_shared_fixture_groups_transitive_merge() -> None:
     class _DbType:
         pass
 
@@ -1411,7 +1411,9 @@ def test_shared_fixture_groups_transitive_merge():
 # ── FixtureAccessor ───────────────────────────────────────────────────────────
 
 
-def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context():
+def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context() -> (
+    None
+):
     """FixtureAccessor.__getattr__ must raise AttributeError when
     _fixture_context is not set (no active instantiation context).
     """
@@ -1437,7 +1439,7 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
         _fixture_context.reset(token)
 
 
-def test_fixture_accessor_underscore_attr_raises_attribute_error():
+def test_fixture_accessor_underscore_attr_raises_attribute_error() -> None:
     """FixtureAccessor.__getattr__ raises AttributeError for _-prefixed attrs
     without checking the fixture context (fast path)."""
     from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
@@ -1448,7 +1450,7 @@ def test_fixture_accessor_underscore_attr_raises_attribute_error():
         _ = accessor._private
 
 
-def test_fixture_accessor_call_delegates_to_func():
+def test_fixture_accessor_call_delegates_to_func() -> None:
     """FixtureAccessor.__call__ delegates to the wrapped function."""
     from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
 
@@ -1457,7 +1459,7 @@ def test_fixture_accessor_call_delegates_to_func():
     assert accessor("world") == "hi world", "should delegate to wrapped func"
 
 
-def test_fixture_accessor_has_oxitest_fixture_name():
+def test_fixture_accessor_has_oxitest_fixture_name() -> None:
     """FixtureAccessor carries _oxitest_fixture_name for executor resolution."""
     from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
 
@@ -1466,7 +1468,7 @@ def test_fixture_accessor_has_oxitest_fixture_name():
     assert accessor._oxitest_fixture_name == "db", "should carry fixture name"
 
 
-def test_fixtures_getattr_returns_accessor():
+def test_fixtures_getattr_returns_accessor() -> None:
     """Fixtures.__getattr__ returns a FixtureAccessor for registered fixtures."""
     from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
 
@@ -1481,7 +1483,7 @@ def test_fixtures_getattr_returns_accessor():
     assert accessor._oxitest_fixture_name == "db", "accessor should carry fixture name"
 
 
-def test_fixtures_getattr_raises_for_unknown():
+def test_fixtures_getattr_raises_for_unknown() -> None:
     """Fixtures.__getattr__ raises AttributeError for unregistered names."""
     from oxitest._bridge._fixtures import Fixtures
 
@@ -1492,7 +1494,7 @@ def test_fixtures_getattr_raises_for_unknown():
     assert "Available" in str(exc_info.value), "should list available fixtures"
 
 
-def test_fixtures_getattr_raises_for_underscore():
+def test_fixtures_getattr_raises_for_underscore() -> None:
     """Fixtures.__getattr__ raises AttributeError for _-prefixed names."""
     from oxitest._bridge._fixtures import Fixtures
 
@@ -1501,7 +1503,7 @@ def test_fixtures_getattr_raises_for_underscore():
         _ = fx_obj._internal
 
 
-def test_fixtures_fixture_with_options():
+def test_fixtures_fixture_with_options() -> None:
     """@fixtures.fixture(name=..., shared=...) registers with custom options."""
     from oxitest._bridge._fixtures import Fixtures
 
@@ -1517,7 +1519,7 @@ def test_fixtures_fixture_with_options():
     assert defn.shared is True, "should be shared"
 
 
-def test_fixtures_namespace_name():
+def test_fixtures_namespace_name() -> None:
     """Fixtures stores the namespace name passed at construction."""
     from oxitest._bridge._fixtures import Fixtures
 
@@ -1529,7 +1531,7 @@ def test_fixtures_namespace_name():
 
 
 @oxitest.mark.inprocess
-def test_plugin_fixture_provider_injected():
+def test_plugin_fixture_provider_injected() -> None:
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
     import types
 
@@ -1595,7 +1597,7 @@ class AuthToken:
     pass
 
 
-def test_registry_resolve_by_type_unique():
+def test_registry_resolve_by_type_unique() -> None:
     """Single fixture for a type resolves regardless of qualifier."""
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def(
@@ -1610,7 +1612,7 @@ def test_registry_resolve_by_type_unique():
     assert result2.name == "db_session", "qualifier ignored when type is unique"
 
 
-def test_registry_resolve_by_type_ambiguous_with_qualifier():
+def test_registry_resolve_by_type_ambiguous_with_qualifier() -> None:
     """Two fixtures of same type -- qualifier disambiguates."""
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
@@ -1626,7 +1628,7 @@ def test_registry_resolve_by_type_ambiguous_with_qualifier():
     assert result.name == "dev_db", "qualifier should select dev_db"
 
 
-def test_registry_resolve_ambiguous_no_match():
+def test_registry_resolve_ambiguous_no_match() -> None:
     """Two fixtures of same type, unknown qualifier -- AmbiguousFixtureError."""
     from oxitest._bridge._errors import AmbiguousFixtureError
 
@@ -1644,7 +1646,7 @@ def test_registry_resolve_ambiguous_no_match():
         reg.resolve(DBSession, qualifier="unknown")
 
 
-def test_registry_resolve_no_match():
+def test_registry_resolve_no_match() -> None:
     """No fixture for type -- FixtureNotFoundError."""
     reg = FixtureRegistry()
 
@@ -1652,7 +1654,7 @@ def test_registry_resolve_no_match():
         reg.resolve(AuthToken)
 
 
-def test_registry_override_precedence():
+def test_registry_override_precedence() -> None:
     """Last registered fixture of same type wins (leaf conftest overrides root)."""
     reg = FixtureRegistry()
     root = helpers.common.make_fixture_def(

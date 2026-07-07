@@ -29,7 +29,7 @@ class _SkipMiddleware:
         return next_fn
 
 
-def test_build_pipeline_no_middlewares():
+def test_build_pipeline_no_middlewares() -> None:
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
@@ -50,7 +50,7 @@ def test_build_pipeline_no_middlewares():
     helpers.common.assert_result(result, WarnedResult, message="ok")
 
 
-def test_build_pipeline_single_middleware():
+def test_build_pipeline_single_middleware() -> None:
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
@@ -71,7 +71,7 @@ def test_build_pipeline_single_middleware():
     helpers.common.assert_result(result, WarnedResult, message="HELLO")
 
 
-def test_build_pipeline_ordering():
+def test_build_pipeline_ordering() -> None:
     """Last middleware in the list should be outermost (runs first)."""
     plan = ExecutionPlan(
         fn=lambda: None,
@@ -94,7 +94,7 @@ def test_build_pipeline_ordering():
     helpers.common.assert_result(result, WarnedResult, message="BASE")
 
 
-def test_build_pipeline_skip_middleware_is_noop():
+def test_build_pipeline_skip_middleware_is_noop() -> None:
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",

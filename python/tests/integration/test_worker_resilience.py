@@ -5,7 +5,7 @@ from oxitest import TempDir, helpers
 
 
 @oxitest.mark.timeout(120)
-def test_worker_crash_reported_as_failure(tmp: TempDir):
+def test_worker_crash_reported_as_failure(tmp: TempDir) -> None:
     """A worker that crashes via os._exit is reported as a failure, not a hang."""
     (tmp / "test_crash.py").write_text(
         "import os\n"
@@ -26,7 +26,7 @@ def test_worker_crash_reported_as_failure(tmp: TempDir):
 
 
 @oxitest.mark.timeout(120)
-def test_timeout_reported_per_test(tmp: TempDir):
+def test_timeout_reported_per_test(tmp: TempDir) -> None:
     """A test exceeding --timeout is reported as a timeout failure."""
     (tmp / "test_slow.py").write_text(
         "import time\n"

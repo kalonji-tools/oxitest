@@ -5,7 +5,7 @@ from __future__ import annotations
 from oxitest._bridge._fixture_session import _Scope
 
 
-def test_scope_miss_on_first_access():
+def test_scope_miss_on_first_access() -> None:
     """First access to a name is a cache miss."""
     scope = _Scope()
     scope.get_or_create("db", lambda: "conn")
@@ -13,7 +13,7 @@ def test_scope_miss_on_first_access():
     assert scope.hits.get("db", 0) == 0, f"expected 0 hits, got {scope.hits}"
 
 
-def test_scope_hit_on_second_access():
+def test_scope_hit_on_second_access() -> None:
     """Second access to same name is a cache hit."""
     scope = _Scope()
     scope.get_or_create("db", lambda: "conn")
@@ -22,7 +22,7 @@ def test_scope_hit_on_second_access():
     assert scope.misses["db"] == 1, f"expected 1 miss, got {scope.misses}"
 
 
-def test_scope_multiple_fixtures_tracked_independently():
+def test_scope_multiple_fixtures_tracked_independently() -> None:
     """Each fixture name gets its own hit/miss counters."""
     scope = _Scope()
     scope.get_or_create("db", lambda: "conn")
@@ -36,7 +36,7 @@ def test_scope_multiple_fixtures_tracked_independently():
     assert scope.misses["cache"] == 1, f"cache misses: {scope.misses['cache']}"
 
 
-def test_get_cache_stats_shape():
+def test_get_cache_stats_shape() -> None:
     """Verify the shape of cache stats from _Scope data."""
     scope = _Scope()
     scope.get_or_create("db", lambda: "conn")

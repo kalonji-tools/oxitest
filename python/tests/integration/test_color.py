@@ -6,7 +6,7 @@ import sys
 from oxitest import TempDir
 
 
-def test_color_always_emits_ansi_codes(tmp: TempDir):
+def test_color_always_emits_ansi_codes(tmp: TempDir) -> None:
     """--color=always produces ANSI escape sequences in stdout."""
     (tmp / "test_colors.py").write_text(
         "def test_pass():\n    assert 1 == 1\n\ndef test_fail():\n    assert 1 == 2\n"

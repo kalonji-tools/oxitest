@@ -22,13 +22,13 @@ from oxitest._bridge.parametrize import DictCases
 from oxitest._bridge.result import ViolationKind
 
 
-def test_collect_empty_module(tmp: TempDir):
+def test_collect_empty_module(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(tmp, "", name="test_empty.py")
     items, _ = collect_module(path)
     assert items == [], f"collecting an empty module should yield no items, got {items}"
 
 
-def test_collect_single_test_function(tmp: TempDir):
+def test_collect_single_test_function(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp, "def test_bar(): pass\n", name="test_foo.py"
     )
@@ -45,7 +45,7 @@ def test_collect_single_test_function(tmp: TempDir):
     )
 
 
-def test_collect_multiple_functions(tmp: TempDir):
+def test_collect_multiple_functions(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp, "def test_one(): pass\ndef test_two(): pass\n", name="test_multi.py"
     )
@@ -58,7 +58,7 @@ def test_collect_multiple_functions(tmp: TempDir):
     assert "test_two" in names, f"'test_two' should be collected, got names: {names}"
 
 
-def test_collect_ignores_non_test_functions(tmp: TempDir):
+def test_collect_ignores_non_test_functions(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp, "def helper(): pass\ndef test_real(): pass\n", name="test_foo.py"
     )
@@ -72,12 +72,12 @@ def test_collect_ignores_non_test_functions(tmp: TempDir):
     )
 
 
-def test_collect_raises_on_missing_file():
+def test_collect_raises_on_missing_file() -> None:
     with raises(Exception):
         collect_module("/nonexistent/path/test_foo.py")
 
 
-def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir):
+def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir) -> None:
     """collect_module error: plain traceback, no TestResult repr, real newlines."""
     path = helpers.common.write_test_module(
         tmp, "import _oxitest_nonexistent_module_xyz\n", name="test_bad_import.py"
@@ -95,7 +95,7 @@ def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir):
     )
 
 
-def test_collect_extracts_marker_names(tmp: TempDir):
+def test_collect_extracts_marker_names(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n@oxitest.mark.slow\ndef test_query(): pass\n",
@@ -108,7 +108,7 @@ def test_collect_extracts_marker_names(tmp: TempDir):
     )
 
 
-def test_collect_extracts_multiple_markers(tmp: TempDir):
+def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -126,7 +126,7 @@ def test_collect_extracts_multiple_markers(tmp: TempDir):
     )
 
 
-def test_propagate_class_marks_copies_usefixtures():
+def test_propagate_class_marks_copies_usefixtures() -> None:
     """_propagate_class_marks appends usefixtures marks from class to function."""
     import oxitest
 
@@ -146,7 +146,7 @@ def test_propagate_class_marks_copies_usefixtures():
     )
 
 
-def test_propagate_class_marks_copies_all_marks():
+def test_propagate_class_marks_copies_all_marks() -> None:
     """_propagate_class_marks copies ALL marks from class to function."""
     import oxitest
 
@@ -165,7 +165,7 @@ def test_propagate_class_marks_copies_all_marks():
     )
 
 
-def test_collect_class_methods_use_qualified_name(tmp: TempDir):
+def test_collect_class_methods_use_qualified_name(tmp: TempDir) -> None:
     """Class methods are returned as 'ClassName::method_name'."""
     path = helpers.common.write_test_module(
         tmp,
@@ -184,7 +184,7 @@ def test_collect_class_methods_use_qualified_name(tmp: TempDir):
     )
 
 
-def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir):
+def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> None:
     """usefixtures on a class is propagated to each test method at collection time."""
     path = helpers.common.write_test_module(
         tmp,
@@ -206,7 +206,7 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir):
         )
 
 
-def test_collect_class_skip_propagated(tmp: TempDir):
+def test_collect_class_skip_propagated(tmp: TempDir) -> None:
     """skip on a class IS propagated to test methods."""
     path = helpers.common.write_test_module(
         tmp,
@@ -224,7 +224,7 @@ def test_collect_class_skip_propagated(tmp: TempDir):
     )
 
 
-def test_collected_item_can_be_constructed():
+def test_collected_item_can_be_constructed() -> None:
     item = CollectedItem(
         fn_name="test_foo",
         lineno=1,
@@ -245,7 +245,7 @@ def test_collected_item_can_be_constructed():
     assert item.is_async is False, f"expected is_async=False, got {item.is_async!r}"
 
 
-def test_collected_item_with_markers_and_param():
+def test_collected_item_with_markers_and_param() -> None:
     item = CollectedItem(
         fn_name="test_bar",
         lineno=5,
@@ -302,7 +302,7 @@ def _write_py(tmp_path: TempDir, src: str) -> str:
     return helpers.common.write_test_module(tmp_path, src, name="test_viol.py")
 
 
-def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir):
+def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir) -> None:
     """Bare-assert detection moved to Rust (bare_asserts.rs) — Python returns none."""
     path = _write_py(
         tmp,
@@ -319,7 +319,7 @@ def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir):
     )
 
 
-def test_collect_violations_assert_with_message_no_violation(tmp: TempDir):
+def test_collect_violations_assert_with_message_no_violation(tmp: TempDir) -> None:
     path = _write_py(
         tmp,
         """
@@ -333,7 +333,7 @@ def test_collect_violations_assert_with_message_no_violation(tmp: TempDir):
     )
 
 
-def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir):
+def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir) -> None:
     path = _write_py(
         tmp,
         """
@@ -350,7 +350,7 @@ def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir):
     assert bare == [], f"expected no bare-assert violations, got {bare}"
 
 
-def test_collect_violations_false_when_disabled(tmp: TempDir):
+def test_collect_violations_false_when_disabled(tmp: TempDir) -> None:
     path = _write_py(
         tmp,
         """
@@ -364,7 +364,7 @@ def test_collect_violations_false_when_disabled(tmp: TempDir):
     )
 
 
-def test_check_fn_violations_class_method_dict_parametrize():
+def test_check_fn_violations_class_method_dict_parametrize() -> None:
     """Class method with dict-parametrize produces DICT_PARAMETRIZE violation."""
 
     def test_method(self):
@@ -392,7 +392,7 @@ def test_check_fn_violations_class_method_dict_parametrize():
     )
 
 
-def test_check_fn_violations_class_method_missing_mark_reason():
+def test_check_fn_violations_class_method_missing_mark_reason() -> None:
     """Class method with skip missing reason= produces MISSING_MARK_REASON."""
     import oxitest
 
@@ -417,7 +417,7 @@ def test_check_fn_violations_class_method_missing_mark_reason():
     assert v.detail == "skip", f"violation detail should be 'skip', got {v.detail!r}"
 
 
-def test_collect_async_function_sets_is_async(tmp: TempDir):
+def test_collect_async_function_sets_is_async(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp, "async def test_hello(): pass\n", name="test_async.py"
     )
@@ -428,7 +428,7 @@ def test_collect_async_function_sets_is_async(tmp: TempDir):
     )
 
 
-def test_collect_sync_function_sets_is_async_false(tmp: TempDir):
+def test_collect_sync_function_sets_is_async_false(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp, "def test_hello(): pass\n", name="test_sync.py"
     )
@@ -439,7 +439,7 @@ def test_collect_sync_function_sets_is_async_false(tmp: TempDir):
     )
 
 
-def test_collect_mixed_sync_async(tmp: TempDir):
+def test_collect_mixed_sync_async(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "def test_sync(): pass\nasync def test_async(): pass\n",
@@ -452,7 +452,7 @@ def test_collect_mixed_sync_async(tmp: TempDir):
     assert by_name["test_async"].is_async is True, "async test should be is_async=True"
 
 
-def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir):
+def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None:
     """Fixtures() with allow comment registers silently — no violation."""
     path = helpers.common.write_test_module(
         tmp,
@@ -492,7 +492,7 @@ def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir):
     )
 
 
-def test_collect_async_class_method_sets_is_async(tmp: TempDir):
+def test_collect_async_class_method_sets_is_async(tmp: TempDir) -> None:
     path = helpers.common.write_test_module(
         tmp,
         "class TestSuite:\n"
@@ -511,7 +511,7 @@ def test_collect_async_class_method_sets_is_async(tmp: TempDir):
     )
 
 
-def test_module_members_yields_test_functions_only():
+def test_module_members_yields_test_functions_only() -> None:
     mod = ModuleType("fake")
 
     def test_one():
@@ -533,7 +533,7 @@ def test_module_members_yields_test_functions_only():
     assert "helper" not in names, f"'helper' should not be yielded, got {names}"
 
 
-def test_collect_items_returns_collected_items():
+def test_collect_items_returns_collected_items() -> None:
     def fake_fn():
         pass
 
@@ -550,7 +550,7 @@ def test_collect_items_returns_collected_items():
 # ── _extract_module_marks tests ───────────────────────────────────────────────
 
 
-def test_extract_module_marks_none_returns_empty():
+def test_extract_module_marks_none_returns_empty() -> None:
     """No oxi_mark attribute → empty list, no violations."""
     module = ModuleType("test_no_marks")
     marks, violations = _extract_module_marks(module, "/fake/test_no_marks.py")
@@ -558,7 +558,7 @@ def test_extract_module_marks_none_returns_empty():
     assert violations == [], f"expected no violations, got {violations}"
 
 
-def test_extract_module_marks_single_mark():
+def test_extract_module_marks_single_mark() -> None:
     """oxi_mark = oxi.mark.slow → list with one MarkInfo."""
     module = ModuleType("test_single")
     setattr(module, "oxi_mark", MarkInfo("slow", (), MappingProxyType({})))
@@ -568,7 +568,7 @@ def test_extract_module_marks_single_mark():
     assert violations == [], f"expected no violations, got {violations}"
 
 
-def test_extract_module_marks_list():
+def test_extract_module_marks_list() -> None:
     """oxi_mark = [mark.slow, mark.timeout(10)] → list with two MarkInfos."""
     module = ModuleType("test_list")
     setattr(
@@ -587,7 +587,7 @@ def test_extract_module_marks_list():
     assert violations == [], f"expected no violations, got {violations}"
 
 
-def test_extract_module_marks_tuple():
+def test_extract_module_marks_tuple() -> None:
     """oxi_mark as tuple is accepted."""
     module = ModuleType("test_tuple")
     setattr(module, "oxi_mark", (MarkInfo("slow", (), MappingProxyType({})),))
@@ -595,7 +595,7 @@ def test_extract_module_marks_tuple():
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
 
 
-def test_extract_module_marks_invalid_entry():
+def test_extract_module_marks_invalid_entry() -> None:
     """Non-MarkInfo entries produce violations, valid entries still collected."""
     module = ModuleType("test_invalid")
     setattr(
@@ -620,7 +620,7 @@ def test_extract_module_marks_invalid_entry():
 # ── _apply_module_marks tests ─────────────────────────────────────────────────
 
 
-def test_apply_module_marks_prepends_to_unmarked_fn():
+def test_apply_module_marks_prepends_to_unmarked_fn() -> None:
     """Module marks are added to functions with no per-test marks."""
 
     def test_fn():
@@ -633,7 +633,7 @@ def test_apply_module_marks_prepends_to_unmarked_fn():
     assert marks[0].name == "slow", f"expected 'slow', got {marks[0].name!r}"
 
 
-def test_apply_module_marks_per_test_overrides_same_name():
+def test_apply_module_marks_per_test_overrides_same_name() -> None:
     """Per-test mark overrides module mark of the same name."""
     import oxitest
 
@@ -654,7 +654,7 @@ def test_apply_module_marks_per_test_overrides_same_name():
     )
 
 
-def test_apply_module_marks_non_conflicting_added():
+def test_apply_module_marks_non_conflicting_added() -> None:
     """Module marks with different names than per-test marks are added."""
     import oxitest
 
@@ -670,7 +670,7 @@ def test_apply_module_marks_non_conflicting_added():
     assert "timeout" in names, f"per-test mark 'timeout' should remain, got {names}"
 
 
-def test_apply_module_marks_empty_list_is_noop():
+def test_apply_module_marks_empty_list_is_noop() -> None:
     """Empty module_marks list does not modify functions."""
 
     def test_fn():
@@ -684,7 +684,7 @@ def test_apply_module_marks_empty_list_is_noop():
 # ── collect_module oxi_mark integration tests ─────────────────────────────────
 
 
-def test_collect_module_with_oxi_mark_single(tmp: TempDir):
+def test_collect_module_with_oxi_mark_single(tmp: TempDir) -> None:
     """oxi_mark = oxi.mark.slow applies 'slow' to all tests."""
     path = helpers.common.write_test_module(
         tmp,
@@ -703,7 +703,7 @@ def test_collect_module_with_oxi_mark_single(tmp: TempDir):
     assert violations == [], f"expected no violations, got {violations}"
 
 
-def test_collect_module_with_oxi_mark_list(tmp: TempDir):
+def test_collect_module_with_oxi_mark_list(tmp: TempDir) -> None:
     """oxi_mark = [mark.slow, mark.timeout(10)] applies both marks to all tests."""
     path = helpers.common.write_test_module(
         tmp,
@@ -724,7 +724,7 @@ def test_collect_module_with_oxi_mark_list(tmp: TempDir):
         )
 
 
-def test_collect_module_oxi_mark_per_test_override(tmp: TempDir):
+def test_collect_module_oxi_mark_per_test_override(tmp: TempDir) -> None:
     """Per-test mark overrides module mark of the same name."""
     path = helpers.common.write_test_module(
         tmp,
@@ -743,7 +743,7 @@ def test_collect_module_oxi_mark_per_test_override(tmp: TempDir):
         )
 
 
-def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
+def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir) -> None:
     """Module marks apply to each parametrize case."""
     path = helpers.common.write_test_module(
         tmp,
@@ -766,7 +766,7 @@ def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir):
         )
 
 
-def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir):
+def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir) -> None:
     """Module marks apply to test methods inside Test* classes."""
     path = helpers.common.write_test_module(
         tmp,
@@ -786,7 +786,7 @@ def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir):
         )
 
 
-def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
+def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir) -> None:
     """Invalid entries in oxi_mark produce violations."""
     path = helpers.common.write_test_module(
         tmp,
@@ -809,7 +809,7 @@ def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir):
 # ── class-level mark propagation tests ─────────────────────────────────────
 
 
-def test_propagate_class_marks_copies_skip(tmp: TempDir):
+def test_propagate_class_marks_copies_skip(tmp: TempDir) -> None:
     """Class-level @mark.skip propagates to all methods."""
     path = helpers.common.write_test_module(
         tmp,
@@ -829,7 +829,7 @@ def test_propagate_class_marks_copies_skip(tmp: TempDir):
         )
 
 
-def test_propagate_class_marks_copies_timeout(tmp: TempDir):
+def test_propagate_class_marks_copies_timeout(tmp: TempDir) -> None:
     """Class-level @mark.timeout propagates to all methods."""
     path = helpers.common.write_test_module(
         tmp,
@@ -847,7 +847,7 @@ def test_propagate_class_marks_copies_timeout(tmp: TempDir):
     )
 
 
-def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
+def test_propagate_class_marks_copies_custom_mark(tmp: TempDir) -> None:
     """Class-level custom mark propagates to methods."""
     path = helpers.common.write_test_module(
         tmp,
@@ -866,7 +866,7 @@ def test_propagate_class_marks_copies_custom_mark(tmp: TempDir):
 # ── oxi_mark skip(when=False) no-op tests ──────────────────────────────────
 
 
-def test_module_mark_skip_when_false_no_violation(tmp: TempDir):
+def test_module_mark_skip_when_false_no_violation(tmp: TempDir) -> None:
     """oxi_mark = mark.skip(when=False) is a no-op, not a violation."""
     path = helpers.common.write_test_module(
         tmp,
@@ -888,7 +888,7 @@ def test_module_mark_skip_when_false_no_violation(tmp: TempDir):
     )
 
 
-def test_module_mark_skip_when_true_applies(tmp: TempDir):
+def test_module_mark_skip_when_true_applies(tmp: TempDir) -> None:
     """oxi_mark = mark.skip(when=True) applies skip to all tests."""
     path = helpers.common.write_test_module(
         tmp,
@@ -909,7 +909,7 @@ def test_module_mark_skip_when_true_applies(tmp: TempDir):
     )
 
 
-def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir):
+def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir) -> None:
     """oxi_mark list with skip(when=False) silently skips the no-op entry."""
     path = helpers.common.write_test_module(
         tmp,
@@ -982,7 +982,7 @@ class _GoodCollector:
         ]
 
 
-def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture):
+def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
     """A collector that raises emits PluginCollectorWarning."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_err.py"
@@ -1015,7 +1015,7 @@ def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture):
     )
 
 
-def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture):
+def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
     """A collector returning non-CollectedItem values emits a warning per bad item."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_bad.py"
@@ -1047,7 +1047,7 @@ def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture):
     assert "int" in msg1, f"second warning should identify 'int' type, got: {msg1}"
 
 
-def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture):
+def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) -> None:
     """A well-behaved collector adds items and emits no warnings."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_good.py"
@@ -1166,7 +1166,7 @@ def test_get_fixture_deps_skips_return_annotation() -> None:
 # --- allow-comment gate tests for _check_module_registrars ---
 
 
-def test_fixtures_without_allow_comment_blocked(tmp: TempDir):
+def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
     """Fixtures() without allow comment emits violation and does NOT register."""
     path = helpers.common.write_test_module(
         tmp,
@@ -1202,7 +1202,7 @@ def test_fixtures_without_allow_comment_blocked(tmp: TempDir):
     )
 
 
-def test_helpers_with_allow_comment_suppressed(tmp: TempDir):
+def test_helpers_with_allow_comment_suppressed(tmp: TempDir) -> None:
     """Helpers() with allow comment emits no violation."""
     path = helpers.common.write_test_module(
         tmp,

@@ -22,7 +22,7 @@ def _remove_fake_module(name: str) -> None:
     sys.modules.pop(name, None)
 
 
-def test_load_empty_plugins_returns_empty_registry():
+def test_load_empty_plugins_returns_empty_registry() -> None:
     registry = load_plugins([], {})
     assert isinstance(registry, PluginRegistry), (
         f"expected PluginRegistry, got {type(registry).__name__}"
@@ -31,7 +31,7 @@ def test_load_empty_plugins_returns_empty_registry():
 
 
 @oxitest.mark.inprocess
-def test_load_valid_plugin():
+def test_load_valid_plugin() -> None:
     mod = types.ModuleType("fake_plugin")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     _install_fake_module("fake_plugin", mod)
@@ -49,7 +49,7 @@ def test_load_valid_plugin():
 
 
 @oxitest.mark.inprocess
-def test_load_plugin_receives_config():
+def test_load_plugin_receives_config() -> None:
     received: dict = {}
 
     def entry(config=None):
@@ -68,13 +68,13 @@ def test_load_plugin_receives_config():
         _remove_fake_module("cfg_plugin")
 
 
-def test_load_missing_module_raises():
+def test_load_missing_module_raises() -> None:
     with raises(PluginLoadError, match="not found"):
         load_plugins(["nonexistent_oxitest_plugin_xyz"], {})
 
 
 @oxitest.mark.inprocess
-def test_load_no_entry_function_raises():
+def test_load_no_entry_function_raises() -> None:
     mod = types.ModuleType("no_entry")
     _install_fake_module("no_entry", mod)
     try:
@@ -85,7 +85,7 @@ def test_load_no_entry_function_raises():
 
 
 @oxitest.mark.inprocess
-def test_load_wrong_return_type_raises():
+def test_load_wrong_return_type_raises() -> None:
     mod = types.ModuleType("bad_return")
     setattr(mod, "oxitest_plugin", lambda **_: "not a Plugin")
     _install_fake_module("bad_return", mod)
@@ -97,7 +97,7 @@ def test_load_wrong_return_type_raises():
 
 
 @oxitest.mark.inprocess
-def test_load_entry_raises_wraps_error():
+def test_load_entry_raises_wraps_error() -> None:
     def bad_entry(**_: object):
         msg = "boom"
         raise ValueError(msg)
@@ -113,7 +113,7 @@ def test_load_entry_raises_wraps_error():
 
 
 @oxitest.mark.inprocess
-def test_registry_aggregates_across_plugins():
+def test_registry_aggregates_across_plugins() -> None:
     class FakeBackend:
         def install(self):
             pass
@@ -150,7 +150,7 @@ def test_registry_aggregates_across_plugins():
 
 
 @oxitest.mark.inprocess
-def test_conflicting_debugger_backends_raises():
+def test_conflicting_debugger_backends_raises() -> None:
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
     mod_a = types.ModuleType("dbg_plugin_a")
     setattr(
@@ -180,7 +180,7 @@ def test_conflicting_debugger_backends_raises():
         _remove_fake_module("dbg_plugin_b")
 
 
-def test_flatten_protocol_returns_empty_for_no_plugins():
+def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
     registry = PluginRegistry()
     assert registry.log_backends == (), f"expected empty, got {registry.log_backends!r}"
     assert registry.fixture_providers == (), (
@@ -194,7 +194,7 @@ def test_flatten_protocol_returns_empty_for_no_plugins():
 
 
 @oxitest.mark.inprocess
-def test_single_debugger_backend_is_valid():
+def test_single_debugger_backend_is_valid() -> None:
     """One plugin providing a debugger backend should not raise."""
     mod = types.ModuleType("solo_dbg")
     setattr(
@@ -212,7 +212,7 @@ def test_single_debugger_backend_is_valid():
         _remove_fake_module("solo_dbg")
 
 
-def test_fixture_provider_scope_default():
+def test_fixture_provider_scope_default() -> None:
     """FixtureProvider without scope property defaults to 'each'."""
 
     class MinimalProvider:
@@ -236,7 +236,7 @@ def test_fixture_provider_scope_default():
     )
 
 
-def test_fixture_provider_scope_custom():
+def test_fixture_provider_scope_custom() -> None:
     """FixtureProvider with scope property is respected."""
 
     class SessionProvider:

@@ -14,17 +14,17 @@ from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
 from oxitest._bridge.result import PassedResult, TimeoutResult
 
 
-def test_timeout_context_raises_on_expiry():
+def test_timeout_context_raises_on_expiry() -> None:
     with raises(OxitestTimeoutError), _timeout_context(1):
         time.sleep(5)
 
 
-def test_timeout_context_does_not_raise_when_fast():
+def test_timeout_context_does_not_raise_when_fast() -> None:
     with _timeout_context(5):
         time.sleep(0)  # completes instantly
 
 
-def test_timeout_context_cancels_after_block():
+def test_timeout_context_cancels_after_block() -> None:
     """No residual alarm after a successful block (Unix only)."""
     import signal as _signal
 
@@ -36,13 +36,13 @@ def test_timeout_context_cancels_after_block():
     assert remaining == 0.0, f"Expected no pending alarm, got {remaining}s remaining"
 
 
-def test_oxitest_timeout_error_is_exception():
+def test_oxitest_timeout_error_is_exception() -> None:
     assert issubclass(OxitestTimeoutError, Exception), (
         "OxitestTimeoutError should be a subclass of Exception"
     )
 
 
-def test_timeout_context_type_matches_platform():
+def test_timeout_context_type_matches_platform() -> None:
     if sys.platform == "win32":
         from oxitest._bridge._timeout import _WindowsTimeoutContext
 
@@ -66,7 +66,7 @@ class InvalidTimeout:
     zero=InvalidTimeout(seconds=0),
     negative=InvalidTimeout(seconds=-1),
 )
-def test_timeout_mark_rejects_invalid_seconds(seconds):
+def test_timeout_mark_rejects_invalid_seconds(seconds) -> None:
     with raises(ValueError, match="seconds > 0"):
 
         @oxitest.mark.timeout(seconds=seconds)
@@ -74,7 +74,7 @@ def test_timeout_mark_rejects_invalid_seconds(seconds):
             pass
 
 
-def test_timeout_mark_stores_seconds():
+def test_timeout_mark_stores_seconds() -> None:
     @oxitest.mark.timeout(seconds=5)
     def test_ok():
         pass
@@ -93,7 +93,7 @@ def test_timeout_mark_stores_seconds():
     )
 
 
-def test_timeout_handler_returns_wrapper():
+def test_timeout_handler_returns_wrapper() -> None:
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 3}))
     )
@@ -106,7 +106,7 @@ def test_timeout_handler_returns_wrapper():
     )
 
 
-def test_timeout_handler_wrapper_passes_fast_test():
+def test_timeout_handler_wrapper_passes_fast_test() -> None:
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5}))
     )
@@ -118,7 +118,7 @@ def test_timeout_handler_wrapper_passes_fast_test():
     )
 
 
-def test_timeout_handler_wrapper_returns_timeout_on_expiry():
+def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 1}))
     )

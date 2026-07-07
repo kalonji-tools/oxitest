@@ -40,7 +40,7 @@ def _make_plugin_with_extension():
 
 
 @oxitest.mark.inprocess
-def test_discover_cli_extensions_reads_attribute():
+def test_discover_cli_extensions_reads_attribute() -> None:
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -57,7 +57,7 @@ def test_discover_cli_extensions_reads_attribute():
 
 
 @oxitest.mark.inprocess
-def test_user_prefix_override():
+def test_user_prefix_override() -> None:
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -72,7 +72,7 @@ def test_user_prefix_override():
 
 
 @oxitest.mark.inprocess
-def test_plugin_without_extension_has_no_cli():
+def test_plugin_without_extension_has_no_cli() -> None:
     mod = types.ModuleType("fake_simple")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["fake_simple"] = mod
@@ -86,7 +86,7 @@ def test_plugin_without_extension_has_no_cli():
 
 
 @oxitest.mark.inprocess
-def test_activate_plugin_with_typed_config():
+def test_activate_plugin_with_typed_config() -> None:
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -104,7 +104,7 @@ def test_activate_plugin_with_typed_config():
 
 
 @oxitest.mark.inprocess
-def test_backwards_compat_dict_config():
+def test_backwards_compat_dict_config() -> None:
     received: dict = {}
 
     def entry(config=None):

@@ -36,7 +36,7 @@ def _make_instantiator(*defs) -> tuple[FixtureInstantiator, FixtureRegistry]:
     return FixtureInstantiator(reg, PluginRegistry()), reg
 
 
-def test_resolve_simple_fixture():
+def test_resolve_simple_fixture() -> None:
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def("db", lambda: "conn", conftest_path="/c.py")
     )
@@ -48,7 +48,7 @@ def test_resolve_simple_fixture():
     assert result == "conn", f"expected 'conn', got {result!r}"
 
 
-def test_resolve_cycle_raises():
+def test_resolve_cycle_raises() -> None:
     def fx_a(b: Fixture[int]) -> None:  # type: ignore[type-arg]
         pass
 
@@ -66,7 +66,7 @@ def test_resolve_cycle_raises():
         )
 
 
-def test_resolve_not_found_raises():
+def test_resolve_not_found_raises() -> None:
     inst, _reg = _make_instantiator()
 
     with raises(FixtureNotFoundError):
@@ -75,7 +75,7 @@ def test_resolve_not_found_raises():
         )
 
 
-def test_resolve_shared_uses_scope_refs():
+def test_resolve_shared_uses_scope_refs() -> None:
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def(
             "shared_db", lambda: "shared_conn", conftest_path="/c.py", shared=True
@@ -95,7 +95,7 @@ def test_resolve_shared_uses_scope_refs():
     )
 
 
-def test_timing_recorded():
+def test_timing_recorded() -> None:
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
     )
@@ -115,7 +115,7 @@ def test_timing_recorded():
 # ─── New error types ─────────────────────────────────────────────────────────
 
 
-def test_ambiguous_fixture_error_lists_candidates():
+def test_ambiguous_fixture_error_lists_candidates() -> None:
     """AmbiguousFixtureError message lists candidate fixture names."""
     err = AmbiguousFixtureError("DBSession", ["dev_db", "prod_db"])
     msg = str(err)
@@ -124,7 +124,7 @@ def test_ambiguous_fixture_error_lists_candidates():
     assert "prod_db" in msg, "error should list candidate 'prod_db'"
 
 
-def test_broad_fixture_type_error():
+def test_broad_fixture_type_error() -> None:
     """BroadFixtureTypeError mentions the param name and broad type."""
     from typing import Any
 
@@ -137,7 +137,7 @@ def test_broad_fixture_type_error():
 # ─── Unified resolve_param ───────────────────────────────────────────────────
 
 
-def test_resolve_param_by_type_not_name():
+def test_resolve_param_by_type_not_name() -> None:
     """Conftest fixture resolves by binding type even when param name differs."""
     from oxitest._bridge._fixture_registry import (
         ConftestSource,
@@ -176,7 +176,7 @@ def test_resolve_param_by_type_not_name():
 # ─── _resolve_by_source dispatch ────────────────────────────────────────────
 
 
-def test_resolve_by_source_plugin():
+def test_resolve_by_source_plugin() -> None:
     """PluginSource fixture resolved through registry dispatches to provider.create."""
 
     class FakeProvider:

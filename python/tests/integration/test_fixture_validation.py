@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_fixture_typo_aborts_with_exit_code_3(tmp: TempDir):
+def test_fixture_typo_aborts_with_exit_code_3(tmp: TempDir) -> None:
     """A fixture name typo aborts before any test runs."""
     conftest = """\
 import oxitest
@@ -27,7 +27,7 @@ def test_uses_typo(sotre: oxitest.Fixture[int]) -> None:
     helpers.integ.assert_contains(out.lower(), "fixture", "sotre")
 
 
-def test_valid_fixture_names_pass(tmp: TempDir):
+def test_valid_fixture_names_pass(tmp: TempDir) -> None:
     """Valid fixture names do not trigger validation errors."""
     conftest = """\
 import oxitest
@@ -50,7 +50,7 @@ def test_uses_store(store: oxitest.Fixture[int]) -> None:
     helpers.integ.assert_passed(out, rc)
 
 
-def test_did_you_mean_suggestion(tmp: TempDir):
+def test_did_you_mean_suggestion(tmp: TempDir) -> None:
     """A close typo shows a 'did you mean?' suggestion."""
     conftest = """\
 import oxitest

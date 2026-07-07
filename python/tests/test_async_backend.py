@@ -6,12 +6,12 @@ from oxitest import raises, warns
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
 
 
-def test_asyncio_backend_name():
+def test_asyncio_backend_name() -> None:
     backend = AsyncioBackend()
     assert backend.name == "asyncio", f"expected 'asyncio', got {backend.name!r}"
 
 
-def test_asyncio_backend_runs_coroutine():
+def test_asyncio_backend_runs_coroutine() -> None:
     backend = AsyncioBackend()
 
     async def coro():
@@ -21,7 +21,7 @@ def test_asyncio_backend_runs_coroutine():
     assert result == 42, f"expected 42, got {result!r}"
 
 
-def test_asyncio_backend_propagates_exception():
+def test_asyncio_backend_propagates_exception() -> None:
     backend = AsyncioBackend()
 
     async def coro():
@@ -32,7 +32,7 @@ def test_asyncio_backend_propagates_exception():
         backend.run(coro())
 
 
-def test_asyncio_backend_creates_shared_session():
+def test_asyncio_backend_creates_shared_session() -> None:
     backend = AsyncioBackend()
     session = backend.create_shared_session()
     assert isinstance(session, AsyncioSharedSession), (
@@ -41,7 +41,7 @@ def test_asyncio_backend_creates_shared_session():
     session.close()
 
 
-def test_shared_session_runs_coroutine():
+def test_shared_session_runs_coroutine() -> None:
     session = AsyncioSharedSession()
 
     async def coro():
@@ -52,13 +52,13 @@ def test_shared_session_runs_coroutine():
     session.close()
 
 
-def test_shared_session_close_is_idempotent():
+def test_shared_session_close_is_idempotent() -> None:
     session = AsyncioSharedSession()
     session.close()
     session.close()  # must not raise
 
 
-def test_shared_session_cleans_stray_tasks():
+def test_shared_session_cleans_stray_tasks() -> None:
     session = AsyncioSharedSession()
 
     async def spawner():

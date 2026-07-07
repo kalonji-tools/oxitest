@@ -36,7 +36,7 @@ def write_project(
     tests: dict[str, str],
     pyproject: str | None = None,
     conftest: str | None = None,
-):
+) -> None:
     """Scaffold a project in tmp.
 
     Args:
@@ -54,7 +54,7 @@ def write_project(
 
 
 @integ.helper
-def assert_passed(out: str, rc: int, *, count: int | None = None):
+def assert_passed(out: str, rc: int, *, count: int | None = None) -> None:
     """Assert the run passed (exit 0)."""
     assert rc == 0, f"expected exit 0, got {rc}\n{out}"
     if count is not None:
@@ -62,7 +62,7 @@ def assert_passed(out: str, rc: int, *, count: int | None = None):
 
 
 @integ.helper
-def assert_failed(out: str, rc: int, *, count: int | None = None):
+def assert_failed(out: str, rc: int, *, count: int | None = None) -> None:
     """Assert the run had failures (non-zero exit)."""
     assert rc != 0, f"expected non-zero exit, got {rc}\n{out}"
     if count is not None:
@@ -70,20 +70,20 @@ def assert_failed(out: str, rc: int, *, count: int | None = None):
 
 
 @integ.helper
-def assert_collection_error(out: str, rc: int):
+def assert_collection_error(out: str, rc: int) -> None:
     """Assert collection error (exit 3)."""
     assert rc == 3, f"expected exit 3 (collection error), got {rc}\n{out}"
 
 
 @integ.helper
-def assert_contains(out: str, *terms: str):
+def assert_contains(out: str, *terms: str) -> None:
     """Assert all terms are present in output."""
     for term in terms:
         assert term in out, f"expected {term!r} in:\n{out}"
 
 
 @integ.helper
-def assert_excludes(out: str, *terms: str):
+def assert_excludes(out: str, *terms: str) -> None:
     """Assert none of the terms are present in output."""
     for term in terms:
         assert term not in out, f"unexpected {term!r} in:\n{out}"

@@ -10,7 +10,7 @@ from oxitest._bridge._fixture_instantiator import (
 )
 
 
-def test_reject_async_in_sync_raises_on_coroutine():
+def test_reject_async_in_sync_raises_on_coroutine() -> None:
     async def coro():
         pass
 
@@ -19,7 +19,7 @@ def test_reject_async_in_sync_raises_on_coroutine():
         _reject_async_in_sync("dep_a", c, "my_fixture")
 
 
-def test_reject_async_in_sync_raises_on_async_gen():
+def test_reject_async_in_sync_raises_on_async_gen() -> None:
     async def agen():
         yield 1
 
@@ -30,12 +30,12 @@ def test_reject_async_in_sync_raises_on_async_gen():
     asyncio.run(g.aclose())
 
 
-def test_reject_async_in_sync_passes_on_sync_value():
+def test_reject_async_in_sync_passes_on_sync_value() -> None:
     # Should not raise for plain values
     _reject_async_in_sync("dep_a", 42, "my_fixture")
 
 
-def test_reject_nonshared_async_raises_on_coroutine():
+def test_reject_nonshared_async_raises_on_coroutine() -> None:
     async def coro():
         pass
 
@@ -47,5 +47,5 @@ def test_reject_nonshared_async_raises_on_coroutine():
     )
 
 
-def test_reject_nonshared_async_passes_on_sync_value():
+def test_reject_nonshared_async_passes_on_sync_value() -> None:
     _reject_nonshared_async("dep_a", "hello", "shared_fix")

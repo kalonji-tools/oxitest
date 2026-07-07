@@ -32,7 +32,7 @@ def doctest_project(tmp: TempDir) -> Yields[Path]:
     yield tmp
 
 
-def test_doctest_modules_collects_and_runs(doctest_project: Fixture[Path]):
+def test_doctest_modules_collects_and_runs(doctest_project: Fixture[Path]) -> None:
     """--doctest-modules collects doctests from source files."""
     tmp = doctest_project
     out, _, _ = helpers.common.run_oxitest(tmp, "--doctest-modules", cwd=str(tmp))
@@ -42,7 +42,7 @@ def test_doctest_modules_collects_and_runs(doctest_project: Fixture[Path]):
     assert "1 failed" in out, f"expected 1 failed in:\n{out}"
 
 
-def test_doctest_modules_off_by_default(doctest_project: Fixture[Path]):
+def test_doctest_modules_off_by_default(doctest_project: Fixture[Path]) -> None:
     """Without --doctest-modules, doctests are not collected."""
     tmp = doctest_project
     out, _, _ = helpers.common.run_oxitest(tmp, cwd=str(tmp))
@@ -50,7 +50,7 @@ def test_doctest_modules_off_by_default(doctest_project: Fixture[Path]):
     assert "collected 0 items" in out, f"expected 0 items in:\n{out}"
 
 
-def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]):
+def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]) -> None:
     """Doctests and regular tests coexist in the same run."""
     tmp = doctest_project
     (tmp / "test_math.py").write_text("def test_one(): assert 1 == 1\n")
@@ -60,7 +60,7 @@ def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]):
     assert "1 failed" in out, f"expected 1 failed in:\n{out}"
 
 
-def test_doctest_node_id_format(doctest_project: Fixture[Path]):
+def test_doctest_node_id_format(doctest_project: Fixture[Path]) -> None:
     """Doctest node IDs use the <doctest> prefix."""
     tmp = doctest_project
     out, _, _ = helpers.common.run_oxitest(tmp, "--doctest-modules", "-v", cwd=str(tmp))

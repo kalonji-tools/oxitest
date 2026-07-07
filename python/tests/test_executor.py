@@ -68,7 +68,7 @@ def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
     assert "test_bar" in msg, f"expected node_id in message, got {msg!r}"
 
 
-def test_passing_function(tmp: TempDir):
+def test_passing_function(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
@@ -81,7 +81,7 @@ def test_passing_function(tmp: TempDir):
     )
 
 
-def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir):
+def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_bare():\n    assert 1 == 1\n", "test_bare"
     )
@@ -96,7 +96,9 @@ def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir):
     )
 
 
-def test_passing_with_message_assert_returns_empty_no_message_lines(tmp: TempDir):
+def test_passing_with_message_assert_returns_empty_no_message_lines(
+    tmp: TempDir,
+) -> None:
     result = helpers.common.exec_inline(
         tmp, 'def test_msg():\n    assert 1 == 1, "one equals one"\n', "test_msg"
     )
@@ -109,7 +111,7 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(tmp: TempDir
     )
 
 
-def test_failing_assertion_with_message(tmp: TempDir):
+def test_failing_assertion_with_message(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, 'def test_bad():\n    assert 1 == 2, "one is not two"\n', "test_bad"
     )
@@ -129,7 +131,7 @@ def test_failing_assertion_with_message(tmp: TempDir):
     )
 
 
-def test_failing_bare_assertion(tmp: TempDir):
+def test_failing_bare_assertion(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_bad():\n    assert 1 == 2\n", "test_bad"
     )
@@ -150,7 +152,7 @@ def test_failing_bare_assertion(tmp: TempDir):
     )
 
 
-def test_error_exception(tmp: TempDir):
+def test_error_exception(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_error():\n    raise ValueError('boom')\n", "test_error"
     )
@@ -167,7 +169,7 @@ def test_error_exception(tmp: TempDir):
     assert result.lineno == 2, f"error lineno should be 2, got {result.lineno}"
 
 
-def test_skipped_via_unittest(tmp: TempDir):
+def test_skipped_via_unittest(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import unittest\ndef test_skip(): raise unittest.SkipTest('reason')\n",
@@ -181,7 +183,7 @@ def test_skipped_via_unittest(tmp: TempDir):
     )
 
 
-def test_function_not_found_is_error(tmp: TempDir):
+def test_function_not_found_is_error(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_real(): pass\n", "test_nonexistent", name="test_foo.py"
     )
@@ -190,7 +192,7 @@ def test_function_not_found_is_error(tmp: TempDir):
     )
 
 
-def test_warning_captured_as_warned_status(tmp: TempDir):
+def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import warnings\n"
@@ -295,7 +297,7 @@ def test_assertion_operands(
 # ── Fixture integration ───────────────────────────────────────────────────────
 
 
-def test_run_test_without_session_backward_compat(tmp: TempDir):
+def test_run_test_without_session_backward_compat(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
@@ -305,7 +307,7 @@ def test_run_test_without_session_backward_compat(tmp: TempDir):
     )
 
 
-def test_run_test_with_fixture_injected(tmp: TempDir):
+def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
     session = helpers.common.make_session_with("val", lambda: 99)
     result = helpers.common.exec_inline(
         tmp,
@@ -320,7 +322,7 @@ def test_run_test_with_fixture_injected(tmp: TempDir):
     )
 
 
-def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
+def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None:
     def bad_factory():
         msg = "db is down"
         raise RuntimeError(msg)
@@ -347,7 +349,7 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir):
 
 def test_run_test_missing_fixture_returns_error_result(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
-):
+) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
@@ -364,7 +366,7 @@ def test_run_test_missing_fixture_returns_error_result(
     )
 
 
-def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir):
+def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
     torn_down = []
 
     def factory():
@@ -513,7 +515,7 @@ def test_multiple_teardown_failures_all_reported(
 # ── Compact parametrize ───────────────────────────────────────────────────────
 
 
-def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir):
+def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir) -> None:
     """params: Params receives the whole dataclass, not spread fields."""
     result = helpers.common.exec_inline(
         tmp,
@@ -538,7 +540,7 @@ def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir):
     )
 
 
-def test_expanded_parametrize_still_works(tmp: TempDir):
+def test_expanded_parametrize_still_works(tmp: TempDir) -> None:
     """x: int, y: int receives spread fields (existing behaviour preserved)."""
     result = helpers.common.exec_inline(
         tmp,
@@ -563,7 +565,7 @@ def test_expanded_parametrize_still_works(tmp: TempDir):
     )
 
 
-def test_compact_parametrize_mixed_with_fixture(tmp: TempDir):
+def test_compact_parametrize_mixed_with_fixture(tmp: TempDir) -> None:
     """params: Params + db: Fixture[int] — both resolved correctly."""
     session = helpers.common.make_session_with("db", lambda: 99)
     result = helpers.common.exec_inline(
@@ -590,7 +592,7 @@ def test_compact_parametrize_mixed_with_fixture(tmp: TempDir):
     )
 
 
-def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir):
+def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir) -> None:
     """Non-fixture param annotated with a different type → expanded mode."""
     result = helpers.common.exec_inline(
         tmp,
@@ -613,7 +615,7 @@ def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir):
     )
 
 
-def test_run_test_timeout_mark_fires(tmp: TempDir):
+def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import time, oxitest\n"
@@ -631,7 +633,7 @@ def test_run_test_timeout_mark_fires(tmp: TempDir):
     )
 
 
-def test_run_test_timeout_passes_fast_test(tmp: TempDir):
+def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -646,7 +648,7 @@ def test_run_test_timeout_passes_fast_test(tmp: TempDir):
     )
 
 
-def test_run_test_default_timeout_fires(tmp: TempDir):
+def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import time\ndef test_slow():\n    time.sleep(5)\n",
@@ -658,7 +660,7 @@ def test_run_test_default_timeout_fires(tmp: TempDir):
     )
 
 
-def test_run_test_no_timeout_by_default(tmp: TempDir):
+def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(tmp, "def test_ok():\n    pass\n", "test_ok")
     assert result.status == "passed", (
         f"test without timeout mark should pass normally, got {result.status!r}"
@@ -668,7 +670,7 @@ def test_run_test_no_timeout_by_default(tmp: TempDir):
 # ── Async test execution ─────────────────────────────────────────────────────
 
 
-def test_async_test_passes(tmp: TempDir):
+def test_async_test_passes(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "async def test_ok():\n    assert 1 == 1\n", "test_ok"
     )
@@ -678,7 +680,7 @@ def test_async_test_passes(tmp: TempDir):
     )
 
 
-def test_async_test_fails(tmp: TempDir):
+def test_async_test_fails(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, 'async def test_bad():\n    assert 1 == 2, "nope"\n', "test_bad"
     )
@@ -690,7 +692,7 @@ def test_async_test_fails(tmp: TempDir):
     )
 
 
-def test_async_test_error(tmp: TempDir):
+def test_async_test_error(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp, "async def test_err():\n    raise ValueError('boom')\n", "test_err"
     )
@@ -705,7 +707,7 @@ def test_async_test_error(tmp: TempDir):
     )
 
 
-def test_async_test_warning(tmp: TempDir):
+def test_async_test_warning(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import warnings\n"
@@ -722,7 +724,7 @@ def test_async_test_warning(tmp: TempDir):
     )
 
 
-def test_async_test_skip(tmp: TempDir):
+def test_async_test_skip(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -739,7 +741,7 @@ def test_async_test_skip(tmp: TempDir):
     )
 
 
-def test_async_test_xfail(tmp: TempDir):
+def test_async_test_xfail(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -753,7 +755,7 @@ def test_async_test_xfail(tmp: TempDir):
     )
 
 
-def test_async_test_xpass(tmp: TempDir):
+def test_async_test_xpass(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -767,7 +769,7 @@ def test_async_test_xpass(tmp: TempDir):
     )
 
 
-def test_async_test_with_async_fixture(tmp: TempDir):
+def test_async_test_with_async_fixture(tmp: TempDir) -> None:
     async def async_factory():
         return 99
 
@@ -786,7 +788,7 @@ def test_async_test_with_async_fixture(tmp: TempDir):
     )
 
 
-def test_async_test_with_sync_fixture(tmp: TempDir):
+def test_async_test_with_sync_fixture(tmp: TempDir) -> None:
     session = helpers.common.make_session_with("val", lambda: 42)
     result = helpers.common.exec_inline(
         tmp,
@@ -802,7 +804,7 @@ def test_async_test_with_sync_fixture(tmp: TempDir):
     )
 
 
-def test_async_fixture_setup_error(tmp: TempDir):
+def test_async_fixture_setup_error(tmp: TempDir) -> None:
     async def bad_factory():
         msg = "db is down"
         raise RuntimeError(msg)
@@ -825,7 +827,7 @@ def test_async_fixture_setup_error(tmp: TempDir):
     )
 
 
-def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
+def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
     async def async_factory():
         return 99
 
@@ -853,7 +855,7 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir):
 # ── Async yield fixtures ─────────────────────────────────────────────────────
 
 
-def test_async_yield_fixture_provides_value(tmp: TempDir):
+def test_async_yield_fixture_provides_value(tmp: TempDir) -> None:
     async def async_yield_factory():
         yield 42
 
@@ -872,7 +874,7 @@ def test_async_yield_fixture_provides_value(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_runs(tmp: TempDir):
+def test_async_yield_fixture_teardown_runs(tmp: TempDir) -> None:
     """Teardown code after yield must execute even when test passes."""
     log: list[str] = []
 
@@ -898,7 +900,7 @@ def test_async_yield_fixture_teardown_runs(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir):
+def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir) -> None:
     """Teardown must run even when the test fails."""
     torn_down: list[bool] = []
 
@@ -921,7 +923,7 @@ def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir):
+def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir) -> None:
     """Teardown must run even when the test errors."""
     torn_down: list[bool] = []
 
@@ -944,7 +946,7 @@ def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir):
+def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir) -> None:
     """Multiple async yield fixtures tear down in reverse order."""
     log: list[str] = []
 
@@ -980,7 +982,9 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCapture):
+def test_async_yield_fixture_teardown_error_warns(
+    tmp: TempDir, warn: WarnCapture
+) -> None:
     """Teardown exception should warn, not crash."""
 
     async def async_yield_factory():
@@ -1006,7 +1010,7 @@ def test_async_yield_fixture_teardown_error_warns(tmp: TempDir, warn: WarnCaptur
     )
 
 
-def test_async_yield_fixture_setup_error(tmp: TempDir):
+def test_async_yield_fixture_setup_error(tmp: TempDir) -> None:
     """Error during async yield fixture setup should produce error result."""
 
     async def bad_factory():
@@ -1031,7 +1035,7 @@ def test_async_yield_fixture_setup_error(tmp: TempDir):
     )
 
 
-def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir):
+def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir) -> None:
     async def async_yield_factory():
         yield 42
 
@@ -1059,7 +1063,7 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir):
 # ── Async timeouts ───────────────────────────────────────────────────────────
 
 
-def test_async_test_timeout_mark_fires(tmp: TempDir):
+def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio, oxitest\n"
@@ -1077,7 +1081,7 @@ def test_async_test_timeout_mark_fires(tmp: TempDir):
     )
 
 
-def test_async_test_default_timeout_fires(tmp: TempDir):
+def test_async_test_default_timeout_fires(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio\nasync def test_slow():\n    await asyncio.sleep(10)\n",
@@ -1090,7 +1094,7 @@ def test_async_test_default_timeout_fires(tmp: TempDir):
     )
 
 
-def test_async_test_timeout_passes_fast_test(tmp: TempDir):
+def test_async_test_timeout_passes_fast_test(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -1104,7 +1108,7 @@ def test_async_test_timeout_passes_fast_test(tmp: TempDir):
     )
 
 
-def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
+def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
     """Async yield fixture teardown must run even when test times out."""
     torn_down: list[bool] = []
 
@@ -1134,7 +1138,7 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir):
 # ── Shared async fixtures ────────────────────────────────────────────────────
 
 
-def test_shared_async_fixture_provides_value(tmp: TempDir):
+def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
     async def async_pool_factory():
         return 99
 
@@ -1163,7 +1167,7 @@ def test_shared_async_fixture_provides_value(tmp: TempDir):
     )
 
 
-def test_shared_async_fixture_cached_across_tests(tmp: TempDir):
+def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
     f = tmp / "test_shared_cached.py"
     f.write_text(
         "from oxitest import Fixture\n"
@@ -1199,7 +1203,7 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir):
     )
 
 
-def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture):
+def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> None:
     """Stray tasks from one test should not affect the next test."""
     f = tmp / "test_shared_stray.py"
     f.write_text(
@@ -1236,7 +1240,7 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture):
     session.end_session()
 
 
-def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir):
+def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> None:
     """Shared async yield fixture teardown runs when end_session is called."""
     f = tmp / "test_shared_td.py"
     f.write_text(
@@ -1274,7 +1278,7 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir):
     )
 
 
-def test_non_shared_async_test_gets_own_loop(tmp: TempDir):
+def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
     """Async test not using shared fixtures gets per-test asyncio.run(), even
     when the session has a shared async loop from another test."""
     f = tmp / "test_isolation.py"
@@ -1312,7 +1316,7 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir):
 # ── Built-in task_group fixture ──────────────────────────────────────────────
 
 
-def test_task_group_fixture_basic(tmp: TempDir):
+def test_task_group_fixture_basic(tmp: TempDir) -> None:
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio\n"
@@ -1333,7 +1337,7 @@ def test_task_group_fixture_basic(tmp: TempDir):
     )
 
 
-def test_task_group_fixture_cancels_on_test_end(tmp: TempDir):
+def test_task_group_fixture_cancels_on_test_end(tmp: TempDir) -> None:
     """Tasks still running when the test ends should be cancelled by TaskGroup exit."""
     result = helpers.common.exec_inline(
         tmp,
@@ -1350,7 +1354,7 @@ def test_task_group_fixture_cancels_on_test_end(tmp: TempDir):
     )
 
 
-def test_task_group_fixture_sync_test_error(tmp: TempDir):
+def test_task_group_fixture_sync_test_error(tmp: TempDir) -> None:
     """Sync test requesting task_group should get a clear error."""
     result = helpers.common.exec_inline(
         tmp,
@@ -1371,7 +1375,7 @@ def test_task_group_fixture_sync_test_error(tmp: TempDir):
 # ── Async fixture dependency errors ──────────────────────────────────────────
 
 
-def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir):
+def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
     """A sync fixture that depends on a non-shared async fixture should error."""
 
     async def async_factory():
@@ -1408,7 +1412,7 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir):
     )
 
 
-def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir):
+def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
     """A shared async fixture cannot depend on a non-shared async fixture."""
 
     async def non_shared_async():

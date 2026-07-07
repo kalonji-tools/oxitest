@@ -7,7 +7,7 @@ import oxitest
 from oxitest import TempDir, helpers
 
 
-def test_cache_created_on_firstrun_oxitest(tmp: TempDir):
+def test_cache_created_on_firstrun_oxitest(tmp: TempDir) -> None:
     """A .oxitest_cache directory is created after the first run."""
     (tmp / "test_cached.py").write_text("def test_a(): assert True\n")
     helpers.common.run_oxitest(tmp)
@@ -15,7 +15,7 @@ def test_cache_created_on_firstrun_oxitest(tmp: TempDir):
     assert cache_dir.exists(), ".oxitest_cache/ should be created after first run"
 
 
-def test_failed_only_runs_subset(tmp: TempDir):
+def test_failed_only_runs_subset(tmp: TempDir) -> None:
     """--failed=only reruns only the previously-failed test after fixing it."""
     (tmp / "test_mixed.py").write_text(
         "def test_pass(): assert True\ndef test_fail(): assert False\n"
@@ -31,7 +31,7 @@ def test_failed_only_runs_subset(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_failed_first_runs_all(tmp: TempDir):
+def test_failed_first_runs_all(tmp: TempDir) -> None:
     """--failed=first runs all tests (failed ones first) and exits 0 when clean."""
     (tmp / "test_ff.py").write_text(
         "def test_ok(): assert True\ndef test_bad(): assert False\n"

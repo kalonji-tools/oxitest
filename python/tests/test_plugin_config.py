@@ -16,7 +16,7 @@ from oxitest._bridge._plugin_config import (
 )
 
 
-def test_introspect_extracts_fields():
+def test_introspect_extracts_fields() -> None:
     @dataclass(frozen=True)
     class Cfg:
         host: Annotated[str, Both(help="host")] = "local"
@@ -39,7 +39,7 @@ def test_introspect_extracts_fields():
     )
 
 
-def test_introspect_rejects_unannotated_field():
+def test_introspect_rejects_unannotated_field() -> None:
     @dataclass(frozen=True)
     class Bad:
         name: str = "oops"
@@ -48,7 +48,7 @@ def test_introspect_rejects_unannotated_field():
         introspect_config(Bad)
 
 
-def test_introspect_rejects_non_dataclass():
+def test_introspect_rejects_non_dataclass() -> None:
     class NotDC:
         pass
 
@@ -56,7 +56,7 @@ def test_introspect_rejects_non_dataclass():
         introspect_config(NotDC)
 
 
-def test_introspect_detects_optional():
+def test_introspect_detects_optional() -> None:
     @dataclass(frozen=True)
     class Cfg:
         required: Annotated[str, Conf(help="required")]
@@ -67,7 +67,7 @@ def test_introspect_detects_optional():
     assert descs[1].optional, "str | None field should be optional"
 
 
-def test_merge_precedence_cli_over_env_over_pyproject():
+def test_merge_precedence_cli_over_env_over_pyproject() -> None:
     @dataclass(frozen=True)
     class Cfg:
         host: Annotated[str, Both(help="host", env="TEST_HOST")] = "default"
@@ -98,7 +98,7 @@ def test_merge_precedence_cli_over_env_over_pyproject():
     assert result.host == "cli", f"expected CLI override, got {result.host}"
 
 
-def test_merge_cli_only_ignores_pyproject():
+def test_merge_cli_only_ignores_pyproject() -> None:
     @dataclass(frozen=True)
     class Cfg:
         verbose: Annotated[bool, Cli(help="verbose")] = False
@@ -110,7 +110,7 @@ def test_merge_cli_only_ignores_pyproject():
     assert result.verbose is False, "Cli-only field should ignore pyproject values"
 
 
-def test_merge_conf_only_ignores_cli():
+def test_merge_conf_only_ignores_cli() -> None:
     @dataclass(frozen=True)
     class Cfg:
         path: Annotated[str, Conf(help="path")] = "/default"
@@ -126,7 +126,7 @@ def test_merge_conf_only_ignores_cli():
     assert result.path == "/pyproject", "Conf-only field should ignore CLI values"
 
 
-def test_merge_missing_required_field_raises():
+def test_merge_missing_required_field_raises() -> None:
     @dataclass(frozen=True)
     class Cfg:
         required: Annotated[str, Conf(help="required")]

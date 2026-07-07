@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def test_oxi_mark_applies_to_all_tests(tmp: TempDir):
+def test_oxi_mark_applies_to_all_tests(tmp: TempDir) -> None:
     """oxi_mark marks apply to all tests in the module."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\n"
@@ -16,7 +16,7 @@ def test_oxi_mark_applies_to_all_tests(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_oxi_mark_visible_to_expression_filter(tmp: TempDir):
+def test_oxi_mark_visible_to_expression_filter(tmp: TempDir) -> None:
     """-E mark() filtering sees module-level marks."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\n"
@@ -30,7 +30,7 @@ def test_oxi_mark_visible_to_expression_filter(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=2)
 
 
-def test_oxi_mark_per_test_override(tmp: TempDir):
+def test_oxi_mark_per_test_override(tmp: TempDir) -> None:
     """Per-test mark overrides module mark — test with per-test skip is skipped."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\n"
@@ -44,7 +44,7 @@ def test_oxi_mark_per_test_override(tmp: TempDir):
     helpers.integ.assert_contains(out, "1 skipped")
 
 
-def test_oxi_mark_strict_validates_module_marks(tmp: TempDir):
+def test_oxi_mark_strict_validates_module_marks(tmp: TempDir) -> None:
     """--strict catches missing reason on module-level skip mark."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\noxi_mark = [oxitest.mark.skip]\ndef test_a(): assert True\n"
@@ -54,7 +54,7 @@ def test_oxi_mark_strict_validates_module_marks(tmp: TempDir):
     helpers.integ.assert_contains(out, "missing-mark-reason")
 
 
-def test_oxi_mark_single_mark_not_list(tmp: TempDir):
+def test_oxi_mark_single_mark_not_list(tmp: TempDir) -> None:
     """oxi_mark = oxi.mark.slow (single, not list) works."""
     (tmp / "test_mod.py").write_text(
         "import oxitest\noxi_mark = oxitest.mark.slow\ndef test_a(): assert True\n"

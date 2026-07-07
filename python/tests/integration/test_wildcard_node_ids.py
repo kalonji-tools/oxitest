@@ -19,7 +19,7 @@ def _write_project(tmp: TempDir) -> None:
     )
 
 
-def test_glob_function_name(tmp: TempDir):
+def test_glob_function_name(tmp: TempDir) -> None:
     """Glob in function name selects only matching tests."""
     _write_project(tmp)
     # test_a* matches test_add only (test_sub and test_mul don't start with test_a)
@@ -32,7 +32,7 @@ def test_glob_function_name(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=1)
 
 
-def test_glob_star_selects_all_in_file(tmp: TempDir):
+def test_glob_star_selects_all_in_file(tmp: TempDir) -> None:
     """Glob `*` selects all tests in the targeted file, no others."""
     _write_project(tmp)
     out, _, rc = helpers.common.run_oxitest_subcmd(
@@ -42,7 +42,7 @@ def test_glob_star_selects_all_in_file(tmp: TempDir):
     helpers.integ.assert_passed(out, rc, count=3)
 
 
-def test_glob_no_match_runs_nothing(tmp: TempDir):
+def test_glob_no_match_runs_nothing(tmp: TempDir) -> None:
     """Glob with no matches collects zero tests."""
     _write_project(tmp)
     out, *_ = helpers.common.run_oxitest_subcmd(
@@ -54,7 +54,7 @@ def test_glob_no_match_runs_nothing(tmp: TempDir):
     helpers.integ.assert_contains(out, "no tests ran")
 
 
-def test_non_glob_prefix_matching_preserved(tmp: TempDir):
+def test_non_glob_prefix_matching_preserved(tmp: TempDir) -> None:
     """Non-glob node IDs still use existing prefix matching."""
     _write_project(tmp)
     out, _, rc = helpers.common.run_oxitest_subcmd(
