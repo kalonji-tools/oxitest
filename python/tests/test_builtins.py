@@ -642,7 +642,7 @@ def test_tempdir_injected_via_session() -> None:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
-    def fn(tmp: TempDir) -> None:  # type: ignore[valid-type]
+    def fn(tmp: TempDir) -> None:
         pass
 
     kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -665,7 +665,7 @@ def test_tempdir_factory_session_scoped() -> None:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
-    def fn(factory: TempDirFactory) -> None:  # type: ignore[valid-type]
+    def fn(factory: TempDirFactory) -> None:
         pass
 
     k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -682,7 +682,7 @@ def test_stdcapture_injected_via_session() -> None:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
-    def fn(cap: StdCapture) -> None:  # type: ignore[valid-type]
+    def fn(cap: StdCapture) -> None:
         pass
 
     kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -703,7 +703,7 @@ def test_patcher_injected_via_session() -> None:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
-    def fn(patch: Patcher) -> None:  # type: ignore[valid-type]
+    def fn(patch: Patcher) -> None:
         pass
 
     kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -736,7 +736,7 @@ def test_testcontext_still_works_via_builtin_dispatch() -> None:
     )
     session = FixtureSession(reg)
 
-    def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(thing: Fixture[str]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -954,7 +954,7 @@ def test_logcapture_injected_via_session() -> None:
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
-    def fn(log: LogCapture) -> None:  # type: ignore[valid-type]
+    def fn(log: LogCapture) -> None:
         pass
 
     kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))

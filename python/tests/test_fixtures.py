@@ -242,7 +242,7 @@ def test_function_scope_new_instance_per_resolve() -> None:
         helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
     )
 
-    def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(val: Fixture[int]) -> None:
         pass
 
     k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -270,7 +270,7 @@ def test_yield_fixture_function_scope_teardown() -> None:
         helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
     )
 
-    def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(val: Fixture[str]) -> None:
         pass
 
     meta = helpers.common.make_meta("t.py")
@@ -295,7 +295,7 @@ def test_yield_fixture_function_scope_teardown() -> None:
 def test_addfinalizer_runs_in_teardown() -> None:
     calls = []
 
-    def factory(ctx: Fixture[OxiTestContext]) -> str:  # type: ignore[type-arg]
+    def factory(ctx: Fixture[OxiTestContext]) -> str:
         ctx.addfinalizer(lambda: calls.append("done"))
         return "val"
 
@@ -303,7 +303,7 @@ def test_addfinalizer_runs_in_teardown() -> None:
         helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
     )
 
-    def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(thing: Fixture[str]) -> None:
         pass
 
     meta = helpers.common.make_meta("t.py")
@@ -327,7 +327,7 @@ def test_addfinalizer_runs_in_teardown() -> None:
 
 
 def test_dag_fixture_depending_on_fixture() -> None:
-    def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
+    def derived(base: Fixture[int]) -> int:
         return base * 2
 
     session = helpers.common.make_session(
@@ -335,7 +335,7 @@ def test_dag_fixture_depending_on_fixture() -> None:
         helpers.common.make_fixture_def("derived", derived, conftest_path="/c.py"),
     )
 
-    def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(derived: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -405,7 +405,7 @@ def test_autouse_teardown_still_runs() -> None:
 def test_missing_fixture_raises_not_found() -> None:
     session = helpers.common.make_session()
 
-    def fn(nonexistent: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(nonexistent: Fixture[int]) -> None:
         pass
 
     with raises(FixtureNotFoundError) as exc_info:
@@ -417,10 +417,10 @@ def test_missing_fixture_raises_not_found() -> None:
 
 
 def test_cycle_raises_fixture_cycle_error() -> None:
-    def a(b: Fixture[int]) -> int:  # type: ignore[type-arg]
+    def a(b: Fixture[int]) -> int:
         return b
 
-    def b(a: Fixture[int]) -> int:  # type: ignore[type-arg]
+    def b(a: Fixture[int]) -> int:
         return a
 
     session = helpers.common.make_session(
@@ -428,7 +428,7 @@ def test_cycle_raises_fixture_cycle_error() -> None:
         helpers.common.make_fixture_def("b", b, conftest_path="/c.py"),
     )
 
-    def fn(a: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(a: Fixture[int]) -> None:
         pass
 
     with raises(FixtureCycleError):
@@ -444,7 +444,7 @@ def test_setup_error_raises_fixture_setup_error() -> None:
         helpers.common.make_fixture_def("bad", bad, conftest_path="/c.py")
     )
 
-    def fn(bad: Fixture[None]) -> None:  # type: ignore[type-arg]
+    def fn(bad: Fixture[None]) -> None:
         pass
 
     with raises(FixtureSetupError) as exc_info:
@@ -474,7 +474,7 @@ def test_fixture_marker_param_resolved_by_name() -> None:
         helpers.common.make_fixture_def("val", factory, conftest_path="/c.py")
     )
 
-    def fn(val: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(val: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -504,7 +504,7 @@ def test_non_fixture_param_ignored_by_resolver() -> None:
 def test_fixture_test_context_injected_directly() -> None:
     session = helpers.common.make_session()
 
-    def fn(ctx: Fixture[OxiTestContext]) -> None:  # type: ignore[type-arg]
+    def fn(ctx: Fixture[OxiTestContext]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -516,7 +516,7 @@ def test_fixture_test_context_injected_directly() -> None:
 
 def test_fixture_dep_resolved_via_annotation() -> None:
 
-    def derived(base: Fixture[int]) -> int:  # type: ignore[type-arg]
+    def derived(base: Fixture[int]) -> int:
         return base * 3
 
     session = helpers.common.make_session(
@@ -524,7 +524,7 @@ def test_fixture_dep_resolved_via_annotation() -> None:
         helpers.common.make_fixture_def("derived", derived, conftest_path="/c.py"),
     )
 
-    def fn(derived: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(derived: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -548,7 +548,7 @@ def test_autouse_not_double_invoked_when_explicitly_requested() -> None:
         )
     )
 
-    def fn(setup: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(setup: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -691,7 +691,7 @@ def test_resolve_for_test_skip_names_prevents_resolution() -> None:
 
     session = helpers.common.make_session(helpers.common.make_fixture_def("db", my_db))
 
-    def test_fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def test_fn(db: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(
@@ -802,7 +802,7 @@ def test_test_context_has_on_teardown_alias() -> None:
 def test_on_teardown_registers_cleanup() -> None:
     calls: list[str] = []
 
-    def factory(ctx: Fixture[OxiTestContext]) -> str:  # type: ignore[type-arg]
+    def factory(ctx: Fixture[OxiTestContext]) -> str:
         ctx.on_teardown(lambda: calls.append("done"))
         return "val"
 
@@ -810,7 +810,7 @@ def test_on_teardown_registers_cleanup() -> None:
         helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
     )
 
-    def fn(thing: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(thing: Fixture[str]) -> None:
         pass
 
     meta = helpers.common.make_meta("t.py")
@@ -878,7 +878,7 @@ def test_shared_fixture_is_called_once_across_tests() -> None:
         )
     )
 
-    def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(db: Fixture[int]) -> None:
         pass
 
     k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -927,13 +927,13 @@ def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
 
     k, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     with raises(SharedFixtureMutationError):
-        k["cfg"]["x"] = 2  # type: ignore[index]
+        k["cfg"]["x"] = 2
 
 
 def test_shared_fixture_teardown_runs_on_end_session() -> None:
     torn_down: list[bool] = []
 
-    def factory() -> Generator[str]:  # type: ignore[return]
+    def factory() -> Generator[str]:
         yield "v"
         torn_down.append(True)
 
@@ -943,7 +943,7 @@ def test_shared_fixture_teardown_runs_on_end_session() -> None:
         )
     )
 
-    def fn(res: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(res: Fixture[str]) -> None:
         pass
 
     session.resolve_for_test(fn, helpers.common.make_meta("t.py"))

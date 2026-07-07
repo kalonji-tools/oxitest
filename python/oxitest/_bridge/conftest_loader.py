@@ -64,8 +64,8 @@ def _extract_fixture_type(func: Callable[..., Any]) -> type:
     if origin is collections.abc.Generator:
         args = getattr(ret, "__args__", ())
         if args:
-            return args[0]  # type: ignore[return-value]
-    return ret  # type: ignore[return-value]
+            return args[0]
+    return ret
 
 
 def _extract_depends_on(func: Callable[..., Any]) -> tuple[tuple[str, type], ...]:
@@ -116,7 +116,7 @@ def _load_conftest_module(path: str) -> ModuleType | None:
         return None
     module = importlib.util.module_from_spec(spec)
     sys.modules[unique_name] = module
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    spec.loader.exec_module(module)
     sys.modules["conftest"] = module
     return module
 

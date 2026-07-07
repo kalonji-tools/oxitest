@@ -215,7 +215,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
     registry.register(helpers.common.make_fixture_def("db", my_fixture))
     session = FixtureSession(registry)
 
-    def test_fn(x: int, db: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def test_fn(x: int, db: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(
@@ -481,7 +481,7 @@ def test_parametrize_rejects_non_callable_for_fixture_ref_field() -> None:
 
     with raises(TypeError, match="FixtureRef"):
 
-        @parametrize(bad=RefCase(db=42))  # type: ignore[arg-type]
+        @parametrize(bad=RefCase(db=42))
         def test_foo(db: Fixture[int]) -> None:
             pass
 

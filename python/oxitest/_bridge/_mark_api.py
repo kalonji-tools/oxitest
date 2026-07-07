@@ -74,7 +74,7 @@ class _Mark:
     def __call__(self, *args: Any, **kwargs: Any) -> _F | Callable[[_F], _F]:
         if len(args) == 1 and callable(args[0]) and not kwargs:
             _append_mark(args[0], MarkInfo(self.name, (), MappingProxyType({})))
-            return args[0]  # type: ignore[return-value]
+            return args[0]
         info = MarkInfo(self.name, args, MappingProxyType(dict(kwargs)))
 
         def decorator(f: _F) -> _F:
@@ -121,7 +121,7 @@ class _SkipMark:
             _append_mark(
                 args[0], MarkInfo("skip", (), MappingProxyType({"reason": ""}))
             )
-            return args[0]  # type: ignore[return-value]
+            return args[0]
 
         if args:
             msg = (

@@ -51,10 +51,10 @@ def test_resolve_simple_fixture() -> None:
 
 
 def test_resolve_cycle_raises() -> None:
-    def fx_a(b: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fx_a(b: Fixture[int]) -> None:
         pass
 
-    def fx_b(a: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fx_b(a: Fixture[int]) -> None:
         pass
 
     inst, _reg = _make_instantiator(

@@ -185,7 +185,7 @@ class DataclassCases:
                 case_id,
                 [
                     (f.name, repr(getattr(case, f.name)))
-                    for f in dataclasses.fields(case)  # type: ignore[arg-type]
+                    for f in dataclasses.fields(case)
                 ],
             )
 
@@ -206,10 +206,7 @@ class DataclassCases:
                 )
                 raise ParametrizeError(msg)
             return {compact_param: case}, fixref_names
-        param_kwargs = {
-            f.name: getattr(case, f.name)
-            for f in dataclasses.fields(case)  # type: ignore[arg-type]
-        }
+        param_kwargs = {f.name: getattr(case, f.name) for f in dataclasses.fields(case)}
         return param_kwargs, fixref_names
 
 

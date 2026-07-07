@@ -30,7 +30,7 @@ if _KEY not in sys.modules:
     setattr(counter, "n", 0)
     sys.modules[_KEY] = counter
 _counter = sys.modules[_KEY]
-_counter.n += 1  # type: ignore[attr-defined]
+_counter.n += 1
 
 
 def test_module_loaded_once_first_test() -> None:
