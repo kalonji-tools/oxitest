@@ -2,8 +2,10 @@
 
 import io
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar
+from types import TracebackType
+from typing import ClassVar, Never
 
 import oxitest
 from oxitest import DebuggerBackend, StdCapture, helpers
@@ -152,8 +154,8 @@ def test_recording_debugger_records_post_mortem() -> None:
     )
 
 
-def _make_failing_fn():
-    def failing():
+def _make_failing_fn() -> Callable[[], Never]:
+    def failing() -> Never:
         msg = "boom"
         raise AssertionError(msg)
 
@@ -226,7 +228,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem() -> None:
     class Skipped(Exception):
         pass
 
-    def skip_test():
+    def skip_test() -> Never:
         msg = "not today"
         raise Skipped(msg)
 
@@ -256,12 +258,12 @@ def test_trace_before_test_suspends_capture_during_call() -> None:
         trace_count = 0
         post_mortem_tracebacks: ClassVar[list] = []
 
-        def trace(self):
+        def trace(self) -> None:
             nonlocal suspended_during_trace
             suspended_during_trace = sys.stdout is cap._old_stdout
             self.trace_count += 1
 
-        def post_mortem(self, tb):
+        def post_mortem(self, tb: TracebackType) -> None:
             pass
 
     spy = SpyDebugger()

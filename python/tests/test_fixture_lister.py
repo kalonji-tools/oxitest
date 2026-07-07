@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from oxitest import helpers
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge.fixture_lister import tree_fixtures_from_registry
@@ -28,13 +30,13 @@ def test_tree_single_no_deps() -> None:
 
 
 def test_tree_linear_chain() -> None:
-    def _config():
+    def _config() -> None:
         pass
 
-    def _connection(config):
+    def _connection(config: Any) -> None:
         pass
 
-    def _db(connection):
+    def _db(connection: Any) -> None:
         pass
 
     reg = FixtureRegistry()
@@ -66,16 +68,16 @@ def test_tree_linear_chain() -> None:
 
 
 def test_tree_diamond() -> None:
-    def _base():
+    def _base() -> None:
         pass
 
-    def _left(base):
+    def _left(base: Any) -> None:
         pass
 
-    def _right(base):
+    def _right(base: Any) -> None:
         pass
 
-    def _top(left, right):
+    def _top(left: Any, right: Any) -> None:
         pass
 
     reg = FixtureRegistry()
@@ -117,10 +119,10 @@ def test_tree_diamond() -> None:
 
 
 def test_tree_cycle_detection() -> None:
-    def _a(b):
+    def _a(b: Any) -> None:
         pass
 
-    def _b(a):
+    def _b(a: Any) -> None:
         pass
 
     reg = FixtureRegistry()
@@ -141,10 +143,10 @@ def test_tree_cycle_detection() -> None:
 
 
 def test_tree_keyword_filter() -> None:
-    def _config():
+    def _config() -> None:
         pass
 
-    def _db(config):
+    def _db(config: Any) -> None:
         pass
 
     reg = FixtureRegistry()

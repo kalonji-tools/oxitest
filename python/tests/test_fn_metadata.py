@@ -7,7 +7,7 @@ from oxitest._bridge._mark_api import MarkInfo
 
 
 def test_get_or_create_creates_on_first_access() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     meta = get_or_create(fn)
@@ -29,7 +29,7 @@ def test_get_or_create_creates_on_first_access() -> None:
 
 
 def test_get_or_create_returns_same_instance() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     first = get_or_create(fn)
@@ -41,7 +41,7 @@ def test_get_or_create_returns_same_instance() -> None:
 
 
 def test_get_metadata_returns_default_for_unknown_function() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     meta = get_metadata(fn)
@@ -61,7 +61,7 @@ def test_get_metadata_returns_default_for_unknown_function() -> None:
 
 
 def test_get_metadata_returns_registered_metadata() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     mark = MarkInfo("slow", (), MappingProxyType({}))
@@ -77,7 +77,7 @@ def test_get_metadata_returns_registered_metadata() -> None:
 
 
 def test_mutations_persist_across_calls() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     mark = MarkInfo("integration", (), MappingProxyType({}))
@@ -90,10 +90,10 @@ def test_mutations_persist_across_calls() -> None:
 
 
 def test_different_functions_get_independent_metadata() -> None:
-    def fn_a():
+    def fn_a() -> None:
         pass
 
-    def fn_b():
+    def fn_b() -> None:
         pass
 
     get_or_create(fn_a).marks.append(MarkInfo("slow", (), MappingProxyType({})))

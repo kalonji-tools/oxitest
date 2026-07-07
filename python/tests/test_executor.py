@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator, Generator
 from dataclasses import dataclass
 
 from oxitest import (
@@ -323,7 +324,7 @@ def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
 
 
 def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None:
-    def bad_factory():
+    def bad_factory() -> None:
         msg = "db is down"
         raise RuntimeError(msg)
 
@@ -369,7 +370,7 @@ def test_run_test_missing_fixture_returns_error_result(
 def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
     torn_down = []
 
-    def factory():
+    def factory() -> Generator[int, None, None]:
         yield 99
         torn_down.append(True)
 
@@ -396,7 +397,7 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
     """A RuntimeError raised inside fixture teardown must not change test status."""
     torn_down: list[str] = []
 
-    def factory():
+    def factory() -> Generator[int, None, None]:
         yield 42
         torn_down.append("ran")
         msg = "teardown exploded"
@@ -429,13 +430,13 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
     """Teardown exception in first fixture must not block teardown of second fixture."""
     log: list[str] = []
 
-    def factory_a():
+    def factory_a() -> Generator[int, None, None]:
         yield 1
         log.append("a_teardown")
         msg = "a teardown exploded"
         raise RuntimeError(msg)
 
-    def factory_b():
+    def factory_b() -> Generator[int, None, None]:
         yield 2
         log.append("b_teardown")
 
@@ -472,13 +473,13 @@ def test_multiple_teardown_failures_all_reported(
     """When ALL fixture teardowns fail, each emits a warning and test still passes."""
     log: list[str] = []
 
-    def factory_a():
+    def factory_a() -> Generator[int, None, None]:
         yield 1
         log.append("a_teardown")
         msg = "a exploded"
         raise RuntimeError(msg)
 
-    def factory_b():
+    def factory_b() -> Generator[int, None, None]:
         yield 2
         log.append("b_teardown")
         msg = "b exploded"
@@ -770,7 +771,7 @@ def test_async_test_xpass(tmp: TempDir) -> None:
 
 
 def test_async_test_with_async_fixture(tmp: TempDir) -> None:
-    async def async_factory():
+    async def async_factory() -> int:
         return 99
 
     session = helpers.common.make_session_with("val", async_factory)
@@ -805,7 +806,7 @@ def test_async_test_with_sync_fixture(tmp: TempDir) -> None:
 
 
 def test_async_fixture_setup_error(tmp: TempDir) -> None:
-    async def bad_factory():
+    async def bad_factory() -> None:
         msg = "db is down"
         raise RuntimeError(msg)
 
@@ -828,7 +829,7 @@ def test_async_fixture_setup_error(tmp: TempDir) -> None:
 
 
 def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
-    async def async_factory():
+    async def async_factory() -> int:
         return 99
 
     session = helpers.common.make_session_with("val", async_factory)
@@ -856,7 +857,7 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
 
 
 def test_async_yield_fixture_provides_value(tmp: TempDir) -> None:
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
 
     session = helpers.common.make_session_with("val", async_yield_factory)
@@ -878,7 +879,7 @@ def test_async_yield_fixture_teardown_runs(tmp: TempDir) -> None:
     """Teardown code after yield must execute even when test passes."""
     log: list[str] = []
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[list[str], None]:
         log.append("setup")
         yield log
         log.append("teardown")
@@ -904,7 +905,7 @@ def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir) -> None:
     """Teardown must run even when the test fails."""
     torn_down: list[bool] = []
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
         torn_down.append(True)
 
@@ -927,7 +928,7 @@ def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir) -> None:
     """Teardown must run even when the test errors."""
     torn_down: list[bool] = []
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
         torn_down.append(True)
 
@@ -950,12 +951,12 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir) -> None:
     """Multiple async yield fixtures tear down in reverse order."""
     log: list[str] = []
 
-    async def factory_a():
+    async def factory_a() -> AsyncGenerator[str, None]:
         log.append("setup_a")
         yield "A"
         log.append("teardown_a")
 
-    async def factory_b():
+    async def factory_b() -> AsyncGenerator[str, None]:
         log.append("setup_b")
         yield "B"
         log.append("teardown_b")
@@ -987,7 +988,7 @@ def test_async_yield_fixture_teardown_error_warns(
 ) -> None:
     """Teardown exception should warn, not crash."""
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
         msg = "teardown exploded"
         raise RuntimeError(msg)
@@ -1013,7 +1014,7 @@ def test_async_yield_fixture_teardown_error_warns(
 def test_async_yield_fixture_setup_error(tmp: TempDir) -> None:
     """Error during async yield fixture setup should produce error result."""
 
-    async def bad_factory():
+    async def bad_factory() -> AsyncGenerator[None, None]:
         msg = "setup failed"
         raise RuntimeError(msg)
         yield
@@ -1036,7 +1037,7 @@ def test_async_yield_fixture_setup_error(tmp: TempDir) -> None:
 
 
 def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir) -> None:
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
 
     session = helpers.common.make_session_with("val", async_yield_factory)
@@ -1112,7 +1113,7 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
     """Async yield fixture teardown must run even when test times out."""
     torn_down: list[bool] = []
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
         torn_down.append(True)
 
@@ -1139,7 +1140,7 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
 
 
 def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
-    async def async_pool_factory():
+    async def async_pool_factory() -> int:
         return 99
 
     reg = FixtureRegistry()
@@ -1178,7 +1179,7 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
     )
     call_count = 0
 
-    async def async_pool_factory():
+    async def async_pool_factory() -> int:
         nonlocal call_count
         call_count += 1
         return call_count
@@ -1215,7 +1216,7 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> Non
         "    assert pool == 42\n"
     )
 
-    async def async_pool_factory():
+    async def async_pool_factory() -> int:
         return 42
 
     reg = FixtureRegistry()
@@ -1250,7 +1251,7 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
     )
     log: list[str] = []
 
-    async def async_yield_factory():
+    async def async_yield_factory() -> AsyncGenerator[int, None]:
         log.append("setup")
         yield 42
         log.append("teardown")
@@ -1292,7 +1293,7 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
         "    assert loop is not None\n"
     )
 
-    async def async_pool_factory():
+    async def async_pool_factory() -> int:
         return 42
 
     reg = FixtureRegistry()
@@ -1378,7 +1379,7 @@ def test_task_group_fixture_sync_test_error(tmp: TempDir) -> None:
 def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
     """A sync fixture that depends on a non-shared async fixture should error."""
 
-    async def async_factory():
+    async def async_factory() -> int:
         return 42
 
     def sync_factory(dep: Fixture[int]) -> str:
@@ -1415,7 +1416,7 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
 def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
     """A shared async fixture cannot depend on a non-shared async fixture."""
 
-    async def non_shared_async():
+    async def non_shared_async() -> int:
         return 42
 
     async def shared_async(dep: Fixture[int]) -> str:

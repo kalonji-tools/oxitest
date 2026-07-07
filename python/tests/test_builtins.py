@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 
 import oxitest
 
@@ -29,13 +30,13 @@ def _make_builtin_ctx(
     keep_tmp: str | None = None,
     inject_scope: str = "function",
     result_cell: list | None = None,
-):
+) -> tuple[_BuiltinContext, list[Callable[[], None]]]:
     """Create a ``_BuiltinContext`` with sensible test defaults.
 
     Returns ``(ctx, teardowns)`` — the teardowns list is needed by
     most tests to verify teardown registration and run cleanup.
     """
-    teardowns: list = []
+    teardowns: list[Callable[[], None]] = []
     ctx = _BuiltinContext(
         meta=TestMeta(module_path="t.py", fn_name=fn_name, node_id=""),
         inject_scope=inject_scope,
@@ -980,14 +981,14 @@ def test_logcapture_includes_plugin_backends() -> None:
             self.installed = False
             self._records: list[logging.LogRecord] = []
 
-        def install(self):
+        def install(self) -> None:
             self.installed = True
 
-        def uninstall(self):
+        def uninstall(self) -> None:
             self.installed = False
 
         @property
-        def records(self):
+        def records(self) -> list[logging.LogRecord]:
             return list(self._records)
 
     fake_backend = FakePluginBackend()

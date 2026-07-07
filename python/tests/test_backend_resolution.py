@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Coroutine
+from typing import Any, Never
+
 import oxitest
 from oxitest._bridge._async_backend import (
     AsyncioBackend,
@@ -15,10 +18,10 @@ class _FakeBackend:
     def name(self) -> str:
         return "fake"
 
-    def run(self, coro):
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Never:
         raise NotImplementedError
 
-    def create_shared_session(self):
+    def create_shared_session(self) -> Never:
         raise NotImplementedError
 
 
@@ -29,10 +32,10 @@ class _AsyncioNamedBackend:
     def name(self) -> str:
         return "asyncio"
 
-    def run(self, coro):
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Never:
         raise NotImplementedError
 
-    def create_shared_session(self):
+    def create_shared_session(self) -> Never:
         raise NotImplementedError
 
 

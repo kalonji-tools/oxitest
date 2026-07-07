@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from types import MappingProxyType
 
 from oxitest import helpers
@@ -8,15 +9,20 @@ from oxitest._bridge._middleware import (
     ExecutionPlan,
     build_pipeline,
 )
-from oxitest._bridge.result import WarnedResult
+from oxitest._bridge.result import TestResult, WarnedResult
 
 
 class _UppercaseMiddleware:
     """Test middleware that uppercases the result message."""
 
-    def apply(self, plan: ExecutionPlan, next_fn):
-        def wrapped():
+    def apply(
+        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+    ) -> Callable[[], TestResult]:
+        def wrapped() -> TestResult:
             result = next_fn()
+            assert isinstance(result, WarnedResult), (
+                f"expected WarnedResult, got {type(result).__name__}"
+            )
             return dataclasses.replace(result, message=result.message.upper())
 
         return wrapped
@@ -25,7 +31,9 @@ class _UppercaseMiddleware:
 class _SkipMiddleware:
     """Test middleware that passes through unchanged."""
 
-    def apply(self, plan: ExecutionPlan, next_fn):
+    def apply(
+        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+    ) -> Callable[[], TestResult]:
         return next_fn
 
 
@@ -42,7 +50,7 @@ def test_build_pipeline_no_middlewares() -> None:
         shared_session=None,
     )
 
-    def base():
+    def base() -> WarnedResult:
         return WarnedResult(message="ok")
 
     execute = build_pipeline([], plan, base)
@@ -63,7 +71,7 @@ def test_build_pipeline_single_middleware() -> None:
         shared_session=None,
     )
 
-    def base():
+    def base() -> WarnedResult:
         return WarnedResult(message="hello")
 
     execute = build_pipeline([_UppercaseMiddleware()], plan, base)
@@ -85,7 +93,7 @@ def test_build_pipeline_ordering() -> None:
         shared_session=None,
     )
 
-    def base():
+    def base() -> WarnedResult:
         return WarnedResult(message="base")
 
     mws = [_SkipMiddleware(), _UppercaseMiddleware()]
@@ -107,7 +115,7 @@ def test_build_pipeline_skip_middleware_is_noop() -> None:
         shared_session=None,
     )
 
-    def base():
+    def base() -> WarnedResult:
         return WarnedResult(message="unchanged")
 
     execute = build_pipeline([_SkipMiddleware()], plan, base)

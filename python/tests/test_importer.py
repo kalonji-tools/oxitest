@@ -134,7 +134,7 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
     class FakeClass:
         pass
 
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
@@ -154,7 +154,7 @@ def test_propagate_class_marks_copies_all_marks() -> None:
     class FakeClass:
         pass
 
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
@@ -367,7 +367,7 @@ def test_collect_violations_false_when_disabled(tmp: TempDir) -> None:
 def test_check_fn_violations_class_method_dict_parametrize() -> None:
     """Class method with dict-parametrize produces DICT_PARAMETRIZE violation."""
 
-    def test_method(self):
+    def test_method(self: object) -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_or_create
@@ -397,7 +397,7 @@ def test_check_fn_violations_class_method_missing_mark_reason() -> None:
     import oxitest
 
     @oxitest.mark.skip
-    def test_method(self):
+    def test_method(self: object) -> None:
         pass
 
     path = "tests/test_cls.py"
@@ -514,13 +514,13 @@ def test_collect_async_class_method_sets_is_async(tmp: TempDir) -> None:
 def test_module_members_yields_test_functions_only() -> None:
     mod = ModuleType("fake")
 
-    def test_one():
+    def test_one() -> None:
         pass
 
-    def test_two():
+    def test_two() -> None:
         pass
 
-    def helper():
+    def helper() -> None:
         pass
 
     mod.__dict__["test_one"] = test_one
@@ -534,7 +534,7 @@ def test_module_members_yields_test_functions_only() -> None:
 
 
 def test_collect_items_returns_collected_items() -> None:
-    def fake_fn():
+    def fake_fn() -> None:
         pass
 
     lineno = fake_fn.__code__.co_firstlineno
@@ -623,7 +623,7 @@ def test_extract_module_marks_invalid_entry() -> None:
 def test_apply_module_marks_prepends_to_unmarked_fn() -> None:
     """Module marks are added to functions with no per-test marks."""
 
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     module_marks = [MarkInfo("slow", (), MappingProxyType({}))]
@@ -638,7 +638,7 @@ def test_apply_module_marks_per_test_overrides_same_name() -> None:
     import oxitest
 
     @oxitest.mark.timeout(5)
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     module_marks = [MarkInfo("timeout", (), MappingProxyType({"seconds": 120}))]
@@ -659,7 +659,7 @@ def test_apply_module_marks_non_conflicting_added() -> None:
     import oxitest
 
     @oxitest.mark.timeout(5)
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     module_marks = [MarkInfo("slow", (), MappingProxyType({}))]
@@ -673,7 +673,7 @@ def test_apply_module_marks_non_conflicting_added() -> None:
 def test_apply_module_marks_empty_list_is_noop() -> None:
     """Empty module_marks list does not modify functions."""
 
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     _apply_module_marks([("test_fn", test_fn)], [])

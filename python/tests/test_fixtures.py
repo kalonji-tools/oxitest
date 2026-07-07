@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+from collections.abc import Generator
+from typing import Never
 
 import oxitest
 from oxitest import Fixture, Fixtures, WarnCapture, helpers, raises
@@ -42,7 +44,7 @@ def test_mark_attribute_callable_without_error() -> None:
 
 def test_mark_used_as_decorator_returns_function() -> None:
     @oxitest.mark.skip
-    def fn():
+    def fn() -> None:
         pass
 
     assert callable(fn), (
@@ -232,7 +234,7 @@ def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
 def test_function_scope_new_instance_per_resolve() -> None:
     calls = []
 
-    def factory():
+    def factory() -> int:
         calls.append(1)
         return len(calls)
 
@@ -260,7 +262,7 @@ def test_function_scope_new_instance_per_resolve() -> None:
 def test_yield_fixture_function_scope_teardown() -> None:
     torn_down = []
 
-    def factory():
+    def factory() -> Generator[str]:
         yield "value"
         torn_down.append(True)
 
@@ -349,7 +351,7 @@ def test_dag_fixture_depending_on_fixture() -> None:
 def test_autouse_runs_side_effects_without_being_in_kwargs() -> None:
     calls = []
 
-    def setup():
+    def setup() -> None:
         calls.append(1)
 
     session = helpers.common.make_session(
@@ -358,7 +360,7 @@ def test_autouse_runs_side_effects_without_being_in_kwargs() -> None:
         )
     )
 
-    def fn():
+    def fn() -> None:
         pass  # does NOT request 'setup'
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -375,7 +377,7 @@ def test_autouse_runs_side_effects_without_being_in_kwargs() -> None:
 def test_autouse_teardown_still_runs() -> None:
     torn_down = []
 
-    def setup():
+    def setup() -> Generator[None]:
         yield
         torn_down.append(True)
 
@@ -385,7 +387,7 @@ def test_autouse_teardown_still_runs() -> None:
         )
     )
 
-    def fn():
+    def fn() -> None:
         pass
 
     _, fn_teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -434,7 +436,7 @@ def test_cycle_raises_fixture_cycle_error() -> None:
 
 
 def test_setup_error_raises_fixture_setup_error() -> None:
-    def bad():
+    def bad() -> Never:
         msg = "oops"
         raise ValueError(msg)
 
@@ -567,7 +569,7 @@ def test_fixtures_bare_decorator_registers_def() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
-    def my_fixture():
+    def my_fixture() -> int:
         return 42
 
     assert len(fx._defs) == 1, (
@@ -593,7 +595,7 @@ def test_fixtures_autouse() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(autouse=True)
-    def auto():
+    def auto() -> None:
         pass
 
     assert fx._defs[0].autouse is True, (
@@ -606,7 +608,7 @@ def test_fixtures_name_override() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(name="renamed")
-    def original():
+    def original() -> None:
         pass
 
     assert fx._defs[0].name == "renamed", (
@@ -619,7 +621,7 @@ def test_fixtures_stamps_fixture_name_for_inject_compat() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
-    def my_fixture():
+    def my_fixture() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -634,7 +636,7 @@ def test_fixtures_name_override_stamps_fixture_name() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture(name="renamed")
-    def original():
+    def original() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -650,7 +652,7 @@ def test_fixtures_does_not_stamp_oxitest_fixture_attr() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
-    def my_fixture():
+    def my_fixture() -> None:
         pass
 
     assert not hasattr(my_fixture, "_oxitest_fixture"), (
@@ -663,11 +665,11 @@ def test_fixtures_multiple_registrations() -> None:
     fx = oxitest.Fixtures()
 
     @fx.fixture
-    def a():
+    def a() -> None:
         pass
 
     @fx.fixture
-    def b():
+    def b() -> None:
         pass
 
     assert len(fx._defs) == 2, (
@@ -712,7 +714,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
     )
 
     # param 'numbers' has no annotation — should raise a helpful error
-    def test_fn(numbers) -> None:  # type: ignore[annotation-unchecked]
+    def test_fn(numbers) -> None:
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
@@ -931,7 +933,7 @@ def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
 def test_shared_fixture_teardown_runs_on_end_session() -> None:
     torn_down: list[bool] = []
 
-    def factory():  # type: ignore[return]
+    def factory() -> Generator[str]:  # type: ignore[return]
         yield "v"
         torn_down.append(True)
 

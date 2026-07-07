@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from types import MappingProxyType
+from typing import Any
 
 import oxitest
 from oxitest import TempDir, helpers, parametrize
@@ -21,6 +23,7 @@ from oxitest._bridge.result import (
     FailedResult,
     PassedResult,
     SkippedResult,
+    TestResult,
     WarnedResult,
 )
 
@@ -33,7 +36,7 @@ def test_mark_info_stores_name_args_kwargs() -> None:
 
 
 def test_append_mark_creates_list_on_first_call() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
@@ -49,7 +52,7 @@ def test_append_mark_creates_list_on_first_call() -> None:
 
 
 def test_append_mark_stacks_multiple_marks() -> None:
-    def fn():
+    def fn() -> None:
         pass
 
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
@@ -63,7 +66,7 @@ def test_append_mark_stacks_multiple_marks() -> None:
 
 def test_mark_bare_decorator_stamps_function() -> None:
     @oxitest.mark.slow
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -83,7 +86,7 @@ def test_mark_bare_decorator_stamps_function() -> None:
 
 def test_mark_parameterised_decorator_stores_args() -> None:
     @oxitest.mark.skip(reason="not ready")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -99,7 +102,7 @@ def test_mark_parameterised_decorator_stores_args() -> None:
 
 def test_mark_skip_when_true_stores_via_decorator() -> None:
     @oxitest.mark.skip(when=True, reason="always skip")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -115,13 +118,13 @@ def test_skip_mark_rejects_positional_args() -> None:
     with oxitest.raises(TypeError, match="positional"):
 
         @oxitest.mark.skip(True, reason="nope")
-        def test_fn():
+        def test_fn() -> None:
             pass
 
 
 def test_skip_mark_when_true_attaches_mark() -> None:
     @oxitest.mark.skip(when=True, reason="not ready")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -138,7 +141,7 @@ def test_skip_mark_when_true_attaches_mark() -> None:
 
 def test_skip_mark_when_false_does_not_attach() -> None:
     @oxitest.mark.skip(when=False, reason="never")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -150,7 +153,7 @@ def test_skip_mark_when_false_does_not_attach() -> None:
 
 def test_skip_mark_bare_still_works() -> None:
     @oxitest.mark.skip
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -167,7 +170,7 @@ def test_skip_mark_bare_still_works() -> None:
 
 def test_skip_mark_empty_parens_same_as_bare() -> None:
     @oxitest.mark.skip()
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -184,7 +187,7 @@ def test_skip_mark_empty_parens_same_as_bare() -> None:
 
 def test_skip_mark_reason_only() -> None:
     @oxitest.mark.skip(reason="WIP")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -199,13 +202,13 @@ def test_skip_mark_rejects_unknown_kwargs() -> None:
     with oxitest.raises(TypeError, match="unexpected keyword"):
 
         @oxitest.mark.skip(bogus=True)
-        def test_fn():
+        def test_fn() -> None:
             pass
 
 
 def test_mark_xfail_stores_strict_false() -> None:
     @oxitest.mark.xfail(strict=False, reason="flaky")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -220,7 +223,7 @@ def test_mark_xfail_stores_strict_false() -> None:
 
 def test_mark_usefixtures_stores_fixture_names() -> None:
     @oxitest.mark.usefixtures("db", "cache")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -235,7 +238,7 @@ def test_mark_usefixtures_stores_fixture_names() -> None:
 def test_mark_stacking_two_decorators() -> None:
     @oxitest.mark.slow
     @oxitest.mark.integration
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -353,7 +356,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
     reg = FixtureRegistry()
     log: list[str] = []
 
-    def side_effect_fixture():
+    def side_effect_fixture() -> None:
         log.append("setup")
 
     reg.register(helpers.common.make_fixture_def("my_fixture", side_effect_fixture))
@@ -420,7 +423,7 @@ def test_skip_when_false_not_in_marks() -> None:
     """when=False means no mark attached, so handler is never invoked."""
 
     @oxitest.mark.skip(when=False, reason="never")
-    def test_fn():
+    def test_fn() -> None:
         pass
 
     from oxitest._bridge._fn_metadata import get_metadata
@@ -567,7 +570,9 @@ def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
 class _FakePluginWrapper:
     marker = "custom_mark"
 
-    def wrap(self, next_fn, args):
+    def wrap(
+        self, next_fn: Callable[[], TestResult], args: dict[int | str, Any]
+    ) -> TestResult:
         result = next_fn()
         return dataclasses.replace(result, message=f"wrapped:{args}")
 

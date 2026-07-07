@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Never
 
 from oxitest import raises, warns
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
@@ -14,7 +15,7 @@ def test_asyncio_backend_name() -> None:
 def test_asyncio_backend_runs_coroutine() -> None:
     backend = AsyncioBackend()
 
-    async def coro():
+    async def coro() -> int:
         return 42
 
     result = backend.run(coro())
@@ -24,7 +25,7 @@ def test_asyncio_backend_runs_coroutine() -> None:
 def test_asyncio_backend_propagates_exception() -> None:
     backend = AsyncioBackend()
 
-    async def coro():
+    async def coro() -> Never:
         msg = "boom"
         raise ValueError(msg)
 
@@ -44,7 +45,7 @@ def test_asyncio_backend_creates_shared_session() -> None:
 def test_shared_session_runs_coroutine() -> None:
     session = AsyncioSharedSession()
 
-    async def coro():
+    async def coro() -> int:
         return 99
 
     result = session.run(coro())
@@ -61,8 +62,8 @@ def test_shared_session_close_is_idempotent() -> None:
 def test_shared_session_cleans_stray_tasks() -> None:
     session = AsyncioSharedSession()
 
-    async def spawner():
-        async def background():
+    async def spawner() -> str:
+        async def background() -> None:
             await asyncio.sleep(999)
 
         asyncio.ensure_future(background())  # noqa: RUF006 — intentional leak for detection test

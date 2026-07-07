@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from oxitest import helpers
-from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
 from oxitest._bridge._fixture_validator import FixtureValidator
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge.plugin_loader import PluginRegistry
 
 
-def _make_validator(*defs) -> FixtureValidator:
+def _make_validator(*defs: FixtureDef[object]) -> FixtureValidator:
     """Create a FixtureValidator from FixtureDefs."""
     reg = FixtureRegistry()
     for d in defs:

@@ -28,7 +28,9 @@ class _PluginType:
     """Marker type for plugin fixture tests."""
 
 
-def _make_instantiator(*defs) -> tuple[FixtureInstantiator, FixtureRegistry]:
+def _make_instantiator(
+    *defs: FixtureDef,
+) -> tuple[FixtureInstantiator, FixtureRegistry]:
     """Create an Instantiator + its registry."""
     reg = FixtureRegistry()
     for d in defs:
@@ -181,25 +183,25 @@ def test_resolve_by_source_plugin() -> None:
 
     class FakeProvider:
         @property
-        def name(self):
+        def name(self) -> str:
             return "fake"
 
         @property
-        def fixture_type(self):
+        def fixture_type(self) -> type[_PluginType]:
             return _PluginType
 
         @property
-        def scope(self):
+        def scope(self) -> str:
             return "each"
 
         @property
-        def autouse(self):
+        def autouse(self) -> bool:
             return False
 
-        def create(self, ctx):
+        def create(self, ctx: object) -> str:
             return "plugin_value"
 
-        def teardown(self, value):
+        def teardown(self, value: object) -> None:
             pass
 
     defn = FixtureDef(

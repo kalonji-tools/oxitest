@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from oxitest._bridge._async_backend import AsyncioBackend
+from collections.abc import AsyncGenerator, Coroutine
+from typing import Any
+
+from oxitest._bridge._async_backend import AsyncioBackend, SharedAsyncSession
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
 
 # ── Stub backend / session ────────────────────────────────────────────────────
 
 
-def _exhaust_coro(coro):
+def _exhaust_coro(coro: Coroutine[Any, Any, Any]) -> Any:
     """Synchronously exhaust a coroutine (single-step only)."""
     try:
         coro.send(None)
@@ -24,11 +27,11 @@ class _StubSession:
     def __init__(self) -> None:
         self.run_count = 0
 
-    def run(self, coro):
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
         self.run_count += 1
         return _exhaust_coro(coro)
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
@@ -41,12 +44,15 @@ class _StubBackend:
         self._session = _StubSession()
         self.create_count = 0
 
-    def create_shared_session(self):
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        return _exhaust_coro(coro)
+
+    def create_shared_session(self) -> SharedAsyncSession:
         self.create_count += 1
         return self._session
 
 
-def _make_stub_backend():
+def _make_stub_backend() -> tuple[_StubBackend, _StubSession]:
     """Return a stub AsyncBackend and its shared session."""
     backend = _StubBackend()
     session = backend._session
@@ -97,7 +103,7 @@ def test_resolve_creates_session_lazily() -> None:
 
     assert mgr.session is None, "session should be None before resolve"
 
-    async def my_fixture():
+    async def my_fixture() -> int:
         return 42
 
     value = mgr.resolve(my_fixture, {})
@@ -111,10 +117,10 @@ def test_resolve_reuses_existing_session() -> None:
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
-    async def fx_a():
+    async def fx_a() -> str:
         return "a"
 
-    async def fx_b():
+    async def fx_b() -> str:
         return "b"
 
     mgr.resolve(fx_a, {})
@@ -127,7 +133,7 @@ def test_resolve_sets_was_used() -> None:
     backend, _ = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
-    async def my_fixture():
+    async def my_fixture() -> int:
         return 1
 
     mgr.resolve(my_fixture, {})
@@ -140,7 +146,7 @@ def test_resolve_passes_deps_to_fixture() -> None:
     mgr = SharedAsyncManager(backend)
     received = {}
 
-    async def my_fixture(a: int = 0, b: str = ""):
+    async def my_fixture(a: int = 0, b: str = "") -> str:
         received["a"] = a
         received["b"] = b
         return "ok"
@@ -156,7 +162,7 @@ def test_resolve_async_generator_tracks_teardown() -> None:
     mgr = SharedAsyncManager(backend)
     torn_down = []
 
-    async def my_fixture():
+    async def my_fixture() -> AsyncGenerator[int, None]:
         yield 99
         torn_down.append(True)
 
@@ -175,7 +181,7 @@ def test_resolve_plain_coroutine() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
-    async def my_fixture():
+    async def my_fixture() -> str:
         return "hello"
 
     value = mgr.resolve(my_fixture, {})
@@ -189,7 +195,7 @@ def test_resolve_sync_function_passthrough() -> None:
     backend, _ = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
-    def my_fixture():
+    def my_fixture() -> str:
         return "sync_val"
 
     value = mgr.resolve(my_fixture, {})
@@ -204,7 +210,7 @@ def test_cleanup_closes_session() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
-    async def my_fixture():
+    async def my_fixture() -> int:
         return 1
 
     mgr.resolve(my_fixture, {})
@@ -230,11 +236,11 @@ def test_cleanup_drains_teardowns_in_reverse() -> None:
     mgr = SharedAsyncManager(backend)
     order: list[str] = []
 
-    async def fx_a():
+    async def fx_a() -> AsyncGenerator[str, None]:
         yield "a"
         order.append("a_teardown")
 
-    async def fx_b():
+    async def fx_b() -> AsyncGenerator[str, None]:
         yield "b"
         order.append("b_teardown")
 
@@ -267,7 +273,7 @@ def test_resolve_raises_fixture_setup_error_on_exception() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
-    async def bad_fixture():
+    async def bad_fixture() -> None:
         msg = "boom"
         raise ValueError(msg)
 
@@ -283,7 +289,7 @@ def test_async_generator_fixture_teardown_exception_reported() -> None:
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
-    async def bad_teardown():
+    async def bad_teardown() -> AsyncGenerator[int, None]:
         yield 42
         msg = "teardown exploded"
         raise RuntimeError(msg)

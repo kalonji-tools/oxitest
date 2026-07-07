@@ -33,7 +33,7 @@ class Case:
     none=Case(inner_type=type(None), expected_inner=type(None)),
     test_context=Case(inner_type=_TestCtx, expected_inner=_TestCtx),
 )
-def test_fixture_type_is_annotated(inner_type, expected_inner) -> None:
+def test_fixture_type_is_annotated(inner_type: type, expected_inner: type) -> None:
     result = Fixture[inner_type]
     assert get_origin(result) is Annotated, (
         f"Fixture[{inner_type.__name__}] should have Annotated origin, "

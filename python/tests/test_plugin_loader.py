@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import Never
 
 import oxitest
 from oxitest import helpers, raises
@@ -52,7 +53,7 @@ def test_load_valid_plugin() -> None:
 def test_load_plugin_receives_config() -> None:
     received: dict = {}
 
-    def entry(config=None):
+    def entry(config: dict[str, object] | None = None) -> Plugin:
         received["config"] = config
         return Plugin()
 
@@ -98,7 +99,7 @@ def test_load_wrong_return_type_raises() -> None:
 
 @oxitest.mark.inprocess
 def test_load_entry_raises_wraps_error() -> None:
-    def bad_entry(**_: object):
+    def bad_entry(**_: object) -> Never:
         msg = "boom"
         raise ValueError(msg)
 
@@ -115,14 +116,14 @@ def test_load_entry_raises_wraps_error() -> None:
 @oxitest.mark.inprocess
 def test_registry_aggregates_across_plugins() -> None:
     class FakeBackend:
-        def install(self):
+        def install(self) -> None:
             pass
 
-        def uninstall(self):
+        def uninstall(self) -> None:
             pass
 
         @property
-        def records(self):
+        def records(self) -> list[object]:
             return []
 
     mod1 = types.ModuleType("plug1")
@@ -224,10 +225,10 @@ def test_fixture_provider_scope_default() -> None:
         def fixture_type(self) -> type:
             return int
 
-        def create(self, ctx):
+        def create(self, ctx: object) -> int:
             return 42
 
-        def teardown(self, value):
+        def teardown(self, value: object) -> None:
             pass
 
     provider = MinimalProvider()
@@ -256,10 +257,10 @@ def test_fixture_provider_scope_custom() -> None:
         def autouse(self) -> bool:
             return True
 
-        def create(self, ctx):
+        def create(self, ctx: object) -> int:
             return 42
 
-        def teardown(self, value):
+        def teardown(self, value: object) -> None:
             pass
 
     provider = SessionProvider()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from oxitest import TempDir, helpers
 from oxitest._bridge._assert_error import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge._diagnostics import (
@@ -14,6 +16,7 @@ from oxitest._bridge.result import (
     FailedResult,
     PassedResult,
     SkippedResult,
+    TestResult,
     WarnedResult,
 )
 
@@ -112,10 +115,10 @@ def test_base_exception_not_exception_returns_none() -> None:
 def test_compose_wraps_inner() -> None:
     """wrapper sees inner's result and can transform it."""
 
-    def inner():
+    def inner() -> PassedResult:
         return PassedResult()
 
-    def transform(next_fn):
+    def transform(next_fn: Callable[[], TestResult]) -> WarnedResult:
         next_fn()
         return WarnedResult(message="wrapped")
 
@@ -127,10 +130,10 @@ def test_compose_wraps_inner() -> None:
 
 
 def test_compose_passes_through() -> None:
-    def inner():
+    def inner() -> FailedResult:
         return FailedResult()
 
-    def wrapper(next_fn):
+    def wrapper(next_fn: Callable[[], TestResult]) -> TestResult:
         return next_fn()
 
     composed = _compose(wrapper, inner)
@@ -144,15 +147,15 @@ def test_compose_chains_left_to_right() -> None:
     """Last appended wrapper = outermost. _compose is called in reversed."""
     calls = []
 
-    def w1(next_fn):
+    def w1(next_fn: Callable[[], TestResult]) -> TestResult:
         calls.append("w1")
         return next_fn()
 
-    def w2(next_fn):
+    def w2(next_fn: Callable[[], TestResult]) -> TestResult:
         calls.append("w2")
         return next_fn()
 
-    def base():
+    def base() -> PassedResult:
         return PassedResult()
 
     # Manually compose in reverse order (w2 then w1) to mirror the
@@ -190,7 +193,7 @@ def test_repr_safe_truncates_long_string() -> None:
 def test_frames_captured_on_assertion_error() -> None:
     """_handle_assertion_error populates frames from the traceback."""
 
-    def inner():
+    def inner() -> None:
         assert False, "boom"
 
     try:
@@ -213,7 +216,7 @@ def test_frames_captured_on_assertion_error() -> None:
 def test_frames_captured_on_runtime_exception() -> None:
     """_handle_runtime_exception populates frames from the traceback."""
 
-    def blow_up():
+    def blow_up() -> None:
         msg = "kaboom"
         raise ValueError(msg)
 
