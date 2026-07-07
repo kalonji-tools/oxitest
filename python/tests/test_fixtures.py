@@ -714,7 +714,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
     )
 
     # param 'numbers' has no annotation — should raise a helpful error
-    def test_fn(numbers) -> None:
+    def test_fn(numbers) -> None:  # noqa: ANN001 — intentionally unannotated to test UnannotatedFixtureParamError
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
