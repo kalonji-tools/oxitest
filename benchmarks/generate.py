@@ -39,7 +39,7 @@ def _oxitest_conftest() -> str:
 
 
         @bench.fixture
-        def data() -> dict:  # type: ignore[return]
+        def data() -> dict:
             d: dict = {}
             yield d
             d.clear()

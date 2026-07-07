@@ -476,7 +476,7 @@ def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None
         _registry = registry
         _module_cache = None
 
-    _, violations = collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
+    _, violations = collect_module(path, session=_FakeSession())
     registrar_viols = [
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
@@ -964,7 +964,7 @@ class _BadReturnCollector:
     """Collector that returns non-CollectedItem values."""
 
     def collect(self, path: str, module: object) -> list[object]:
-        return ["not-a-collected-item", 42]  # type: ignore[list-item]
+        return ["not-a-collected-item", 42]
 
 
 class _GoodCollector:
@@ -1186,7 +1186,7 @@ def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
         _registry = registry
         _module_cache = None
 
-    _, violations = collect_module(path, session=_FakeSession())  # type: ignore[arg-type]
+    _, violations = collect_module(path, session=_FakeSession())
     registrar_viols = [
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]

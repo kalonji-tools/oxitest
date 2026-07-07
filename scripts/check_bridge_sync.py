@@ -233,7 +233,7 @@ def _check_reporter_pairs(python: dict[str, set[str]]) -> int:
     reporter_rust = parse_rust_structs(REPORTER_RUST_PATH)
     for rust_name, py_name in REPORTER_PAIRS.items():
         rust_fields = reporter_rust.get(rust_name)
-        py_fields = python.get(py_name)  # ty: ignore[invalid-assignment]
+        py_fields = python.get(py_name)
         if rust_fields is None:
             print(f"ERROR: Rust struct '{rust_name}' not found in {REPORTER_RUST_PATH}")
             errors += 1

@@ -184,7 +184,7 @@ def test_session_plugin_without_scope_autouse() -> None:
         """PluginRegistry subclass that injects a single fixture provider."""
 
         @property
-        def fixture_providers(self) -> tuple:  # type: ignore[override]
+        def fixture_providers(self) -> tuple:
             return (MinimalProvider(),)
 
     session = FixtureSession([], FakePluginRegistry())

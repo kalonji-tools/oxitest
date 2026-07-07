@@ -153,7 +153,7 @@ def _load_and_resolve(
     try:
         fixture_kwargs: dict[str, Any]
         fixture_kwargs, fn_teardowns = session.resolve_for_test(
-            fn,  # type: ignore[arg-type]
+            fn,
             meta,
             skip_names=fixref_names,
         )

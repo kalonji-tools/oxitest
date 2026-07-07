@@ -224,7 +224,7 @@ def test_create_session_populates_registry(tmp: TempDir) -> None:
     )
     session, _ = create_session([str(f)])
 
-    def fn(db: Fixture[int]) -> None:  # type: ignore[type-arg]
+    def fn(db: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
@@ -263,7 +263,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
     )
     session, _ = create_session([str(root_conf), str(sub_conf)])
 
-    def fn(val: Fixture[str]) -> None:  # type: ignore[type-arg]
+    def fn(val: Fixture[str]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(

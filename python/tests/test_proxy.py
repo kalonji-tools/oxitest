@@ -29,7 +29,7 @@ def test_frozen_proxy_raises_on_setattr() -> None:
 
     p = FrozenProxy(Obj())
     with raises(SharedFixtureMutationError, match="cannot set attribute 'x'"):
-        p.x = 1  # type: ignore[misc]
+        p.x = 1
 
 
 def test_frozen_proxy_raises_on_delattr() -> None:
@@ -38,19 +38,19 @@ def test_frozen_proxy_raises_on_delattr() -> None:
 
     p = FrozenProxy(Obj())
     with raises(SharedFixtureMutationError, match="cannot delete attribute 'x'"):
-        del p.x  # type: ignore[misc]
+        del p.x
 
 
 def test_frozen_proxy_raises_on_setitem() -> None:
     p = FrozenProxy({})
     with raises(SharedFixtureMutationError, match="cannot set item"):
-        p["k"] = 1  # type: ignore[index]
+        p["k"] = 1
 
 
 def test_frozen_proxy_raises_on_delitem() -> None:
     p = FrozenProxy({"k": 1})
     with raises(SharedFixtureMutationError, match="cannot delete item"):
-        del p["k"]  # type: ignore[attr-defined]
+        del p["k"]
 
 
 def test_frozen_proxy_repr() -> None:

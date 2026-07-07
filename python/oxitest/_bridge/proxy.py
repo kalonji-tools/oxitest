@@ -60,8 +60,8 @@ class FrozenProxy:
         if isinstance(other, FrozenProxy):
             return object.__getattribute__(self, "_wrapped") == object.__getattribute__(
                 other, "_wrapped"
-            )  # type: ignore[misc]
-        return object.__getattribute__(self, "_wrapped") == other  # type: ignore[misc]
+            )
+        return object.__getattribute__(self, "_wrapped") == other
 
     def __hash__(self) -> int:
         return hash(object.__getattribute__(self, "_wrapped"))
