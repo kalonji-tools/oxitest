@@ -177,9 +177,11 @@ def test_provider_import_error_without_coverage() -> None:
     import oxitest._bridge._coverage as _cov_mod
 
     provider = CoveragePyProvider()
-    with patch.object(_cov_mod, "_coverage", None):
-        with oxitest.raises(ImportError, match="pip install coverage"):
-            provider.start()
+    with (
+        patch.object(_cov_mod, "_coverage", None),
+        oxitest.raises(ImportError, match="pip install coverage"),
+    ):
+        provider.start()
 
 
 # ─── Worker coverage auto-detection tests ────────────────────────────────────

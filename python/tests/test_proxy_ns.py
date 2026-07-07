@@ -85,7 +85,8 @@ def test_fixtures_proxy_unknown_namespace_raises() -> None:
     proxy = FixturesProxy(session, "/fake/test.py", [])
     try:
         _ = proxy.unknown_ns
-        assert False, "expected AttributeError for unknown namespace 'unknown_ns'"
+        msg = "expected AttributeError for unknown namespace 'unknown_ns'"
+        raise AssertionError(msg)
     except AttributeError as exc:
         assert "unknown_ns" in str(exc), (
             f"AttributeError should mention 'unknown_ns', got: {exc}"
@@ -150,7 +151,8 @@ def test_oxi_proxy_unknown_raises_with_available_list(
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     try:
         _ = proxy.unknown
-        assert False, "expected AttributeError for unknown oxi builtin 'unknown'"
+        msg = "expected AttributeError for unknown oxi builtin 'unknown'"
+        raise AssertionError(msg)
     except AttributeError as exc:
         assert "unknown" in str(exc), (
             f"AttributeError should mention the unknown name 'unknown', got: {exc}"

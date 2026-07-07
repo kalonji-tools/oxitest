@@ -39,16 +39,16 @@ def test_fixture_scope_uses_parent_teardowns_when_nested() -> None:
     outer_teardowns: list[Callable[[], None]] = []
     inner_teardowns: list[Callable[[], None]] = []
     session = object()
-    with _fixture_scope(session, "/outer.py", outer_teardowns):
-        with _fixture_scope(session, "/inner.py", inner_teardowns):
-            ctx = _fixture_context.get(None)
-            assert ctx is not None, "inner context should be set"
-            assert ctx.fn_teardowns is outer_teardowns, (
-                "nested scope should use parent's fn_teardowns, not its own"
-            )
-            assert ctx.module_path == "/inner.py", (
-                "module_path should be the inner scope's"
-            )
+    with (
+        _fixture_scope(session, "/outer.py", outer_teardowns),
+        _fixture_scope(session, "/inner.py", inner_teardowns),
+    ):
+        ctx = _fixture_context.get(None)
+        assert ctx is not None, "inner context should be set"
+        assert ctx.fn_teardowns is outer_teardowns, (
+            "nested scope should use parent's fn_teardowns, not its own"
+        )
+        assert ctx.module_path == "/inner.py", "module_path should be the inner scope's"
 
 
 def test_fixture_scope_uses_own_teardowns_when_no_parent() -> None:

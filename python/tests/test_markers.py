@@ -117,7 +117,7 @@ def test_mark_skip_when_true_stores_via_decorator() -> None:
 def test_skip_mark_rejects_positional_args() -> None:
     with oxitest.raises(TypeError, match="positional"):
 
-        @oxitest.mark.skip(True, reason="nope")
+        @oxitest.mark.skip(True, reason="nope")  # noqa: FBT003
         def test_fn() -> None:
             pass
 

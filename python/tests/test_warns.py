@@ -26,9 +26,11 @@ def test_warns_match_passes_when_pattern_found() -> None:
 
 
 def test_warns_match_fails_when_pattern_not_found() -> None:
-    with raises(AssertionError, match="not found"):
-        with warns(UserWarning, match="specific"):
-            warnings.warn("totally different", UserWarning)
+    with (
+        raises(AssertionError, match="not found"),
+        warns(UserWarning, match="specific"),
+    ):
+        warnings.warn("totally different", UserWarning)
 
 
 def test_warns_subclass_caught_by_parent_category() -> None:
