@@ -528,7 +528,7 @@ def test_extract_fixture_type_from_yields() -> None:
 def test_extract_fixture_type_missing_raises() -> None:
     """No return annotation raises an error."""
 
-    def my_fixture():
+    def my_fixture():  # noqa: ANN202 — intentionally unannotated to test error path
         pass
 
     with raises(Exception, match="return"):
@@ -550,7 +550,7 @@ def test_extract_depends_on() -> None:
 def test_extract_depends_on_skips_unannotated() -> None:
     """Unannotated parameters are not included in depends_on."""
 
-    def my_fixture(db, x: int) -> DBSession:
+    def my_fixture(db, x: int) -> DBSession:  # noqa: ANN001 — intentionally unannotated to test skip behavior
         raise NotImplementedError
 
     deps = _extract_depends_on(my_fixture)

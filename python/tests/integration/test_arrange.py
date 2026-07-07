@@ -3,7 +3,7 @@
 from oxitest import TempDir, helpers
 
 
-def _write_shared_suite(tmp: TempDir):
+def _write_shared_suite(tmp: TempDir) -> None:
     """Write a test suite with a shared fixture and mixed tests."""
     (tmp / "conftest.py").write_text(
         "import oxitest as oxi\n"
