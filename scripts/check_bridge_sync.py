@@ -323,6 +323,7 @@ def _check_task_format() -> int:
 
 
 def main() -> int:
+    """Parse Rust/Python structs, compare for sync, and return mismatch count."""
     rust = parse_rust_structs(RUST_PATH)
     python = parse_python_classes(PYTHON_PATH)
     errors = 0

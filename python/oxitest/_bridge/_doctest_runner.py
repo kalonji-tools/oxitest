@@ -120,6 +120,7 @@ def run_doctest(module_path: str, name: str) -> TestResult:
 
     Returns:
         TestResult with pass/fail status and diagnostic info.
+
     """
     result = _import_doctest_module(module_path)
     if isinstance(result, ErrorResult):

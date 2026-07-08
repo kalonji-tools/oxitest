@@ -136,7 +136,7 @@ def run(task: WorkerTask) -> None:
 
 
 def main() -> None:
-    """Persistent worker: read newline-delimited JSON tasks from stdin until EOF."""
+    """Read newline-delimited JSON tasks from stdin, write one result line per test."""
     _maybe_start_coverage()
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the

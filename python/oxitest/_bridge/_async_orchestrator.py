@@ -117,6 +117,7 @@ class SharedAsyncManager:
 
         Raises:
             FixtureSetupError: If the fixture raises during setup.
+
         """
         if self._session is None:
             self._session = self._backend.create_shared_session()

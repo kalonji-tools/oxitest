@@ -1,3 +1,5 @@
+"""Tests for parametrize decorator: dataclass, dict, partial, and composed modes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,12 +15,16 @@ from oxitest._bridge.parametrize import ComposedCases, DataclassCases, DictCases
 
 @dataclass(frozen=True)
 class AddCase:
+    """Frozen dataclass used as parametrize case type in addition tests."""
+
     x: int
     y: int
     expected: int
 
 
 def test_parametrize_stamps_function() -> None:
+    """@parametrize stamps a DataclassCases tuple on the function's metadata."""
+
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
@@ -46,6 +52,8 @@ def test_parametrize_stamps_function() -> None:
 
 
 def test_parametrize_multiple_cases() -> None:
+    """@parametrize with multiple keyword cases stores all of them in the metadata."""
+
     @parametrize(
         basic=AddCase(x=1, y=2, expected=3),
         zero_sum=AddCase(x=0, y=0, expected=0),
@@ -72,6 +80,7 @@ def test_parametrize_multiple_cases() -> None:
 
 
 def test_parametrize_rejects_non_dataclass() -> None:
+    """@parametrize rejects a case value that is not a frozen dataclass or dict."""
     with raises(
         TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
@@ -82,6 +91,8 @@ def test_parametrize_rejects_non_dataclass() -> None:
 
 
 def test_parametrize_rejects_non_frozen_dataclass() -> None:
+    """@parametrize rejects a mutable (non-frozen) dataclass instance."""
+
     @dataclass
     class Mutable:
         x: int
@@ -94,6 +105,7 @@ def test_parametrize_rejects_non_frozen_dataclass() -> None:
 
 
 def test_parametrize_rejects_empty_cases() -> None:
+    """@parametrize with no keyword arguments raises TypeError."""
     with raises(TypeError, match="at least one case"):
 
         @parametrize()
@@ -102,6 +114,8 @@ def test_parametrize_rejects_empty_cases() -> None:
 
 
 def test_parametrize_rejects_wrong_instance_type() -> None:
+    """@parametrize rejects a case that is an instance of a different dataclass type."""
+
     @dataclass(frozen=True)
     class OtherCase:
         z: int
@@ -117,6 +131,7 @@ def test_parametrize_rejects_wrong_instance_type() -> None:
 
 
 def test_collect_parametrize_expands_to_n_items(tmp: TempDir) -> None:
+    """collect_module expands an N-case @parametrize into N CollectedItems."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -147,6 +162,7 @@ def test_collect_parametrize_expands_to_n_items(tmp: TempDir) -> None:
 
 
 def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
+    """Each collected parametrize item carries field values as param_values pairs."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -176,6 +192,7 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
 
 
 def test_collect_non_parametrize_has_none_param_id(tmp: TempDir) -> None:
+    """Non-parametrized tests have param_id=None and empty param_values."""
     path = helpers.common.write_test_module(tmp, "def test_foo(): pass\n")
     items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
@@ -228,9 +245,7 @@ def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
 
 
 def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
-    """A param with a wrong annotation (e.g. int instead of Fixture[int]) whose name
-    matches a registered fixture raises UnannotatedFixtureParamError — the check covers
-    both no-annotation and wrong-annotation cases."""
+    """Wrong annotation matching a fixture raises UnannotatedFixtureParamError."""
     from oxitest._bridge._errors import UnannotatedFixtureParamError
 
     registry = FixtureRegistry()
@@ -259,6 +274,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
 
 
 def test_executor_runs_parametrize_case(tmp: TempDir) -> None:
+    """Executor injects parametrize field values; the test passes when correct."""
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -281,6 +297,7 @@ def test_executor_runs_parametrize_case(tmp: TempDir) -> None:
 
 
 def test_executor_parametrize_failure(tmp: TempDir) -> None:
+    """The executor returns failed status when a parametrize case assertion fails."""
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -487,6 +504,8 @@ def test_parametrize_rejects_non_callable_for_fixture_ref_field() -> None:
 
 
 def test_parametrize_dict_mode_stamps_function() -> None:
+    """@parametrize with dict values stamps DictCases on the function's metadata."""
+
     @parametrize(basic={"x": 1, "y": 2, "expected": 3})
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
@@ -507,6 +526,8 @@ def test_parametrize_dict_mode_stamps_function() -> None:
 
 
 def test_parametrize_dict_mode_multiple_cases() -> None:
+    """Dict mode with multiple cases stores all entries in the DictCases mapping."""
+
     @parametrize(
         basic={"x": 1, "y": 2, "expected": 3},
         zero_sum={"x": 0, "y": 0, "expected": 0},
@@ -530,6 +551,7 @@ def test_parametrize_dict_mode_multiple_cases() -> None:
 
 
 def test_parametrize_dict_mode_rejects_extra_key() -> None:
+    """@parametrize(dict) raises TypeError when a dict key is not a test parameter."""
     with raises(TypeError, match="unexpected key"):
 
         @parametrize(basic={"x": 1, "y": 2, "expeced": 3})  # codespell:ignore expeced
@@ -538,6 +560,7 @@ def test_parametrize_dict_mode_rejects_extra_key() -> None:
 
 
 def test_parametrize_dict_mode_rejects_missing_key() -> None:
+    """@parametrize(dict) raises TypeError when a required parameter key is absent."""
     with raises(TypeError, match="missing key"):
 
         @parametrize(basic={"x": 1, "y": 2})
@@ -546,6 +569,7 @@ def test_parametrize_dict_mode_rejects_missing_key() -> None:
 
 
 def test_parametrize_dict_mode_rejects_non_dict_case() -> None:
+    """@parametrize rejects a case that is not a dict when other cases are dicts."""
     with raises(TypeError, match="must be a dict"):
 
         @parametrize(
@@ -640,6 +664,7 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
 
 
 def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
+    """collect_module expands an N-case dict @parametrize into N CollectedItems."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -662,6 +687,7 @@ def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
 
 
 def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir) -> None:
+    """Each dict parametrize item carries its values as param_values pairs."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -826,6 +852,7 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -
 
 
 def test_dict_cases_items_yields_repr_pairs() -> None:
+    """DictCases.items() yields (case_id, [(key, repr(val))...]) tuples."""
     dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     result = list(dc.items())
     assert result == [("basic", [("x", "1"), ("y", "2")])], (
@@ -836,6 +863,7 @@ def test_dict_cases_items_yields_repr_pairs() -> None:
 
 
 def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs() -> None:
+    """DictCases.resolve() returns the dict as kwargs with an empty fixrefs set."""
     dc = DictCases(cases=MappingProxyType({"basic": {"x": 1, "y": 2}}))
     kwargs, fixrefs = dc.resolve(lambda _x, _y: None, "basic")
     assert kwargs == {"x": 1, "y": 2}, f"resolve should return case dict, got {kwargs}"
@@ -843,6 +871,7 @@ def test_dict_cases_resolve_returns_kwargs_and_empty_fixrefs() -> None:
 
 
 def test_dataclass_cases_items_yields_field_repr_pairs() -> None:
+    """DataclassCases.items() yields (case_id, [(field, repr(val))...]) tuples."""
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -857,6 +886,7 @@ def test_dataclass_cases_items_yields_field_repr_pairs() -> None:
 
 
 def test_dataclass_cases_resolve_expanded_mode() -> None:
+    """DataclassCases.resolve() expands dataclass fields as individual kwargs."""
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -874,6 +904,7 @@ def test_dataclass_cases_resolve_expanded_mode() -> None:
 
 
 def test_dataclass_cases_resolve_compact_mode() -> None:
+    """DataclassCases.resolve() passes the whole dataclass as one kwarg (compact)."""
     dc = DataclassCases(
         cases=MappingProxyType({"basic": AddCase(x=1, y=2, expected=3)}),
         param_type=AddCase,
@@ -891,6 +922,7 @@ def test_dataclass_cases_resolve_compact_mode() -> None:
 
 
 def test_dict_parametrize_rejects_extra_key(tmp: TempDir) -> None:
+    """collect_module raises ImportError when a dict case has an unexpected key."""
     code = (
         "import oxitest\n"
         "\n"
@@ -903,6 +935,7 @@ def test_dict_parametrize_rejects_extra_key(tmp: TempDir) -> None:
 
 
 def test_dict_parametrize_rejects_missing_key(tmp: TempDir) -> None:
+    """collect_module raises ImportError when a dict case is missing a required key."""
     code = (
         "import oxitest\n"
         "\n"
@@ -915,6 +948,7 @@ def test_dict_parametrize_rejects_missing_key(tmp: TempDir) -> None:
 
 
 def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir) -> None:
+    """collect_module raises ImportError for a case that is a mutable dataclass."""
     code = (
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -932,6 +966,7 @@ def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir) -> None:
 
 
 def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
+    """collect_module raises ImportError when cases have mixed dataclass types."""
     code = (
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -955,13 +990,7 @@ def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
 
 
 def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> None:
-    """FixtureRef with namespace and session=None returns error.
-
-    When no session is available (session=None), the executor uses a
-    FixtureSession([]) which has no registry. Loading the conftest via
-    create_session provides the registry and namespace. Without it, the
-    fixture resolution fails.
-    """
+    """FixtureRef with namespace and session=None produces an error result."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -1008,6 +1037,7 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> No
 
 
 def test_parametrize_rejects_empty_cases_direct() -> None:
+    """Calling parametrize() directly with no args raises TypeError."""
     from oxitest import raises
     from oxitest._bridge.parametrize import parametrize
 
@@ -1016,6 +1046,7 @@ def test_parametrize_rejects_empty_cases_direct() -> None:
 
 
 def test_parametrize_rejects_non_dataclass_non_dict_direct() -> None:
+    """parametrize() with a non-dict, non-dataclass value raises TypeError."""
     from oxitest import raises
     from oxitest._bridge.parametrize import parametrize
 
@@ -1033,12 +1064,15 @@ def test_parametrize_rejects_non_dataclass_non_dict_direct() -> None:
 
 @dataclass
 class MathCase:
+    """Mutable dataclass used to test partial() composition with non-frozen types."""
+
     x: int
     y: int
     expected: int
 
 
 def test_partial_stores_target_type_and_fields() -> None:
+    """partial() stores the target type, provided field values, and field name set."""
     p = partial(MathCase, x=1, y=2)
 
     assert p.target_type is MathCase, (
@@ -1053,21 +1087,26 @@ def test_partial_stores_target_type_and_fields() -> None:
 
 
 def test_partial_rejects_non_dataclass() -> None:
+    """partial() rejects a target type that is not a dataclass."""
     with raises(TypeError, match="must be a dataclass"):
         partial(int, x=1)
 
 
 def test_partial_rejects_empty_fields() -> None:
+    """partial() with no field kwargs raises TypeError."""
     with raises(TypeError, match="at least one field"):
         partial(MathCase)
 
 
 def test_partial_rejects_unknown_field() -> None:
+    """partial() raises TypeError when a kwarg name is not a field on the dataclass."""
     with raises(TypeError, match="unknown field"):
         partial(MathCase, x=1, typo=2)
 
 
 def test_partial_detects_fixref_fields() -> None:
+    """partial() identifies FixtureRef fields and stores them in fixref_fields."""
+
     @dataclass
     class DbCase:
         db: FixtureRef[str]
@@ -1083,6 +1122,8 @@ def test_partial_detects_fixref_fields() -> None:
 
 
 def test_partial_rejects_non_callable_fixref() -> None:
+    """partial() raises TypeError when a FixtureRef field gets a non-callable value."""
+
     @dataclass
     class DbCase:
         db: FixtureRef[str]
@@ -1095,6 +1136,7 @@ def test_partial_rejects_non_callable_fixref() -> None:
 
 
 def test_partial_cases_items_yields_field_repr_pairs() -> None:
+    """ComposedCases.items() yields (case_id, [(field, repr(val))...]) per layer."""
     p = partial(MathCase, x=1, y=2, expected=3)
     pc = ComposedCases(
         cases=MappingProxyType({"add": p}),
@@ -1112,6 +1154,7 @@ def test_partial_cases_items_yields_field_repr_pairs() -> None:
 
 
 def test_parametrize_stacks_partial_layers() -> None:
+    """Two @parametrize(partial) decorators produce a 2-tuple of ComposedCases."""
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(pg=partial(MathCase, x=1))
@@ -1133,6 +1176,7 @@ def test_parametrize_stacks_partial_layers() -> None:
 
 
 def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
+    """A single @parametrize with full dataclass cases yields a 1-tuple."""
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
@@ -1153,6 +1197,7 @@ def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
 
 
 def test_parametrize_single_dict_is_1_tuple() -> None:
+    """A single @parametrize with a dict case produces a 1-tuple of DictCases."""
     from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic={"x": 1, "y": 2, "expected": 3})
@@ -1174,6 +1219,7 @@ def test_parametrize_single_dict_is_1_tuple() -> None:
 
 
 def test_parametrize_rejects_mixing_partial_and_full() -> None:
+    """Stacking partial and full dataclass @parametrize raises TypeError."""
     with raises(TypeError, match="cannot mix"):
 
         @parametrize(pg=partial(MathCase, x=1))
@@ -1183,6 +1229,8 @@ def test_parametrize_rejects_mixing_partial_and_full() -> None:
 
 
 def test_parametrize_rejects_partial_different_target_type() -> None:
+    """Stacking partial() layers with different dataclass types raises TypeError."""
+
     @dataclass
     class OtherCase:
         z: int
@@ -1196,6 +1244,7 @@ def test_parametrize_rejects_partial_different_target_type() -> None:
 
 
 def test_parametrize_rejects_overlapping_fields() -> None:
+    """Stacking partial() layers that assign the same field raises TypeError."""
     with raises(TypeError, match="overlap"):
 
         @parametrize(pg=partial(MathCase, x=1, y=2))
@@ -1208,6 +1257,7 @@ def test_parametrize_rejects_overlapping_fields() -> None:
 
 
 def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) -> None:
+    """Two stacked @parametrize layers produce the full cartesian product of cases."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1234,6 +1284,7 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) ->
 
 
 def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> None:
+    """Composed cases carry merged param_values from all contributing partial layers."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1261,6 +1312,7 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> N
 
 
 def test_collect_composed_rejects_single_partial_layer(tmp: TempDir) -> None:
+    """A single partial() layer with unfilled fields raises TypeError at collect."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1279,6 +1331,7 @@ def test_collect_composed_rejects_single_partial_layer(tmp: TempDir) -> None:
 
 
 def test_collect_composed_rejects_incomplete_fields(tmp: TempDir) -> None:
+    """Composed partial layers that leave a field unset raise TypeError at collect."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1299,6 +1352,7 @@ def test_collect_composed_rejects_incomplete_fields(tmp: TempDir) -> None:
 
 
 def test_collect_composed_3_layers(tmp: TempDir) -> None:
+    """Three stacked partial() layers correctly compose into one combined case."""
     path = helpers.common.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1324,6 +1378,7 @@ def test_collect_composed_3_layers(tmp: TempDir) -> None:
 
 
 def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
+    """Executor correctly injects merged field values from composed partial layers."""
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1348,6 +1403,7 @@ def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
 
 
 def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
+    """A wrong expected value in composed parametrize produces a failed result."""
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1371,6 +1427,7 @@ def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
 
 
 def test_executor_composed_with_fixture(tmp: TempDir) -> None:
+    """Composed partial cases combine correctly with injected Fixture[T] parameters."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -1402,6 +1459,7 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
 
 
 def test_executor_composed_compact_mode(tmp: TempDir) -> None:
+    """Compact-mode composed parametrize injects the assembled dataclass instance."""
     result = helpers.common.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
@@ -1425,6 +1483,7 @@ def test_executor_composed_compact_mode(tmp: TempDir) -> None:
 
 
 def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
+    """FixtureRef inside a composed partial case resolves the fixture at execution."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"

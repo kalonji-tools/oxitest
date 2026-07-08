@@ -207,6 +207,7 @@ class Fixtures:
             name: Override the fixture name. Defaults to the function name.
             shared: If `True`, fixture is session-lifetime and immutable
                 (wrapped with `FrozenProxy`).
+
         """
 
         def _register(f: _F) -> _F:

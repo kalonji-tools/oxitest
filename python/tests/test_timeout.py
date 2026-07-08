@@ -1,3 +1,5 @@
+"""Tests for timeout context manager, OxitestTimeoutError, and timeout mark handler."""
+
 from __future__ import annotations
 
 import sys
@@ -15,11 +17,13 @@ from oxitest._bridge.result import PassedResult, TimeoutResult
 
 
 def test_timeout_context_raises_on_expiry() -> None:
+    """_timeout_context raises OxitestTimeoutError when the block exceeds deadline."""
     with raises(OxitestTimeoutError), _timeout_context(1):
         time.sleep(5)
 
 
 def test_timeout_context_does_not_raise_when_fast() -> None:
+    """_timeout_context does not raise when the block completes before the deadline."""
     with _timeout_context(5):
         time.sleep(0)  # completes instantly
 
@@ -37,12 +41,14 @@ def test_timeout_context_cancels_after_block() -> None:
 
 
 def test_oxitest_timeout_error_is_exception() -> None:
+    """OxitestTimeoutError is an Exception subclass so it can be caught generically."""
     assert issubclass(OxitestTimeoutError, Exception), (
         "OxitestTimeoutError should be a subclass of Exception"
     )
 
 
 def test_timeout_context_type_matches_platform() -> None:
+    """_timeout_context returns the platform-specific implementation."""
     if sys.platform == "win32":
         from oxitest._bridge._timeout import _WindowsTimeoutContext
 
@@ -59,6 +65,8 @@ def test_timeout_context_type_matches_platform() -> None:
 
 @dataclass(frozen=True)
 class InvalidTimeout:
+    """Parameters for a single invalid timeout test case."""
+
     seconds: int
 
 
@@ -67,6 +75,7 @@ class InvalidTimeout:
     negative=InvalidTimeout(seconds=-1),
 )
 def test_timeout_mark_rejects_invalid_seconds(seconds: int) -> None:
+    """@mark.timeout raises ValueError for zero or negative seconds."""
     with raises(ValueError, match="seconds > 0"):
 
         @oxitest.mark.timeout(seconds=seconds)
@@ -75,6 +84,8 @@ def test_timeout_mark_rejects_invalid_seconds(seconds: int) -> None:
 
 
 def test_timeout_mark_stores_seconds() -> None:
+    """@mark.timeout stores the seconds value in the function's mark metadata."""
+
     @oxitest.mark.timeout(seconds=5)
     def test_ok() -> None:
         pass
@@ -94,6 +105,7 @@ def test_timeout_mark_stores_seconds() -> None:
 
 
 def test_timeout_handler_returns_wrapper() -> None:
+    """_TimeoutHandler.handle() returns a wrapper with no short-circuit outcome."""
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 3}))
     )
@@ -107,6 +119,7 @@ def test_timeout_handler_returns_wrapper() -> None:
 
 
 def test_timeout_handler_wrapper_passes_fast_test() -> None:
+    """The timeout wrapper passes a PassedResult when the test finishes in time."""
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5}))
     )
@@ -119,6 +132,7 @@ def test_timeout_handler_wrapper_passes_fast_test() -> None:
 
 
 def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
+    """The timeout wrapper returns TimeoutResult when the test exceeds the deadline."""
     result = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 1}))
     )

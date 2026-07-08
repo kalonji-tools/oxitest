@@ -52,6 +52,8 @@ def _make_builtin_ctx(
 
 
 def test_builtin_fixture_registration() -> None:
+    """A BuiltinFixture subclass is retrievable by type via for_type()."""
+
     class _Sentinel:
         pass
 
@@ -69,23 +71,27 @@ def test_builtin_fixture_registration() -> None:
 
 
 def test_builtin_fixture_for_type_unknown_returns_none() -> None:
+    """for_type() returns None for a type that has no registered BuiltinFixture."""
     assert BuiltinFixture.for_type(int) is None, (
         "BuiltinFixture.for_type(int) should return None for an unregistered type"
     )
 
 
 def test_builtin_fixture_create_raises_not_implemented() -> None:
+    """BuiltinFixture.create() raises NotImplementedError on the abstract base class."""
     ctx, _ = _make_builtin_ctx()
     with raises(NotImplementedError):
         BuiltinFixture().create(ctx)
 
 
 def test_builtin_context_keep_tmp_default_is_none() -> None:
+    """_BuiltinContext.keep_tmp defaults to None when no keep_tmp option is given."""
     ctx, _ = _make_builtin_ctx()
     assert ctx.keep_tmp is None, "_BuiltinContext.keep_tmp should default to None"
 
 
 def test_builtin_context_keep_tmp_accepts_value() -> None:
+    """_BuiltinContext.keep_tmp stores the provided value when explicitly set."""
     ctx, _ = _make_builtin_ctx(keep_tmp="failed")
     assert ctx.keep_tmp == "failed", (
         "_BuiltinContext.keep_tmp should accept and store 'failed'"
@@ -96,6 +102,7 @@ def test_builtin_context_keep_tmp_accepts_value() -> None:
 
 
 def test_tempdir_fixture_creates_directory() -> None:
+    """_TempDirFixture.create() makes a directory and registers one teardown."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
     ctx, teardowns = _make_builtin_ctx()
@@ -112,6 +119,7 @@ def test_tempdir_fixture_creates_directory() -> None:
 
 
 def test_tempdir_fixture_directory_name_includes_fn_name() -> None:
+    """TempDir path name embeds the test function name for identifiable directories."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
     ctx, teardowns = _make_builtin_ctx(fn_name="my_test")
@@ -129,6 +137,7 @@ def test_tempdir_fixture_directory_name_includes_fn_name() -> None:
 
 
 def test_tempdir_fixture_teardown_removes_directory() -> None:
+    """TempDir teardown removes the created directory so tests don't leak /tmp."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
 
     ctx, teardowns = _make_builtin_ctx()
@@ -142,6 +151,7 @@ def test_tempdir_fixture_teardown_removes_directory() -> None:
 
 
 def test_tempdir_keep_tmp_failed_preserves_on_failure() -> None:
+    """keep_tmp='failed' preserves the TempDir when the test result is FailedResult."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
     from oxitest._bridge.result import FailedResult, TestResult
 
@@ -168,6 +178,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure() -> None:
 
 
 def test_tempdir_keep_tmp_failed_cleans_on_pass() -> None:
+    """keep_tmp='failed' still removes TempDir when the test result is PassedResult."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
     from oxitest._bridge.result import PassedResult, TestResult
 
@@ -188,6 +199,7 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass() -> None:
 
 
 def test_tempdir_keep_tmp_always_preserves_on_pass() -> None:
+    """keep_tmp='always' preserves the TempDir even when the test passes."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
     from oxitest._bridge.result import PassedResult, TestResult
 
@@ -210,6 +222,7 @@ def test_tempdir_keep_tmp_always_preserves_on_pass() -> None:
 
 
 def test_tempdir_keep_tmp_failed_preserves_on_error() -> None:
+    """keep_tmp='failed' preserves the TempDir when the test result is ErrorResult."""
     from oxitest._bridge._builtins._tempdir import _TempDirFixture
     from oxitest._bridge.result import ErrorResult, TestResult
 
@@ -232,6 +245,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_error() -> None:
 
 
 def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
+    """Preserved TempDir path and --keep-tmp hint are printed to stderr on teardown."""
     # NOTE: This test uses stdlib redirect_stderr instead of dogfooding StdCapture
     # because the stderr output is produced inside teardowns[0](), which runs
     # outside the normal test flow. StdCapture/FdCapture would need to be set up
@@ -271,6 +285,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
 
 
 def test_tempdir_factory_mktemp_creates_distinct_dirs() -> None:
+    """mktemp() with different names produces two distinct existing directories."""
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
     ctx, _ = _make_builtin_ctx(inject_scope="session")
@@ -292,6 +307,7 @@ def test_tempdir_factory_mktemp_creates_distinct_dirs() -> None:
 
 
 def test_tempdir_factory_teardown_removes_all_dirs() -> None:
+    """TempDirFactory teardown removes every directory created by mktemp()."""
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
     ctx, teardowns = _make_builtin_ctx(inject_scope="session")
@@ -312,6 +328,7 @@ def test_tempdir_factory_teardown_removes_all_dirs() -> None:
 
 
 def test_tempdir_factory_scope_is_session() -> None:
+    """TempDirFactory is session-scoped; shared across all tests in a session."""
     from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture
 
     assert _TempDirFactoryFixture.scope == "session", (
@@ -324,6 +341,7 @@ def test_tempdir_factory_scope_is_session() -> None:
 
 
 def test_stdcapture_captures_print() -> None:
+    """StdCapture intercepts print() output and exposes it via readouterr().out."""
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
     ctx, teardowns = _make_builtin_ctx()
@@ -343,6 +361,7 @@ def test_stdcapture_captures_print() -> None:
 
 
 def test_stdcapture_readouterr_resets_buffer() -> None:
+    """readouterr() flushes the buffer so successive reads don't accumulate."""
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
     ctx, teardowns = _make_builtin_ctx()
@@ -361,7 +380,7 @@ def test_stdcapture_readouterr_resets_buffer() -> None:
 
 
 def test_stdcapture_disabled_passes_through(_cap_outer: StdCapture) -> None:
-
+    """cap.disabled() context manager passes output through without capturing it."""
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
     ctx, teardowns = _make_builtin_ctx()
@@ -380,7 +399,7 @@ def test_stdcapture_disabled_passes_through(_cap_outer: StdCapture) -> None:
 
 
 def test_stdcapture_teardown_restores_streams() -> None:
-
+    """StdCapture teardown restores sys.stdout to the original stream object."""
     from oxitest._bridge._builtins._capture import _StdCaptureFixture
 
     real_stdout = sys.stdout
@@ -400,6 +419,7 @@ def test_stdcapture_teardown_restores_streams() -> None:
 
 
 def test_fdcapture_captures_fd_write() -> None:
+    """FdCapture intercepts raw fd writes and exposes them via readouterr().out."""
     import os
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
@@ -417,6 +437,7 @@ def test_fdcapture_captures_fd_write() -> None:
 
 
 def test_fdcapture_readouterr_resets_buffer() -> None:
+    """FdCapture readouterr() flushes the buffer; successive reads don't accumulate."""
     import os
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
@@ -437,6 +458,7 @@ def test_fdcapture_readouterr_resets_buffer() -> None:
 
 
 def test_fdcapture_disabled_passes_through() -> None:
+    """FdCapture.disabled() context manager lets fd writes pass through uncaptured."""
     import os
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
@@ -458,6 +480,7 @@ def test_fdcapture_disabled_passes_through() -> None:
 
 
 def test_fdcapture_teardown_restores_fds() -> None:
+    """FdCapture teardown restores file descriptor 1 to the original underlying fd."""
     import os
 
     from oxitest._bridge._builtins._capture import _FdCaptureFixture
@@ -479,6 +502,7 @@ def test_fdcapture_teardown_restores_fds() -> None:
 
 
 def test_patcher_setattr_overrides_attribute() -> None:
+    """patch.setattr() immediately changes the target attribute to the new value."""
     import types
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
@@ -494,6 +518,7 @@ def test_patcher_setattr_overrides_attribute() -> None:
 
 
 def test_patcher_setattr_restores_on_teardown() -> None:
+    """patch.setattr() teardown reverts the attribute to its original value."""
     import types
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
@@ -511,6 +536,7 @@ def test_patcher_setattr_restores_on_teardown() -> None:
 
 
 def test_patcher_setenv_sets_and_restores() -> None:
+    """patch.setenv() sets an env var during the test and removes it on teardown."""
     import os
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
@@ -534,6 +560,7 @@ def test_patcher_setenv_sets_and_restores() -> None:
 
 
 def test_patcher_delenv_removes_and_restores() -> None:
+    """patch.delenv() removes an env var during the test and restores it on teardown."""
     import os
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
@@ -558,6 +585,7 @@ def test_patcher_delenv_removes_and_restores() -> None:
 
 
 def test_patcher_chdir_changes_and_restores(tmp: TempDir) -> None:
+    """patch.chdir() changes the working directory and restores the original."""
     from oxitest._bridge._builtins._patch import _PatcherFixture
 
     original = Path.cwd()
@@ -579,6 +607,7 @@ def test_patcher_chdir_changes_and_restores(tmp: TempDir) -> None:
 
 
 def test_patcher_teardown_undoes_in_lifo_order() -> None:
+    """Patcher teardown undoes all patches in LIFO order to avoid ordering conflicts."""
     import types
 
     from oxitest._bridge._builtins._patch import _PatcherFixture
@@ -603,6 +632,7 @@ def test_patcher_teardown_undoes_in_lifo_order() -> None:
 
 
 def test_builtin_types_are_injectable() -> None:
+    """All public builtin types carry __oxitest_injectable__ = True for dispatch."""
     import oxitest._bridge._builtins as builtins_pkg
 
     for name in (
@@ -626,6 +656,7 @@ def test_builtin_types_are_injectable() -> None:
 
 
 def test_testcontext_registered_as_builtin() -> None:
+    """TestContext is registered as a BuiltinFixture and injected like TempDir."""
     from oxitest._bridge._builtin_context import TestContext
     from oxitest._bridge._builtins._base import BuiltinFixture
 
@@ -639,7 +670,7 @@ def test_testcontext_registered_as_builtin() -> None:
 
 
 def test_tempdir_injected_via_session() -> None:
-
+    """FixtureSession resolves TempDir via builtin dispatch and tears it down."""
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
@@ -662,7 +693,7 @@ def test_tempdir_injected_via_session() -> None:
 
 
 def test_tempdir_factory_session_scoped() -> None:
-
+    """TempDirFactory returns the same instance across resolve_for_test calls."""
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
@@ -679,7 +710,7 @@ def test_tempdir_factory_session_scoped() -> None:
 
 
 def test_stdcapture_injected_via_session() -> None:
-
+    """FixtureSession resolves StdCapture via builtin dispatch and captures print."""
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 
@@ -699,6 +730,7 @@ def test_stdcapture_injected_via_session() -> None:
 
 
 def test_patcher_injected_via_session() -> None:
+    """FixtureSession resolves Patcher via builtin dispatch and reverts patches."""
     import types
 
     reg = FixtureRegistry()
@@ -725,6 +757,7 @@ def test_patcher_injected_via_session() -> None:
 
 
 def test_testcontext_still_works_via_builtin_dispatch() -> None:
+    """A fixture that depends on Fixture[TestContext] resolves via builtin dispatch."""
     from oxitest._bridge._fixture_registry import FixtureRegistry
     from oxitest._bridge._fixture_session import FixtureSession
 
@@ -751,6 +784,7 @@ def test_testcontext_still_works_via_builtin_dispatch() -> None:
 
 
 def test_stdlib_backend_captures_records() -> None:
+    """StdlibLogBackend.install() intercepts logging and accumulates LogRecords."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import StdlibLogBackend
@@ -771,6 +805,7 @@ def test_stdlib_backend_captures_records() -> None:
 
 
 def test_stdlib_backend_uninstall_removes_handler() -> None:
+    """StdlibLogBackend.uninstall() removes its handler from the root logger."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import StdlibLogBackend
@@ -791,6 +826,7 @@ def test_stdlib_backend_uninstall_removes_handler() -> None:
 
 
 def test_stdlib_backend_uninstall_restores_level() -> None:
+    """StdlibLogBackend.uninstall() restores the root logger level to pre-install."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import StdlibLogBackend
@@ -806,6 +842,7 @@ def test_stdlib_backend_uninstall_restores_level() -> None:
 
 
 def test_stdlib_backend_set_level_filters_records() -> None:
+    """set_level() updates the capture threshold; prior records are filtered."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import StdlibLogBackend
@@ -832,6 +869,7 @@ def test_stdlib_backend_set_level_filters_records() -> None:
 
 
 def test_logcapture_records_aggregates_backends() -> None:
+    """LogCapture.records aggregates LogRecords from all installed backends."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
@@ -848,6 +886,7 @@ def test_logcapture_records_aggregates_backends() -> None:
 
 
 def test_logcapture_text_formats_records() -> None:
+    """LogCapture.text formats captured records as a human-readable string."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
@@ -866,6 +905,7 @@ def test_logcapture_text_formats_records() -> None:
 
 
 def test_logcapture_set_level_changes_threshold() -> None:
+    """LogCapture.set_level() changes the filter threshold mid-test for all backends."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
@@ -889,6 +929,7 @@ def test_logcapture_set_level_changes_threshold() -> None:
 
 
 def test_logcapture_at_level_captures_and_restores() -> None:
+    """at_level() temporarily lowers the capture threshold and restores it on exit."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
@@ -912,6 +953,7 @@ def test_logcapture_at_level_captures_and_restores() -> None:
 
 
 def test_logcapture_teardown_uninstalls_backends() -> None:
+    """LogCapture.close() uninstalls all backends and removes their log handlers."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
@@ -931,6 +973,7 @@ def test_logcapture_teardown_uninstalls_backends() -> None:
 
 
 def test_logcapture_fixture_registers_teardown() -> None:
+    """_LogCaptureFixture.create() registers one teardown that closes all backends."""
     import logging
 
     from oxitest._bridge._builtins._logcapture import _LogCaptureFixture
@@ -951,7 +994,7 @@ def test_logcapture_fixture_registers_teardown() -> None:
 
 
 def test_logcapture_injected_via_session() -> None:
-
+    """FixtureSession resolves LogCapture by builtin dispatch into the kwargs dict."""
     reg = FixtureRegistry()
     session = FixtureSession(reg)
 

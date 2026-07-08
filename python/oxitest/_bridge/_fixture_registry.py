@@ -125,7 +125,7 @@ def _compute_shared_ancestors(
     by_name: dict[str, list[FixtureDef[Any]]],
     computed: dict[str, frozenset[str]],
 ) -> frozenset[str]:
-    """Iterative DFS from *start* collecting transitively reachable shared fixtures.
+    """Collect transitively reachable shared fixtures via iterative DFS from *start*.
 
     Results are memoised in *computed* to avoid redundant traversals.
     """

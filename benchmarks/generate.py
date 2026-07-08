@@ -224,6 +224,7 @@ def _startup_file() -> str:
 
 
 def generate() -> None:
+    """Regenerate the fixture tree under benchmarks/generated/, replacing existing output."""
     if GENERATED.exists():
         shutil.rmtree(GENERATED)
     GENERATED.mkdir()

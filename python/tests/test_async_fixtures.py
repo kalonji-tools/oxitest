@@ -12,7 +12,7 @@ from oxitest._bridge._async_orchestrator import SharedAsyncManager
 
 
 def _exhaust_coro(coro: Coroutine[Any, Any, Any]) -> Any:
-    """Synchronously exhaust a coroutine (single-step only)."""
+    """Drive a coroutine to completion in a single send (single-step only)."""
     try:
         coro.send(None)
     except StopIteration as e:
@@ -63,12 +63,14 @@ def _make_stub_backend() -> tuple[_StubBackend, _StubSession]:
 
 
 def test_initial_state_session_is_none() -> None:
+    """SharedAsyncManager starts with no session before any fixture is resolved."""
     mgr = SharedAsyncManager(AsyncioBackend())
 
     assert mgr.session is None, "session should be None before any resolve"
 
 
 def test_initial_state_was_used_is_false() -> None:
+    """was_used is False on a freshly created manager before any resolve call."""
     mgr = SharedAsyncManager(AsyncioBackend())
 
     assert mgr.was_used is False, "was_used should be False initially"
@@ -78,6 +80,7 @@ def test_initial_state_was_used_is_false() -> None:
 
 
 def test_was_used_setter() -> None:
+    """was_used can be set to True to mark the manager as having run async fixtures."""
     mgr = SharedAsyncManager(AsyncioBackend())
 
     mgr.was_used = True
@@ -86,6 +89,7 @@ def test_was_used_setter() -> None:
 
 
 def test_was_used_can_be_reset() -> None:
+    """was_used can be reset to False after being set, supporting session reuse."""
     mgr = SharedAsyncManager(AsyncioBackend())
     mgr.was_used = True
 
@@ -98,6 +102,7 @@ def test_was_used_can_be_reset() -> None:
 
 
 def test_resolve_creates_session_lazily() -> None:
+    """The shared session is created on first resolve, not at construction time."""
     backend, session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -114,6 +119,7 @@ def test_resolve_creates_session_lazily() -> None:
 
 
 def test_resolve_reuses_existing_session() -> None:
+    """Subsequent resolve calls reuse the same session rather than creating a new."""
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -130,6 +136,7 @@ def test_resolve_reuses_existing_session() -> None:
 
 
 def test_resolve_sets_was_used() -> None:
+    """Resolving a fixture marks the manager as used so cleanup runs at session end."""
     backend, _ = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -142,6 +149,7 @@ def test_resolve_sets_was_used() -> None:
 
 
 def test_resolve_passes_deps_to_fixture() -> None:
+    """Dependency values are forwarded as keyword arguments to the fixture."""
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
     received = {}
@@ -207,6 +215,7 @@ def test_resolve_sync_function_passthrough() -> None:
 
 
 def test_cleanup_closes_session() -> None:
+    """cleanup() closes the shared async session and sets it to None."""
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
@@ -256,6 +265,7 @@ def test_cleanup_drains_teardowns_in_reverse() -> None:
 
 
 def test_backend_property() -> None:
+    """The backend property returns the AsyncBackend passed at construction time."""
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 

@@ -39,6 +39,7 @@ def _make_instantiator(
 
 
 def test_resolve_simple_fixture() -> None:
+    """resolve_fixture should return the factory's return value for a known fixture."""
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def("db", lambda: "conn", conftest_path="/c.py")
     )
@@ -51,6 +52,8 @@ def test_resolve_simple_fixture() -> None:
 
 
 def test_resolve_cycle_raises() -> None:
+    """resolve_fixture raises FixtureCycleError when fixtures depend on each other."""
+
     def fx_a(b: Fixture[int]) -> None:
         pass
 
@@ -69,6 +72,7 @@ def test_resolve_cycle_raises() -> None:
 
 
 def test_resolve_not_found_raises() -> None:
+    """resolve_fixture should raise FixtureNotFoundError for an unregistered name."""
     inst, _reg = _make_instantiator()
 
     with raises(FixtureNotFoundError):
@@ -78,6 +82,7 @@ def test_resolve_not_found_raises() -> None:
 
 
 def test_resolve_shared_uses_scope_refs() -> None:
+    """Shared fixtures are stored in the ScopeRefs cache after first resolution."""
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def(
             "shared_db", lambda: "shared_conn", conftest_path="/c.py", shared=True
@@ -98,6 +103,7 @@ def test_resolve_shared_uses_scope_refs() -> None:
 
 
 def test_timing_recorded() -> None:
+    """get_fixture_timings records setup_count and name for each resolved fixture."""
     inst, _reg = _make_instantiator(
         helpers.common.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
     )

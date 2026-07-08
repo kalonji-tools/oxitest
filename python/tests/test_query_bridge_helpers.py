@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 def test_helper_entries_returns_dicts() -> None:
+    """helper_entries() returns serialisable dicts for registered helpers."""
     from oxitest._bridge._fixture_registry import ConftestSource
     from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
     from oxitest._bridge.query_bridge import helper_entries

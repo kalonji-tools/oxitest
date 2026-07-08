@@ -27,6 +27,7 @@ def warns(category: type[Warning], *, match: str | None = None) -> Iterator[None
 
         with oxitest.warns(UserWarning, match="deprecated"):
             call_legacy_api()
+
     """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

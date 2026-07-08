@@ -1,3 +1,5 @@
+"""Tests for FunctionMetadata get_or_create and get_metadata registry functions."""
+
 from __future__ import annotations
 
 from types import MappingProxyType
@@ -7,6 +9,8 @@ from oxitest._bridge._mark_api import MarkInfo
 
 
 def test_get_or_create_creates_on_first_access() -> None:
+    """get_or_create should initialize a fresh FunctionMetadata on first call."""
+
     def fn() -> None:
         pass
 
@@ -29,6 +33,8 @@ def test_get_or_create_creates_on_first_access() -> None:
 
 
 def test_get_or_create_returns_same_instance() -> None:
+    """get_or_create should return the identical object on repeated calls."""
+
     def fn() -> None:
         pass
 
@@ -41,6 +47,8 @@ def test_get_or_create_returns_same_instance() -> None:
 
 
 def test_get_metadata_returns_default_for_unknown_function() -> None:
+    """get_metadata on an unregistered function should return empty default metadata."""
+
     def fn() -> None:
         pass
 
@@ -61,6 +69,8 @@ def test_get_metadata_returns_default_for_unknown_function() -> None:
 
 
 def test_get_metadata_returns_registered_metadata() -> None:
+    """get_metadata should reflect marks added via get_or_create."""
+
     def fn() -> None:
         pass
 
@@ -77,6 +87,8 @@ def test_get_metadata_returns_registered_metadata() -> None:
 
 
 def test_mutations_persist_across_calls() -> None:
+    """Mutations via get_or_create are visible through subsequent get_metadata calls."""
+
     def fn() -> None:
         pass
 
@@ -90,6 +102,8 @@ def test_mutations_persist_across_calls() -> None:
 
 
 def test_different_functions_get_independent_metadata() -> None:
+    """Marks added to fn_a should not appear on fn_b's independent metadata."""
+
     def fn_a() -> None:
         pass
 

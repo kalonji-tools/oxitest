@@ -246,6 +246,7 @@ def tree_fixtures_from_registry(
 
     Returns:
         Formatted tree string, or error message if circular deps detected.
+
     """
     # Build dependency graph from signatures
     all_defs: dict[str, FixtureDef[Any]] = {}

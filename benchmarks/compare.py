@@ -282,6 +282,7 @@ def _check_regressions(results: list[dict]) -> bool:
 
 
 def main() -> int:
+    """Print all benchmark summaries and return 1 if any regression is found."""
     results = load_results("benchmarks/results.json")
     _print_startup(results)
     has_regression = _print_tiers(results)

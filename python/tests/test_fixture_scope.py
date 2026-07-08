@@ -1,3 +1,5 @@
+"""Tests for fixture scope caching and lifecycle behaviour."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

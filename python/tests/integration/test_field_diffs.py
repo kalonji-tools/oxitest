@@ -6,6 +6,7 @@ from oxitest import TempDir, helpers
 
 
 def test_dataclass_field_diffs_shown(tmp: TempDir) -> None:
+    """Assertion failure on dataclasses should display per-field diffs in output."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -31,6 +32,7 @@ def test_dataclass_field_diffs_shown(tmp: TempDir) -> None:
 
 
 def test_non_dataclass_no_field_diffs(tmp: TempDir) -> None:
+    """Non-dataclass assertion failures should not include a 'field diffs' section."""
     helpers.integ.write_project(
         tmp,
         tests={

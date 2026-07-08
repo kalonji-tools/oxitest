@@ -8,6 +8,7 @@ from oxitest import helpers
 
 
 def test_valid_names_return_empty() -> None:
+    """validate_fixture_names should return an empty list when all names are known."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -24,6 +25,7 @@ def test_valid_names_return_empty() -> None:
 
 
 def test_invalid_name_returns_error() -> None:
+    """validate_fixture_names returns an error tuple when a fixture name is unknown."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -40,6 +42,7 @@ def test_invalid_name_returns_error() -> None:
 
 
 def test_fixref_names_excluded() -> None:
+    """fixture_names in fixref_names should be excluded from validation errors."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -56,6 +59,7 @@ def test_fixref_names_excluded() -> None:
 
 
 def test_mixed_valid_and_invalid() -> None:
+    """validate_fixture_names reports only invalid names across multiple items."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -83,6 +87,7 @@ def test_mixed_valid_and_invalid() -> None:
 
 
 def test_empty_items_return_empty() -> None:
+    """validate_fixture_names should return empty list when given no items."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names([])
@@ -91,6 +96,7 @@ def test_empty_items_return_empty() -> None:
 
 
 def test_no_fixture_names_return_empty() -> None:
+    """validate_fixture_names returns empty list when items have no fixture_names."""
     session = helpers.common.make_session_with("store", lambda: 42)
 
     errors = session.validate_fixture_names(
@@ -106,7 +112,7 @@ def test_no_fixture_names_return_empty() -> None:
 
 
 def _factory_no_dep() -> None:
-    """A fixture factory with no dependencies."""
+    """Return None — used as a no-dependency fixture factory."""
 
 
 def test_unused_fixture_detected() -> None:

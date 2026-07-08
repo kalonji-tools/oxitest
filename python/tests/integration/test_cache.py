@@ -49,6 +49,8 @@ def test_failed_first_runs_all(tmp: TempDir) -> None:
 
 @dataclass(frozen=True)
 class FailedStrategyCase:
+    """Parametrize case for --failed strategy parallel tests."""
+
     flag: str
     expected_count: int
 

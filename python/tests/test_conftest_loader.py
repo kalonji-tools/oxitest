@@ -1,3 +1,5 @@
+"""Tests for conftest discovery, loading, fixture extraction, and session creation."""
+
 from __future__ import annotations
 
 import sys
@@ -20,6 +22,7 @@ from oxitest._bridge.conftest_loader import (
 
 
 def test_find_conftest_no_conftest_files(tmp: TempDir) -> None:
+    """When no conftest.py exists on the path, an empty list is returned."""
     (tmp / "tests").mkdir()
     result = find_conftest_paths(str(tmp / "tests" / "test_foo.py"), str(tmp))
     assert result == [], (
@@ -28,6 +31,7 @@ def test_find_conftest_no_conftest_files(tmp: TempDir) -> None:
 
 
 def test_find_conftest_root_only(tmp: TempDir) -> None:
+    """A conftest.py at the rootdir is found even when the test is in a subdirectory."""
     (tmp / "conftest.py").write_text("")
     (tmp / "tests").mkdir()
     result = find_conftest_paths(str(tmp / "tests" / "test_foo.py"), str(tmp))
@@ -37,6 +41,7 @@ def test_find_conftest_root_only(tmp: TempDir) -> None:
 
 
 def test_find_conftest_root_and_nested(tmp: TempDir) -> None:
+    """Both root and nested conftest.py files are returned in the correct order."""
     (tmp / "conftest.py").write_text("")
     tests_dir = tmp / "tests"
     tests_dir.mkdir()
@@ -63,6 +68,7 @@ def test_find_conftest_root_first_order(tmp: TempDir) -> None:
 
 
 def test_find_conftest_test_outside_rootdir_returns_empty(tmp: TempDir) -> None:
+    """A test file outside the rootdir yields no conftest paths."""
     other = tmp / "other"
     other.mkdir()
     result = find_conftest_paths(
@@ -78,6 +84,7 @@ def test_find_conftest_test_outside_rootdir_returns_empty(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_empty_conftest_warns(tmp: TempDir) -> None:
+    """create_session warns when a conftest.py contains no Fixtures instance."""
     f = tmp / "conftest.py"
     f.write_text("")
     with warns(UserWarning, match="no Fixtures instance"):
@@ -85,6 +92,7 @@ def test_load_fixtures_empty_conftest_warns(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_extracts_from_fixtures_instance(tmp: TempDir) -> None:
+    """Only @fixtures.fixture-decorated functions are extracted, not plain functions."""
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -112,6 +120,7 @@ def test_load_fixtures_extracts_from_fixtures_instance(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_name_override(tmp: TempDir) -> None:
+    """@fixtures.fixture(name=...) overrides the function name used for the fixture."""
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -131,6 +140,7 @@ def test_load_fixtures_name_override(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_autouse(tmp: TempDir) -> None:
+    """@fixtures.fixture(autouse=True) sets autouse=True on the FixtureDef."""
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -151,6 +161,7 @@ def test_load_fixtures_autouse(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_conftest_path_recorded(tmp: TempDir) -> None:
+    """Each FixtureDef records the path of the conftest.py it was loaded from."""
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -199,6 +210,7 @@ def test_load_fixtures_multiple_instances(tmp: TempDir) -> None:
 
 
 def test_create_session_empty_returns_session() -> None:
+    """create_session([]) returns an empty FixtureSession with no violations."""
     session, violations = create_session([])
     assert isinstance(session, FixtureSession), (
         f"create_session([]) should return a FixtureSession, got "
@@ -210,6 +222,7 @@ def test_create_session_empty_returns_session() -> None:
 
 
 def test_create_session_populates_registry(tmp: TempDir) -> None:
+    """Fixtures in conftest are resolvable via the session after create_session."""
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -235,6 +248,7 @@ def test_create_session_populates_registry(tmp: TempDir) -> None:
 
 
 def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
+    """A sub-directory conftest fixture overrides same-named root conftest fixture."""
     root_conf = tmp / "conftest.py"
     root_conf.write_text(
         textwrap.dedent("""\
@@ -280,7 +294,6 @@ def test_load_fixtures_registers_conftest_in_sys_modules(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
-
     f = tmp / "conftest.py"
     f.write_text(
         textwrap.dedent("""\
@@ -308,6 +321,7 @@ def test_load_fixtures_registers_conftest_in_sys_modules(
 
 
 def test_load_fixtures_stamps_namespace_from_variable_name(tmp: TempDir) -> None:
+    """The variable name of a Fixtures() instance is used as the fixture namespace."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -325,6 +339,7 @@ def test_load_fixtures_stamps_namespace_from_variable_name(tmp: TempDir) -> None
 
 
 def test_load_fixtures_explicit_name_overrides_variable_name(tmp: TempDir) -> None:
+    """Fixtures(name='...') overrides the variable name when stamping the namespace."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -341,6 +356,7 @@ def test_load_fixtures_explicit_name_overrides_variable_name(tmp: TempDir) -> No
 
 
 def test_load_fixtures_sets_namespace_on_fixture_def(tmp: TempDir) -> None:
+    """The namespace is stored on FixtureDef, not as a private function attribute."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"
@@ -360,6 +376,7 @@ def test_load_fixtures_sets_namespace_on_fixture_def(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_raises_on_reserved_name_oxi_variable(tmp: TempDir) -> None:
+    """Using 'oxi' as the Fixtures() variable name raises ValueError (reserved)."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\noxi = oxitest.Fixtures()\n")
     with raises(ValueError, match="reserved"):
@@ -367,6 +384,7 @@ def test_load_fixtures_raises_on_reserved_name_oxi_variable(tmp: TempDir) -> Non
 
 
 def test_load_fixtures_raises_on_explicit_name_oxi(tmp: TempDir) -> None:
+    """Fixtures(name='oxi') raises ValueError because 'oxi' is a reserved namespace."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='oxi')\n")
     with raises(ValueError, match="reserved"):
@@ -374,6 +392,7 @@ def test_load_fixtures_raises_on_explicit_name_oxi(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_rejects_keyword_namespace_variable(tmp: TempDir) -> None:
+    """Fixtures(name='class') raises ValueError: keywords disallowed as namespaces."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\nclass_ = oxitest.Fixtures()\n")
     # variable name "class_" is fine, but "class" would be a syntax error
@@ -384,6 +403,7 @@ def test_load_fixtures_rejects_keyword_namespace_variable(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_rejects_builtin_namespace_name(tmp: TempDir) -> None:
+    """Using a builtin name (like 'int') as a Fixtures() variable raises ValueError."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\nint = oxitest.Fixtures()\n")
     with raises(ValueError, match="Python builtin"):
@@ -391,6 +411,7 @@ def test_load_fixtures_rejects_builtin_namespace_name(tmp: TempDir) -> None:
 
 
 def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir) -> None:
+    """Fixtures(name='list') raises ValueError because builtin names are disallowed."""
     conftest = tmp / "conftest.py"
     conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='list')\n")
     with raises(ValueError, match="Python builtin"):
@@ -496,11 +517,11 @@ def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir) -> N
 
 
 class Connection:
-    pass
+    """Dummy connection type for fixture type-extraction tests."""
 
 
 class DBSession:
-    pass
+    """Dummy session type for fixture type-extraction tests."""
 
 
 def test_extract_fixture_type_from_return() -> None:

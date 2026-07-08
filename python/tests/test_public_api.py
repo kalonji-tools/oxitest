@@ -6,6 +6,7 @@ import oxitest
 
 
 def test_module_has_docstring() -> None:
+    """The oxitest module exposes a non-empty module-level docstring."""
     assert oxitest.__doc__ is not None, "oxitest module should have a docstring"
     assert len(oxitest.__doc__.strip()) > 0, (
         "oxitest module docstring should not be blank"
@@ -13,24 +14,28 @@ def test_module_has_docstring() -> None:
 
 
 def test_module_docstring_mentions_fixtures_registry() -> None:
+    """The module docstring mentions 'Fixtures' to document the registry API."""
     doc = oxitest.__doc__
     assert doc is not None, "oxitest module should have a docstring"
     assert "Fixtures" in doc, "oxitest module docstring should mention 'Fixtures'"
 
 
 def test_module_docstring_mentions_fixture_injection() -> None:
+    """The module docstring mentions 'Fixture' to document the injection mechanism."""
     doc = oxitest.__doc__
     assert doc is not None, "oxitest module should have a docstring"
     assert "Fixture" in doc, "oxitest module docstring should mention 'Fixture'"
 
 
 def test_fixture_type_has_docstring() -> None:
+    """The Fixture type exposes a non-empty docstring describing its purpose."""
     from oxitest import Fixture
 
     assert Fixture.__doc__ is not None, "Fixture type should have a docstring"
 
 
 def test_fixture_type_docstring_explains_injection() -> None:
+    """The Fixture docstring explains the Fixture[T] injection pattern."""
     from oxitest import Fixture
 
     doc = Fixture.__doc__
@@ -42,6 +47,7 @@ def test_fixture_type_docstring_explains_injection() -> None:
 
 
 def test_fixture_type_docstring_warns_unannotated_not_injected() -> None:
+    """The Fixture docstring clarifies that unannotated parameters are not injected."""
     from oxitest import Fixture
 
     doc = Fixture.__doc__
@@ -53,12 +59,14 @@ def test_fixture_type_docstring_warns_unannotated_not_injected() -> None:
 
 
 def test_parametrize_decorator_has_docstring() -> None:
+    """The parametrize decorator exposes a non-empty docstring."""
     assert oxitest.parametrize.__doc__ is not None, (
         "oxitest.parametrize should have a docstring"
     )
 
 
 def test_parametrize_docstring_explains_compact_mode() -> None:
+    """The parametrize docstring documents the compact single-value case mode."""
     doc = oxitest.parametrize.__doc__
     assert doc is not None, "oxitest.parametrize should have a docstring"
     assert "compact" in doc.lower(), (
@@ -67,6 +75,7 @@ def test_parametrize_docstring_explains_compact_mode() -> None:
 
 
 def test_parametrize_docstring_explains_expanded_mode() -> None:
+    """The parametrize docstring documents the expanded dataclass case mode."""
     doc = oxitest.parametrize.__doc__
     assert doc is not None, "oxitest.parametrize should have a docstring"
     assert "expanded" in doc.lower(), (
@@ -75,6 +84,7 @@ def test_parametrize_docstring_explains_expanded_mode() -> None:
 
 
 def test_parametrize_docstring_explains_mode_detection() -> None:
+    """The parametrize docstring explains how mode is inferred from the signature."""
     doc = oxitest.parametrize.__doc__
     assert doc is not None, "oxitest.parametrize should have a docstring"
     # must mention that mode is inferred from the function signature
@@ -85,6 +95,7 @@ def test_parametrize_docstring_explains_mode_detection() -> None:
 
 
 def test_fixtures_fixture_method_has_teardown_docstring() -> None:
+    """Fixtures.fixture docstring mentions yield and teardown for generator fixtures."""
     import oxitest
 
     doc = oxitest.Fixtures.fixture.__doc__
@@ -98,6 +109,7 @@ def test_fixtures_fixture_method_has_teardown_docstring() -> None:
 
 
 def test_fixtures_fixture_method_docstring_recommends_typed_returns() -> None:
+    """Fixtures.fixture docstring discourages plain dicts, recommends typed returns."""
     import oxitest
 
     doc = oxitest.Fixtures.fixture.__doc__
@@ -117,12 +129,14 @@ def test_fixtures_fixture_method_docstring_recommends_typed_returns() -> None:
 
 
 def test_tempdir_exported_from_oxitest() -> None:
+    """TempDir is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "TempDir"), "'TempDir' should be exported from oxitest"
 
 
 def test_tempdir_factory_exported_from_oxitest() -> None:
+    """TempDirFactory is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "TempDirFactory"), (
@@ -131,6 +145,7 @@ def test_tempdir_factory_exported_from_oxitest() -> None:
 
 
 def test_stdcapture_exported_from_oxitest() -> None:
+    """StdCapture is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "StdCapture"), (
@@ -139,18 +154,21 @@ def test_stdcapture_exported_from_oxitest() -> None:
 
 
 def test_fdcapture_exported_from_oxitest() -> None:
+    """FdCapture is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "FdCapture"), "'FdCapture' should be exported from oxitest"
 
 
 def test_patcher_exported_from_oxitest() -> None:
+    """Patcher is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "Patcher"), "'Patcher' should be exported from oxitest"
 
 
 def test_capture_result_exported_from_oxitest() -> None:
+    """CaptureResult is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "CaptureResult"), (
@@ -159,6 +177,7 @@ def test_capture_result_exported_from_oxitest() -> None:
 
 
 def test_logcapture_exported_from_oxitest() -> None:
+    """LogCapture is available as a top-level name in the oxitest package."""
     import oxitest
 
     assert hasattr(oxitest, "LogCapture"), (
@@ -167,6 +186,7 @@ def test_logcapture_exported_from_oxitest() -> None:
 
 
 def test_shared_fixture_mutation_error_importable_from_oxitest() -> None:
+    """SharedFixtureMutationError is exported and is a RuntimeError subclass."""
     import oxitest
 
     assert hasattr(oxitest, "SharedFixtureMutationError"), (
@@ -178,6 +198,7 @@ def test_shared_fixture_mutation_error_importable_from_oxitest() -> None:
 
 
 def test_yields_exported_from_oxitest() -> None:
+    """Yields is exported from oxitest and listed in __all__."""
     import oxitest
 
     assert hasattr(oxitest, "Yields"), "'Yields' should be exported from oxitest"
@@ -185,12 +206,14 @@ def test_yields_exported_from_oxitest() -> None:
 
 
 def test_warncapture_exported_from_oxitest() -> None:
+    """WarnCapture is importable directly from the oxitest package."""
     from oxitest import WarnCapture
 
     assert WarnCapture is not None, "WarnCapture should be exported from oxitest"
 
 
 def test_fixture_teardown_warning_exported_from_oxitest() -> None:
+    """FixtureTeardownWarning is importable from oxitest as a UserWarning subclass."""
     from oxitest import FixtureTeardownWarning
 
     assert issubclass(FixtureTeardownWarning, UserWarning), (
@@ -199,6 +222,7 @@ def test_fixture_teardown_warning_exported_from_oxitest() -> None:
 
 
 def test_internal_types_not_in_all() -> None:
+    """Internal implementation types are absent from __all__ to avoid leaking them."""
     removed = [
         "ApproxBase",
     ]
@@ -209,6 +233,7 @@ def test_internal_types_not_in_all() -> None:
 
 
 def test_exception_types_in_all() -> None:
+    """Public exception and warning types are listed in __all__ for discoverability."""
     promoted = [
         "SharedFixtureMutationError",
         "FixtureShadowWarning",
@@ -221,6 +246,7 @@ def test_exception_types_in_all() -> None:
 
 
 def test_plugin_config_types_in_all() -> None:
+    """Stable plugin config types (Cli, Conf, Both, CliExtension) are in __all__."""
     expected = ["Cli", "Conf", "Both", "CliExtension"]
     for name in expected:
         assert name in oxitest.__all__, (
@@ -229,6 +255,7 @@ def test_plugin_config_types_in_all() -> None:
 
 
 def test_plugin_config_types_importable() -> None:
+    """Plugin config types can be constructed from the public API without errors."""
     from oxitest import Both, Cli, CliExtension, Conf
 
     assert Cli(help="test").help == "test", "Cli should be constructable"
@@ -240,6 +267,7 @@ def test_plugin_config_types_importable() -> None:
 
 
 def test_injectable_exported_from_oxitest() -> None:
+    """The injectable decorator is exported from oxitest and listed in __all__."""
     import oxitest
 
     assert hasattr(oxitest, "injectable"), (

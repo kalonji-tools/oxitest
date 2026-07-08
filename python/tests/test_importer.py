@@ -1,3 +1,5 @@
+"""Tests for collect_module, item collection, module marks, and class propagation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,12 +25,14 @@ from oxitest._bridge.result import ViolationKind
 
 
 def test_collect_empty_module(tmp: TempDir) -> None:
+    """An empty module yields no collected items."""
     path = helpers.common.write_test_module(tmp, "", name="test_empty.py")
     items, _ = collect_module(path)
     assert items == [], f"collecting an empty module should yield no items, got {items}"
 
 
 def test_collect_single_test_function(tmp: TempDir) -> None:
+    """A module with one test_ function produces a single CollectedItem."""
     path = helpers.common.write_test_module(
         tmp, "def test_bar(): pass\n", name="test_foo.py"
     )
@@ -46,6 +50,7 @@ def test_collect_single_test_function(tmp: TempDir) -> None:
 
 
 def test_collect_multiple_functions(tmp: TempDir) -> None:
+    """All test_ functions in a module are collected as separate items."""
     path = helpers.common.write_test_module(
         tmp, "def test_one(): pass\ndef test_two(): pass\n", name="test_multi.py"
     )
@@ -59,6 +64,7 @@ def test_collect_multiple_functions(tmp: TempDir) -> None:
 
 
 def test_collect_ignores_non_test_functions(tmp: TempDir) -> None:
+    """Functions not prefixed with test_ are silently excluded from collection."""
     path = helpers.common.write_test_module(
         tmp, "def helper(): pass\ndef test_real(): pass\n", name="test_foo.py"
     )
@@ -73,6 +79,7 @@ def test_collect_ignores_non_test_functions(tmp: TempDir) -> None:
 
 
 def test_collect_raises_on_missing_file() -> None:
+    """collect_module raises an exception when the given path does not exist."""
     with raises(Exception):
         collect_module("/nonexistent/path/test_foo.py")
 
@@ -96,6 +103,7 @@ def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir) -> 
 
 
 def test_collect_extracts_marker_names(tmp: TempDir) -> None:
+    """Marker names from @mark decorators appear in the CollectedItem.markers tuple."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n@oxitest.mark.slow\ndef test_query(): pass\n",
@@ -109,6 +117,7 @@ def test_collect_extracts_marker_names(tmp: TempDir) -> None:
 
 
 def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
+    """All stacked @mark decorators appear in the CollectedItem.markers tuple."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -185,7 +194,7 @@ def test_collect_class_methods_use_qualified_name(tmp: TempDir) -> None:
 
 
 def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> None:
-    """usefixtures on a class is propagated to each test method at collection time."""
+    """The usefixtures mark on a class propagates to each test method at collection."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -207,7 +216,7 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> Non
 
 
 def test_collect_class_skip_propagated(tmp: TempDir) -> None:
-    """skip on a class IS propagated to test methods."""
+    """A skip mark on a class IS propagated to all test methods at collection time."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
@@ -225,6 +234,7 @@ def test_collect_class_skip_propagated(tmp: TempDir) -> None:
 
 
 def test_collected_item_can_be_constructed() -> None:
+    """CollectedItem can be constructed with all fields and stores each correctly."""
     item = CollectedItem(
         fn_name="test_foo",
         lineno=1,
@@ -246,6 +256,7 @@ def test_collected_item_can_be_constructed() -> None:
 
 
 def test_collected_item_with_markers_and_param() -> None:
+    """CollectedItem stores non-default markers and param_id correctly."""
     item = CollectedItem(
         fn_name="test_bar",
         lineno=5,
@@ -320,6 +331,7 @@ def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir) -> None:
 
 
 def test_collect_violations_assert_with_message_no_violation(tmp: TempDir) -> None:
+    """An assert statement with a message is not flagged as a violation."""
     path = _write_py(
         tmp,
         """
@@ -334,6 +346,7 @@ def test_collect_violations_assert_with_message_no_violation(tmp: TempDir) -> No
 
 
 def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir) -> None:
+    """A bare assert in a nested helper does not violate the outer test function."""
     path = _write_py(
         tmp,
         """
@@ -351,6 +364,7 @@ def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir) -> Non
 
 
 def test_collect_violations_false_when_disabled(tmp: TempDir) -> None:
+    """No violations when collect_violations=False, even for bare asserts."""
     path = _write_py(
         tmp,
         """
@@ -418,6 +432,7 @@ def test_check_fn_violations_class_method_missing_mark_reason() -> None:
 
 
 def test_collect_async_function_sets_is_async(tmp: TempDir) -> None:
+    """An async def test_ function is collected with is_async=True."""
     path = helpers.common.write_test_module(
         tmp, "async def test_hello(): pass\n", name="test_async.py"
     )
@@ -429,6 +444,7 @@ def test_collect_async_function_sets_is_async(tmp: TempDir) -> None:
 
 
 def test_collect_sync_function_sets_is_async_false(tmp: TempDir) -> None:
+    """A synchronous def test_ function is collected with is_async=False."""
     path = helpers.common.write_test_module(
         tmp, "def test_hello(): pass\n", name="test_sync.py"
     )
@@ -440,6 +456,7 @@ def test_collect_sync_function_sets_is_async_false(tmp: TempDir) -> None:
 
 
 def test_collect_mixed_sync_async(tmp: TempDir) -> None:
+    """A module with both sync and async tests sets is_async correctly on each item."""
     path = helpers.common.write_test_module(
         tmp,
         "def test_sync(): pass\nasync def test_async(): pass\n",
@@ -493,6 +510,7 @@ def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None
 
 
 def test_collect_async_class_method_sets_is_async(tmp: TempDir) -> None:
+    """Async and sync class methods each receive the correct is_async value."""
     path = helpers.common.write_test_module(
         tmp,
         "class TestSuite:\n"
@@ -512,6 +530,7 @@ def test_collect_async_class_method_sets_is_async(tmp: TempDir) -> None:
 
 
 def test_module_members_yields_test_functions_only() -> None:
+    """_module_members yields only test_ prefixed callables, skipping helpers."""
     mod = ModuleType("fake")
 
     def test_one() -> None:
@@ -534,6 +553,8 @@ def test_module_members_yields_test_functions_only() -> None:
 
 
 def test_collect_items_returns_collected_items() -> None:
+    """_collect_items wraps member functions into CollectedItem values with metadata."""
+
     def fake_fn() -> None:
         pass
 

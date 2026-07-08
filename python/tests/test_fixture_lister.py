@@ -12,6 +12,7 @@ from oxitest._bridge.fixture_lister import tree_fixtures_from_registry
 
 
 def test_tree_empty_registry_shows_builtins() -> None:
+    """An empty user registry still renders built-in fixtures like TempDir."""
     reg = FixtureRegistry()
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     assert "TempDir" in result, f"built-in TempDir missing: {result!r}"
@@ -19,6 +20,7 @@ def test_tree_empty_registry_shows_builtins() -> None:
 
 
 def test_tree_single_no_deps() -> None:
+    """A leaf fixture with no dependencies renders without tree branch characters."""
     reg = FixtureRegistry()
     reg.register(helpers.common.make_fixture_def("db", conftest_path="conftest.py"))
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
@@ -30,6 +32,8 @@ def test_tree_single_no_deps() -> None:
 
 
 def test_tree_linear_chain() -> None:
+    """A fixture chain renders as nested tree children in dependency order."""
+
     def _config() -> None:
         pass
 
@@ -68,6 +72,8 @@ def test_tree_linear_chain() -> None:
 
 
 def test_tree_diamond() -> None:
+    """A diamond dependency (shared base) shows both branches under the top fixture."""
+
     def _base() -> None:
         pass
 
@@ -119,6 +125,8 @@ def test_tree_diamond() -> None:
 
 
 def test_tree_cycle_detection() -> None:
+    """Circular fixture dependencies are detected and labeled in the tree output."""
+
     def _a(b: Any) -> None:
         pass
 
@@ -143,6 +151,8 @@ def test_tree_cycle_detection() -> None:
 
 
 def test_tree_keyword_filter() -> None:
+    """The pattern arg limits root-level fixtures to matches but shows their subtree."""
+
     def _config() -> None:
         pass
 
@@ -177,6 +187,7 @@ def test_tree_keyword_filter() -> None:
 
 
 def test_tree_verbosity_1_shows_tags() -> None:
+    """Verbosity level 1 adds [shared] and async tags alongside each fixture name."""
     reg = FixtureRegistry()
     reg.register(
         helpers.common.make_fixture_def(
@@ -189,6 +200,7 @@ def test_tree_verbosity_1_shows_tags() -> None:
 
 
 def test_tree_verbosity_2_shows_origin() -> None:
+    """Verbosity 2 includes the conftest.py path where each fixture was defined."""
     reg = FixtureRegistry()
     reg.register(
         helpers.common.make_fixture_def("db", conftest_path="tests/conftest.py")

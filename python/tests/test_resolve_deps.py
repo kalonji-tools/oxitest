@@ -1,3 +1,5 @@
+"""Tests for async dependency guards in sync fixture contexts."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +14,8 @@ from oxitest._bridge._fixture_instantiator import (
 
 
 def test_reject_async_in_sync_raises_on_coroutine() -> None:
+    """_reject_async_in_sync should raise FixtureSetupError when given a coroutine."""
+
     async def coro() -> None:
         pass
 
@@ -21,6 +25,8 @@ def test_reject_async_in_sync_raises_on_coroutine() -> None:
 
 
 def test_reject_async_in_sync_raises_on_async_gen() -> None:
+    """_reject_async_in_sync raises FixtureSetupError when given an async generator."""
+
     async def agen() -> AsyncGenerator[int, None]:
         yield 1
 
@@ -32,11 +38,14 @@ def test_reject_async_in_sync_raises_on_async_gen() -> None:
 
 
 def test_reject_async_in_sync_passes_on_sync_value() -> None:
+    """_reject_async_in_sync should not raise for plain synchronous values."""
     # Should not raise for plain values
     _reject_async_in_sync("dep_a", 42, "my_fixture")
 
 
 def test_reject_nonshared_async_raises_on_coroutine() -> None:
+    """_reject_nonshared_async raises FixtureSetupError mentioning lifetime mismatch."""
+
     async def coro() -> None:
         pass
 
@@ -49,4 +58,5 @@ def test_reject_nonshared_async_raises_on_coroutine() -> None:
 
 
 def test_reject_nonshared_async_passes_on_sync_value() -> None:
+    """_reject_nonshared_async should not raise for plain synchronous values."""
     _reject_nonshared_async("dep_a", "hello", "shared_fix")

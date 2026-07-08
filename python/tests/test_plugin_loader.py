@@ -24,6 +24,7 @@ def _remove_fake_module(name: str) -> None:
 
 
 def test_load_empty_plugins_returns_empty_registry() -> None:
+    """load_plugins([]) returns an empty PluginRegistry with no entries."""
     registry = load_plugins([], {})
     assert isinstance(registry, PluginRegistry), (
         f"expected PluginRegistry, got {type(registry).__name__}"
@@ -33,6 +34,7 @@ def test_load_empty_plugins_returns_empty_registry() -> None:
 
 @oxitest.mark.inprocess
 def test_load_valid_plugin() -> None:
+    """A module with a valid oxitest_plugin() entry function is loaded."""
     mod = types.ModuleType("fake_plugin")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     _install_fake_module("fake_plugin", mod)
@@ -51,6 +53,7 @@ def test_load_valid_plugin() -> None:
 
 @oxitest.mark.inprocess
 def test_load_plugin_receives_config() -> None:
+    """Plugin config from pyproject.toml is forwarded to oxitest_plugin()."""
     received: dict = {}
 
     def entry(config: dict[str, object] | None = None) -> Plugin:
@@ -70,12 +73,14 @@ def test_load_plugin_receives_config() -> None:
 
 
 def test_load_missing_module_raises() -> None:
+    """load_plugins raises PluginLoadError when a named module cannot be imported."""
     with raises(PluginLoadError, match="not found"):
         load_plugins(["nonexistent_oxitest_plugin_xyz"], {})
 
 
 @oxitest.mark.inprocess
 def test_load_no_entry_function_raises() -> None:
+    """load_plugins raises PluginLoadError when the module has no oxitest_plugin."""
     mod = types.ModuleType("no_entry")
     _install_fake_module("no_entry", mod)
     try:
@@ -87,6 +92,7 @@ def test_load_no_entry_function_raises() -> None:
 
 @oxitest.mark.inprocess
 def test_load_wrong_return_type_raises() -> None:
+    """load_plugins raises PluginLoadError when oxitest_plugin() returns non-Plugin."""
     mod = types.ModuleType("bad_return")
     setattr(mod, "oxitest_plugin", lambda **_: "not a Plugin")
     _install_fake_module("bad_return", mod)
@@ -99,6 +105,8 @@ def test_load_wrong_return_type_raises() -> None:
 
 @oxitest.mark.inprocess
 def test_load_entry_raises_wraps_error() -> None:
+    """Exceptions from oxitest_plugin() are wrapped in PluginLoadError with context."""
+
     def bad_entry(**_: object) -> Never:
         msg = "boom"
         raise ValueError(msg)
@@ -115,6 +123,8 @@ def test_load_entry_raises_wraps_error() -> None:
 
 @oxitest.mark.inprocess
 def test_registry_aggregates_across_plugins() -> None:
+    """PluginRegistry collects contributions (e.g. log_backends) from all plugins."""
+
     class FakeBackend:
         def install(self) -> None:
             pass
@@ -182,6 +192,7 @@ def test_conflicting_debugger_backends_raises() -> None:
 
 
 def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
+    """An empty PluginRegistry returns empty tuples for all extension points."""
     registry = PluginRegistry()
     assert registry.log_backends == (), f"expected empty, got {registry.log_backends!r}"
     assert registry.fixture_providers == (), (

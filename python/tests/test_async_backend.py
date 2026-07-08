@@ -1,3 +1,5 @@
+"""Tests for AsyncioBackend and AsyncioSharedSession event-loop lifecycle."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,11 +10,13 @@ from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
 
 
 def test_asyncio_backend_name() -> None:
+    """AsyncioBackend.name should identify the backend as 'asyncio'."""
     backend = AsyncioBackend()
     assert backend.name == "asyncio", f"expected 'asyncio', got {backend.name!r}"
 
 
 def test_asyncio_backend_runs_coroutine() -> None:
+    """AsyncioBackend.run() should execute a coroutine and return its result."""
     backend = AsyncioBackend()
 
     async def coro() -> int:
@@ -23,6 +27,7 @@ def test_asyncio_backend_runs_coroutine() -> None:
 
 
 def test_asyncio_backend_propagates_exception() -> None:
+    """AsyncioBackend.run() should propagate exceptions raised inside the coroutine."""
     backend = AsyncioBackend()
 
     async def coro() -> Never:
@@ -34,6 +39,7 @@ def test_asyncio_backend_propagates_exception() -> None:
 
 
 def test_asyncio_backend_creates_shared_session() -> None:
+    """create_shared_session() should return an AsyncioSharedSession instance."""
     backend = AsyncioBackend()
     session = backend.create_shared_session()
     assert isinstance(session, AsyncioSharedSession), (
@@ -43,6 +49,7 @@ def test_asyncio_backend_creates_shared_session() -> None:
 
 
 def test_shared_session_runs_coroutine() -> None:
+    """AsyncioSharedSession.run() should execute a coroutine and return its result."""
     session = AsyncioSharedSession()
 
     async def coro() -> int:
@@ -54,12 +61,14 @@ def test_shared_session_runs_coroutine() -> None:
 
 
 def test_shared_session_close_is_idempotent() -> None:
+    """Calling close() twice on a shared session should not raise."""
     session = AsyncioSharedSession()
     session.close()
     session.close()  # must not raise
 
 
 def test_shared_session_cleans_stray_tasks() -> None:
+    """close() should detect and warn about tasks that were leaked inside run()."""
     session = AsyncioSharedSession()
 
     async def spawner() -> str:

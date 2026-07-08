@@ -1,3 +1,5 @@
+"""Tests for the HelperProvider protocol and PluginRegistry helper_providers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -12,16 +14,19 @@ def _screenshot(selector: str) -> str:
 
 
 class ConformingProvider:
+    """Test double that conforms to the HelperProvider structural protocol."""
+
     @property
-    def name(self) -> str:
+    def name(self) -> str:  # noqa: D102
         return "take_screenshot"
 
     @property
-    def helper(self) -> Callable[..., Any]:
+    def helper(self) -> Callable[..., Any]:  # noqa: D102
         return _screenshot
 
 
 def test_helper_provider_isinstance_check() -> None:
+    """A class with name and helper properties should satisfy HelperProvider."""
     provider = ConformingProvider()
     assert isinstance(provider, HelperProvider), (
         "class with name + helper properties should satisfy the protocol"
@@ -29,17 +34,20 @@ def test_helper_provider_isinstance_check() -> None:
 
 
 def test_helper_provider_name() -> None:
+    """Name property should return the registered helper name."""
     provider = ConformingProvider()
     assert provider.name == "take_screenshot", "name should be accessible"
 
 
 def test_helper_provider_callable() -> None:
+    """Helper property should return a callable that invokes the underlying function."""
     provider = ConformingProvider()
     result = provider.helper("#login")
     assert result == "screenshot:#login", "helper should return the callable"
 
 
 def test_plugin_registry_helper_providers_empty() -> None:
+    """An empty PluginRegistry should expose an empty helper_providers tuple."""
     reg = PluginRegistry()
     assert reg.helper_providers == (), "empty registry should return empty tuple"
 

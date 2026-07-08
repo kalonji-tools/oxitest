@@ -74,6 +74,7 @@ class AsyncioSharedSession:
 
         Raises:
             RuntimeError: If the session has already been closed.
+
         """
         if self._loop is None or self._loop.is_closed():
             msg = "SharedAsyncSession is closed"
@@ -123,6 +124,7 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
     Raises:
         BackendNotFoundError: if no backend matches the config name.
         ConflictingBackendError: if multiple plugins register the same name.
+
     """
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)

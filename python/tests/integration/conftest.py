@@ -44,6 +44,7 @@ def write_project(
         tests: Mapping of {filename: code}. Code is dedented.
         pyproject: Optional pyproject.toml content (dedented).
         conftest: Optional conftest.py content (dedented).
+
     """
     if pyproject:
         (tmp / "pyproject.toml").write_text(textwrap.dedent(pyproject))

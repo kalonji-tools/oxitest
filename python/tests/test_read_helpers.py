@@ -1,3 +1,5 @@
+"""Tests for _HelpersProxy — namespace-aware helper resolution from ContextVar."""
+
 from __future__ import annotations
 
 import oxitest
@@ -11,6 +13,7 @@ def _greet(name: str) -> str:
 
 
 def test_proxy_resolves_namespace_and_callable() -> None:
+    """Proxy should chain namespace access and callable invocation correctly."""
     reg = HelperRegistry()
     reg.register(
         HelperDef(
@@ -31,6 +34,7 @@ def test_proxy_resolves_namespace_and_callable() -> None:
 
 
 def test_proxy_raises_outside_session() -> None:
+    """Accessing a proxy namespace outside a session should raise AttributeError."""
     token = _helpers_registry_var.set(None)
     try:
         proxy = _HelpersProxy()
@@ -43,6 +47,7 @@ def test_proxy_raises_outside_session() -> None:
 
 
 def test_proxy_raises_unknown_namespace() -> None:
+    """Accessing a namespace with no registered helpers should raise AttributeError."""
     reg = HelperRegistry()
     token = _helpers_registry_var.set(reg)
     try:

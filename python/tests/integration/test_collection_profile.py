@@ -14,6 +14,7 @@ def _write_simple_project(tmp: TempDir) -> None:
 
 
 def test_collection_profile_output(tmp: TempDir) -> None:
+    """--collection-profile should output prescan and collection timing sections."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -27,6 +28,7 @@ def test_collection_profile_output(tmp: TempDir) -> None:
 
 
 def test_collection_profile_shows_slowest_files(tmp: TempDir) -> None:
+    """--collection-profile output should list individual test file names."""
     _write_simple_project(tmp)
     _out, err, rc = helpers.common.run_oxitest(tmp, "--collection-profile")
     helpers.integ.assert_passed(_out, rc)
@@ -34,6 +36,7 @@ def test_collection_profile_shows_slowest_files(tmp: TempDir) -> None:
 
 
 def test_collection_profile_not_shown_by_default(tmp: TempDir) -> None:
+    """Without --collection-profile, the profile section should not appear in output."""
     _write_simple_project(tmp)
     _out, err, rc = helpers.common.run_oxitest(tmp)
     helpers.integ.assert_passed(_out, rc)

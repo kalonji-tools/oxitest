@@ -24,7 +24,7 @@ def test_strict_abort_no_violations_exits_0(tmp: TempDir) -> None:
 
 
 def test_strict_enforce_reports_violations(tmp: TempDir) -> None:
-    """strict = enforce runs all tests but exits 1 when violations are found."""
+    """Strict enforce mode runs all tests but exits 1 when violations are found."""
     (tmp / "test_mixed.py").write_text(
         'def test_bare(): assert True\ndef test_clean(): assert True, "has message"\n'
     )
