@@ -3,12 +3,13 @@ from __future__ import annotations
 __all__ = ["raises"]
 
 import re
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, cast, overload
 
 if TYPE_CHECKING:
     import types
 
 _ExcType = type[BaseException] | tuple[type[BaseException], ...]
+_E = TypeVar("_E", bound=BaseException)
 
 
 def _exc_name(exc_type: _ExcType) -> str:
@@ -17,13 +18,13 @@ def _exc_name(exc_type: _ExcType) -> str:
     return exc_type.__name__
 
 
-class _RaisesContext:
+class _RaisesContext(Generic[_E]):
     """Context manager returned by raises(). Stores the caught exception in .value."""
 
     def __init__(self, exc_type: _ExcType, match: str | None) -> None:
         self._exc_type = exc_type
         self._match = match
-        self.value: BaseException | None = None
+        self.value: _E  # set in __exit__; only valid after the with-block exits
 
     def __enter__(self) -> Self:
         return self
@@ -42,11 +43,23 @@ class _RaisesContext:
         if self._match is not None and not re.search(self._match, str(exc_val)):
             msg = f"Pattern {self._match!r} not found in {str(exc_val)!r}"
             raise AssertionError(msg)
-        self.value = exc_val
+        self.value = cast("_E", exc_val)
         return True  # suppress the exception
 
 
-def raises(exc_type: _ExcType, *, match: str | None = None) -> _RaisesContext:
+@overload
+def raises(exc_type: type[_E], *, match: str | None = ...) -> _RaisesContext[_E]: ...
+
+
+@overload
+def raises(
+    exc_type: tuple[type[BaseException], ...], *, match: str | None = ...
+) -> _RaisesContext[BaseException]: ...
+
+
+def raises(
+    exc_type: _ExcType, *, match: str | None = None
+) -> _RaisesContext[BaseException]:
     """Assert that a block of code raises the expected exception type.
 
     Args:
@@ -57,7 +70,7 @@ def raises(exc_type: _ExcType, *, match: str | None = None) -> _RaisesContext:
 
     Returns:
         A context manager. Use `as exc_info` to access `exc_info.value`
-        (the caught exception) after the block.
+        (the caught exception, typed as `exc_type`) after the block.
 
     Example::
 

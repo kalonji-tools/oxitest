@@ -47,7 +47,6 @@ ignore = [
 "python/tests/*" = [
     "T201",
     "PLR2004",  # magic values in comparisons
-    "PT017",    # assert in except block
     "S108",     # insecure temp file usage
     "S603",     # subprocess call
     "S607",     # partial executable path
