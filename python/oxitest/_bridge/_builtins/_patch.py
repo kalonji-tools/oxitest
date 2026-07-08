@@ -34,6 +34,7 @@ class Patcher:
 
         Raises:
             AttributeError: If *obj* does not have an attribute named *name*.
+
         """
         old = getattr(obj, name)
         setattr(obj, name, value)
@@ -47,6 +48,7 @@ class Patcher:
         Args:
             name: Environment variable name.
             value: New string value.
+
         """
         old = os.environ.get(name)
         os.environ[name] = value
@@ -66,6 +68,7 @@ class Patcher:
 
         Args:
             name: Environment variable name to remove.
+
         """
         old = os.environ.get(name)
         if old is not None:
@@ -77,6 +80,7 @@ class Patcher:
 
         Args:
             path: Directory to change into. Accepts any `os.fspath`-compatible value.
+
         """
         old = Path.cwd()
         os.chdir(path)

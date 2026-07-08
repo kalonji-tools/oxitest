@@ -6,6 +6,7 @@ from oxitest import TempDir, helpers
 
 
 def test_list_count_basic(tmp: TempDir) -> None:
+    """'query tests --count' should report the correct number of discovered tests."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -24,6 +25,7 @@ def test_sub():
 
 
 def test_list_count_multiple_files(tmp: TempDir) -> None:
+    """'query tests --count' should aggregate tests across multiple test files."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -37,6 +39,7 @@ def test_list_count_multiple_files(tmp: TempDir) -> None:
 
 
 def test_list_count_with_class(tmp: TempDir) -> None:
+    """'query tests --count' should count methods in class-based test groups."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -53,6 +56,7 @@ class TestGroup:
 
 
 def test_list_count_no_tests(tmp: TempDir) -> None:
+    """'query tests --count' reports 0 when no test functions are present."""
     helpers.integ.write_project(
         tmp,
         tests={
@@ -65,6 +69,7 @@ def test_list_count_no_tests(tmp: TempDir) -> None:
 
 
 def test_list_count_singular(tmp: TempDir) -> None:
+    """'query tests --count' output should include '1 tests' for a single test."""
     helpers.integ.write_project(
         tmp,
         tests={

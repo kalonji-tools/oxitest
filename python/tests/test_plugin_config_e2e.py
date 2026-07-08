@@ -15,6 +15,8 @@ from oxitest._bridge.plugin_loader import load_plugins
 
 @dataclass(frozen=True)
 class TestConfig:
+    """Sample plugin config with Both, Conf, and Cli annotated fields for e2e tests."""
+
     host: Annotated[str, Both(short="H", help="Target host", env="TEST_E2E_HOST")] = (
         "local://"
     )
@@ -24,6 +26,7 @@ class TestConfig:
 
 @oxitest.mark.inprocess
 def test_full_flow_introspect_merge_construct() -> None:
+    """Introspect → merge → construct should respect CLI > pyproject precedence."""
     descs = introspect_config(TestConfig)
     config = merge_config(
         TestConfig,
@@ -43,6 +46,7 @@ def test_full_flow_introspect_merge_construct() -> None:
 
 @oxitest.mark.inprocess
 def test_plugin_loader_discovers_and_activates_typed_config() -> None:
+    """load_plugins + activate_plugin should construct a fully-merged typed config."""
     mod = types.ModuleType("e2e_plugin")
     setattr(
         mod, "oxitest_cli_extension", CliExtension(prefix="e2e", config_type=TestConfig)

@@ -18,10 +18,11 @@ def _make_validator(*defs: FixtureDef[object]) -> FixtureValidator:
 
 
 def _factory_no_dep() -> None:
-    """A fixture factory with no dependencies."""
+    """Return None — used as a no-dependency fixture factory."""
 
 
 def test_validate_valid_names_returns_empty() -> None:
+    """validate_fixture_names should return empty list when all names are registered."""
     v = _make_validator(
         helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
@@ -34,6 +35,7 @@ def test_validate_valid_names_returns_empty() -> None:
 
 
 def test_validate_invalid_name_returns_error() -> None:
+    """validate_fixture_names reports an error for an unregistered fixture name."""
     v = _make_validator(
         helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
@@ -46,6 +48,7 @@ def test_validate_invalid_name_returns_error() -> None:
 
 
 def test_find_unused_detects_unreferenced() -> None:
+    """find_unused_fixtures should identify fixtures that no test references."""
     v = _make_validator(
         helpers.common.make_fixture_def(
             "unused_db", conftest_path="/project/conftest.py", factory=_factory_no_dep
@@ -61,6 +64,7 @@ def test_find_unused_detects_unreferenced() -> None:
 
 
 def test_find_unused_excludes_autouse() -> None:
+    """find_unused_fixtures should not flag autouse fixtures as unused."""
     v = _make_validator(
         helpers.common.make_fixture_def(
             "auto_setup",
@@ -76,6 +80,8 @@ def test_find_unused_excludes_autouse() -> None:
 
 
 def test_find_unused_excludes_transitive_deps() -> None:
+    """find_unused_fixtures does not flag fixtures that are deps of used fixtures."""
+
     def _parent(dep: object = None) -> None:
         pass
 

@@ -1,6 +1,5 @@
 # python/tests/test_diagnostic_parity.py
-"""Integration test: parallel failures must have same diagnostic fields as
-serial failures.
+"""Integration tests: parallel failures carry the same diagnostic fields as serial.
 
 Strategy: invoke the oxitest CLI as a subprocess in both --serial and
 --workers 2 (forced-parallel) modes, then compare the diagnostic block in the

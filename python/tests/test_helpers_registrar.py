@@ -1,3 +1,5 @@
+"""Tests for the Helpers registrar — @helpers.helper decoration and namespace access."""
+
 from __future__ import annotations
 
 import oxitest
@@ -5,11 +7,11 @@ from oxitest import Helpers
 
 
 def test_helper_decorator_registers() -> None:
+    """Decorating a function with @h.helper adds it to the internal def list."""
     h = Helpers()
 
     @h.helper
     def my_fn() -> str:
-        """A helper."""
         return "hello"
 
     assert len(h._defs) == 1, "decorator should register one def"
@@ -18,6 +20,7 @@ def test_helper_decorator_registers() -> None:
 
 
 def test_helper_decorator_with_name_override() -> None:
+    """Passing name= to @h.helper registers the helper under the explicit name."""
     h = Helpers()
 
     @h.helper(name="custom")
@@ -28,6 +31,7 @@ def test_helper_decorator_with_name_override() -> None:
 
 
 def test_helper_decorator_preserves_function() -> None:
+    """@h.helper returns the original function unchanged so it is directly callable."""
     h = Helpers()
 
     @h.helper
@@ -38,6 +42,7 @@ def test_helper_decorator_preserves_function() -> None:
 
 
 def test_helpers_getattr_returns_callable() -> None:
+    """Accessing a registered helper name via attribute lookup returns its callable."""
     h = Helpers()
 
     @h.helper
@@ -48,22 +53,26 @@ def test_helpers_getattr_returns_callable() -> None:
 
 
 def test_helpers_getattr_unknown_raises() -> None:
+    """Accessing an unregistered name on a Helpers instance raises AttributeError."""
     h = Helpers()
     with oxitest.raises(AttributeError, match="no registered helper"):
         h.nonexistent
 
 
 def test_helpers_namespace_from_init() -> None:
+    """Helpers(name=...) stores the explicit namespace name for registry grouping."""
     h = Helpers(name="utils")
     assert h._namespace_name == "utils", "explicit name should be stored"
 
 
 def test_helpers_namespace_defaults_empty() -> None:
+    """Helpers() with no name argument defaults to an empty namespace string."""
     h = Helpers()
     assert h._namespace_name == "", "default namespace should be empty string"
 
 
 def test_helpers_captures_source_line() -> None:
+    """Helpers() records its source line for the allow-comment gate."""
     h = Helpers()
     assert hasattr(h, "_source_line"), "Helpers should capture source line"
     assert isinstance(h._source_line, int), "source line should be an int"

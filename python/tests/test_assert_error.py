@@ -1,3 +1,5 @@
+"""Tests for assert rewriting: _OxitestAssertionError carries structured operands."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,6 +20,7 @@ def _exec_rewritten(src: str, ns: dict[str, Any]) -> None:
 
 
 def test_compare_equal_failure_carries_left_right_op() -> None:
+    """Rewritten assert x == y should populate left, right, and op on failure."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     try:
@@ -31,6 +34,7 @@ def test_compare_equal_failure_carries_left_right_op() -> None:
 
 
 def test_compare_in_failure_carries_operands() -> None:
+    """Rewritten 'assert x in collection' should populate left, right, and op='in'."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": "bob"}
     _exec_rewritten('def test_f():\n    assert x in ["alice", "carol"]\n', ns)
     try:
@@ -46,6 +50,7 @@ def test_compare_in_failure_carries_operands() -> None:
 
 
 def test_bool_assert_failure_carries_value() -> None:
+    """Rewritten bare 'assert flag' should set left=flag and right=_OXITEST_NO_RHS."""
     ns: dict[str, Any] = {
         "_OxitestAssertionError": _OxitestAssertionError,
         "_oxitest_no_rhs": _OXITEST_NO_RHS,
@@ -65,6 +70,7 @@ def test_bool_assert_failure_carries_value() -> None:
 
 
 def test_assert_with_message_carries_why() -> None:
+    """Assert with a message string should carry that message in the exception args."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten('def test_f():\n    assert x == 42, "should be 42"\n', ns)
     try:
@@ -79,7 +85,7 @@ def test_assert_with_message_carries_why() -> None:
 
 
 def test_chained_compare_left_untouched() -> None:
-    """Chained comparisons (a < b < c) are not rewritten — fall back gracefully."""
+    """Chained comparisons (a < b < c) are not rewritten and fall back gracefully."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 20}
     _exec_rewritten("def test_f():\n    assert 1 < x < 10\n", ns)
     try:
@@ -94,7 +100,7 @@ def test_chained_compare_left_untouched() -> None:
 
 
 def test_bool_op_assert_left_untouched() -> None:
-    """assert a and b is not rewritten."""
+    """Boolean 'and' assertions fall back to plain AssertionError (not rewritten)."""
     ns: dict[str, Any] = {
         "_OxitestAssertionError": _OxitestAssertionError,
         "a": True,
@@ -113,6 +119,7 @@ def test_bool_op_assert_left_untouched() -> None:
 
 
 def test_passing_assert_does_not_raise() -> None:
+    """A rewritten assert that passes should not raise any exception."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 42}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
     ns["test_f"]()  # must not raise

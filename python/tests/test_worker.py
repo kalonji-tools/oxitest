@@ -1,3 +1,5 @@
+"""Tests for the parallel worker subprocess: JSON task protocol and result fields."""
+
 from __future__ import annotations
 
 import json
@@ -43,6 +45,7 @@ def _run_worker(task: dict) -> list[dict]:
 
 
 def test_worker_runs_passing_test(tmp: TempDir) -> None:
+    """Worker should return outcome='passed' for a test with a passing assertion."""
     test_file = tmp / "test_pass.py"
     test_file.write_text("def test_pass():\n    assert 1 == 1\n")
 
@@ -58,6 +61,7 @@ def test_worker_runs_passing_test(tmp: TempDir) -> None:
 
 
 def test_worker_runs_failing_test(tmp: TempDir) -> None:
+    """Worker should return outcome='failed' for a test with a failing assertion."""
     test_file = tmp / "test_fail.py"
     test_file.write_text("def test_fail():\n    assert 1 == 2\n")
 
@@ -71,6 +75,7 @@ def test_worker_runs_failing_test(tmp: TempDir) -> None:
 
 
 def test_worker_result_has_required_fields(tmp: TempDir) -> None:
+    """Worker result JSON must include node_id, outcome, and duration_ms fields."""
     test_file = tmp / "test_fields.py"
     test_file.write_text("def test_x():\n    pass\n")
 
@@ -88,6 +93,7 @@ def test_worker_result_has_required_fields(tmp: TempDir) -> None:
 
 
 def test_worker_emits_structured_failure_fields(tmp: TempDir) -> None:
+    """Failed worker result includes file, lineno, left, right, op, and source_line."""
     test_file = tmp / "test_structured.py"
     test_file.write_text(
         "def test_simple_assert():\n    x = 1\n    y = 2\n    assert x == y\n"

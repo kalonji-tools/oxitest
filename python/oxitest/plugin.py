@@ -95,6 +95,7 @@ class FixtureProvider(Protocol):
 
         Returns:
             The fixture object that will be injected into the test.
+
         """
         ...
 
@@ -105,6 +106,7 @@ class FixtureProvider(Protocol):
 
         Args:
             value: The object previously returned by `create`.
+
         """
         ...
 
@@ -174,6 +176,7 @@ class ExecutionWrapper(Protocol):
 
         Returns:
             A `TestResult` for the test.
+
         """
         ...
 
@@ -192,6 +195,7 @@ class Collector(Protocol):
         Returns:
             A list of `CollectedItem` objects describing the tests found.
             Return an empty list if the collector finds nothing.
+
         """
         ...
 
@@ -206,6 +210,7 @@ class Reporter(Protocol):
         Args:
             item: The `CollectedItem` identifying the test
                 (fn_name, lineno, markers, param_id, etc.).
+
         """
         ...
 
@@ -219,11 +224,12 @@ class Reporter(Protocol):
             outcome: A `TestResult` with the test status and any failure
                 information.
             duration_ms: Wall-clock time the test took, in milliseconds.
+
         """
         ...
 
     def finish(self, collect_errors: list[Any], *, interrupted: bool) -> None:
-        """Called once after all tests have completed and teardown is done.
+        """Run once after all tests have completed and teardown is done.
 
         Args:
             collect_errors: List of errors encountered during collection
@@ -231,6 +237,7 @@ class Reporter(Protocol):
                 succeeded cleanly.
             interrupted: `True` if the run was cut short (e.g. ``--maxfail``
                 threshold reached or a signal was received).
+
         """
         ...
 

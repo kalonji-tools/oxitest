@@ -125,6 +125,7 @@ class LogCapture:
             level: Logging level integer (e.g. `logging.DEBUG`, `logging.WARNING`).
             logger: Name of the logger to configure. `None` applies the level
                 to the root logger.
+
         """
         for b in self._backends:
             if isinstance(b, StdlibLogBackend):
@@ -149,6 +150,7 @@ class LogCapture:
                     run_thing()
                 assert "debug detail" in log.text
             ```
+
         """
         target = logging.getLogger(logger)
         old_level = target.level

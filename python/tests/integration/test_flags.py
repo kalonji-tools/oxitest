@@ -557,7 +557,7 @@ def test_nested_conftest_reexport(tmp: TempDir) -> None:
 
 
 def test_importorskip_skips_missing_module(tmp: TempDir) -> None:
-    """importorskip skips the test when the module is not installed."""
+    """oxi.importorskip skips the test when the requested module is not installed."""
     helpers.integ.write_project(
         tmp,
         tests={

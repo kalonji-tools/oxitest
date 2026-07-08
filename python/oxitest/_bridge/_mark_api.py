@@ -32,6 +32,7 @@ def skip(reason: str = "") -> None:
                 oxitest.skip("no network")
             ...
         ```
+
     """
     raise unittest.SkipTest(reason)
 
@@ -49,6 +50,7 @@ class MarkInfo:
         name: The mark name (e.g. `"skip"`, `"xfail"`, `"timeout"`).
         args: Positional arguments passed to the mark decorator call.
         kwargs: Keyword arguments passed to the mark decorator call.
+
     """
 
     name: str
@@ -188,6 +190,7 @@ class _MarkNamespace:
         def test_broken() -> None:
             ...
         ```
+
     """
 
     def __getattr__(self, name: str) -> Any:

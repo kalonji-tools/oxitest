@@ -1,3 +1,5 @@
+"""Tests for NamespaceProxy, FixturesProxy, OxiNamespaceProxy, and their integration."""
+
 from __future__ import annotations
 
 from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir, helpers
@@ -12,6 +14,7 @@ from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespace
 
 
 def test_namespace_proxy_resolves_fixture() -> None:
+    """Attribute access on NamespaceProxy resolves and returns the fixture value."""
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-val", namespace="db")
     )
@@ -22,6 +25,7 @@ def test_namespace_proxy_resolves_fixture() -> None:
 
 
 def test_namespace_proxy_is_lazy() -> None:
+    """NamespaceProxy defers the fixture factory call until first attribute access."""
     called = []
 
     def make_conn() -> str:
@@ -41,6 +45,7 @@ def test_namespace_proxy_is_lazy() -> None:
 
 
 def test_namespace_proxy_isolates_namespaces() -> None:
+    """Two NamespaceProxy instances for different namespaces resolve the same name."""
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
         helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
@@ -60,6 +65,7 @@ def test_namespace_proxy_isolates_namespaces() -> None:
 
 
 def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
+    """Accessing a user-defined namespace on FixturesProxy returns a NamespaceProxy."""
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
     )
@@ -71,6 +77,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
 
 
 def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
+    """Accessing the 'oxi' attribute on FixturesProxy returns an OxiNamespaceProxy."""
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     oxi = proxy.oxi
@@ -81,6 +88,7 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
 
 
 def test_fixtures_proxy_unknown_namespace_raises() -> None:
+    """Accessing an unregistered namespace on FixturesProxy raises AttributeError."""
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     try:
@@ -102,6 +110,7 @@ def test_fixtures_proxy_unknown_namespace_raises() -> None:
 def test_oxi_proxy_tmp_injects_tempdir(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """oxi.tmp injects a TempDir builtin via the OxiNamespaceProxy."""
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.tmp
     assert isinstance(result, TempDir), (
@@ -112,6 +121,7 @@ def test_oxi_proxy_tmp_injects_tempdir(
 def test_oxi_proxy_cap_injects_stdcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """oxi.cap injects a StdCapture builtin via the OxiNamespaceProxy."""
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.cap
@@ -125,6 +135,7 @@ def test_oxi_proxy_cap_injects_stdcapture(
 def test_oxi_proxy_patch_injects_patcher(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """oxi.patch injects a Patcher builtin via the OxiNamespaceProxy."""
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     result = proxy.patch
     assert isinstance(result, Patcher), (
@@ -135,6 +146,7 @@ def test_oxi_proxy_patch_injects_patcher(
 def test_oxi_proxy_log_injects_logcapture(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """oxi.log injects a LogCapture builtin via the OxiNamespaceProxy."""
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
     result = proxy.log
@@ -148,6 +160,7 @@ def test_oxi_proxy_log_injects_logcapture(
 def test_oxi_proxy_unknown_raises_with_available_list(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """Unknown name on OxiNamespaceProxy raises AttributeError listing builtins."""
     proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
     try:
         _ = proxy.unknown
@@ -201,8 +214,7 @@ def test_oxi_proxy_ctx_returns_test_context(
 def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
-    """FixturesProxy.oxi caches and returns same OxiNamespaceProxy on
-    repeated access."""
+    """FixturesProxy.oxi caches and returns the same OxiNamespaceProxy each access."""
     proxy = FixturesProxy(fixture_session, "/fake/test.py", [])
     oxi1 = proxy.oxi
     oxi2 = proxy.oxi
@@ -215,8 +227,7 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
 def test_oxi_proxy_caches_builtin_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
-    """OxiNamespaceProxy caches builtin instances; repeated access returns
-    the same object."""
+    """OxiNamespaceProxy caches builtins so repeated access returns the same object."""
     teardowns: list = []
     proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", teardowns)
     tmp1 = proxy.tmp
@@ -232,9 +243,7 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
 
 
 def test_full_pipeline_fx_namespace_access(tmp: TempDir) -> None:
-    """Full pipeline: conftest defines namespaced fixtures; test accesses via
-    fx.db.conn. Covers: conftest load → registry → proxy → test execution.
-    """
+    """Full pipeline: namespaced fixtures in conftest, accessed via fx.db.conn."""
     conftest = tmp / "conftest.py"
     conftest.write_text(
         "import oxitest\n"

@@ -42,6 +42,7 @@ class CaptureResult:
             assert result.out == "hello\\n"
             assert result.err == ""
         ```
+
     """
 
     out: str
@@ -93,6 +94,7 @@ class StdCapture(_CaptureBase):
             captured = cap.readouterr()
             assert captured.out == "hello\\n"
         ```
+
     """
 
     def __init__(self) -> None:
@@ -136,6 +138,7 @@ class FdCapture(_CaptureBase):
             captured = cap.readouterr()
             assert "from C" in captured.out
         ```
+
     """
 
     def __init__(self) -> None:

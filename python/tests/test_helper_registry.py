@@ -1,3 +1,5 @@
+"""Tests for HelperRegistry — storage, namespace scoping, and most-local resolution."""
+
 from __future__ import annotations
 
 import oxitest
@@ -6,11 +8,11 @@ from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
 
 
 def _dummy() -> str:
-    """A dummy helper."""
     return "hello"
 
 
 def test_helper_def_stores_fields() -> None:
+    """HelperDef stores name, func, source, and namespace on construction."""
     defn = HelperDef(
         name="dummy",
         func=_dummy,
@@ -24,6 +26,7 @@ def test_helper_def_stores_fields() -> None:
 
 
 def test_helper_def_is_frozen() -> None:
+    """HelperDef is frozen; registered helper definitions cannot be mutated."""
     defn = HelperDef(
         name="dummy",
         func=_dummy,
@@ -34,6 +37,7 @@ def test_helper_def_is_frozen() -> None:
 
 
 def test_registry_register_and_get() -> None:
+    """Registering a HelperDef makes it retrievable by name via HelperRegistry.get."""
     reg = HelperRegistry()
     defn = HelperDef(
         name="dummy",
@@ -46,6 +50,7 @@ def test_registry_register_and_get() -> None:
 
 
 def test_registry_all_returns_most_local() -> None:
+    """When two helpers share a name, all() returns only the most-local one."""
     reg = HelperRegistry()
     root_defn = HelperDef(
         name="dummy",
@@ -71,6 +76,7 @@ def test_registry_all_returns_most_local() -> None:
 
 
 def test_registry_has_namespace() -> None:
+    """has_namespace returns True only for namespaces with a registered helper."""
     reg = HelperRegistry()
     defn = HelperDef(
         name="dummy",
@@ -84,6 +90,7 @@ def test_registry_has_namespace() -> None:
 
 
 def test_registry_get_in_namespace() -> None:
+    """get_in_namespace finds a helper only when both name and namespace match."""
     reg = HelperRegistry()
     defn = HelperDef(
         name="dummy",
@@ -101,6 +108,7 @@ def test_registry_get_in_namespace() -> None:
 
 
 def test_registry_contains_and_iter() -> None:
+    """HelperRegistry supports `in` containment checks and iteration over names."""
     reg = HelperRegistry()
     defn = HelperDef(
         name="dummy",

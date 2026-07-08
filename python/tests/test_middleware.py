@@ -1,3 +1,5 @@
+"""Tests for build_pipeline composition and middleware ordering."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -38,6 +40,7 @@ class _SkipMiddleware:
 
 
 def test_build_pipeline_no_middlewares() -> None:
+    """build_pipeline with no middlewares should call the base function directly."""
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
@@ -59,6 +62,7 @@ def test_build_pipeline_no_middlewares() -> None:
 
 
 def test_build_pipeline_single_middleware() -> None:
+    """A single middleware should wrap the base and transform the result."""
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",
@@ -103,6 +107,7 @@ def test_build_pipeline_ordering() -> None:
 
 
 def test_build_pipeline_skip_middleware_is_noop() -> None:
+    """A pass-through middleware should leave the result unchanged."""
     plan = ExecutionPlan(
         fn=lambda: None,
         fn_name="test_x",

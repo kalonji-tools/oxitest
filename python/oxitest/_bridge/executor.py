@@ -292,6 +292,7 @@ def run_test(
         A `TestResult` whose `status` is one of ``"passed"``, ``"failed"``,
         ``"error"``, ``"skipped"``, ``"warned"``, ``"xfailed"``, or
         ``"xpassed"``.
+
     """
     # Doctest dispatch — bypass normal fixture/mark pipeline
     if meta.fn_name.startswith("<doctest>"):

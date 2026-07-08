@@ -164,6 +164,8 @@ def _make_failing_fn() -> Callable[[], Never]:
 
 @dataclass(frozen=True)
 class DebugModeCase:
+    """Parametrize case for debug mode x passing/failing test matrix."""
+
     mode: str | None
     passing: bool
     expect_trace: int

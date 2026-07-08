@@ -70,5 +70,6 @@ def raises(exc_type: _ExcType, *, match: str | None = None) -> _RaisesContext:
         with oxitest.raises(KeyError) as exc_info:
             d["missing"]
         assert exc_info.value.args[0] == "missing"
+
     """
     return _RaisesContext(exc_type, match)

@@ -1,3 +1,5 @@
+"""Tests for Fixture[T], FixtureRef[T], Yields[T], injectable, and FixtureScope."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,15 +17,17 @@ from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureType
 
 
 class _Database:
-    pass
+    """Dummy fixture binding type for Fixture[T] annotation tests."""
 
 
 class _TestCtx:
-    pass
+    """Dummy context type for Fixture[T] annotation tests."""
 
 
 @dataclass(frozen=True)
 class Case:
+    """Parametrize case for Fixture[T] annotation structure tests."""
+
     inner_type: type
     expected_inner: type
 
@@ -34,6 +38,7 @@ class Case:
     test_context=Case(inner_type=_TestCtx, expected_inner=_TestCtx),
 )
 def test_fixture_type_is_annotated(inner_type: type, expected_inner: type) -> None:
+    """Fixture[T] is Annotated with T as inner type and a _FixtureMarker in metadata."""
     result = Fixture[inner_type]
     assert get_origin(result) is Annotated, (
         f"Fixture[{inner_type.__name__}] should have Annotated origin, "
@@ -50,6 +55,7 @@ def test_fixture_type_is_annotated(inner_type: type, expected_inner: type) -> No
 
 
 def test_bare_fixture_is_not_annotated() -> None:
+    """Bare Fixture without a type argument is the raw _FixtureType, not Annotated."""
     assert get_origin(Fixture) is None, (
         f"bare Fixture (without type arg) should have no origin, got "
         f"{get_origin(Fixture)!r}"
@@ -60,6 +66,8 @@ def test_bare_fixture_is_not_annotated() -> None:
 
 
 def test_get_type_hints_detects_fixture_marker() -> None:
+    """get_type_hints resolves Fixture[T] to Annotated[T, _FixtureMarker] at runtime."""
+
     def fn(db: Fixture[_Database], x: int) -> None:
         pass
 
@@ -82,6 +90,7 @@ def test_get_type_hints_detects_fixture_marker() -> None:
 
 
 def test_two_fixture_markers_are_independent() -> None:
+    """Each Fixture[T] subscript creates a distinct _FixtureMarker to avoid aliasing."""
     a = Fixture[int]
     b = Fixture[int]
     _, *meta_a = get_args(a)
@@ -92,6 +101,7 @@ def test_two_fixture_markers_are_independent() -> None:
 
 
 def test_fixture_ref_database_is_annotated() -> None:
+    """FixtureRef[T] produces an Annotated[Callable[..., T], _FixtureRefMarker] type."""
     from oxitest import FixtureRef
     from oxitest._bridge._fixture_type import _FixtureRefMarker
 
@@ -116,6 +126,7 @@ def test_fixture_ref_database_is_annotated() -> None:
 
 
 def test_fixture_ref_marker_distinct_from_fixture_marker() -> None:
+    """_FixtureMarker and _FixtureRefMarker never appear in each other's metadata."""
     from oxitest import Fixture, FixtureRef
     from oxitest._bridge._fixture_type import _FixtureMarker, _FixtureRefMarker
 
@@ -130,6 +141,7 @@ def test_fixture_ref_marker_distinct_from_fixture_marker() -> None:
 
 
 def test_two_fixture_ref_markers_are_independent() -> None:
+    """Each FixtureRef[T] subscript creates a distinct _FixtureRefMarker."""
     from oxitest import FixtureRef
 
     a = FixtureRef[int]
@@ -177,6 +189,7 @@ def test_yields_does_not_carry_fixture_marker() -> None:
 
 
 def test_fixture_ref_exported_from_oxitest() -> None:
+    """FixtureRef is exported from oxitest and listed in __all__."""
     import oxitest
 
     assert hasattr(oxitest, "FixtureRef"), (
@@ -188,6 +201,7 @@ def test_fixture_ref_exported_from_oxitest() -> None:
 
 
 def test_injectable_stamps_attribute() -> None:
+    """@injectable stamps __oxitest_injectable__ = True on the decorated class."""
     from oxitest._bridge._fixture_type import injectable
 
     @injectable
@@ -200,6 +214,7 @@ def test_injectable_stamps_attribute() -> None:
 
 
 def test_injectable_returns_the_class_unchanged() -> None:
+    """@injectable returns the original class unchanged so identity is preserved."""
     from oxitest._bridge._fixture_type import injectable
 
     @injectable
@@ -212,6 +227,7 @@ def test_injectable_returns_the_class_unchanged() -> None:
 
 
 def test_fixture_inner_type_detects_injectable() -> None:
+    """_fixture_inner_type returns (True, cls) for an @injectable-decorated class."""
     from oxitest._bridge._fixture_registry import _fixture_inner_type
     from oxitest._bridge._fixture_type import injectable
 
@@ -229,6 +245,7 @@ def test_fixture_inner_type_detects_injectable() -> None:
 
 
 def test_fixture_inner_type_ignores_plain_class() -> None:
+    """_fixture_inner_type returns (False, ...) for a plain class (no @injectable)."""
     from oxitest._bridge._fixture_registry import _fixture_inner_type
 
     class PlainClass:
@@ -242,6 +259,7 @@ def test_fixture_inner_type_ignores_plain_class() -> None:
 
 
 def test_fixture_wrapper_on_injectable_still_works() -> None:
+    """Fixture[T] wrapping an @injectable type is detected and unwrapped correctly."""
     from oxitest._bridge._fixture_registry import _fixture_inner_type
     from oxitest._bridge._fixture_type import Fixture, injectable
 
@@ -274,6 +292,8 @@ def test_fixture_scope_values() -> None:
 
 @dataclass(frozen=True)
 class SourceCase:
+    """Parametrize case for fixture source variant field-storage tests."""
+
     label: str
     source: object
     field: str

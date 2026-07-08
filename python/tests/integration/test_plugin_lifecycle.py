@@ -448,7 +448,7 @@ def test_fixtures_from_both_plugins_in_same_test(tmp: TempDir) -> None:
 
 
 def test_query_plugins_shows_both_sample_plugins(tmp: TempDir) -> None:
-    """``query plugins`` lists both sample plugins."""
+    """``query plugins`` should list both sample plugins when both are configured."""
     _write_both_plugins_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run_sub(tmp, "query", "plugins")
     helpers.integ.assert_passed(out, rc)
@@ -504,7 +504,7 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
 
 
 def test_missing_plugin_module_error(tmp: TempDir) -> None:
-    """plugins = ['nonexistent']; clear error message with module name."""
+    """Missing plugin module should produce a clear error mentioning the module name."""
     (tmp / "pyproject.toml").write_text(
         '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["nonexistent_plugin_xyz"]\n'
     )
@@ -556,6 +556,8 @@ def test_help_shows_plugin_flags(tmp: TempDir) -> None:
 
 @dataclass(frozen=True)
 class CliPrecedenceCase:
+    """Parametrize case for CLI > env > pyproject precedence tests."""
+
     cli_args: tuple[str, ...]
     env_extra: dict[str, str]
     expected_host: str

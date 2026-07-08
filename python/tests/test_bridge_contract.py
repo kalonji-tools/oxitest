@@ -85,6 +85,7 @@ def _wire(
 
 
 def test_collected_item_fields_match_rust() -> None:
+    """CollectedItem Python fields must match the Rust struct to avoid PyO3 panics."""
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "CollectedItem")
     python_fields = _python_fields(CollectedItem)
@@ -97,6 +98,7 @@ def test_collected_item_fields_match_rust() -> None:
 
 
 def test_raw_violation_fields_match_rust() -> None:
+    """CollectedViolation fields must match RawViolation in bridge.rs."""
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "RawViolation")
     python_fields = _python_fields(CollectedViolation)
@@ -268,6 +270,7 @@ def test_violation_kind_variants_match_rust() -> None:
 
 
 def test_required_fields_passed_has_required_fields() -> None:
+    """PassedResult wire payload includes node_id, outcome, duration_ms, and version."""
     wire = _wire(PassedResult())
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
@@ -278,6 +281,7 @@ def test_required_fields_passed_has_required_fields() -> None:
 
 
 def test_required_fields_failed_has_required_fields() -> None:
+    """FailedResult wire payload has node_id, outcome, duration_ms, protocol_version."""
     wire = _wire(FailedResult(message="boom"))
     assert "node_id" in wire, "node_id must be present"
     assert "outcome" in wire, "outcome must be present"
@@ -288,6 +292,7 @@ def test_required_fields_failed_has_required_fields() -> None:
 
 
 def test_compact_passed_omits_all_optional_fields() -> None:
+    """PassedResult omits diagnostic fields from wire payload (keeps output compact)."""
     wire = _wire(PassedResult())
     optional_keys = {
         "failure_repr",
@@ -307,12 +312,14 @@ def test_compact_passed_omits_all_optional_fields() -> None:
 
 
 def test_compact_strict_true_is_included() -> None:
+    """XPassedResult strict=True includes strict so Rust enforces xpass-as-failure."""
     wire = _wire(XPassedResult(strict=True))
     assert "strict" in wire, "strict=True must be present"
     assert wire["strict"] is True, "strict must be True"
 
 
 def test_failed_shape_includes_diagnostic_fields() -> None:
+    """FailedResult with all diagnostic fields round-trips via wire format."""
     result = FailedResult(
         message="AssertionError: values differ",
         file="tests/test_foo.py",
@@ -342,6 +349,7 @@ def test_failed_shape_includes_diagnostic_fields() -> None:
 
 
 def test_failed_shape_error_includes_message_and_frames() -> None:
+    """ErrorResult wire payload includes message and frames for traceback display."""
     result = ErrorResult(
         message="ImportError: no module named foo",
         frames=(
@@ -399,6 +407,7 @@ def test_status_round_trip(status: str, expected: str) -> None:
 
 
 def test_frame_keys() -> None:
+    """Frame wire serialization has exactly the keys that Rust's RawFrame expects."""
     result = FailedResult(
         message="err",
         frames=(
@@ -413,6 +422,7 @@ def test_frame_keys() -> None:
 
 
 def test_frame_multiple_frames_preserved() -> None:
+    """All frames in a result are preserved in order through the wire serialization."""
     result = FailedResult(
         message="err",
         frames=(
@@ -431,6 +441,7 @@ def test_frame_multiple_frames_preserved() -> None:
 
 
 def test_protocol_version_always_present() -> None:
+    """Every wire payload carries protocol_version so the coordinator spots drift."""
     result = PassedResult()
     wire = _wire(result, "t.py::test_a", 1.0)
     assert "protocol_version" in wire, "protocol_version must always be in wire output"

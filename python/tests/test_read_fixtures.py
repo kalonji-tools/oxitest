@@ -1,3 +1,5 @@
+"""Tests for _FixturesProxy — namespace-aware fixture accessor resolution."""
+
 from __future__ import annotations
 
 import oxitest
@@ -5,6 +7,7 @@ from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProx
 
 
 def test_proxy_resolves_namespace_and_accessor(_tmp: oxitest.TempDir) -> None:
+    """Proxy chains namespace access to a FixtureAccessor with fixture metadata."""
     from oxitest._bridge._fixture_registry import (
         ConftestSource,
         FixtureDef,
@@ -37,6 +40,7 @@ def test_proxy_resolves_namespace_and_accessor(_tmp: oxitest.TempDir) -> None:
 
 
 def test_proxy_raises_outside_session() -> None:
+    """Accessing a proxy namespace outside a session should raise AttributeError."""
     token = _fixtures_registry_var.set(None)
     try:
         proxy = _FixturesProxy()

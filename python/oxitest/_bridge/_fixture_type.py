@@ -66,6 +66,7 @@ class _FixtureRefType:
         def test_backend(store: Fixture[KVault], label: str) -> None:
             assert store.ping()
         ```
+
     """
 
     def __class_getitem__(cls, item: Any) -> Any:

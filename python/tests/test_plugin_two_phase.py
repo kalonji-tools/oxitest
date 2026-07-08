@@ -41,6 +41,7 @@ def _make_plugin_with_extension() -> types.ModuleType:
 
 @oxitest.mark.inprocess
 def test_discover_cli_extensions_reads_attribute() -> None:
+    """load_plugins discovers oxitest_cli_extension and stores prefix + descriptors."""
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -58,6 +59,7 @@ def test_discover_cli_extensions_reads_attribute() -> None:
 
 @oxitest.mark.inprocess
 def test_user_prefix_override() -> None:
+    """cli_prefix in plugin_settings should override the default extension prefix."""
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -73,6 +75,7 @@ def test_user_prefix_override() -> None:
 
 @oxitest.mark.inprocess
 def test_plugin_without_extension_has_no_cli() -> None:
+    """A plugin without oxitest_cli_extension should not appear in cli_extensions."""
     mod = types.ModuleType("fake_simple")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["fake_simple"] = mod
@@ -87,6 +90,7 @@ def test_plugin_without_extension_has_no_cli() -> None:
 
 @oxitest.mark.inprocess
 def test_activate_plugin_with_typed_config() -> None:
+    """activate_plugin calls oxitest_plugin exactly once with the merged config."""
     mod = _make_plugin_with_extension()
     sys.modules["fake_ext_plugin"] = mod
     try:
@@ -105,6 +109,7 @@ def test_activate_plugin_with_typed_config() -> None:
 
 @oxitest.mark.inprocess
 def test_backwards_compat_dict_config() -> None:
+    """A legacy plugin accepting dict config should receive plugin_settings as-is."""
     received: dict = {}
 
     def entry(config: dict[str, str] | None = None) -> Plugin:

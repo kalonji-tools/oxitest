@@ -22,6 +22,7 @@ from oxitest._bridge.result import (
 
 
 def test_plain_assertion_returns_failed() -> None:
+    """A plain AssertionError produces a FailedResult with status='failed'."""
     exc = AssertionError("plain message")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -33,6 +34,7 @@ def test_plain_assertion_returns_failed() -> None:
 
 
 def test_plain_assertion_no_message_gives_empty_message() -> None:
+    """AssertionError with no args produces an empty message string, not None."""
     exc = AssertionError()
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -45,6 +47,7 @@ def test_plain_assertion_no_message_gives_empty_message() -> None:
 
 
 def test_oxitest_assertion_with_lhs_rhs_populates_fields() -> None:
+    """_OxitestAssertionError with both operands fills left, right, and op."""
     exc = _OxitestAssertionError(1, 2, "==", "mismatch")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
@@ -60,6 +63,7 @@ def test_oxitest_assertion_with_lhs_rhs_populates_fields() -> None:
 
 
 def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
+    """The _OXITEST_NO_RHS sentinel maps to an empty string in result.right."""
     exc = _OxitestAssertionError(42, _OXITEST_NO_RHS, "==", "")
     result = _handle_assertion_error(exc)
     assert result.right == "", (
@@ -69,6 +73,8 @@ def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
 
 
 def test_skipped_exception_returns_skipped() -> None:
+    """Any exception whose class name contains 'Skipped' produces a SkippedResult."""
+
     class Skipped(Exception):
         pass
 
@@ -78,6 +84,8 @@ def test_skipped_exception_returns_skipped() -> None:
 
 
 def test_skip_test_returns_skipped() -> None:
+    """An exception named 'SkipTest' (pytest convention) produces SkippedResult."""
+
     class SkipTest(Exception):
         pass
 
@@ -90,6 +98,7 @@ def test_skip_test_returns_skipped() -> None:
 
 
 def test_regular_exception_returns_error() -> None:
+    """An ordinary Exception (not skip/assert) produces ErrorResult with type name."""
     try:
         msg = "something broke"
         raise ValueError(msg)
@@ -102,6 +111,8 @@ def test_regular_exception_returns_error() -> None:
 
 
 def test_base_exception_not_exception_returns_none() -> None:
+    """Non-Exception BaseException subclasses return None (caller re-raises)."""
+
     class MyBase(BaseException):
         pass
 
@@ -113,7 +124,7 @@ def test_base_exception_not_exception_returns_none() -> None:
 
 
 def test_compose_wraps_inner() -> None:
-    """wrapper sees inner's result and can transform it."""
+    """Wrapper sees inner's result and can transform it."""
 
     def inner() -> PassedResult:
         return PassedResult()
@@ -130,6 +141,8 @@ def test_compose_wraps_inner() -> None:
 
 
 def test_compose_passes_through() -> None:
+    """A wrapper that delegates to next_fn propagates the inner result unchanged."""
+
     def inner() -> FailedResult:
         return FailedResult()
 
@@ -170,6 +183,7 @@ def test_compose_chains_left_to_right() -> None:
 
 
 def test_repr_max_is_positive_int() -> None:
+    """_REPR_MAX is a positive integer that caps repr output length."""
     from oxitest._bridge._diagnostics import _REPR_MAX
 
     assert isinstance(_REPR_MAX, int), (
@@ -179,6 +193,7 @@ def test_repr_max_is_positive_int() -> None:
 
 
 def test_repr_safe_truncates_long_string() -> None:
+    """_repr_safe caps output length to prevent huge failure messages on long values."""
     from oxitest._bridge._diagnostics import _REPR_MAX, _repr_safe
 
     long_str = "x" * (_REPR_MAX * 10)
@@ -242,6 +257,7 @@ def test_frames_empty_when_no_traceback() -> None:
 
 
 def test_bad_module_path_returns_error(tmp: TempDir) -> None:
+    """run_test returns an error result when the module path does not exist."""
     result = helpers.common.run_test(str(tmp / "nonexistent.py"), "test_foo")
     assert result.status == "error", (
         f"run_test with nonexistent module should return status='error', got "
@@ -250,6 +266,7 @@ def test_bad_module_path_returns_error(tmp: TempDir) -> None:
 
 
 def test_bad_fn_name_returns_error(tmp: TempDir) -> None:
+    """run_test returns an error when the function name is absent from the module."""
     module = tmp / "test_mod.py"
     module.write_text("def test_real(): pass\n")
     result = helpers.common.run_test(str(module), "test_missing")

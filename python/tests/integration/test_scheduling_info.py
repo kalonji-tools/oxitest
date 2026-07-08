@@ -6,6 +6,7 @@ from oxitest import TempDir, helpers
 
 
 def test_verbose_shows_scheduling_decision(tmp: TempDir) -> None:
+    """-v should emit a 'scheduling:' line explaining how tests are dispatched."""
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -16,6 +17,7 @@ def test_verbose_shows_scheduling_decision(tmp: TempDir) -> None:
 
 
 def test_verbose_shows_serial_reason(tmp: TempDir) -> None:
+    """-v --serial should mention 'serial' in the scheduling diagnostic output."""
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -26,6 +28,7 @@ def test_verbose_shows_serial_reason(tmp: TempDir) -> None:
 
 
 def test_verbose_shows_strategy(tmp: TempDir) -> None:
+    """-v should include the scheduling strategy name in the diagnostic output."""
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
@@ -36,6 +39,7 @@ def test_verbose_shows_strategy(tmp: TempDir) -> None:
 
 
 def test_no_scheduling_info_without_verbose(tmp: TempDir) -> None:
+    """Without -v, the scheduling diagnostic section should not appear."""
     helpers.integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},

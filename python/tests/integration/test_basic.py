@@ -4,6 +4,7 @@ from oxitest import TempDir, helpers
 
 
 def test_all_pass_exits_zero(tmp: TempDir) -> None:
+    """All-passing test suite should exit 0 with no failures reported."""
     (tmp / "test_ok.py").write_text(
         "def test_a(): assert 1 == 1\ndef test_b(): assert True\n"
     )
@@ -12,12 +13,14 @@ def test_all_pass_exits_zero(tmp: TempDir) -> None:
 
 
 def test_failure_exits_one(tmp: TempDir) -> None:
+    """A failing assertion should cause oxitest to exit with a non-zero code."""
     (tmp / "test_fail.py").write_text("def test_x(): assert 1 == 2\n")
     out, _, rc = helpers.common.run_oxitest(tmp)
     helpers.integ.assert_failed(out, rc)
 
 
 def test_all_skip_exits_zero(tmp: TempDir) -> None:
+    """A suite of only @mark.skip tests should still exit 0."""
     (tmp / "test_skip.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.skip(reason='not ready')\n"
@@ -29,6 +32,7 @@ def test_all_skip_exits_zero(tmp: TempDir) -> None:
 
 
 def test_xfail_exits_zero(tmp: TempDir) -> None:
+    """A test marked @mark.xfail that fails should exit 0 and be reported as xfailed."""
     (tmp / "test_xfail.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.xfail(reason='known bug')\n"
@@ -40,6 +44,7 @@ def test_xfail_exits_zero(tmp: TempDir) -> None:
 
 
 def test_mixed_pass_and_fail(tmp: TempDir) -> None:
+    """A suite with both passing and failing tests should exit non-zero."""
     (tmp / "test_mix.py").write_text(
         "def test_good(): assert True\ndef test_bad(): assert False\n"
     )
@@ -49,6 +54,7 @@ def test_mixed_pass_and_fail(tmp: TempDir) -> None:
 
 
 def test_no_tests_collected(tmp: TempDir) -> None:
+    """A file with no test functions should exit 0 with zero tests collected."""
     (tmp / "test_empty.py").write_text("# no test functions\n")
     out, _, rc = helpers.common.run_oxitest(tmp)
     helpers.integ.assert_passed(out, rc)

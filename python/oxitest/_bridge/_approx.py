@@ -167,6 +167,7 @@ def approx(
 
         assert 0.1 + 0.2 == approx(0.3)
         assert [0.1, 0.2] == approx([0.1, 0.2], abs=1e-9)
+
     """
     if isinstance(expected, set):
         msg = "approx() does not support sets"

@@ -1,3 +1,5 @@
+"""Tests for _load_module and _resolve_fn in the module loader."""
+
 from __future__ import annotations
 
 import hashlib
@@ -12,6 +14,7 @@ def _unique_name(path: str) -> str:
 
 
 def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
+    """_load_module returns a module object containing the defined test function."""
     from oxitest._bridge._loader import _load_module
 
     f = tmp / "test_sample.py"
@@ -27,6 +30,7 @@ def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
 
 
 def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir) -> None:
+    """_load_module should raise _LoadError when the file path does not exist."""
     from oxitest._bridge._loader import _load_module, _LoadError
 
     unique = _unique_name("/nonexistent/path/test_x.py")
@@ -35,6 +39,7 @@ def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir) -> None:
 
 
 def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
+    """_load_module should raise _LoadError when the file contains a syntax error."""
     from oxitest._bridge._loader import _load_module, _LoadError
 
     f = tmp / "test_broken.py"
@@ -48,6 +53,7 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
 def test_resolve_fn_returns_callable(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
+    """_resolve_fn returns a (module, callable) tuple for a valid function name."""
     import importlib.util
     import sys
 
@@ -75,6 +81,7 @@ def test_resolve_fn_returns_callable(
 def test_resolve_fn_raises_load_error_on_missing_function(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
+    """_resolve_fn raises _LoadError with status='error' when the function is absent."""
     import importlib.util
     import sys
 
@@ -107,6 +114,7 @@ def test_resolve_fn_raises_load_error_on_missing_function(
 def test_resolve_fn_handles_class_method(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
+    """_resolve_fn should resolve 'ClassName::method_name' to the unbound method."""
     import importlib.util
     import sys
 

@@ -58,6 +58,7 @@ class TempDir:
             output.write_text("hello")
             assert output.read_text() == "hello"
         ```
+
     """
 
     path: Path
@@ -87,6 +88,7 @@ class TempDirFactory:
             dst = factory.mktemp("dst")
             shutil.copy(src / "a.txt", dst / "a.txt")
         ```
+
     """
 
     def __init__(self) -> None:
@@ -101,6 +103,7 @@ class TempDirFactory:
 
         Returns:
             A new `TempDir` pointing at the created directory.
+
         """
         d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
         self.dirs.append(d)

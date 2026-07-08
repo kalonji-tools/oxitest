@@ -259,6 +259,7 @@ class PluginRegistry:
         Args:
             plugin_settings_json: JSON dict of per-module pyproject settings.
             cli_values_json: JSON dict of per-module CLI-provided values.
+
         """
         plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
         cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
@@ -300,6 +301,7 @@ class PluginRegistry:
         Raises:
             ConflictingDebuggerError: if multiple plugins provide a debugger backend.
             ConflictingCoverageError: if multiple plugins provide a coverage provider.
+
         """
         if len(self.debugger_backends) > 1:
             providers = [name for name, _ in self.debugger_backends]
@@ -319,6 +321,7 @@ def _load_single_plugin(
 
     Raises:
         PluginLoadError: If the plugin cannot be loaded or is invalid.
+
     """
     # Check if this plugin declares only lazy protocols and can be deferred.
     mod_settings = plugin_configs.get(module_name, {})
@@ -410,6 +413,7 @@ def load_plugins(
 
     Raises:
         PluginLoadError: If any plugin cannot be loaded or is invalid.
+
     """
     registry = PluginRegistry()
     for module_name in plugin_modules:

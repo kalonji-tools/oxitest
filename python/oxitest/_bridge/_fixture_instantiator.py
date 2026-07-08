@@ -293,7 +293,7 @@ class FixtureInstantiator:
         defn: FixtureDef[Any],
         ctx: _ResolutionContext,
     ) -> Any:
-        """Internal resolution of a fixture definition, handling scope caching."""
+        """Resolve a fixture definition, handling scope caching."""
         scope_refs = ctx.scope_callback(defn)
 
         if scope_refs is not None:

@@ -1,3 +1,5 @@
+"""Tests for the executor: sync/async execution, fixture injection, and timeouts."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
@@ -16,6 +18,7 @@ from oxitest._bridge._fixture_session import FixtureSession
 
 
 def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None:
+    """_warn_teardown() emits a FixtureTeardownWarning containing the fixture name."""
     from oxitest._bridge._fixture_context import FixtureTeardownWarning, _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
@@ -31,6 +34,7 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
 
 
 def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
+    """_warn_teardown() includes the node_id in the warning message when provided."""
     from oxitest._bridge._fixture_context import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
@@ -42,6 +46,7 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
+    """_warn_teardown() still emits a warning when no node_id is given."""
     from oxitest._bridge._fixture_context import _warn_teardown
 
     _warn_teardown("my_fix", RuntimeError("boom"))
@@ -52,6 +57,7 @@ def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
 
 
 def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
+    """_warn_teardown() reads node_id from _current_teardown_node_id ContextVar."""
     from oxitest._bridge._fixture_context import (
         _current_teardown_node_id,
         _warn_teardown,
@@ -70,6 +76,7 @@ def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
 
 
 def test_passing_function(tmp: TempDir) -> None:
+    """A passing test produces status='passed' and reports its bare assert line."""
     result = helpers.common.exec_inline(
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
@@ -83,6 +90,7 @@ def test_passing_function(tmp: TempDir) -> None:
 
 
 def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir) -> None:
+    """Bare assert lines are tracked in no_message_lines for strict-mode checks."""
     result = helpers.common.exec_inline(
         tmp, "def test_bare():\n    assert 1 == 1\n", "test_bare"
     )
@@ -100,6 +108,7 @@ def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir) -> None
 def test_passing_with_message_assert_returns_empty_no_message_lines(
     tmp: TempDir,
 ) -> None:
+    """Asserts with a message are not flagged in no_message_lines."""
     result = helpers.common.exec_inline(
         tmp, 'def test_msg():\n    assert 1 == 1, "one equals one"\n', "test_msg"
     )
@@ -113,6 +122,7 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(
 
 
 def test_failing_assertion_with_message(tmp: TempDir) -> None:
+    """A failing assert with a message produces status='failed' with correct lineno."""
     result = helpers.common.exec_inline(
         tmp, 'def test_bad():\n    assert 1 == 2, "one is not two"\n', "test_bad"
     )
@@ -133,6 +143,7 @@ def test_failing_assertion_with_message(tmp: TempDir) -> None:
 
 
 def test_failing_bare_assertion(tmp: TempDir) -> None:
+    """A failing bare assert produces status='failed' with an empty message string."""
     result = helpers.common.exec_inline(
         tmp, "def test_bad():\n    assert 1 == 2\n", "test_bad"
     )
@@ -154,6 +165,7 @@ def test_failing_bare_assertion(tmp: TempDir) -> None:
 
 
 def test_error_exception(tmp: TempDir) -> None:
+    """An uncaught exception produces status='error' with exception type and message."""
     result = helpers.common.exec_inline(
         tmp, "def test_error():\n    raise ValueError('boom')\n", "test_error"
     )
@@ -171,6 +183,7 @@ def test_error_exception(tmp: TempDir) -> None:
 
 
 def test_skipped_via_unittest(tmp: TempDir) -> None:
+    """Raising unittest.SkipTest produces status='skipped' with the skip reason."""
     result = helpers.common.exec_inline(
         tmp,
         "import unittest\ndef test_skip(): raise unittest.SkipTest('reason')\n",
@@ -185,6 +198,7 @@ def test_skipped_via_unittest(tmp: TempDir) -> None:
 
 
 def test_function_not_found_is_error(tmp: TempDir) -> None:
+    """Running a non-existent test function name produces status='error'."""
     result = helpers.common.exec_inline(
         tmp, "def test_real(): pass\n", "test_nonexistent", name="test_foo.py"
     )
@@ -194,6 +208,7 @@ def test_function_not_found_is_error(tmp: TempDir) -> None:
 
 
 def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
+    """A test that emits a Python warning produces status='warned' with warning type."""
     result = helpers.common.exec_inline(
         tmp,
         "import warnings\n"
@@ -212,6 +227,8 @@ def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
 
 @dataclass(frozen=True)
 class OperandCase:
+    """Parametrize case capturing source code and expected assertion operand fields."""
+
     source: str
     fn_name: str
     expected_status: str
@@ -274,6 +291,7 @@ def test_assertion_operands(
     expected_op: str,
     expected_message: str,
 ) -> None:
+    """Executor extracts left, right, and op operands from assertion failures."""
     result = helpers.common.exec_inline(tmp, source, fn_name, name="test_op.py")
     assert result.status == expected_status, (
         f"expected status={expected_status!r}, got {result.status!r} "
@@ -299,6 +317,7 @@ def test_assertion_operands(
 
 
 def test_run_test_without_session_backward_compat(tmp: TempDir) -> None:
+    """run_test() works without a FixtureSession for tests with no fixture params."""
     result = helpers.common.exec_inline(
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
@@ -309,6 +328,7 @@ def test_run_test_without_session_backward_compat(tmp: TempDir) -> None:
 
 
 def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
+    """Executor injects a registered fixture value into Fixture[T]-annotated params."""
     session = helpers.common.make_session_with("val", lambda: 99)
     result = helpers.common.exec_inline(
         tmp,
@@ -324,6 +344,8 @@ def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
 
 
 def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None:
+    """A fixture factory that raises propagates as status='error' with exc text."""
+
     def bad_factory() -> None:
         msg = "db is down"
         raise RuntimeError(msg)
@@ -351,6 +373,7 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None
 def test_run_test_missing_fixture_returns_error_result(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
+    """Requesting an unregistered fixture produces status='error' naming the fixture."""
     result = helpers.common.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
@@ -368,6 +391,7 @@ def test_run_test_missing_fixture_returns_error_result(
 
 
 def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
+    """Yield fixture teardown executes even when the test body fails an assertion."""
     torn_down = []
 
     def factory() -> Generator[int, None, None]:
@@ -617,6 +641,7 @@ def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir) -> None:
 
 
 def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
+    """@mark.timeout on a slow sync test produces status='timeout' with limit value."""
     result = helpers.common.exec_inline(
         tmp,
         "import time, oxitest\n"
@@ -635,6 +660,7 @@ def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
 
 
 def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
+    """A fast sync test that finishes within the @mark.timeout limit still passes."""
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -650,6 +676,7 @@ def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
 
 
 def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
+    """The default_timeout parameter enforces a timeout even without @mark.timeout."""
     result = helpers.common.exec_inline(
         tmp,
         "import time\ndef test_slow():\n    time.sleep(5)\n",
@@ -662,6 +689,7 @@ def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
 
 
 def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
+    """Tests run without timeout when no timeout mark or default_timeout is given."""
     result = helpers.common.exec_inline(tmp, "def test_ok():\n    pass\n", "test_ok")
     assert result.status == "passed", (
         f"test without timeout mark should pass normally, got {result.status!r}"
@@ -672,6 +700,7 @@ def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
 
 
 def test_async_test_passes(tmp: TempDir) -> None:
+    """A passing async test is run via asyncio.run() and produces status='passed'."""
     result = helpers.common.exec_inline(
         tmp, "async def test_ok():\n    assert 1 == 1\n", "test_ok"
     )
@@ -682,6 +711,7 @@ def test_async_test_passes(tmp: TempDir) -> None:
 
 
 def test_async_test_fails(tmp: TempDir) -> None:
+    """A failing assertion inside an async test produces status='failed'."""
     result = helpers.common.exec_inline(
         tmp, 'async def test_bad():\n    assert 1 == 2, "nope"\n', "test_bad"
     )
@@ -694,6 +724,7 @@ def test_async_test_fails(tmp: TempDir) -> None:
 
 
 def test_async_test_error(tmp: TempDir) -> None:
+    """An uncaught exception inside an async test produces status='error'."""
     result = helpers.common.exec_inline(
         tmp, "async def test_err():\n    raise ValueError('boom')\n", "test_err"
     )
@@ -709,6 +740,7 @@ def test_async_test_error(tmp: TempDir) -> None:
 
 
 def test_async_test_warning(tmp: TempDir) -> None:
+    """A warning emitted inside an async test produces status='warned'."""
     result = helpers.common.exec_inline(
         tmp,
         "import warnings\n"
@@ -726,6 +758,7 @@ def test_async_test_warning(tmp: TempDir) -> None:
 
 
 def test_async_test_skip(tmp: TempDir) -> None:
+    """@mark.skip on an async test produces status='skipped' with the skip reason."""
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -743,6 +776,7 @@ def test_async_test_skip(tmp: TempDir) -> None:
 
 
 def test_async_test_xfail(tmp: TempDir) -> None:
+    """An expected-to-fail async test that fails produces status='xfailed'."""
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -757,6 +791,7 @@ def test_async_test_xfail(tmp: TempDir) -> None:
 
 
 def test_async_test_xpass(tmp: TempDir) -> None:
+    """An expected-to-fail async test that passes produces status='xpassed'."""
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -771,6 +806,8 @@ def test_async_test_xpass(tmp: TempDir) -> None:
 
 
 def test_async_test_with_async_fixture(tmp: TempDir) -> None:
+    """An async fixture is awaited correctly when injected into an async test."""
+
     async def async_factory() -> int:
         return 99
 
@@ -790,6 +827,7 @@ def test_async_test_with_async_fixture(tmp: TempDir) -> None:
 
 
 def test_async_test_with_sync_fixture(tmp: TempDir) -> None:
+    """A sync fixture can be injected into an async test without errors."""
     session = helpers.common.make_session_with("val", lambda: 42)
     result = helpers.common.exec_inline(
         tmp,
@@ -806,6 +844,8 @@ def test_async_test_with_sync_fixture(tmp: TempDir) -> None:
 
 
 def test_async_fixture_setup_error(tmp: TempDir) -> None:
+    """An async fixture factory that raises propagates as status='error'."""
+
     async def bad_factory() -> None:
         msg = "db is down"
         raise RuntimeError(msg)
@@ -829,6 +869,8 @@ def test_async_fixture_setup_error(tmp: TempDir) -> None:
 
 
 def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
+    """Using an async fixture in a sync test produces status='error' naming it."""
+
     async def async_factory() -> int:
         return 99
 
@@ -857,6 +899,8 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
 
 
 def test_async_yield_fixture_provides_value(tmp: TempDir) -> None:
+    """An async yield fixture provides the yielded value to the async test."""
+
     async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
 
@@ -1037,6 +1081,8 @@ def test_async_yield_fixture_setup_error(tmp: TempDir) -> None:
 
 
 def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir) -> None:
+    """Using an async yield fixture in a sync test produces status='error'."""
+
     async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
 
@@ -1065,6 +1111,7 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir) -> None
 
 
 def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
+    """@mark.timeout on a slow async test produces status='timeout' with limit value."""
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio, oxitest\n"
@@ -1083,6 +1130,7 @@ def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
 
 
 def test_async_test_default_timeout_fires(tmp: TempDir) -> None:
+    """The default_timeout parameter enforces a timeout on slow async tests too."""
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio\nasync def test_slow():\n    await asyncio.sleep(10)\n",
@@ -1096,6 +1144,7 @@ def test_async_test_default_timeout_fires(tmp: TempDir) -> None:
 
 
 def test_async_test_timeout_passes_fast_test(tmp: TempDir) -> None:
+    """A fast async test that finishes within the @mark.timeout limit still passes."""
     result = helpers.common.exec_inline(
         tmp,
         "import oxitest\n"
@@ -1140,6 +1189,8 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
 
 
 def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
+    """A shared async fixture is resolved and its value injected into the async test."""
+
     async def async_pool_factory() -> int:
         return 99
 
@@ -1169,6 +1220,7 @@ def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
 
 
 def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
+    """A shared async fixture factory is called once and cached across tests."""
     f = tmp / "test_shared_cached.py"
     f.write_text(
         "from oxitest import Fixture\n"
@@ -1280,8 +1332,7 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
 
 
 def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
-    """Async test not using shared fixtures gets per-test asyncio.run(), even
-    when the session has a shared async loop from another test."""
+    """Async test without shared fixtures uses asyncio.run() even with shared loops."""
     f = tmp / "test_isolation.py"
     f.write_text(
         "import asyncio\n"
@@ -1318,6 +1369,7 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
 
 
 def test_task_group_fixture_basic(tmp: TempDir) -> None:
+    """task_group fixture provides an asyncio.TaskGroup that spawns and awaits tasks."""
     result = helpers.common.exec_inline(
         tmp,
         "import asyncio\n"

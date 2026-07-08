@@ -20,6 +20,7 @@ def _run_completions(shell: str) -> tuple[str, str, int]:
 
 
 def test_completions_bash_outputs_script(_tmp: TempDir) -> None:
+    """'completions bash' should output a valid bash completion script and exit 0."""
     out, _err, rc = _run_completions("bash")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
     assert "complete" in out.lower() or "_oxitest" in out, (
@@ -28,6 +29,7 @@ def test_completions_bash_outputs_script(_tmp: TempDir) -> None:
 
 
 def test_completions_zsh_outputs_script(_tmp: TempDir) -> None:
+    """'completions zsh' should output a valid zsh completion script and exit 0."""
     out, _err, rc = _run_completions("zsh")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
     assert "#compdef" in out or "_oxitest" in out, (
@@ -36,6 +38,7 @@ def test_completions_zsh_outputs_script(_tmp: TempDir) -> None:
 
 
 def test_completions_fish_outputs_script(_tmp: TempDir) -> None:
+    """'completions fish' should output a valid fish completion script and exit 0."""
     out, _err, rc = _run_completions("fish")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
     assert "complete" in out.lower(), (

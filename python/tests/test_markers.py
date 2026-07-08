@@ -1,3 +1,5 @@
+"""Tests for the mark API, mark decorators, handlers, and mark evaluation pipeline."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -29,6 +31,7 @@ from oxitest._bridge.result import (
 
 
 def test_mark_info_stores_name_args_kwargs() -> None:
+    """MarkInfo preserves name, args, and kwargs exactly as supplied."""
     m = MarkInfo("slow", (), MappingProxyType({}))
     assert m.name == "slow", f"expected name='slow', got {m.name!r}"
     assert m.args == (), f"expected args=(), got {m.args!r}"
@@ -36,6 +39,8 @@ def test_mark_info_stores_name_args_kwargs() -> None:
 
 
 def test_append_mark_creates_list_on_first_call() -> None:
+    """_append_mark initialises the marks list and stores the first mark."""
+
     def fn() -> None:
         pass
 
@@ -52,6 +57,8 @@ def test_append_mark_creates_list_on_first_call() -> None:
 
 
 def test_append_mark_stacks_multiple_marks() -> None:
+    """Each successive _append_mark call grows the marks list by one."""
+
     def fn() -> None:
         pass
 
@@ -65,6 +72,8 @@ def test_append_mark_stacks_multiple_marks() -> None:
 
 
 def test_mark_bare_decorator_stamps_function() -> None:
+    """Bare @mark.slow decorator attaches a MarkInfo with empty args/kwargs."""
+
     @oxitest.mark.slow
     def test_fn() -> None:
         pass
@@ -85,6 +94,8 @@ def test_mark_bare_decorator_stamps_function() -> None:
 
 
 def test_mark_parameterised_decorator_stores_args() -> None:
+    """@mark.skip(reason=...) stores kwargs in the MarkInfo correctly."""
+
     @oxitest.mark.skip(reason="not ready")
     def test_fn() -> None:
         pass
@@ -101,6 +112,8 @@ def test_mark_parameterised_decorator_stores_args() -> None:
 
 
 def test_mark_skip_when_true_stores_via_decorator() -> None:
+    """@mark.skip(when=True) stores a skip MarkInfo with the given reason."""
+
     @oxitest.mark.skip(when=True, reason="always skip")
     def test_fn() -> None:
         pass
@@ -115,6 +128,7 @@ def test_mark_skip_when_true_stores_via_decorator() -> None:
 
 
 def test_skip_mark_rejects_positional_args() -> None:
+    """@mark.skip raises TypeError when given a positional boolean argument."""
     with oxitest.raises(TypeError, match="positional"):
 
         @oxitest.mark.skip(True, reason="nope")  # noqa: FBT003
@@ -123,6 +137,8 @@ def test_skip_mark_rejects_positional_args() -> None:
 
 
 def test_skip_mark_when_true_attaches_mark() -> None:
+    """@mark.skip(when=True) attaches exactly one skip mark with the supplied reason."""
+
     @oxitest.mark.skip(when=True, reason="not ready")
     def test_fn() -> None:
         pass
@@ -140,6 +156,8 @@ def test_skip_mark_when_true_attaches_mark() -> None:
 
 
 def test_skip_mark_when_false_does_not_attach() -> None:
+    """@mark.skip(when=False) is a no-op and leaves the marks list empty."""
+
     @oxitest.mark.skip(when=False, reason="never")
     def test_fn() -> None:
         pass
@@ -152,6 +170,8 @@ def test_skip_mark_when_false_does_not_attach() -> None:
 
 
 def test_skip_mark_bare_still_works() -> None:
+    """Bare @mark.skip (no call) attaches a skip mark with an empty reason string."""
+
     @oxitest.mark.skip
     def test_fn() -> None:
         pass
@@ -169,6 +189,8 @@ def test_skip_mark_bare_still_works() -> None:
 
 
 def test_skip_mark_empty_parens_same_as_bare() -> None:
+    """@mark.skip() with empty parens behaves identically to bare @mark.skip."""
+
     @oxitest.mark.skip()
     def test_fn() -> None:
         pass
@@ -186,6 +208,8 @@ def test_skip_mark_empty_parens_same_as_bare() -> None:
 
 
 def test_skip_mark_reason_only() -> None:
+    """@mark.skip(reason=...) stores the reason kwarg and no other kwargs."""
+
     @oxitest.mark.skip(reason="WIP")
     def test_fn() -> None:
         pass
@@ -199,6 +223,7 @@ def test_skip_mark_reason_only() -> None:
 
 
 def test_skip_mark_rejects_unknown_kwargs() -> None:
+    """@mark.skip raises TypeError when given an unrecognised keyword argument."""
     with oxitest.raises(TypeError, match="unexpected keyword"):
 
         @oxitest.mark.skip(bogus=True)
@@ -207,6 +232,8 @@ def test_skip_mark_rejects_unknown_kwargs() -> None:
 
 
 def test_mark_xfail_stores_strict_false() -> None:
+    """@mark.xfail(strict=False) stores both strict and reason in kwargs."""
+
     @oxitest.mark.xfail(strict=False, reason="flaky")
     def test_fn() -> None:
         pass
@@ -222,6 +249,8 @@ def test_mark_xfail_stores_strict_false() -> None:
 
 
 def test_mark_usefixtures_stores_fixture_names() -> None:
+    """@mark.usefixtures stores fixture names as positional args on the MarkInfo."""
+
     @oxitest.mark.usefixtures("db", "cache")
     def test_fn() -> None:
         pass
@@ -236,6 +265,8 @@ def test_mark_usefixtures_stores_fixture_names() -> None:
 
 
 def test_mark_stacking_two_decorators() -> None:
+    """Stacking two mark decorators registers both marks on the function."""
+
     @oxitest.mark.slow
     @oxitest.mark.integration
     def test_fn() -> None:
@@ -255,6 +286,8 @@ def test_mark_stacking_two_decorators() -> None:
 
 @dataclasses.dataclass(frozen=True)
 class MarkerCase:
+    """Parametrize case for marker executor result tests."""
+
     code: str
     expected_status: str
     message_contains: str = ""
@@ -340,6 +373,7 @@ class MarkerCase:
 def test_mark_executor_result(
     tmp: TempDir, code: str, expected_status: str, message_contains: str
 ) -> None:
+    """Each mark variant produces the expected executor status when run."""
     result = helpers.common.exec_inline(tmp, "import oxitest\n" + code, "test_foo")
     assert result.status == expected_status, (
         f"mark executor result: expected status={expected_status!r}, "
@@ -352,7 +386,7 @@ def test_mark_executor_result(
 
 
 def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
-    """usefixtures mark causes the fixture to run (side effects happen)."""
+    """The usefixtures mark runs the named fixture, producing its side effects."""
     reg = FixtureRegistry()
     log: list[str] = []
 
@@ -383,6 +417,7 @@ def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
 
 
 def test_mark_eval_result_defaults() -> None:
+    """MarkEvalResult() starts with short_circuit=None and wrapper=None."""
     r = MarkEvalResult()
     assert r.short_circuit is None, (
         f"MarkEvalResult() short_circuit should default to None, got "
@@ -394,7 +429,7 @@ def test_mark_eval_result_defaults() -> None:
 
 
 def test_usefixtures_mark_resolves_via_evaluate_marks() -> None:
-    """usefixtures mark is handled inline in evaluate_marks, not via a handler."""
+    """Usefixtures is resolved inline in evaluate_marks, not by a MarkHandler."""
     session = FixtureSession(FixtureRegistry())
     marks = [MarkInfo("usefixtures", (), MappingProxyType({}))]
     sc, wrappers = evaluate_marks(marks, session, "test_fake.py", [])
@@ -403,6 +438,7 @@ def test_usefixtures_mark_resolves_via_evaluate_marks() -> None:
 
 
 def test_skip_handler_returns_short_circuit() -> None:
+    """_SkipHandler.handle produces a skipped short-circuit result and no wrapper."""
     result = _SkipHandler().handle(
         MarkInfo("skip", (), MappingProxyType({"reason": "not ready"}))
     )
@@ -434,6 +470,7 @@ def test_skip_when_false_not_in_marks() -> None:
 
 
 def test_xfail_handler_returns_wrapper() -> None:
+    """_XFailHandler.handle produces a wrapper function and no short-circuit."""
     result = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
@@ -442,6 +479,7 @@ def test_xfail_handler_returns_wrapper() -> None:
 
 
 def test_xfail_wrapper_converts_failed_to_xfailed() -> None:
+    """The xfail wrapper turns a failed inner result into an xfailed outcome."""
     result = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
@@ -454,6 +492,7 @@ def test_xfail_wrapper_converts_failed_to_xfailed() -> None:
 
 
 def test_xfail_wrapper_converts_passed_to_xpassed() -> None:
+    """The xfail wrapper turns an unexpectedly passing inner result into xpassed."""
     result = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known"}))
     )
@@ -466,6 +505,7 @@ def test_xfail_wrapper_converts_passed_to_xpassed() -> None:
 
 
 def test_xfail_wrapper_passes_through_skipped() -> None:
+    """The xfail wrapper leaves a skipped inner result unchanged."""
     result = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})))
     assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
     wrapper = result.wrapper
@@ -478,6 +518,7 @@ def test_xfail_wrapper_passes_through_skipped() -> None:
 
 
 def test_evaluate_marks_returns_tuple() -> None:
+    """evaluate_marks with no marks returns (None, [])."""
     sc, wrappers = evaluate_marks(
         [], FixtureSession(FixtureRegistry()), "test_fake.py", []
     )
@@ -488,6 +529,7 @@ def test_evaluate_marks_returns_tuple() -> None:
 
 
 def test_evaluate_marks_skip_returns_short_circuit() -> None:
+    """evaluate_marks with a skip mark short-circuits to a skipped result."""
     sc, wrappers = evaluate_marks(
         [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))],
         FixtureSession(FixtureRegistry()),
@@ -508,6 +550,7 @@ def test_evaluate_marks_skip_returns_short_circuit() -> None:
 
 
 def test_all_builtin_handlers_registered() -> None:
+    """_MARK_REGISTRY contains exactly the three built-in mark handlers."""
     expected = {"skip", "xfail", "timeout"}
     assert set(_MARK_REGISTRY.keys()) == expected, (
         f"expected builtin mark handlers {expected}, got {set(_MARK_REGISTRY.keys())}"
@@ -515,6 +558,7 @@ def test_all_builtin_handlers_registered() -> None:
 
 
 def test_registered_handlers_are_mark_handler_instances() -> None:
+    """Every entry in _MARK_REGISTRY is a MarkHandler subclass instance."""
     for name, handler in _MARK_REGISTRY.items():
         assert isinstance(handler, MarkHandler), (
             f"handler for mark {name!r} should be a MarkHandler instance, "
@@ -523,12 +567,14 @@ def test_registered_handlers_are_mark_handler_instances() -> None:
 
 
 def test_handler_with_unknown_mark_name_not_in_registry() -> None:
+    """An arbitrary unknown mark name is absent from _MARK_REGISTRY."""
     assert "nonexistent_mark" not in _MARK_REGISTRY, (
         "unknown mark name 'nonexistent_mark' should not be in _MARK_REGISTRY"
     )
 
 
 def test_each_handler_has_mark_name_class_attr() -> None:
+    """Each registered handler exposes a mark_name attribute matching its key."""
     for name, handler in _MARK_REGISTRY.items():
         assert hasattr(handler, "mark_name"), (
             f"{type(handler).__name__} missing mark_name class attribute"
@@ -540,6 +586,7 @@ def test_each_handler_has_mark_name_class_attr() -> None:
 
 
 def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
+    """A failing assertion populates exc_type with 'AssertionError'."""
     result = helpers.common.exec_inline(
         tmp, "import oxitest\ndef test_foo(): assert False\n", "test_foo"
     )
@@ -549,6 +596,7 @@ def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
 
 
 def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
+    """An uncaught runtime exception sets exc_type to the exception class name."""
     result = helpers.common.exec_inline(
         tmp, "import oxitest\ndef test_foo(): raise ValueError('boom')\n", "test_foo"
     )
@@ -558,6 +606,7 @@ def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
 
 
 def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
+    """A passing test produces a PassedResult, which has no exc_type attribute."""
     result = helpers.common.exec_inline(
         tmp, "import oxitest\ndef test_foo(): pass\n", "test_foo"
     )
@@ -568,6 +617,8 @@ def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
 
 
 class _FakePluginWrapper:
+    """Minimal stand-in for a plugin that wraps test results."""
+
     marker = "custom_mark"
 
     def wrap(
@@ -578,6 +629,7 @@ class _FakePluginWrapper:
 
 
 def test_plugin_mark_handler_wraps_correctly() -> None:
+    """_PluginMarkHandler delegates wrapping to the plugin and returns a wrapper."""
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     assert handler.mark_name == "custom_mark", (
@@ -617,6 +669,7 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
 
 
 def test_evaluate_marks_dispatches_plugin_handlers() -> None:
+    """evaluate_marks routes plugin marks through the supplied plugin_handlers list."""
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     marks = [MarkInfo("custom_mark", (), MappingProxyType({}))]

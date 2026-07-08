@@ -40,6 +40,7 @@ class DebuggerBackend(Protocol):
 
         Args:
             tb: The traceback from the failed test.
+
         """
         ...
 

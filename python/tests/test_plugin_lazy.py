@@ -17,6 +17,7 @@ from oxitest.plugin import Plugin
 
 
 def test_plugin_with_eager_protocol_imported_immediately() -> None:
+    """Plugins declaring any eager protocol must be imported immediately."""
     assert PluginEntry.needs_eager_import(["reporter"]), "reporter is an eager protocol"
     assert PluginEntry.needs_eager_import(["collector"]), (
         "collector is an eager protocol"
@@ -30,6 +31,7 @@ def test_plugin_with_eager_protocol_imported_immediately() -> None:
 
 
 def test_plugin_without_protocol_declaration_imported_eagerly() -> None:
+    """Plugins with no protocol declaration default to eager import."""
     assert PluginEntry.needs_eager_import(None), (
         "no declaration means import eagerly (safe default)"
     )
@@ -39,6 +41,7 @@ def test_plugin_without_protocol_declaration_imported_eagerly() -> None:
 
 
 def test_plugin_with_only_lazy_protocols_not_eager() -> None:
+    """Plugins declaring only lazy protocols are deferred at startup."""
     assert not PluginEntry.needs_eager_import(["fixture_provider"]), (
         "fixture_provider is a lazy protocol"
     )
@@ -57,12 +60,14 @@ def test_plugin_with_only_lazy_protocols_not_eager() -> None:
 
 
 def test_mixed_protocols_imported_eagerly() -> None:
+    """One eager protocol in the declaration forces the whole plugin to load eagerly."""
     assert PluginEntry.needs_eager_import(["fixture_provider", "reporter"]), (
         "presence of one eager protocol forces eager import"
     )
 
 
 def test_eager_protocols_constant_contains_expected_values() -> None:
+    """EAGER_PROTOCOLS contains exactly the four protocols for immediate import."""
     expected = frozenset(
         {"reporter", "collector", "async_backend", "coverage_provider"}
     )
@@ -72,6 +77,7 @@ def test_eager_protocols_constant_contains_expected_values() -> None:
 
 
 def test_lazy_protocols_constant_contains_expected_values() -> None:
+    """LAZY_PROTOCOLS contains exactly the five protocols that allow deferred import."""
     expected = frozenset(
         {
             "log_backend",
@@ -87,6 +93,7 @@ def test_lazy_protocols_constant_contains_expected_values() -> None:
 
 
 def test_deferred_classmethod_creates_unloaded_entry() -> None:
+    """PluginEntry.deferred creates an entry with is_loaded=False and plugin=None."""
     entry = PluginEntry.deferred("some.plugin", ["fixture_provider"])
 
     assert entry.module_name == "some.plugin", (
@@ -103,6 +110,7 @@ def test_deferred_classmethod_creates_unloaded_entry() -> None:
 
 
 def test_plugin_entry_default_is_loaded() -> None:
+    """A PluginEntry built with a plugin instance is considered immediately loaded."""
     plugin = Plugin()
     entry = PluginEntry(module_name="some.plugin", plugin=plugin)
 
@@ -116,6 +124,7 @@ def test_plugin_entry_default_is_loaded() -> None:
 
 @oxitest.mark.inprocess
 def test_deferred_entry_ensure_loaded_imports_module() -> None:
+    """ensure_loaded() imports the module, creates the plugin, marks entry loaded."""
     mod = types.ModuleType("lazy_fixture_plugin")
     setattr(mod, "oxitest_plugin", Plugin)
     sys.modules["lazy_fixture_plugin"] = mod
@@ -143,6 +152,7 @@ def test_deferred_entry_ensure_loaded_imports_module() -> None:
 
 
 def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
+    """ensure_loaded() on a loaded entry returns the plugin without re-importing."""
     plugin = Plugin()
     entry = PluginEntry(module_name="some.plugin", plugin=plugin)
 
@@ -155,6 +165,7 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
 
 @oxitest.mark.inprocess
 def test_load_plugins_defers_lazy_only_plugin() -> None:
+    """load_plugins defers plugins with only lazy protocols (no startup import)."""
     mod = types.ModuleType("lazy_only_plugin")
     setattr(mod, "oxitest_plugin", Plugin)
     sys.modules["lazy_only_plugin"] = mod
@@ -182,6 +193,7 @@ def test_load_plugins_defers_lazy_only_plugin() -> None:
 
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_eager_protocol() -> None:
+    """load_plugins eagerly imports plugins that declare a reporter protocol."""
     mod = types.ModuleType("eager_reporter_plugin")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["eager_reporter_plugin"] = mod
@@ -205,6 +217,7 @@ def test_load_plugins_eager_imports_plugin_with_eager_protocol() -> None:
 
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_no_protocols_declared() -> None:
+    """load_plugins eagerly imports plugins with no protocol declaration (default)."""
     mod = types.ModuleType("no_protocols_plugin")
     setattr(mod, "oxitest_plugin", lambda **_: Plugin())
     sys.modules["no_protocols_plugin"] = mod
@@ -225,6 +238,7 @@ def test_load_plugins_eager_imports_plugin_with_no_protocols_declared() -> None:
 
 @oxitest.mark.inprocess
 def test_registry_register_deferred_appends_entry() -> None:
+    """register_deferred appends a PluginEntry to the registry's entries list."""
     registry = PluginRegistry()
     entry = PluginEntry.deferred("deferred.plugin", ["log_backend"])
 
@@ -238,6 +252,7 @@ def test_registry_register_deferred_appends_entry() -> None:
 
 @oxitest.mark.inprocess
 def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> None:
+    """resolve_fixture_providers loads deferred fixture plugins, returns providers."""
     mod = types.ModuleType("deferred_fixture_plugin")
 
     class FakeToken:
@@ -293,6 +308,7 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
 
 @oxitest.mark.inprocess
 def test_registry_resolve_fixture_providers_skips_non_fixture_deferred() -> None:
+    """resolve_fixture_providers skips deferred plugins with non-fixture protocols."""
     registry = PluginRegistry()
     entry = PluginEntry.deferred("lazy_log_plugin", ["log_backend"])
     registry.register_deferred(entry)

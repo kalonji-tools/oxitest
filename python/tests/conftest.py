@@ -168,10 +168,12 @@ def run_oxitest(
     Args:
         tmp_path: Path to pass as the positional argument. Pass ``None``
             to omit (e.g. for ``oxitest env``).
+        *extra_args: Additional CLI arguments forwarded to oxitest.
         env: Optional environment dict passed directly to ``subprocess.run``.
             Caller is responsible for inheriting ``os.environ`` if needed.
         cwd: Optional working directory for the subprocess.
         timeout: Subprocess timeout in seconds.
+
     """
     cmd = [sys.executable, "-m", "oxitest"]
     if tmp_path is not None:
@@ -243,7 +245,7 @@ def run_test(
     param_id: str | None = None,
     default_timeout: int | None = None,
 ) -> TestResult:
-    """Convenience wrapper around ``executor.run_test`` for tests.
+    """Wrap ``executor.run_test`` for tests.
 
     Accepts the old positional-arg style and constructs a ``TestMeta``
     internally, so existing test call sites don't need to change.
@@ -302,6 +304,7 @@ def write_test_file(
 
 @common.helper
 def write_test_module(tmp: TempDir, code: str, *, name: str = "test_auto.py") -> str:
+    """Write dedented code to a named file in tmp and return its path as str."""
     f = tmp / name
     f.write_text(textwrap.dedent(code))
     return str(f)
@@ -316,7 +319,9 @@ class RecordingDebugger:
     post_mortem_tracebacks: list[TracebackType] = field(default_factory=list)
 
     def trace(self) -> None:
+        """Increment trace_count to record that trace was called."""
         self.trace_count += 1
 
     def post_mortem(self, tb: TracebackType) -> None:
+        """Append tb to post_mortem_tracebacks to record post-mortem invocations."""
         self.post_mortem_tracebacks.append(tb)
