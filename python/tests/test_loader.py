@@ -62,10 +62,8 @@ def test_resolve_fn_returns_callable(
     f = tmp / "mod.py"
     f.write_text("def test_bar(): return 42\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp", f)
-    assert spec is not None and spec.loader is not None, (
-        "importlib.util.spec_from_file_location should return a valid spec with a "
-        "loader"
-    )
+    assert spec is not None, "spec_from_file_location should return a spec"
+    assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp"] = module
     spec.loader.exec_module(module)
@@ -90,10 +88,8 @@ def test_resolve_fn_raises_load_error_on_missing_function(
     f = tmp / "mod.py"
     f.write_text("def test_bar(): pass\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp2", f)
-    assert spec is not None and spec.loader is not None, (
-        "importlib.util.spec_from_file_location should return a valid spec with a "
-        "loader"
-    )
+    assert spec is not None, "spec_from_file_location should return a spec"
+    assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp2"] = module
     spec.loader.exec_module(module)
@@ -123,10 +119,8 @@ def test_resolve_fn_handles_class_method(
     f = tmp / "mod.py"
     f.write_text("class TestFoo:\n    def test_method(self): return 'ok'\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp3", f)
-    assert spec is not None and spec.loader is not None, (
-        "importlib.util.spec_from_file_location should return a valid spec with a "
-        "loader"
-    )
+    assert spec is not None, "spec_from_file_location should return a spec"
+    assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
     sys.modules["_test_mod_tmp3"] = module
     spec.loader.exec_module(module)

@@ -47,6 +47,6 @@ def test_proxy_raises_outside_session() -> None:
         with oxitest.raises(
             AttributeError, match="only available during a test session"
         ):
-            proxy.db
+            _ = proxy.db
     finally:
         _fixtures_registry_var.reset(token)

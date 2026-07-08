@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import sys
-import types
 from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
-from oxitest import Both, Cli, CliExtension, Conf, Plugin
+from oxitest import Both, Cli, CliExtension, Conf, Plugin, helpers
 from oxitest._bridge._plugin_config import introspect_config, merge_config
 from oxitest._bridge.plugin_loader import load_plugins
 
@@ -47,18 +46,17 @@ def test_full_flow_introspect_merge_construct() -> None:
 @oxitest.mark.inprocess
 def test_plugin_loader_discovers_and_activates_typed_config() -> None:
     """load_plugins + activate_plugin should construct a fully-merged typed config."""
-    mod = types.ModuleType("e2e_plugin")
-    setattr(
-        mod, "oxitest_cli_extension", CliExtension(prefix="e2e", config_type=TestConfig)
-    )
-
     received_configs: list[TestConfig] = []
 
     def oxitest_plugin(*, config: TestConfig) -> Plugin:
         received_configs.append(config)
         return Plugin()
 
-    setattr(mod, "oxitest_plugin", oxitest_plugin)
+    mod = helpers.common.make_plugin_module(
+        "e2e_plugin",
+        oxitest_plugin,
+        oxitest_cli_extension=CliExtension(prefix="e2e", config_type=TestConfig),
+    )
     sys.modules["e2e_plugin"] = mod
 
     try:

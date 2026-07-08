@@ -45,10 +45,9 @@ ignore = [
 "python/oxitest/_bridge/worker.py" = ["T201", "PLC0415"]
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/tests/*" = [
-    "T201", "B010", "B018",
+    "T201",
     "PLR2004",  # magic values in comparisons
     "PT017",    # assert in except block
-    "PT018",    # composite assert
     "S108",     # insecure temp file usage
     "S603",     # subprocess call
     "S607",     # partial executable path

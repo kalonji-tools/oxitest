@@ -582,7 +582,7 @@ def test_extract_module_marks_none_returns_empty() -> None:
 def test_extract_module_marks_single_mark() -> None:
     """oxi_mark = oxi.mark.slow → list with one MarkInfo."""
     module = ModuleType("test_single")
-    setattr(module, "oxi_mark", MarkInfo("slow", (), MappingProxyType({})))
+    setattr(module, "oxi_mark", MarkInfo("slow", (), MappingProxyType({})))  # noqa: B010
     marks, violations = _extract_module_marks(module, "/fake/test_single.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
     assert marks[0].name == "slow", f"expected mark name 'slow', got {marks[0].name!r}"
@@ -592,7 +592,7 @@ def test_extract_module_marks_single_mark() -> None:
 def test_extract_module_marks_list() -> None:
     """oxi_mark = [mark.slow, mark.timeout(10)] → list with two MarkInfos."""
     module = ModuleType("test_list")
-    setattr(
+    setattr(  # noqa: B010 — dynamic module attr
         module,
         "oxi_mark",
         [
@@ -611,7 +611,7 @@ def test_extract_module_marks_list() -> None:
 def test_extract_module_marks_tuple() -> None:
     """oxi_mark as tuple is accepted."""
     module = ModuleType("test_tuple")
-    setattr(module, "oxi_mark", (MarkInfo("slow", (), MappingProxyType({})),))
+    setattr(module, "oxi_mark", (MarkInfo("slow", (), MappingProxyType({})),))  # noqa: B010
     marks, _ = _extract_module_marks(module, "/fake/test_tuple.py")
     assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
 
@@ -619,7 +619,7 @@ def test_extract_module_marks_tuple() -> None:
 def test_extract_module_marks_invalid_entry() -> None:
     """Non-MarkInfo entries produce violations, valid entries still collected."""
     module = ModuleType("test_invalid")
-    setattr(
+    setattr(  # noqa: B010 — dynamic module attr
         module,
         "oxi_mark",
         [

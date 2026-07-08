@@ -32,9 +32,10 @@ def test_parametrize_stamps_function() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"parametrize should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"parametrize should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"parametrize should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DataclassCases), (
         "parametrize decorator should stamp DataclassCases (dataclass mode)"
@@ -64,9 +65,10 @@ def test_parametrize_multiple_cases() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"parametrize should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"parametrize should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"parametrize should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DataclassCases), (
         "decorator should stamp DataclassCases (dataclass mode)"
@@ -513,9 +515,10 @@ def test_parametrize_dict_mode_stamps_function() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"dict mode should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"dict mode should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
         f"dict mode should stamp DictCases, got {type(param_cases)!r}"
@@ -538,9 +541,10 @@ def test_parametrize_dict_mode_multiple_cases() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"dict mode should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"dict mode should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
         f"dict mode should stamp DictCases, got {type(param_cases)!r}"
@@ -590,9 +594,10 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"dict mode should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"dict mode should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
         f"dict mode should stamp DictCases, got {type(param_cases)!r}"
@@ -718,9 +723,10 @@ def test_parametrize_inferred_type_stamps_function() -> None:
     from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
-    assert isinstance(raw, tuple) and len(raw) == 1, (
-        f"dataclass mode should store a 1-tuple, got {raw!r}"
+    assert isinstance(raw, tuple), (
+        f"dataclass mode should store a tuple, got {type(raw).__name__}"
     )
+    assert len(raw) == 1, f"dataclass mode should store a 1-tuple, got {raw!r}"
     param_cases = raw[0]
     assert isinstance(param_cases, DataclassCases), (
         f"dataclass mode should stamp DataclassCases, got {type(param_cases)!r}"
