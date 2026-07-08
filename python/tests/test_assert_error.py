@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import oxitest
 from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
@@ -23,30 +24,24 @@ def test_compare_equal_failure_carries_left_right_op() -> None:
     """Rewritten assert x == y should populate left, right, and op on failure."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten("def test_f():\n    assert x == 42\n", ns)
-    try:
+    with oxitest.raises(_OxitestAssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except _OxitestAssertionError as e:
-        assert e.left == 41, f"expected e.left == 41, got {e.left!r}"
-        assert e.right == 42, f"expected e.right == 42, got {e.right!r}"
-        assert e.op == "==", f"expected e.op == '==', got {e.op!r}"
+    assert exc.value.left == 41, f"expected left == 41, got {exc.value.left!r}"
+    assert exc.value.right == 42, f"expected right == 42, got {exc.value.right!r}"
+    assert exc.value.op == "==", f"expected op == '==', got {exc.value.op!r}"
 
 
 def test_compare_in_failure_carries_operands() -> None:
     """Rewritten 'assert x in collection' should populate left, right, and op='in'."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": "bob"}
     _exec_rewritten('def test_f():\n    assert x in ["alice", "carol"]\n', ns)
-    try:
+    with oxitest.raises(_OxitestAssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except _OxitestAssertionError as e:
-        assert e.left == "bob", f"expected e.left == 'bob', got {e.left!r}"
-        assert e.right == ["alice", "carol"], (
-            f"expected e.right == ['alice', 'carol'], got {e.right!r}"
-        )
-        assert e.op == "in", f"expected e.op == 'in', got {e.op!r}"
+    assert exc.value.left == "bob", f"expected left == 'bob', got {exc.value.left!r}"
+    assert exc.value.right == ["alice", "carol"], (
+        f"expected right == ['alice', 'carol'], got {exc.value.right!r}"
+    )
+    assert exc.value.op == "in", f"expected op == 'in', got {exc.value.op!r}"
 
 
 def test_bool_assert_failure_carries_value() -> None:
@@ -57,46 +52,39 @@ def test_bool_assert_failure_carries_value() -> None:
         "flag": False,
     }
     _exec_rewritten("def test_f():\n    assert flag\n", ns)
-    try:
+    with oxitest.raises(_OxitestAssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except _OxitestAssertionError as e:
-        assert e.left is False, f"expected e.left is False, got {e.left!r}"
-        assert e.right is _OXITEST_NO_RHS, (
-            f"expected e.right is _OXITEST_NO_RHS (sentinel), got {e.right!r}"
-        )
-        assert e.op == "", f"expected e.op == '' for bool assert, got {e.op!r}"
+    assert exc.value.left is False, f"expected left is False, got {exc.value.left!r}"
+    assert exc.value.right is _OXITEST_NO_RHS, (
+        f"expected right is _OXITEST_NO_RHS (sentinel), got {exc.value.right!r}"
+    )
+    assert exc.value.op == "", (
+        f"expected op == '' for bool assert, got {exc.value.op!r}"
+    )
 
 
 def test_assert_with_message_carries_why() -> None:
     """Assert with a message string should carry that message in the exception args."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 41}
     _exec_rewritten('def test_f():\n    assert x == 42, "should be 42"\n', ns)
-    try:
+    with oxitest.raises(_OxitestAssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except _OxitestAssertionError as e:
-        assert e.args[0] == "should be 42", (
-            f"expected error message 'should be 42', got {e.args[0]!r}"
-        )
-        assert e.op == "==", f"expected e.op == '==', got {e.op!r}"
+    assert exc.value.args[0] == "should be 42", (
+        f"expected error message 'should be 42', got {exc.value.args[0]!r}"
+    )
+    assert exc.value.op == "==", f"expected op == '==', got {exc.value.op!r}"
 
 
 def test_chained_compare_left_untouched() -> None:
     """Chained comparisons (a < b < c) are not rewritten and fall back gracefully."""
     ns: dict[str, Any] = {"_OxitestAssertionError": _OxitestAssertionError, "x": 20}
     _exec_rewritten("def test_f():\n    assert 1 < x < 10\n", ns)
-    try:
+    with oxitest.raises(AssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except AssertionError as e:
-        assert not isinstance(e, _OxitestAssertionError), (
-            "chained comparison should fall back to plain AssertionError, not "
-            "_OxitestAssertionError"
-        )
+    assert not isinstance(exc.value, _OxitestAssertionError), (
+        "chained comparison should fall back to plain AssertionError, not "
+        "_OxitestAssertionError"
+    )
 
 
 def test_bool_op_assert_left_untouched() -> None:
@@ -107,15 +95,12 @@ def test_bool_op_assert_left_untouched() -> None:
         "b": False,
     }
     _exec_rewritten("def test_f():\n    assert a and b\n", ns)
-    try:
+    with oxitest.raises(AssertionError) as exc:
         ns["test_f"]()
-        msg = "should have raised"
-        raise AssertionError(msg)
-    except AssertionError as e:
-        assert not isinstance(e, _OxitestAssertionError), (
-            "boolean 'and' assert should fall back to plain AssertionError, not "
-            "_OxitestAssertionError"
-        )
+    assert not isinstance(exc.value, _OxitestAssertionError), (
+        "boolean 'and' assert should fall back to plain AssertionError, not "
+        "_OxitestAssertionError"
+    )
 
 
 def test_passing_assert_does_not_raise() -> None:
