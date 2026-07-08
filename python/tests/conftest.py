@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -34,6 +35,7 @@ __all__ = [
     "exec_inline",
     "make_fixture_def",
     "make_meta",
+    "make_plugin_module",
     "make_session",
     "make_session_with",
     "run_oxitest",
@@ -308,6 +310,25 @@ def write_test_module(tmp: TempDir, code: str, *, name: str = "test_auto.py") ->
     f = tmp / name
     f.write_text(textwrap.dedent(code))
     return str(f)
+
+
+@common.helper
+def make_plugin_module(
+    name: str,
+    entry: Callable[..., object] | None = None,
+    **attrs: object,
+) -> types.ModuleType:
+    """Create a fake plugin module with the given entry point and attributes.
+
+    Sets ``oxitest_plugin`` to *entry* when provided.  Any additional keyword
+    arguments are set as module attributes (e.g. ``oxitest_cli_extension``).
+    """
+    mod = types.ModuleType(name)
+    if entry is not None:
+        setattr(mod, "oxitest_plugin", entry)  # noqa: B010 — dynamic module attr
+    for attr_name, value in attrs.items():
+        setattr(mod, attr_name, value)
+    return mod
 
 
 @common.helper

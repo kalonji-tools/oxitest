@@ -35,8 +35,7 @@ def test_load_empty_plugins_returns_empty_registry() -> None:
 @oxitest.mark.inprocess
 def test_load_valid_plugin() -> None:
     """A module with a valid oxitest_plugin() entry function is loaded."""
-    mod = types.ModuleType("fake_plugin")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
+    mod = helpers.common.make_plugin_module("fake_plugin", lambda **_: Plugin())
     _install_fake_module("fake_plugin", mod)
     try:
         registry = load_plugins(["fake_plugin"], {})
@@ -60,8 +59,7 @@ def test_load_plugin_receives_config() -> None:
         received["config"] = config
         return Plugin()
 
-    mod = types.ModuleType("cfg_plugin")
-    setattr(mod, "oxitest_plugin", entry)
+    mod = helpers.common.make_plugin_module("cfg_plugin", entry)
     _install_fake_module("cfg_plugin", mod)
     try:
         load_plugins(["cfg_plugin"], {"cfg_plugin": {"level": "DEBUG"}})
@@ -93,8 +91,7 @@ def test_load_no_entry_function_raises() -> None:
 @oxitest.mark.inprocess
 def test_load_wrong_return_type_raises() -> None:
     """load_plugins raises PluginLoadError when oxitest_plugin() returns non-Plugin."""
-    mod = types.ModuleType("bad_return")
-    setattr(mod, "oxitest_plugin", lambda **_: "not a Plugin")
+    mod = helpers.common.make_plugin_module("bad_return", lambda **_: "not a Plugin")
     _install_fake_module("bad_return", mod)
     try:
         with raises(PluginLoadError, match="must return oxitest.Plugin"):
@@ -111,8 +108,7 @@ def test_load_entry_raises_wraps_error() -> None:
         msg = "boom"
         raise ValueError(msg)
 
-    mod = types.ModuleType("raises_plugin")
-    setattr(mod, "oxitest_plugin", bad_entry)
+    mod = helpers.common.make_plugin_module("raises_plugin", bad_entry)
     _install_fake_module("raises_plugin", mod)
     try:
         with raises(PluginLoadError, match="raised"):
@@ -136,16 +132,12 @@ def test_registry_aggregates_across_plugins() -> None:
         def records(self) -> list[object]:
             return []
 
-    mod1 = types.ModuleType("plug1")
-    setattr(
-        mod1,
-        "oxitest_plugin",
+    mod1 = helpers.common.make_plugin_module(
+        "plug1",
         lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
-    mod2 = types.ModuleType("plug2")
-    setattr(
-        mod2,
-        "oxitest_plugin",
+    mod2 = helpers.common.make_plugin_module(
+        "plug2",
         lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
     _install_fake_module("plug1", mod1)
@@ -163,16 +155,12 @@ def test_registry_aggregates_across_plugins() -> None:
 @oxitest.mark.inprocess
 def test_conflicting_debugger_backends_raises() -> None:
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
-    mod_a = types.ModuleType("dbg_plugin_a")
-    setattr(
-        mod_a,
-        "oxitest_plugin",
+    mod_a = helpers.common.make_plugin_module(
+        "dbg_plugin_a",
         lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
-    mod_b = types.ModuleType("dbg_plugin_b")
-    setattr(
-        mod_b,
-        "oxitest_plugin",
+    mod_b = helpers.common.make_plugin_module(
+        "dbg_plugin_b",
         lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
     _install_fake_module("dbg_plugin_a", mod_a)
@@ -208,10 +196,8 @@ def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
 @oxitest.mark.inprocess
 def test_single_debugger_backend_is_valid() -> None:
     """One plugin providing a debugger backend should not raise."""
-    mod = types.ModuleType("solo_dbg")
-    setattr(
-        mod,
-        "oxitest_plugin",
+    mod = helpers.common.make_plugin_module(
+        "solo_dbg",
         lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
     _install_fake_module("solo_dbg", mod)

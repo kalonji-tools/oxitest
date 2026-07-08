@@ -56,7 +56,7 @@ def test_helpers_getattr_unknown_raises() -> None:
     """Accessing an unregistered name on a Helpers instance raises AttributeError."""
     h = Helpers()
     with oxitest.raises(AttributeError, match="no registered helper"):
-        h.nonexistent
+        _ = h.nonexistent
 
 
 def test_helpers_namespace_from_init() -> None:

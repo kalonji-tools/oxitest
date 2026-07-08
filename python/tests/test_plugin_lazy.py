@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
-import types
 
 import oxitest
+from oxitest import helpers
 from oxitest._bridge.plugin_loader import (
     EAGER_PROTOCOLS,
     LAZY_PROTOCOLS,
@@ -125,8 +125,7 @@ def test_plugin_entry_default_is_loaded() -> None:
 @oxitest.mark.inprocess
 def test_deferred_entry_ensure_loaded_imports_module() -> None:
     """ensure_loaded() imports the module, creates the plugin, marks entry loaded."""
-    mod = types.ModuleType("lazy_fixture_plugin")
-    setattr(mod, "oxitest_plugin", Plugin)
+    mod = helpers.common.make_plugin_module("lazy_fixture_plugin", Plugin)
     sys.modules["lazy_fixture_plugin"] = mod
     try:
         entry = PluginEntry.deferred("lazy_fixture_plugin", ["fixture_provider"])
@@ -166,8 +165,7 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
 @oxitest.mark.inprocess
 def test_load_plugins_defers_lazy_only_plugin() -> None:
     """load_plugins defers plugins with only lazy protocols (no startup import)."""
-    mod = types.ModuleType("lazy_only_plugin")
-    setattr(mod, "oxitest_plugin", Plugin)
+    mod = helpers.common.make_plugin_module("lazy_only_plugin", Plugin)
     sys.modules["lazy_only_plugin"] = mod
     try:
         registry = load_plugins(
@@ -194,8 +192,9 @@ def test_load_plugins_defers_lazy_only_plugin() -> None:
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_eager_protocol() -> None:
     """load_plugins eagerly imports plugins that declare a reporter protocol."""
-    mod = types.ModuleType("eager_reporter_plugin")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
+    mod = helpers.common.make_plugin_module(
+        "eager_reporter_plugin", lambda **_: Plugin()
+    )
     sys.modules["eager_reporter_plugin"] = mod
     try:
         registry = load_plugins(
@@ -218,8 +217,7 @@ def test_load_plugins_eager_imports_plugin_with_eager_protocol() -> None:
 @oxitest.mark.inprocess
 def test_load_plugins_eager_imports_plugin_with_no_protocols_declared() -> None:
     """load_plugins eagerly imports plugins with no protocol declaration (default)."""
-    mod = types.ModuleType("no_protocols_plugin")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
+    mod = helpers.common.make_plugin_module("no_protocols_plugin", lambda **_: Plugin())
     sys.modules["no_protocols_plugin"] = mod
     try:
         registry = load_plugins(["no_protocols_plugin"], {})
@@ -253,7 +251,6 @@ def test_registry_register_deferred_appends_entry() -> None:
 @oxitest.mark.inprocess
 def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> None:
     """resolve_fixture_providers loads deferred fixture plugins, returns providers."""
-    mod = types.ModuleType("deferred_fixture_plugin")
 
     class FakeToken:
         """Marker type for FakeFixtureProvider."""
@@ -281,9 +278,8 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
         def autouse(self) -> bool:
             return False
 
-    setattr(
-        mod,
-        "oxitest_plugin",
+    mod = helpers.common.make_plugin_module(
+        "deferred_fixture_plugin",
         lambda: Plugin(fixture_providers=(FakeFixtureProvider(),)),
     )
     sys.modules["deferred_fixture_plugin"] = mod

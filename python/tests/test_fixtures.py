@@ -43,7 +43,7 @@ def test_skip_no_reason() -> None:
 def test_mark_attribute_callable_without_error() -> None:
     """Mark attributes are callable with arbitrary args and don't raise on access."""
     oxitest.mark.skip(reason="reason")
-    oxitest.mark.xfail
+    _ = oxitest.mark.xfail
     oxitest.mark.anything("value")
 
 
@@ -1617,8 +1617,6 @@ def test_fixtures_namespace_name() -> None:
 @oxitest.mark.inprocess
 def test_plugin_fixture_provider_injected() -> None:
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
-    import types
-
     from oxitest._bridge.plugin_loader import load_plugins
     from oxitest.plugin import Plugin
 
@@ -1654,8 +1652,10 @@ def test_plugin_fixture_provider_injected() -> None:
             return False
 
     provider = FakeDatabaseProvider()
-    mod = types.ModuleType("db_plugin")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin(fixture_providers=(provider,)))
+    mod = helpers.common.make_plugin_module(
+        "db_plugin",
+        lambda **_: Plugin(fixture_providers=(provider,)),
+    )
     sys.modules["db_plugin"] = mod
 
     try:

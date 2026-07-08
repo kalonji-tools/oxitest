@@ -41,7 +41,7 @@ def test_proxy_raises_outside_session() -> None:
         with oxitest.raises(
             AttributeError, match="only available during a test session"
         ):
-            proxy.utils
+            _ = proxy.utils
     finally:
         _helpers_registry_var.reset(token)
 
@@ -53,6 +53,6 @@ def test_proxy_raises_unknown_namespace() -> None:
     try:
         proxy = _HelpersProxy()
         with oxitest.raises(AttributeError, match="no helper namespace"):
-            proxy.nonexistent
+            _ = proxy.nonexistent
     finally:
         _helpers_registry_var.reset(token)

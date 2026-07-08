@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
+from oxitest import helpers
 from oxitest._bridge._plugin_config import (
     Both,
     CliExtension,
@@ -23,20 +24,18 @@ def _make_plugin_with_extension() -> types.ModuleType:
     class FakeCfg:
         host: Annotated[str, Both(help="host")] = "local"
 
-    mod = types.ModuleType("fake_ext_plugin")
-    setattr(
-        mod, "oxitest_cli_extension", CliExtension(prefix="fake", config_type=FakeCfg)
-    )
-
     call_tracker: list[bool] = []
 
     def oxitest_plugin(**_: object) -> Plugin:
         call_tracker.append(True)
         return Plugin()
 
-    setattr(mod, "oxitest_plugin", oxitest_plugin)
-    setattr(mod, "_call_tracker", call_tracker)
-    return mod
+    return helpers.common.make_plugin_module(
+        "fake_ext_plugin",
+        oxitest_plugin,
+        oxitest_cli_extension=CliExtension(prefix="fake", config_type=FakeCfg),
+        _call_tracker=call_tracker,
+    )
 
 
 @oxitest.mark.inprocess
@@ -76,8 +75,7 @@ def test_user_prefix_override() -> None:
 @oxitest.mark.inprocess
 def test_plugin_without_extension_has_no_cli() -> None:
     """A plugin without oxitest_cli_extension should not appear in cli_extensions."""
-    mod = types.ModuleType("fake_simple")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin())
+    mod = helpers.common.make_plugin_module("fake_simple", lambda **_: Plugin())
     sys.modules["fake_simple"] = mod
     try:
         registry = load_plugins(["fake_simple"], {})
@@ -116,8 +114,7 @@ def test_backwards_compat_dict_config() -> None:
         received["config"] = config
         return Plugin()
 
-    mod = types.ModuleType("fake_legacy")
-    setattr(mod, "oxitest_plugin", entry)
+    mod = helpers.common.make_plugin_module("fake_legacy", entry)
     sys.modules["fake_legacy"] = mod
     try:
         load_plugins(["fake_legacy"], {"fake_legacy": {"key": "val"}})

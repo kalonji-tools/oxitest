@@ -1014,7 +1014,6 @@ def test_logcapture_injected_via_session() -> None:
 def test_logcapture_includes_plugin_backends() -> None:
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
     import logging
-    import types
 
     from oxitest._bridge._builtins._logcapture import LogCapture, StdlibLogBackend
     from oxitest._bridge.plugin_loader import load_plugins
@@ -1037,8 +1036,10 @@ def test_logcapture_includes_plugin_backends() -> None:
 
     fake_backend = FakePluginBackend()
 
-    mod = types.ModuleType("fake_log_plugin")
-    setattr(mod, "oxitest_plugin", lambda **_: Plugin(log_backends=(fake_backend,)))
+    mod = helpers.common.make_plugin_module(
+        "fake_log_plugin",
+        lambda **_: Plugin(log_backends=(fake_backend,)),
+    )
     sys.modules["fake_log_plugin"] = mod
     try:
         registry = load_plugins(["fake_log_plugin"], {})
