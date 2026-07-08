@@ -45,24 +45,25 @@ ignore = [
 "python/oxitest/_bridge/worker.py" = ["T201", "PLC0415"]
 "python/oxitest/_bridge/_builtins/_capture.py" = ["T201", "SIM115"]
 "python/tests/*" = [
-    "T201",
     "PLR2004",  # magic values in comparisons
-    "S108",     # insecure temp file usage
-    "S603",     # subprocess call
-    "S607",     # partial executable path
-    "PLW1510",  # subprocess.run without check
-    "PLW0177",  # comparison with NaN
-    "N818",     # exception name suffix (test doubles named Skipped etc.)
-    "TRY301",   # raise within try (testing exception handling)
-    "INP001",   # no __init__.py (test dirs are not packages)
-    "S102",     # exec() needed to test AST rewriter and live type annotations
-    "PLR0913",  # test helpers and parametrized tests have many params by nature
     "PLC0415",  # lazy imports in tests (each test imports what it tests)
-    "PT019",    # underscore-prefixed fixture params (oxitest, not pytest — rule doesn't apply)
     "ARG002",   # unused method args in protocol test doubles (structural conformance)
     "SLF001",   # tests legitimately inspect private state to verify internals
     "S101",     # assert is the primary assertion mechanism in tests
+    "INP001",   # no __init__.py (test dirs are not packages)
 ]
+"python/tests/conftest.py" = ["S603", "PLW1510", "PLR0913"]
+"python/tests/integration/*" = ["S603", "PLW1510"]
+"python/tests/test_namespace_validation.py" = ["S108"]
+"python/tests/test_assert_error.py" = ["S102"]
+"python/tests/test_importer.py" = ["S102"]
+"python/tests/test_warncapture.py" = ["S603", "PLW1510"]
+"python/tests/integration/test_completions.py" = ["PT019"]
+"python/tests/integration/test_version.py" = ["PT019"]
+"python/tests/test_builtins.py" = ["PT019"]
+"python/tests/test_conftest_loader.py" = ["PT019"]
+"python/tests/test_loader.py" = ["PT019"]
+"python/tests/test_read_fixtures.py" = ["PT019"]
 "python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201"]
 "benchmarks/*.py" = ["T201", "E501", "PLR2004", "S101"]

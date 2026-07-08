@@ -84,19 +84,19 @@ def test_scalar_neg_inf_not_equal_pos_inf() -> None:
 
 def test_scalar_nan_default_false() -> None:
     """By default nan != nan, matching standard IEEE 754 semantics."""
-    assert float("nan") != approx(float("nan")), "nan should not equal nan by default"
+    assert float("nan") != approx(float("nan")), "nan should not equal nan by default"  # noqa: PLW0177
 
 
 def test_scalar_nan_ok_true() -> None:
     """nan_ok=True makes nan compare equal to nan, useful for placeholder checks."""
-    assert float("nan") == approx(float("nan"), nan_ok=True), (
+    assert float("nan") == approx(float("nan"), nan_ok=True), (  # noqa: PLW0177
         "nan should equal nan when nan_ok=True"
     )
 
 
 def test_scalar_nan_vs_number() -> None:
     """NaN on the left-hand side is not approximately equal to any finite number."""
-    assert float("nan") != approx(1.0), "nan should not equal a number"
+    assert float("nan") != approx(1.0), "nan should not equal a number"  # noqa: PLW0177
 
 
 def test_scalar_number_vs_nan() -> None:

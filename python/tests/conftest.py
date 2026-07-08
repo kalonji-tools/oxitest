@@ -14,6 +14,7 @@ import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
+from typing import TypeVar
 
 import oxitest
 from oxitest import Helpers, TempDir, TestResult, Yields
@@ -33,6 +34,7 @@ __all__ = [
     "RecordingDebugger",
     "assert_result",
     "exec_inline",
+    "make_exc",
     "make_fixture_def",
     "make_meta",
     "make_plugin_module",
@@ -237,6 +239,18 @@ def make_meta(
     return TestMeta(
         module_path=module_path, fn_name=fn_name, node_id=node_id, param_id=param_id
     )
+
+
+_E = TypeVar("_E", bound=BaseException)
+
+
+@common.helper
+def make_exc(exc_type: type[_E], msg: str = "") -> _E:
+    """Create an exception with a real traceback attached."""
+    try:
+        raise exc_type(msg)  # noqa: TRY301
+    except exc_type as exc:
+        return exc
 
 
 @common.helper

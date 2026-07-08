@@ -75,7 +75,7 @@ def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
 def test_skipped_exception_returns_skipped() -> None:
     """Any exception whose class name contains 'Skipped' produces a SkippedResult."""
 
-    class Skipped(Exception):
+    class Skipped(Exception):  # noqa: N818
         pass
 
     exc = Skipped("skip reason")
@@ -86,7 +86,7 @@ def test_skipped_exception_returns_skipped() -> None:
 def test_skip_test_returns_skipped() -> None:
     """An exception named 'SkipTest' (pytest convention) produces SkippedResult."""
 
-    class SkipTest(Exception):
+    class SkipTest(Exception):  # noqa: N818
         pass
 
     exc = SkipTest("reason")
@@ -99,11 +99,8 @@ def test_skip_test_returns_skipped() -> None:
 
 def test_regular_exception_returns_error() -> None:
     """An ordinary Exception (not skip/assert) produces ErrorResult with type name."""
-    try:
-        msg = "something broke"
-        raise ValueError(msg)
-    except ValueError as exc:
-        result = _handle_runtime_exception(exc)
+    exc = helpers.common.make_exc(ValueError, "something broke")
+    result = _handle_runtime_exception(exc)
     r = helpers.common.assert_result(result, ErrorResult)
     assert "ValueError" in r.message, (
         f"error message should contain 'ValueError', got {r.message!r}"
