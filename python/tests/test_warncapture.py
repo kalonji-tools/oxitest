@@ -13,7 +13,7 @@ from oxitest import TempDir, WarnCapture
 
 def test_warncapture_captures_warnings_emitted_during_test(warn: WarnCapture) -> None:
     """WarnCapture.list should contain warnings emitted during the test body."""
-    warnings.warn("hello", UserWarning)
+    warnings.warn("hello", UserWarning, stacklevel=2)
     assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
     assert issubclass(warn.list[0].category, UserWarning), (
         f"expected UserWarning category, got {warn.list[0].category!r}"
@@ -25,8 +25,8 @@ def test_warncapture_captures_warnings_emitted_during_test(warn: WarnCapture) ->
 
 def test_warncapture_captures_multiple_warning_categories(warn: WarnCapture) -> None:
     """WarnCapture should collect warnings of different categories in a single list."""
-    warnings.warn("first", UserWarning)
-    warnings.warn("second", DeprecationWarning)
+    warnings.warn("first", UserWarning, stacklevel=2)
+    warnings.warn("second", DeprecationWarning, stacklevel=2)
     assert len(warn.list) == 2, f"expected 2 warnings, got {warn.list!r}"
     categories = [w.category for w in warn.list]
     assert UserWarning in categories, (
@@ -39,17 +39,17 @@ def test_warncapture_captures_multiple_warning_categories(warn: WarnCapture) -> 
 
 def test_warncapture_clear_resets_list(warn: WarnCapture) -> None:
     """WarnCapture.clear() should empty the list so new warnings are captured fresh."""
-    warnings.warn("before clear", UserWarning)
+    warnings.warn("before clear", UserWarning, stacklevel=2)
     assert len(warn.list) == 1, f"expected 1 warning before clear, got {warn.list!r}"
     warn.clear()
     assert warn.list == [], f"expected empty list after clear, got {warn.list!r}"
-    warnings.warn("after clear", UserWarning)
+    warnings.warn("after clear", UserWarning, stacklevel=2)
     assert len(warn.list) == 1, f"expected 1 warning after clear, got {warn.list!r}"
 
 
 def test_warncapture_all_captured_ids_survives_clear(warn: WarnCapture) -> None:
     """_all_captured_ids is not affected by clear() — tracks lifetime captures."""
-    warnings.warn("first", UserWarning)
+    warnings.warn("first", UserWarning, stacklevel=2)
     assert len(warn._all_captured_ids) == 1, (
         f"expected 1 tracked id, got {len(warn._all_captured_ids)}"
     )
@@ -57,7 +57,7 @@ def test_warncapture_all_captured_ids_survives_clear(warn: WarnCapture) -> None:
     assert len(warn._all_captured_ids) == 1, (
         f"clear() must not reset _all_captured_ids, got {len(warn._all_captured_ids)}"
     )
-    warnings.warn("second", UserWarning)
+    warnings.warn("second", UserWarning, stacklevel=2)
     assert len(warn._all_captured_ids) == 2, (
         f"expected 2 tracked ids, got {len(warn._all_captured_ids)}"
     )
@@ -65,9 +65,9 @@ def test_warncapture_all_captured_ids_survives_clear(warn: WarnCapture) -> None:
 
 def test_warncapture_and_oxitest_warns_can_coexist(warn: WarnCapture) -> None:
     """WarnCapture stays active while oxitest.warns() is used in the same test."""
-    warnings.warn("before", UserWarning)
+    warnings.warn("before", UserWarning, stacklevel=2)
     with oxitest.warns(UserWarning, match="asserted"):
-        warnings.warn("asserted", UserWarning)
+        warnings.warn("asserted", UserWarning, stacklevel=2)
     assert any("before" in str(w.message) for w in warn.list), (
         f"WarnCapture must capture warnings outside oxitest.warns() context, "
         f"got {warn.list!r}"
