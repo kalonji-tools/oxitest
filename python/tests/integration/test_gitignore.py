@@ -19,7 +19,11 @@ def test_gitignore_respected(tmp: TempDir) -> None:
     (tmp / "ignored_dir/test_hidden.py").write_text("def test_hidden(): pass\n")
 
     subprocess.run(
-        ["git", "init"], cwd=str(tmp), check=True, capture_output=True, env=_clean_env()
+        ["git", "init"],  # noqa: S607
+        cwd=str(tmp),
+        check=True,
+        capture_output=True,
+        env=_clean_env(),
     )
     (tmp / ".gitignore").write_text("ignored_dir/\n")
 
@@ -36,7 +40,11 @@ def test_no_use_gitignore_disables_filtering(tmp: TempDir) -> None:
     (tmp / "ignored_dir/test_hidden.py").write_text("def test_hidden(): pass\n")
 
     subprocess.run(
-        ["git", "init"], cwd=str(tmp), check=True, capture_output=True, env=_clean_env()
+        ["git", "init"],  # noqa: S607
+        cwd=str(tmp),
+        check=True,
+        capture_output=True,
+        env=_clean_env(),
     )
     (tmp / ".gitignore").write_text("ignored_dir/\n")
 

@@ -40,7 +40,7 @@ def test_is_debuggable_value_error() -> None:
 def test_is_debuggable_skipped_false() -> None:
     """Skipped exceptions (by name) should not trigger pdb."""
 
-    class Skipped(Exception):
+    class Skipped(Exception):  # noqa: N818
         pass
 
     assert not _is_debuggable(Skipped("reason")), "Skipped should not be debuggable"
@@ -49,7 +49,7 @@ def test_is_debuggable_skipped_false() -> None:
 def test_is_debuggable_skip_test_false() -> None:
     """SkipTest exceptions (by name) should not trigger pdb."""
 
-    class SkipTest(Exception):
+    class SkipTest(Exception):  # noqa: N818
         pass
 
     assert not _is_debuggable(SkipTest("reason")), "SkipTest should not be debuggable"
@@ -137,15 +137,10 @@ def test_recording_debugger_records_trace() -> None:
 def test_recording_debugger_records_post_mortem() -> None:
     """RecordingDebugger should record traceback objects."""
     rec = helpers.common.RecordingDebugger()
-    try:
-        msg = "boom"
-        raise ValueError(msg)
-    except ValueError:
-        import sys
-
-        tb = sys.exc_info()[2]
-        assert tb is not None, "traceback must exist inside except block"
-        rec.post_mortem(tb)
+    exc = helpers.common.make_exc(ValueError, "boom")
+    tb = exc.__traceback__
+    assert tb is not None, "make_exc must produce a traceback"
+    rec.post_mortem(tb)
     assert len(rec.post_mortem_tracebacks) == 1, (
         f"expected 1 traceback, got {len(rec.post_mortem_tracebacks)}"
     )
@@ -227,7 +222,7 @@ def test_run_base_non_debuggable_exception_skips_post_mortem() -> None:
     """Skipped exceptions should not trigger post_mortem."""
     rec = helpers.common.RecordingDebugger()
 
-    class Skipped(Exception):
+    class Skipped(Exception):  # noqa: N818
         pass
 
     def skip_test() -> Never:
@@ -293,7 +288,7 @@ def test_debug_post_mortem_permanently_suspends_capture() -> None:
 
     try:
         msg = "test failure"
-        raise AssertionError(msg)
+        raise AssertionError(msg)  # noqa: TRY301 — need active exc context for sys.exc_info()
     except AssertionError as exc:
         _debug_post_mortem(
             {"cap": cap}, "t.py::test_fail", exc, rec, file=io.StringIO()
@@ -311,7 +306,7 @@ def test_debug_post_mortem_no_capture_kwargs() -> None:
     rec = helpers.common.RecordingDebugger()
     try:
         msg = "oops"
-        raise ValueError(msg)
+        raise ValueError(msg)  # noqa: TRY301 — need active exc context for sys.exc_info()
     except ValueError as exc:
         _debug_post_mortem({}, "t.py::test_err", exc, rec, file=io.StringIO())
     assert len(rec.post_mortem_tracebacks) == 1, "post_mortem should be called once"

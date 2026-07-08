@@ -281,7 +281,7 @@ class OperandCase:
         expected_op="is",
     ),
 )
-def test_assertion_operands(
+def test_assertion_operands(  # noqa: PLR0913
     tmp: TempDir,
     source: str,
     fn_name: str,

@@ -347,7 +347,7 @@ def test_stdcapture_captures_print() -> None:
     ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx)
 
-    print("hello")
+    print("hello")  # noqa: T201
     result = cap.readouterr()
     teardowns[0]()  # restore stdout/stderr
 
@@ -367,9 +367,9 @@ def test_stdcapture_readouterr_resets_buffer() -> None:
     ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx)
 
-    print("first")
+    print("first")  # noqa: T201
     cap.readouterr()
-    print("second")
+    print("second")  # noqa: T201
     result = cap.readouterr()
     teardowns[0]()
 
@@ -719,7 +719,7 @@ def test_stdcapture_injected_via_session() -> None:
 
     kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
     cap = kwargs["cap"]
-    print("captured")
+    print("captured")  # noqa: T201
     result = cap.readouterr()
     for td in reversed(teardowns):
         td()

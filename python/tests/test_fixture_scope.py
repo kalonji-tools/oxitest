@@ -30,9 +30,9 @@ def test_fixture_scope_resets_on_exception() -> None:
     try:
         with _fixture_scope(object(), "/test.py", teardowns):
             msg = "boom"
-            raise RuntimeError(msg)
+            raise RuntimeError(msg)  # noqa: TRY301
     except RuntimeError:
-        pass
+        """Intentionally caught — verifying context resets after exception."""
     assert _fixture_context.get(None) is None, "context should be reset after exception"
 
 
