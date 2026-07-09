@@ -100,6 +100,7 @@ def test_captured_warnings_not_in_report(tmp: TempDir) -> None:
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
     assert "not_captured" in result.stdout, (
         f"uncaptured warning should appear:\n{result.stdout}"

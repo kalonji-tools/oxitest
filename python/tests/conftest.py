@@ -190,6 +190,7 @@ def run_oxitest(
         timeout=timeout,
         cwd=cwd,
         env=env,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 
@@ -222,6 +223,7 @@ def run_oxitest_subcmd(
         timeout=timeout,
         cwd=str(tmp_path) if use_cwd else None,
         env=env,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 
