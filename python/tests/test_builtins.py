@@ -82,7 +82,7 @@ def test_builtin_fixture_registration() -> None:
             "_Sentinel"
         )
     finally:
-        BuiltinFixture.registered_types().pop(_Sentinel, None)
+        BuiltinFixture._registry.pop(_Sentinel, None)  # noqa: SLF001 — test cleanup of class-level registry
 
 
 def test_builtin_fixture_for_type_unknown_returns_none() -> None:
