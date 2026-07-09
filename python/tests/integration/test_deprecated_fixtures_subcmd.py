@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from oxitest import TempDir, helpers
 
 
@@ -61,9 +64,6 @@ def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir) -> None:
 
 def test_fixtures_subcmd_hidden_from_help() -> None:
     """``oxitest --help`` does not list the deprecated ``fixtures`` subcommand."""
-    import subprocess
-    import sys
-
     result = subprocess.run(
         [sys.executable, "-m", "oxitest", "--help"],
         capture_output=True,

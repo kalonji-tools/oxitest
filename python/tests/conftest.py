@@ -26,6 +26,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
+from oxitest._bridge.executor import run_test as _run_test
 from oxitest._bridge.plugin_loader import PluginRegistry
 
 common = Helpers()
@@ -268,8 +269,6 @@ def run_test(
     Accepts the old positional-arg style and constructs a ``TestMeta``
     internally, so existing test call sites don't need to change.
     """
-    from oxitest._bridge.executor import run_test as _run_test
-
     meta = TestMeta(
         module_path=module_path,
         fn_name=fn_name,

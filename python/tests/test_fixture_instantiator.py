@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from oxitest import Fixture, helpers, raises
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
@@ -15,6 +17,7 @@ from oxitest._bridge._fixture_instantiator import (
     _ResolutionContext,
 )
 from oxitest._bridge._fixture_registry import (
+    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
@@ -134,8 +137,6 @@ def test_ambiguous_fixture_error_lists_candidates() -> None:
 
 def test_broad_fixture_type_error() -> None:
     """BroadFixtureTypeError mentions the param name and broad type."""
-    from typing import Any
-
     err = BroadFixtureTypeError("db", Any)
     msg = str(err)
     assert "db" in msg, "error should mention the parameter name"
@@ -147,12 +148,6 @@ def test_broad_fixture_type_error() -> None:
 
 def test_resolve_param_by_type_not_name() -> None:
     """Conftest fixture resolves by binding type even when param name differs."""
-    from oxitest._bridge._fixture_registry import (
-        ConftestSource,
-        FixtureDef,
-        FixtureScope,
-    )
-    from oxitest._bridge._test_meta import TestMeta
 
     class MyType:
         pass

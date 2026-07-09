@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from oxitest._bridge.plugin_loader import PluginRegistry
-from oxitest.plugin import HelperProvider
+from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._helper_registry import HelperRegistry
+from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
+from oxitest.plugin import HelperProvider, Plugin
 
 
 def _screenshot(selector: str) -> str:
@@ -56,11 +58,6 @@ def test_plugin_registry_helper_providers_empty() -> None:
 
 def test_plugin_helpers_registered_in_session() -> None:
     """FixtureSession._register_plugin_helpers populates a HelperRegistry."""
-    from oxitest._bridge._fixture_session import FixtureSession
-    from oxitest._bridge._helper_registry import HelperRegistry
-    from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
-    from oxitest.plugin import Plugin
-
     plugin = Plugin(helper_providers=(ConformingProvider(),))
     entry = PluginEntry(module_name="my_plugin", plugin=plugin)
     plugin_reg = PluginRegistry(entries=[entry])

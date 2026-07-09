@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal as _signal
 import sys
 import time
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from types import MappingProxyType
 import oxitest
 import oxitest as oxi
 from oxitest import helpers, raises
+from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import _TimeoutHandler
 from oxitest._bridge._timeout import OxitestTimeoutError, _timeout_context
@@ -30,8 +32,6 @@ def test_timeout_context_does_not_raise_when_fast() -> None:
 
 def test_timeout_context_cancels_after_block() -> None:
     """No residual alarm after a successful block (Unix only)."""
-    import signal as _signal
-
     if not hasattr(_signal, "getitimer"):
         return  # Windows: no way to inspect pending alarm, skip
     with _timeout_context(5):
@@ -89,8 +89,6 @@ def test_timeout_mark_stores_seconds() -> None:
     @oxitest.mark.timeout(seconds=5)
     def test_ok() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     marks = get_metadata(test_ok).marks
     assert len(marks) == 1, (

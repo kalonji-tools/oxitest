@@ -20,12 +20,16 @@ import re
 from dataclasses import dataclass
 
 import oxitest as oxi
+from oxitest import helpers
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.result import (
     PROTOCOL_VERSION,
     CollectedItem,
     CollectedViolation,
     ErrorResult,
     FailedResult,
+    FixtureTiming,
     Frame,
     PassedResult,
     SkippedResult,
@@ -467,9 +471,6 @@ def test_protocol_version_matches_rust_constant() -> None:
 
 def test_get_fixture_timings_returns_expected_shape() -> None:
     """get_fixture_timings() returns list of FixtureTiming dataclasses."""
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-    from oxitest._bridge._fixture_session import FixtureSession
-
     session = FixtureSession(FixtureRegistry())
     timings = session.get_fixture_timings()
     assert isinstance(timings, list), "timings must be a list"
@@ -478,9 +479,6 @@ def test_get_fixture_timings_returns_expected_shape() -> None:
 
 def test_get_fixture_timings_entry_has_required_attrs() -> None:
     """Each timing entry has the 5 required attributes with correct types."""
-    from oxitest import helpers
-    from oxitest._bridge.result import FixtureTiming
-
     session = helpers.common.make_session_with("timed_fx", lambda: 1)
     session.get_fixture("timed_fx", "mod.py", [])
     timings = session.get_fixture_timings()
@@ -502,9 +500,6 @@ def test_get_fixture_timings_entry_has_required_attrs() -> None:
 
 def test_fixture_session_has_bridge_methods() -> None:
     """FixtureSession exposes the methods called by the Rust bridge."""
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-    from oxitest._bridge._fixture_session import FixtureSession
-
     session = FixtureSession(FixtureRegistry())
     bridge_methods = {
         "end_module",
@@ -524,8 +519,5 @@ def test_fixture_session_has_bridge_methods() -> None:
 
 def test_fixture_session_end_module_does_not_raise() -> None:
     """end_module accepts a module path without raising."""
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-    from oxitest._bridge._fixture_session import FixtureSession
-
     session = FixtureSession(FixtureRegistry())
     session.end_module("mod.py")

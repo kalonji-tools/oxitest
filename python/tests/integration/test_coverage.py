@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import oxitest
@@ -31,8 +32,6 @@ def _cleanup_coverage() -> None:
         f.unlink(missing_ok=True)
     htmlcov = _PROJECT_ROOT / "htmlcov"
     if htmlcov.is_dir():
-        import shutil
-
         shutil.rmtree(htmlcov)
 
 

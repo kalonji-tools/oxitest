@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from oxitest._bridge.result import CollectedItem
+
 from ._config import MetricsConfig
 
 
@@ -76,8 +78,6 @@ class BenchCollector:
     """Collector: discovers bench_* functions as test items."""
 
     def collect(self, path: str, module: object) -> list[Any]:
-        from oxitest._bridge.result import CollectedItem
-
         items = []
         for name, obj in inspect.getmembers(module, inspect.isfunction):
             if name.startswith("bench_"):

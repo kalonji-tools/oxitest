@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -159,8 +160,6 @@ def test_plugin_receives_config(tmp: TempDir) -> None:
     assert output_file.exists(), (
         "Plugin did not write config file — oxitest_plugin() was not called"
     )
-    import json
-
     received = json.loads(output_file.read_text())
     assert received["level"] == "DEBUG", (
         f"expected level='DEBUG', got {received.get('level')!r}"
@@ -352,8 +351,6 @@ def test_plugin_reporter_receives_events(tmp: TempDir) -> None:
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-
-    import json
 
     events = json.loads(output_file.read_text())
 

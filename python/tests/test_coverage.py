@@ -8,8 +8,13 @@ from types import ModuleType
 from unittest.mock import patch
 
 import oxitest
+import oxitest._bridge._coverage as _cov_mod
+import oxitest._bridge.worker as worker_mod
 from oxitest import CovReportFormat
 from oxitest._bridge._coverage import CoveragePyProvider
+from oxitest._bridge._errors import ConflictingCoverageError
+from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
+from oxitest._bridge.worker import _maybe_start_coverage
 from oxitest.plugin import CoverageProvider, Plugin
 
 
@@ -108,8 +113,6 @@ def _make_fake_coverage_module(instance: _FakeCovInstance) -> ModuleType:
 
 def test_provider_start_sets_env_var(patcher: oxitest.Patcher) -> None:
     """start() sets COVERAGE_PROCESS_START in os.environ."""
-    import oxitest._bridge._coverage as _cov_mod
-
     fake_cov = _FakeCovInstance()
     fake_mod = _make_fake_coverage_module(fake_cov)
 
@@ -174,8 +177,6 @@ def test_provider_report_none_skips() -> None:
 
 def test_provider_import_error_without_coverage() -> None:
     """start() raises ImportError when coverage.py is not installed."""
-    import oxitest._bridge._coverage as _cov_mod
-
     provider = CoveragePyProvider()
     with (
         patch.object(_cov_mod, "_coverage", None),
@@ -201,9 +202,6 @@ def test_worker_coverage_startup_when_env_set(
     patcher: oxitest.Patcher,
 ) -> None:
     """_maybe_start_coverage calls coverage.process_startup() when env var set."""
-    import oxitest._bridge.worker as worker_mod
-    from oxitest._bridge.worker import _maybe_start_coverage
-
     fake_mod = _FakeCoverageModule()
     patcher.setenv("COVERAGE_PROCESS_START", "/path/to/config")
     with patch.object(worker_mod, "_coverage", fake_mod):
@@ -216,8 +214,6 @@ def test_worker_coverage_skipped_when_env_absent(
     patcher: oxitest.Patcher,
 ) -> None:
     """_maybe_start_coverage does nothing when COVERAGE_PROCESS_START not set."""
-    from oxitest._bridge.worker import _maybe_start_coverage
-
     patcher.delenv("COVERAGE_PROCESS_START")
     # Should not raise or try to import coverage
     _maybe_start_coverage()
@@ -228,9 +224,6 @@ def test_worker_coverage_skipped_when_env_absent(
 
 def test_conflicting_coverage_providers_raises() -> None:
     """Two plugins providing CoverageProvider raises ConflictingCoverageError."""
-    from oxitest._bridge._errors import ConflictingCoverageError
-    from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
-
     provider_a = _FakeProvider()
     provider_b = _FakeProvider()
 
