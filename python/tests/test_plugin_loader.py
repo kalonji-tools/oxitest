@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from typing import Never
+from typing import Any, Never
 
 import oxitest
 from oxitest import helpers, raises
@@ -222,10 +222,10 @@ def test_fixture_provider_scope_default() -> None:
         def fixture_type(self) -> type:
             return int
 
-        def create(self, ctx: object) -> int:
+        def create(self, **_: Any) -> int:
             return 42
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, **_: Any) -> None:
             pass
 
     provider = MinimalProvider()
@@ -254,10 +254,10 @@ def test_fixture_provider_scope_custom() -> None:
         def autouse(self) -> bool:
             return True
 
-        def create(self, ctx: object) -> int:
+        def create(self, **_: Any) -> int:
             return 42
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, **_: Any) -> None:
             pass
 
     provider = SessionProvider()

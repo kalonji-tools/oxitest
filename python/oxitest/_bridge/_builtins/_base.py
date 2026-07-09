@@ -61,5 +61,5 @@ class BuiltinFixture:
 
         cls._registered = True
 
-    def create(self, ctx: _BuiltinContext) -> Any:
+    def create(self, *, ctx: _BuiltinContext) -> Any:
         raise NotImplementedError

@@ -57,7 +57,7 @@ from oxitest._bridge._builtins._warncapture import (
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=TestContext):
-    def create(self, ctx: _BuiltinContext) -> TestContext:
+    def create(self, *, ctx: _BuiltinContext) -> TestContext:
         return TestContext(ctx.meta, ctx.teardown_stack)
 
 

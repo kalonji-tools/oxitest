@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Generator
+from typing import Any
 
 from oxitest import TempDir, helpers
 from oxitest._bridge._fixture_registry import (
@@ -174,10 +175,10 @@ def test_session_plugin_without_scope_autouse() -> None:
         def fixture_type(self) -> type[_MinimalType]:
             return _MinimalType
 
-        def create(self, ctx: object) -> int:
+        def create(self, **_: Any) -> int:
             return 42
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, **_: Any) -> None:
             pass
 
     class FakePluginRegistry(PluginRegistry):

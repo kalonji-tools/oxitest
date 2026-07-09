@@ -65,6 +65,7 @@ class ExecutionPlan:
 class Middleware(Protocol):
     def apply(
         self,
+        *,
         plan: ExecutionPlan,
         next_fn: Callable[[], TestResult],
     ) -> Callable[[], TestResult]:
@@ -80,7 +81,7 @@ def build_pipeline(
     """Compose middlewares around a base runner. Last in list = outermost."""
     execute = base
     for mw in reversed(middlewares):
-        execute = mw.apply(plan, execute)
+        execute = mw.apply(plan=plan, next_fn=execute)
     return execute
 
 
@@ -91,7 +92,7 @@ class TimeoutMiddleware:
         self._default = default_timeout
 
     def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+        self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
     ) -> Callable[[], TestResult]:
         if self._default is not None and not any(
             m.name == "timeout" for m in plan.marks
@@ -104,7 +105,7 @@ class AsyncDepGuardMiddleware:
     """Rejects async fixture values passed to sync tests."""
 
     def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+        self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
     ) -> Callable[[], TestResult]:
         if not inspect.iscoroutinefunction(plan.fn):
             for k, v in plan.kwargs.items():
@@ -191,7 +192,7 @@ class AsyncBridgeMiddleware:
     """Replaces base runner with async bridge when fn is async."""
 
     def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+        self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
     ) -> Callable[[], TestResult]:
         if not inspect.iscoroutinefunction(plan.fn):
             return next_fn

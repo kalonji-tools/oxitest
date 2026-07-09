@@ -55,7 +55,7 @@ class WarnCapture:
 
 
 class _WarnCaptureFixture(BuiltinFixture, fixture_type=WarnCapture):
-    def create(self, ctx: _BuiltinContext) -> WarnCapture:
+    def create(self, *, ctx: _BuiltinContext) -> WarnCapture:
         cap = WarnCapture()
         ctx.teardown_stack.append(cap.close)
         return cap

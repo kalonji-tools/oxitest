@@ -179,14 +179,14 @@ class FdCapture(_CaptureBase):
 
 
 class _StdCaptureFixture(BuiltinFixture, fixture_type=StdCapture):
-    def create(self, ctx: _BuiltinContext) -> StdCapture:
+    def create(self, *, ctx: _BuiltinContext) -> StdCapture:
         cap = StdCapture()
         ctx.teardown_stack.append(cap.close)
         return cap
 
 
 class _FdCaptureFixture(BuiltinFixture, fixture_type=FdCapture):
-    def create(self, ctx: _BuiltinContext) -> FdCapture:
+    def create(self, *, ctx: _BuiltinContext) -> FdCapture:
         cap = FdCapture()
         ctx.teardown_stack.append(cap.close)
         return cap

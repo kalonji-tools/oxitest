@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 import oxitest
 from oxitest import helpers
@@ -264,10 +265,10 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
         def fixture_type(self) -> type:
             return FakeToken
 
-        def create(self, ctx: object) -> FakeToken:
+        def create(self, **_: Any) -> FakeToken:
             return FakeToken()
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, **_: Any) -> None:
             pass
 
         @property

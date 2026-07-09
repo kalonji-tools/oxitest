@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
+from typing import Any
 
 import oxitest
 from oxitest import CollectedItem, TempDir, WarnCapture, helpers, raises
@@ -965,7 +966,7 @@ class _FakeSession:
 class _RaisingCollector:
     """Collector that always raises."""
 
-    def collect(self, path: str, module: object) -> list[object]:
+    def collect(self, **_: Any) -> list[object]:
         msg = "collector went boom"
         raise RuntimeError(msg)
 
@@ -973,14 +974,14 @@ class _RaisingCollector:
 class _BadReturnCollector:
     """Collector that returns non-CollectedItem values."""
 
-    def collect(self, path: str, module: object) -> list[object]:
+    def collect(self, **_: Any) -> list[object]:
         return ["not-a-collected-item", 42]
 
 
 class _GoodCollector:
     """Collector that returns a valid CollectedItem."""
 
-    def collect(self, path: str, module: object) -> list[CollectedItem]:
+    def collect(self, **_: Any) -> list[CollectedItem]:
         return [
             CollectedItem(
                 fn_name="test_from_plugin",

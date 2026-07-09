@@ -116,7 +116,7 @@ class TempDirFactory:
 
 
 class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
-    def create(self, ctx: _BuiltinContext) -> TempDir:
+    def create(self, *, ctx: _BuiltinContext) -> TempDir:
         prefix = f"{ctx.fn_name}_" if ctx.fn_name else None
         d = Path(tempfile.mkdtemp(prefix=prefix))
         tmp = TempDir(d)
@@ -140,7 +140,7 @@ class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
 class _TempDirFactoryFixture(BuiltinFixture, fixture_type=TempDirFactory):
     scope = "session"
 
-    def create(self, ctx: _BuiltinContext) -> TempDirFactory:
+    def create(self, *, ctx: _BuiltinContext) -> TempDirFactory:
         factory = TempDirFactory()
         if ctx.keep_tmp is None:
             ctx.teardown_stack.append(factory.close)

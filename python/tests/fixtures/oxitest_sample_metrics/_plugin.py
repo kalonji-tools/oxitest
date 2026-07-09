@@ -33,10 +33,10 @@ class MetricsCollectorProvider:
     def fixture_type(self) -> type:
         return MetricsCollector
 
-    def create(self, ctx: Any) -> MetricsCollector:
+    def create(self, **_: Any) -> MetricsCollector:
         return MetricsCollector()
 
-    def teardown(self, value: object) -> None:
+    def teardown(self, **_: Any) -> None:
         pass
 
     @property
@@ -55,10 +55,10 @@ class MetricsReporter:
         self._path = Path(output_path)
         self._events: list[dict[str, Any]] = []
 
-    def test_started(self, item: Any) -> None:
+    def test_started(self, *, item: Any) -> None:
         self._events.append({"event": "started", "item": str(item)})
 
-    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None:
+    def test_completed(self, *, item: Any, outcome: Any, duration_ms: float) -> None:
         self._events.append(
             {
                 "event": "completed",
@@ -68,7 +68,7 @@ class MetricsReporter:
             }
         )
 
-    def finish(self, collect_errors: list[Any], *, interrupted: bool) -> None:
+    def finish(self, *, interrupted: bool, **_: Any) -> None:
         self._events.append({"event": "finish", "interrupted": interrupted})
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(self._events, indent=2))
@@ -77,7 +77,7 @@ class MetricsReporter:
 class BenchCollector:
     """Collector: discovers bench_* functions as test items."""
 
-    def collect(self, path: str, module: object) -> list[Any]:
+    def collect(self, *, module: object, **_: Any) -> list[Any]:
         items = []
         for name, obj in inspect.getmembers(module, inspect.isfunction):
             if name.startswith("bench_"):
@@ -108,7 +108,7 @@ class MetricsCoverageProvider:
         marker = Path.cwd() / "coverage_stopped.txt"
         marker.write_text("stopped")
 
-    def report(self, fmt: Any) -> int:
+    def report(self, **_: Any) -> int:
         return 0
 
 
