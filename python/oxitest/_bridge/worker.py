@@ -132,7 +132,7 @@ def run(task: WorkerTask) -> None:
             debug=debug,
         )
         duration_ms = (time.monotonic() - start) * 1000.0
-        print(json.dumps(result.to_wire(meta.node_id, duration_ms)))
+        print(json.dumps(result.to_wire(meta.node_id, duration_ms)))  # noqa: T201 — worker IPC via stdout
 
 
 def main() -> None:

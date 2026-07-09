@@ -144,8 +144,8 @@ class FdCapture(_CaptureBase):
     def __init__(self) -> None:
         self._old_stdout_fd = os.dup(1)
         self._old_stderr_fd = os.dup(2)
-        self._stdout_tmp = tempfile.TemporaryFile()
-        self._stderr_tmp = tempfile.TemporaryFile()
+        self._stdout_tmp = tempfile.TemporaryFile()  # noqa: SIM115 — lifecycle managed by start()/close()
+        self._stderr_tmp = tempfile.TemporaryFile()  # noqa: SIM115 — lifecycle managed by start()/close()
         os.dup2(self._stdout_tmp.fileno(), 1)
         os.dup2(self._stderr_tmp.fileno(), 2)
 

@@ -95,7 +95,7 @@ def test_captured_warnings_not_in_report(tmp: TempDir) -> None:
             assert True, ""
     """)
     )
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 — intentionally inspects exit code
         [sys.executable, "-m", "oxitest", str(tmp), "--serial", "--warnings"],
         capture_output=True,
         text=True,
