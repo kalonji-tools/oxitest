@@ -112,7 +112,7 @@ def test_multiple_fixtures_each_tracked_separately() -> None:
     session = helpers.common.make_session_with("fast_a", lambda: 1)
     teardowns: list[Callable[[], None]] = []
 
-    session._registry.register(
+    session.registry.register(
         helpers.common.make_fixture_def(
             "fast_b", lambda: 2, conftest_path="/conftest.py"
         )
@@ -137,7 +137,7 @@ def test_multiple_fixtures_each_tracked_separately() -> None:
 def test_session_builtins_registered() -> None:
     """Builtins appear in the unified registry after session init."""
     session = FixtureSession([], PluginRegistry())
-    defn = session._registry.resolve(TempDir)
+    defn = session.registry.resolve(TempDir)
     assert defn.name is not None, "TempDir builtin should be registered"
     assert isinstance(defn.source, BuiltinSource), (
         "source should be BuiltinSource for a builtin fixture"
@@ -154,7 +154,7 @@ def test_session_conftest_overrides_builtin() -> None:
     )
     session = FixtureSession([custom], PluginRegistry())
     # Use qualifier "TempDir" to disambiguate (conftest registered with name "TempDir")
-    defn = session._registry.resolve(TempDir, qualifier="TempDir")
+    defn = session.registry.resolve(TempDir, qualifier="TempDir")
     assert isinstance(defn.source, ConftestSource), (
         "conftest fixture should override builtin when they share the same type"
     )
@@ -189,7 +189,7 @@ def test_session_plugin_without_scope_autouse() -> None:
 
     session = FixtureSession([], FakePluginRegistry())
 
-    defn = session._registry.resolve(_MinimalType)
+    defn = session.registry.resolve(_MinimalType)
     assert defn.name == "minimal", (
         "plugin fixture should be registered with provider name"
     )

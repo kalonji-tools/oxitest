@@ -41,7 +41,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_validator import FixtureValidator as _FixtureValidator
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._helper_registry import HelperDef
+from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
@@ -442,6 +442,16 @@ class FixtureSession:
                 for n in names
             ),
         )
+
+    @property
+    def registry(self) -> FixtureRegistry:
+        """Read-only access to the fixture registry."""
+        return self._registry
+
+    @property
+    def helper_registry(self) -> HelperRegistry:
+        """Read-only access to the helper registry."""
+        return self._helper_registry
 
     def has_shared_fixtures(self) -> bool:
         """Return True if the effective (most-local) definition has shared=True."""
