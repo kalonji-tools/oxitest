@@ -11,15 +11,24 @@ import oxitest
 from oxitest import Fixture, Fixtures, WarnCapture, helpers, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
+    AmbiguousFixtureError,
     FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,
+    UnannotatedFixtureParamError,
 )
+from oxitest._bridge._fixture_context import _fixture_context
 from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     FixtureShadowWarning,
 )
+from oxitest._bridge._fixtures import FixtureAccessor
+from oxitest._bridge._fn_metadata import get_metadata
+from oxitest._bridge.plugin_loader import load_plugins
+from oxitest._bridge.proxy import FrozenProxy, SharedFixtureMutationError
+from oxitest._bridge.proxy_ns import FixturesProxy
 from oxitest._bridge.result import ViolationKind
+from oxitest.plugin import Plugin
 
 # ── skip / mark ───────────────────────────────────────────────────────────────
 
@@ -660,8 +669,6 @@ def test_fixtures_stamps_fixture_name_for_inject_compat() -> None:
     def my_fixture() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     assert get_metadata(my_fixture).fixture_name == "my_fixture", (
         f"@fx.fixture should register fixture_name='my_fixture' in metadata, "
         f"got {get_metadata(my_fixture).fixture_name!r}"
@@ -675,8 +682,6 @@ def test_fixtures_name_override_stamps_fixture_name() -> None:
     @fx.fixture(name="renamed")
     def original() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     assert get_metadata(original).fixture_name == "renamed", (
         f"@fx.fixture(name='renamed') should register fixture_name='renamed'"
@@ -744,8 +749,6 @@ def test_resolve_for_test_skip_names_prevents_resolution() -> None:
 
 def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
     """An unannotated param matching a fixture raises UnannotatedFixtureParamError."""
-    from oxitest._bridge._errors import UnannotatedFixtureParamError
-
     session = helpers.common.make_session(
         helpers.common.make_fixture_def(
             "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
@@ -775,8 +778,6 @@ def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
 
 def test_wrong_annotation_matching_fixture_raises_helpful_error() -> None:
     """Wrong annotation on a fixture-name param raises UnannotatedFixtureParamError."""
-    from oxitest._bridge._errors import UnannotatedFixtureParamError
-
     session = helpers.common.make_session(
         helpers.common.make_fixture_def(
             "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
@@ -879,8 +880,6 @@ def test_on_teardown_registers_cleanup() -> None:
 
 def test_fixture_decorator_accepts_shared_kwarg() -> None:
     """@fixture(shared=True) stores shared=True on the resulting FixtureDef."""
-    from oxitest._bridge._fixtures import Fixtures
-
     reg_obj = Fixtures()
 
     @reg_obj.fixture(shared=True)
@@ -896,8 +895,6 @@ def test_fixture_decorator_accepts_shared_kwarg() -> None:
 
 def test_fixture_decorator_default_shared_is_false() -> None:
     """@fixture without shared= defaults to shared=False on the FixtureDef."""
-    from oxitest._bridge._fixtures import Fixtures
-
     reg_obj = Fixtures()
 
     @reg_obj.fixture
@@ -937,7 +934,6 @@ def test_shared_fixture_is_called_once_across_tests() -> None:
 
 def test_shared_fixture_value_is_wrapped_in_frozen_proxy() -> None:
     """Shared fixture values are wrapped in a FrozenProxy to prevent mutation."""
-    from oxitest._bridge.proxy import FrozenProxy
 
     def factory() -> dict[str, int]:
         return {"x": 1}
@@ -960,7 +956,6 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy() -> None:
 
 def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
     """__setitem__ on a shared fixture value raises SharedFixtureMutationError."""
-    from oxitest._bridge.proxy import SharedFixtureMutationError
 
     def factory() -> dict[str, int]:
         return {"x": 1}
@@ -1262,8 +1257,6 @@ def test_fixtures_explicit_name_is_stored() -> None:
 
 def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation() -> None:
     """Test that resolve_for_test injects FixturesProxy for bare Fixtures annotation."""
-    from oxitest._bridge.proxy_ns import FixturesProxy
-
     session = helpers.common.make_session()
 
     # Create the test function with Fixtures annotation
@@ -1502,12 +1495,6 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
     None
 ):
     """FixtureAccessor.__getattr__ raises AttributeError when _fixture_context unset."""
-    from oxitest._bridge._fixture_context import _fixture_context
-    from oxitest._bridge._fixtures import (
-        FixtureAccessor,
-        Fixtures,
-    )
-
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)
 
@@ -1526,8 +1513,6 @@ def test_fixture_accessor_getattr_raises_attribute_error_without_fixture_context
 
 def test_fixture_accessor_underscore_attr_raises_attribute_error() -> None:
     """FixtureAccessor.__getattr__ raises AttributeError for _-prefixed attrs."""
-    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
-
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)
     with raises(AttributeError):
@@ -1536,8 +1521,6 @@ def test_fixture_accessor_underscore_attr_raises_attribute_error() -> None:
 
 def test_fixture_accessor_call_delegates_to_func() -> None:
     """FixtureAccessor.__call__ delegates to the wrapped function."""
-    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
-
     fx_obj = Fixtures()
     accessor = FixtureAccessor("greet", fx_obj, lambda x: f"hi {x}")
     assert accessor("world") == "hi world", "should delegate to wrapped func"
@@ -1545,8 +1528,6 @@ def test_fixture_accessor_call_delegates_to_func() -> None:
 
 def test_fixture_accessor_has_oxitest_fixture_name() -> None:
     """FixtureAccessor carries _oxitest_fixture_name for executor resolution."""
-    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
-
     fx_obj = Fixtures()
     accessor = FixtureAccessor("db", fx_obj, lambda: None)
     assert accessor._oxitest_fixture_name == "db", "should carry fixture name"
@@ -1554,8 +1535,6 @@ def test_fixture_accessor_has_oxitest_fixture_name() -> None:
 
 def test_fixtures_getattr_returns_accessor() -> None:
     """Fixtures.__getattr__ returns a FixtureAccessor for registered fixtures."""
-    from oxitest._bridge._fixtures import FixtureAccessor, Fixtures
-
     fx_obj = Fixtures()
 
     @fx_obj.fixture
@@ -1569,8 +1548,6 @@ def test_fixtures_getattr_returns_accessor() -> None:
 
 def test_fixtures_getattr_raises_for_unknown() -> None:
     """Fixtures.__getattr__ raises AttributeError for unregistered names."""
-    from oxitest._bridge._fixtures import Fixtures
-
     fx_obj = Fixtures()
     with raises(AttributeError) as exc_info:
         _ = fx_obj.nonexistent
@@ -1580,8 +1557,6 @@ def test_fixtures_getattr_raises_for_unknown() -> None:
 
 def test_fixtures_getattr_raises_for_underscore() -> None:
     """Fixtures.__getattr__ raises AttributeError for _-prefixed names."""
-    from oxitest._bridge._fixtures import Fixtures
-
     fx_obj = Fixtures()
     with raises(AttributeError):
         _ = fx_obj._internal
@@ -1589,8 +1564,6 @@ def test_fixtures_getattr_raises_for_underscore() -> None:
 
 def test_fixtures_fixture_with_options() -> None:
     """@fixtures.fixture(name=..., shared=...) registers with custom options."""
-    from oxitest._bridge._fixtures import Fixtures
-
     fx_obj = Fixtures()
 
     @fx_obj.fixture(name="custom_name", shared=True)
@@ -1605,8 +1578,6 @@ def test_fixtures_fixture_with_options() -> None:
 
 def test_fixtures_namespace_name() -> None:
     """Fixtures stores the namespace name passed at construction."""
-    from oxitest._bridge._fixtures import Fixtures
-
     fx_obj = Fixtures("myns")
     assert fx_obj._namespace_name == "myns", "should store namespace name"
 
@@ -1617,8 +1588,6 @@ def test_fixtures_namespace_name() -> None:
 @oxitest.mark.inprocess
 def test_plugin_fixture_provider_injected() -> None:
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
-    from oxitest._bridge.plugin_loader import load_plugins
-    from oxitest.plugin import Plugin
 
     class FakeDatabase:
         """The type that the plugin provides."""
@@ -1714,8 +1683,6 @@ def test_registry_resolve_by_type_ambiguous_with_qualifier() -> None:
 
 def test_registry_resolve_ambiguous_no_match() -> None:
     """Two fixtures of same type, unknown qualifier -- AmbiguousFixtureError."""
-    from oxitest._bridge._errors import AmbiguousFixtureError
-
     reg = FixtureRegistry()
     dev = helpers.common.make_fixture_def(
         "dev_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
