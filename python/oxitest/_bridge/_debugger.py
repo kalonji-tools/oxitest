@@ -8,7 +8,7 @@ from __future__ import annotations
 
 __all__ = ["DebuggerBackend", "_PdbBackend"]
 
-import pdb
+import pdb  # noqa: T100
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ class _PdbBackend:
     """Default debugger backend wrapping stdlib ``pdb``."""
 
     def trace(self) -> None:
-        pdb.set_trace()
+        pdb.set_trace()  # noqa: T100
 
     def post_mortem(self, tb: TracebackType) -> None:
         pdb.post_mortem(tb)

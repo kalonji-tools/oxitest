@@ -63,7 +63,6 @@ ignore = [
 "python/tests/test_conftest_loader.py" = ["PT019"]
 "python/tests/test_loader.py" = ["PT019"]
 "python/tests/test_read_fixtures.py" = ["PT019"]
-"python/oxitest/_bridge/_debugger.py" = ["T100"]
 "scripts/*" = ["T201"]
 "benchmarks/*.py" = ["T201", "E501", "PLR2004", "S101"]
 
