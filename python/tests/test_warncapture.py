@@ -47,19 +47,19 @@ def test_warncapture_clear_resets_list(warn: WarnCapture) -> None:
     assert len(warn.list) == 1, f"expected 1 warning after clear, got {warn.list!r}"
 
 
-def test_warncapture_all_captured_ids_survives_clear(warn: WarnCapture) -> None:
-    """_all_captured_ids is not affected by clear() — tracks lifetime captures."""
+def test_warncapture_captured_ids_survives_clear(warn: WarnCapture) -> None:
+    """captured_ids is not affected by clear() — tracks lifetime captures."""
     warnings.warn("first", UserWarning, stacklevel=2)
-    assert len(warn._all_captured_ids) == 1, (
-        f"expected 1 tracked id, got {len(warn._all_captured_ids)}"
+    assert len(warn.captured_ids) == 1, (
+        f"expected 1 tracked id, got {len(warn.captured_ids)}"
     )
     warn.clear()
-    assert len(warn._all_captured_ids) == 1, (
-        f"clear() must not reset _all_captured_ids, got {len(warn._all_captured_ids)}"
+    assert len(warn.captured_ids) == 1, (
+        f"clear() must not reset captured_ids, got {len(warn.captured_ids)}"
     )
     warnings.warn("second", UserWarning, stacklevel=2)
-    assert len(warn._all_captured_ids) == 2, (
-        f"expected 2 tracked ids, got {len(warn._all_captured_ids)}"
+    assert len(warn.captured_ids) == 2, (
+        f"expected 2 tracked ids, got {len(warn.captured_ids)}"
     )
 
 
