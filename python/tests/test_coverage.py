@@ -71,10 +71,10 @@ class _FakeCovInstance:
     stopped: bool = False
     saved: bool = False
     combined: bool = False
-    _report_called: bool = False
-    _html_called: bool = False
-    _xml_called: bool = False
-    _json_called: bool = False
+    report_called: bool = False
+    html_called: bool = False
+    xml_called: bool = False
+    json_called: bool = False
 
     def start(self) -> None:
         self.started = True
@@ -89,19 +89,19 @@ class _FakeCovInstance:
         self.combined = True
 
     def report(self) -> int:
-        self._report_called = True
+        self.report_called = True
         return 85
 
     def html_report(self) -> int:
-        self._html_called = True
+        self.html_called = True
         return 0
 
     def xml_report(self) -> int:
-        self._xml_called = True
+        self.xml_called = True
         return 0
 
     def json_report(self) -> int:
-        self._json_called = True
+        self.json_called = True
         return 0
 
 
@@ -149,7 +149,7 @@ def test_provider_report_term() -> None:
     provider.cov = fake_cov
     result = provider.report(fmt=CovReportFormat.TERM)
 
-    assert fake_cov._report_called, "report() should have been called"  # noqa: SLF001
+    assert fake_cov.report_called, "report() should have been called"
     assert result == 85, f"expected 85, got {result}"
 
 
@@ -161,7 +161,7 @@ def test_provider_report_html() -> None:
     provider.cov = fake_cov
     provider.report(fmt=CovReportFormat.HTML)
 
-    assert fake_cov._html_called, "html_report() should have been called"  # noqa: SLF001
+    assert fake_cov.html_called, "html_report() should have been called"
 
 
 def test_provider_report_none_skips() -> None:
@@ -173,7 +173,7 @@ def test_provider_report_none_skips() -> None:
     result = provider.report(fmt=CovReportFormat.NONE)
 
     assert result == 0, f"expected 0, got {result}"
-    assert not fake_cov._report_called, "report() should not have been called"  # noqa: SLF001
+    assert not fake_cov.report_called, "report() should not have been called"
 
 
 def test_provider_import_error_without_coverage() -> None:

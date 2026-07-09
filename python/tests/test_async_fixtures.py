@@ -44,7 +44,7 @@ class _StubBackend:
     name = "stub"
 
     def __init__(self) -> None:
-        self._session = _StubSession()
+        self.session = _StubSession()
         self.create_count = 0
 
     def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
@@ -52,13 +52,13 @@ class _StubBackend:
 
     def create_shared_session(self) -> SharedAsyncSession:
         self.create_count += 1
-        return self._session
+        return self.session
 
 
 def _make_stub_backend() -> tuple[_StubBackend, _StubSession]:
     """Return a stub AsyncBackend and its shared session."""
     backend = _StubBackend()
-    session = backend._session  # noqa: SLF001
+    session = backend.session
     return backend, session
 
 
