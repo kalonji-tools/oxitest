@@ -454,12 +454,12 @@ def test_create_session_stores_helper_registry(tmp: TempDir) -> None:
         "    return 'thing'\n"
     )
     session, _ = create_session([str(f)])
-    assert hasattr(session, "_helper_registry"), (
-        "session should have a _helper_registry attribute after create_session"
+    assert hasattr(session, "helper_registry"), (
+        "session should have a helper_registry property after create_session"
     )
-    assert isinstance(session._helper_registry, HelperRegistry), (
-        "_helper_registry should be a HelperRegistry, got "
-        f"{type(session._helper_registry).__name__}"
+    assert isinstance(session.helper_registry, HelperRegistry), (
+        "helper_registry should be a HelperRegistry, got "
+        f"{type(session.helper_registry).__name__}"
     )
 
 
@@ -501,12 +501,12 @@ def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir) -> N
         "    return 42\n"
     )
     session, _ = create_session([str(f)])
-    assert hasattr(session, "_helper_registry"), (
-        "session should have _helper_registry even with no Helpers() instances"
+    assert hasattr(session, "helper_registry"), (
+        "session should have helper_registry even with no Helpers() instances"
     )
-    registry = session._helper_registry
+    registry = session.helper_registry
     assert isinstance(registry, HelperRegistry), (
-        "session._helper_registry should be a HelperRegistry"
+        "session.helper_registry should be a HelperRegistry"
     )
     assert list(registry) == [], (
         "helper_registry should be empty when conftest has no Helpers() instances"
