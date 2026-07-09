@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+import sys
 
 import oxitest
 from oxitest import Fixture, TempDir, raises
+from oxitest._bridge._loader import _load_module, _LoadError, _resolve_fn
 
 
 def _unique_name(path: str) -> str:
@@ -15,8 +18,6 @@ def _unique_name(path: str) -> str:
 
 def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
     """_load_module returns a module object containing the defined test function."""
-    from oxitest._bridge._loader import _load_module
-
     f = tmp / "test_sample.py"
     f.write_text("def test_foo(): pass\n")
     unique = _unique_name(str(f))
@@ -31,8 +32,6 @@ def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
 
 def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir) -> None:
     """_load_module should raise _LoadError when the file path does not exist."""
-    from oxitest._bridge._loader import _load_module, _LoadError
-
     unique = _unique_name("/nonexistent/path/test_x.py")
     with raises(_LoadError):
         _load_module("/nonexistent/path/test_x.py", unique)
@@ -40,8 +39,6 @@ def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir) -> None:
 
 def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
     """_load_module should raise _LoadError when the file contains a syntax error."""
-    from oxitest._bridge._loader import _load_module, _LoadError
-
     f = tmp / "test_broken.py"
     f.write_text("def test_foo(: pass\n")
     unique = _unique_name(str(f))
@@ -54,11 +51,6 @@ def test_resolve_fn_returns_callable(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn returns a (module, callable) tuple for a valid function name."""
-    import importlib.util
-    import sys
-
-    from oxitest._bridge._loader import _resolve_fn
-
     f = tmp / "mod.py"
     f.write_text("def test_bar(): return 42\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp", f)
@@ -80,11 +72,6 @@ def test_resolve_fn_raises_load_error_on_missing_function(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn raises _LoadError with status='error' when the function is absent."""
-    import importlib.util
-    import sys
-
-    from oxitest._bridge._loader import _LoadError, _resolve_fn
-
     f = tmp / "mod.py"
     f.write_text("def test_bar(): pass\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp2", f)
@@ -111,11 +98,6 @@ def test_resolve_fn_handles_class_method(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn should resolve 'ClassName::method_name' to the unbound method."""
-    import importlib.util
-    import sys
-
-    from oxitest._bridge._loader import _resolve_fn
-
     f = tmp / "mod.py"
     f.write_text("class TestFoo:\n    def test_method(self): return 'ok'\n")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp3", f)

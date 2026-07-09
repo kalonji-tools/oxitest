@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from oxitest import Fixture, FixtureRef, TempDir, helpers, parametrize, partial, raises
+from oxitest._bridge._errors import UnannotatedFixtureParamError
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge.conftest_loader import create_session, load_fixtures_from_conftest
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import ComposedCases, DataclassCases, DictCases
@@ -28,8 +30,6 @@ def test_parametrize_stamps_function() -> None:
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
@@ -61,8 +61,6 @@ def test_parametrize_multiple_cases() -> None:
     )
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
@@ -248,8 +246,6 @@ def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
 
 def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
     """Wrong annotation matching a fixture raises UnannotatedFixtureParamError."""
-    from oxitest._bridge._errors import UnannotatedFixtureParamError
-
     registry = FixtureRegistry()
 
     def x_fixture() -> int:
@@ -512,8 +508,6 @@ def test_parametrize_dict_mode_stamps_function() -> None:
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
         f"dict mode should store a tuple, got {type(raw).__name__}"
@@ -537,8 +531,6 @@ def test_parametrize_dict_mode_multiple_cases() -> None:
     )
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
@@ -590,8 +582,6 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema() -> None:
     @parametrize(basic={"x": 2, "expected": 20})
     def test_foo(x: int, expected: int, multiplier: Fixture[int]) -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
@@ -719,8 +709,6 @@ def test_parametrize_inferred_type_stamps_function() -> None:
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
     def test_foo(x: int, y: int, expected: int) -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
@@ -1044,18 +1032,12 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> No
 
 def test_parametrize_rejects_empty_cases_direct() -> None:
     """Calling parametrize() directly with no args raises TypeError."""
-    from oxitest import raises
-    from oxitest._bridge.parametrize import parametrize
-
     with raises(TypeError, match="at least one case"):
         parametrize()
 
 
 def test_parametrize_rejects_non_dataclass_non_dict_direct() -> None:
     """parametrize() with a non-dict, non-dataclass value raises TypeError."""
-    from oxitest import raises
-    from oxitest._bridge.parametrize import parametrize
-
     with raises(
         TypeError, match="case values must be dicts, frozen dataclass instances"
     ):
@@ -1161,7 +1143,6 @@ def test_partial_cases_items_yields_field_repr_pairs() -> None:
 
 def test_parametrize_stacks_partial_layers() -> None:
     """Two @parametrize(partial) decorators produce a 2-tuple of ComposedCases."""
-    from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(pg=partial(MathCase, x=1))
     @parametrize(add=partial(MathCase, y=2, expected=3))
@@ -1183,7 +1164,6 @@ def test_parametrize_stacks_partial_layers() -> None:
 
 def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
     """A single @parametrize with full dataclass cases yields a 1-tuple."""
-    from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic=AddCase(x=1, y=2, expected=3))
     def test_fn(x: int, y: int, expected: int) -> None:
@@ -1204,7 +1184,6 @@ def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
 
 def test_parametrize_single_dict_is_1_tuple() -> None:
     """A single @parametrize with a dict case produces a 1-tuple of DictCases."""
-    from oxitest._bridge._fn_metadata import get_metadata
 
     @parametrize(basic={"x": 1, "y": 2, "expected": 3})
     def test_fn(x: int, y: int, expected: int) -> None:
