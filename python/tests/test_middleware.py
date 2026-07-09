@@ -18,7 +18,7 @@ class _UppercaseMiddleware:
     """Test middleware that uppercases the result message."""
 
     def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+        self, _: ExecutionPlan, next_fn: Callable[[], TestResult]
     ) -> Callable[[], TestResult]:
         def wrapped() -> TestResult:
             result = next_fn()
@@ -34,7 +34,7 @@ class _SkipMiddleware:
     """Test middleware that passes through unchanged."""
 
     def apply(
-        self, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
+        self, _: ExecutionPlan, next_fn: Callable[[], TestResult]
     ) -> Callable[[], TestResult]:
         return next_fn
 

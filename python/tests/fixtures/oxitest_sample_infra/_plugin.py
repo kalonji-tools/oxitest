@@ -33,7 +33,7 @@ class InfraHostProvider:
     def fixture_type(self) -> type:
         return InfraHost
 
-    def create(self, ctx: Any) -> InfraHost:
+    def create(self, _: Any) -> InfraHost:
         return InfraHost(self._config.host, self._config.timeout)
 
     def teardown(self, value: object) -> None:
@@ -87,7 +87,7 @@ class RemoteWrapper:
     def marker(self) -> str:
         return "remote"
 
-    def wrap(self, test_fn: Any, marker_args: dict[str, Any]) -> Any:
+    def wrap(self, test_fn: Any, _: dict[str, Any]) -> Any:
         return test_fn()
 
 

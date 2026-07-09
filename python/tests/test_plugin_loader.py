@@ -222,7 +222,7 @@ def test_fixture_provider_scope_default() -> None:
         def fixture_type(self) -> type:
             return int
 
-        def create(self, ctx: object) -> int:
+        def create(self, _: object) -> int:
             return 42
 
         def teardown(self, value: object) -> None:
@@ -254,7 +254,7 @@ def test_fixture_provider_scope_custom() -> None:
         def autouse(self) -> bool:
             return True
 
-        def create(self, ctx: object) -> int:
+        def create(self, _: object) -> int:
             return 42
 
         def teardown(self, value: object) -> None:

@@ -52,23 +52,16 @@ ignore = [
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
 
-# ── ARG002: unused method args in protocol test doubles ─────────────────
-"python/tests/fixtures/oxitest_sample_infra/_plugin.py" = ["ARG002"]
-"python/tests/fixtures/oxitest_sample_metrics/_plugin.py" = ["ARG002"]
-"python/tests/test_builtins.py" = ["ARG002", "PT019", "SLF001"]
-"python/tests/test_coverage.py" = ["ARG002", "SLF001"]
-"python/tests/test_fixture_instantiator.py" = ["ARG002", "SLF001"]
-"python/tests/test_fixture_session.py" = ["ARG002"]
-"python/tests/test_fixtures.py" = ["ARG002", "SLF001"]
-"python/tests/test_importer.py" = ["ARG002", "S102"]
-"python/tests/test_middleware.py" = ["ARG002"]
-"python/tests/test_plugin_lazy.py" = ["ARG002"]
-"python/tests/test_plugin_loader.py" = ["ARG002"]
+"python/tests/test_builtins.py" = ["PT019", "SLF001"]
+"python/tests/test_importer.py" = ["S102"]
 
 # ── SLF001: tests legitimately inspect private state ────────────────────
 "python/tests/test_async_fixtures.py" = ["SLF001"]
+"python/tests/test_coverage.py" = ["SLF001"]
 "python/tests/test_debug.py" = ["SLF001"]
 "python/tests/test_exception_handlers.py" = ["SLF001"]
+"python/tests/test_fixture_instantiator.py" = ["SLF001"]
+"python/tests/test_fixtures.py" = ["SLF001"]
 "python/tests/test_helper_provider.py" = ["SLF001"]
 "python/tests/test_helpers_registrar.py" = ["SLF001"]
 "python/tests/test_middleware_builder.py" = ["SLF001"]

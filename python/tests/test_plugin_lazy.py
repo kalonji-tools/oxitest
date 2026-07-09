@@ -264,7 +264,7 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
         def fixture_type(self) -> type:
             return FakeToken
 
-        def create(self, ctx: object) -> FakeToken:
+        def create(self, _: object) -> FakeToken:
             return FakeToken()
 
         def teardown(self, value: object) -> None:

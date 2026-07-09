@@ -72,7 +72,7 @@ def test_builtin_fixture_registration() -> None:
         pass
 
     class _SentinelFixture(BuiltinFixture, fixture_type=_Sentinel):
-        def create(self, ctx: _BuiltinContext) -> str:
+        def create(self, _: _BuiltinContext) -> str:
             return "sentinel"
 
     try:

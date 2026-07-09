@@ -41,7 +41,7 @@ class _FakeProvider:
     def stop(self) -> None:
         pass
 
-    def report(self, fmt: CovReportFormat) -> int:
+    def report(self, _: CovReportFormat) -> int:
         return 0
 
 

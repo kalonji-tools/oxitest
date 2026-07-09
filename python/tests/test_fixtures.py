@@ -1605,7 +1605,7 @@ def test_plugin_fixture_provider_injected() -> None:
         def fixture_type(self) -> type:
             return FakeDatabase
 
-        def create(self, ctx: object) -> FakeDatabase:
+        def create(self, _: object) -> FakeDatabase:
             return FakeDatabase(url="sqlite://test")
 
         def teardown(self, value: object) -> None:

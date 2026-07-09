@@ -66,6 +66,7 @@ class Middleware(Protocol):
     def apply(
         self,
         plan: ExecutionPlan,
+        /,
         next_fn: Callable[[], TestResult],
     ) -> Callable[[], TestResult]:
         """Wrap or replace next_fn. Return next_fn unchanged to skip."""

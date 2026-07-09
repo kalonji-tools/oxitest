@@ -174,7 +174,7 @@ def test_session_plugin_without_scope_autouse() -> None:
         def fixture_type(self) -> type[_MinimalType]:
             return _MinimalType
 
-        def create(self, ctx: object) -> int:
+        def create(self, _: object) -> int:
             return 42
 
         def teardown(self, value: object) -> None:
