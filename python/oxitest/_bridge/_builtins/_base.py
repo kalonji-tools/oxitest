@@ -2,6 +2,7 @@ from __future__ import annotations
 
 __all__ = ["BuiltinFixture"]
 
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
@@ -40,9 +41,11 @@ class BuiltinFixture:
             BuiltinFixture._registry[fixture_type] = cls
 
     @classmethod
-    def registered_types(cls) -> dict[type, type[BuiltinFixture]]:
-        """Return the registry of fixture type -> implementation class mappings."""
-        return cls._registry
+    def registered_types(
+        cls,
+    ) -> MappingProxyType[type, type[BuiltinFixture]]:
+        """Read-only view of the fixture type -> implementation class registry."""
+        return MappingProxyType(cls._registry)
 
     @classmethod
     def for_type(cls, inner: type) -> type[BuiltinFixture] | None:
