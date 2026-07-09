@@ -352,7 +352,7 @@ def test_stdcapture_readouterr_resets_buffer() -> None:
     )
 
 
-def test_stdcapture_disabled_passes_through(_cap_outer: StdCapture) -> None:
+def test_stdcapture_disabled_passes_through() -> None:
     """cap.disabled() context manager passes output through without capturing it."""
     ctx, teardowns = _make_builtin_ctx()
     cap = _StdCaptureFixture().create(ctx=ctx)

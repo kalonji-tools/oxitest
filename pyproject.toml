@@ -39,6 +39,9 @@ ignore = [
 
     # ── Not yet addressed (TODO: fix incrementally) ──────────────────────
     "ANN401",         # dynamically typed expressions (Any) — legitimately Any in fixture/plugin system
+
+    # ── Not applicable (pytest-specific) ────────────────────────────────
+    "PT",             # flake8-pytest-style — oxitest is not pytest; PT001-PT031 are all inapplicable (PTH pathlib rules remain enabled)
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -51,8 +54,6 @@ ignore = [
     "S101",     # assert is the primary assertion mechanism in tests
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
-
-"python/tests/test_builtins.py" = ["PT019"]
 
 # ── PLC0415: intentionally lazy imports ─────────────────────────────────
 "python/tests/fixtures/oxitest_sample_infra/__init__.py" = ["PLC0415"]
@@ -67,13 +68,6 @@ ignore = [
 "python/tests/conftest.py" = ["S603"]
 "python/tests/integration/*" = ["S603"]
 "python/tests/test_worker.py" = ["S603"]
-
-# ── PT019: pytest.raises without match — intentional ────────────────────
-"python/tests/integration/test_completions.py" = ["PT019"]
-"python/tests/integration/test_version.py" = ["PT019"]
-"python/tests/test_conftest_loader.py" = ["PT019"]
-"python/tests/test_loader.py" = ["PT019"]
-"python/tests/test_read_fixtures.py" = ["PT019"]
 
 # ── Scripts and benchmarks ──────────────────────────────────────────────
 "scripts/*" = ["T201"]
