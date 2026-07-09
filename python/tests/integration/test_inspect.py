@@ -16,6 +16,7 @@ def _run_inspect(*args: str, cwd: str | None = None) -> tuple[str, str, int]:
         text=True,
         timeout=60,
         cwd=cwd,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 

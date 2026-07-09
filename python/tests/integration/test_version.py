@@ -15,6 +15,7 @@ def _run_version_flag(*args: str) -> tuple[str, str, int]:
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 

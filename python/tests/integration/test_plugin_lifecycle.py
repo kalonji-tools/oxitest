@@ -60,6 +60,7 @@ def _run_top_flag(
         timeout=60,
         cwd=str(tmp),
         env=base_env,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 
