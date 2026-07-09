@@ -246,8 +246,8 @@ class FixtureInstantiator:
             case ConftestSource():
                 return resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
-                value = provider.create(None)
-                fn_teardowns.append(lambda v=value, p=provider: p.teardown(v))
+                value = provider.create(ctx=None)
+                fn_teardowns.append(lambda v=value, p=provider: p.teardown(value=v))
                 return value
             case BuiltinSource(impl_cls=impl_cls):
                 return self.inject_builtin(impl_cls, meta, "function", fn_teardowns)
@@ -409,7 +409,7 @@ class FixtureInstantiator:
             return effective_session_scope.get_or_create(
                 f"__builtin_{impl_cls.__name__}",
                 lambda: impl_cls().create(
-                    _BuiltinContext(
+                    ctx=_BuiltinContext(
                         meta=meta,
                         inject_scope="session",
                         teardown_stack=effective_session_scope.teardowns,
@@ -420,7 +420,7 @@ class FixtureInstantiator:
                 ),
             )
         return impl_cls().create(
-            _BuiltinContext(
+            ctx=_BuiltinContext(
                 meta=meta,
                 inject_scope=inject_scope,
                 teardown_stack=teardown_stack,

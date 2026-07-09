@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from types import ModuleType
+from typing import Any
 from unittest.mock import patch
 
 import oxitest
@@ -41,7 +42,7 @@ class _FakeProvider:
     def stop(self) -> None:
         pass
 
-    def report(self, fmt: CovReportFormat) -> int:
+    def report(self, **_: Any) -> int:
         return 0
 
 
@@ -146,7 +147,7 @@ def test_provider_report_term() -> None:
 
     provider = CoveragePyProvider()
     provider._cov = fake_cov
-    result = provider.report(CovReportFormat.TERM)
+    result = provider.report(fmt=CovReportFormat.TERM)
 
     assert fake_cov._report_called, "report() should have been called"
     assert result == 85, f"expected 85, got {result}"
@@ -158,7 +159,7 @@ def test_provider_report_html() -> None:
 
     provider = CoveragePyProvider()
     provider._cov = fake_cov
-    provider.report(CovReportFormat.HTML)
+    provider.report(fmt=CovReportFormat.HTML)
 
     assert fake_cov._html_called, "html_report() should have been called"
 
@@ -169,7 +170,7 @@ def test_provider_report_none_skips() -> None:
 
     provider = CoveragePyProvider()
     provider._cov = fake_cov
-    result = provider.report(CovReportFormat.NONE)
+    result = provider.report(fmt=CovReportFormat.NONE)
 
     assert result == 0, f"expected 0, got {result}"
     assert not fake_cov._report_called, "report() should not have been called"

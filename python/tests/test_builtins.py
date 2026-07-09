@@ -11,6 +11,7 @@ import types
 from collections.abc import Callable
 from contextlib import redirect_stderr
 from pathlib import Path
+from typing import Any
 
 import oxitest
 import oxitest._bridge._builtins as builtins_pkg
@@ -72,7 +73,7 @@ def test_builtin_fixture_registration() -> None:
         pass
 
     class _SentinelFixture(BuiltinFixture, fixture_type=_Sentinel):
-        def create(self, ctx: _BuiltinContext) -> str:
+        def create(self, **_: Any) -> str:
             return "sentinel"
 
     try:
@@ -95,7 +96,7 @@ def test_builtin_fixture_create_raises_not_implemented() -> None:
     """BuiltinFixture.create() raises NotImplementedError on the abstract base class."""
     ctx, _ = _make_builtin_ctx()
     with raises(NotImplementedError):
-        BuiltinFixture().create(ctx)
+        BuiltinFixture().create(ctx=ctx)
 
 
 def test_builtin_context_keep_tmp_default_is_none() -> None:
@@ -118,7 +119,7 @@ def test_builtin_context_keep_tmp_accepts_value() -> None:
 def test_tempdir_fixture_creates_directory() -> None:
     """_TempDirFixture.create() makes a directory and registers one teardown."""
     ctx, teardowns = _make_builtin_ctx()
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
 
     assert tmp.path.is_dir(), (
         f"_TempDirFixture.create() should produce a directory, got path={tmp.path!r} "
@@ -133,7 +134,7 @@ def test_tempdir_fixture_creates_directory() -> None:
 def test_tempdir_fixture_directory_name_includes_fn_name() -> None:
     """TempDir path name embeds the test function name for identifiable directories."""
     ctx, teardowns = _make_builtin_ctx(fn_name="my_test")
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
 
     assert tmp.path.is_dir(), (
         f"_TempDirFixture.create() should produce a directory when fn_name is given, "
@@ -149,7 +150,7 @@ def test_tempdir_fixture_directory_name_includes_fn_name() -> None:
 def test_tempdir_fixture_teardown_removes_directory() -> None:
     """TempDir teardown removes the created directory so tests don't leak /tmp."""
     ctx, teardowns = _make_builtin_ctx()
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
 
     teardowns[0]()
@@ -164,7 +165,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_failure() -> None:
     ctx, teardowns = _make_builtin_ctx(
         fn_name="fail_test", keep_tmp="failed", result_cell=result_cell
     )
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
     assert path.is_dir(), "TempDir should create a directory"
 
@@ -186,7 +187,7 @@ def test_tempdir_keep_tmp_failed_cleans_on_pass() -> None:
     ctx, teardowns = _make_builtin_ctx(
         fn_name="pass_test", keep_tmp="failed", result_cell=result_cell
     )
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
 
     # Simulate a passed test result
@@ -204,7 +205,7 @@ def test_tempdir_keep_tmp_always_preserves_on_pass() -> None:
     ctx, teardowns = _make_builtin_ctx(
         fn_name="pass_test", keep_tmp="always", result_cell=result_cell
     )
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
 
     result_cell[0] = PassedResult()
@@ -222,7 +223,7 @@ def test_tempdir_keep_tmp_failed_preserves_on_error() -> None:
     ctx, teardowns = _make_builtin_ctx(
         fn_name="err_test", keep_tmp="failed", result_cell=result_cell
     )
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
 
     result_cell[0] = ErrorResult(message="boom")
@@ -245,7 +246,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
     ctx, teardowns = _make_builtin_ctx(
         fn_name="fail_test", keep_tmp="failed", result_cell=result_cell
     )
-    tmp = _TempDirFixture().create(ctx)
+    tmp = _TempDirFixture().create(ctx=ctx)
     path = tmp.path
 
     result_cell[0] = FailedResult(message="oops")
@@ -269,7 +270,7 @@ def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
 def test_tempdir_factory_mktemp_creates_distinct_dirs() -> None:
     """mktemp() with different names produces two distinct existing directories."""
     ctx, _ = _make_builtin_ctx(inject_scope="session")
-    factory = _TempDirFactoryFixture().create(ctx)
+    factory = _TempDirFactoryFixture().create(ctx=ctx)
 
     a = factory.mktemp("a")
     b = factory.mktemp("b")
@@ -289,7 +290,7 @@ def test_tempdir_factory_mktemp_creates_distinct_dirs() -> None:
 def test_tempdir_factory_teardown_removes_all_dirs() -> None:
     """TempDirFactory teardown removes every directory created by mktemp()."""
     ctx, teardowns = _make_builtin_ctx(inject_scope="session")
-    factory = _TempDirFactoryFixture().create(ctx)
+    factory = _TempDirFactoryFixture().create(ctx=ctx)
 
     a = factory.mktemp("x")
     b = factory.mktemp("y")
@@ -319,7 +320,7 @@ def test_tempdir_factory_scope_is_session() -> None:
 def test_stdcapture_captures_print() -> None:
     """StdCapture intercepts print() output and exposes it via readouterr().out."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _StdCaptureFixture().create(ctx)
+    cap = _StdCaptureFixture().create(ctx=ctx)
 
     print("hello")  # noqa: T201
     result = cap.readouterr()
@@ -337,7 +338,7 @@ def test_stdcapture_captures_print() -> None:
 def test_stdcapture_readouterr_resets_buffer() -> None:
     """readouterr() flushes the buffer so successive reads don't accumulate."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _StdCaptureFixture().create(ctx)
+    cap = _StdCaptureFixture().create(ctx=ctx)
 
     print("first")  # noqa: T201
     cap.readouterr()
@@ -354,7 +355,7 @@ def test_stdcapture_readouterr_resets_buffer() -> None:
 def test_stdcapture_disabled_passes_through(_cap_outer: StdCapture) -> None:
     """cap.disabled() context manager passes output through without capturing it."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _StdCaptureFixture().create(ctx)
+    cap = _StdCaptureFixture().create(ctx=ctx)
 
     with cap.disabled():
         # While disabled, output goes to the real stdout (captured by cap_outer)
@@ -372,7 +373,7 @@ def test_stdcapture_teardown_restores_streams() -> None:
     """StdCapture teardown restores sys.stdout to the original stream object."""
     real_stdout = sys.stdout
     ctx, teardowns = _make_builtin_ctx()
-    _StdCaptureFixture().create(ctx)
+    _StdCaptureFixture().create(ctx=ctx)
 
     assert sys.stdout is not real_stdout, (
         "StdCapture should replace sys.stdout with a capture buffer while active"
@@ -389,7 +390,7 @@ def test_stdcapture_teardown_restores_streams() -> None:
 def test_fdcapture_captures_fd_write() -> None:
     """FdCapture intercepts raw fd writes and exposes them via readouterr().out."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _FdCaptureFixture().create(ctx)
+    cap = _FdCaptureFixture().create(ctx=ctx)
 
     os.write(1, b"raw\n")
     result = cap.readouterr()
@@ -403,7 +404,7 @@ def test_fdcapture_captures_fd_write() -> None:
 def test_fdcapture_readouterr_resets_buffer() -> None:
     """FdCapture readouterr() flushes the buffer; successive reads don't accumulate."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _FdCaptureFixture().create(ctx)
+    cap = _FdCaptureFixture().create(ctx=ctx)
 
     os.write(1, b"first\n")
     cap.readouterr()  # consume first write
@@ -420,7 +421,7 @@ def test_fdcapture_readouterr_resets_buffer() -> None:
 def test_fdcapture_disabled_passes_through() -> None:
     """FdCapture.disabled() context manager lets fd writes pass through uncaptured."""
     ctx, teardowns = _make_builtin_ctx()
-    cap = _FdCaptureFixture().create(ctx)
+    cap = _FdCaptureFixture().create(ctx=ctx)
 
     with cap.disabled():
         # While disabled, writes go to real fd 1 (not captured)
@@ -439,7 +440,7 @@ def test_fdcapture_teardown_restores_fds() -> None:
     """FdCapture teardown restores file descriptor 1 to the original underlying fd."""
     saved_fd = os.dup(1)  # save a reference to the current real stdout fd
     ctx, teardowns = _make_builtin_ctx()
-    _FdCaptureFixture().create(ctx)
+    _FdCaptureFixture().create(ctx=ctx)
 
     teardowns[0]()
     try:
@@ -456,7 +457,7 @@ def test_fdcapture_teardown_restores_fds() -> None:
 def test_patcher_setattr_overrides_attribute() -> None:
     """patch.setattr() immediately changes the target attribute to the new value."""
     ctx, _ = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     obj = types.SimpleNamespace(x=1)
     patch.setattr(obj, "x", 99)
@@ -468,7 +469,7 @@ def test_patcher_setattr_overrides_attribute() -> None:
 def test_patcher_setattr_restores_on_teardown() -> None:
     """patch.setattr() teardown reverts the attribute to its original value."""
     ctx, teardowns = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     obj = types.SimpleNamespace(x=1)
     patch.setattr(obj, "x", 99)
@@ -485,7 +486,7 @@ def test_patcher_setenv_sets_and_restores() -> None:
     os.environ.pop(key, None)
 
     ctx, teardowns = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     patch.setenv(key, "hello")
     assert os.environ[key] == "hello", (
@@ -505,7 +506,7 @@ def test_patcher_delenv_removes_and_restores() -> None:
     os.environ[key] = "original"
 
     ctx, teardowns = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     patch.delenv(key)
     assert key not in os.environ, (
@@ -525,7 +526,7 @@ def test_patcher_chdir_changes_and_restores(tmp: TempDir) -> None:
     original = Path.cwd()
 
     ctx, teardowns = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     patch.chdir(tmp)
     assert Path.cwd() == Path(tmp), (
@@ -543,7 +544,7 @@ def test_patcher_chdir_changes_and_restores(tmp: TempDir) -> None:
 def test_patcher_teardown_undoes_in_lifo_order() -> None:
     """Patcher teardown undoes all patches in LIFO order to avoid ordering conflicts."""
     ctx, teardowns = _make_builtin_ctx()
-    patch = _PatcherFixture().create(ctx)
+    patch = _PatcherFixture().create(ctx=ctx)
 
     obj = types.SimpleNamespace(a="orig_a", b="orig_b")
     patch.setattr(obj, "a", "new_a")
@@ -860,7 +861,7 @@ def test_logcapture_teardown_uninstalls_backends() -> None:
 def test_logcapture_fixture_registers_teardown() -> None:
     """_LogCaptureFixture.create() registers one teardown that closes all backends."""
     ctx, teardowns = _make_builtin_ctx()
-    _LogCaptureFixture().create(ctx)
+    _LogCaptureFixture().create(ctx=ctx)
 
     assert len(teardowns) == 1, (
         f"LogCaptureFixture should register exactly 1 teardown, got {len(teardowns)}"

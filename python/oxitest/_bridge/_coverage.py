@@ -47,7 +47,7 @@ class CoveragePyProvider:
         self._cov.save()
         self._cov.combine()
 
-    def report(self, fmt: CovReportFormat) -> int:
+    def report(self, *, fmt: CovReportFormat) -> int:
         """Generate report in the given format."""
         match fmt:
             case CovReportFormat.TERM:

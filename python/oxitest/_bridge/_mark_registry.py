@@ -126,7 +126,7 @@ class _PluginMarkHandler(MarkHandler):
             _w: Any = pw,
             _a: dict[int | str, Any] = args,
         ) -> TestResult:
-            return _w.wrap(next_fn, _a)
+            return _w.wrap(test_fn=next_fn, marker_args=_a)
 
         return MarkEvalResult(wrapper=wrapper)
 

@@ -505,7 +505,7 @@ def collect_module(
         for collector in _plugin_registry.collectors:  # pragma: no cover
             collector_name = type(collector).__qualname__
             try:
-                plugin_items = collector.collect(path, module)
+                plugin_items = collector.collect(path=path, module=module)
                 for item in plugin_items:
                     if isinstance(item, CollectedItem):
                         items.append(item)

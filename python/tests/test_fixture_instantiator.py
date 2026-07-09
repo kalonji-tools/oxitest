@@ -199,10 +199,10 @@ def test_resolve_by_source_plugin() -> None:
         def autouse(self) -> bool:
             return False
 
-        def create(self, ctx: object) -> str:
+        def create(self, **_: Any) -> str:
             return "plugin_value"
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, **_: Any) -> None:
             pass
 
     defn = FixtureDef(

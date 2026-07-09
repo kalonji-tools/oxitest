@@ -252,9 +252,9 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir) -> None:
                 @property
                 def fixture_type(self):
                     return Database
-                def create(self, ctx):
+                def create(self, **_):
                     return Database()
-                def teardown(self, value):
+                def teardown(self, *, value):
                     value.connected = False
 
             def oxitest_plugin(config=None):
@@ -311,16 +311,16 @@ def test_plugin_reporter_receives_events(tmp: TempDir) -> None:
                 def __init__(self, output_path):
                     self._path = Path(output_path)
                     self._events = []
-                def test_started(self, item):
+                def test_started(self, *, item):
                     self._events.append({'event': 'started', 'item': str(item)})
-                def test_completed(self, item, outcome, duration_ms):
+                def test_completed(self, *, item, outcome, duration_ms):
                     self._events.append({
                         'event': 'completed',
                         'item': str(item),
                         'outcome': str(outcome),
                         'duration_ms': duration_ms,
                     })
-                def finish(self, collect_errors, *, interrupted):
+                def finish(self, *, interrupted, **_):
                     self._events.append({'event': 'finish'})
                     self._path.write_text(json.dumps(self._events))
 
@@ -376,7 +376,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
             from oxitest._bridge.result import CollectedItem
 
             class CheckCollector:
-                def collect(self, path, module):
+                def collect(self, *, module, **_):
                     items = []
                     for name, obj in inspect.getmembers(module, inspect.isfunction):
                         if name.startswith('check_'):
@@ -444,7 +444,7 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir) -> None:
                 @property
                 def marker(self):
                     return 'retry'
-                def wrap(self, test_fn, marker_args):
+                def wrap(self, *, test_fn, marker_args, **_):
                     count = marker_args.get('count', 1)
                     last_result = None
                     for _ in range(count):

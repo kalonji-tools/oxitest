@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from collections.abc import Generator
-from typing import Never
+from typing import Any, Never
 
 import oxitest
 from oxitest import Fixture, Fixtures, WarnCapture, helpers, raises
@@ -1605,10 +1605,10 @@ def test_plugin_fixture_provider_injected() -> None:
         def fixture_type(self) -> type:
             return FakeDatabase
 
-        def create(self, ctx: object) -> FakeDatabase:
+        def create(self, **_: Any) -> FakeDatabase:
             return FakeDatabase(url="sqlite://test")
 
-        def teardown(self, value: object) -> None:
+        def teardown(self, *, value: object) -> None:
             if isinstance(value, FakeDatabase):
                 value.closed = True
 

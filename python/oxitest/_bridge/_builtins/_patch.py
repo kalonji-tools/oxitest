@@ -93,7 +93,7 @@ class Patcher:
 
 
 class _PatcherFixture(BuiltinFixture, fixture_type=Patcher):
-    def create(self, ctx: _BuiltinContext) -> Patcher:
+    def create(self, *, ctx: _BuiltinContext) -> Patcher:
         patcher = Patcher()
         ctx.teardown_stack.append(patcher.close)
         return patcher

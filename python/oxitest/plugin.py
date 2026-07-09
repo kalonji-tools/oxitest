@@ -87,7 +87,7 @@ class FixtureProvider(Protocol):
         """
         ...
 
-    def create(self, ctx: Any) -> object:
+    def create(self, *, ctx: Any) -> object:
         """Instantiate and return the fixture value for a single test.
 
         Args:
@@ -99,7 +99,7 @@ class FixtureProvider(Protocol):
         """
         ...
 
-    def teardown(self, value: object) -> None:
+    def teardown(self, *, value: object) -> None:
         """Release resources held by the fixture value.
 
         Called after the test completes, regardless of pass or fail.
@@ -162,7 +162,7 @@ class ExecutionWrapper(Protocol):
         """
         ...
 
-    def wrap(self, test_fn: Any, marker_args: dict[str, Any]) -> Any:
+    def wrap(self, *, test_fn: Any, marker_args: dict[str, Any]) -> Any:
         """Execute the test, applying marker-driven behaviour around it.
 
         `test_fn` is a zero-argument callable that runs the test and returns a
@@ -185,7 +185,7 @@ class ExecutionWrapper(Protocol):
 class Collector(Protocol):
     """Protocol for custom test collectors."""
 
-    def collect(self, path: str, module: object) -> list[CollectedItem]:
+    def collect(self, *, path: str, module: object) -> list[CollectedItem]:
         """Collect test items from an already-imported module.
 
         Args:
@@ -204,7 +204,7 @@ class Collector(Protocol):
 class Reporter(Protocol):
     """Protocol for plugin reporters."""
 
-    def test_started(self, item: CollectedItem) -> None:
+    def test_started(self, *, item: CollectedItem) -> None:
         """Called immediately before a test begins executing.
 
         Args:
@@ -215,7 +215,7 @@ class Reporter(Protocol):
         ...
 
     def test_completed(
-        self, item: CollectedItem, outcome: TestResult, duration_ms: float
+        self, *, item: CollectedItem, outcome: TestResult, duration_ms: float
     ) -> None:
         """Called immediately after a test finishes, whether it passed or failed.
 
@@ -228,7 +228,7 @@ class Reporter(Protocol):
         """
         ...
 
-    def finish(self, collect_errors: list[Any], *, interrupted: bool) -> None:
+    def finish(self, *, collect_errors: list[Any], interrupted: bool) -> None:
         """Run once after all tests have completed and teardown is done.
 
         Args:
@@ -259,7 +259,7 @@ class CoverageProvider(Protocol):
         """Stop collection, save data, combine parallel data files."""
         ...
 
-    def report(self, fmt: CovReportFormat) -> int:
+    def report(self, *, fmt: CovReportFormat) -> int:
         """Generate report in the given format. Returns 0 on success."""
         ...
 
