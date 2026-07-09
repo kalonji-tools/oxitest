@@ -90,7 +90,7 @@ def _clean_sys_modules() -> Yields[None]:
 
 
 @common.helper
-def make_fixture_def(
+def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     name: str,
     factory: Callable[..., object] | None = None,
     *,
@@ -280,7 +280,7 @@ def run_test(
 
 
 @common.helper
-def exec_inline(
+def exec_inline(  # noqa: PLR0913 — test helper, all kwargs have defaults
     tmp: TempDir,
     code: str,
     fn_name: str = "test_ok",
