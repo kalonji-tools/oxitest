@@ -595,10 +595,10 @@ class _FakePluginWrapper:
     marker = "custom_mark"
 
     def wrap(
-        self, next_fn: Callable[[], TestResult], args: dict[int | str, Any]
+        self, *, test_fn: Callable[[], TestResult], marker_args: dict[int | str, Any]
     ) -> TestResult:
-        result = next_fn()
-        return dataclasses.replace(result, message=f"wrapped:{args}")
+        result = test_fn()
+        return dataclasses.replace(result, message=f"wrapped:{marker_args}")
 
 
 def test_plugin_mark_handler_wraps_correctly() -> None:
