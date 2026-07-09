@@ -213,7 +213,7 @@ def test_resolve_by_source_plugin() -> None:
     )
     inst, _reg = _make_instantiator(defn)
     teardowns: list = []
-    value = inst._resolve_by_source(
+    value = inst._resolve_by_source(  # noqa: SLF001 — testing internal dispatch of PluginSource; no public entry point exposes this directly
         defn,
         TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x"),
         teardowns,

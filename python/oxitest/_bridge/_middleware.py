@@ -255,6 +255,11 @@ class MiddlewareBuilder:
             AsyncBridgeMiddleware,
         ]
 
+    @property
+    def pipeline(self) -> list[type[Middleware]]:
+        """The current middleware pipeline."""
+        return self._pipeline
+
     def insert_after(self, target: type, new: type) -> None:
         if target is AsyncBridgeMiddleware:
             msg = (

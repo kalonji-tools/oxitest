@@ -14,9 +14,9 @@ def test_helper_decorator_registers() -> None:
     def my_fn() -> str:
         return "hello"
 
-    assert len(h._defs) == 1, "decorator should register one def"
-    assert h._defs[0].name == "my_fn", "name should come from function name"
-    assert h._defs[0].func is my_fn, "func should be the original function"
+    assert len(h.defs) == 1, "decorator should register one def"
+    assert h.defs[0].name == "my_fn", "name should come from function name"
+    assert h.defs[0].func is my_fn, "func should be the original function"
 
 
 def test_helper_decorator_with_name_override() -> None:
@@ -27,7 +27,7 @@ def test_helper_decorator_with_name_override() -> None:
     def my_fn() -> str:
         return "hello"
 
-    assert h._defs[0].name == "custom", "name override should be respected"
+    assert h.defs[0].name == "custom", "name override should be respected"
 
 
 def test_helper_decorator_preserves_function() -> None:
@@ -62,18 +62,18 @@ def test_helpers_getattr_unknown_raises() -> None:
 def test_helpers_namespace_from_init() -> None:
     """Helpers(name=...) stores the explicit namespace name for registry grouping."""
     h = Helpers(name="utils")
-    assert h._namespace_name == "utils", "explicit name should be stored"
+    assert h.namespace_name == "utils", "explicit name should be stored"
 
 
 def test_helpers_namespace_defaults_empty() -> None:
     """Helpers() with no name argument defaults to an empty namespace string."""
     h = Helpers()
-    assert h._namespace_name == "", "default namespace should be empty string"
+    assert h.namespace_name == "", "default namespace should be empty string"
 
 
 def test_helpers_captures_source_line() -> None:
     """Helpers() records its source line for the allow-comment gate."""
     h = Helpers()
-    assert hasattr(h, "_source_line"), "Helpers should capture source line"
-    assert isinstance(h._source_line, int), "source line should be an int"
-    assert h._source_line > 0, "source line should be positive"
+    assert hasattr(h, "source_line"), "Helpers should capture source line"
+    assert isinstance(h.source_line, int), "source line should be an int"
+    assert h.source_line > 0, "source line should be positive"

@@ -59,7 +59,7 @@ def test_check_warnings_excludes_captured_ids() -> None:
 
     wc = WarnCapture()
     # Simulate that the WarnCapture already captured this warning
-    wc._all_captured_ids.add(id(caught[0]))
+    wc.captured_ids.add(id(caught[0]))
 
     has, msg = _check_warnings(caught, {"warns": wc})
 

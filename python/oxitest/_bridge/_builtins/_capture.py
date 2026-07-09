@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._builtins._base import BuiltinFixture
 
@@ -104,6 +104,11 @@ class StdCapture(_CaptureBase):
         self._old_stderr = sys.stderr
         sys.stdout = self._out_buf
         sys.stderr = self._err_buf
+
+    @property
+    def original_stdout(self) -> Any:
+        """The original sys.stdout before capture was installed."""
+        return self._old_stdout
 
     def readouterr(self) -> CaptureResult:
         out = self._out_buf.getvalue()

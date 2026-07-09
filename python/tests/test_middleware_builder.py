@@ -14,10 +14,10 @@ from oxitest._bridge._middleware import (
 def test_default_pipeline_builds_without_error() -> None:
     """Default pipeline: AsyncDepGuardMiddleware first, AsyncBridgeMiddleware last."""
     builder = MiddlewareBuilder()
-    assert builder._pipeline[0] is AsyncDepGuardMiddleware, (
+    assert builder.pipeline[0] is AsyncDepGuardMiddleware, (
         "AsyncDepGuardMiddleware must be first in default pipeline"
     )
-    assert builder._pipeline[-1] is AsyncBridgeMiddleware, (
+    assert builder.pipeline[-1] is AsyncBridgeMiddleware, (
         "AsyncBridgeMiddleware must be last in default pipeline"
     )
 
@@ -40,7 +40,7 @@ def test_remove_non_pinned_middleware_succeeds() -> None:
     """Removing a non-pinned middleware like TimeoutMiddleware should succeed."""
     builder = MiddlewareBuilder()
     builder.remove(TimeoutMiddleware)
-    assert TimeoutMiddleware not in builder._pipeline, (
+    assert TimeoutMiddleware not in builder.pipeline, (
         "TimeoutMiddleware should be removed from pipeline"
     )
 

@@ -82,7 +82,7 @@ def test_builtin_fixture_registration() -> None:
             "_Sentinel"
         )
     finally:
-        BuiltinFixture._registry.pop(_Sentinel, None)
+        BuiltinFixture.registered_types().pop(_Sentinel, None)
 
 
 def test_builtin_fixture_for_type_unknown_returns_none() -> None:
@@ -926,8 +926,8 @@ def test_logcapture_includes_plugin_backends() -> None:
         assert fake_backend.installed, (
             "Plugin log backend should be installed when LogCapture is created"
         )
-        assert len(cap._backends) == 2, (
-            f"Expected 2 backends (stdlib + plugin), got {len(cap._backends)}"
+        assert len(cap.backends) == 2, (
+            f"Expected 2 backends (stdlib + plugin), got {len(cap.backends)}"
         )
 
         cap.close()

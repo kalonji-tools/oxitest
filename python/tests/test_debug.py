@@ -69,7 +69,7 @@ def test_is_debuggable_system_exit_false() -> None:
 def test_suspend_capture_restores_std_capture() -> None:
     """_suspend_capture should call _restore on StdCapture instances."""
     cap = StdCapture()
-    old_stdout = cap._old_stdout
+    old_stdout = cap.original_stdout
     _suspend_capture({"cap": cap, "x": 42})
     assert sys.stdout is old_stdout, "stdout should be restored after _suspend_capture"
 
@@ -257,7 +257,7 @@ def test_trace_before_test_suspends_capture_during_call() -> None:
 
         def trace(self) -> None:
             nonlocal suspended_during_trace
-            suspended_during_trace = sys.stdout is cap._old_stdout
+            suspended_during_trace = sys.stdout is cap.original_stdout
             self.trace_count += 1
 
         def post_mortem(self, tb: TracebackType) -> None:
@@ -267,7 +267,7 @@ def test_trace_before_test_suspends_capture_during_call() -> None:
     _trace_before_test({"cap": cap}, "t.py::test_x", spy, file=io.StringIO())
 
     assert suspended_during_trace, "capture should be suspended during trace()"
-    assert sys.stdout is not cap._old_stdout, (
+    assert sys.stdout is not cap.original_stdout, (
         "capture should be re-enabled after trace returns"
     )
     cap.close()  # cleanup
@@ -283,7 +283,7 @@ def test_trace_before_test_no_capture_kwargs() -> None:
 def test_debug_post_mortem_permanently_suspends_capture() -> None:
     """_debug_post_mortem should permanently restore capture."""
     cap = StdCapture()
-    old_stdout = cap._old_stdout
+    old_stdout = cap.original_stdout
     rec = helpers.common.RecordingDebugger()
 
     try:
