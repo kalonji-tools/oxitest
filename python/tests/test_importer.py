@@ -7,7 +7,9 @@ from types import MappingProxyType, ModuleType
 
 import oxitest
 from oxitest import CollectedItem, TempDir, WarnCapture, helpers, raises
-from oxitest._bridge._fn_metadata import get_metadata
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_type import Fixture
+from oxitest._bridge._fn_metadata import get_metadata, get_or_create
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
@@ -137,7 +139,6 @@ def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
 
 def test_propagate_class_marks_copies_usefixtures() -> None:
     """_propagate_class_marks appends usefixtures marks from class to function."""
-    import oxitest
 
     @oxitest.mark.usefixtures("db")
     class FakeClass:
@@ -147,8 +148,6 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
-    from oxitest._bridge._fn_metadata import get_metadata
-
     marks = get_metadata(test_fn).marks
     assert any(m.name == "usefixtures" for m in marks), (
         "usefixtures mark from class should be propagated to function"
@@ -157,7 +156,6 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
 
 def test_propagate_class_marks_copies_all_marks() -> None:
     """_propagate_class_marks copies ALL marks from class to function."""
-    import oxitest
 
     @oxitest.mark.skip(reason="class skip")
     class FakeClass:
@@ -167,8 +165,6 @@ def test_propagate_class_marks_copies_all_marks() -> None:
         pass
 
     _propagate_class_marks(test_fn, FakeClass)
-    from oxitest._bridge._fn_metadata import get_metadata
-
     assert any(m.name == "skip" for m in get_metadata(test_fn).marks), (
         "skip mark from class should propagate to test_fn"
     )
@@ -384,8 +380,6 @@ def test_check_fn_violations_class_method_dict_parametrize() -> None:
     def test_method(self: object) -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_or_create
-
     get_or_create(test_method).param_cases = (
         DictCases(cases=MappingProxyType({"basic": {"x": 1}, "extra": {"x": 2}})),
     )
@@ -408,7 +402,6 @@ def test_check_fn_violations_class_method_dict_parametrize() -> None:
 
 def test_check_fn_violations_class_method_missing_mark_reason() -> None:
     """Class method with skip missing reason= produces MISSING_MARK_REASON."""
-    import oxitest
 
     @oxitest.mark.skip
     def test_method(self: object) -> None:
@@ -485,8 +478,6 @@ def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None
         "async def test_foo(async_val, sync_val): pass\n",
         name="test_async_fx.py",
     )
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-
     registry = FixtureRegistry()
 
     class _FakeSession:
@@ -656,7 +647,6 @@ def test_apply_module_marks_prepends_to_unmarked_fn() -> None:
 
 def test_apply_module_marks_per_test_overrides_same_name() -> None:
     """Per-test mark overrides module mark of the same name."""
-    import oxitest
 
     @oxitest.mark.timeout(5)
     def test_fn() -> None:
@@ -677,7 +667,6 @@ def test_apply_module_marks_per_test_overrides_same_name() -> None:
 
 def test_apply_module_marks_non_conflicting_added() -> None:
     """Module marks with different names than per-test marks are added."""
-    import oxitest
 
     @oxitest.mark.timeout(5)
     def test_fn() -> None:
@@ -1108,8 +1097,6 @@ class _MyDB:
 
 def test_get_fixture_deps_includes_builtins() -> None:
     """_get_fixture_deps includes builtins (unlike old _get_fixture_names)."""
-    from oxitest._bridge._fixture_type import Fixture
-
     # Use exec to avoid `from __future__ import annotations` stringification
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
     exec(
@@ -1129,8 +1116,6 @@ def test_get_fixture_deps_includes_builtins() -> None:
 
 def test_get_fixture_deps_skips_non_fixture() -> None:
     """Plain-typed params are not included."""
-    from oxitest._bridge._fixture_type import Fixture
-
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
     exec(
         "def test_fn(x: int, db: Fixture[_MyDB]) -> None: ...",
@@ -1149,8 +1134,6 @@ def test_get_fixture_deps_skips_non_fixture() -> None:
 
 def test_get_fixture_deps_returns_qualifier_and_type() -> None:
     """Each dep is a (qualifier, type_name) tuple."""
-    from oxitest._bridge._fixture_type import Fixture
-
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB, "TempDir": TempDir}
     exec(
         "def test_fn(db: Fixture[_MyDB], tmp: Fixture[TempDir]) -> None: ...",
@@ -1168,8 +1151,6 @@ def test_get_fixture_deps_returns_qualifier_and_type() -> None:
 
 def test_get_fixture_deps_skips_return_annotation() -> None:
     """Return annotation is not included in deps."""
-    from oxitest._bridge._fixture_type import Fixture
-
     ns: dict[str, object] = {"Fixture": Fixture, "_MyDB": _MyDB}
     exec(
         "def test_fn(db: Fixture[_MyDB]) -> None: ...",
@@ -1199,8 +1180,6 @@ def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
         "def test_foo(local_val): pass\n",
         name="test_no_allow.py",
     )
-    from oxitest._bridge._fixture_registry import FixtureRegistry
-
     registry = FixtureRegistry()
 
     class _FakeSession:

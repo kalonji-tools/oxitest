@@ -11,6 +11,7 @@ import oxitest
 from oxitest import TempDir, helpers, parametrize
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
@@ -45,8 +46,6 @@ def test_append_mark_creates_list_on_first_call() -> None:
         pass
 
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
-    from oxitest._bridge._fn_metadata import get_metadata
-
     meta = get_metadata(fn)
     assert len(meta.marks) == 1, (
         f"expected 1 mark after first append, got {len(meta.marks)}"
@@ -64,8 +63,6 @@ def test_append_mark_stacks_multiple_marks() -> None:
 
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
     _append_mark(fn, MarkInfo("integration", (), MappingProxyType({})))
-    from oxitest._bridge._fn_metadata import get_metadata
-
     assert len(get_metadata(fn).marks) == 2, (
         f"expected 2 marks after two appends, got {len(get_metadata(fn).marks)}"
     )
@@ -77,8 +74,6 @@ def test_mark_bare_decorator_stamps_function() -> None:
     @oxitest.mark.slow
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "bare mark decorator should register mark in metadata"
@@ -100,8 +95,6 @@ def test_mark_parameterised_decorator_stores_args() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     meta = get_metadata(test_fn)
     assert meta.marks[0].name == "skip", (
         f"mark name should be 'skip', got {meta.marks[0].name!r}"
@@ -117,8 +110,6 @@ def test_mark_skip_when_true_stores_via_decorator() -> None:
     @oxitest.mark.skip(when=True, reason="always skip")
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     m = get_metadata(test_fn).marks[0]
     assert m.name == "skip", f"mark name should be 'skip', got {m.name!r}"
@@ -143,8 +134,6 @@ def test_skip_mark_when_true_attaches_mark() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, f"expected 1 mark, got {len(meta.marks)}"
     assert meta.marks[0].name == "skip", (
@@ -162,8 +151,6 @@ def test_skip_mark_when_false_does_not_attach() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     assert len(get_metadata(test_fn).marks) == 0, (
         "when=False should not attach any mark"
     )
@@ -175,8 +162,6 @@ def test_skip_mark_bare_still_works() -> None:
     @oxitest.mark.skip
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "bare @mark.skip should attach mark"
@@ -195,8 +180,6 @@ def test_skip_mark_empty_parens_same_as_bare() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "@mark.skip() should attach mark"
     assert meta.marks[0].name == "skip", (
@@ -213,8 +196,6 @@ def test_skip_mark_reason_only() -> None:
     @oxitest.mark.skip(reason="WIP")
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     meta = get_metadata(test_fn)
     assert meta.marks[0].kwargs == {"reason": "WIP"}, (
@@ -238,8 +219,6 @@ def test_mark_xfail_stores_strict_false() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     m = get_metadata(test_fn).marks[0]
     assert m.name == "xfail", f"mark name should be 'xfail', got {m.name!r}"
     assert m.kwargs == {"strict": False, "reason": "flaky"}, (
@@ -255,8 +234,6 @@ def test_mark_usefixtures_stores_fixture_names() -> None:
     def test_fn() -> None:
         pass
 
-    from oxitest._bridge._fn_metadata import get_metadata
-
     m = get_metadata(test_fn).marks[0]
     assert m.name == "usefixtures", f"mark name should be 'usefixtures', got {m.name!r}"
     assert m.args == ("db", "cache"), (
@@ -271,8 +248,6 @@ def test_mark_stacking_two_decorators() -> None:
     @oxitest.mark.integration
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     names = [m.name for m in get_metadata(test_fn).marks]
     assert "slow" in names, f"'slow' should be in stacked marks, got {names}"
@@ -461,8 +436,6 @@ def test_skip_when_false_not_in_marks() -> None:
     @oxitest.mark.skip(when=False, reason="never")
     def test_fn() -> None:
         pass
-
-    from oxitest._bridge._fn_metadata import get_metadata
 
     assert len(get_metadata(test_fn).marks) == 0, (
         "when=False should not attach skip mark"
