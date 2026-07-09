@@ -414,7 +414,9 @@ pub fn stop_and_report_coverage(
     let cov_module = py.import("oxitest._bridge._coverage")?;
     let fmt_cls = cov_module.getattr("CovReportFormat")?;
     let fmt = fmt_cls.call1((format,))?;
-    provider.call_method1("report", (&fmt,))?;
+    let report_kwargs = pyo3::types::PyDict::new(py);
+    report_kwargs.set_item("fmt", &fmt)?;
+    provider.call_method("report", (), Some(&report_kwargs))?;
     Ok(())
 }
 
