@@ -17,11 +17,13 @@ class ConformingProvider:
     """Test double that conforms to the HelperProvider structural protocol."""
 
     @property
-    def name(self) -> str:  # noqa: D102
+    def name(self) -> str:
+        """Return the helper name for registry lookup."""
         return "take_screenshot"
 
     @property
-    def helper(self) -> Callable[..., Any]:  # noqa: D102
+    def helper(self) -> Callable[..., Any]:
+        """Return the callable that implements this helper."""
         return _screenshot
 
 

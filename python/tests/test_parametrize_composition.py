@@ -56,7 +56,8 @@ _fixtures = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
 
 @_fixtures.fixture
-def pg_db() -> str:  # noqa: D103
+def pg_db() -> str:
+    """Provide a database connection string for parametrize composition tests."""
     return "postgres"
 
 
