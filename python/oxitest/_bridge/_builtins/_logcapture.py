@@ -105,6 +105,11 @@ class LogCapture:
             b.install()
 
     @property
+    def backends(self) -> list[LogBackend]:
+        """The installed log backends."""
+        return self._backends
+
+    @property
     def records(self) -> list[logging.LogRecord]:
         """All log records from all backends, sorted by creation time."""
         all_records: list[logging.LogRecord] = []

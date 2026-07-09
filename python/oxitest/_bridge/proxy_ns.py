@@ -169,6 +169,11 @@ class FixturesProxy(_CachingProxy):
         object.__setattr__(self, "_fn_name", fn_name)
         object.__setattr__(self, "_cache", {})
 
+    @property
+    def session(self) -> FixtureSession:
+        """The underlying fixture session."""
+        return object.__getattribute__(self, "_session")
+
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)

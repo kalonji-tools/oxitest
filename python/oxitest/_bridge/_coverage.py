@@ -31,6 +31,15 @@ class CoveragePyProvider:
     def __init__(self) -> None:
         self._cov: Any = None
 
+    @property
+    def cov(self) -> Any:
+        """The underlying coverage.Coverage instance."""
+        return self._cov
+
+    @cov.setter
+    def cov(self, value: Any) -> None:
+        self._cov = value
+
     def start(self) -> None:
         """Begin coverage collection."""
         if _coverage is None:

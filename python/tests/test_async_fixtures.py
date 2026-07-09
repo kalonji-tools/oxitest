@@ -58,7 +58,7 @@ class _StubBackend:
 def _make_stub_backend() -> tuple[_StubBackend, _StubSession]:
     """Return a stub AsyncBackend and its shared session."""
     backend = _StubBackend()
-    session = backend._session
+    session = backend._session  # noqa: SLF001
     return backend, session
 
 
@@ -180,7 +180,7 @@ def test_resolve_async_generator_tracks_teardown() -> None:
     value = mgr.resolve(my_fixture, {})
 
     assert value == 99, "should yield the first value"
-    assert len(mgr._teardowns) == 1, "should track one teardown"
+    assert len(mgr.teardowns) == 1, "should track one teardown"
 
     mgr.cleanup()
 
@@ -198,7 +198,7 @@ def test_resolve_plain_coroutine() -> None:
     value = mgr.resolve(my_fixture, {})
 
     assert value == "hello", "should return the awaited value"
-    assert len(mgr._teardowns) == 0, "no teardowns for plain coroutines"
+    assert len(mgr.teardowns) == 0, "no teardowns for plain coroutines"
 
 
 def test_resolve_sync_function_passthrough() -> None:
@@ -304,7 +304,7 @@ def test_async_generator_fixture_teardown_exception_reported() -> None:
     value = mgr.resolve(bad_teardown, {})
 
     assert value == 42, f"should yield the value before teardown, got {value!r}"
-    assert len(mgr._teardowns) == 1, "should track one teardown"
+    assert len(mgr.teardowns) == 1, "should track one teardown"
 
     with oxi.warns(FixtureTeardownWarning, match="teardown exploded"):
         mgr.cleanup()

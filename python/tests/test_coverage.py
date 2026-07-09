@@ -133,7 +133,7 @@ def test_provider_stop_saves_and_combines() -> None:
     fake_cov = _FakeCovInstance()
 
     provider = CoveragePyProvider()
-    provider._cov = fake_cov
+    provider.cov = fake_cov
     provider.stop()
 
     assert fake_cov.stopped, "stop() should have been called"
@@ -146,10 +146,10 @@ def test_provider_report_term() -> None:
     fake_cov = _FakeCovInstance()
 
     provider = CoveragePyProvider()
-    provider._cov = fake_cov
+    provider.cov = fake_cov
     result = provider.report(fmt=CovReportFormat.TERM)
 
-    assert fake_cov._report_called, "report() should have been called"
+    assert fake_cov._report_called, "report() should have been called"  # noqa: SLF001
     assert result == 85, f"expected 85, got {result}"
 
 
@@ -158,10 +158,10 @@ def test_provider_report_html() -> None:
     fake_cov = _FakeCovInstance()
 
     provider = CoveragePyProvider()
-    provider._cov = fake_cov
+    provider.cov = fake_cov
     provider.report(fmt=CovReportFormat.HTML)
 
-    assert fake_cov._html_called, "html_report() should have been called"
+    assert fake_cov._html_called, "html_report() should have been called"  # noqa: SLF001
 
 
 def test_provider_report_none_skips() -> None:
@@ -169,11 +169,11 @@ def test_provider_report_none_skips() -> None:
     fake_cov = _FakeCovInstance()
 
     provider = CoveragePyProvider()
-    provider._cov = fake_cov
+    provider.cov = fake_cov
     result = provider.report(fmt=CovReportFormat.NONE)
 
     assert result == 0, f"expected 0, got {result}"
-    assert not fake_cov._report_called, "report() should not have been called"
+    assert not fake_cov._report_called, "report() should not have been called"  # noqa: SLF001
 
 
 def test_provider_import_error_without_coverage() -> None:

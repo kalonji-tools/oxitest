@@ -98,6 +98,11 @@ class SharedAsyncManager:
         self._used = value
 
     @property
+    def teardowns(self) -> list[tuple[str, Any]]:
+        """Pending async teardowns."""
+        return self._teardowns
+
+    @property
     def session(self) -> SharedAsyncSession | None:
         """The underlying shared async session, or None if not yet created."""
         return self._session

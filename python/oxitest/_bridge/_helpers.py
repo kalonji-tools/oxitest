@@ -44,6 +44,11 @@ class Helpers:
     def defs(self) -> list[HelperDef]:
         return self._defs
 
+    @property
+    def source_line(self) -> int:
+        """Line number where this Helpers() was instantiated."""
+        return self._source_line
+
     @overload
     def helper(self, fn: _F) -> _F: ...
 

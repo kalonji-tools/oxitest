@@ -99,7 +99,7 @@ def test_activate_plugin_with_typed_config() -> None:
             cli_values={"host": "ssh://test"},
         )
         assert isinstance(plugin, Plugin), f"expected Plugin, got {type(plugin)}"
-        call_tracker = mod._call_tracker
+        call_tracker = mod._call_tracker  # noqa: SLF001
         assert len(call_tracker) == 1, "oxitest_plugin should have been called once"
     finally:
         sys.modules.pop("fake_ext_plugin", None)

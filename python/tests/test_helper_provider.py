@@ -57,14 +57,14 @@ def test_plugin_registry_helper_providers_empty() -> None:
 
 
 def test_plugin_helpers_registered_in_session() -> None:
-    """FixtureSession._register_plugin_helpers populates a HelperRegistry."""
+    """set_helper_registry populates a HelperRegistry with plugin helpers."""
     plugin = Plugin(helper_providers=(ConformingProvider(),))
     entry = PluginEntry(module_name="my_plugin", plugin=plugin)
     plugin_reg = PluginRegistry(entries=[entry])
 
     session = FixtureSession([], plugin_registry=plugin_reg)
     helper_reg = HelperRegistry()
-    session._register_plugin_helpers(helper_reg)
+    session.set_helper_registry(helper_reg)
 
     defs = helper_reg.all()
     assert len(defs) == 1, (

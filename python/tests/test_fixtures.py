@@ -614,11 +614,11 @@ def test_fixtures_bare_decorator_registers_def() -> None:
     def my_fixture() -> int:
         return 42
 
-    assert len(fx._defs) == 1, (
+    assert len(fx.defs) == 1, (
         f"one fixture registered with @fx.fixture should produce 1 def, got "
-        f"{len(fx._defs)}"
+        f"{len(fx.defs)}"
     )
-    defn = fx._defs[0]
+    defn = fx.defs[0]
     assert defn.name == "my_fixture", (
         f"fixture def name should be 'my_fixture', got {defn.name!r}"
     )
@@ -641,9 +641,8 @@ def test_fixtures_autouse() -> None:
     def auto() -> None:
         pass
 
-    assert fx._defs[0].autouse is True, (
-        f"@fx.fixture(autouse=True) should set autouse=True, got "
-        f"{fx._defs[0].autouse!r}"
+    assert fx.defs[0].autouse is True, (
+        f"@fx.fixture(autouse=True) should set autouse=True, got {fx.defs[0].autouse!r}"
     )
 
 
@@ -655,9 +654,9 @@ def test_fixtures_name_override() -> None:
     def original() -> None:
         pass
 
-    assert fx._defs[0].name == "renamed", (
+    assert fx.defs[0].name == "renamed", (
         f"@fx.fixture(name='renamed') should override the fixture name, got "
-        f"{fx._defs[0].name!r}"
+        f"{fx.defs[0].name!r}"
     )
 
 
@@ -715,12 +714,12 @@ def test_fixtures_multiple_registrations() -> None:
     def b() -> None:
         pass
 
-    assert len(fx._defs) == 2, (
-        f"two @fx.fixture decorations should produce 2 defs, got {len(fx._defs)}"
+    assert len(fx.defs) == 2, (
+        f"two @fx.fixture decorations should produce 2 defs, got {len(fx.defs)}"
     )
-    assert {d.name for d in fx._defs} == {"a", "b"}, (
+    assert {d.name for d in fx.defs} == {"a", "b"}, (
         f"registered fixture names should be {{'a', 'b'}}, got "
-        f"{{{', '.join(d.name for d in fx._defs)}}}"
+        f"{{{', '.join(d.name for d in fx.defs)}}}"
     )
 
 
@@ -886,7 +885,7 @@ def test_fixture_decorator_accepts_shared_kwarg() -> None:
     def my_val() -> int:
         return 42
 
-    defn = reg_obj._defs[0]
+    defn = reg_obj.defs[0]
     assert defn.shared is True, (
         f"@fixture(shared=True) should set defn.shared=True, got {defn.shared!r}"
     )
@@ -901,7 +900,7 @@ def test_fixture_decorator_default_shared_is_false() -> None:
     def my_val() -> int:
         return 42
 
-    defn = reg_obj._defs[0]
+    defn = reg_obj.defs[0]
     assert defn.shared is False, (
         f"default @fixture (no shared=) should have defn.shared=False, got "
         f"{defn.shared!r}"
@@ -1237,18 +1236,18 @@ def test_get_fixture_in_namespace_raises_not_found_with_namespace() -> None:
 def test_fixtures_default_namespace_name_is_empty() -> None:
     """Fixtures() with no name argument stores an empty string as _namespace_name."""
     fx = oxitest.Fixtures()
-    assert fx._namespace_name == "", (
-        f"Fixtures() with no name should have _namespace_name='', got "
-        f"{fx._namespace_name!r}"
+    assert fx.namespace_name == "", (
+        f"Fixtures() with no name should have namespace_name='', got "
+        f"{fx.namespace_name!r}"
     )
 
 
 def test_fixtures_explicit_name_is_stored() -> None:
     """Fixtures(name='db') stores 'db' as _namespace_name."""
     fx = oxitest.Fixtures(name="db")
-    assert fx._namespace_name == "db", (
-        f"Fixtures(name='db') should store _namespace_name='db', got "
-        f"{fx._namespace_name!r}"
+    assert fx.namespace_name == "db", (
+        f"Fixtures(name='db') should store namespace_name='db', got "
+        f"{fx.namespace_name!r}"
     )
 
 
@@ -1288,9 +1287,9 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session() -> None:
         test_fn, helpers.common.make_meta("/fake/module.py")
     )
     proxy = kwargs["fx"]
-    assert proxy._session is session, (
-        f"FixturesProxy._session should be the same session used during resolve, got "
-        f"{proxy._session!r}"
+    assert proxy.session is session, (
+        f"FixturesProxy.session should be the same session used during resolve, got "
+        f"{proxy.session!r}"
     )
 
 
@@ -1516,7 +1515,7 @@ def test_fixture_accessor_underscore_attr_raises_attribute_error() -> None:
     fx_obj = Fixtures()
     accessor = FixtureAccessor("value", fx_obj, lambda: 42)
     with raises(AttributeError):
-        _ = accessor._private
+        _ = accessor._private  # noqa: SLF001
 
 
 def test_fixture_accessor_call_delegates_to_func() -> None:
@@ -1527,10 +1526,10 @@ def test_fixture_accessor_call_delegates_to_func() -> None:
 
 
 def test_fixture_accessor_has_oxitest_fixture_name() -> None:
-    """FixtureAccessor carries _oxitest_fixture_name for executor resolution."""
+    """FixtureAccessor carries fixture_name for executor resolution."""
     fx_obj = Fixtures()
     accessor = FixtureAccessor("db", fx_obj, lambda: None)
-    assert accessor._oxitest_fixture_name == "db", "should carry fixture name"
+    assert accessor.fixture_name == "db", "should carry fixture name"
 
 
 def test_fixtures_getattr_returns_accessor() -> None:
@@ -1543,7 +1542,7 @@ def test_fixtures_getattr_returns_accessor() -> None:
 
     accessor = fx_obj.db
     assert isinstance(accessor, FixtureAccessor), "should return FixtureAccessor"
-    assert accessor._oxitest_fixture_name == "db", "accessor should carry fixture name"
+    assert accessor.fixture_name == "db", "accessor should carry fixture name"
 
 
 def test_fixtures_getattr_raises_for_unknown() -> None:
@@ -1559,7 +1558,7 @@ def test_fixtures_getattr_raises_for_underscore() -> None:
     """Fixtures.__getattr__ raises AttributeError for _-prefixed names."""
     fx_obj = Fixtures()
     with raises(AttributeError):
-        _ = fx_obj._internal
+        _ = fx_obj._internal  # noqa: SLF001
 
 
 def test_fixtures_fixture_with_options() -> None:
@@ -1570,8 +1569,8 @@ def test_fixtures_fixture_with_options() -> None:
     def my_func() -> str:
         return "val"
 
-    assert len(fx_obj._defs) == 1, "should register one fixture"
-    defn = fx_obj._defs[0]
+    assert len(fx_obj.defs) == 1, "should register one fixture"
+    defn = fx_obj.defs[0]
     assert defn.name == "custom_name", "should use custom name"
     assert defn.shared is True, "should be shared"
 
@@ -1579,10 +1578,10 @@ def test_fixtures_fixture_with_options() -> None:
 def test_fixtures_namespace_name() -> None:
     """Fixtures stores the namespace name passed at construction."""
     fx_obj = Fixtures("myns")
-    assert fx_obj._namespace_name == "myns", "should store namespace name"
+    assert fx_obj.namespace_name == "myns", "should store namespace name"
 
     fx_default = Fixtures()
-    assert fx_default._namespace_name == "", "default namespace should be empty"
+    assert fx_default.namespace_name == "", "default namespace should be empty"
 
 
 @oxitest.mark.inprocess
@@ -1726,6 +1725,6 @@ def test_registry_override_precedence() -> None:
 def test_fixtures_captures_source_line() -> None:
     """Fixtures() captures the source line number of its own instantiation call."""
     fx = oxitest.Fixtures()
-    assert hasattr(fx, "_source_line"), "Fixtures should capture source line"
-    assert isinstance(fx._source_line, int), "source line should be an int"
-    assert fx._source_line > 0, "source line should be positive"
+    assert hasattr(fx, "source_line"), "Fixtures should capture source line"
+    assert isinstance(fx.source_line, int), "source line should be an int"
+    assert fx.source_line > 0, "source line should be positive"

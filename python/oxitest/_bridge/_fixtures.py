@@ -68,6 +68,11 @@ class FixtureAccessor:
         self._oxitest_fixture_name: str = get_metadata(func).fixture_name or name
         self.__name__ = name
 
+    @property
+    def fixture_name(self) -> str:
+        """The canonical fixture name used for executor resolution."""
+        return self._oxitest_fixture_name
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._fa_func(*args, **kwargs)
 
@@ -135,6 +140,11 @@ class Fixtures:
     @property
     def defs(self) -> list[FixtureDef[Any]]:
         return self._defs
+
+    @property
+    def source_line(self) -> int:
+        """Line number where this Fixtures() was instantiated."""
+        return self._source_line
 
     @overload
     def fixture(self, fn: _F) -> _F: ...

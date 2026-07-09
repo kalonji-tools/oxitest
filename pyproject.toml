@@ -52,18 +52,7 @@ ignore = [
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
 
-# ── SLF001: tests legitimately inspect private state ────────────────────
-"python/tests/test_async_fixtures.py" = ["SLF001"]
-"python/tests/test_builtins.py" = ["PT019", "SLF001"]
-"python/tests/test_coverage.py" = ["SLF001"]
-"python/tests/test_debug.py" = ["SLF001"]
-"python/tests/test_exception_handlers.py" = ["SLF001"]
-"python/tests/test_fixture_instantiator.py" = ["SLF001"]
-"python/tests/test_fixtures.py" = ["SLF001"]
-"python/tests/test_helper_provider.py" = ["SLF001"]
-"python/tests/test_helpers_registrar.py" = ["SLF001"]
-"python/tests/test_middleware_builder.py" = ["SLF001"]
-"python/tests/test_plugin_two_phase.py" = ["SLF001"]
+"python/tests/test_builtins.py" = ["PT019"]
 
 # ── PLC0415: intentionally lazy imports ─────────────────────────────────
 "python/tests/fixtures/oxitest_sample_infra/__init__.py" = ["PLC0415"]
