@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Never
 
+import oxitest
 import oxitest as oxi
 from oxitest import raises
 
@@ -74,8 +75,6 @@ def test_raises_subclass_caught_by_parent_type() -> Never:
 
 def test_raises_exported_from_oxitest() -> None:
     """raises() is part of the public oxitest API and listed in __all__."""
-    import oxitest
-
     assert hasattr(oxitest, "raises"), (
         "'raises' should be exported from the oxitest module"
     )

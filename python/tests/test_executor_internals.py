@@ -7,8 +7,10 @@ from collections.abc import Callable
 from oxitest import TempDir, helpers
 from oxitest._bridge._assert_error import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge._diagnostics import (
+    _REPR_MAX,
     _handle_assertion_error,
     _handle_runtime_exception,
+    _repr_safe,
 )
 from oxitest._bridge._middleware import _compose
 from oxitest._bridge.result import (
@@ -181,8 +183,6 @@ def test_compose_chains_left_to_right() -> None:
 
 def test_repr_max_is_positive_int() -> None:
     """_REPR_MAX is a positive integer that caps repr output length."""
-    from oxitest._bridge._diagnostics import _REPR_MAX
-
     assert isinstance(_REPR_MAX, int), (
         f"_REPR_MAX should be an int, got {type(_REPR_MAX).__name__}"
     )
@@ -191,8 +191,6 @@ def test_repr_max_is_positive_int() -> None:
 
 def test_repr_safe_truncates_long_string() -> None:
     """_repr_safe caps output length to prevent huge failure messages on long values."""
-    from oxitest._bridge._diagnostics import _REPR_MAX, _repr_safe
-
     long_str = "x" * (_REPR_MAX * 10)
     result = _repr_safe(long_str)
     assert len(result) <= _REPR_MAX + 20, (

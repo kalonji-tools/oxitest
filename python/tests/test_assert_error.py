@@ -9,12 +9,11 @@ from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
     _OxitestAssertionError,
 )
+from oxitest._oxitest import rewrite_asserts
 
 
 def _exec_rewritten(src: str, ns: dict[str, Any]) -> None:
     """Parse, rewrite via Rust, compile, and exec src with the given namespace."""
-    from oxitest._oxitest import rewrite_asserts
-
     tree, _bare = rewrite_asserts(src, "<test>")
     code = compile(tree, "<test>", "exec")
     exec(code, ns)
@@ -112,8 +111,6 @@ def test_passing_assert_does_not_raise() -> None:
 
 def test_bare_assert_map_returned() -> None:
     """Rust rewriter returns bare-assert-by-function map."""
-    from oxitest._oxitest import rewrite_asserts
-
     src = (
         "def test_a():\n    assert True\n    assert 1 == 1, 'ok'\n"
         "\ndef test_b():\n    assert False\n"
@@ -127,8 +124,6 @@ def test_bare_assert_map_returned() -> None:
 
 def test_bare_assert_nested_fn_attributed_to_outer() -> None:
     """Bare asserts in nested functions attribute to outermost function."""
-    from oxitest._oxitest import rewrite_asserts
-
     src = (
         "def test_outer():\n    def helper():\n        assert True\n    assert False\n"
     )

@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator, Coroutine
 from typing import Any
 
+import oxitest as oxi
 from oxitest._bridge._async_backend import AsyncioBackend, SharedAsyncSession
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
+from oxitest._bridge._errors import FixtureSetupError
+from oxitest._bridge._fixture_context import FixtureTeardownWarning
 
 # ── Stub backend / session ────────────────────────────────────────────────────
 
@@ -277,9 +280,6 @@ def test_backend_property() -> None:
 
 def test_resolve_raises_fixture_setup_error_on_exception() -> None:
     """resolve() wraps exceptions in FixtureSetupError."""
-    import oxitest as oxi
-    from oxitest._bridge._errors import FixtureSetupError
-
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
@@ -293,9 +293,6 @@ def test_resolve_raises_fixture_setup_error_on_exception() -> None:
 
 def test_async_generator_fixture_teardown_exception_reported() -> None:
     """Async fixture raising during teardown should report the error."""
-    import oxitest as oxi
-    from oxitest._bridge._fixture_context import FixtureTeardownWarning
-
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 

@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import sys
 import textwrap
+import warnings
 
 import oxitest
 from oxitest import Fixture, TempDir, Yields, helpers, raises, warns
+from oxitest._bridge._fixture_registry import ConftestSource
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge.conftest_loader import (
     _extract_depends_on,
     _extract_fixture_type,
     _extract_helpers,
+    _load_conftest_module,
+    create_conftest_fixtures,
     create_session,
     find_conftest_paths,
     load_fixtures_from_conftest,
@@ -423,8 +427,6 @@ def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir) -> None:
 
 def test_create_conftest_fixtures_returns_helper_registry(tmp: TempDir) -> None:
     """create_conftest_fixtures returns a HelperRegistry as its third element."""
-    from oxitest._bridge.conftest_loader import create_conftest_fixtures
-
     f = tmp / "conftest.py"
     f.write_text(
         "from oxitest import Helpers\n"
@@ -475,8 +477,6 @@ def test_create_session_helpers_only_conftest_no_fixtures_no_warning(
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    import warnings
-
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         create_session([str(f)])
@@ -593,9 +593,6 @@ def test_extract_helpers_from_conftest(tmp: TempDir) -> None:
         "def greet(name: str) -> str:\n"
         "    return f'hi {name}'\n"
     )
-    from oxitest._bridge._fixture_registry import ConftestSource
-    from oxitest._bridge.conftest_loader import _load_conftest_module
-
     module = _load_conftest_module(str(conftest))
     assert module is not None, "_load_conftest_module should return a module"
     defs = _extract_helpers(module, str(conftest))

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 
+import oxitest
 from oxitest import raises, warns
 
 
@@ -49,8 +50,6 @@ def test_warns_subclass_caught_by_parent_category() -> None:
 
 def test_warns_exported_from_oxitest() -> None:
     """The warns function should be publicly exported in oxitest.__all__."""
-    import oxitest
-
     assert hasattr(oxitest, "warns"), (
         "'warns' should be exported from the oxitest module"
     )

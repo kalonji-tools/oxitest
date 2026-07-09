@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 
+import oxitest
 from oxitest import importorskip, raises
 
 
 def test_importorskip_returns_module() -> None:
     """Successful import via importorskip should return the module object."""
-    import os
-
     mod = importorskip("os")
     assert mod is os, "importorskip('os') should return the os module"
 
@@ -38,8 +38,6 @@ def test_importorskip_custom_reason() -> None:
 
 def test_importorskip_exported_from_oxitest() -> None:
     """The importorskip function should be publicly exported in oxitest.__all__."""
-    import oxitest
-
     assert hasattr(oxitest, "importorskip"), (
         "'importorskip' should be exported from the oxitest module"
     )

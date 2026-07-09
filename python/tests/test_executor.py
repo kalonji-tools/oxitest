@@ -13,14 +13,13 @@ from oxitest import (
     helpers,
     parametrize,
 )
+from oxitest._bridge._fixture_context import _current_teardown_node_id, _warn_teardown
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 
 
 def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None:
     """_warn_teardown() emits a FixtureTeardownWarning containing the fixture name."""
-    from oxitest._bridge._fixture_context import FixtureTeardownWarning, _warn_teardown
-
     _warn_teardown("my_fix", RuntimeError("boom"))
 
     assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
@@ -35,8 +34,6 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
 
 def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() includes the node_id in the warning message when provided."""
-    from oxitest._bridge._fixture_context import _warn_teardown
-
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
     assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
@@ -47,8 +44,6 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
 
 def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() still emits a warning when no node_id is given."""
-    from oxitest._bridge._fixture_context import _warn_teardown
-
     _warn_teardown("my_fix", RuntimeError("boom"))
 
     assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
@@ -58,11 +53,6 @@ def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
 
 def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
     """_warn_teardown() reads node_id from _current_teardown_node_id ContextVar."""
-    from oxitest._bridge._fixture_context import (
-        _current_teardown_node_id,
-        _warn_teardown,
-    )
-
     token = _current_teardown_node_id.set("tests/test_b.py::test_bar")
     try:
         _warn_teardown("db", RuntimeError("oops"))

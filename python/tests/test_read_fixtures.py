@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import oxitest
+from oxitest._bridge._fixture_registry import (
+    ConftestSource,
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+)
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
 
 
 def test_proxy_resolves_namespace_and_accessor(_tmp: oxitest.TempDir) -> None:
     """Proxy chains namespace access to a FixtureAccessor with fixture metadata."""
-    from oxitest._bridge._fixture_registry import (
-        ConftestSource,
-        FixtureDef,
-        FixtureRegistry,
-        FixtureScope,
-    )
 
     def _db() -> str:
         return "pg"

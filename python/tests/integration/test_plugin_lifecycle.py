@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,9 +49,6 @@ def _run_top_flag(
     immediately.  This helper builds the subprocess directly so that
     ``flag`` is the first argument, matching what a user would type.
     """
-    import subprocess
-    import sys
-
     base_env = {**os.environ, "PYTHONPATH": FIXTURES_DIR}
     if env_extra:
         base_env.update(env_extra)

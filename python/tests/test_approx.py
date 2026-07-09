@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import oxitest as oxi
-from oxitest import approx, raises
+from oxitest import ApproxBase, approx, raises
 
 # ── Scalar: default tolerance ────────────────────────────────────────────────
 
@@ -276,15 +276,11 @@ def test_repr(case: ReprCase) -> None:
 
 def test_import_from_public_api() -> None:
     """The approx function is accessible via the top-level oxitest package."""
-    import oxitest as oxi
-
     assert oxi.approx(0.3) == 0.1 + 0.2, "approx should be accessible from public API"
 
 
 def test_approx_base_isinstance() -> None:
     """approx() returns an ApproxBase instance, making isinstance checks reliable."""
-    import oxitest as oxi
-
-    assert isinstance(oxi.approx(1.0), oxi.ApproxBase), (
+    assert isinstance(oxi.approx(1.0), ApproxBase), (
         "approx() should return an ApproxBase instance"
     )
