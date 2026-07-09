@@ -24,6 +24,7 @@ def test_color_always_emits_ansi_codes(tmp: TempDir) -> None:
         capture_output=True,
         text=True,
         timeout=60,
+        check=False,
     )
 
     out = result.stdout

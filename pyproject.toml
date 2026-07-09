@@ -53,7 +53,7 @@ ignore = [
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
 "python/tests/conftest.py" = ["S603", "PLW1510", "PLR0913"]
-"python/tests/integration/*" = ["S603", "PLW1510"]
+"python/tests/integration/*" = ["S603"]
 "python/tests/test_namespace_validation.py" = ["S108"]
 "python/tests/test_assert_error.py" = ["S102"]
 "python/tests/test_importer.py" = ["S102"]

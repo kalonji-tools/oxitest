@@ -69,6 +69,7 @@ def test_fixtures_subcmd_hidden_from_help() -> None:
         capture_output=True,
         text=True,
         timeout=30,
+        check=False,
     )
     # --help exits with code 0
     assert result.returncode == 0, (
