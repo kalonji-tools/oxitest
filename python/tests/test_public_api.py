@@ -2,58 +2,39 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import oxitest
+import oxitest as oxi
 from oxitest import (
     Both,
     Cli,
     CliExtension,
     Conf,
     FixtureTeardownWarning,
-    WarnCapture,
 )
 
 
-def test_tempdir_exported_from_oxitest() -> None:
-    """TempDir is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "TempDir"), "'TempDir' should be exported from oxitest"
+@dataclass(frozen=True)
+class ExportCase:
+    """Expected public export name."""
+
+    name: str
 
 
-def test_tempdir_factory_exported_from_oxitest() -> None:
-    """TempDirFactory is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "TempDirFactory"), (
-        "'TempDirFactory' should be exported from oxitest"
-    )
-
-
-def test_stdcapture_exported_from_oxitest() -> None:
-    """StdCapture is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "StdCapture"), (
-        "'StdCapture' should be exported from oxitest"
-    )
-
-
-def test_fdcapture_exported_from_oxitest() -> None:
-    """FdCapture is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "FdCapture"), "'FdCapture' should be exported from oxitest"
-
-
-def test_patcher_exported_from_oxitest() -> None:
-    """Patcher is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "Patcher"), "'Patcher' should be exported from oxitest"
-
-
-def test_capture_result_exported_from_oxitest() -> None:
-    """CaptureResult is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "CaptureResult"), (
-        "'CaptureResult' should be exported from oxitest"
-    )
-
-
-def test_logcapture_exported_from_oxitest() -> None:
-    """LogCapture is available as a top-level name in the oxitest package."""
-    assert hasattr(oxitest, "LogCapture"), (
-        "'LogCapture' should be exported from oxitest"
-    )
+@oxi.parametrize(
+    tempdir=ExportCase(name="TempDir"),
+    tempdir_factory=ExportCase(name="TempDirFactory"),
+    stdcapture=ExportCase(name="StdCapture"),
+    fdcapture=ExportCase(name="FdCapture"),
+    patcher=ExportCase(name="Patcher"),
+    capture_result=ExportCase(name="CaptureResult"),
+    logcapture=ExportCase(name="LogCapture"),
+    warncapture=ExportCase(name="WarnCapture"),
+)
+def test_builtin_type_exported(name: str) -> None:
+    """Builtin fixture types are available as top-level names in oxitest."""
+    assert hasattr(oxitest, name), f"'{name}' should be exported from oxitest"
 
 
 def test_shared_fixture_mutation_error_importable_from_oxitest() -> None:
@@ -70,11 +51,6 @@ def test_yields_exported_from_oxitest() -> None:
     """Yields is exported from oxitest and listed in __all__."""
     assert hasattr(oxitest, "Yields"), "'Yields' should be exported from oxitest"
     assert "Yields" in oxitest.__all__, "'Yields' should be listed in oxitest.__all__"
-
-
-def test_warncapture_exported_from_oxitest() -> None:
-    """WarnCapture is importable directly from the oxitest package."""
-    assert WarnCapture is not None, "WarnCapture should be exported from oxitest"
 
 
 def test_fixture_teardown_warning_exported_from_oxitest() -> None:
