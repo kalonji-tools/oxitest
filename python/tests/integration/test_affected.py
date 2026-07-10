@@ -37,9 +37,7 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
 def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     """Git worktree created from git_repo, placed inside a second TempDir."""
     main_repo = git_repo
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -66,9 +64,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
     ENOENT when the canonical path differs.
     """
     worktree_path = git_worktree
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -96,9 +92,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
 def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
     """``-v --affected=HEAD`` prints a summary line to stderr."""
     repo = git_repo
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -119,9 +113,7 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
 def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
     """``-vv --affected=HEAD`` prints stage-by-stage breakdown to stderr."""
     repo = git_repo
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -141,9 +133,7 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
 def test_affected_zero_results_shows_summary(git_repo: Fixture[Path]) -> None:
     """When 0 tests affected, summary prints even without -v."""
     repo = git_repo
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
     # No changes staged — 0 affected.
     out, err, _ = helpers.common.run_oxitest(
         repo, "--affected=HEAD", env=clean_env, cwd=str(repo)
