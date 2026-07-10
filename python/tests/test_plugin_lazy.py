@@ -11,7 +11,8 @@ from oxitest._bridge.plugin_loader import (
     EAGER_PROTOCOLS,
     LAZY_PROTOCOLS,
     PluginEntry,
-    PluginRegistry,
+    _PluginRegistryBuilder,
+    activate_deferred_plugins,
     load_plugins,
 )
 from oxitest.plugin import Plugin
@@ -242,22 +243,23 @@ def test_load_plugins_eager_imports_plugin_with_no_protocols_declared() -> None:
 
 
 @oxitest.mark.inprocess
-def test_registry_register_deferred_appends_entry() -> None:
-    """register_deferred appends a PluginEntry to the registry's entries list."""
-    registry = PluginRegistry()
+def test_builder_add_entry_appends_deferred_entry() -> None:
+    """_PluginRegistryBuilder.add_entry appends a deferred PluginEntry."""
+    builder = _PluginRegistryBuilder()
     entry = PluginEntry.deferred("deferred.plugin", ["log_backend"])
 
-    registry.register_deferred(entry)
+    builder.add_entry(entry)
+    registry = builder.build()
 
     assert len(registry.entries) == 1, (
-        f"expected 1 entry after register_deferred, got {len(registry.entries)}"
+        f"expected 1 entry after add_entry, got {len(registry.entries)}"
     )
-    assert registry.entries[0] is entry, "registered entry should be the same object"
+    assert registry.entries[0] == entry, "registered entry should match the original"
 
 
 @oxitest.mark.inprocess
-def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> None:
-    """resolve_fixture_providers loads deferred fixture plugins, returns providers."""
+def test_deferred_fixture_plugin_loaded_via_ensure_loaded() -> None:
+    """A deferred fixture plugin can be loaded via ensure_loaded, exposing providers."""
 
     class FakeToken:
         """Marker type for FakeFixtureProvider."""
@@ -291,38 +293,86 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
     )
     sys.modules["deferred_fixture_plugin"] = mod
     try:
-        registry = PluginRegistry()
         entry = PluginEntry.deferred("deferred_fixture_plugin", ["fixture_provider"])
-        registry.register_deferred(entry)
+        new_entry, plugin = entry.ensure_loaded()
 
-        providers = registry.resolve_fixture_providers()
-
+        providers = plugin.fixture_providers
         assert len(providers) == 1, f"expected 1 fixture provider, got {len(providers)}"
         assert isinstance(providers[0], FakeFixtureProvider), (
             f"expected FakeFixtureProvider, got {type(providers[0]).__name__}"
         )
-        resolved_entry = registry.entries[0]
-        assert resolved_entry.is_loaded is True, (
-            "deferred fixture plugin should be loaded in registry after resolve, "
-            f"got is_loaded={resolved_entry.is_loaded!r}"
+        assert new_entry.is_loaded is True, (
+            "deferred fixture plugin should be loaded after ensure_loaded, "
+            f"got is_loaded={new_entry.is_loaded!r}"
         )
     finally:
         sys.modules.pop("deferred_fixture_plugin", None)
 
 
 @oxitest.mark.inprocess
-def test_registry_resolve_fixture_providers_skips_non_fixture_deferred() -> None:
-    """resolve_fixture_providers skips deferred plugins with non-fixture protocols."""
-    registry = PluginRegistry()
+def test_builder_builds_registry_with_deferred_non_fixture_plugin() -> None:
+    """A deferred non-fixture plugin in the builder yields no fixture_providers."""
     entry = PluginEntry.deferred("lazy_log_plugin", ["log_backend"])
-    registry.register_deferred(entry)
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(entry)
+    registry = builder.build()
 
-    providers = registry.resolve_fixture_providers()
+    assert registry.fixture_providers == (), (
+        "non-fixture deferred plugin should yield no providers, "
+        f"got {registry.fixture_providers!r}"
+    )
+    assert registry.entries[0].is_loaded is False, (
+        "non-fixture deferred plugin should remain unloaded, "
+        f"got is_loaded={registry.entries[0].is_loaded!r}"
+    )
 
-    assert providers == (), (
-        f"non-fixture deferred plugin should yield no providers, got {providers!r}"
-    )
-    assert entry.is_loaded is False, (
-        "non-fixture deferred plugin should not be loaded, "
-        f"got is_loaded={entry.is_loaded!r}"
-    )
+
+@oxitest.mark.inprocess
+def test_deferred_fixture_plugin_activated_in_phase_2() -> None:
+    """activate_deferred_plugins loads non-CLI deferred fixture plugins."""
+
+    class FakeFixtureProvider:
+        @property
+        def name(self) -> str:
+            return "fake"
+
+        @property
+        def fixture_type(self) -> type:
+            return int
+
+        def create(self, **_: Any) -> int:
+            return 99
+
+        def teardown(self, **_: Any) -> None:
+            pass
+
+    def oxitest_plugin(**_: object) -> Plugin:
+        providers: Any = (FakeFixtureProvider(),)
+        return Plugin(fixture_providers=providers)
+
+    mod = helpers.common.make_plugin_module("deferred_fx_phase2", oxitest_plugin)
+    sys.modules["deferred_fx_phase2"] = mod
+    try:
+        # Load with declared fixture_provider protocol → deferred (no CLI ext)
+        registry = load_plugins(
+            ["deferred_fx_phase2"],
+            {"deferred_fx_phase2": {"protocols": ["fixture_provider"]}},
+        )
+        assert not registry.entries[0].is_loaded, (
+            "fixture_provider plugin should be deferred after load_plugins"
+        )
+        assert registry.fixture_providers == (), (
+            "deferred plugin's providers should not appear before activation"
+        )
+
+        activated = activate_deferred_plugins(registry, "{}", "{}")
+
+        assert activated.entries[0].is_loaded, (
+            "fixture_provider plugin should be loaded after activate_deferred_plugins"
+        )
+        assert len(activated.fixture_providers) == 1, (
+            "activated registry should contain the fixture provider, "
+            f"got {activated.fixture_providers!r}"
+        )
+    finally:
+        sys.modules.pop("deferred_fx_phase2", None)

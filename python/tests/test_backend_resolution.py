@@ -11,7 +11,11 @@ from oxitest._bridge._async_backend import (
     resolve_backend,
 )
 from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
-from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
+from oxitest._bridge.plugin_loader import (
+    PluginEntry,
+    PluginRegistry,
+    _PluginRegistryBuilder,
+)
 from oxitest.plugin import Plugin
 
 
@@ -44,10 +48,10 @@ class _AsyncioNamedBackend:
 
 
 def _registry_with(*entries: tuple[str, Plugin]) -> PluginRegistry:
-    reg = PluginRegistry()
+    builder = _PluginRegistryBuilder()
     for module_name, plugin in entries:
-        reg._entries.append(PluginEntry(module_name=module_name, plugin=plugin))  # noqa: SLF001
-    return reg
+        builder.add_entry(PluginEntry(module_name=module_name, plugin=plugin))
+    return builder.build()
 
 
 def test_default_asyncio_with_empty_registry() -> None:

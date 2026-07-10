@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Coroutine
 from typing import Any, Never
 
-from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
+from oxitest._bridge.plugin_loader import (
+    PluginEntry,
+    _PluginRegistryBuilder,
+)
 from oxitest.plugin import Plugin
 
 
@@ -36,18 +39,19 @@ def test_plugin_async_backend_default_none() -> None:
     assert p.async_backend is None, f"expected None, got {p.async_backend!r}"
 
 
-def test_registry_async_backends_property() -> None:
-    """PluginRegistry.async_backends should list only plugins that supply a backend."""
+def test_registry_entries_contain_async_backend() -> None:
+    """Async backends are accessible through plugin entries on the registry."""
     fake = _FakeBackend()
-    reg = PluginRegistry()
-    reg._entries.append(  # noqa: SLF001
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(
         PluginEntry(module_name="with_backend", plugin=Plugin(async_backend=fake))
     )
-    reg._entries.append(PluginEntry(module_name="no_backend", plugin=Plugin()))  # noqa: SLF001
-    backends = reg.async_backends
+    builder.add_entry(PluginEntry(module_name="no_backend", plugin=Plugin()))
+    reg = builder.build()
+    backends = [
+        e.plugin.async_backend
+        for e in reg.entries
+        if e.plugin is not None and e.plugin.async_backend is not None
+    ]
     assert len(backends) == 1, f"expected 1 backend, got {len(backends)}"
-    module_name, backend = backends[0]
-    assert module_name == "with_backend", (
-        f"expected 'with_backend', got {module_name!r}"
-    )
-    assert backend is fake, f"expected fake backend, got {backend!r}"
+    assert backends[0] is fake, f"expected fake backend, got {backends[0]!r}"

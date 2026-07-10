@@ -13,7 +13,11 @@ from oxitest._bridge._plugin_config import (
     Both,
     CliExtension,
 )
-from oxitest._bridge.plugin_loader import load_plugins
+from oxitest._bridge.plugin_loader import (
+    _activate_plugin,
+    activate_deferred_plugins,
+    load_plugins,
+)
 from oxitest.plugin import Plugin
 
 
@@ -93,14 +97,42 @@ def test_activate_plugin_with_typed_config() -> None:
     sys.modules["fake_ext_plugin"] = mod
     try:
         registry = load_plugins(["fake_ext_plugin"], {})
-        plugin = registry.activate_plugin(
+        plugin = _activate_plugin(
             "fake_ext_plugin",
+            cli_extensions=registry.cli_extensions,
             pyproject_values={},
             cli_values={"host": "ssh://test"},
         )
         assert isinstance(plugin, Plugin), f"expected Plugin, got {type(plugin)}"
         call_tracker = mod.call_tracker
         assert len(call_tracker) == 1, "oxitest_plugin should have been called once"
+    finally:
+        sys.modules.pop("fake_ext_plugin", None)
+
+
+@oxitest.mark.inprocess
+def test_activate_deferred_returns_new_registry() -> None:
+    """activate_deferred_plugins returns a new registry; the original is unchanged."""
+    mod = _make_plugin_with_extension()
+    sys.modules["fake_ext_plugin"] = mod
+    try:
+        old_registry = load_plugins(["fake_ext_plugin"], {})
+        old_entry = old_registry.entries[0]
+        assert not old_entry.is_loaded, (
+            "deferred plugin should not be loaded before activation"
+        )
+
+        new_registry = activate_deferred_plugins(old_registry, "{}", "{}")
+
+        assert new_registry is not old_registry, (
+            "activate_deferred_plugins must return a new registry, not mutate in place"
+        )
+        assert not old_registry.entries[0].is_loaded, (
+            "original registry's entry must remain unloaded after activation"
+        )
+        assert new_registry.entries[0].is_loaded, (
+            "new registry's entry should be loaded after activation"
+        )
     finally:
         sys.modules.pop("fake_ext_plugin", None)
 
