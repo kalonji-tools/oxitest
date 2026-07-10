@@ -120,3 +120,52 @@ def test_validate_builtin_qualifier_not_flagged() -> None:
     assert errors == [], (
         "builtin fixture qualifier should be excluded from missing fixture errors"
     )
+
+
+def test_validate_fixref_names_excluded() -> None:
+    """fixture_names in fixref_names should be excluded from validation errors."""
+    v = _make_validator(
+        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+    )
+
+    errors = v.validate_fixture_names(
+        [
+            {
+                "node_id": "test.py::test_a",
+                "fixture_names": ["backend", "store"],
+                "fixref_names": ["backend"],
+            },
+        ]
+    )
+
+    assert errors == [], f"fixref names should be excluded, got {errors}"
+
+
+def test_validate_mixed_valid_and_invalid() -> None:
+    """validate_fixture_names reports only invalid names across multiple items."""
+    v = _make_validator(
+        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+    )
+
+    errors = v.validate_fixture_names(
+        [
+            {
+                "node_id": "test.py::test_a",
+                "fixture_names": ["store"],
+                "fixref_names": [],
+            },
+            {
+                "node_id": "test.py::test_b",
+                "fixture_names": ["no_such_fx"],
+                "fixref_names": [],
+            },
+            {
+                "node_id": "test.py::test_c",
+                "fixture_names": ["missing"],
+                "fixref_names": [],
+            },
+        ]
+    )
+
+    expected = [("test.py::test_b", "no_such_fx"), ("test.py::test_c", "missing")]
+    assert errors == expected, f"expected {expected}, got {errors}"
