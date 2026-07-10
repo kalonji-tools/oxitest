@@ -3,7 +3,7 @@ from __future__ import annotations
 __all__ = ["LogBackend", "LogCapture", "StdlibLogBackend", "_LogCaptureFixture"]
 
 import logging
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -27,7 +27,7 @@ class LogBackend(Protocol):
     def uninstall(self) -> None: ...
 
     @property
-    def records(self) -> list[logging.LogRecord]: ...
+    def records(self) -> Sequence[logging.LogRecord]: ...
 
 
 class _CapturingHandler(logging.Handler):
@@ -45,8 +45,8 @@ class _CapturingHandler(logging.Handler):
         self._records.append(record)
 
     @property
-    def records(self) -> list[logging.LogRecord]:
-        return self._records
+    def records(self) -> tuple[logging.LogRecord, ...]:
+        return tuple(self._records)
 
 
 class StdlibLogBackend:
@@ -105,17 +105,17 @@ class LogCapture:
             b.install()
 
     @property
-    def backends(self) -> list[LogBackend]:
+    def backends(self) -> tuple[LogBackend, ...]:
         """The installed log backends."""
-        return self._backends
+        return tuple(self._backends)
 
     @property
-    def records(self) -> list[logging.LogRecord]:
+    def records(self) -> tuple[logging.LogRecord, ...]:
         """All log records from all backends, sorted by creation time."""
         all_records: list[logging.LogRecord] = []
         for b in self._backends:
             all_records.extend(b.records)
-        return sorted(all_records, key=lambda r: r.created)
+        return tuple(sorted(all_records, key=lambda r: r.created))
 
     @property
     def text(self) -> str:
