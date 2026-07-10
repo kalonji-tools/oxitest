@@ -8,6 +8,7 @@ from __future__ import annotations
 
 __all__ = ["PluginRegistry", "load_plugins"]
 
+import dataclasses
 import functools
 import importlib
 import itertools
@@ -75,7 +76,7 @@ def _coerce_str_list(raw: object) -> list[str]:
     return []
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class PluginEntry:
     """A loaded plugin with its metadata."""
 
@@ -103,10 +104,10 @@ class PluginEntry:
             return True
         return bool(set(declared_protocols) & EAGER_PROTOCOLS)
 
-    def ensure_loaded(self) -> Plugin:
-        """Import and initialise the plugin if it has not been loaded yet."""
+    def ensure_loaded(self) -> tuple[PluginEntry, Plugin]:
+        """Import and initialise the plugin, returning (updated_entry, plugin)."""
         if self.plugin is not None:
-            return self.plugin
+            return self, self.plugin
         module = importlib.import_module(self.module_name)
         entry_fn = getattr(module, "oxitest_plugin")  # noqa: B009 — dynamic module attr
         result = entry_fn()
@@ -116,8 +117,8 @@ class PluginEntry:
                 f" oxitest.Plugin, got {type(result).__name__}"
             )
             raise PluginLoadError(msg)
-        self.plugin = result
-        return result
+        new_entry = dataclasses.replace(self, plugin=result)
+        return new_entry, result
 
 
 def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
@@ -277,7 +278,7 @@ class PluginRegistry:
         plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
         cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
 
-        for entry in self._entries:
+        for i, entry in enumerate(self._entries):
             if entry.is_loaded:
                 continue
             if entry.module_name not in self._cli_extensions:
@@ -289,7 +290,7 @@ class PluginRegistry:
                 pyproject_values=pyproject_values,
                 cli_values=cli_values.get(entry.module_name, {}),
             )
-            entry.plugin = plugin
+            self._entries[i] = dataclasses.replace(entry, plugin=plugin)
 
         # Invalidate cached protocol properties so they pick up new plugins.
         self._invalidate_caches()
@@ -297,15 +298,17 @@ class PluginRegistry:
     def resolve_fixture_providers(self) -> tuple[FixtureProvider, ...]:
         """Return all fixture providers, loading deferred fixture_provider plugins."""
         providers: list[FixtureProvider] = []
-        for entry in self._entries:
+        for i, entry in enumerate(self._entries):
             if (
                 not entry.is_loaded
                 and entry.declared_protocols
                 and "fixture_provider" in entry.declared_protocols
             ):
-                entry.ensure_loaded()
-            if entry.plugin:
-                providers.extend(entry.plugin.fixture_providers)
+                loaded, _ = entry.ensure_loaded()
+                self._entries[i] = loaded
+            current = self._entries[i]
+            if current.plugin:
+                providers.extend(current.plugin.fixture_providers)
         return tuple(providers)
 
     def validate(self) -> None:
