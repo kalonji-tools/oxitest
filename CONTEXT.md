@@ -1,5 +1,9 @@
 # CONTEXT.md — oxitest Domain Glossary
 
+## Design Principles
+
+**Immutable by Default** — All Python-side interfaces are immutable unless explicitly proven mutable. Dataclasses are `frozen=True, slots=True`. Public attributes are read-only (`@property`, no setter). Collection accessors return immutable views (`tuple`, `MappingProxyType`). Parameters are never mutated. Classes that need mutability are listed as `&mut` exceptions in ADR-0005 — the single source of truth. Mirrors Rust's `let` vs `let mut` convention.
+
 ## Core Concepts
 
 **Test Item** — A single runnable test. Identified by a node ID. May be a standalone function or a parametrized variant of one.
