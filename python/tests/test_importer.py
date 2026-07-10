@@ -10,7 +10,7 @@ import oxitest
 from oxitest import CollectedItem, TempDir, WarnCapture, helpers, raises
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_type import Fixture
-from oxitest._bridge._fn_metadata import get_metadata, get_or_create
+from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
@@ -381,8 +381,11 @@ def test_check_fn_violations_class_method_dict_parametrize() -> None:
     def test_method(self: object) -> None:
         pass
 
-    get_or_create(test_method).param_cases = (
-        DictCases(cases=MappingProxyType({"basic": {"x": 1}, "extra": {"x": 2}})),
+    _update(
+        test_method,
+        param_cases=(
+            DictCases(cases=MappingProxyType({"basic": {"x": 1}, "extra": {"x": 2}})),
+        ),
     )
 
     path = "tests/test_cls.py"
@@ -689,7 +692,7 @@ def test_apply_module_marks_empty_list_is_noop() -> None:
 
     _apply_module_marks([("test_fn", test_fn)], [])
     marks = get_metadata(test_fn).marks
-    assert marks == [], f"expected no marks, got {marks}"
+    assert marks == (), f"expected no marks, got {marks}"
 
 
 # ── collect_module oxi_mark integration tests ─────────────────────────────────
