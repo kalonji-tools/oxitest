@@ -256,9 +256,9 @@ class MiddlewareBuilder:
         ]
 
     @property
-    def pipeline(self) -> list[type[Middleware]]:
-        """The current middleware pipeline."""
-        return self._pipeline
+    def pipeline(self) -> tuple[type[Middleware], ...]:
+        """The current middleware pipeline (immutable view)."""
+        return tuple(self._pipeline)
 
     def insert_after(self, target: type, new: type) -> None:
         if target is AsyncBridgeMiddleware:

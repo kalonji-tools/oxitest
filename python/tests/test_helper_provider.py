@@ -60,7 +60,7 @@ def test_plugin_helpers_registered_in_session() -> None:
     """set_helper_registry populates a HelperRegistry with plugin helpers."""
     plugin = Plugin(helper_providers=(ConformingProvider(),))
     entry = PluginEntry(module_name="my_plugin", plugin=plugin)
-    plugin_reg = PluginRegistry(entries=[entry])
+    plugin_reg = PluginRegistry(_entries=[entry])
 
     session = FixtureSession([], plugin_registry=plugin_reg)
     helper_reg = HelperRegistry()

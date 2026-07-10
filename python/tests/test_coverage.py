@@ -228,7 +228,7 @@ def test_conflicting_coverage_providers_raises() -> None:
     provider_b = _FakeProvider()
 
     registry = PluginRegistry(
-        entries=[
+        _entries=[
             PluginEntry(
                 module_name="plugin_a", plugin=Plugin(coverage_provider=provider_a)
             ),

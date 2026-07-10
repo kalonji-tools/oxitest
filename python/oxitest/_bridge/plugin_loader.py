@@ -14,6 +14,7 @@ import itertools
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from oxitest._bridge._errors import ConflictingCoverageError, ConflictingDebuggerError
@@ -153,47 +154,59 @@ class PluginRegistry:
         "coverage_providers",
     )
 
-    entries: list[PluginEntry] = field(default_factory=list)
-    cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = field(
+    _entries: list[PluginEntry] = field(default_factory=list)
+    _cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = field(
         default_factory=dict
     )
+
+    @property
+    def entries(self) -> tuple[PluginEntry, ...]:
+        """All registered plugin entries (immutable view)."""
+        return tuple(self._entries)
+
+    @property
+    def cli_extensions(
+        self,
+    ) -> MappingProxyType[str, tuple[CliExtension, list[FieldDescriptor]]]:
+        """All CLI extensions (immutable view)."""
+        return MappingProxyType(self._cli_extensions)
 
     @functools.cached_property
     def log_backends(self) -> tuple[LogBackend, ...]:
         """All log backends from all plugins."""
-        return _flatten_protocol(self.entries, "log_backends")
+        return _flatten_protocol(self._entries, "log_backends")
 
     @functools.cached_property
     def fixture_providers(self) -> tuple[FixtureProvider, ...]:
         """All fixture providers from all plugins."""
-        return _flatten_protocol(self.entries, "fixture_providers")
+        return _flatten_protocol(self._entries, "fixture_providers")
 
     @functools.cached_property
     def helper_providers(self) -> tuple[HelperProvider, ...]:
         """All helper providers from all plugins."""
-        return _flatten_protocol(self.entries, "helper_providers")
+        return _flatten_protocol(self._entries, "helper_providers")
 
     @functools.cached_property
     def execution_wrappers(self) -> tuple[ExecutionWrapper, ...]:
         """All execution wrappers from all plugins."""
-        return _flatten_protocol(self.entries, "execution_wrappers")
+        return _flatten_protocol(self._entries, "execution_wrappers")
 
     @functools.cached_property
     def collectors(self) -> tuple[Collector, ...]:
         """All collectors from all plugins."""
-        return _flatten_protocol(self.entries, "collectors")
+        return _flatten_protocol(self._entries, "collectors")
 
     @functools.cached_property
     def reporters(self) -> tuple[Reporter, ...]:
         """All reporters from all plugins."""
-        return _flatten_protocol(self.entries, "reporters")
+        return _flatten_protocol(self._entries, "reporters")
 
     @functools.cached_property
     def async_backends(self) -> tuple[tuple[str, Any], ...]:
         """All async backends from all plugins, as (module_name, backend) pairs."""
         return tuple(
             (entry.module_name, entry.plugin.async_backend)
-            for entry in self.entries
+            for entry in self._entries
             if entry.plugin is not None and entry.plugin.async_backend is not None
         )
 
@@ -202,7 +215,7 @@ class PluginRegistry:
         """All debugger backends from all plugins, as (module_name, backend) pairs."""
         return tuple(
             (entry.module_name, entry.plugin.debugger_backend)
-            for entry in self.entries
+            for entry in self._entries
             if entry.plugin is not None and entry.plugin.debugger_backend is not None
         )
 
@@ -211,7 +224,7 @@ class PluginRegistry:
         """All coverage providers from all plugins, as (module_name, provider) pairs."""
         return tuple(
             (entry.module_name, entry.plugin.coverage_provider)
-            for entry in self.entries
+            for entry in self._entries
             if entry.plugin is not None and entry.plugin.coverage_provider is not None
         )
 
@@ -222,7 +235,7 @@ class PluginRegistry:
 
     def register_deferred(self, entry: PluginEntry) -> None:
         """Append a deferred (not yet imported) plugin entry."""
-        self.entries.append(entry)
+        self._entries.append(entry)
 
     def activate_plugin(
         self,
@@ -237,8 +250,8 @@ class PluginRegistry:
             msg = f"plugin '{module_name}' has no oxitest_plugin() function"
             raise PluginLoadError(msg)
 
-        if module_name in self.cli_extensions:
-            ext, descriptors = self.cli_extensions[module_name]
+        if module_name in self._cli_extensions:
+            ext, descriptors = self._cli_extensions[module_name]
             config = merge_config(
                 ext.config_type, descriptors, pyproject_values, cli_values
             )
@@ -264,10 +277,10 @@ class PluginRegistry:
         plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
         cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
 
-        for entry in self.entries:
+        for entry in self._entries:
             if entry.is_loaded:
                 continue
-            if entry.module_name not in self.cli_extensions:
+            if entry.module_name not in self._cli_extensions:
                 continue
 
             pyproject_values = plugin_settings.get(entry.module_name, {})
@@ -281,10 +294,10 @@ class PluginRegistry:
         # Invalidate cached protocol properties so they pick up new plugins.
         self._invalidate_caches()
 
-    def resolve_fixture_providers(self) -> list:
+    def resolve_fixture_providers(self) -> tuple[FixtureProvider, ...]:
         """Return all fixture providers, loading deferred fixture_provider plugins."""
-        providers = []
-        for entry in self.entries:
+        providers: list[FixtureProvider] = []
+        for entry in self._entries:
             if (
                 not entry.is_loaded
                 and entry.declared_protocols
@@ -293,7 +306,7 @@ class PluginRegistry:
                 entry.ensure_loaded()
             if entry.plugin:
                 providers.extend(entry.plugin.fixture_providers)
-        return providers
+        return tuple(providers)
 
     def validate(self) -> None:
         """Check for conflicting plugin declarations.
@@ -372,9 +385,9 @@ def _load_single_plugin(
             msg = f'plugin "{module_name}" config dataclass error: {e}'
             raise PluginLoadError(msg) from e
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
-        registry.cli_extensions[module_name] = (overridden_ext, descriptors)
+        registry._cli_extensions[module_name] = (overridden_ext, descriptors)  # noqa: SLF001
         # Phase 1 complete — defer activation to activate_plugin()
-        registry.entries.append(PluginEntry(module_name=module_name))
+        registry._entries.append(PluginEntry(module_name=module_name))  # noqa: SLF001
         return
 
     # Call the entry point with config
@@ -393,7 +406,7 @@ def _load_single_plugin(
         )
         raise PluginLoadError(msg)
 
-    registry.entries.append(PluginEntry(module_name=module_name, plugin=result))
+    registry._entries.append(PluginEntry(module_name=module_name, plugin=result))  # noqa: SLF001
 
 
 def load_plugins(
