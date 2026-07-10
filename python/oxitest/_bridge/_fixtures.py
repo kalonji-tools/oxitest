@@ -138,8 +138,8 @@ class Fixtures:
         self._namespace_name = value
 
     @property
-    def defs(self) -> list[FixtureDef[Any]]:
-        return self._defs
+    def defs(self) -> tuple[FixtureDef[Any], ...]:
+        return tuple(self._defs)
 
     @property
     def source_line(self) -> int:
