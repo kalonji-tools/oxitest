@@ -68,6 +68,8 @@ Classes whose purpose is stateful accumulation earn mutability. They are listed 
 
 Functions and methods do not mutate their parameters. If a function needs to modify a collection, it copies first and returns the new version. Plugin protocol parameters are immutable from the callee's perspective — plugins must not mutate what they receive.
 
+**Corollary:** Input parameters that are only read should be typed with their read-only abstract — `Sequence` not `list`, `Mapping` not `dict`, `AbstractSet` not `set`. This signals the immutability contract at the type level and gives callers flexibility in what they pass. Return values use concrete immutable types (`tuple`, `MappingProxyType`, `frozenset`). Protocol return types use the abstract (`Sequence`, `Mapping`) when implementers need flexibility in concrete type.
+
 ### Rule 6: Read-only public attributes
 
 Public attributes on regular (non-dataclass) classes are read-only by default. Expose via `@property` with no setter. A setter requires the class to be in the `&mut` exception list *and* the specific attribute to need external mutation.
