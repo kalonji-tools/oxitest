@@ -6,17 +6,16 @@ plugin module paths and their per-plugin config dicts.
 
 from __future__ import annotations
 
-__all__ = ["PluginRegistry", "load_plugins"]
+__all__ = ["PluginRegistry", "activate_deferred_plugins", "load_plugins"]
 
 import dataclasses
-import functools
 import importlib
 import itertools
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._errors import ConflictingCoverageError, ConflictingDebuggerError
 from oxitest._bridge._plugin_config import (
@@ -121,7 +120,7 @@ class PluginEntry:
         return new_entry, result
 
 
-def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
+def _flatten_protocol(entries: Sequence[PluginEntry], attr: str) -> tuple[Any, ...]:
     """Flatten a list-valued protocol attribute across all loaded plugins."""
     return tuple(
         itertools.chain.from_iterable(
@@ -130,210 +129,165 @@ def _flatten_protocol(entries: list[PluginEntry], attr: str) -> tuple:
     )
 
 
-@dataclass
-class PluginRegistry:
-    """Holds all loaded plugin instances.
+# ── Frozen registry ──────────────────────────────────────────────────────────
 
-    Registry pattern: dataclass with ``@functools.cached_property`` for
-    lazy protocol flattening. Appropriate when entries are added in two
-    phases (deferred registration, then activation) and computed views
-    must be invalidated on mutation. ``_CACHED_PROPERTIES`` enumerates
-    all cached views; ``_invalidate_caches()`` clears them. Compare with
-    ``BuiltinFixture._registry`` (auto-registration), ``FixtureRegistry``
-    (instance-based), and ``_MARK_REGISTRY`` (module-level dict).
+
+@dataclass(frozen=True, slots=True)
+class PluginRegistry:
+    """Immutable registry of all loaded plugins.
+
+    Constructed exclusively by ``_PluginRegistryBuilder.build()``.
+    All fields are eagerly computed and frozen — no lazy caching needed.
+    Valid by construction: the builder validates before returning.
     """
 
-    _CACHED_PROPERTIES: ClassVar[tuple[str, ...]] = (
-        "log_backends",
-        "fixture_providers",
-        "helper_providers",
-        "execution_wrappers",
-        "collectors",
-        "reporters",
-        "async_backends",
-        "debugger_backends",
-        "coverage_providers",
-    )
+    entries: tuple[PluginEntry, ...] = ()
+    cli_extensions: MappingProxyType[
+        str, tuple[CliExtension, list[FieldDescriptor]]
+    ] = field(default_factory=lambda: MappingProxyType({}))
 
-    _entries: list[PluginEntry] = field(default_factory=list)
-    _cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = field(
-        default_factory=dict
-    )
+    # Sequential protocol collections (iterated by consumers)
+    log_backends: tuple[LogBackend, ...] = ()
+    fixture_providers: tuple[FixtureProvider, ...] = ()
+    helper_providers: tuple[HelperProvider, ...] = ()
+    execution_wrappers: tuple[ExecutionWrapper, ...] = ()
+    collectors: tuple[Collector, ...] = ()
+    reporters: tuple[Reporter, ...] = ()
 
-    @property
-    def entries(self) -> tuple[PluginEntry, ...]:
-        """All registered plugin entries (immutable view)."""
-        return tuple(self._entries)
+    # At-most-one (validated at build time)
+    debugger_backend: DebuggerBackend | None = None
+    coverage_provider: object | None = None
 
-    @property
-    def cli_extensions(
+
+# ── Builder ──────────────────────────────────────────────────────────────────
+
+
+class _PluginRegistryBuilder:
+    """Mutable accumulator for constructing a frozen PluginRegistry.
+
+    Private — never escapes this module.
+    """
+
+    def __init__(
         self,
-    ) -> MappingProxyType[str, tuple[CliExtension, list[FieldDescriptor]]]:
-        """All CLI extensions (immutable view)."""
-        return MappingProxyType(self._cli_extensions)
-
-    @functools.cached_property
-    def log_backends(self) -> tuple[LogBackend, ...]:
-        """All log backends from all plugins."""
-        return _flatten_protocol(self._entries, "log_backends")
-
-    @functools.cached_property
-    def fixture_providers(self) -> tuple[FixtureProvider, ...]:
-        """All fixture providers from all plugins."""
-        return _flatten_protocol(self._entries, "fixture_providers")
-
-    @functools.cached_property
-    def helper_providers(self) -> tuple[HelperProvider, ...]:
-        """All helper providers from all plugins."""
-        return _flatten_protocol(self._entries, "helper_providers")
-
-    @functools.cached_property
-    def execution_wrappers(self) -> tuple[ExecutionWrapper, ...]:
-        """All execution wrappers from all plugins."""
-        return _flatten_protocol(self._entries, "execution_wrappers")
-
-    @functools.cached_property
-    def collectors(self) -> tuple[Collector, ...]:
-        """All collectors from all plugins."""
-        return _flatten_protocol(self._entries, "collectors")
-
-    @functools.cached_property
-    def reporters(self) -> tuple[Reporter, ...]:
-        """All reporters from all plugins."""
-        return _flatten_protocol(self._entries, "reporters")
-
-    @functools.cached_property
-    def async_backends(self) -> tuple[tuple[str, Any], ...]:
-        """All async backends from all plugins, as (module_name, backend) pairs."""
-        return tuple(
-            (entry.module_name, entry.plugin.async_backend)
-            for entry in self._entries
-            if entry.plugin is not None and entry.plugin.async_backend is not None
+        entries: Sequence[PluginEntry] = (),
+        cli_extensions: (
+            dict[str, tuple[CliExtension, list[FieldDescriptor]]] | None
+        ) = None,
+    ) -> None:
+        self._entries: list[PluginEntry] = list(entries)
+        self._cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = (
+            dict(cli_extensions) if cli_extensions is not None else {}
         )
 
-    @functools.cached_property
-    def debugger_backends(self) -> tuple[tuple[str, DebuggerBackend], ...]:
-        """All debugger backends from all plugins, as (module_name, backend) pairs."""
-        return tuple(
-            (entry.module_name, entry.plugin.debugger_backend)
-            for entry in self._entries
-            if entry.plugin is not None and entry.plugin.debugger_backend is not None
-        )
-
-    @functools.cached_property
-    def coverage_providers(self) -> tuple[tuple[str, object], ...]:
-        """All coverage providers from all plugins, as (module_name, provider) pairs."""
-        return tuple(
-            (entry.module_name, entry.plugin.coverage_provider)
-            for entry in self._entries
-            if entry.plugin is not None and entry.plugin.coverage_provider is not None
-        )
-
-    def _invalidate_caches(self) -> None:
-        """Clear all cached protocol properties after plugin activation."""
-        for attr in self._CACHED_PROPERTIES:
-            self.__dict__.pop(attr, None)
-
-    def register_deferred(self, entry: PluginEntry) -> None:
-        """Append a deferred (not yet imported) plugin entry."""
+    def add_entry(self, entry: PluginEntry) -> None:
+        """Append a plugin entry."""
         self._entries.append(entry)
 
-    def activate_plugin(
+    def add_cli_extension(
         self,
         module_name: str,
-        pyproject_values: dict[str, object],
-        cli_values: dict[str, object],
-    ) -> Plugin:
-        """Activate a plugin with typed config (phase 2 of two-phase loading)."""
-        mod = importlib.import_module(module_name)
-        entry_fn = getattr(mod, "oxitest_plugin", None)
-        if entry_fn is None:
-            msg = f"plugin '{module_name}' has no oxitest_plugin() function"
-            raise PluginLoadError(msg)
-
-        if module_name in self._cli_extensions:
-            ext, descriptors = self._cli_extensions[module_name]
-            config = merge_config(
-                ext.config_type, descriptors, pyproject_values, cli_values
-            )
-            return entry_fn(config=config)
-
-        return entry_fn()
-
-    def activate_deferred_plugins(
-        self,
-        plugin_settings_json: str,
-        cli_values_json: str,
+        ext: CliExtension,
+        descriptors: list[FieldDescriptor],
     ) -> None:
-        """Activate plugins with CLI extensions that were deferred during load.
+        """Register a CLI extension for a plugin module."""
+        self._cli_extensions[module_name] = (ext, descriptors)
 
-        Called from Rust after ``init_session()`` so that typed configs
-        (merged from pyproject + CLI + env) reach the plugin entry point.
+    def replace_entry(self, index: int, new_entry: PluginEntry) -> None:
+        """Replace an entry at the given index."""
+        self._entries[index] = new_entry
 
-        Args:
-            plugin_settings_json: JSON dict of per-module pyproject settings.
-            cli_values_json: JSON dict of per-module CLI-provided values.
+    def build(self) -> PluginRegistry:
+        """Validate and construct a frozen PluginRegistry."""
+        entries = tuple(self._entries)
 
-        """
-        plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
-        cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
+        # Compute sequential protocol collections
+        log_backends = _flatten_protocol(self._entries, "log_backends")
+        fixture_providers = _flatten_protocol(self._entries, "fixture_providers")
+        helper_providers = _flatten_protocol(self._entries, "helper_providers")
+        execution_wrappers = _flatten_protocol(self._entries, "execution_wrappers")
+        collectors = _flatten_protocol(self._entries, "collectors")
+        reporters = _flatten_protocol(self._entries, "reporters")
 
-        for i, entry in enumerate(self._entries):
-            if entry.is_loaded:
-                continue
-            if entry.module_name not in self._cli_extensions:
-                continue
+        # Extract at-most-one singletons
+        debugger_entries = [
+            entry
+            for entry in self._entries
+            if entry.plugin is not None and entry.plugin.debugger_backend is not None
+        ]
+        coverage_entries = [
+            entry
+            for entry in self._entries
+            if entry.plugin is not None and entry.plugin.coverage_provider is not None
+        ]
 
-            pyproject_values = plugin_settings.get(entry.module_name, {})
-            plugin = self.activate_plugin(
-                entry.module_name,
-                pyproject_values=pyproject_values,
-                cli_values=cli_values.get(entry.module_name, {}),
-            )
-            self._entries[i] = dataclasses.replace(entry, plugin=plugin)
-
-        # Invalidate cached protocol properties so they pick up new plugins.
-        self._invalidate_caches()
-
-    def resolve_fixture_providers(self) -> tuple[FixtureProvider, ...]:
-        """Return all fixture providers, loading deferred fixture_provider plugins."""
-        providers: list[FixtureProvider] = []
-        for i, entry in enumerate(self._entries):
-            if (
-                not entry.is_loaded
-                and entry.declared_protocols
-                and "fixture_provider" in entry.declared_protocols
-            ):
-                loaded, _ = entry.ensure_loaded()
-                self._entries[i] = loaded
-            current = self._entries[i]
-            if current.plugin:
-                providers.extend(current.plugin.fixture_providers)
-        return tuple(providers)
-
-    def validate(self) -> None:
-        """Check for conflicting plugin declarations.
-
-        Raises:
-            ConflictingDebuggerError: if multiple plugins provide a debugger backend.
-            ConflictingCoverageError: if multiple plugins provide a coverage provider.
-
-        """
-        if len(self.debugger_backends) > 1:
-            providers = [name for name, _ in self.debugger_backends]
+        # Validate uniqueness
+        if len(debugger_entries) > 1:
+            providers = [e.module_name for e in debugger_entries]
             raise ConflictingDebuggerError(providers)
-
-        if len(self.coverage_providers) > 1:
-            providers = [name for name, _ in self.coverage_providers]
+        if len(coverage_entries) > 1:
+            providers = [e.module_name for e in coverage_entries]
             raise ConflictingCoverageError(providers)
+
+        debugger_backend: DebuggerBackend | None = None
+        if debugger_entries:
+            plugin = debugger_entries[0].plugin
+            if plugin is not None:
+                debugger_backend = plugin.debugger_backend
+
+        coverage_provider: object | None = None
+        if coverage_entries:
+            plugin = coverage_entries[0].plugin
+            if plugin is not None:
+                coverage_provider = plugin.coverage_provider
+
+        return PluginRegistry(
+            entries=entries,
+            cli_extensions=MappingProxyType(self._cli_extensions),
+            log_backends=log_backends,
+            fixture_providers=fixture_providers,
+            helper_providers=helper_providers,
+            execution_wrappers=execution_wrappers,
+            collectors=collectors,
+            reporters=reporters,
+            debugger_backend=debugger_backend,
+            coverage_provider=coverage_provider,
+        )
+
+
+# ── Module-level functions ───────────────────────────────────────────────────
+
+
+def _activate_plugin(
+    module_name: str,
+    cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]]
+    | MappingProxyType[str, tuple[CliExtension, list[FieldDescriptor]]],
+    pyproject_values: dict[str, object],
+    cli_values: dict[str, object],
+) -> Plugin:
+    """Activate a plugin with typed config (phase 2 of two-phase loading)."""
+    mod = importlib.import_module(module_name)
+    entry_fn = getattr(mod, "oxitest_plugin", None)
+    if entry_fn is None:
+        msg = f"plugin '{module_name}' has no oxitest_plugin() function"
+        raise PluginLoadError(msg)
+
+    if module_name in cli_extensions:
+        ext, descriptors = cli_extensions[module_name]
+        config = merge_config(
+            ext.config_type, descriptors, pyproject_values, cli_values
+        )
+        return entry_fn(config=config)
+
+    return entry_fn()
 
 
 def _load_single_plugin(
     module_name: str,
     plugin_configs: dict[str, dict[str, object]],
-    registry: PluginRegistry,
+    builder: _PluginRegistryBuilder,
 ) -> None:
-    """Load and register a single plugin module into the registry.
+    """Load and register a single plugin module into the builder.
 
     Raises:
         PluginLoadError: If the plugin cannot be loaded or is invalid.
@@ -348,7 +302,7 @@ def _load_single_plugin(
 
     if declared_protocols and not PluginEntry.needs_eager_import(declared_protocols):
         entry = PluginEntry.deferred(module_name, list(declared_protocols))
-        registry.register_deferred(entry)
+        builder.add_entry(entry)
         return
 
     # Import the module
@@ -388,9 +342,9 @@ def _load_single_plugin(
             msg = f'plugin "{module_name}" config dataclass error: {e}'
             raise PluginLoadError(msg) from e
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
-        registry._cli_extensions[module_name] = (overridden_ext, descriptors)  # noqa: SLF001
-        # Phase 1 complete — defer activation to activate_plugin()
-        registry._entries.append(PluginEntry(module_name=module_name))  # noqa: SLF001
+        builder.add_cli_extension(module_name, overridden_ext, descriptors)
+        # Phase 1 complete — defer activation to activate_deferred_plugins()
+        builder.add_entry(PluginEntry(module_name=module_name))
         return
 
     # Call the entry point with config
@@ -409,7 +363,7 @@ def _load_single_plugin(
         )
         raise PluginLoadError(msg)
 
-    registry._entries.append(PluginEntry(module_name=module_name, plugin=result))  # noqa: SLF001
+    builder.add_entry(PluginEntry(module_name=module_name, plugin=result))
 
 
 def load_plugins(
@@ -425,14 +379,65 @@ def load_plugins(
             `[tool.oxitest.plugin_settings.<name>]` sections.
 
     Returns:
-        A PluginRegistry containing all loaded plugins.
+        A frozen PluginRegistry containing all loaded plugins.
 
     Raises:
         PluginLoadError: If any plugin cannot be loaded or is invalid.
 
     """
-    registry = PluginRegistry()
+    builder = _PluginRegistryBuilder()
     for module_name in plugin_modules:
-        _load_single_plugin(module_name, plugin_configs, registry)
-    registry.validate()
-    return registry
+        _load_single_plugin(module_name, plugin_configs, builder)
+    return builder.build()
+
+
+def activate_deferred_plugins(
+    registry: PluginRegistry,
+    plugin_settings_json: str,
+    cli_values_json: str,
+) -> PluginRegistry:
+    """Activate plugins with CLI extensions that were deferred during load.
+
+    Called from Rust after ``init_session()`` so that typed configs
+    (merged from pyproject + CLI + env) reach the plugin entry point.
+
+    Also activates any remaining deferred plugins (e.g., fixture_provider
+    plugins) so all plugins are loaded before test execution begins.
+
+    Args:
+        registry: The current frozen registry.
+        plugin_settings_json: JSON dict of per-module pyproject settings.
+        cli_values_json: JSON dict of per-module CLI-provided values.
+
+    Returns:
+        A new frozen PluginRegistry with all deferred plugins activated.
+
+    """
+    plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
+    cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
+
+    builder = _PluginRegistryBuilder(
+        entries=registry.entries,
+        cli_extensions=dict(registry.cli_extensions),
+    )
+
+    for i, entry in enumerate(registry.entries):
+        if entry.is_loaded:
+            continue
+
+        # Activate CLI-extension plugins with typed config
+        if entry.module_name in registry.cli_extensions:
+            pyproject_values = plugin_settings.get(entry.module_name, {})
+            plugin = _activate_plugin(
+                entry.module_name,
+                cli_extensions=registry.cli_extensions,
+                pyproject_values=pyproject_values,
+                cli_values=cli_values.get(entry.module_name, {}),
+            )
+            builder.replace_entry(i, dataclasses.replace(entry, plugin=plugin))
+        else:
+            # Activate remaining deferred plugins (e.g., fixture_provider)
+            loaded, _ = entry.ensure_loaded()
+            builder.replace_entry(i, loaded)
+
+    return builder.build()

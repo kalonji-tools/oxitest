@@ -9,7 +9,7 @@ from typing import Annotated
 import oxitest
 from oxitest import Both, Cli, CliExtension, Conf, Plugin, helpers
 from oxitest._bridge._plugin_config import introspect_config, merge_config
-from oxitest._bridge.plugin_loader import load_plugins
+from oxitest._bridge.plugin_loader import _activate_plugin, load_plugins
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,9 @@ def test_plugin_loader_discovers_and_activates_typed_config() -> None:
             "plugin should have CLI extensions registered"
         )
 
-        registry.activate_plugin(
+        _activate_plugin(
             "e2e_plugin",
+            cli_extensions=registry.cli_extensions,
             pyproject_values={"path": "/from/pyproject"},
             cli_values={"host": "ssh://activated"},
         )

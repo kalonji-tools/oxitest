@@ -93,8 +93,8 @@ def _resolve_debugger_backend(
     if debug_mode is None:
         return None
     registry = getattr(session, "_plugin_registry", None)
-    if registry is not None and registry.debugger_backends:
-        return registry.debugger_backends[0][1]
+    if registry is not None and registry.debugger_backend is not None:
+        return registry.debugger_backend
     return _PdbBackend()
 
 

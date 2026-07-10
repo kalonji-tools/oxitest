@@ -420,11 +420,12 @@ pub fn stop_and_report_coverage(
     Ok(())
 }
 
-/// Activate deferred plugins that have CLI extensions.
+/// Activate deferred plugins and replace the registry with the updated version.
 ///
 /// After `load_plugins()` defers plugins with `oxitest_cli_extension`, this
-/// function calls `PluginRegistry.activate_deferred_plugins()` to construct
-/// typed configs from merged pyproject + CLI values and call `oxitest_plugin(config=...)`.
+/// function calls the module-level `activate_deferred_plugins()` to construct
+/// typed configs from merged pyproject + CLI values, activate all remaining
+/// deferred plugins, and return a new frozen registry.
 pub fn activate_deferred_plugins(
     py: Python<'_>,
     session: &FixtureSession,
@@ -434,12 +435,20 @@ pub fn activate_deferred_plugins(
         std::collections::HashMap<String, toml::Value>,
     >,
 ) -> PyResult<()> {
+    let loader = py.import("oxitest._bridge.plugin_loader")?;
     let registry = session.0.bind(py).getattr("_plugin_registry")?;
 
     let settings_json = serde_json::to_string(plugin_settings).unwrap_or_else(|_| "{}".to_owned());
     let cli_json = serde_json::to_string(plugin_cli_values).unwrap_or_else(|_| "{}".to_owned());
 
-    registry.call_method1("activate_deferred_plugins", (settings_json, cli_json))?;
+    let new_registry = loader.call_method1(
+        "activate_deferred_plugins",
+        (registry, settings_json, cli_json),
+    )?;
+    session
+        .0
+        .bind(py)
+        .setattr("_plugin_registry", new_registry)?;
     Ok(())
 }
 

@@ -15,7 +15,12 @@ from oxitest._bridge._fixture_registry import (
     PluginSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
-from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge.plugin_loader import (
+    PluginEntry,
+    PluginRegistry,
+    _PluginRegistryBuilder,
+)
+from oxitest.plugin import Plugin
 
 
 class _MinimalType:
@@ -181,14 +186,14 @@ def test_session_plugin_without_scope_autouse() -> None:
         def teardown(self, **_: Any) -> None:
             pass
 
-    class FakePluginRegistry(PluginRegistry):
-        """PluginRegistry subclass that injects a single fixture provider."""
+    providers: Any = (MinimalProvider(),)
+    plugin = Plugin(fixture_providers=providers)
+    entry = PluginEntry(module_name="test_minimal", plugin=plugin)
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(entry)
+    registry = builder.build()
 
-        @property
-        def fixture_providers(self) -> tuple:
-            return (MinimalProvider(),)
-
-    session = FixtureSession([], FakePluginRegistry())
+    session = FixtureSession([], registry)
 
     defn = session.registry.resolve(_MinimalType)
     assert defn.name == "minimal", (

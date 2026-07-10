@@ -203,8 +203,8 @@ def test_single_debugger_backend_is_valid() -> None:
     _install_fake_module("solo_dbg", mod)
     try:
         registry = load_plugins(["solo_dbg"], {})
-        assert len(registry.debugger_backends) == 1, (
-            f"expected 1 debugger backend, got {len(registry.debugger_backends)}"
+        assert registry.debugger_backend is not None, (
+            "expected a debugger backend, got None"
         )
     finally:
         _remove_fake_module("solo_dbg")
