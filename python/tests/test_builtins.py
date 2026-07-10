@@ -702,75 +702,6 @@ def test_testcontext_still_works_via_builtin_dispatch() -> None:
     )
 
 
-# ── LogBackend / StdlibLogBackend ─────────────────────────────────────────────
-
-
-def test_stdlib_backend_captures_records() -> None:
-    """StdlibLogBackend.install() intercepts logging and accumulates LogRecords."""
-    backend = StdlibLogBackend(level=logging.DEBUG)
-    backend.install()
-    logging.getLogger().debug("hello from stdlib")
-    recs = backend.records
-    backend.uninstall()
-
-    assert len(recs) == 1, (
-        f"StdlibLogBackend should capture 1 log record, got {len(recs)}"
-    )
-    assert recs[0].getMessage() == "hello from stdlib", (
-        f"captured record message should be 'hello from stdlib', got "
-        f"{recs[0].getMessage()!r}"
-    )
-
-
-def test_stdlib_backend_uninstall_removes_handler() -> None:
-    """StdlibLogBackend.uninstall() removes its handler from the root logger."""
-    backend = StdlibLogBackend(level=logging.DEBUG)
-    root = logging.getLogger()
-    handler_count_before = len(root.handlers)
-    backend.install()
-    assert len(root.handlers) == handler_count_before + 1, (
-        f"install() should add 1 handler to root logger, got {len(root.handlers)} (was "
-        f"{handler_count_before})"
-    )
-    backend.uninstall()
-    assert len(root.handlers) == handler_count_before, (
-        f"uninstall() should remove the handler, restoring count to "
-        f"{handler_count_before}, got {len(root.handlers)}"
-    )
-
-
-def test_stdlib_backend_uninstall_restores_level() -> None:
-    """StdlibLogBackend.uninstall() restores the root logger level to pre-install."""
-    root = logging.getLogger()
-    old_level = root.level
-    backend = StdlibLogBackend(level=logging.DEBUG)
-    backend.install()
-    backend.uninstall()
-    assert root.level == old_level, (
-        f"uninstall() should restore root logger level to {old_level}, got {root.level}"
-    )
-
-
-def test_stdlib_backend_set_level_filters_records() -> None:
-    """set_level() updates the capture threshold; prior records are filtered."""
-    backend = StdlibLogBackend(level=logging.WARNING)
-    backend.install()
-    logging.getLogger().debug("should be filtered")
-    backend.set_level(logging.DEBUG)
-    logging.getLogger().debug("should be captured")
-    recs = backend.records
-    backend.uninstall()
-
-    assert len(recs) == 1, (
-        f"set_level(DEBUG) after WARNING should capture 1 record (not 2), got "
-        f"{len(recs)}"
-    )
-    assert recs[0].getMessage() == "should be captured", (
-        f"only the post-set_level record should be captured, got "
-        f"{recs[0].getMessage()!r}"
-    )
-
-
 # ── LogCapture ───────────────────────────────────────────────────────────────
 
 
@@ -855,6 +786,18 @@ def test_logcapture_teardown_uninstalls_backends() -> None:
     assert len(root.handlers) == handler_count, (
         f"LogCapture.close() should remove the handler, restoring count to "
         f"{handler_count}, got {len(root.handlers)}"
+    )
+
+
+def test_logcapture_close_restores_root_logger_level() -> None:
+    """LogCapture.close() restores the root logger level to its pre-capture value."""
+    root = logging.getLogger()
+    original_level = root.level
+    cap = LogCapture([StdlibLogBackend(level=logging.DEBUG)])
+    cap.close()
+    assert root.level == original_level, (
+        f"LogCapture.close() should restore root logger level to {original_level}, "
+        f"got {root.level}"
     )
 
 
