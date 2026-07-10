@@ -49,9 +49,9 @@ class HelperRegistry:
                 return defn
         return None
 
-    def all(self) -> list[HelperDef]:
+    def all(self) -> tuple[HelperDef, ...]:
         """Return all effective (most-local) helper defs."""
-        return [defs[-1] for defs in self._by_name.values() if defs]
+        return tuple(defs[-1] for defs in self._by_name.values() if defs)
 
     def has_namespace(self, namespace: str) -> bool:
         """Return True if any registered helper belongs to the given namespace."""

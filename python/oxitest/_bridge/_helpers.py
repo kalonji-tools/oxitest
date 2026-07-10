@@ -41,8 +41,8 @@ class Helpers:
         self._namespace_name = value
 
     @property
-    def defs(self) -> list[HelperDef]:
-        return self._defs
+    def defs(self) -> tuple[HelperDef, ...]:
+        return tuple(self._defs)
 
     @property
     def source_line(self) -> int:
