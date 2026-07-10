@@ -40,10 +40,10 @@ def test_registry_async_backends_property() -> None:
     """PluginRegistry.async_backends should list only plugins that supply a backend."""
     fake = _FakeBackend()
     reg = PluginRegistry()
-    reg.entries.append(
+    reg._entries.append(  # noqa: SLF001
         PluginEntry(module_name="with_backend", plugin=Plugin(async_backend=fake))
     )
-    reg.entries.append(PluginEntry(module_name="no_backend", plugin=Plugin()))
+    reg._entries.append(PluginEntry(module_name="no_backend", plugin=Plugin()))  # noqa: SLF001
     backends = reg.async_backends
     assert len(backends) == 1, f"expected 1 backend, got {len(backends)}"
     module_name, backend = backends[0]

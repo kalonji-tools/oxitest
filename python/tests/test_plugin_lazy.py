@@ -312,7 +312,7 @@ def test_registry_resolve_fixture_providers_skips_non_fixture_deferred() -> None
 
     providers = registry.resolve_fixture_providers()
 
-    assert providers == [], (
+    assert providers == (), (
         f"non-fixture deferred plugin should yield no providers, got {providers!r}"
     )
     assert entry.is_loaded is False, (

@@ -29,7 +29,7 @@ def test_load_empty_plugins_returns_empty_registry() -> None:
     assert isinstance(registry, PluginRegistry), (
         f"expected PluginRegistry, got {type(registry).__name__}"
     )
-    assert registry.entries == [], f"expected empty entries, got {registry.entries!r}"
+    assert registry.entries == (), f"expected empty entries, got {registry.entries!r}"
 
 
 @oxitest.mark.inprocess

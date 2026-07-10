@@ -8,7 +8,7 @@ Plugin authors import from here:
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -42,7 +42,7 @@ class LogBackend(Protocol):
         ...
 
     @property
-    def records(self) -> list[Any]:
+    def records(self) -> Sequence[Any]:
         """Captured log records accumulated since the last `install` call.
 
         Returns a list of backend-specific record objects (e.g.

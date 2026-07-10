@@ -98,9 +98,9 @@ class SharedAsyncManager:
         self._used = value
 
     @property
-    def teardowns(self) -> list[tuple[str, Any]]:
-        """Pending async teardowns."""
-        return self._teardowns
+    def teardowns(self) -> tuple[tuple[str, Any], ...]:
+        """Pending async teardowns (immutable view)."""
+        return tuple(self._teardowns)
 
     @property
     def session(self) -> SharedAsyncSession | None:

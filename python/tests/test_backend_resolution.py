@@ -46,7 +46,7 @@ class _AsyncioNamedBackend:
 def _registry_with(*entries: tuple[str, Plugin]) -> PluginRegistry:
     reg = PluginRegistry()
     for module_name, plugin in entries:
-        reg.entries.append(PluginEntry(module_name=module_name, plugin=plugin))
+        reg._entries.append(PluginEntry(module_name=module_name, plugin=plugin))  # noqa: SLF001
     return reg
 
 
