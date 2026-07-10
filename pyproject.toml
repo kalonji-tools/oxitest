@@ -58,7 +58,6 @@ ignore = [
 # ── PLC0415: intentionally lazy imports ─────────────────────────────────
 "python/tests/fixtures/oxitest_sample_infra/__init__.py" = ["PLC0415"]
 "python/tests/fixtures/oxitest_sample_metrics/__init__.py" = ["PLC0415"]
-"python/tests/test_timeout.py" = ["PLC0415"]
 
 # ── S102: exec() required for AST-rewritten module loading ──────────────
 "python/tests/test_assert_error.py" = ["S102"]
