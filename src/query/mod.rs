@@ -52,7 +52,7 @@ pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
         ResourceKind::Tests => vec!["name"],
         ResourceKind::Fixtures => vec!["name"],
         ResourceKind::Marks => vec!["name"],
-        ResourceKind::Helpers => vec!["name", "namespace", "signature", "source"],
+        ResourceKind::Helpers => vec!["name", "namespace", "source"],
         ResourceKind::Plugins => vec!["name"],
     }
 }
@@ -292,5 +292,19 @@ mod tests {
     fn default_columns_fixtures() {
         let cols = default_columns(ResourceKind::Fixtures);
         assert!(cols.contains(&"name"));
+    }
+
+    #[test]
+    fn default_columns_helpers() {
+        let cols = default_columns(ResourceKind::Helpers);
+        assert!(
+            !cols.contains(&"signature"),
+            "signature should not be in default columns — it makes the table unreadable"
+        );
+        assert_eq!(
+            cols,
+            vec!["name", "namespace", "source"],
+            "helpers default columns should be name, namespace, source"
+        );
     }
 }
