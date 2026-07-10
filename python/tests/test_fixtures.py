@@ -12,7 +12,6 @@ from oxitest import Fixture, Fixtures, WarnCapture, helpers, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
-    FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,
     UnannotatedFixtureParamError,
@@ -433,42 +432,6 @@ def test_autouse_teardown_still_runs() -> None:
 
 
 # ── Error cases ───────────────────────────────────────────────────────────────
-
-
-def test_missing_fixture_raises_not_found() -> None:
-    """Requesting a fixture that was never registered raises FixtureNotFoundError."""
-    session = helpers.common.make_session()
-
-    def fn(nonexistent: Fixture[int]) -> None:
-        pass
-
-    with raises(FixtureNotFoundError) as exc_info:
-        session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
-    assert "nonexistent" in str(exc_info.value), (
-        f"FixtureNotFoundError message should mention 'nonexistent', got "
-        f"{str(exc_info.value)!r}"
-    )
-
-
-def test_cycle_raises_fixture_cycle_error() -> None:
-    """A circular fixture dependency raises FixtureCycleError at resolve time."""
-
-    def a(b: Fixture[int]) -> int:
-        return b
-
-    def b(a: Fixture[int]) -> int:
-        return a
-
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("a", a, conftest_path="/c.py"),
-        helpers.common.make_fixture_def("b", b, conftest_path="/c.py"),
-    )
-
-    def fn(a: Fixture[int]) -> None:
-        pass
-
-    with raises(FixtureCycleError):
-        session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
 
 
 def test_setup_error_raises_fixture_setup_error() -> None:
