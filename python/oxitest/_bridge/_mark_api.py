@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, TypeVar
 
-from oxitest._bridge._fn_metadata import get_or_create
+from oxitest._bridge._fn_metadata import _update, get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -59,7 +59,8 @@ class MarkInfo:
 
 
 def _append_mark(f: object, info: MarkInfo) -> None:
-    get_or_create(f).marks.append(info)
+    meta = get_or_create(f)
+    _update(f, marks=(*meta.marks, info))
 
 
 class _Mark:

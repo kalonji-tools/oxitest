@@ -24,7 +24,7 @@ from typing import Any, TypeVar, overload
 
 from oxitest._bridge._fixture_context import _fixture_context
 from oxitest._bridge._fixture_registry import ConftestSource, FixtureDef, FixtureScope
-from oxitest._bridge._fn_metadata import get_metadata, get_or_create
+from oxitest._bridge._fn_metadata import _update, get_metadata
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -222,7 +222,7 @@ class Fixtures:
 
         def _register(f: _F) -> _F:
             fixture_name = name or getattr(f, "__name__", repr(f))
-            get_or_create(f).fixture_name = fixture_name
+            _update(f, fixture_name=fixture_name)
             defn = FixtureDef(
                 name=fixture_name,
                 fixture_type=object,  # placeholder — overwritten by conftest_loader

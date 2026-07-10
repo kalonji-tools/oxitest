@@ -10,10 +10,11 @@ and there is no stale-id problem from `id()` reuse.
 
 from __future__ import annotations
 
-__all__ = ["FunctionMetadata", "get_metadata", "get_or_create"]
+__all__ = ["FunctionMetadata", "_update", "get_metadata", "get_or_create"]
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+import dataclasses
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from oxitest._bridge._mark_api import MarkInfo
@@ -22,9 +23,9 @@ if TYPE_CHECKING:
 _ATTR = "_oxitest_meta"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class FunctionMetadata:
-    marks: list[MarkInfo] = field(default_factory=list)
+    marks: tuple[MarkInfo, ...] = ()
     param_cases: tuple[ResolvedCases, ...] | None = None
     fixture_name: str | None = None
 
@@ -41,3 +42,11 @@ def get_or_create(fn: object) -> FunctionMetadata:
         meta = FunctionMetadata()
         setattr(fn, _ATTR, meta)
     return meta
+
+
+def _update(fn: object, **changes: Any) -> FunctionMetadata:
+    """Replace metadata fields on *fn*, returning the new frozen instance."""
+    meta = get_or_create(fn)
+    new_meta = dataclasses.replace(meta, **changes)
+    setattr(fn, _ATTR, new_meta)
+    return new_meta

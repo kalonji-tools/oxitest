@@ -24,7 +24,7 @@ from typing import Annotated, Any, TypeVar, cast, get_args, get_origin, get_type
 from oxitest._bridge._errors import ParametrizeError
 from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
-from oxitest._bridge._fn_metadata import get_metadata, get_or_create
+from oxitest._bridge._fn_metadata import _update, get_metadata, get_or_create
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 
 _F = TypeVar("_F", bound=Callable[..., Any])
@@ -430,7 +430,7 @@ def _dict_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
                 " Use a single @parametrize call for dict mode."
             )
             raise TypeError(msg)
-        meta.param_cases = (layer,)
+        _update(fn, param_cases=(layer,))
         return fn
 
     return decorator
@@ -444,7 +444,7 @@ def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
         meta = get_or_create(fn)
         existing = meta.param_cases
         if existing is None:
-            meta.param_cases = (new_layer,)
+            _update(fn, param_cases=(new_layer,))
             return fn
         composed = _as_composed(existing)
         existing_pt = composed[0].param_type
@@ -466,7 +466,7 @@ def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
                     " Each layer must provide disjoint fields."
                 )
                 raise TypeError(msg)
-        meta.param_cases = (new_layer, *existing)
+        _update(fn, param_cases=(new_layer, *existing))
         return fn
 
     return decorator
@@ -484,7 +484,7 @@ def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
                 " decorators. Use partial() for composition."
             )
             raise TypeError(msg)
-        meta.param_cases = (param_cases_layer,)
+        _update(fn, param_cases=(param_cases_layer,))
         return fn
 
     return decorator
