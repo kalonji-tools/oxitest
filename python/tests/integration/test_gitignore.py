@@ -5,13 +5,6 @@ import subprocess
 from oxitest import TempDir, helpers
 
 
-def _clean_env() -> dict[str, str]:
-    """Strip GIT_* vars that leak from pre-push hooks."""
-    return {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
-
-
 def test_gitignore_respected(tmp: TempDir) -> None:
     """Files in .gitignore'd directories are not collected."""
     (tmp / "test_visible.py").write_text("def test_ok(): pass\n")
@@ -23,7 +16,7 @@ def test_gitignore_respected(tmp: TempDir) -> None:
         cwd=str(tmp),
         check=True,
         capture_output=True,
-        env=_clean_env(),
+        env=helpers.integ.clean_git_env(),
     )
     (tmp / ".gitignore").write_text("ignored_dir/\n")
 
@@ -44,7 +37,7 @@ def test_no_use_gitignore_disables_filtering(tmp: TempDir) -> None:
         cwd=str(tmp),
         check=True,
         capture_output=True,
-        env=_clean_env(),
+        env=helpers.integ.clean_git_env(),
     )
     (tmp / ".gitignore").write_text("ignored_dir/\n")
 

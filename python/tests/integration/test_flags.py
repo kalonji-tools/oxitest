@@ -269,9 +269,7 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
     git = ["git", "-C", str(tmp)]
 
     # Clear git env vars that prek/pre-commit may set.
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -303,9 +301,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
     """--affected works when a subdirectory is passed as the path argument."""
     tmp = git_repo
     git = ["git", "-C", str(tmp)]
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = helpers.integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)

@@ -5,6 +5,7 @@ Helper functions are accessible via ``helpers.integ.<function>()``.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import textwrap
 from pathlib import Path
@@ -25,8 +26,15 @@ __all__ = [
     "assert_excludes",
     "assert_failed",
     "assert_passed",
+    "clean_git_env",
     "write_project",
 ]
+
+
+@integ.helper
+def clean_git_env() -> dict[str, str]:
+    """Strip GIT_* vars that leak from pre-push hooks."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
 @integ.helper
@@ -97,9 +105,7 @@ def assert_excludes(out: str, *terms: str) -> None:
 def git_repo(tmp: TempDir) -> Yields[Path]:
     """Tmp dir initialized as a git repo with an initial commit."""
     git = ["git", "-C", str(tmp)]
-    clean_env = {
-        k: v for k, v in __import__("os").environ.items() if not k.startswith("GIT_")
-    }
+    clean_env = clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
