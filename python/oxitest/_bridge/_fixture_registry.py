@@ -172,7 +172,9 @@ def _transitive_shared(
     return shared_ancestors
 
 
-def _merge_components(shared_ancestors: dict[str, frozenset[str]]) -> list[list[str]]:
+def _merge_components(
+    shared_ancestors: dict[str, frozenset[str]],
+) -> tuple[tuple[str, ...], ...]:
     """Merge overlapping shared-ancestor sets into connected components via union-find.
 
     Returns sorted list of sorted groups.
@@ -196,7 +198,8 @@ def _merge_components(shared_ancestors: dict[str, frozenset[str]]) -> list[list[
     for name in shared_ancestors:
         groups.setdefault(find(name), set()).add(name)
 
-    return sorted(sorted(comp) for comp in groups.values())
+    components = [tuple(sorted(comp)) for comp in groups.values()]
+    return tuple(sorted(components))
 
 
 class FixtureRegistry:
@@ -264,22 +267,22 @@ class FixtureRegistry:
     def __iter__(self) -> Iterator[str]:
         return iter(self._by_name)
 
-    def all(self) -> list[FixtureDef[Any]]:
+    def all(self) -> tuple[FixtureDef[Any], ...]:
         """Return all effective (most-local) fixture defs."""
-        return [defs[-1] for defs in self._by_name.values() if defs]
+        return tuple(defs[-1] for defs in self._by_name.values() if defs)
 
-    def all_defs(self, name: str) -> list[FixtureDef[Any]]:
+    def all_defs(self, name: str) -> tuple[FixtureDef[Any], ...]:
         defs = self._by_name.get(name)
-        return list(defs) if defs else []
+        return tuple(defs) if defs else ()
 
     def get(self, name: str) -> FixtureDef[Any] | None:
         """Return the most-local (last-registered) FixtureDef for name."""
         defs = self._by_name.get(name)
         return defs[-1] if defs else None
 
-    def get_by_type(self, t: type) -> list[FixtureDef[Any]]:
+    def get_by_type(self, t: type) -> tuple[FixtureDef[Any], ...]:
         """Return fixture definitions registered for the given type."""
-        return self._by_type.get(t, [])
+        return tuple(self._by_type.get(t, ()))
 
     def get_autouse(self) -> Iterator[FixtureDef[Any]]:
         """Yield all autouse fixtures (most-local version of each name)."""
@@ -316,18 +319,18 @@ class FixtureRegistry:
         """Return True if any registered fixture belongs to the given namespace."""
         return namespace in self._namespaces
 
-    def shared_fixture_groups(self) -> list[list[str]]:
+    def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
         """Compute connected components of shared fixture dependencies.
 
         Uses the depends_on field of each FixtureDef to build a dependency
         graph, then computes transitive closure to find groups of fixtures
-        linked by shared fixture dependencies. Returns sorted list of sorted
+        linked by shared fixture dependencies. Returns sorted tuple of sorted
         groups.
         """
         graph = _build_dependency_graph(self)
         shared_ancestors = _transitive_shared(graph, self._by_name)
         if not shared_ancestors:
-            return []
+            return ()
         return _merge_components(shared_ancestors)
 
     def has_shared(self) -> bool:
@@ -336,10 +339,12 @@ class FixtureRegistry:
             self._has_shared_cache = len(self.shared_fixture_groups()) > 0
         return self._has_shared_cache
 
-    def shared_names(self) -> list[str]:
+    def shared_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
-        return sorted(
-            name for name, defs in self._by_name.items() if defs and defs[-1].shared
+        return tuple(
+            sorted(
+                name for name, defs in self._by_name.items() if defs and defs[-1].shared
+            )
         )
 
     def resolve(

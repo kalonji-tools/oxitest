@@ -54,7 +54,7 @@ def test_empty_session_returns_empty_timings() -> None:
 
     timings = session.get_fixture_timings()
 
-    assert timings == [], f"expected empty list from empty session, got {timings!r}"
+    assert timings == (), f"expected empty tuple from empty session, got {timings!r}"
 
 
 def test_teardown_timing_recorded_for_yield_fixture() -> None:
