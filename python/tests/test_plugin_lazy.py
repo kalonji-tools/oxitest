@@ -135,17 +135,20 @@ def test_deferred_entry_ensure_loaded_imports_module() -> None:
             f"got is_loaded={entry.is_loaded!r}"
         )
 
-        result = entry.ensure_loaded()
+        new_entry, plugin = entry.ensure_loaded()
 
-        assert isinstance(result, Plugin), (
-            f"ensure_loaded() should return Plugin, got {type(result).__name__}"
+        assert isinstance(plugin, Plugin), (
+            f"ensure_loaded() should return Plugin, got {type(plugin).__name__}"
         )
-        assert entry.is_loaded is True, (
-            "entry should be marked loaded after ensure_loaded(), "
-            f"got {entry.is_loaded!r}"
+        assert entry.is_loaded is False, (
+            f"original entry should remain unloaded (frozen), got {entry.is_loaded!r}"
         )
-        assert entry.plugin is result, (
-            "entry.plugin should be the same object returned by ensure_loaded()"
+        assert new_entry.is_loaded is True, (
+            "new entry should be marked loaded after ensure_loaded(), "
+            f"got {new_entry.is_loaded!r}"
+        )
+        assert new_entry.plugin is plugin, (
+            "new_entry.plugin should be the same object returned by ensure_loaded()"
         )
     finally:
         sys.modules.pop("lazy_fixture_plugin", None)
@@ -156,9 +159,12 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
     plugin = Plugin()
     entry = PluginEntry(module_name="some.plugin", plugin=plugin)
 
-    result = entry.ensure_loaded()
+    returned_entry, returned_plugin = entry.ensure_loaded()
 
-    assert result is plugin, (
+    assert returned_entry is entry, (
+        "ensure_loaded() on an already-loaded entry should return the same entry"
+    )
+    assert returned_plugin is plugin, (
         "ensure_loaded() on an already-loaded entry should return the existing plugin"
     )
 
@@ -295,9 +301,10 @@ def test_registry_resolve_fixture_providers_loads_deferred_fixture_plugin() -> N
         assert isinstance(providers[0], FakeFixtureProvider), (
             f"expected FakeFixtureProvider, got {type(providers[0]).__name__}"
         )
-        assert entry.is_loaded is True, (
-            f"deferred fixture plugin should be loaded after resolve, "
-            f"got is_loaded={entry.is_loaded!r}"
+        resolved_entry = registry.entries[0]
+        assert resolved_entry.is_loaded is True, (
+            "deferred fixture plugin should be loaded in registry after resolve, "
+            f"got is_loaded={resolved_entry.is_loaded!r}"
         )
     finally:
         sys.modules.pop("deferred_fixture_plugin", None)
