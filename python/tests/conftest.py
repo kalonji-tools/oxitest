@@ -22,6 +22,7 @@ from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
+    FixtureRegistry,
     FixtureScope,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
@@ -39,6 +40,7 @@ __all__ = [
     "make_fixture_def",
     "make_meta",
     "make_plugin_module",
+    "make_registry",
     "make_session",
     "make_session_with",
     "run_oxitest",
@@ -144,6 +146,15 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
         is_async=is_async,
         depends_on=depends_on,
     )
+
+
+@common.helper
+def make_registry(*defs: FixtureDef) -> FixtureRegistry:
+    """Create a ``FixtureRegistry`` from one or more ``FixtureDef``s."""
+    reg = FixtureRegistry()
+    for d in defs:
+        reg.register(d)
+    return reg
 
 
 @common.helper
