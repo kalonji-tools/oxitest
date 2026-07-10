@@ -18,9 +18,9 @@ _hints_cache: weakref.WeakKeyDictionary[Any, dict[str, Any]] = (
 )
 
 
-def get_marks(obj: object) -> list[Any]:
-    """Return the list of oxitest marks attached to obj, or [] if none."""
-    return get_metadata(obj).marks
+def get_marks(obj: object) -> tuple[Any, ...]:
+    """Return the oxitest marks attached to obj as an immutable tuple."""
+    return tuple(get_metadata(obj).marks)
 
 
 def get_fixture_name(fn: object, fallback: str = "") -> str:

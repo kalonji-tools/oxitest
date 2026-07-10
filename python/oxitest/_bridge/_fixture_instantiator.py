@@ -432,10 +432,10 @@ class FixtureInstantiator:
 
     # ── Timing ───────────────────────────────────────────────────────────
 
-    def get_fixture_timings(self) -> list[FixtureTiming]:
+    def get_fixture_timings(self) -> tuple[FixtureTiming, ...]:
         """Return per-fixture setup and teardown timing aggregates."""
         names = sorted(set(self._setup_times.keys()) | set(self._teardown_times.keys()))
-        return [
+        return tuple(
             FixtureTiming(
                 name=n,
                 total_setup_ms=float(sum(self._setup_times.get(n, []))),
@@ -444,4 +444,4 @@ class FixtureInstantiator:
                 teardown_count=len(self._teardown_times.get(n, [])),
             )
             for n in names
-        ]
+        )

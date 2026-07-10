@@ -378,8 +378,8 @@ def test_registry_all_defs_returns_all_entries() -> None:
 def test_registry_all_defs_returns_empty_for_unknown() -> None:
     """all_defs() returns an empty list for a name that was never registered."""
     reg = helpers.common.make_registry()
-    assert reg.all_defs("missing") == [], (
-        "all_defs for an unregistered name should return an empty list"
+    assert reg.all_defs("missing") == (), (
+        "all_defs for an unregistered name should return an empty tuple"
     )
 
 

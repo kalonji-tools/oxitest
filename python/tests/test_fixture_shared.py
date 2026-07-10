@@ -189,7 +189,7 @@ def test_shared_fixture_names_uses_most_local_definition() -> None:
         ),
         helpers.common.make_fixture_def("db", conftest_path="/root/sub/conftest.py"),
     )
-    assert session.shared_fixture_names() == [], (
+    assert session.shared_fixture_names() == (), (
         "shared_fixture_names() should use only the most-local definition; "
         "a root shared=True overridden by leaf shared=False should not appear"
     )
@@ -200,7 +200,7 @@ def test_shared_fixture_names_returns_empty_when_no_shared() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("client", conftest_path="/c.py")
     )
-    assert session.shared_fixture_names() == [], (
+    assert session.shared_fixture_names() == (), (
         "shared_fixture_names() should return [] when no fixture has shared=True"
     )
 
@@ -212,7 +212,7 @@ def test_shared_fixture_names_returns_only_shared_names() -> None:
         helpers.common.make_fixture_def("cache", shared=True, conftest_path="/c.py"),
         helpers.common.make_fixture_def("client", conftest_path="/c.py"),
     )
-    assert session.shared_fixture_names() == ["cache", "db"], (
+    assert session.shared_fixture_names() == ("cache", "db"), (
         "shared_fixture_names() should return only names where shared=True, got "
         f"{session.shared_fixture_names()!r}"
     )
@@ -224,7 +224,7 @@ def test_shared_fixture_names_returns_only_shared_names() -> None:
 def test_shared_fixture_groups_empty_registry() -> None:
     """shared_fixture_groups() returns an empty list when no fixtures are registered."""
     session = helpers.common.make_session()
-    assert session.shared_fixture_groups() == [], (
+    assert session.shared_fixture_groups() == (), (
         "empty registry should return no fixture groups"
     )
 
@@ -234,7 +234,7 @@ def test_shared_fixture_groups_no_shared_fixtures() -> None:
     session = helpers.common.make_session(
         helpers.common.make_fixture_def("store", conftest_path="/conftest.py")
     )
-    assert session.shared_fixture_groups() == [], (
+    assert session.shared_fixture_groups() == (), (
         "registry with no shared fixtures should return no groups"
     )
 
@@ -245,7 +245,7 @@ def test_shared_fixture_groups_single_shared() -> None:
         helpers.common.make_fixture_def("db", shared=True, conftest_path="/conftest.py")
     )
     groups = session.shared_fixture_groups()
-    assert groups == [["db"]], (
+    assert groups == (("db",),), (
         f"single shared fixture should produce one group, got {groups}"
     )
 
@@ -267,7 +267,7 @@ def test_shared_fixture_groups_transitive_dependency() -> None:
         ),
     )
     groups = session.shared_fixture_groups()
-    assert groups == [["db", "repo"]], (
+    assert groups == (("db", "repo"),), (
         f"repo depends on shared db — should form one group, got {groups}"
     )
 

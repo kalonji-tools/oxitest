@@ -473,8 +473,8 @@ def test_get_fixture_timings_returns_expected_shape() -> None:
     """get_fixture_timings() returns list of FixtureTiming dataclasses."""
     session = FixtureSession(FixtureRegistry())
     timings = session.get_fixture_timings()
-    assert isinstance(timings, list), "timings must be a list"
-    assert timings == [], "empty session should produce empty timings"
+    assert isinstance(timings, tuple), "timings must be a tuple"
+    assert timings == (), "empty session should produce empty timings"
 
 
 def test_get_fixture_timings_entry_has_required_attrs() -> None:

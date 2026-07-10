@@ -106,7 +106,7 @@ class _SessionProtocol(Protocol):
 
     def has_namespace(self, namespace: str) -> bool: ...
 
-    def get_fixture_timings(self) -> list[FixtureTiming]: ...
+    def get_fixture_timings(self) -> tuple[FixtureTiming, ...]: ...
 
 
 # ── FixtureSession ────────────────────────────────────────────────────────────
@@ -457,17 +457,17 @@ class FixtureSession:
         """Return True if the effective (most-local) definition has shared=True."""
         return self._registry.has_shared()
 
-    def shared_fixture_names(self) -> list[str]:
+    def shared_fixture_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
         return self._registry.shared_names()
 
-    def shared_fixture_groups(self) -> list[list[str]]:
+    def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
         """Return connected components of shared fixture dependencies."""
         return self._registry.shared_fixture_groups()
 
-    def registered_fixture_names(self) -> list[str]:
+    def registered_fixture_names(self) -> tuple[str, ...]:
         """Return all fixture names known to the registry."""
-        return list(self._registry)
+        return tuple(self._registry)
 
     def validate_fixture_names(
         self,
@@ -495,7 +495,7 @@ class FixtureSession:
         """
         return self._validator.find_unused_fixtures(items)
 
-    def get_fixture_timings(self) -> list[FixtureTiming]:
+    def get_fixture_timings(self) -> tuple[FixtureTiming, ...]:
         """Return per-fixture setup and teardown timing aggregates."""
         return self._instantiator.get_fixture_timings()
 

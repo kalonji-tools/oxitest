@@ -23,7 +23,7 @@ import functools
 import hashlib
 import inspect
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any
@@ -234,7 +234,7 @@ def _evaluate_marks_phase(
     resolved: _ResolvedTest,
     session: _SessionProtocol,
     module_path: str,
-    marks: list[MarkInfo],
+    marks: Sequence[MarkInfo],
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Evaluate marks and return (short_circuit, wrappers)."""
     _plugin_registry = getattr(session, "_plugin_registry", None)
@@ -322,7 +322,7 @@ def run_test(
     fn_teardowns = resolved.fn_teardowns
 
     try:
-        marks: list[MarkInfo] = get_marks(fn_raw)
+        marks = get_marks(fn_raw)
         short_circuit, wrappers = _evaluate_marks_phase(
             resolved, effective_session, meta.module_path, marks
         )

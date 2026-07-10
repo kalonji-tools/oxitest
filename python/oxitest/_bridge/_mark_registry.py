@@ -18,7 +18,7 @@ __all__ = [
 
 import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from oxitest._bridge._fixture_session import _SessionProtocol
@@ -151,7 +151,7 @@ _BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
 
 
 def evaluate_marks(
-    marks: list[MarkInfo],
+    marks: Sequence[MarkInfo],
     session: _SessionProtocol,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
