@@ -5,8 +5,16 @@ from __future__ import annotations
 import oxitest
 from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir, helpers
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
-from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    ConftestSource,
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+)
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
+from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
+from oxitest._bridge._read_helpers import _helpers_registry_var, _HelpersProxy
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
@@ -309,3 +317,98 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
 
     result = helpers.common.run_test(str(test_file), "test_two_namespaces", session)
     assert result.status == "passed", result.message
+
+
+# ── ContextVar proxies (_FixturesProxy / _HelpersProxy) ──────────────────────
+
+
+def test_fixtures_proxy_resolves_namespace_and_accessor(
+    _tmp: oxitest.TempDir,
+) -> None:
+    """_FixturesProxy chains namespace access to a FixtureAccessor with metadata."""
+
+    def _db() -> str:
+        return "pg"
+
+    reg = FixtureRegistry()
+    reg.register(
+        FixtureDef(
+            name="conn",
+            fixture_type=str,
+            scope=FixtureScope.EACH,
+            source=ConftestSource(func=_db, conftest_path="/conftest.py"),
+            namespace="db",
+        )
+    )
+    token = _fixtures_registry_var.set(reg)
+    try:
+        proxy = _FixturesProxy()
+        accessor = proxy.db.conn
+        assert hasattr(accessor, "_oxitest_fixture_name"), (
+            "should return a FixtureAccessor with fixture name metadata"
+        )
+    finally:
+        _fixtures_registry_var.reset(token)
+
+
+def test_fixtures_proxy_raises_outside_session() -> None:
+    """Accessing a _FixturesProxy namespace outside a session raises AttributeError."""
+    token = _fixtures_registry_var.set(None)
+    try:
+        proxy = _FixturesProxy()
+        with oxitest.raises(
+            AttributeError, match="only available during a test session"
+        ):
+            _ = proxy.db
+    finally:
+        _fixtures_registry_var.reset(token)
+
+
+def _greet(name: str) -> str:
+    return f"hi {name}"
+
+
+def test_helpers_proxy_resolves_namespace_and_callable() -> None:
+    """_HelpersProxy chains namespace access and callable invocation correctly."""
+    reg = HelperRegistry()
+    reg.register(
+        HelperDef(
+            name="greet",
+            func=_greet,
+            source=ConftestSource(func=_greet, conftest_path="/conftest.py"),
+            namespace="utils",
+        )
+    )
+    token = _helpers_registry_var.set(reg)
+    try:
+        proxy = _HelpersProxy()
+        assert proxy.utils.greet("world") == "hi world", (
+            "should resolve namespace then callable"
+        )
+    finally:
+        _helpers_registry_var.reset(token)
+
+
+def test_helpers_proxy_raises_outside_session() -> None:
+    """Accessing a _HelpersProxy namespace outside a session raises AttributeError."""
+    token = _helpers_registry_var.set(None)
+    try:
+        proxy = _HelpersProxy()
+        with oxitest.raises(
+            AttributeError, match="only available during a test session"
+        ):
+            _ = proxy.utils
+    finally:
+        _helpers_registry_var.reset(token)
+
+
+def test_helpers_proxy_raises_unknown_namespace() -> None:
+    """Accessing a namespace with no registered helpers raises AttributeError."""
+    reg = HelperRegistry()
+    token = _helpers_registry_var.set(reg)
+    try:
+        proxy = _HelpersProxy()
+        with oxitest.raises(AttributeError, match="no helper namespace"):
+            _ = proxy.nonexistent
+    finally:
+        _helpers_registry_var.reset(token)
