@@ -141,7 +141,7 @@ def test_register_duplicate_name_warns(warn: WarnCapture) -> None:
 
     # Assert
     shadow_warnings = [
-        w for w in warn.list if issubclass(w.category, FixtureShadowWarning)
+        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
     ]
     assert len(shadow_warnings) == 1, (
         f"registering 'db' from a different conftest should emit 1 shadow warning, "
@@ -164,7 +164,7 @@ def test_register_first_fixture_no_shadow_warning(warn: WarnCapture) -> None:
 
     # Assert
     shadow_warnings = [
-        w for w in warn.list if issubclass(w.category, FixtureShadowWarning)
+        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
     ]
     assert shadow_warnings == [], (
         "first registration of a fixture should not emit a shadow warning, "
@@ -185,7 +185,7 @@ def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
 
     # Assert
     shadow_warnings = [
-        w for w in warn.list if issubclass(w.category, FixtureShadowWarning)
+        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
     ]
     assert shadow_warnings == [], (
         "re-registering 'db' from the same conftest should not emit a shadow warning, "

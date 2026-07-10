@@ -22,13 +22,13 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
     """_warn_teardown() emits a FixtureTeardownWarning containing the fixture name."""
     _warn_teardown("my_fix", RuntimeError("boom"))
 
-    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
-    assert issubclass(warn.list[0].category, FixtureTeardownWarning), (
-        f"expected FixtureTeardownWarning, got {warn.list[0].category!r}"
+    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    assert issubclass(warn.warnings[0].category, FixtureTeardownWarning), (
+        f"expected FixtureTeardownWarning, got {warn.warnings[0].category!r}"
     )
-    assert "my_fix" in str(warn.list[0].message), (
+    assert "my_fix" in str(warn.warnings[0].message), (
         f"warning message should contain fixture name 'my_fix', got "
-        f"{str(warn.list[0].message)!r}"
+        f"{str(warn.warnings[0].message)!r}"
     )
 
 
@@ -36,8 +36,8 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() includes the node_id in the warning message when provided."""
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
-    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
-    msg = str(warn.list[0].message)
+    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    msg = str(warn.warnings[0].message)
     assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
     assert "test_foo" in msg, f"expected node_id in message, got {msg!r}"
 
@@ -46,8 +46,8 @@ def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() still emits a warning when no node_id is given."""
     _warn_teardown("my_fix", RuntimeError("boom"))
 
-    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
-    msg = str(warn.list[0].message)
+    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    msg = str(warn.warnings[0].message)
     assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
 
 
@@ -59,8 +59,8 @@ def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
     finally:
         _current_teardown_node_id.reset(token)
 
-    assert len(warn.list) == 1, f"expected 1 warning, got {warn.list!r}"
-    msg = str(warn.list[0].message)
+    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    msg = str(warn.warnings[0].message)
     assert "db" in msg, f"expected fixture name in message, got {msg!r}"
     assert "test_bar" in msg, f"expected node_id in message, got {msg!r}"
 
@@ -433,8 +433,8 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
     assert torn_down == ["ran"], (
         f"fixture teardown must have executed before raising, got {torn_down!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.list), (
-        f"expected a FixtureTeardownWarning in warn.list, got {warn.list!r}"
+    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
+        f"expected a FixtureTeardownWarning in warn.warnings, got {warn.warnings!r}"
     )
 
 
@@ -476,8 +476,8 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         f"second fixture teardown must still run despite first fixture raising, "
         f"got log={log!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.list), (
-        f"expected a FixtureTeardownWarning in warn.list, got {warn.list!r}"
+    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
+        f"expected a FixtureTeardownWarning in warn.warnings, got {warn.warnings!r}"
     )
 
 
@@ -519,11 +519,11 @@ def test_multiple_teardown_failures_all_reported(
     assert "a_teardown" in log, f"fixture a teardown must have run, got log={log!r}"
     assert "b_teardown" in log, f"fixture b teardown must have run, got log={log!r}"
     teardown_warnings = [
-        w for w in warn.list if issubclass(w.category, FixtureTeardownWarning)
+        w for w in warn.warnings if issubclass(w.category, FixtureTeardownWarning)
     ]
     assert len(teardown_warnings) == 2, (
         f"expected 2 FixtureTeardownWarning (one per failing teardown), "
-        f"got {len(teardown_warnings)}: {warn.list!r}"
+        f"got {len(teardown_warnings)}: {warn.warnings!r}"
     )
 
 

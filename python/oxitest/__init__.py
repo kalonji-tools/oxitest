@@ -46,7 +46,7 @@ CaptureResult  — `out` and `err` strings returned by `readouterr()`.
 LogCapture     — Capture logging records; `log.records`, `log.text`,
                  `log.set_level()`.
 WarnCapture    — Capture all warnings.warn() calls during a test:
-                 `warn.list`, `warn.clear()`.
+                 `warn.warnings`, `warn.clear()`.
 raises         — Assert a block raises an exception:
                  `with oxitest.raises(ValueError, match="pattern"):`.
 warns          — Assert a block emits a warning:

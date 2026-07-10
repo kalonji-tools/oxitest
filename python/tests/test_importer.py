@@ -1011,11 +1011,11 @@ def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
     )
 
     collector_warnings = [
-        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 1, (
         "expected exactly 1 PluginCollectorWarning, "
-        f"got {len(collector_warnings)}: {warn.list}"
+        f"got {len(collector_warnings)}: {warn.warnings}"
     )
     msg = str(collector_warnings[0].message)
     assert "_RaisingCollector" in msg, (
@@ -1043,11 +1043,11 @@ def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> No
     )
 
     collector_warnings = [
-        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 2, (
         "expected 2 warnings (one per bad item), "
-        f"got {len(collector_warnings)}: {warn.list}"
+        f"got {len(collector_warnings)}: {warn.warnings}"
     )
     msg0 = str(collector_warnings[0].message)
     assert "_BadReturnCollector" in msg0, (
@@ -1079,7 +1079,7 @@ def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) 
     )
 
     collector_warnings = [
-        w for w in warn.list if issubclass(w.category, PluginCollectorWarning)
+        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 0, (
         f"a well-behaved collector should emit no warnings, got: {collector_warnings}"

@@ -366,8 +366,8 @@ def test_async_yield_fixture_teardown_error_warns(
         f"teardown error should not affect test result, got status={result.status!r}, "
         f"msg={result.message!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.list), (
-        f"expected a FixtureTeardownWarning, got {warn.list!r}"
+    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
+        f"expected a FixtureTeardownWarning, got {warn.warnings!r}"
     )
 
 
@@ -524,9 +524,9 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> Non
     r2 = helpers.common.run_test(str(f), "test_clean", session)
     assert r1.status == "passed", f"test_leaker: {r1.status!r}, {r1.message!r}"
     assert r2.status == "passed", f"test_clean: {r2.status!r}, {r2.message!r}"
-    leaked_warns = [w for w in warn.list if "leaked" in str(w.message).lower()]
+    leaked_warns = [w for w in warn.warnings if "leaked" in str(w.message).lower()]
     assert len(leaked_warns) >= 1, (
-        f"expected leaked task warning, got {[str(w.message) for w in warn.list]}"
+        f"expected leaked task warning, got {[str(w.message) for w in warn.warnings]}"
     )
     session.end_session()
 
