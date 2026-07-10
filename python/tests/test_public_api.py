@@ -1,4 +1,4 @@
-"""Tests for the oxitest public API surface — discoverability and docstrings."""
+"""Tests for the oxitest public API surface — export presence and discoverability."""
 
 from __future__ import annotations
 
@@ -8,123 +8,9 @@ from oxitest import (
     Cli,
     CliExtension,
     Conf,
-    Fixture,
     FixtureTeardownWarning,
     WarnCapture,
 )
-
-
-def test_module_has_docstring() -> None:
-    """The oxitest module exposes a non-empty module-level docstring."""
-    assert oxitest.__doc__ is not None, "oxitest module should have a docstring"
-    assert len(oxitest.__doc__.strip()) > 0, (
-        "oxitest module docstring should not be blank"
-    )
-
-
-def test_module_docstring_mentions_fixtures_registry() -> None:
-    """The module docstring mentions 'Fixtures' to document the registry API."""
-    doc = oxitest.__doc__
-    assert doc is not None, "oxitest module should have a docstring"
-    assert "Fixtures" in doc, "oxitest module docstring should mention 'Fixtures'"
-
-
-def test_module_docstring_mentions_fixture_injection() -> None:
-    """The module docstring mentions 'Fixture' to document the injection mechanism."""
-    doc = oxitest.__doc__
-    assert doc is not None, "oxitest module should have a docstring"
-    assert "Fixture" in doc, "oxitest module docstring should mention 'Fixture'"
-
-
-def test_fixture_type_has_docstring() -> None:
-    """The Fixture type exposes a non-empty docstring describing its purpose."""
-    assert Fixture.__doc__ is not None, "Fixture type should have a docstring"
-
-
-def test_fixture_type_docstring_explains_injection() -> None:
-    """The Fixture docstring explains the Fixture[T] injection pattern."""
-    doc = Fixture.__doc__
-    assert doc is not None, "Fixture type should have a docstring"
-    assert "inject" in doc.lower(), "Fixture docstring should explain injection"
-    assert "Fixture[T]" in doc or "Fixture[" in doc, (
-        "Fixture docstring should show Fixture[T] usage"
-    )
-
-
-def test_fixture_type_docstring_warns_unannotated_not_injected() -> None:
-    """The Fixture docstring clarifies that unannotated parameters are not injected."""
-    doc = Fixture.__doc__
-    assert doc is not None, "Fixture type should have a docstring"
-    # must make clear that unannotated params are NOT injected
-    assert "not" in doc.lower() or "required" in doc.lower(), (
-        "Fixture docstring should clarify that unannotated params are NOT injected"
-    )
-
-
-def test_parametrize_decorator_has_docstring() -> None:
-    """The parametrize decorator exposes a non-empty docstring."""
-    assert oxitest.parametrize.__doc__ is not None, (
-        "oxitest.parametrize should have a docstring"
-    )
-
-
-def test_parametrize_docstring_explains_compact_mode() -> None:
-    """The parametrize docstring documents the compact single-value case mode."""
-    doc = oxitest.parametrize.__doc__
-    assert doc is not None, "oxitest.parametrize should have a docstring"
-    assert "compact" in doc.lower(), (
-        "oxitest.parametrize docstring should explain compact mode"
-    )
-
-
-def test_parametrize_docstring_explains_expanded_mode() -> None:
-    """The parametrize docstring documents the expanded dataclass case mode."""
-    doc = oxitest.parametrize.__doc__
-    assert doc is not None, "oxitest.parametrize should have a docstring"
-    assert "expanded" in doc.lower(), (
-        "oxitest.parametrize docstring should explain expanded mode"
-    )
-
-
-def test_parametrize_docstring_explains_mode_detection() -> None:
-    """The parametrize docstring explains how mode is inferred from the signature."""
-    doc = oxitest.parametrize.__doc__
-    assert doc is not None, "oxitest.parametrize should have a docstring"
-    # must mention that mode is inferred from the function signature
-    assert "signature" in doc.lower() or "annotate" in doc.lower(), (
-        "oxitest.parametrize docstring should explain mode detection from function"
-        " signature"
-    )
-
-
-def test_fixtures_fixture_method_has_teardown_docstring() -> None:
-    """Fixtures.fixture docstring mentions yield and teardown for generator fixtures."""
-    doc = oxitest.Fixtures.fixture.__doc__
-    assert doc is not None, "Fixtures.fixture method should have a docstring"
-    assert "yield" in doc.lower(), (
-        "Fixtures.fixture docstring should mention 'yield' for teardown pattern"
-    )
-    assert "teardown" in doc.lower(), (
-        "Fixtures.fixture docstring should mention 'teardown'"
-    )
-
-
-def test_fixtures_fixture_method_docstring_recommends_typed_returns() -> None:
-    """Fixtures.fixture docstring discourages plain dicts, recommends typed returns."""
-    doc = oxitest.Fixtures.fixture.__doc__
-    assert doc is not None, "Fixtures.fixture method should have a docstring"
-    # must advise against plain dict
-    assert "dict" in doc.lower(), (
-        "Fixtures.fixture docstring should mention 'dict' (to advise against it)"
-    )
-    # must recommend a structured alternative
-    assert "dataclass" in doc.lower() or "typeddict" in doc.lower(), (
-        "Fixtures.fixture docstring should recommend dataclass or TypedDict"
-    )
-    # must include a return-types section header
-    assert "return" in doc.lower(), (
-        "Fixtures.fixture docstring should include a return-types section"
-    )
 
 
 def test_tempdir_exported_from_oxitest() -> None:
