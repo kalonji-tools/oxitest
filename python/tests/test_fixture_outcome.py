@@ -39,10 +39,12 @@ def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) ->
     assert outcome.value == "val", f"expected 'val', got {outcome.value!r}"
     assert outcome.teardown is not None, "generator should have teardown"
     outcome.teardown()
-    assert len(warn.list) == 1, f"expected 1 teardown warning, got {len(warn.list)}"
-    assert "exploding" in str(warn.list[0].message), (
+    assert len(warn.warnings) == 1, (
+        f"expected 1 teardown warning, got {len(warn.warnings)}"
+    )
+    assert "exploding" in str(warn.warnings[0].message), (
         f"warning should contain fixture name 'exploding', got "
-        f"{str(warn.list[0].message)!r}"
+        f"{str(warn.warnings[0].message)!r}"
     )
 
 

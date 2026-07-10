@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = ["WarnCapture", "_WarnCaptureFixture"]
 
 import warnings
+from warnings import WarningMessage
 
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins._base import BuiltinFixture
@@ -14,7 +15,7 @@ class WarnCapture:
     """Captures all `warnings.warn()` calls issued during a test.
 
     Installed automatically when a test parameter is annotated `warn: WarnCapture`.
-    Access captured warnings via `warn.list`; reset between assertions with
+    Access captured warnings via `warn.warnings`; reset between assertions with
     `warn.clear()`.
 
     Implementation note: the executor wraps each test in
@@ -28,27 +29,32 @@ class WarnCapture:
     """
 
     def __init__(self) -> None:
-        self.list: list[warnings.WarningMessage] = []
+        self._warnings: list[WarningMessage] = []
         self._all_captured_ids: set[int] = set()
         self._orig_showwarnmsg = getattr(warnings, "_showwarnmsg")  # noqa: B009 — private CPython API not in type stubs
-        _captured = self.list
+        _captured = self._warnings
         _all_ids = self._all_captured_ids
 
-        def _intercepting_showwarnmsg(msg: warnings.WarningMessage) -> None:
+        def _intercepting_showwarnmsg(msg: WarningMessage) -> None:
             _captured.append(msg)
             _all_ids.add(id(msg))
             self._orig_showwarnmsg(msg)
 
         setattr(warnings, "_showwarnmsg", _intercepting_showwarnmsg)  # noqa: B010 — private CPython API
 
+    @property
+    def warnings(self) -> tuple[WarningMessage, ...]:
+        """Return all captured warnings as an immutable tuple."""
+        return tuple(self._warnings)
+
     def clear(self) -> None:
-        """Clear all captured warnings, resetting `warn.list` to `[]`."""
-        self.list.clear()
+        """Clear all captured warnings."""
+        self._warnings.clear()
 
     @property
-    def captured_ids(self) -> set[int]:
+    def captured_ids(self) -> frozenset[int]:
         """Return IDs of all captured warning messages."""
-        return self._all_captured_ids
+        return frozenset(self._all_captured_ids)
 
     def close(self) -> None:
         setattr(warnings, "_showwarnmsg", self._orig_showwarnmsg)  # noqa: B010 — private CPython API

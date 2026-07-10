@@ -58,7 +58,7 @@ class TestContext:
         teardown_stack: list[Callable[[], None]],
     ) -> None:
         self._meta = meta
-        self.param: Any = None
+        self._param: Any = None
         self._teardown_stack = teardown_stack
 
     @property
@@ -89,6 +89,11 @@ class TestContext:
         ``usefixtures``) and custom marks.
         """
         return self._meta.markers
+
+    @property
+    def param(self) -> Any:
+        """Current parametrize case value, or ``None`` if not parametrized."""
+        return self._param
 
     def addfinalizer(self, fn: Callable[[], None]) -> None:
         """Register a cleanup function to run after this test or fixture completes."""

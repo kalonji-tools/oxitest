@@ -13,7 +13,7 @@ bare, without wrapping in ``Fixture[...]``):
     cap: FdCapture            # capture at fd level (C extensions, subprocesses)
     patch: Patcher            # temporary attribute / env / chdir overrides
     log: LogCapture           # capture logging records; log.records, log.text
-    warn: WarnCapture         # capture warnings.warn() calls; warn.list, warn.clear()
+    warn: WarnCapture         # capture warnings.warn(); warn.warnings, warn.clear()
 """
 
 from __future__ import annotations

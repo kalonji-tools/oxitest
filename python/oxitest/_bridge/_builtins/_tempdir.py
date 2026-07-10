@@ -92,7 +92,12 @@ class TempDirFactory:
     """
 
     def __init__(self) -> None:
-        self.dirs: list[Path] = []
+        self._dirs: list[Path] = []
+
+    @property
+    def dirs(self) -> tuple[Path, ...]:
+        """Return all created temp directories as an immutable tuple."""
+        return tuple(self._dirs)
 
     def mktemp(self, label: str) -> TempDir:
         """Create a new temp directory and return it as a TempDir.
@@ -106,13 +111,13 @@ class TempDirFactory:
 
         """
         d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
-        self.dirs.append(d)
+        self._dirs.append(d)
         return TempDir(d)
 
     def close(self) -> None:
-        for d in self.dirs:
+        for d in self._dirs:
             shutil.rmtree(d, ignore_errors=True)
-        self.dirs.clear()
+        self._dirs.clear()
 
 
 class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
