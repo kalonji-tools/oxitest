@@ -22,13 +22,20 @@ def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None
     """_warn_teardown() emits a FixtureTeardownWarning containing the fixture name."""
     _warn_teardown("my_fix", RuntimeError("boom"))
 
-    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    assert len(warn.warnings) == 1, (
+        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+        f" logic is broken: "
+        f"{warn.warnings!r}"
+    )
     assert issubclass(warn.warnings[0].category, FixtureTeardownWarning), (
-        f"expected FixtureTeardownWarning, got {warn.warnings[0].category!r}"
+        f"teardown failures must use FixtureTeardownWarning so users can filter them"
+        f" separately from "
+        f"regular warnings: {warn.warnings[0].category!r}"
     )
     assert "my_fix" in str(warn.warnings[0].message), (
-        f"warning message should contain fixture name 'my_fix', got "
-        f"{str(warn.warnings[0].message)!r}"
+        f"the fixture name identifies which cleanup failed -- without it, users cannot"
+        f" diagnose "
+        f"resource leaks: {str(warn.warnings[0].message)!r}"
     )
 
 
@@ -36,19 +43,39 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() includes the node_id in the warning message when provided."""
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
-    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    assert len(warn.warnings) == 1, (
+        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+        f" logic is broken: "
+        f"{warn.warnings!r}"
+    )
     msg = str(warn.warnings[0].message)
-    assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
-    assert "test_foo" in msg, f"expected node_id in message, got {msg!r}"
+    assert "my_fix" in msg, (
+        f"the fixture name identifies which cleanup failed -- without it, users cannot"
+        f" diagnose "
+        f"resource leaks: {msg!r}"
+    )
+    assert "test_foo" in msg, (
+        f"the node_id tells users which test triggered the teardown failure -- without"
+        f" it, the "
+        f"warning is not actionable: {msg!r}"
+    )
 
 
 def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
     """_warn_teardown() still emits a warning when no node_id is given."""
     _warn_teardown("my_fix", RuntimeError("boom"))
 
-    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    assert len(warn.warnings) == 1, (
+        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+        f" logic is broken: "
+        f"{warn.warnings!r}"
+    )
     msg = str(warn.warnings[0].message)
-    assert "my_fix" in msg, f"expected fixture name in message, got {msg!r}"
+    assert "my_fix" in msg, (
+        f"the fixture name identifies which cleanup failed -- without it, users cannot"
+        f" diagnose "
+        f"resource leaks: {msg!r}"
+    )
 
 
 def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
@@ -59,10 +86,22 @@ def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
     finally:
         _current_teardown_node_id.reset(token)
 
-    assert len(warn.warnings) == 1, f"expected 1 warning, got {warn.warnings!r}"
+    assert len(warn.warnings) == 1, (
+        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+        f" logic is broken: "
+        f"{warn.warnings!r}"
+    )
     msg = str(warn.warnings[0].message)
-    assert "db" in msg, f"expected fixture name in message, got {msg!r}"
-    assert "test_bar" in msg, f"expected node_id in message, got {msg!r}"
+    assert "db" in msg, (
+        f"the fixture name identifies which cleanup failed -- without it, users cannot"
+        f" diagnose "
+        f"resource leaks: {msg!r}"
+    )
+    assert "test_bar" in msg, (
+        f"ContextVar-based node_id must propagate into the warning so users know which"
+        f" test "
+        f"triggered the teardown failure: {msg!r}"
+    )
 
 
 def test_passing_function(tmp: TempDir) -> None:
@@ -71,11 +110,15 @@ def test_passing_function(tmp: TempDir) -> None:
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
     assert result.status == "passed", (
-        f"passing test should have status='passed', got {result.status!r}"
+        f"simple passing test is the baseline contract -- executor must not mangle"
+        f" results: "
+        f"{result.status!r}"
     )
     assert result.no_message_lines == (1,), (
-        f"bare assert on line 1 should appear in no_message_lines, got "
-        f"{result.no_message_lines}"
+        f"strict mode relies on no_message_lines to catch bare asserts -- missing this"
+        f" line means "
+        f"the strict check cannot enforce message requirements:"
+        f" {result.no_message_lines}"
     )
 
 
@@ -85,13 +128,18 @@ def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir) -> None
         tmp, "def test_bare():\n    assert 1 == 1\n", "test_bare"
     )
     assert result.status == "passed", (
-        f"passing test should have status='passed', got {result.status!r}"
+        f"passing test is the baseline contract -- executor must not mangle results: "
+        f"{result.status!r}"
     )
     assert len(result.no_message_lines) == 1, (
-        f"expected 1 bare-assert line reported, got {result.no_message_lines}"
+        f"exactly one bare assert exists in the source -- over- or under-counting"
+        f" breaks strict "
+        f"mode reporting: {result.no_message_lines}"
     )
     assert result.no_message_lines[0] == 2, (
-        f"bare assert is on line 2, got no_message_lines={result.no_message_lines}"
+        f"the line number must match the source location so strict mode can point users"
+        f" to the "
+        f"exact bare assert: no_message_lines={result.no_message_lines}"
     )
 
 
@@ -103,11 +151,13 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(
         tmp, 'def test_msg():\n    assert 1 == 1, "one equals one"\n', "test_msg"
     )
     assert result.status == "passed", (
-        f"passing test should have status='passed', got {result.status!r}"
+        f"passing test is the baseline contract -- executor must not mangle results: "
+        f"{result.status!r}"
     )
     assert result.no_message_lines == (), (
-        f"assert with message should not appear in no_message_lines, got "
-        f"{result.no_message_lines}"
+        f"asserts with messages satisfy strict mode -- flagging them would produce"
+        f" false violations "
+        f"and erode trust in strict enforcement: {result.no_message_lines}"
     )
 
 
@@ -117,18 +167,29 @@ def test_failing_assertion_with_message(tmp: TempDir) -> None:
         tmp, 'def test_bad():\n    assert 1 == 2, "one is not two"\n', "test_bad"
     )
     assert result.status == "failed", (
-        f"assertion failure should produce status='failed', got {result.status!r}"
+        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        f" failure modes "
+        f"that reporters and CI gates handle differently: {result.status!r}"
     )
     assert result.message == "one is not two", (
-        f"failure message should be 'one is not two', got {result.message!r}"
+        f"the user-provided assertion message is the developer's diagnosis -- losing it"
+        f" forces "
+        f"them to re-derive context from the traceback: {result.message!r}"
     )
-    assert result.lineno == 2, f"failure lineno should be 2, got {result.lineno}"
+    assert result.lineno == 2, (
+        f"the lineno anchors the failure to source -- wrong line numbers send"
+        f" developers on wild "
+        f"goose chases: {result.lineno}"
+    )
     assert "assert" in result.source_line, (
-        f"source_line should contain 'assert', got {result.source_line!r}"
+        f"source_line gives context without opening the file -- omitting the assert"
+        f" keyword makes "
+        f"the snippet useless for quick triage: {result.source_line!r}"
     )
     assert result.no_message_lines == (), (
-        f"assert with message should not appear in no_message_lines, got "
-        f"{result.no_message_lines}"
+        f"asserts with messages satisfy strict mode -- flagging them would produce"
+        f" false violations "
+        f"and erode trust in strict enforcement: {result.no_message_lines}"
     )
 
 
@@ -138,19 +199,30 @@ def test_failing_bare_assertion(tmp: TempDir) -> None:
         tmp, "def test_bad():\n    assert 1 == 2\n", "test_bad"
     )
     assert result.status == "failed", (
-        f"assertion failure should produce status='failed', got {result.status!r}"
+        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        f" failure modes "
+        f"that reporters and CI gates handle differently: {result.status!r}"
     )
     assert result.message == "", (
-        f"bare assert failure should have empty message, got {result.message!r}"
+        f"bare asserts have no user message -- fabricating one would mislead developers"
+        f" into "
+        f"thinking the test author provided diagnostic text: {result.message!r}"
     )
-    assert result.lineno == 2, f"failure lineno should be 2, got {result.lineno}"
+    assert result.lineno == 2, (
+        f"the lineno anchors the failure to source -- wrong line numbers send"
+        f" developers on wild "
+        f"goose chases: {result.lineno}"
+    )
     assert "assert" in result.source_line, (
-        f"source_line should contain 'assert', got {result.source_line!r}"
+        f"source_line gives context without opening the file -- omitting the assert"
+        f" keyword makes "
+        f"the snippet useless for quick triage: {result.source_line!r}"
     )
     assert result.no_message_lines == (), (
-        f"failed assert line should not be in no_message_lines (only passing asserts "
-        "tracked), "
-        f"got {result.no_message_lines}"
+        f"no_message_lines only tracks passing bare asserts for strict mode -- failed"
+        f" asserts are "
+        f"already surfaced as failures, double-reporting would be noise:"
+        f" {result.no_message_lines}"
     )
 
 
@@ -160,16 +232,25 @@ def test_error_exception(tmp: TempDir) -> None:
         tmp, "def test_error():\n    raise ValueError('boom')\n", "test_error"
     )
     assert result.status == "error", (
-        f"uncaught exception should produce status='error', got {result.status!r}"
+        f"uncaught exceptions are infrastructure failures, not assertion failures --"
+        f" conflating "
+        f"them loses the signal that something unexpected broke: {result.status!r}"
     )
     assert "ValueError" in result.message, (
-        f"error message should contain 'ValueError', got {result.message!r}"
+        f"the exception type tells developers what category of bug to look for --"
+        f" without it, "
+        f"they cannot triage the failure from the summary alone: {result.message!r}"
     )
     assert "boom" in result.message, (
-        f"error message should contain the exception text 'boom', got "
-        f"{result.message!r}"
+        f"the exception text carries the author's diagnostic context -- stripping it"
+        f" forces "
+        f"developers to reproduce the failure to understand it: {result.message!r}"
     )
-    assert result.lineno == 2, f"error lineno should be 2, got {result.lineno}"
+    assert result.lineno == 2, (
+        f"the lineno anchors the error to source -- wrong line numbers send developers"
+        f" on wild "
+        f"goose chases: {result.lineno}"
+    )
 
 
 def test_skipped_via_unittest(tmp: TempDir) -> None:
@@ -180,10 +261,15 @@ def test_skipped_via_unittest(tmp: TempDir) -> None:
         "test_skip",
     )
     assert result.status == "skipped", (
-        f"unittest.SkipTest should produce status='skipped', got {result.status!r}"
+        f"unittest.SkipTest is the stdlib skip protocol -- misclassifying it breaks"
+        f" compatibility "
+        f"with existing test suites that rely on unittest skip semantics:"
+        f" {result.status!r}"
     )
     assert result.message == "reason", (
-        f"skip message should be 'reason', got {result.message!r}"
+        f"the skip reason explains why a test was excluded -- losing it makes skip"
+        f" reports useless "
+        f"for auditing test coverage gaps: {result.message!r}"
     )
 
 
@@ -193,7 +279,11 @@ def test_function_not_found_is_error(tmp: TempDir) -> None:
         tmp, "def test_real(): pass\n", "test_nonexistent", name="test_foo.py"
     )
     assert result.status == "error", (
-        f"missing test function should produce status='error', got {result.status!r}"
+        f"a missing function is a collection-level defect, not a test failure --"
+        f" reporting it as "
+        f"'error' ensures the runner surfaces broken test references instead of"
+        f" silently skipping "
+        f"them: {result.status!r}"
     )
 
 
@@ -208,10 +298,14 @@ def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
         "test_warn",
     )
     assert result.status == "warned", (
-        f"test emitting warnings should produce status='warned', got {result.status!r}"
+        f"warnings are a distinct outcome that strict mode can gate on -- collapsing"
+        f" them into "
+        f"'passed' hides deprecation debt from CI: {result.status!r}"
     )
     assert "DeprecationWarning" in result.message, (
-        f"warned message should mention 'DeprecationWarning', got {result.message!r}"
+        f"the warning category tells developers whether the warning is actionable now"
+        f" or later -- "
+        f"without it, all warnings look equally urgent: {result.message!r}"
     )
 
 
@@ -284,22 +378,33 @@ def test_assertion_operands(  # noqa: PLR0913
     """Executor extracts left, right, and op operands from assertion failures."""
     result = helpers.common.exec_inline(tmp, source, fn_name, name="test_op.py")
     assert result.status == expected_status, (
-        f"expected status={expected_status!r}, got {result.status!r} "
-        f"(message={result.message!r})"
+        f"status classification drives reporter rendering and CI gates -- wrong status"
+        f" breaks "
+        f"downstream tooling: status={result.status!r}, message={result.message!r}"
     )
     actual_left = getattr(result, "left", "")
     actual_right = getattr(result, "right", "")
     actual_op = getattr(result, "op", "")
     assert actual_left == expected_left, (
-        f"expected left={expected_left!r}, got {actual_left!r}"
+        f"the left operand shows what the code actually produced -- without it,"
+        f" developers cannot "
+        f"see the mismatch at a glance: {actual_left!r}"
     )
     assert actual_right == expected_right, (
-        f"expected right={expected_right!r}, got {actual_right!r}"
+        f"the right operand shows what was expected -- without it, the diff is"
+        f" incomplete and "
+        f"developers must re-run the test to understand the failure: {actual_right!r}"
     )
-    assert actual_op == expected_op, f"expected op={expected_op!r}, got {actual_op!r}"
+    assert actual_op == expected_op, (
+        f"the operator distinguishes equality from identity from ordering --"
+        f" misreporting it "
+        f"misleads developers about what kind of comparison failed: {actual_op!r}"
+    )
     if expected_message:
         assert result.message == expected_message, (
-            f"expected message={expected_message!r}, got {result.message!r}"
+            f"the user-provided assertion message is the developer's diagnosis --"
+            f" losing it forces "
+            f"them to re-derive context from the traceback: {result.message!r}"
         )
 
 
@@ -312,8 +417,10 @@ def test_run_test_without_session_backward_compat(tmp: TempDir) -> None:
         tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
     )
     assert result.status == "passed", (
-        f"run_test without session should work and return status='passed', got "
-        f"{result.status!r}"
+        f"backward compatibility guarantee -- tests with no fixture params must work"
+        f" without a "
+        f"session so existing code does not break when the fixture system evolves:"
+        f" {result.status!r}"
     )
 
 
@@ -328,7 +435,10 @@ def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"test with injected fixture should pass, got status={result.status!r}, "
+        f"fixture injection is the core DI contract -- if the executor cannot resolve"
+        f" and pass a "
+        f"registered fixture value, the entire fixture system is broken:"
+        f" status={result.status!r}, "
         f"msg={result.message!r}"
     )
 
@@ -349,14 +459,19 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None
         session=session,
     )
     assert result.status == "error", (
-        f"fixture setup error should produce status='error', got {result.status!r}"
+        f"fixture setup failures are infrastructure errors, not test failures --"
+        f" conflating them "
+        f"hides the fact that the test never ran: {result.status!r}"
     )
     assert "bad" in result.message, (
-        f"error message should mention fixture name 'bad', got {result.message!r}"
+        f"the fixture name tells developers which dependency failed -- without it, they"
+        f" must "
+        f"bisect the fixture graph to find the broken setup: {result.message!r}"
     )
     assert "db is down" in result.message, (
-        f"error message should contain the original exception text, got "
-        f"{result.message!r}"
+        f"the original exception text carries the root cause -- stripping it forces"
+        f" developers "
+        f"to reproduce the failure to diagnose it: {result.message!r}"
     )
 
 
@@ -372,11 +487,15 @@ def test_run_test_missing_fixture_returns_error_result(
         session=fixture_session,
     )
     assert result.status == "error", (
-        f"missing fixture should produce status='error', got {result.status!r}"
+        f"an unregistered fixture is a configuration defect -- reporting it as 'error'"
+        f" ensures the "
+        f"runner surfaces wiring mistakes instead of silently injecting None:"
+        f" {result.status!r}"
     )
     assert "nonexistent" in result.message, (
-        f"error message should mention the missing fixture 'nonexistent', got "
-        f"{result.message!r}"
+        f"naming the missing fixture tells developers exactly what to register -- a"
+        f" generic error "
+        f"forces them to inspect every parameter to find the gap: {result.message!r}"
     )
 
 
@@ -397,11 +516,14 @@ def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "failed", (
-        f"test with failing assertion should produce status='failed', got "
-        f"{result.status!r}"
+        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        f" failure modes "
+        f"that reporters and CI gates handle differently: {result.status!r}"
     )
     assert torn_down == [True], (  # teardown ran despite test failure
-        f"fixture teardown should run even when test fails, got torn_down={torn_down!r}"
+        f"yield fixture teardown is a cleanup guarantee -- skipping it on failure"
+        f" causes resource "
+        f"leaks (open connections, temp files, locked state): torn_down={torn_down!r}"
     )
 
 
@@ -427,14 +549,20 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         session=session,
     )
     assert result.status == "passed", (
-        f"teardown exception must not affect test result, got "
-        f"status={result.status!r}, msg={result.message!r}"
+        f"teardown errors are side-effects -- they must not retroactively change a"
+        f" passing verdict "
+        f"or developers lose trust in green results: status={result.status!r}, "
+        f"msg={result.message!r}"
     )
     assert torn_down == ["ran"], (
-        f"fixture teardown must have executed before raising, got {torn_down!r}"
+        f"teardown must execute even when it will raise -- the cleanup side-effects"
+        f" (closing "
+        f"connections, deleting temps) happen before the raise: {torn_down!r}"
     )
     assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"expected a FixtureTeardownWarning in warn.warnings, got {warn.warnings!r}"
+        f"teardown failures must surface as warnings so developers know cleanup failed"
+        f" without "
+        f"the test being retroactively marked broken: {warn.warnings!r}"
     )
 
 
@@ -468,16 +596,25 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         session=session,
     )
     assert result.status == "passed", (
-        f"teardown exception must not propagate to test result, got "
-        f"status={result.status!r}, msg={result.message!r}"
+        f"teardown errors are side-effects -- they must not retroactively change a"
+        f" passing verdict "
+        f"or developers lose trust in green results: status={result.status!r}, "
+        f"msg={result.message!r}"
     )
-    assert "a_teardown" in log, f"first fixture teardown must have run, got log={log!r}"
+    assert "a_teardown" in log, (
+        f"every fixture teardown must run regardless of other teardown failures --"
+        f" skipping "
+        f"cleanup cascades resource leaks across the session: log={log!r}"
+    )
     assert "b_teardown" in log, (
-        f"second fixture teardown must still run despite first fixture raising, "
-        f"got log={log!r}"
+        f"teardown isolation is critical -- one fixture's cleanup failure must not"
+        f" block another "
+        f"fixture's cleanup or resources accumulate across the session: log={log!r}"
     )
     assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"expected a FixtureTeardownWarning in warn.warnings, got {warn.warnings!r}"
+        f"teardown failures must surface as warnings so developers know cleanup failed"
+        f" without "
+        f"the test being retroactively marked broken: {warn.warnings!r}"
     )
 
 
@@ -513,17 +650,28 @@ def test_multiple_teardown_failures_all_reported(
         session=session,
     )
     assert result.status == "passed", (
-        f"test result should be passed despite all teardowns failing, got "
-        f"status={result.status!r}, msg={result.message!r}"
+        f"teardown errors are side-effects -- even when all teardowns fail, the test"
+        f" body passed "
+        f"and the verdict must reflect that: status={result.status!r},"
+        f" msg={result.message!r}"
     )
-    assert "a_teardown" in log, f"fixture a teardown must have run, got log={log!r}"
-    assert "b_teardown" in log, f"fixture b teardown must have run, got log={log!r}"
+    assert "a_teardown" in log, (
+        f"every fixture teardown must attempt cleanup even when all peers also fail --"
+        f" partial "
+        f"cleanup is better than no cleanup: log={log!r}"
+    )
+    assert "b_teardown" in log, (
+        f"teardown isolation is critical -- one fixture's cleanup failure must not"
+        f" block another "
+        f"fixture's cleanup or resources accumulate across the session: log={log!r}"
+    )
     teardown_warnings = [
         w for w in warn.warnings if issubclass(w.category, FixtureTeardownWarning)
     ]
     assert len(teardown_warnings) == 2, (
-        f"expected 2 FixtureTeardownWarning (one per failing teardown), "
-        f"got {len(teardown_warnings)}: {warn.warnings!r}"
+        f"each failing teardown must emit its own warning -- collapsing them hides"
+        f" which fixtures "
+        f"leaked resources: {len(teardown_warnings)} warnings in {warn.warnings!r}"
     )
 
 
@@ -550,7 +698,9 @@ def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir) -> None:
         param_id="case1",
     )
     assert result.status == "passed", (
-        f"compact parametrize (params: Params) should pass, got "
+        f"compact mode passes the whole dataclass as a single argument -- if resolution"
+        f" breaks, "
+        f"structured test cases lose their grouping and field access fails: "
         f"status={result.status!r}, msg={result.message!r}"
     )
 
@@ -575,8 +725,11 @@ def test_expanded_parametrize_still_works(tmp: TempDir) -> None:
         param_id="case1",
     )
     assert result.status == "passed", (
-        f"expanded parametrize (x: int, y: int) should pass, got "
-        f"status={result.status!r}, msg={result.message!r}"
+        f"expanded mode spreads dataclass fields into individual params -- this is the"
+        f" original "
+        f"behavior and must not regress when compact mode is added:"
+        f" status={result.status!r}, "
+        f"msg={result.message!r}"
     )
 
 
@@ -602,8 +755,10 @@ def test_compact_parametrize_mixed_with_fixture(tmp: TempDir) -> None:
         param_id="case1",
     )
     assert result.status == "passed", (
-        f"compact parametrize with fixture should pass, got status={result.status!r}, "
-        f"msg={result.message!r}"
+        f"compact parametrize and fixture injection must coexist -- if the resolver"
+        f" confuses "
+        f"Params with Fixture[T] annotations, one system stomps the other: "
+        f"status={result.status!r}, msg={result.message!r}"
     )
 
 
@@ -625,6 +780,9 @@ def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir) -> None:
         param_id="case1",
     )
     assert result.status == "passed", (
-        f"expanded parametrize with unrelated annotation should pass, "
-        f"got status={result.status!r}, msg={result.message!r}"
+        f"non-Fixture annotations must not confuse the resolver into compact mode -- if"
+        f" a plain "
+        f"type hint triggers whole-dataclass injection, field spreading silently"
+        f" breaks: "
+        f"status={result.status!r}, msg={result.message!r}"
     )

@@ -21,8 +21,9 @@ def test_async_test_passes(tmp: TempDir) -> None:
         tmp, "async def test_ok():\n    assert 1 == 1\n", "test_ok"
     )
     assert result.status == "passed", (
-        f"passing async test should have status='passed', got {result.status!r}, "
-        f"msg={result.message!r}"
+        f"async tests must go through asyncio.run() transparently -- passing is the"
+        f" baseline contract, "
+        f"got {result.status!r}, msg={result.message!r}"
     )
 
 
@@ -32,10 +33,13 @@ def test_async_test_fails(tmp: TempDir) -> None:
         tmp, 'async def test_bad():\n    assert 1 == 2, "nope"\n', "test_bad"
     )
     assert result.status == "failed", (
-        f"failing async test should have status='failed', got {result.status!r}"
+        f"assertion failures inside async tests must surface identically to sync tests"
+        f" -- "
+        f"the event loop must not swallow them, got {result.status!r}"
     )
     assert "nope" in result.message, (
-        f"failure message should contain 'nope', got {result.message!r}"
+        f"the user's assertion message is their primary debugging clue -- "
+        f"it must survive the async-to-sync boundary, got {result.message!r}"
     )
 
 
@@ -45,13 +49,17 @@ def test_async_test_error(tmp: TempDir) -> None:
         tmp, "async def test_err():\n    raise ValueError('boom')\n", "test_err"
     )
     assert result.status == "error", (
-        f"async error should produce status='error', got {result.status!r}"
+        f"uncaught exceptions must be distinguished from assertion failures -- "
+        f"'error' signals infrastructure problems, not test logic, got"
+        f" {result.status!r}"
     )
     assert "ValueError" in result.message, (
-        f"error message should contain 'ValueError', got {result.message!r}"
+        f"exception type is essential for debugging -- without it the user cannot "
+        f"narrow the root cause, got {result.message!r}"
     )
     assert "boom" in result.message, (
-        f"error message should contain 'boom', got {result.message!r}"
+        f"exception payload carries the developer's context about what went wrong -- "
+        f"dropping it forces re-running with a debugger, got {result.message!r}"
     )
 
 
@@ -66,10 +74,12 @@ def test_async_test_warning(tmp: TempDir) -> None:
         "test_warn",
     )
     assert result.status == "warned", (
-        f"async test with warning should produce status='warned', got {result.status!r}"
+        f"warnings inside async tests must propagate to the result -- "
+        f"silently dropping them hides deprecation regressions, got {result.status!r}"
     )
     assert "DeprecationWarning" in result.message, (
-        f"warned message should mention 'DeprecationWarning', got {result.message!r}"
+        f"warning category identifies the class of problem -- without it users "
+        f"cannot filter or suppress selectively, got {result.message!r}"
     )
 
 
@@ -84,10 +94,13 @@ def test_async_test_skip(tmp: TempDir) -> None:
         "test_skip",
     )
     assert result.status == "skipped", (
-        f"skipped async test should have status='skipped', got {result.status!r}"
+        f"@mark.skip must bypass the event loop entirely --"
+        f" running and then discarding wastes time and risks"
+        f" side effects, got {result.status!r}"
     )
     assert "not ready" in result.message, (
-        f"skip message should contain 'not ready', got {result.message!r}"
+        f"skip reason tells the team when the test can be re-enabled -- "
+        f"losing it turns a deliberate skip into a mystery, got {result.message!r}"
     )
 
 
@@ -102,7 +115,8 @@ def test_async_test_xfail(tmp: TempDir) -> None:
         "test_xfail",
     )
     assert result.status == "xfailed", (
-        f"xfail async test should have status='xfailed', got {result.status!r}"
+        f"xfail marks a known bug -- if the status is wrong the suite either hides "
+        f"regressions or reports false failures, got {result.status!r}"
     )
 
 
@@ -117,7 +131,8 @@ def test_async_test_xpass(tmp: TempDir) -> None:
         "test_xpass",
     )
     assert result.status == "xpassed", (
-        f"xpass async test should have status='xpassed', got {result.status!r}"
+        f"unexpected pass must be visible so the team knows the bug is fixed "
+        f"and can remove the xfail marker, got {result.status!r}"
     )
 
 
@@ -137,7 +152,10 @@ def test_async_test_with_async_fixture(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"async test with async fixture should pass, got status={result.status!r}, "
+        f"the executor must await async fixtures before injecting -- if it hands a"
+        f" coroutine "
+        f"to the test instead, the assertion inside will fail on type, got"
+        f" {result.status!r}, "
         f"msg={result.message!r}"
     )
 
@@ -154,7 +172,10 @@ def test_async_test_with_sync_fixture(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"async test with sync fixture should pass, got status={result.status!r}, "
+        f"sync fixtures must work inside async tests -- fixture authors should not be"
+        f" forced "
+        f"to rewrite factories as async just because a consumer is async, got"
+        f" {result.status!r}, "
         f"msg={result.message!r}"
     )
 
@@ -176,11 +197,15 @@ def test_async_fixture_setup_error(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "error", (
-        f"async fixture setup error should produce status='error', "
-        f"got {result.status!r}"
+        f"fixture setup failures are infrastructure problems, not test logic failures"
+        f" -- "
+        f"'error' status tells the user to fix the environment, not the test, got"
+        f" {result.status!r}"
     )
     assert "db is down" in result.message, (
-        f"error message should contain 'db is down', got {result.message!r}"
+        f"the original exception message pinpoints the infrastructure issue -- "
+        f"without it the user only knows 'something broke' but not what, got"
+        f" {result.message!r}"
     )
 
 
@@ -200,14 +225,22 @@ def test_sync_test_with_async_fixture_produces_error(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "error", (
-        f"sync test with async fixture should produce error, got {result.status!r}, "
+        f"sync tests cannot host an event loop -- silently injecting a coroutine would"
+        f" cause "
+        f"a confusing runtime TypeError instead of a clear diagnostic, got"
+        f" {result.status!r}, "
         f"msg={result.message!r}"
     )
     assert "async fixture" in result.message.lower(), (
-        f"error message should mention 'async fixture', got {result.message!r}"
+        f"naming the root cause (async fixture in sync context) lets the user fix the"
+        f" test "
+        f"signature or the fixture -- a generic error forces guesswork, got"
+        f" {result.message!r}"
     )
     assert "val" in result.message, (
-        f"error message should mention fixture name 'val', got {result.message!r}"
+        f"the fixture name is the user's handle into conftest.py -- without it they"
+        f" must "
+        f"inspect every fixture to find the async one, got {result.message!r}"
     )
 
 
@@ -230,7 +263,9 @@ def test_async_yield_fixture_provides_value(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"async yield fixture should provide value, got status={result.status!r}, "
+        f"yield fixtures must deliver the yielded value, not the generator itself -- "
+        f"the executor must drive the generator to its first yield, got"
+        f" {result.status!r}, "
         f"msg={result.message!r}"
     )
 
@@ -254,10 +289,13 @@ def test_async_yield_fixture_teardown_runs(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+        f"test must pass so the teardown-order assertion below is meaningful -- "
+        f"a failing test could short-circuit teardown, got {result.status!r},"
+        f" msg={result.message!r}"
     )
     assert log == ["setup", "test_ran", "teardown"], (
-        f"expected setup->test->teardown order, got {log!r}"
+        f"teardown after yield is the fixture's resource cleanup -- skipping it leaks "
+        f"connections, files, or locks, got {log!r}"
     )
 
 
@@ -278,9 +316,15 @@ def test_async_yield_fixture_teardown_runs_on_failure(tmp: TempDir) -> None:
         "test_fail",
         session=session,
     )
-    assert result.status == "failed", f"test should fail, got status={result.status!r}"
+    assert result.status == "failed", (
+        f"the test must actually fail to validate that teardown still runs on failure"
+        f" -- "
+        f"a pass would make the teardown assertion meaningless, got {result.status!r}"
+    )
     assert torn_down == [True], (
-        f"async yield fixture teardown should run on test failure, got {torn_down!r}"
+        f"teardown isolation: yield-fixture cleanup must run even when the test fails"
+        f" -- "
+        f"skipping it leaks resources and poisons subsequent tests, got {torn_down!r}"
     )
 
 
@@ -301,9 +345,16 @@ def test_async_yield_fixture_teardown_runs_on_error(tmp: TempDir) -> None:
         "test_err",
         session=session,
     )
-    assert result.status == "error", f"test should error, got status={result.status!r}"
+    assert result.status == "error", (
+        f"the test must actually error to validate that teardown runs on error -- "
+        f"a different status would invalidate the teardown check below, got"
+        f" {result.status!r}"
+    )
     assert torn_down == [True], (
-        f"async yield fixture teardown should run on test error, got {torn_down!r}"
+        f"teardown isolation: yield-fixture cleanup must run even on unhandled"
+        f" exceptions -- "
+        f"errors are more disruptive than failures, so cleanup is even more critical,"
+        f" got {torn_down!r}"
     )
 
 
@@ -335,11 +386,17 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+        f"both fixtures must resolve successfully to validate the ordering assertions "
+        f"below, got {result.status!r}, msg={result.message!r}"
     )
-    assert log[:2] == ["setup_a", "setup_b"], f"setup should be in order, got {log!r}"
+    assert log[:2] == ["setup_a", "setup_b"], (
+        f"setup must follow dependency order -- fixture B may depend on A being ready,"
+        f" got {log!r}"
+    )
     assert log[2:] == ["teardown_b", "teardown_a"], (
-        f"teardown should be in reverse order, got {log!r}"
+        f"reverse teardown order mirrors try/finally nesting -- last setup is first"
+        f" teardown "
+        f"so dependent fixtures never outlive their dependencies, got {log!r}"
     )
 
 
@@ -363,11 +420,15 @@ def test_async_yield_fixture_teardown_error_warns(
         session=session,
     )
     assert result.status == "passed", (
-        f"teardown error should not affect test result, got status={result.status!r}, "
+        f"teardown errors must not retroactively fail a passing test -- the test body "
+        f"already succeeded and its assertions are valid, got {result.status!r}, "
         f"msg={result.message!r}"
     )
     assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"expected a FixtureTeardownWarning, got {warn.warnings!r}"
+        f"teardown failures must surface as warnings so they are visible in the report"
+        f" -- "
+        f"silently swallowing them hides resource leaks and broken cleanup, got"
+        f" {warn.warnings!r}"
     )
 
 
@@ -389,10 +450,14 @@ def test_async_yield_fixture_setup_error(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "error", (
-        f"async yield fixture setup error should produce error, got {result.status!r}"
+        f"setup-phase exceptions in yield fixtures must be reported as errors -- the"
+        f" test "
+        f"body never ran, so 'failed' would be misleading, got {result.status!r}"
     )
     assert "setup failed" in result.message, (
-        f"error message should contain 'setup failed', got {result.message!r}"
+        f"the original exception message directs the user to the broken setup logic -- "
+        f"a generic 'fixture error' forces them to re-run with --debug, got"
+        f" {result.message!r}"
     )
 
 
@@ -412,14 +477,18 @@ def test_sync_test_with_async_yield_fixture_produces_error(tmp: TempDir) -> None
         session=session,
     )
     assert result.status == "error", (
-        f"sync test with async yield fixture should produce error, "
+        f"async yield fixtures need an event loop to drive"
+        f" the generator -- a sync test "
+        f"has no loop, so the executor must reject this combination early, "
         f"got {result.status!r}, msg={result.message!r}"
     )
     assert "async fixture" in result.message.lower(), (
-        f"error message should mention 'async fixture', got {result.message!r}"
+        f"the error must explain the async/sync mismatch so the user knows whether to "
+        f"make the test async or the fixture sync, got {result.message!r}"
     )
     assert "val" in result.message, (
-        f"error message should mention fixture name 'val', got {result.message!r}"
+        f"naming the offending fixture lets the user jump straight to conftest.py and "
+        f"fix the right factory, got {result.message!r}"
     )
 
 
@@ -452,7 +521,9 @@ def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "passed", (
-        f"shared async fixture should provide value, got status={result.status!r}, "
+        f"shared async fixtures amortize expensive setup across tests -- if the value "
+        f"does not arrive, the entire sharing mechanism is broken, got"
+        f" {result.status!r}, "
         f"msg={result.message!r}"
     )
 
@@ -487,10 +558,19 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
     session = FixtureSession(reg)
     r1 = helpers.common.run_test(str(f), "test_a", session)
     r2 = helpers.common.run_test(str(f), "test_b", session)
-    assert r1.status == "passed", f"test_a: {r1.status!r}, {r1.message!r}"
-    assert r2.status == "passed", f"test_b: {r2.status!r}, {r2.message!r}"
+    assert r1.status == "passed", (
+        f"test_a must pass to prove the shared fixture delivered the correct value on "
+        f"first access: {r1.status!r}, {r1.message!r}"
+    )
+    assert r2.status == "passed", (
+        f"test_b must pass to prove the cached value is identical -- a stale or "
+        f"recreated fixture would yield a different call_count: {r2.status!r},"
+        f" {r2.message!r}"
+    )
     assert call_count == 1, (
-        f"shared fixture factory should be called exactly once, got {call_count}"
+        f"shared fixtures amortize expensive setup --"
+        f" calling the factory twice defeats "
+        f"the purpose and doubles setup cost, got {call_count}"
     )
 
 
@@ -522,11 +602,21 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> Non
     session = FixtureSession(reg)
     r1 = helpers.common.run_test(str(f), "test_leaker", session)
     r2 = helpers.common.run_test(str(f), "test_clean", session)
-    assert r1.status == "passed", f"test_leaker: {r1.status!r}, {r1.message!r}"
-    assert r2.status == "passed", f"test_clean: {r2.status!r}, {r2.message!r}"
+    assert r1.status == "passed", (
+        f"the leaker test must pass so we can verify its stray tasks are cleaned up "
+        f"before the next test runs: {r1.status!r}, {r1.message!r}"
+    )
+    assert r2.status == "passed", (
+        f"stray tasks from test_leaker must not poison test_clean -- test isolation "
+        f"requires each test to start with a clean task set: {r2.status!r},"
+        f" {r2.message!r}"
+    )
     leaked_warns = [w for w in warn.warnings if "leaked" in str(w.message).lower()]
     assert len(leaked_warns) >= 1, (
-        f"expected leaked task warning, got {[str(w.message) for w in warn.warnings]}"
+        f"leaked tasks must be surfaced as warnings so developers know to await or"
+        f" cancel "
+        f"them -- silent cleanup hides concurrency bugs, got"
+        f" {[str(w.message) for w in warn.warnings]}"
     )
     session.end_session()
 
@@ -559,13 +649,22 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
     session = FixtureSession(reg)
     result = helpers.common.run_test(str(f), "test_ok", session)
     assert result.status == "passed", (
-        f"expected passed, got status={result.status!r}, msg={result.message!r}"
+        f"the test must pass to confirm the shared fixture was set up and injected -- "
+        f"failure here invalidates the teardown-timing assertions below, got"
+        f" {result.status!r}, "
+        f"msg={result.message!r}"
     )
-    assert log == ["setup"], f"only setup should have run, got {log!r}"
+    assert log == ["setup"], (
+        f"shared fixture teardown must be deferred until end_session -- running it"
+        f" after "
+        f"individual tests would destroy the value other tests still need, got {log!r}"
+    )
 
     session.end_session()
     assert log == ["setup", "teardown"], (
-        f"teardown should run at end_session, got {log!r}"
+        f"end_session is the last chance to release shared resources -- skipping"
+        f" teardown "
+        f"here leaks connections, temp files, or background tasks, got {log!r}"
     )
 
 
@@ -598,8 +697,17 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
     session = FixtureSession(reg)
     r1 = helpers.common.run_test(str(f), "test_shared", session)
     r2 = helpers.common.run_test(str(f), "test_independent", session)
-    assert r1.status == "passed", f"test_shared: {r1.status!r}, {r1.message!r}"
-    assert r2.status == "passed", f"test_independent: {r2.status!r}, {r2.message!r}"
+    assert r1.status == "passed", (
+        f"shared-fixture test must pass to confirm the session loop is running -- "
+        f"failure here means the shared loop itself is broken: {r1.status!r},"
+        f" {r1.message!r}"
+    )
+    assert r2.status == "passed", (
+        f"tests without shared fixtures must get their own event loop via asyncio.run()"
+        f" -- "
+        f"reusing the shared session loop would leak state between unrelated tests: "
+        f"{r2.status!r}, {r2.message!r}"
+    )
     session.end_session()
 
 
@@ -623,8 +731,10 @@ def test_task_group_fixture_basic(tmp: TempDir) -> None:
         "test_spawn",
     )
     assert result.status == "passed", (
-        f"task_group fixture should allow spawning tasks, "
-        f"got status={result.status!r}, msg={result.message!r}"
+        f"task_group is the structured-concurrency primitive for async tests -- if"
+        f" basic "
+        f"spawn-and-collect fails, no concurrent test patterns work, "
+        f"got {result.status!r}, msg={result.message!r}"
     )
 
 
@@ -640,8 +750,10 @@ def test_task_group_fixture_cancels_on_test_end(tmp: TempDir) -> None:
         "test_leak",
     )
     assert result.status in ("passed", "warned"), (
-        f"task_group should handle leftover tasks gracefully, "
-        f"got status={result.status!r}, msg={result.message!r}"
+        f"TaskGroup.__aexit__ must cancel orphaned tasks automatically -- if it does"
+        f" not, "
+        f"stray tasks leak into the next test or block event-loop shutdown, "
+        f"got {result.status!r}, msg={result.message!r}"
     )
 
 
@@ -656,10 +768,16 @@ def test_task_group_fixture_sync_test_error(tmp: TempDir) -> None:
         "test_sync",
     )
     assert result.status == "error", (
-        f"sync test with task_group should produce error, got {result.status!r}"
+        f"task_group requires an event loop -- a sync test has none, so the executor"
+        f" must "
+        f"reject the request upfront instead of crashing at runtime, got"
+        f" {result.status!r}"
     )
     assert "async fixture" in result.message.lower(), (
-        f"error should mention 'async fixture', got {result.message!r}"
+        f"the error must explain that task_group is async-only so the user knows to"
+        f" make "
+        f"the test async rather than hunting for a missing import, got"
+        f" {result.message!r}"
     )
 
 
@@ -694,12 +812,15 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "error", (
-        f"sync fixture depending on async fixture should error, "
+        f"a sync fixture cannot await its async dependency -- allowing this silently "
+        f"injects a coroutine object instead of the resolved value, "
         f"got {result.status!r}, msg={result.message!r}"
     )
     msg_lower = result.message.lower()
     assert "sync fixture" in msg_lower or "cannot depend" in msg_lower, (
-        f"error should mention sync/async dependency issue, got {result.message!r}"
+        f"the error must explain the sync-depends-on-async violation so the user knows "
+        f"to either make the consumer async or the dependency sync, got"
+        f" {result.message!r}"
     )
 
 
@@ -733,10 +854,15 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
         session=session,
     )
     assert result.status == "error", (
-        f"shared async depending on non-shared async should error, "
+        f"a shared fixture outlives individual tests -- depending on a non-shared"
+        f" fixture "
+        f"would use a value that was torn down after the first test, "
         f"got {result.status!r}, msg={result.message!r}"
     )
     msg_lower = result.message.lower()
     assert "lifetime" in msg_lower or "non-shared" in msg_lower, (
-        f"error should mention lifetime mismatch, got {result.message!r}"
+        f"the error must call out the lifetime mismatch so the user knows the"
+        f" dependency's "
+        f"scope is too narrow, not that the fixture itself is broken, got"
+        f" {result.message!r}"
     )
