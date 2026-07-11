@@ -104,7 +104,7 @@
 
 ## CLI Structure
 
-**Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `list` (show collected tests), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
+**Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
 
 **Inspect Node** — A navigable entity in the `inspect` TUI. One of six built-in kinds: Fixture, Test, Mark, Conftest, Plugin, Helper. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
 
