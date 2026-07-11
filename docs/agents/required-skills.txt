@@ -1,0 +1,14 @@
+# Standalone skills
+grilling
+grill-with-docs
+triage
+improve
+
+# Plugin skills
+ponytail:ponytail-review
+superpowers:brainstorming
+superpowers:writing-plans
+superpowers:subagent-driven-development
+superpowers:executing-plans
+superpowers:requesting-code-review
+superpowers:verification-before-completion
