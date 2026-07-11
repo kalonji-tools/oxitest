@@ -1,5 +1,7 @@
 """Tested examples for the use-raises-warns how-to guide."""
 
+import warnings
+
 import oxitest
 
 
@@ -37,8 +39,6 @@ def test_any_io_error():
         open("/nonexistent/path")  # noqa: SIM115, PTH123
 # --8<-- [end:raises-tuple]
 # fmt: on
-
-import warnings  # noqa: E402
 
 
 # fmt: off
