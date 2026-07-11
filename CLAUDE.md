@@ -15,6 +15,9 @@ devenv shell
 # Check all required tools are available
 just health
 
+# Check required agent skills are installed (warnings only)
+just agent-health
+
 # Build the Rust extension (required before running Python tests)
 just build
 
