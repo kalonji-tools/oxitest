@@ -43,6 +43,10 @@ build *args: (_log _green "Building extension...")
 test *args: (_log _blue "Running tests...")
     PYTHONPATH=python uv run python -m oxitest {{args}}
 
+# Run doc example tests (no rebuild — use `just build` first if Rust changed)
+test-docs *args: (_log _blue "Running doc example tests...")
+    cd docs/user/examples && PYTHONPATH={{justfile_directory()}}/python uv run python -m oxitest {{args}}
+
 # Run Rust unit tests
 test-rust *args: (_log _blue "Running Rust tests...")
     cargo test {{args}}
@@ -57,7 +61,7 @@ check: (_log _blue "Running static checks...")
     codespell --toml pyproject.toml
 
 # Full pre-push gate: clean, check, test everything
-preflight: clean check test-rust build test
+preflight: clean check test-rust build test test-docs
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
