@@ -2,11 +2,11 @@
 
 from oxitest import Fixture
 
+# fmt: off
 # --8<-- [start:quickstart-test]
 
 
 def test_greeting(greeting: Fixture[str]) -> None:
     assert greeting == "hello", "fixture should inject the return value"
-
-
 # --8<-- [end:quickstart-test]
+# fmt: on
