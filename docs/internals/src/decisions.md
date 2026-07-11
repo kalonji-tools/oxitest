@@ -54,8 +54,8 @@ requirement is that the _why_ is captured before the _how_ is merged.
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0001](../../adr/0001-remove-graphify.md) | Remove graphify | Accepted |
-| [0002](../../adr/0002-unified-fixture-backend.md) | Unified fixture backend | Accepted |
-| [0003](../../adr/0003-inspect-two-mode-navigation.md) | Inspect two-mode navigation | Accepted |
-| [0004](../../adr/0004-worker-lazy-imports.md) | Worker lazy imports | Accepted |
-| [0005](../../adr/0005-immutable-by-default-interfaces.md) | Immutable-by-default interfaces | Accepted |
+| [0001](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0001-remove-graphify.md) | Remove graphify | Accepted |
+| [0002](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0002-unified-fixture-backend.md) | Unified fixture backend | Accepted |
+| [0003](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0003-inspect-two-mode-navigation.md) | Inspect two-mode navigation | Accepted |
+| [0004](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0004-worker-lazy-imports.md) | Worker lazy imports | Accepted |
+| [0005](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0005-immutable-by-default-interfaces.md) | Immutable-by-default interfaces | Accepted |
