@@ -46,8 +46,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
 | `affected_base` | string | — | Default git ref for `--affected`. When set, bare `--affected` compares against this ref instead of `HEAD`. CLI `--affected=REF` overrides. |
 | `async_backend` | `str` | `"asyncio"` | Async runtime backend. Used by async test execution. Can be overridden by a plugin providing `AsyncBackend`. |
-| `auto_arrange` | `int \| false` | `100` | Number of tests below which shared-fixture auto-arrangement is applied. Set to `false` to disable. Pyproject.toml only (not a CLI flag). |
-| `auto_arrange_threshold` | `int` | `70` | If the largest auto-arranged group exceeds this percentage of total tests, fall back to serial execution. Pyproject.toml only. |
+| `auto_arrange` | `int \| false` | `100` | Shared-fixture auto-arrangement threshold. An integer sets the percentage of total tests beyond which the largest auto-arranged group triggers serial fallback (default `100`). Set to `false` to disable auto-arrangement entirely. Pyproject.toml only (not a CLI flag). |
 | `tb` | string | `"detail"` | Traceback style on failure. One of: `"detail"`, `"line"`, `"no"`. CLI `--tb` overrides this value. |
 | `show_locals` | boolean | `false` | Show local variable values in the failing frame. CLI `--show-locals` overrides. |
 | `show_internals` | boolean | `false` | Show internal oxitest framework frames in tracebacks. CLI `--show-internals` overrides. |
@@ -60,6 +59,9 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `color` | string | `"auto"` | Color output mode. One of: `"auto"`, `"always"`, `"never"`. CLI `--color` overrides. |
 | `plugins` | list of strings | `[]` | Python module paths of oxitest plugins to load. Each module must export an `oxitest_plugin(config=None)` function returning `oxitest.Plugin`. |
 | `plugin_settings` | table | `{}` | Per-plugin configuration. Each key is a plugin module name, value is a table of settings passed to `oxitest_plugin(config=...)`. |
+| `use_gitignore` | boolean | `true` | Respect `.gitignore` files when discovering test files during collection. Pyproject.toml only (not a CLI flag). |
+| `doctest_modules` | boolean | `false` | Collect and run doctests from module docstrings. CLI `--doctest-modules` overrides. |
+| `inspect_timeout` | integer | `30` | Phase-2 (Python-tier) loading timeout for `oxitest inspect` in seconds. Pyproject.toml only (not a CLI flag). |
 
 ## plugins
 
