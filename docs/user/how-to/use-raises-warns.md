@@ -9,11 +9,7 @@ Use `oxitest.raises()` as a context manager to assert that a block of code raise
 a specific exception:
 
 ```python
-import oxitest
-
-def test_divide_by_zero():
-    with oxitest.raises(ZeroDivisionError):
-        result = 1 / 0
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:raises-basic"
 ```
 
 If the block does **not** raise, the test fails with:
@@ -22,9 +18,7 @@ If the block does **not** raise, the test fails with:
 ### Match the exception message
 
 ```python
-def test_invalid_input():
-    with oxitest.raises(ValueError, match="must be positive"):
-        validate_age(-1)
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:raises-match"
 ```
 
 `match` is a regex pattern checked against `str(exc)` via `re.search`. oxitest fails
@@ -33,11 +27,7 @@ the test if the exception is raised but the pattern does not match the message.
 ### Inspect the exception
 
 ```python
-def test_error_code():
-    with oxitest.raises(KeyError) as exc_info:
-        d = {}
-        _ = d["missing"]
-    assert exc_info.value.args[0] == "missing"
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:raises-excinfo"
 ```
 
 The context manager exposes `.value` — the caught exception — after the block.
@@ -45,9 +35,7 @@ The context manager exposes `.value` — the caught exception — after the bloc
 ### Accept multiple exception types
 
 ```python
-def test_any_io_error():
-    with oxitest.raises((OSError, IOError)):
-        open("/nonexistent/path")
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:raises-tuple"
 ```
 
 Pass a tuple of types to accept any of them.
@@ -57,20 +45,13 @@ Pass a tuple of types to accept any of them.
 Use `oxitest.warns()` to assert that a block emits a specific warning:
 
 ```python
-import warnings
-import oxitest
-
-def test_deprecation_warning():
-    with oxitest.warns(DeprecationWarning):
-        warnings.warn("old_function is deprecated", DeprecationWarning)
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:warns-basic"
 ```
 
 ### Match the warning message
 
 ```python
-def test_warning_message():
-    with oxitest.warns(UserWarning, match="disk space"):
-        warnings.warn("low disk space", UserWarning)
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:warns-match"
 ```
 
 `match` behaves the same as in `raises` — a regex pattern that oxitest checks against
@@ -82,12 +63,7 @@ Use `oxitest.importorskip()` to skip a test if an optional package is not
 installed. Call it at the top of the test function or at module level:
 
 ```python
-import oxitest
-
-def test_with_pandas():
-    pd = oxitest.importorskip("pandas")
-    df = pd.DataFrame({"a": [1, 2, 3]})
-    assert len(df) == 3
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:importorskip-basic"
 ```
 
 If `pandas` is not importable, the test is skipped with:
@@ -99,7 +75,7 @@ it without a second import.
 ### Provide a custom skip message
 
 ```python
-pd = oxitest.importorskip("pandas", reason="pandas required for CSV tests")
+--8<-- "docs/user/examples/how-to/test_raises_warns.py:importorskip-reason"
 ```
 
 `reason` overrides the default skip message.
