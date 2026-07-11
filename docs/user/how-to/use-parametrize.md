@@ -13,22 +13,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     the test ID (e.g. `test_add[basic]`).
 
     ```python
-    from dataclasses import dataclass
-    import oxitest
-
-    @dataclass(frozen=True)
-    class AddCase:
-        x: int
-        y: int
-        expected: int
-
-    @oxitest.parametrize(
-        basic=AddCase(x=1, y=2, expected=3),
-        negative=AddCase(x=-5, y=3, expected=-2),
-        zero=AddCase(x=0, y=0, expected=0),
-    )
-    def test_add(x: int, y: int, expected: int) -> None:
-        assert x + y == expected
+    --8<-- "docs/user/examples/how-to/test_parametrize.py:dataclass-expanded"
     ```
 
     oxitest infers **expanded mode** from the signature: parameters whose names match
@@ -38,12 +23,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     Annotate a single parameter with the dataclass type to receive the whole instance:
 
     ```python
-    @oxitest.parametrize(
-        basic=AddCase(x=1, y=2, expected=3),
-        negative=AddCase(x=-5, y=3, expected=-2),
-    )
-    def test_add_compact(params: AddCase) -> None:
-        assert params.x + params.y == params.expected
+    --8<-- "docs/user/examples/how-to/test_parametrize.py:compact-mode"
     ```
 
     oxitest detects compact mode when exactly one non-`Fixture[T]` parameter carries
@@ -54,15 +34,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     keys must match the non-fixture parameters of the test function:
 
     ```python
-    import oxitest
-
-    @oxitest.parametrize(
-        empty={"items": [], "expected": 0},
-        one={"items": [42], "expected": 42},
-        many={"items": [1, 2, 3], "expected": 6},
-    )
-    def test_sum(items: list[int], expected: int) -> None:
-        assert sum(items) == expected
+    --8<-- "docs/user/examples/how-to/test_parametrize.py:dict-mode"
     ```
 
 !!! tip "Which mode should I use?"
@@ -74,23 +46,7 @@ A dataclass field annotated `FixtureRef[T]` tells oxitest to inject a
 [fixture](use-fixtures.md) for that case. Pass a fixture function as the field value:
 
 ```python
-from dataclasses import dataclass
-import oxitest
-from oxitest import Fixture, FixtureRef
-
-@dataclass(frozen=True)
-class QueryCase:
-    db: FixtureRef[object]   # will be injected
-    query: str
-    expected_rows: int
-
-@oxitest.parametrize(
-    real=QueryCase(db=db_conn, query="SELECT * FROM users", expected_rows=3),
-    mock=QueryCase(db=mock_db, query="SELECT * FROM users", expected_rows=0),
-)
-def test_query(db: Fixture[object], query: str, expected_rows: int) -> None:
-    rows = db.execute(query).fetchall()
-    assert len(rows) == expected_rows
+--8<-- "docs/user/examples/how-to/test_parametrize.py:fixture-ref"
 ```
 
 The fixture is resolved at run time with the same scope/teardown rules as any other fixture.
@@ -102,27 +58,7 @@ writing every combination by hand is tedious. Stack multiple `@oxitest.parametri
 decorators with `oxitest.partial()` to express the cartesian product:
 
 ```python
-from dataclasses import dataclass
-import oxitest
-from oxitest import Fixture, FixtureRef, partial
-
-@dataclass
-class QueryCase:
-    db: FixtureRef[object]
-    query: str
-    expected_rows: int
-
-@oxitest.parametrize(
-    real=partial(QueryCase, db=real_db),
-    mock=partial(QueryCase, db=mock_db),
-)
-@oxitest.parametrize(
-    users=partial(QueryCase, query="SELECT * FROM users", expected_rows=3),
-    empty=partial(QueryCase, query="SELECT * FROM empty", expected_rows=0),
-)
-def test_query(db: Fixture[object], query: str, expected_rows: int) -> None:
-    rows = db.execute(query).fetchall()
-    assert len(rows) == expected_rows
+--8<-- "docs/user/examples/how-to/test_parametrize.py:composed"
 ```
 
 This produces 4 test variants: `test_query[real-users]`, `test_query[real-empty]`,
@@ -147,18 +83,10 @@ This produces 4 test variants: `test_query[real-users]`, `test_query[real-empty]
 - The source dataclass does **not** need to be frozen. Only full (non-composed)
   parametrize cases require `@dataclass(frozen=True)`.
 
-### Compact mode
-
-Compact mode works with composition. Annotate a single parameter with the dataclass
-type to receive the merged instance:
-
-```python
-@oxitest.parametrize(real=partial(QueryCase, db=real_db))
-@oxitest.parametrize(users=partial(QueryCase, query="SELECT 1", expected_rows=1))
-def test_query_compact(case: QueryCase) -> None:
-    rows = case.db.execute(case.query).fetchall()
-    assert len(rows) == case.expected_rows
-```
+!!! note
+    Compact mode (single `case: QueryCase` parameter) is **not** compatible with
+    `FixtureRef` fields. When a case type has `FixtureRef` fields, use expanded
+    mode — annotate individual parameters in the test function signature.
 
 ### Test IDs
 
