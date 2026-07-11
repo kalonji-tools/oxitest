@@ -1,3 +1,7 @@
 [tool.oxitest]
 doctest_modules = true
 timeout = 30
+markers = [
+    "slow: marks tests that take more than a second",
+    "integration: hits a real database or network",
+]
