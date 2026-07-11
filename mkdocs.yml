@@ -64,6 +64,10 @@ markdown_extensions:
       alternate_style: true
   - pymdownx.tasklist:
       custom_checkbox: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      dedent_subsections: true
+      check_paths: true
   - attr_list
   - md_in_html
   - tables
