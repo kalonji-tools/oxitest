@@ -120,7 +120,6 @@ def _load_conftest_module(path: str) -> ModuleType | None:
         spec.loader.exec_module(module)
     except Exception:
         sys.modules.pop(unique_name, None)
-        sys.modules.pop("conftest", None)
         raise
     sys.modules["conftest"] = module
     return module
