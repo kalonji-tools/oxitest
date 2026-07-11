@@ -58,10 +58,15 @@ ignore = [
 # ── Doc examples (user-facing code snippets) ───────────────────────────
 "docs/user/examples/*" = [
     "ANN201",   # return type annotations — docs show beginner-friendly code
+    "ARG001",   # unused args — parametrize examples may not use all params
     "D103",     # docstrings — snippets show minimal examples
+    "E501",     # line length — assertion messages push past 88 chars
     "INP001",   # no __init__.py (not a package)
+    "LOG015",   # root logger — docs show simplest logging pattern
     "PLR2004",  # magic values — examples use literal comparisons
+    "PTH109",   # os.getcwd — docs show stdlib patterns users know
     "S101",     # assert — examples use assert for clarity
+    "T201",     # print — capture examples must print to demonstrate the feature
 ]
 
 # ── PLC0415: intentionally lazy imports ─────────────────────────────────
