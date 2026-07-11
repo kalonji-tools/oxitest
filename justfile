@@ -130,3 +130,60 @@ health:
     else
         printf '\nAll tools available\n'
     fi
+
+# Check that required agent skills are installed (warnings only)
+agent-health:
+    #!/usr/bin/env bash
+    skills_file="docs/agents/required-skills.txt"
+    if [ ! -f "$skills_file" ]; then
+        printf '  SKIP: %s not found\n' "$skills_file"
+        exit 0
+    fi
+
+    found_agent=0
+    for agent in claude codex; do
+        if command -v "$agent" > /dev/null 2>&1; then
+            printf '  \033[32m✓\033[0m %s (%s)\n' "$agent" "$(command -v "$agent")"
+            found_agent=1
+        fi
+    done
+
+    if [ "$found_agent" -eq 0 ]; then
+        printf '  No agent detected — skipping skill checks\n'
+        exit 0
+    fi
+
+    missing=0
+    checked=0
+    if command -v claude > /dev/null 2>&1; then
+        printf '\n  Claude Code skills:\n'
+        while IFS= read -r skill || [ -n "$skill" ]; do
+            skill=$(echo "$skill" | sed 's/#.*//' | xargs)
+            [ -z "$skill" ] && continue
+            checked=$((checked + 1))
+            if echo "$skill" | grep -q ':'; then
+                plugin=$(echo "$skill" | cut -d: -f1)
+                if ls -d ~/.claude/plugins/cache/*/"${plugin}" > /dev/null 2>&1; then
+                    printf '    \033[32m✓\033[0m %s\n' "$skill"
+                else
+                    printf '    \033[33mWARN\033[0m %s not installed (plugin: %s)\n' "$skill" "$plugin"
+                    missing=$((missing + 1))
+                fi
+            else
+                if [ -e ~/.claude/skills/"$skill" ]; then
+                    printf '    \033[32m✓\033[0m %s\n' "$skill"
+                else
+                    printf '    \033[33mWARN\033[0m %s not installed\n' "$skill"
+                    missing=$((missing + 1))
+                fi
+            fi
+        done < "$skills_file"
+    fi
+
+    if [ "$checked" -eq 0 ]; then
+        printf '\n  No skill checks available for detected agent(s)\n'
+    elif [ "$missing" -gt 0 ]; then
+        printf '\n  %d skill(s) missing\n' "$missing"
+    else
+        printf '\n  All required skills available\n'
+    fi
