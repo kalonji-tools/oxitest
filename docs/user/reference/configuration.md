@@ -46,7 +46,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. CLI `--strict` overrides this value. |
 | `affected_base` | string | — | Default git ref for `--affected`. When set, bare `--affected` compares against this ref instead of `HEAD`. CLI `--affected=REF` overrides. |
 | `async_backend` | `str` | `"asyncio"` | Async runtime backend. Used by async test execution. Can be overridden by a plugin providing `AsyncBackend`. |
-| `auto_arrange` | `int \| false` | `100` | Shared-fixture auto-arrangement threshold. An integer sets the percentage of total tests beyond which the largest auto-arranged group triggers serial fallback (default `100`). Set to `false` to disable auto-arrangement entirely. Pyproject.toml only (not a CLI flag). |
+| `auto_arrange` | `int \| false` | `70` | Shared-fixture auto-arrangement threshold. An integer sets the percentage of total tests beyond which the largest auto-arranged group triggers serial fallback. Set to `false` to disable auto-arrangement entirely. Pyproject.toml only (not a CLI flag). |
 | `tb` | string | `"detail"` | Traceback style on failure. One of: `"detail"`, `"line"`, `"no"`. CLI `--tb` overrides this value. |
 | `show_locals` | boolean | `false` | Show local variable values in the failing frame. CLI `--show-locals` overrides. |
 | `show_internals` | boolean | `false` | Show internal oxitest framework frames in tracebacks. CLI `--show-internals` overrides. |

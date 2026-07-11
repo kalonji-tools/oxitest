@@ -66,7 +66,7 @@ just
 
 **8. Post-implementation review.** After all plan tasks are implemented and pushed, run these passes before marking the PR ready:
 - **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity.
-- **`improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
+- **`/improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
 - **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
 - **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
 
@@ -94,7 +94,7 @@ just
 | Implementation plan | Before coding | `superpowers:writing-plans` | — |
 | Execute plan | During coding | `superpowers:subagent-driven-development` | — |
 | Ponytail review | After push | `ponytail:ponytail-review` | — |
-| Improve audit | After push | `improve branch` | — |
+| Improve audit | After push | `/improve branch` | — |
 | Code review | Before merge | `superpowers:requesting-code-review` | — |
 | Post-merge debrief | If diverged | — | `diverged-from-plan` (closed PRs only) |
 
@@ -152,19 +152,49 @@ prek run --all-files
 - `strict.rs` — strict-mode violation checking (bare asserts, dict parametrize, missing mark reason)
 - `bridge.rs` — PyO3 calls into the Python bridge: `collect_module`, `run_test`, `FixtureSession`
 
-**Python bridge** (`python/oxitest/_bridge/`): Pure-Python layer that does the actual test execution. Key modules:
-- `executor.py` — `run_test()`: loads module, resolves fixtures/parametrize, runs test, returns `TestResult`
-- `_fixture_registry.py` — `FixtureDef`, `FixtureRegistry`, `_fixture_inner_type`; fixture definition and registry
+**Python bridge** (`python/oxitest/_bridge/`): Pure-Python layer that does the actual test execution. Key modules by responsibility:
+
+*Fixture system:*
+- `_fixture_registry.py` — `FixtureDef`, `FixtureRegistry`; fixture definition and registry
 - `_fixture_session.py` — `FixtureSession`, `_SessionProtocol`, `_Scope`; fixture lifecycle (scope caching, yield teardown, autouse)
-- `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
-- `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances, builds a `FixtureSession`
-- `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
-- `_assert_error.py` — `_OxitestAssertionError` exception class and `_OXITEST_NO_RHS` sentinel for enriched assertion diagnostics
-- `parametrize.py` — resolves `@mark.parametrize` kwargs into per-case values
-- `marks.py` — mark evaluation: skip, xfail, timeout, and custom marks
-- `proxy.py` / `proxy_ns.py` — `FrozenProxy` (shared fixtures) and `FixturesProxy` (namespace-aware `fx: Fixtures` injection)
+- `_fixture_context.py` — fixture resolution context
+- `_fixture_instantiator.py` — fixture instantiation and dependency injection
 - `_fixture_type.py` — `Fixture[T]`, `FixtureRef[T]`, `Yields[T]` type aliases
+- `_fixture_validator.py` — fixture signature and type validation
+- `proxy.py` / `proxy_ns.py` — `FrozenProxy` (shared fixtures) and `FixturesProxy` (namespace-aware `fx: Fixtures` injection)
 - `_builtins/` — built-in injectable fixtures: `TempDir`, `TempDirFactory`, `StdCapture`, `FdCapture`, `Patcher`, `LogCapture`, `TestContext`
+
+*Mark system:*
+- `_mark_api.py` — mark evaluation: skip, xfail, timeout, and custom marks
+- `_mark_registry.py` — mark registration and custom mark definitions
+
+*Helper system:*
+- `_helpers.py` — `Helpers` registry class and `HelperDef`
+- `_helper_registry.py` — helper namespace resolution and access
+
+*Plugin system:*
+- `plugin_loader.py` — plugin import, validation, `PluginRegistry` (frozen dataclass), `_PluginRegistryBuilder`
+- `_plugin_config.py` — plugin settings resolution
+
+*Execution:*
+- `executor.py` — `run_test()`: loads module, resolves fixtures/parametrize, runs test, returns `TestResult`
+- `_runners.py` — test execution runners (serial, debug)
+- `result.py` — `TestResult` and outcome types
+- `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
+- `parametrize.py` — resolves `@mark.parametrize` kwargs into per-case values
+
+*Collection:*
+- `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
+- `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` and `Helpers()` instances
+- `_loader.py` — module loading infrastructure
+
+*Infrastructure:*
+- `_coverage.py` — coverage provider integration (`CoveragePyProvider`)
+- `_debugger.py` — debugger backend integration
+- `_fn_metadata.py` — `FunctionMetadata` frozen dataclass
+- `_violation_checkers.py` — strict-mode violation checking
+- `_namespace_validation.py` — fixture/helper namespace validation
+- `_assert_error.py` — `_OxitestAssertionError` and enriched assertion diagnostics
 
 ### PyO3 data contract
 
