@@ -1,5 +1,6 @@
 nav:
   - Marks: marks.md
   - Fixture types: fixture-types.md
+  - Helpers: helpers.md
   - Built-in fixtures: builtins.md
   - Utilities: utilities.md
