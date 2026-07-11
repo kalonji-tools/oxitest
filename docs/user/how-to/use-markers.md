@@ -25,12 +25,7 @@ oxitest strips it when validating marks.
 ## Apply a custom marker
 
 ```python
-import oxitest
-
-@oxitest.mark.slow
-def test_large_sort():
-    data = list(range(1_000_000, 0, -1))
-    assert sorted(data) == list(range(1, 1_000_001))
+--8<-- "docs/user/examples/how-to/test_markers.py:custom-marker"
 ```
 
 ## Filter by marker
@@ -55,43 +50,24 @@ Expressions are matched against the full set of marks on each test.
 
 === "With reason (recommended)"
     ```python
-    import oxitest
-
-    @oxitest.mark.skip(reason="feature not yet implemented")
-    def test_not_ready():
-        ...
+    --8<-- "docs/user/examples/how-to/test_markers.py:skip-with-reason"
     ```
 
 === "Without reason"
     ```python
-    import oxitest
-
-    @oxitest.mark.skip
-    def test_not_ready():
-        ...
+    --8<-- "docs/user/examples/how-to/test_markers.py:skip-without-reason"
     ```
 
 You can also skip imperatively from inside a test:
 
 ```python
-import oxitest
-
-def test_platform_specific():
-    import sys
-    if sys.platform != "linux":
-        oxitest.skip("Linux only")
-    ...
+--8<-- "docs/user/examples/how-to/test_markers.py:skip-imperative"
 ```
 
 ## Skip conditionally
 
 ```python
-import sys
-import oxitest
-
-@oxitest.mark.skip(when=sys.platform == "win32", reason="POSIX only")
-def test_symlinks():
-    ...
+--8<-- "docs/user/examples/how-to/test_markers.py:skip-conditional"
 ```
 
 The `when` argument is any expression evaluated at collection time. When falsy, the mark
@@ -100,11 +76,7 @@ is not applied and the test runs normally.
 ## Mark a test as expected to fail
 
 ```python
-import oxitest
-
-@oxitest.mark.xfail(reason="upstream bug #123")
-def test_known_bug():
-    assert broken_function() == 42
+--8<-- "docs/user/examples/how-to/test_markers.py:xfail"
 ```
 
 - If the test **fails** as expected: reported as `XFAIL` (not a failure).
@@ -113,12 +85,7 @@ def test_known_bug():
 ## Set a per-test timeout
 
 ```python
-import oxitest
-
-@oxitest.mark.timeout(seconds=5)
-def test_must_finish_quickly():
-    result = long_running_operation()
-    assert result is not None
+--8<-- "docs/user/examples/how-to/test_markers.py:timeout"
 ```
 
 oxitest kills the test and marks it failed if it exceeds the timeout. `seconds` must be
@@ -131,21 +98,13 @@ Set the `oxi_mark` module-level variable to apply one or more marks to every
 test function in the file:
 
 ```python
-import oxitest as oxi
-
-oxi_mark = oxi.mark.timeout(5)
-
-def test_one():
-    ...
-
-def test_two():
-    ...
+--8<-- "docs/user/examples/how-to/test_markers.py:module-mark"
 ```
 
 Both tests inherit the 5-second timeout. To apply multiple marks, use a list:
 
 ```python
-oxi_mark = [oxi.mark.timeout(5), oxi.mark.slow]
+--8<-- "docs/user/examples/how-to/test_markers.py:module-mark-list"
 ```
 
 ## Force a test to run on the main process
@@ -154,12 +113,7 @@ Use `@oxi.mark.inprocess` to exclude a test from worker subprocesses during
 parallel runs. The test runs on the coordinator process instead:
 
 ```python
-import oxitest as oxi
-
-@oxi.mark.inprocess
-def test_needs_debugger():
-    breakpoint()
-    assert True
+--8<-- "docs/user/examples/how-to/test_markers.py:inprocess"
 ```
 
 This is useful for tests that require `breakpoint()`, global mutable state, or
