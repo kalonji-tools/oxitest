@@ -131,6 +131,9 @@ health:
         printf '\nAll tools available\n'
     fi
 
+    printf '\n'
+    just agent-health
+
 # Check that required agent skills are installed (warnings only)
 agent-health:
     #!/usr/bin/env bash
