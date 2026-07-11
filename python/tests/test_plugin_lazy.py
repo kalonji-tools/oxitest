@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+import types
+from typing import Any, Never
 
 import oxitest
-from oxitest import helpers
+from oxitest import helpers, raises
 from oxitest._bridge.plugin_loader import (
     EAGER_PROTOCOLS,
     LAZY_PROTOCOLS,
     PluginEntry,
+    PluginLoadError,
     _PluginRegistryBuilder,
     activate_deferred_plugins,
     load_plugins,
@@ -376,3 +378,47 @@ def test_deferred_fixture_plugin_activated_in_phase_2() -> None:
         )
     finally:
         sys.modules.pop("deferred_fx_phase2", None)
+
+
+def test_ensure_loaded_import_error_raises_plugin_load_error() -> None:
+    """ensure_loaded() wraps ImportError in PluginLoadError with 'not found'."""
+    entry = PluginEntry.deferred(
+        "nonexistent_module_xyz_deferred", ["fixture_provider"]
+    )
+
+    with raises(PluginLoadError, match="not found"):
+        entry.ensure_loaded()
+
+
+@oxitest.mark.inprocess
+def test_ensure_loaded_missing_entry_point_raises_plugin_load_error() -> None:
+    """ensure_loaded() raises PluginLoadError when module has no oxitest_plugin()."""
+    mod = types.ModuleType("no_entry_deferred")
+    sys.modules["no_entry_deferred"] = mod
+    try:
+        entry = PluginEntry.deferred("no_entry_deferred", ["fixture_provider"])
+
+        with raises(PluginLoadError, match="no oxitest_plugin\\(\\) function"):
+            entry.ensure_loaded()
+    finally:
+        sys.modules.pop("no_entry_deferred", None)
+
+
+@oxitest.mark.inprocess
+def test_ensure_loaded_entry_raises_wrapped_in_plugin_load_error() -> None:
+    """ensure_loaded() wraps exceptions from oxitest_plugin() in PluginLoadError."""
+
+    def broken_entry() -> Never:
+        msg = "boom from deferred"
+        raise ValueError(msg)
+
+    mod = types.ModuleType("broken_deferred_plugin")
+    setattr(mod, "oxitest_plugin", broken_entry)  # noqa: B010 — dynamic module attr
+    sys.modules["broken_deferred_plugin"] = mod
+    try:
+        entry = PluginEntry.deferred("broken_deferred_plugin", ["fixture_provider"])
+
+        with raises(PluginLoadError, match="raised"):
+            entry.ensure_loaded()
+    finally:
+        sys.modules.pop("broken_deferred_plugin", None)

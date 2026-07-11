@@ -107,9 +107,27 @@ class PluginEntry:
         """Import and initialise the plugin, returning (updated_entry, plugin)."""
         if self.plugin is not None:
             return self, self.plugin
-        module = importlib.import_module(self.module_name)
-        entry_fn = getattr(module, "oxitest_plugin")  # noqa: B009 — dynamic module attr
-        result = entry_fn()
+
+        try:
+            module = importlib.import_module(self.module_name)
+        except ImportError as e:
+            msg = f'plugin "{self.module_name}" not found. Is it installed?\n  {e}'
+            raise PluginLoadError(msg) from e
+
+        entry_fn = getattr(module, "oxitest_plugin", None)
+        if entry_fn is None:
+            msg = f'plugin "{self.module_name}" has no oxitest_plugin() function'
+            raise PluginLoadError(msg)
+        if not callable(entry_fn):
+            msg = f'plugin "{self.module_name}" oxitest_plugin is not callable'
+            raise PluginLoadError(msg)
+
+        try:
+            result = entry_fn()
+        except Exception as e:
+            msg = f'plugin "{self.module_name}" oxitest_plugin() raised: {e}'
+            raise PluginLoadError(msg) from e
+
         if not isinstance(result, Plugin):
             msg = (
                 f"oxitest_plugin() in {self.module_name!r} must return"
