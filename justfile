@@ -78,7 +78,7 @@ docs-build: (_log _green "Building all docs...")
 
 # Serve docs with live reload (hot-reload on save, but cross-discipline links 404)
 docs-serve: (_log _green "Starting doc servers...")
-    cargo doc --no-deps --document-private-items
+    -cargo doc --no-deps --document-private-items
     uv run --group docs mkdocs serve --dev-addr localhost:8000 &
     mdbook serve docs/internals --port 3000 &
     python3 -m http.server 3001 --directory target/doc &
