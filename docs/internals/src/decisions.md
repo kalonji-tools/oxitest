@@ -1,13 +1,19 @@
 # Design Decisions
 
-oxitest uses a **spec-on-issue** workflow instead of formal Architecture
-Decision Records (ADRs).  Before implementing a non-trivial change, the author
-posts a spec as a comment on the GitHub issue.  The spec describes the problem,
-the proposed solution, alternatives considered, and the acceptance criteria.
-After the PR lands, the spec comment remains as the permanent record of _why_
-the design looks the way it does.
+oxitest records design rationale in two ways:
 
-This chapter links to the specs for the most important decisions.
+1. **Spec-on-issue** — before implementing a non-trivial change, the author
+   posts a spec as a comment on the GitHub issue.  The spec describes the
+   problem, the proposed solution, alternatives considered, and the acceptance
+   criteria.  After the PR lands, the spec comment remains as the permanent
+   record of _why_ the design looks the way it does.
+
+2. **Architecture Decision Records (ADRs)** — cross-cutting design principles
+   that affect many modules get a formal ADR in `docs/adr/`.  ADRs are
+   numbered sequentially and carry a status (Proposed, Accepted, Superseded).
+
+This chapter links to the specs for the most important decisions and
+summarizes the ADRs.
 
 ## Key decisions
 
@@ -43,3 +49,13 @@ This chapter links to the specs for the most important decisions.
 There is no formal template.  Specs range from a few paragraphs for small
 changes to multi-section documents for features like lazy collection.  The key
 requirement is that the _why_ is captured before the _how_ is merged.
+
+## Architecture Decision Records
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](../../adr/0001-remove-graphify.md) | Remove graphify | Accepted |
+| [0002](../../adr/0002-unified-fixture-backend.md) | Unified fixture backend | Accepted |
+| [0003](../../adr/0003-inspect-two-mode-navigation.md) | Inspect two-mode navigation | Accepted |
+| [0004](../../adr/0004-worker-lazy-imports.md) | Worker lazy imports | Accepted |
+| [0005](../../adr/0005-immutable-by-default-interfaces.md) | Immutable-by-default interfaces | Accepted |
