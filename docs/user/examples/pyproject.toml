@@ -1,0 +1,3 @@
+[tool.oxitest]
+doctest_modules = true
+timeout = 30
