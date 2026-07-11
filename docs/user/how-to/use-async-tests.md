@@ -10,12 +10,7 @@ Declare a test as `async def` and oxitest runs it on the asyncio event loop
 automatically. No decorator or import is required.
 
 ```python
-import asyncio
-
-
-async def test_sleep_completes() -> None:
-    await asyncio.sleep(0)
-    assert True
+--8<-- "docs/user/examples/how-to/test_async_tests.py:basic-async"
 ```
 
 All the same features available to sync tests work with async tests: marks,
@@ -36,32 +31,11 @@ teardown, exactly as with sync yield fixtures. The teardown code runs after the
 test completes, even if the test fails.
 
 ```python
-# conftest.py
-from __future__ import annotations
-import asyncio
-from collections.abc import AsyncGenerator
-import oxitest
-
-fx = oxitest.Fixtures()
-
-
-@fx.fixture
-async def client() -> AsyncGenerator[dict, None]:
-    # async setup
-    conn = await asyncio.sleep(0) or {"connected": True}
-    yield conn
-    # async teardown
-    await asyncio.sleep(0)
+--8<-- "docs/user/examples/how-to/test_async_tests.py:async-fixture"
 ```
 
 ```python
-# tests/test_client.py
-from conftest import client
-from oxitest import Fixture
-
-
-async def test_client_connected(client: Fixture[dict]) -> None:
-    assert client["connected"] is True
+--8<-- "docs/user/examples/how-to/test_async_tests.py:async-fixture-test"
 ```
 
 An async fixture can only be injected into an async test. Injecting an async
@@ -74,11 +48,7 @@ async fixtures are resolved once on a dedicated persistent event loop and torn
 down at the end of the session.
 
 ```python
-@fx.fixture(shared=True)
-async def db_pool() -> AsyncGenerator[object, None]:
-    pool = await create_pool("postgresql://localhost/testdb")
-    yield pool
-    await pool.close()
+--8<-- "docs/user/examples/how-to/test_async_tests.py:shared-async-fixture"
 ```
 
 A shared async fixture can only depend on sync fixtures or other shared async
@@ -92,20 +62,7 @@ for tests that need to spawn concurrent tasks. Tasks still running when the
 test body returns are cancelled automatically.
 
 ```python
-import asyncio
-from oxitest import Fixture
-
-
-async def test_concurrent_work(task_group: Fixture[asyncio.TaskGroup]) -> None:
-    results: list[int] = []
-
-    async def worker(n: int) -> None:
-        results.append(n)
-
-    task_group.create_task(worker(1))
-    task_group.create_task(worker(2))
-    # TaskGroup.__aexit__ awaits both tasks before the test assertion runs
-    assert sorted(results) == [1, 2]
+--8<-- "docs/user/examples/how-to/test_async_tests.py:task-group"
 ```
 
 ## Async marks and timeouts
@@ -113,23 +70,7 @@ async def test_concurrent_work(task_group: Fixture[asyncio.TaskGroup]) -> None:
 All standard marks work on async tests:
 
 ```python
-import oxitest
-
-
-@oxitest.mark.skip(reason="not implemented yet")
-async def test_pending() -> None:
-    pass
-
-
-@oxitest.mark.xfail(reason="known bug #42")
-async def test_known_failure() -> None:
-    assert False
-
-
-@oxitest.mark.timeout(seconds=5)
-async def test_within_budget() -> None:
-    import asyncio
-    await asyncio.sleep(0.1)
+--8<-- "docs/user/examples/how-to/test_async_tests.py:async-marks"
 ```
 
 The `@mark.timeout` decorator and the global `timeout` config key both apply to

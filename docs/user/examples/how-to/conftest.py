@@ -1,7 +1,10 @@
 """Fixtures for how-to doc examples.
 
-Provides stub fixtures referenced by parametrize and fixture examples.
+Provides stub fixtures referenced by parametrize, async, and fixture examples.
 """
+
+import asyncio
+from collections.abc import AsyncGenerator
 
 from oxitest import Fixtures
 
@@ -37,3 +40,11 @@ def mock_db() -> _StubConnection:
 def real_db() -> _StubConnection:
     """Real DB stub — alias for db_conn pattern."""
     return _StubConnection(rows=[1, 2, 3])
+
+
+@fx.fixture
+async def client() -> AsyncGenerator[dict, None]:
+    """Async client stub for doc examples."""
+    conn = await asyncio.sleep(0) or {"connected": True}
+    yield conn
+    await asyncio.sleep(0)
