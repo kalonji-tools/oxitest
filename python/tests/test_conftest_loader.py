@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import textwrap
+import types
 import warnings
 
 import oxitest
@@ -614,26 +615,26 @@ def test_extract_helpers_from_conftest(tmp: TempDir) -> None:
 def test_load_conftest_module_cleans_sys_modules_on_exec_failure(
     tmp: TempDir, _clean_sys_modules: Fixture[None]
 ) -> None:
-    """When exec_module raises, _load_conftest_module cleans both sys.modules keys."""
+    """exec_module failure cleans unique key but preserves previous conftest."""
     # Arrange: conftest that raises at module level
     conftest = tmp / "conftest.py"
     conftest.write_text("raise RuntimeError('boom')\n")
     unique_name = f"_oxitest_conftest_{abs(hash(str(conftest)))}"
-    # Ensure neither key is pre-populated
+    # Simulate a previously loaded conftest still aliased in sys.modules
+    previous_conftest = types.ModuleType("_oxitest_conftest_previous")
     sys.modules.pop(unique_name, None)
-    sys.modules.pop("conftest", None)
-    sentinel = sys.modules.get("conftest")
+    sys.modules["conftest"] = previous_conftest
 
     # Act + Assert: exception propagates
     with raises(RuntimeError, match="boom"):
         _load_conftest_module(str(conftest))
 
-    # Assert: both keys are cleaned up
+    # Assert: unique key cleaned, previous conftest alias preserved
     assert unique_name not in sys.modules, (
         "unique module name should be removed from sys.modules after exec failure; "
         "a poisoned entry would cause confusing import errors on retry"
     )
-    assert sys.modules.get("conftest") is sentinel, (
-        "sys.modules['conftest'] should not be set to the failed module; "
-        "leaving a poisoned alias would contaminate subsequent conftest imports"
+    assert sys.modules.get("conftest") is previous_conftest, (
+        "a failing conftest must not remove a previously loaded conftest's alias; "
+        "sys.modules['conftest'] was never set to the failing module"
     )
