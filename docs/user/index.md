@@ -23,16 +23,9 @@ $ pip install oxitest
 Write a test:
 
 ```python
-from oxitest import Fixtures, Fixture
-
-fx = Fixtures()
-
-@fx.fixture
-def greeting() -> str:
-    return "hello"
-
-def test_greeting(greeting: Fixture[str]) -> None:
-    assert greeting == "hello"
+from oxitest import Fixture
+--8<-- "docs/user/examples/conftest.py:quickstart-setup"
+--8<-- "docs/user/examples/test_index.py:quickstart-test"
 ```
 
 Run it:
