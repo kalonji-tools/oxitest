@@ -58,8 +58,11 @@ ignore = [
 # ── Doc examples (user-facing code snippets) ───────────────────────────
 "docs/user/examples/*" = [
     "ANN201",   # return type annotations — docs show beginner-friendly code
+    "ANN202",   # private method return types — stubs don't need annotations
     "ARG001",   # unused args — parametrize examples may not use all params
-    "D103",     # docstrings — snippets show minimal examples
+    "ARG002",   # unused method args — stub methods ignore parameters
+    "D101",     # class docstrings — dataclass examples are self-documenting
+    "D103",     # function docstrings — snippets show minimal examples
     "E501",     # line length — assertion messages push past 88 chars
     "INP001",   # no __init__.py (not a package)
     "LOG015",   # root logger — docs show simplest logging pattern
