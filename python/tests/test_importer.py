@@ -31,7 +31,10 @@ def test_collect_empty_module(tmp: TempDir) -> None:
     """An empty module yields no collected items."""
     path = helpers.common.write_test_module(tmp, "", name="test_empty.py")
     items, _ = collect_module(path)
-    assert items == [], f"collecting an empty module should yield no items, got {items}"
+    assert items == [], (
+        f"an empty module has no test_ functions -- the collector must return nothing"
+        f" or the runner will try to schedule phantom tests: {items}"
+    )
 
 
 def test_collect_single_test_function(tmp: TempDir) -> None:
@@ -40,15 +43,21 @@ def test_collect_single_test_function(tmp: TempDir) -> None:
         tmp, "def test_bar(): pass\n", name="test_foo.py"
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 collected item, got {len(items)}: {items}"
+    assert len(items) == 1, (
+        f"each test_ function must map to exactly one CollectedItem for the runner to"
+        f" schedule it: {items}"
+    )
     assert items[0].fn_name == "test_bar", (
-        f"expected fn_name='test_bar', got {items[0].fn_name!r}"
+        f"fn_name drives test identification in reports and --lf reruns -- a wrong name"
+        f" makes the test unlinkable: {items[0].fn_name!r}"
     )
     assert items[0].lineno == 1, (
-        f"expected lineno=1 for first function, got {items[0].lineno}"
+        f"lineno anchors error messages and IDE jump-to-source -- an incorrect line"
+        f" misleads developers during debugging: {items[0].lineno}"
     )
     assert items[0].markers == (), (
-        f"expected no markers on unmarked function, got {items[0].markers}"
+        f"unmarked functions must carry zero markers so the runner never applies"
+        f" skip/xfail/timeout behavior by accident: {items[0].markers}"
     )
 
 
@@ -59,11 +68,18 @@ def test_collect_multiple_functions(tmp: TempDir) -> None:
     )
     items, _ = collect_module(path)
     assert len(items) == 2, (
-        f"expected 2 items, got {len(items)}: {[i.fn_name for i in items]}"
+        f"every test_ function must produce exactly one CollectedItem -- missing items"
+        f" silently skip tests: {[i.fn_name for i in items]}"
     )
     names = [item.fn_name for item in items]
-    assert "test_one" in names, f"'test_one' should be collected, got names: {names}"
-    assert "test_two" in names, f"'test_two' should be collected, got names: {names}"
+    assert "test_one" in names, (
+        f"the collector must discover all test_ functions or they will be silently"
+        f" skipped by the runner: {names}"
+    )
+    assert "test_two" in names, (
+        f"the collector must discover all test_ functions or they will be silently"
+        f" skipped by the runner: {names}"
+    )
 
 
 def test_collect_ignores_non_test_functions(tmp: TempDir) -> None:
@@ -73,11 +89,13 @@ def test_collect_ignores_non_test_functions(tmp: TempDir) -> None:
     )
     items, _ = collect_module(path)
     assert len(items) == 1, (
-        f"helper functions should not be collected, expected 1 item got {len(items)}: "
+        f"only test_-prefixed functions are collected -- non-prefixed helpers must"
+        f" never leak into the schedule: "
         f"{[i.fn_name for i in items]}"
     )
     assert items[0].fn_name == "test_real", (
-        f"only 'test_real' should be collected, got {items[0].fn_name!r}"
+        f"non-test helpers leaking into the schedule would be run as tests and produce"
+        f" false passes or cryptic failures: {items[0].fn_name!r}"
     )
 
 
@@ -96,12 +114,21 @@ def test_collect_error_message_is_clean_traceback_not_testrepr(tmp: TempDir) -> 
         collect_module(path)
     msg = str(exc_info.value)
     assert "TestResult(" not in msg, (
-        f"message must not be TestResult repr, got: {msg!r}"
+        f"users see this message raw -- TestResult repr is an internal data structure"
+        f" that leaks implementation details and confuses debugging: {msg!r}"
     )
-    assert "\n" in msg, f"traceback must contain real newlines, got: {msg!r}"
-    assert "Traceback" in msg, f"traceback header missing, got: {msg!r}"
+    assert "\n" in msg, (
+        f"tracebacks need real newlines for readability -- escaped \\n renders as a"
+        f" single unreadable line in terminals: {msg!r}"
+    )
+    assert "Traceback" in msg, (
+        f"without the Traceback header users cannot identify the error as a Python"
+        f" traceback or locate the call chain: {msg!r}"
+    )
     assert "ModuleNotFoundError" in msg or "ImportError" in msg, (
-        f"actual error type missing from message, got: {msg!r}"
+        f"the concrete exception type tells the user whether the problem is a missing"
+        f" module, a syntax error, or something else -- omitting it forces guesswork:"
+        f" {msg!r}"
     )
 
 
@@ -113,9 +140,13 @@ def test_collect_extracts_marker_names(tmp: TempDir) -> None:
         name="test_marked.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"each test_ function must map to exactly one CollectedItem for the runner to"
+        f" schedule it: {len(items)}"
+    )
     assert items[0].markers == ("slow",), (
-        f"expected markers=('slow',), got {items[0].markers}"
+        f"@mark decorators must appear in CollectedItem.markers so the runner can apply"
+        f" filtering (e.g. -m slow) and behavior (skip/xfail): {items[0].markers}"
     )
 
 
@@ -131,10 +162,14 @@ def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
     )
     items, _ = collect_module(path)
     assert "slow" in items[0].markers, (
-        f"'slow' marker should be collected, got markers: {items[0].markers}"
+        f"stacked @mark decorators must all appear in markers -- a missing marker"
+        f" breaks -m filtering and causes silent test inclusion/exclusion:"
+        f" {items[0].markers}"
     )
     assert "integration" in items[0].markers, (
-        f"'integration' marker should be collected, got markers: {items[0].markers}"
+        f"stacked @mark decorators must all appear in markers -- a missing marker"
+        f" breaks -m filtering and causes silent test inclusion/exclusion:"
+        f" {items[0].markers}"
     )
 
 
@@ -151,7 +186,9 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
     _propagate_class_marks(test_fn, FakeClass)
     marks = get_metadata(test_fn).marks
     assert any(m.name == "usefixtures" for m in marks), (
-        "usefixtures mark from class should be propagated to function"
+        "class-level usefixtures must propagate to methods -- without propagation,"
+        " fixture dependencies declared on the class silently disappear and methods run"
+        " without required fixtures"
     )
 
 
@@ -167,7 +204,9 @@ def test_propagate_class_marks_copies_all_marks() -> None:
 
     _propagate_class_marks(test_fn, FakeClass)
     assert any(m.name == "skip" for m in get_metadata(test_fn).marks), (
-        "skip mark from class should propagate to test_fn"
+        "class-level marks propagate unconditionally -- skip on a class means all its"
+        " methods are skipped, otherwise individual methods run when the author"
+        " intended them skipped"
     )
 
 
@@ -183,10 +222,14 @@ def test_collect_class_methods_use_qualified_name(tmp: TempDir) -> None:
     items, _ = collect_module(path)
     names = [item.fn_name for item in items]
     assert "TestSuite::test_foo" in names, (
-        f"class method should be collected as 'TestSuite::test_foo', got names: {names}"
+        f"class methods use 'ClassName::method' qualified names so the runner can"
+        f" disambiguate identically named methods across classes and route --lf reruns"
+        f" correctly: {names}"
     )
     assert "TestSuite::test_bar" in names, (
-        f"class method should be collected as 'TestSuite::test_bar', got names: {names}"
+        f"class methods use 'ClassName::method' qualified names so the runner can"
+        f" disambiguate identically named methods across classes and route --lf reruns"
+        f" correctly: {names}"
     )
 
 
@@ -203,11 +246,14 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> Non
     )
     items, _ = collect_module(path)
     assert len(items) == 2, (
-        f"expected 2 class methods, got {len(items)}: {[i.fn_name for i in items]}"
+        f"both test methods must be collected -- missing a method means it silently"
+        f" never runs: {[i.fn_name for i in items]}"
     )
     for item in items:
         assert "usefixtures" in item.markers, (
-            f"class usefixtures should propagate to {item.fn_name!r}, got markers: "
+            f"class-level usefixtures must propagate to every method -- without it,"
+            f" {item.fn_name!r} runs without the required fixture setup and produces"
+            f" unreliable results: "
             f"{item.markers}"
         )
 
@@ -223,9 +269,13 @@ def test_collect_class_skip_propagated(tmp: TempDir) -> None:
         name="test_cls_skip.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 method to be collected, got {len(items)}"
+    assert len(items) == 1, (
+        f"the single test method must be collected so propagation can be verified:"
+        f" {len(items)}"
+    )
     assert "skip" in items[0].markers, (
-        f"skip mark should propagate from class to method, got markers: "
+        f"class-level skip must propagate to every method -- without it the runner"
+        f" executes tests the author intended to skip, producing misleading results: "
         f"{items[0].markers}"
     )
 
@@ -241,15 +291,29 @@ def test_collected_item_can_be_constructed() -> None:
         is_async=False,
     )
     assert item.fn_name == "test_foo", (
-        f"expected fn_name='test_foo', got {item.fn_name!r}"
+        f"fn_name is the primary key for test identification in reports and --lf -- it"
+        f" must survive round-trip construction: {item.fn_name!r}"
     )
-    assert item.lineno == 1, f"expected lineno=1, got {item.lineno}"
-    assert item.markers == (), f"expected empty markers, got {item.markers}"
-    assert item.param_id is None, f"expected param_id=None, got {item.param_id!r}"
+    assert item.lineno == 1, (
+        f"lineno drives jump-to-source in reporters and IDEs -- a wrong value sends"
+        f" developers to the wrong line: {item.lineno}"
+    )
+    assert item.markers == (), (
+        f"default-constructed items must have empty markers so no skip/xfail/timeout"
+        f" behavior is accidentally triggered: {item.markers}"
+    )
+    assert item.param_id is None, (
+        f"param_id=None signals a non-parametrized test -- a non-None default would"
+        f" cause the runner to look up nonexistent parameter sets: {item.param_id!r}"
+    )
     assert item.param_values == (), (
-        f"expected empty param_values, got {item.param_values}"
+        f"param_values must default to empty -- stale values would inject unexpected"
+        f" arguments into the test function call: {item.param_values}"
     )
-    assert item.is_async is False, f"expected is_async=False, got {item.is_async!r}"
+    assert item.is_async is False, (
+        f"is_async=False is the default -- a True default would cause the runner to"
+        f" wrap synchronous functions in asyncio.run and break them: {item.is_async!r}"
+    )
 
 
 def test_collected_item_with_markers_and_param() -> None:
@@ -262,12 +326,17 @@ def test_collected_item_with_markers_and_param() -> None:
         param_values=(("x", "1"), ("y", "2")),
         is_async=False,
     )
-    assert item.markers == ("slow",), f"expected markers=('slow',), got {item.markers}"
+    assert item.markers == ("slow",), (
+        f"markers must be stored exactly as given -- lost markers break -m filtering"
+        f" and mark-dependent behavior: {item.markers}"
+    )
     assert item.param_id == "case_a", (
-        f"expected param_id='case_a', got {item.param_id!r}"
+        f"param_id identifies the parametrize case in reports and --lf reruns -- a"
+        f" wrong id makes individual cases unaddressable: {item.param_id!r}"
     )
     assert item.param_values == (("x", "1"), ("y", "2")), (
-        f"expected param_values=(('x', '1'), ('y', '2')), got {item.param_values}"
+        f"param_values feed argument injection at runtime -- corrupted values silently"
+        f" inject wrong data into the test function: {item.param_values}"
     )
 
 
@@ -290,18 +359,23 @@ def test_collect_module_emits_violation_for_helpers_in_test_module(
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
     assert len(registrar_viols) == 1, (
-        f"expected 1 REGISTRAR_IN_TEST_MODULE violation for Helpers() in test module, "
-        f"got {len(registrar_viols)}: {registrar_viols}"
+        f"Helpers() in a test module without an allow comment must emit exactly one"
+        f" violation -- zero means the guard is broken, more than one means duplicate"
+        f" detection: {registrar_viols}"
     )
     v = registrar_viols[0]
     assert v.node_id == path, (
-        f"violation node_id should be the module path {path!r}, got {v.node_id!r}"
+        f"node_id must point to the offending module so reporters can show the file"
+        f" path in diagnostics -- a wrong path sends users to the wrong file:"
+        f" {v.node_id!r}"
     )
     assert "Helpers" in v.detail, (
-        f"violation detail should mention Helpers, got {v.detail!r}"
+        f"the detail must name the registrar class so the user knows which instance"
+        f" triggered the violation and can locate it in the source: {v.detail!r}"
     )
     assert "allow[registrar-in-test-module]" in v.detail, (
-        f"violation detail should suggest allow comment, got {v.detail!r}"
+        f"the detail must include the allow comment syntax so the user knows exactly"
+        f" how to suppress the violation if intentional: {v.detail!r}"
     )
 
 
@@ -323,7 +397,8 @@ def test_collect_violations_bare_assert_now_rust_side(tmp: TempDir) -> None:
     _, violations = collect_module(path, collect_violations=True)
     bare = [v for v in violations if v.kind == "bare_assert"]
     assert bare == [], (
-        f"bare-assert violations should come from Rust, not Python: {bare}"
+        f"bare-assert detection lives in Rust (bare_asserts.rs) -- if Python also emits"
+        f" these, violations get double-reported and strict mode double-counts: {bare}"
     )
 
 
@@ -338,7 +413,9 @@ def test_collect_violations_assert_with_message_no_violation(tmp: TempDir) -> No
     )
     _, violations = collect_module(path, collect_violations=False)
     assert violations == [], (
-        f"assert with message should not produce violations, got {violations}"
+        f"asserts with messages satisfy the strict-mode contract -- flagging them as"
+        f" violations would force users to add redundant messages and erode trust in"
+        f" the linter: {violations}"
     )
 
 
@@ -357,7 +434,11 @@ def test_collect_violations_nested_helper_no_false_positive(tmp: TempDir) -> Non
     _, violations = collect_module(path, collect_violations=True)
     # The bare assert is inside a nested helper — must NOT be attributed to test_foo
     bare = [v for v in violations if v.kind == "bare_assert"]
-    assert bare == [], f"expected no bare-assert violations, got {bare}"
+    assert bare == [], (
+        f"bare asserts inside nested helpers must not be attributed to the enclosing"
+        f" test_ function -- false positives train users to ignore real violations:"
+        f" {bare}"
+    )
 
 
 def test_collect_violations_false_when_disabled(tmp: TempDir) -> None:
@@ -371,7 +452,9 @@ def test_collect_violations_false_when_disabled(tmp: TempDir) -> None:
     )
     _, violations = collect_module(path, collect_violations=False)
     assert violations == [], (
-        f"violations should be empty when collect_violations=False, got {violations}"
+        f"collect_violations=False must suppress all violation checks -- emitting"
+        f" violations when disabled breaks the opt-in contract and slows collection"
+        f" unnecessarily: {violations}"
     )
 
 
@@ -393,14 +476,19 @@ def test_check_fn_violations_class_method_dict_parametrize() -> None:
     violations = list(check_fn_violations(path, fn_name, test_method))
 
     assert len(violations) == 1, (
-        f"expected 1 DICT_PARAMETRIZE violation, got {len(violations)}: {violations}"
+        f"dict-parametrize on a class method must produce exactly one violation -- zero"
+        f" means the checker ignores class methods, more means duplicate detection:"
+        f" {violations}"
     )
     v = violations[0]
     assert v.kind == ViolationKind.DICT_PARAMETRIZE, (
-        f"violation kind should be DICT_PARAMETRIZE, got {v.kind!r}"
+        f"the violation must be typed as DICT_PARAMETRIZE so reporters can distinguish"
+        f" it from other violation kinds and apply the correct diagnostic message:"
+        f" {v.kind!r}"
     )
     assert v.node_id == f"{path}::{fn_name}", (
-        f"violation node_id should be '{path}::{fn_name}', got {v.node_id!r}"
+        f"node_id must include the full qualified path so reporters can pinpoint the"
+        f" exact method in diagnostics and IDE integrations: {v.node_id!r}"
     )
 
 
@@ -416,16 +504,22 @@ def test_check_fn_violations_class_method_missing_mark_reason() -> None:
     violations = list(check_fn_violations(path, fn_name, test_method))
 
     assert len(violations) == 1, (
-        f"expected 1 MISSING_MARK_REASON violation, got {len(violations)}: {violations}"
+        f"skip without reason= on a class method must produce exactly one violation --"
+        f" missing it lets undocumented skips persist indefinitely: {violations}"
     )
     v = violations[0]
     assert v.kind == ViolationKind.MISSING_MARK_REASON, (
-        f"violation kind should be MISSING_MARK_REASON, got {v.kind!r}"
+        f"the violation must be typed as MISSING_MARK_REASON so the reporter can"
+        f" suggest adding reason= in its diagnostic: {v.kind!r}"
     )
     assert v.node_id == f"{path}::{fn_name}", (
-        f"violation node_id should be '{path}::{fn_name}', got {v.node_id!r}"
+        f"node_id must carry the full qualified path so the reporter can pinpoint the"
+        f" exact method in its output: {v.node_id!r}"
     )
-    assert v.detail == "skip", f"violation detail should be 'skip', got {v.detail!r}"
+    assert v.detail == "skip", (
+        f"detail must name the mark ('skip') so the diagnostic tells the user which"
+        f" decorator needs a reason= argument: {v.detail!r}"
+    )
 
 
 def test_collect_async_function_sets_is_async(tmp: TempDir) -> None:
@@ -434,9 +528,13 @@ def test_collect_async_function_sets_is_async(tmp: TempDir) -> None:
         tmp, "async def test_hello(): pass\n", name="test_async.py"
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"each test_ function must map to exactly one CollectedItem for the runner to"
+        f" schedule it: {len(items)}"
+    )
     assert items[0].is_async is True, (
-        f"async def test should have is_async=True, got {items[0].is_async!r}"
+        f"is_async=True tells the runner to wrap execution in asyncio.run -- missing it"
+        f" causes a coroutine-never-awaited error: {items[0].is_async!r}"
     )
 
 
@@ -446,9 +544,14 @@ def test_collect_sync_function_sets_is_async_false(tmp: TempDir) -> None:
         tmp, "def test_hello(): pass\n", name="test_sync.py"
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"each test_ function must map to exactly one CollectedItem for the runner to"
+        f" schedule it: {len(items)}"
+    )
     assert items[0].is_async is False, (
-        f"sync def test should have is_async=False, got {items[0].is_async!r}"
+        f"is_async=False tells the runner to call the function directly -- a wrong True"
+        f" would wrap a sync function in asyncio.run and break it:"
+        f" {items[0].is_async!r}"
     )
 
 
@@ -460,10 +563,19 @@ def test_collect_mixed_sync_async(tmp: TempDir) -> None:
         name="test_mixed.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"both sync and async test_ functions must be collected -- missing one silently"
+        f" drops a test from the schedule: {len(items)}"
+    )
     by_name = {item.fn_name: item for item in items}
-    assert by_name["test_sync"].is_async is False, "sync test should be is_async=False"
-    assert by_name["test_async"].is_async is True, "async test should be is_async=True"
+    assert by_name["test_sync"].is_async is False, (
+        "sync functions must be is_async=False -- a wrong True wraps them in"
+        " asyncio.run and breaks execution"
+    )
+    assert by_name["test_async"].is_async is True, (
+        "async functions must be is_async=True -- a wrong False calls them without"
+        " await, producing a coroutine-never-awaited error"
+    )
 
 
 def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None:
@@ -493,14 +605,20 @@ def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
     assert len(registrar_viols) == 0, (
-        "allow comment should suppress violation — "
-        f"got {len(registrar_viols)}: {registrar_viols}"
+        "the allow comment is the opt-in gate for registrars in test modules --"
+        " emitting a violation despite the comment breaks the suppression contract and"
+        " forces users to move fixtures elsewhere: "
+        f"{registrar_viols}"
     )
     assert registry.get("async_val") is not None, (
-        "async_val should be registered — allow comment authorizes registration"
+        "the allow comment authorizes fixture registration -- if fixtures are not"
+        " registered despite the comment, the test will fail at runtime with 'unknown"
+        " fixture' errors"
     )
     assert registry.get("sync_val") is not None, (
-        "sync_val should be registered — allow comment authorizes registration"
+        "the allow comment authorizes fixture registration -- if fixtures are not"
+        " registered despite the comment, the test will fail at runtime with 'unknown"
+        " fixture' errors"
     )
 
 
@@ -514,13 +632,18 @@ def test_collect_async_class_method_sets_is_async(tmp: TempDir) -> None:
         name="test_cls_async.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"both class methods must be collected -- missing one means a test silently"
+        f" never runs: {len(items)}"
+    )
     by_name = {item.fn_name: item for item in items}
     assert by_name["TestSuite::test_async_method"].is_async is True, (
-        "async class method should be is_async=True"
+        "async class methods need is_async=True so the runner wraps them in asyncio.run"
+        " -- without it the coroutine is never awaited"
     )
     assert by_name["TestSuite::test_sync_method"].is_async is False, (
-        "sync class method should be is_async=False"
+        "sync class methods need is_async=False -- a wrong True wraps a regular"
+        " function in asyncio.run and breaks execution"
     )
 
 
@@ -542,9 +665,18 @@ def test_module_members_yields_test_functions_only() -> None:
     mod.__dict__["helper"] = helper
     members = list(_module_members(mod))
     names = [n for n, _ in members]
-    assert "test_one" in names, f"'test_one' should be yielded, got {names}"
-    assert "test_two" in names, f"'test_two' should be yielded, got {names}"
-    assert "helper" not in names, f"'helper' should not be yielded, got {names}"
+    assert "test_one" in names, (
+        f"_module_members must yield all test_-prefixed functions -- missing one"
+        f" silently drops a test from the schedule: {names}"
+    )
+    assert "test_two" in names, (
+        f"_module_members must yield all test_-prefixed functions -- missing one"
+        f" silently drops a test from the schedule: {names}"
+    )
+    assert "helper" not in names, (
+        f"non-test helpers must be excluded -- yielding them would inject non-test"
+        f" callables into the schedule and produce false passes or type errors: {names}"
+    )
 
 
 def test_collect_items_returns_collected_items() -> None:
@@ -556,11 +688,18 @@ def test_collect_items_returns_collected_items() -> None:
     lineno = fake_fn.__code__.co_firstlineno
     members = [("test_fake", fake_fn)]
     items, _ = _collect_items(members, "/fake.py", collect_violations=False)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
-    assert items[0].fn_name == "test_fake", (
-        f"expected fn_name='test_fake', got {items[0].fn_name!r}"
+    assert len(items) == 1, (
+        f"each member function must produce exactly one CollectedItem for the runner to"
+        f" schedule it: {len(items)}"
     )
-    assert items[0].lineno == lineno, f"expected lineno={lineno}, got {items[0].lineno}"
+    assert items[0].fn_name == "test_fake", (
+        f"fn_name must match the member name so reports and --lf reruns can identify"
+        f" the test: {items[0].fn_name!r}"
+    )
+    assert items[0].lineno == lineno, (
+        f"lineno must come from the function's code object so reporters and IDEs can"
+        f" jump to the correct source line: {items[0].lineno}"
+    )
 
 
 # ── _extract_module_marks tests ───────────────────────────────────────────────
@@ -570,8 +709,14 @@ def test_extract_module_marks_none_returns_empty() -> None:
     """No oxi_mark attribute → empty list, no violations."""
     module = ModuleType("test_no_marks")
     marks, violations = _extract_module_marks(module, "/fake/test_no_marks.py")
-    assert marks == [], f"expected no marks, got {marks}"
-    assert violations == [], f"expected no violations, got {violations}"
+    assert marks == [], (
+        f"modules without oxi_mark must produce no marks -- phantom marks would apply"
+        f" unintended behavior (skip/timeout) to every test in the module: {marks}"
+    )
+    assert violations == [], (
+        f"a module with no oxi_mark attribute is valid -- emitting violations for its"
+        f" absence would be a false positive: {violations}"
+    )
 
 
 def test_extract_module_marks_single_mark() -> None:
@@ -579,9 +724,18 @@ def test_extract_module_marks_single_mark() -> None:
     module = ModuleType("test_single")
     setattr(module, "oxi_mark", MarkInfo("slow", (), MappingProxyType({})))  # noqa: B010
     marks, violations = _extract_module_marks(module, "/fake/test_single.py")
-    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
-    assert marks[0].name == "slow", f"expected mark name 'slow', got {marks[0].name!r}"
-    assert violations == [], f"expected no violations, got {violations}"
+    assert len(marks) == 1, (
+        f"a single MarkInfo in oxi_mark must produce exactly one extracted mark -- zero"
+        f" means it was silently dropped: {len(marks)}"
+    )
+    assert marks[0].name == "slow", (
+        f"the extracted mark name must match the MarkInfo -- a wrong name applies the"
+        f" wrong behavior (e.g. skip instead of slow): {marks[0].name!r}"
+    )
+    assert violations == [], (
+        f"a valid MarkInfo is not a violation -- false positives would train users to"
+        f" ignore real violations: {violations}"
+    )
 
 
 def test_extract_module_marks_list() -> None:
@@ -596,11 +750,23 @@ def test_extract_module_marks_list() -> None:
         ],
     )
     marks, violations = _extract_module_marks(module, "/fake/test_list.py")
-    assert len(marks) == 2, f"expected 2 marks, got {len(marks)}"
+    assert len(marks) == 2, (
+        f"every MarkInfo in the oxi_mark list must be extracted -- missing marks"
+        f" silently drop module-wide behavior: {len(marks)}"
+    )
     names = [m.name for m in marks]
-    assert "slow" in names, f"'slow' should be in marks, got {names}"
-    assert "timeout" in names, f"'timeout' should be in marks, got {names}"
-    assert violations == [], f"expected no violations, got {violations}"
+    assert "slow" in names, (
+        f"each mark in the list must be preserved -- dropping 'slow' means -m slow"
+        f" filtering will not match this module's tests: {names}"
+    )
+    assert "timeout" in names, (
+        f"each mark in the list must be preserved -- dropping 'timeout' means"
+        f" module-wide timeout enforcement silently disappears: {names}"
+    )
+    assert violations == [], (
+        f"a list of valid MarkInfos is not a violation -- false positives erode trust"
+        f" in the linter: {violations}"
+    )
 
 
 def test_extract_module_marks_tuple() -> None:
@@ -608,7 +774,10 @@ def test_extract_module_marks_tuple() -> None:
     module = ModuleType("test_tuple")
     setattr(module, "oxi_mark", (MarkInfo("slow", (), MappingProxyType({})),))  # noqa: B010
     marks, _ = _extract_module_marks(module, "/fake/test_tuple.py")
-    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
+    assert len(marks) == 1, (
+        f"oxi_mark as a tuple must be accepted like a list -- rejecting it would break"
+        f" users who prefer tuple syntax for immutability: {len(marks)}"
+    )
 
 
 def test_extract_module_marks_invalid_entry() -> None:
@@ -624,12 +793,24 @@ def test_extract_module_marks_invalid_entry() -> None:
         ],
     )
     marks, violations = _extract_module_marks(module, "/fake/test_invalid.py")
-    assert len(marks) == 1, f"expected 1 valid mark, got {len(marks)}"
-    assert marks[0].name == "slow", f"expected 'slow', got {marks[0].name!r}"
-    assert len(violations) == 2, f"expected 2 violations, got {len(violations)}"
+    assert len(marks) == 1, (
+        f"valid MarkInfo entries must still be extracted even when invalid entries are"
+        f" present -- dropping them penalizes correct entries for sibling errors:"
+        f" {len(marks)}"
+    )
+    assert marks[0].name == "slow", (
+        f"the valid mark must preserve its name so -m filtering and mark-dependent"
+        f" behavior work correctly: {marks[0].name!r}"
+    )
+    assert len(violations) == 2, (
+        f"each non-MarkInfo entry must produce exactly one violation -- missing"
+        f" violations let invalid config pass silently: {len(violations)}"
+    )
     for v in violations:
         assert v.kind == ViolationKind.INVALID_MODULE_MARK, (
-            f"expected INVALID_MODULE_MARK, got {v.kind}"
+            f"invalid oxi_mark entries must be typed as INVALID_MODULE_MARK so the"
+            f" reporter can show the correct diagnostic and suggest MarkInfo usage:"
+            f" {v.kind}"
         )
 
 
@@ -645,8 +826,14 @@ def test_apply_module_marks_prepends_to_unmarked_fn() -> None:
     module_marks = [MarkInfo("slow", (), MappingProxyType({}))]
     _apply_module_marks([("test_fn", test_fn)], module_marks)
     marks = get_metadata(test_fn).marks
-    assert len(marks) == 1, f"expected 1 mark, got {len(marks)}"
-    assert marks[0].name == "slow", f"expected 'slow', got {marks[0].name!r}"
+    assert len(marks) == 1, (
+        f"module marks must be applied to unmarked functions -- without them,"
+        f" module-wide behavior (skip/timeout/slow) silently disappears: {len(marks)}"
+    )
+    assert marks[0].name == "slow", (
+        f"the applied mark must match the module mark name so -m filtering and"
+        f" mark-dependent behavior activate correctly: {marks[0].name!r}"
+    )
 
 
 def test_apply_module_marks_per_test_overrides_same_name() -> None:
@@ -661,11 +848,15 @@ def test_apply_module_marks_per_test_overrides_same_name() -> None:
     marks = get_metadata(test_fn).marks
     timeout_marks = [m for m in marks if m.name == "timeout"]
     assert len(timeout_marks) == 1, (
-        f"expected exactly 1 timeout mark, got {len(timeout_marks)}: {timeout_marks}"
+        f"per-test and module marks of the same name must not stack -- duplicates would"
+        f" cause the runner to apply the behavior twice (e.g. double timeout):"
+        f" {timeout_marks}"
     )
     assert timeout_marks[0].kwargs == {"seconds": 5}, (
-        f"per-test timeout(5) should override module timeout(120), "
-        f"got {timeout_marks[0].kwargs}"
+        f"per-test marks must override module marks of the same name -- the"
+        f" function-level decorator is more specific and must win, otherwise authors"
+        f" cannot customize individual tests: "
+        f"{timeout_marks[0].kwargs}"
     )
 
 
@@ -680,8 +871,15 @@ def test_apply_module_marks_non_conflicting_added() -> None:
     _apply_module_marks([("test_fn", test_fn)], module_marks)
     marks = get_metadata(test_fn).marks
     names = [m.name for m in marks]
-    assert "slow" in names, f"module mark 'slow' should be added, got {names}"
-    assert "timeout" in names, f"per-test mark 'timeout' should remain, got {names}"
+    assert "slow" in names, (
+        f"non-conflicting module marks must be added alongside per-test marks --"
+        f" dropping them silently removes module-wide behavior from individually marked"
+        f" tests: {names}"
+    )
+    assert "timeout" in names, (
+        f"existing per-test marks must survive module mark application -- losing them"
+        f" means function-level decorators have no effect: {names}"
+    )
 
 
 def test_apply_module_marks_empty_list_is_noop() -> None:
@@ -692,7 +890,10 @@ def test_apply_module_marks_empty_list_is_noop() -> None:
 
     _apply_module_marks([("test_fn", test_fn)], [])
     marks = get_metadata(test_fn).marks
-    assert marks == (), f"expected no marks, got {marks}"
+    assert marks == (), (
+        f"applying an empty module_marks list must be a no-op -- injecting phantom"
+        f" marks would apply unintended behavior to all tests: {marks}"
+    )
 
 
 # ── collect_module oxi_mark integration tests ─────────────────────────────────
@@ -709,12 +910,19 @@ def test_collect_module_with_oxi_mark_single(tmp: TempDir) -> None:
         name="test_mod_mark.py",
     )
     items, violations = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"all test_ functions must be collected for module marks to have any effect:"
+        f" {len(items)}"
+    )
     for item in items:
         assert "slow" in item.markers, (
-            f"module mark 'slow' should apply to {item.fn_name}, got {item.markers}"
+            f"oxi_mark = mark.slow must propagate to every test -- without it, -m slow"
+            f" filtering excludes {item.fn_name} from slow-only runs: {item.markers}"
         )
-    assert violations == [], f"expected no violations, got {violations}"
+    assert violations == [], (
+        f"a valid single MarkInfo in oxi_mark must not produce violations -- false"
+        f" positives erode trust in the linter: {violations}"
+    )
 
 
 def test_collect_module_with_oxi_mark_list(tmp: TempDir) -> None:
@@ -728,13 +936,20 @@ def test_collect_module_with_oxi_mark_list(tmp: TempDir) -> None:
         name="test_mod_marks.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"all test_ functions must be collected for module marks to have any effect:"
+        f" {len(items)}"
+    )
     for item in items:
         assert "slow" in item.markers, (
-            f"module mark 'slow' should apply to {item.fn_name}, got {item.markers}"
+            f"every mark in the oxi_mark list must propagate to every test -- dropping"
+            f" 'slow' means -m slow filtering silently excludes {item.fn_name}:"
+            f" {item.markers}"
         )
         assert "timeout" in item.markers, (
-            f"module mark 'timeout' should apply to {item.fn_name}, got {item.markers}"
+            f"every mark in the oxi_mark list must propagate to every test -- dropping"
+            f" 'timeout' means module-wide timeout enforcement silently disappears for"
+            f" {item.fn_name}: {item.markers}"
         )
 
 
@@ -750,10 +965,15 @@ def test_collect_module_oxi_mark_per_test_override(tmp: TempDir) -> None:
         name="test_override.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"both functions must be collected so per-test vs module mark override can be"
+        f" verified on each: {len(items)}"
+    )
     for item in items:
         assert "timeout" in item.markers, (
-            f"timeout should be on {item.fn_name}, got {item.markers}"
+            f"timeout must appear on {item.fn_name} -- the per-test override replaces"
+            f" the module mark, but the mark name must still be present for the runner"
+            f" to enforce the timeout: {item.markers}"
         )
 
 
@@ -772,11 +992,16 @@ def test_collect_module_oxi_mark_with_parametrize(tmp: TempDir) -> None:
         name="test_param.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 parametrize cases, got {len(items)}"
+    assert len(items) == 2, (
+        f"each parametrize case must produce a separate CollectedItem -- missing cases"
+        f" silently skip parameter combinations: {len(items)}"
+    )
     for item in items:
         assert "slow" in item.markers, (
-            f"module mark 'slow' should apply to {item.fn_name}[{item.param_id}], "
-            f"got {item.markers}"
+            f"module marks must propagate to every parametrize case -- without it, -m"
+            f" slow filtering excludes {item.fn_name}[{item.param_id}] from slow-only"
+            f" runs: "
+            f"{item.markers}"
         )
 
 
@@ -792,11 +1017,16 @@ def test_collect_module_oxi_mark_applies_to_class_methods(tmp: TempDir) -> None:
         name="test_cls_mod.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"both class methods must be collected for module mark propagation to be"
+        f" verified: {len(items)}"
+    )
     for item in items:
         assert "slow" in item.markers, (
-            f"module mark 'slow' should apply to class method {item.fn_name}, "
-            f"got {item.markers}"
+            f"module marks must propagate to class methods the same as top-level"
+            f" functions -- without it, class methods in this module are excluded from"
+            f" -m slow runs: "
+            f"{item.markers}"
         )
 
 
@@ -808,15 +1038,24 @@ def test_collect_module_oxi_mark_invalid_entry_violation(tmp: TempDir) -> None:
         name="test_bad_mark.py",
     )
     items, violations = collect_module(path)
-    assert len(items) == 1, f"expected 1 item (tests still collected), got {len(items)}"
+    assert len(items) == 1, (
+        f"test collection must succeed even when oxi_mark has invalid entries --"
+        f" blocking collection penalizes the entire module for one bad entry:"
+        f" {len(items)}"
+    )
     assert "slow" in items[0].markers, (
-        f"valid mark 'slow' should still apply, got {items[0].markers}"
+        f"valid marks must still be applied even when sibling entries are invalid --"
+        f" dropping them punishes correct usage: {items[0].markers}"
     )
     assert len(violations) == 1, (
-        f"expected 1 violation for invalid entry, got {len(violations)}"
+        f"each invalid oxi_mark entry must produce exactly one violation -- zero means"
+        f" invalid config passes silently, more than one means duplicate detection:"
+        f" {len(violations)}"
     )
     assert violations[0].kind == ViolationKind.INVALID_MODULE_MARK, (
-        f"expected INVALID_MODULE_MARK, got {violations[0].kind}"
+        f"the violation must be typed as INVALID_MODULE_MARK so the reporter can show"
+        f" the correct diagnostic and guide the user to fix the entry:"
+        f" {violations[0].kind}"
     )
 
 
@@ -836,10 +1075,15 @@ def test_propagate_class_marks_copies_skip(tmp: TempDir) -> None:
         name="test_class_skip.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 2, f"expected 2 items, got {len(items)}"
+    assert len(items) == 2, (
+        f"both class methods must be collected so skip propagation can be verified on"
+        f" each: {len(items)}"
+    )
     for item in items:
         assert "skip" in item.markers, (
-            f"expected skip marker on {item.fn_name}, got {item.markers}"
+            f"class-level skip must propagate to every method -- without it,"
+            f" {item.fn_name} runs when the author intended the entire class skipped:"
+            f" {item.markers}"
         )
 
 
@@ -855,9 +1099,13 @@ def test_propagate_class_marks_copies_timeout(tmp: TempDir) -> None:
         name="test_class_timeout.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"the class method must be collected so timeout propagation can be verified:"
+        f" {len(items)}"
+    )
     assert "timeout" in items[0].markers, (
-        f"expected timeout marker, got {items[0].markers}"
+        f"class-level timeout must propagate to methods -- without it, methods run"
+        f" without time limits and can hang indefinitely: {items[0].markers}"
     )
 
 
@@ -873,8 +1121,14 @@ def test_propagate_class_marks_copies_custom_mark(tmp: TempDir) -> None:
         name="test_class_custom.py",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
-    assert "slow" in items[0].markers, f"expected slow marker, got {items[0].markers}"
+    assert len(items) == 1, (
+        f"the class method must be collected so custom mark propagation can be"
+        f" verified: {len(items)}"
+    )
+    assert "slow" in items[0].markers, (
+        f"class-level custom marks must propagate to methods -- without it, -m slow"
+        f" filtering excludes these methods from slow-only runs: {items[0].markers}"
+    )
 
 
 # ── oxi_mark skip(when=False) no-op tests ──────────────────────────────────
@@ -892,13 +1146,19 @@ def test_module_mark_skip_when_false_no_violation(tmp: TempDir) -> None:
         name="test_skip_false.py",
     )
     items, violations = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"the test function must be collected so skip(when=False) behavior can be"
+        f" verified: {len(items)}"
+    )
     assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
-        f"skip(when=False) should not be a violation: {violations}"
+        f"skip(when=False) is a valid no-op, not an error -- flagging it as a violation"
+        f" penalizes correct conditional-skip usage: {violations}"
     )
     # Test should NOT have a skip marker
     assert "skip" not in items[0].markers, (
-        f"skip(when=False) should not apply skip marker, got {items[0].markers}"
+        f"skip(when=False) must be a no-op -- applying the skip marker when the"
+        f" condition is False would skip tests the author explicitly wants to run:"
+        f" {items[0].markers}"
     )
 
 
@@ -914,12 +1174,17 @@ def test_module_mark_skip_when_true_applies(tmp: TempDir) -> None:
         name="test_skip_true.py",
     )
     items, violations = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"the test function must be collected so skip(when=True) behavior can be"
+        f" verified: {len(items)}"
+    )
     assert "skip" in items[0].markers, (
-        f"skip(when=True) should apply skip marker, got {items[0].markers}"
+        f"skip(when=True) must apply the skip marker -- without it the runner executes"
+        f" tests the author conditionally wants skipped: {items[0].markers}"
     )
     assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
-        f"skip(when=True) should not be a violation: {violations}"
+        f"skip(when=True) is a valid conditional skip, not an error -- flagging it as a"
+        f" violation penalizes correct usage: {violations}"
     )
 
 
@@ -935,15 +1200,22 @@ def test_module_mark_skip_when_false_in_list_no_violation(tmp: TempDir) -> None:
         name="test_skip_false_list.py",
     )
     items, violations = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        f"the test function must be collected so mixed oxi_mark list behavior can be"
+        f" verified: {len(items)}"
+    )
     assert "slow" in items[0].markers, (
-        f"slow mark should still apply, got {items[0].markers}"
+        f"valid marks in the list must still be applied even when a no-op"
+        f" skip(when=False) is present -- dropping them penalizes correct entries:"
+        f" {items[0].markers}"
     )
     assert "skip" not in items[0].markers, (
-        f"skip(when=False) should not apply, got {items[0].markers}"
+        f"skip(when=False) is a no-op even when inside a list -- applying skip would"
+        f" incorrectly skip tests the author wants to run: {items[0].markers}"
     )
     assert not any(v.kind == ViolationKind.INVALID_MODULE_MARK for v in violations), (
-        f"skip(when=False) in list should not be a violation: {violations}"
+        f"skip(when=False) in a list is valid no-op usage -- flagging it as a violation"
+        f" penalizes correct conditional-skip patterns: {violations}"
     )
 
 
@@ -1009,23 +1281,28 @@ def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
 
     # The regular test item should still be collected despite the collector error
     assert len(items) == 1, (
-        "base test should still be collected when a plugin "
-        f"collector fails, got {len(items)}"
+        "a plugin collector error must not block base test collection -- one broken"
+        " plugin must not prevent the entire module from being tested: "
+        f"{len(items)}"
     )
 
     collector_warnings = [
         w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 1, (
-        "expected exactly 1 PluginCollectorWarning, "
-        f"got {len(collector_warnings)}: {warn.warnings}"
+        "a failing collector must emit exactly one PluginCollectorWarning so users know"
+        " the plugin is broken -- zero means silent failure, more than one means"
+        " duplicate reporting: "
+        f"{warn.warnings}"
     )
     msg = str(collector_warnings[0].message)
     assert "_RaisingCollector" in msg, (
-        f"warning should identify the collector class, got: {msg}"
+        f"the warning must identify the collector class so the user knows which plugin"
+        f" to fix or disable: {msg}"
     )
     assert "collector went boom" in msg, (
-        f"warning should include the original error message, got: {msg}"
+        f"the warning must include the original error message so users can diagnose the"
+        f" root cause without re-running with debug logging: {msg}"
     )
 
 
@@ -1042,23 +1319,32 @@ def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> No
 
     # Only the base test should be collected; bad returns are dropped
     assert len(items) == 1, (
-        f"non-CollectedItem returns should be dropped, got {len(items)} items"
+        f"non-CollectedItem returns must be silently dropped so invalid plugin output"
+        f" cannot corrupt the test schedule: {len(items)}"
     )
 
     collector_warnings = [
         w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 2, (
-        "expected 2 warnings (one per bad item), "
-        f"got {len(collector_warnings)}: {warn.warnings}"
+        "each non-CollectedItem return value must produce a separate warning so the"
+        " plugin author can identify every invalid item: "
+        f"{warn.warnings}"
     )
     msg0 = str(collector_warnings[0].message)
     assert "_BadReturnCollector" in msg0, (
-        f"warning should identify the collector class, got: {msg0}"
+        f"the warning must name the collector class so the plugin author knows which"
+        f" collector returned invalid data: {msg0}"
     )
-    assert "str" in msg0, f"warning should identify the unexpected type, got: {msg0}"
+    assert "str" in msg0, (
+        f"the warning must name the unexpected return type so the plugin author knows"
+        f" what to fix (expected CollectedItem, got str): {msg0}"
+    )
     msg1 = str(collector_warnings[1].message)
-    assert "int" in msg1, f"second warning should identify 'int' type, got: {msg1}"
+    assert "int" in msg1, (
+        f"each bad return must name its specific type so the plugin author can fix each"
+        f" one individually: {msg1}"
+    )
 
 
 def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) -> None:
@@ -1073,19 +1359,23 @@ def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) 
     items, _ = collect_module(path, session=session)
 
     assert len(items) == 2, (
-        f"expected 2 items (1 base + 1 from plugin), got {len(items)}"
+        f"plugin-collected items must be merged with base items -- missing the plugin"
+        f" item means the plugin's tests silently never run: {len(items)}"
     )
     plugin_item = [i for i in items if i.fn_name == "test_from_plugin"]
     assert len(plugin_item) == 1, (
-        "plugin-collected item should be present, "
-        f"got names: {[i.fn_name for i in items]}"
+        "the plugin-collected item must appear in the final item list so the runner"
+        " schedules it -- otherwise the plugin's test contribution is silently lost: "
+        f"{[i.fn_name for i in items]}"
     )
 
     collector_warnings = [
         w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
     ]
     assert len(collector_warnings) == 0, (
-        f"a well-behaved collector should emit no warnings, got: {collector_warnings}"
+        f"a well-behaved collector returning valid CollectedItems must not trigger"
+        f" warnings -- false warnings would train plugin authors to ignore real"
+        f" problems: {collector_warnings}"
     )
 
 
@@ -1111,10 +1401,14 @@ def test_get_fixture_deps_includes_builtins() -> None:
 
     deps = _get_fixture_deps(test_fn)
     type_names = [t for _, t in deps]
-    assert "_MyDB" in type_names, "should include user fixture type in deps"
+    assert "_MyDB" in type_names, (
+        "user-defined Fixture[T] params must appear in deps so the fixture resolver can"
+        " look them up and inject the correct instance at runtime"
+    )
     assert "TempDir" in type_names, (
-        "should include builtin fixture type in deps — "
-        "_get_fixture_deps does NOT exclude builtins"
+        "builtin fixture types must appear in deps -- _get_fixture_deps must not"
+        " exclude them because the resolver needs to see all fixture dependencies to"
+        " build the correct injection order"
     )
 
 
@@ -1129,10 +1423,13 @@ def test_get_fixture_deps_skips_non_fixture() -> None:
 
     deps = _get_fixture_deps(test_fn)
     assert len(deps) == 1, (
-        f"should only include Fixture[T]-annotated params, got {deps}"
+        f"only Fixture[T]-annotated params are fixture dependencies -- including"
+        f" plain-typed params like 'int' would cause the resolver to look up"
+        f" nonexistent fixtures and fail: {deps}"
     )
     assert deps[0] == ("db", "_MyDB"), (
-        f"should be (qualifier, type_name) tuple, got {deps[0]!r}"
+        f"each dep must be a (qualifier, type_name) tuple so the resolver can match the"
+        f" parameter name to the correct fixture definition: {deps[0]!r}"
     )
 
 
@@ -1147,9 +1444,13 @@ def test_get_fixture_deps_returns_qualifier_and_type() -> None:
 
     deps = _get_fixture_deps(test_fn)
     deps_dict = dict(deps)
-    assert deps_dict.get("db") == "_MyDB", f"expected db -> _MyDB, got {deps_dict}"
+    assert deps_dict.get("db") == "_MyDB", (
+        f"the qualifier must map to its Fixture[T] type name so the resolver can look"
+        f" up the correct fixture definition by type: {deps_dict}"
+    )
     assert deps_dict.get("tmp") == "TempDir", (
-        f"expected tmp -> TempDir, got {deps_dict}"
+        f"the qualifier must map to its Fixture[T] type name so the resolver can look"
+        f" up the correct fixture definition by type: {deps_dict}"
     )
 
 
@@ -1165,7 +1466,8 @@ def test_get_fixture_deps_skips_return_annotation() -> None:
     deps = _get_fixture_deps(test_fn)
     qualifiers = [q for q, _ in deps]
     assert "return" not in qualifiers, (
-        f"return annotation should not be in deps, got {deps}"
+        f"the return annotation is not a parameter and must be excluded -- including it"
+        f" would cause the resolver to look up a phantom fixture named 'return': {deps}"
     )
 
 
@@ -1195,14 +1497,20 @@ def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
     assert len(registrar_viols) == 1, (
-        "Fixtures() without allow comment should emit a violation — "
-        f"got {len(registrar_viols)}: {registrar_viols}"
+        "Fixtures() without an allow comment must emit exactly one violation -- the"
+        " allow-comment gate exists to prevent accidental registrar usage in test"
+        " modules, and zero violations means the gate is broken: "
+        f"{registrar_viols}"
     )
     assert "Fixtures" in registrar_viols[0].detail, (
-        f"violation detail should mention Fixtures, got {registrar_viols[0].detail!r}"
+        f"the violation detail must name the registrar class so the user knows which"
+        f" instance triggered the violation and can decide whether to add an allow"
+        f" comment: {registrar_viols[0].detail!r}"
     )
     assert registry.get("local_val") is None, (
-        "local_val should NOT be registered — no allow comment means blocked"
+        "fixtures must NOT be registered when the allow comment is absent --"
+        " registering them anyway bypasses the safety gate and lets accidental"
+        " registrars silently take effect"
     )
 
 
@@ -1224,6 +1532,8 @@ def test_helpers_with_allow_comment_suppressed(tmp: TempDir) -> None:
         v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
     ]
     assert len(registrar_viols) == 0, (
-        "allow comment should suppress Helpers() violation — "
-        f"got {len(registrar_viols)}: {registrar_viols}"
+        "the allow comment is the opt-in gate for Helpers() in test modules -- emitting"
+        " a violation despite the comment breaks the suppression contract and forces"
+        " users to move helpers elsewhere: "
+        f"{registrar_viols}"
     )

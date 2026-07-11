@@ -29,15 +29,20 @@ def test_parametrize_dict_mode_stamps_function() -> None:
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
-        f"dict mode should store a tuple, got {type(raw).__name__}"
+        "param_cases must be a tuple to support stacking multiple @parametrize layers"
     )
-    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
+    assert len(raw) == 1, (
+        "a single @parametrize decorator produces exactly one layer -- extra layers"
+        " mean the decorator ran twice"
+    )
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
-        f"dict mode should stamp DictCases, got {type(param_cases)!r}"
+        "dict kwargs produce DictCases (not DataclassCases) so the executor knows to"
+        " inject individual kwargs"
     )
     assert param_cases.cases == {"basic": {"x": 1, "y": 2, "expected": 3}}, (
-        f"dict mode should store cases correctly, got {param_cases.cases!r}"
+        "case dict must round-trip unchanged so the executor injects exactly the values"
+        " the user specified"
     )
 
 
@@ -53,15 +58,20 @@ def test_parametrize_dict_mode_multiple_cases() -> None:
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
-        f"dict mode should store a tuple, got {type(raw).__name__}"
+        "param_cases must be a tuple so stacked @parametrize layers stay independent"
     )
-    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
+    assert len(raw) == 1, (
+        "one decorator means one layer -- extra layers would cause unexpected"
+        " cross-product expansion"
+    )
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
-        f"dict mode should stamp DictCases, got {type(param_cases)!r}"
+        "dict kwargs must produce DictCases so the executor dispatches kwargs"
+        " injection, not dataclass unpacking"
     )
     assert len(param_cases.cases) == 2, (
-        f"dict mode with 2 cases should produce 2 entries, got {len(param_cases.cases)}"
+        "each kwarg to @parametrize becomes a separate test case -- losing one means a"
+        " test scenario silently disappears"
     )
 
 
@@ -104,16 +114,21 @@ def test_parametrize_dict_mode_excludes_fixture_params_from_schema() -> None:
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
-        f"dict mode should store a tuple, got {type(raw).__name__}"
+        "param_cases must be a tuple so stacking multiple @parametrize layers works"
+        " correctly"
     )
-    assert len(raw) == 1, f"dict mode should store a 1-tuple, got {raw!r}"
+    assert len(raw) == 1, (
+        "single @parametrize produces one layer -- more would multiply the test matrix"
+        " unexpectedly"
+    )
     param_cases = raw[0]
     assert isinstance(param_cases, DictCases), (
-        f"dict mode should stamp DictCases, got {type(param_cases)!r}"
+        "dict kwargs must stamp DictCases so the executor uses kwargs injection for"
+        " these values"
     )
     assert param_cases.cases == {"basic": {"x": 2, "expected": 20}}, (
-        f"dict mode should not include Fixture params in schema,"
-        f" got {param_cases.cases!r}"
+        "Fixture[T] params must be excluded from the case schema because the session"
+        " resolves them separately -- including them would cause duplicate injection"
     )
 
 
@@ -130,8 +145,14 @@ def test_executor_dict_mode_passes(tmp: TempDir) -> None:
     )
     result_basic = helpers.common.exec_inline(tmp, code, "test_add", param_id="basic")
     result_neg = helpers.common.exec_inline(tmp, code, "test_add", param_id="negative")
-    assert result_basic.status == "passed", result_basic.message
-    assert result_neg.status == "passed", result_neg.message
+    assert result_basic.status == "passed", (
+        f"dict-mode must inject case values as kwargs so the test body receives them --"
+        f" failure means injection is broken: {result_basic.message}"
+    )
+    assert result_neg.status == "passed", (
+        f"each dict case runs independently with its own kwargs -- if 'negative' fails"
+        f" while 'basic' passes, case isolation is broken: {result_neg.message}"
+    )
 
 
 def test_executor_dict_mode_failure(tmp: TempDir) -> None:
@@ -146,8 +167,8 @@ def test_executor_dict_mode_failure(tmp: TempDir) -> None:
         param_id="wrong",
     )
     assert result.status == "failed", (
-        f"wrong expected value in dict mode should produce status='failed', got "
-        f"{result.status!r}"
+        "dict-mode must propagate assertion failures so users see real test results --"
+        " swallowing failures hides bugs"
     )
 
 
@@ -174,7 +195,10 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="double"
     )
-    assert result.status == "passed", result.message
+    assert result.status == "passed", (
+        f"dict-mode and fixture injection must coexist -- the session resolves"
+        f" Fixture[T] params while dict supplies the rest: {result.message}"
+    )
 
 
 def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
@@ -191,13 +215,18 @@ def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
     )
     items, _ = collect_module(path)
     assert len(items) == 2, (
-        f"dict parametrize with 2 cases should yield 2 items, got {len(items)}"
+        "each dict case must expand into its own CollectedItem so the scheduler can"
+        " distribute them independently across workers"
     )
     param_ids = [i.param_id for i in items]
     assert "basic" in param_ids, (
-        f"'basic' param_id should be collected, got {param_ids}"
+        "dict keys become param_ids for readable test output and --only filtering --"
+        " missing IDs break test selection"
     )
-    assert "neg" in param_ids, f"'neg' param_id should be collected, got {param_ids}"
+    assert "neg" in param_ids, (
+        "every dict key must appear as a param_id -- a missing key means that test"
+        " scenario was silently dropped during collection"
+    )
 
 
 def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir) -> None:
@@ -210,15 +239,21 @@ def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir) -> None:
         "    pass\n",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"expected 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        "single-case dict must produce exactly one CollectedItem -- extra items would"
+        " run the test multiple times"
+    )
     assert items[0].param_id == "basic", (
-        f"expected param_id='basic', got {items[0].param_id!r}"
+        "param_id must match the dict key so --only test selection and reporter output"
+        " identify the right case"
     )
     assert ("x", "1") in items[0].param_values, (
-        f"('x', '1') should be in param_values, got {items[0].param_values}"
+        "param_values carry the stringified args for reporter display and cache keying"
+        " -- missing 'x' means broken test identity"
     )
     assert ("y", "2") in items[0].param_values, (
-        f"('y', '2') should be in param_values, got {items[0].param_values}"
+        "every dict entry must appear in param_values so the reporter shows all"
+        " injected values in test output"
     )
 
 
@@ -231,18 +266,25 @@ def test_parametrize_inferred_type_stamps_function() -> None:
 
     raw = get_metadata(test_foo).param_cases
     assert isinstance(raw, tuple), (
-        f"dataclass mode should store a tuple, got {type(raw).__name__}"
+        "param_cases must be a tuple so stacked @parametrize decorators compose into a"
+        " cross-product matrix"
     )
-    assert len(raw) == 1, f"dataclass mode should store a 1-tuple, got {raw!r}"
+    assert len(raw) == 1, (
+        "one decorator means one layer -- extra layers would create an unintended"
+        " cross-product expansion"
+    )
     param_cases = raw[0]
     assert isinstance(param_cases, DataclassCases), (
-        f"dataclass mode should stamp DataclassCases, got {type(param_cases)!r}"
+        "dataclass values must produce DataclassCases so the executor unpacks fields,"
+        " not dict keys"
     )
     assert param_cases.param_type is AddCase, (
-        f"param_type should be inferred as AddCase, got {param_cases.param_type!r}"
+        "param_type must be inferred from the first case value so the executor can"
+        " validate all cases share the same schema"
     )
     assert param_cases.cases == {"basic": AddCase(x=1, y=2, expected=3)}, (
-        f"cases should store the case value, got {param_cases.cases!r}"
+        "case dataclass must round-trip unchanged so field values arrive at the test"
+        " body exactly as the user declared them"
     )
 
 

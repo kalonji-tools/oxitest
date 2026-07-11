@@ -276,23 +276,59 @@ def test_violation_kind_variants_match_rust() -> None:
 def test_required_fields_passed_has_required_fields() -> None:
     """PassedResult wire payload includes node_id, outcome, duration_ms, and version."""
     wire = _wire(PassedResult())
-    assert "node_id" in wire, "node_id must be present"
-    assert "outcome" in wire, "outcome must be present"
-    assert "duration_ms" in wire, "duration_ms must be present"
-    assert "protocol_version" in wire, "protocol_version must be present"
-    assert wire["node_id"] == "tests/test_foo.py::test_example", "wrong node_id"
-    assert wire["duration_ms"] == 42.5, "wrong duration_ms"
+    assert "node_id" in wire, (
+        "wire payload must include node_id so the Rust coordinator can route results to"
+        " the correct test node"
+    )
+    assert "outcome" in wire, (
+        "wire payload must include outcome so the Rust reporter can classify the result"
+        " without re-parsing"
+    )
+    assert "duration_ms" in wire, (
+        "wire payload must include duration_ms so the Rust scheduler can make"
+        " timing-based parallelism decisions"
+    )
+    assert "protocol_version" in wire, (
+        "wire payload must include protocol_version so the Rust coordinator can detect"
+        " version drift between Python and Rust"
+    )
+    assert wire["node_id"] == "tests/test_foo.py::test_example", (
+        "node_id must round-trip unchanged -- Rust uses the exact string as a lookup"
+        " key for test-node routing"
+    )
+    assert wire["duration_ms"] == 42.5, (
+        "duration_ms must round-trip unchanged -- Rust uses the exact float for"
+        " scheduling and cache decisions"
+    )
 
 
 def test_required_fields_failed_has_required_fields() -> None:
     """FailedResult wire payload has node_id, outcome, duration_ms, protocol_version."""
     wire = _wire(FailedResult(message="boom"))
-    assert "node_id" in wire, "node_id must be present"
-    assert "outcome" in wire, "outcome must be present"
-    assert "duration_ms" in wire, "duration_ms must be present"
-    assert "protocol_version" in wire, "protocol_version must be present"
-    assert wire["node_id"] == "tests/test_foo.py::test_example", "wrong node_id"
-    assert wire["duration_ms"] == 42.5, "wrong duration_ms"
+    assert "node_id" in wire, (
+        "wire payload must include node_id so the Rust coordinator can route results to"
+        " the correct test node"
+    )
+    assert "outcome" in wire, (
+        "wire payload must include outcome so the Rust reporter can classify the result"
+        " without re-parsing"
+    )
+    assert "duration_ms" in wire, (
+        "wire payload must include duration_ms so the Rust scheduler can make"
+        " timing-based parallelism decisions"
+    )
+    assert "protocol_version" in wire, (
+        "wire payload must include protocol_version so the Rust coordinator can detect"
+        " version drift between Python and Rust"
+    )
+    assert wire["node_id"] == "tests/test_foo.py::test_example", (
+        "node_id must round-trip unchanged -- Rust uses the exact string as a lookup"
+        " key for test-node routing"
+    )
+    assert wire["duration_ms"] == 42.5, (
+        "duration_ms must round-trip unchanged -- Rust uses the exact float for"
+        " scheduling and cache decisions"
+    )
 
 
 def test_compact_passed_omits_all_optional_fields() -> None:
@@ -318,8 +354,13 @@ def test_compact_passed_omits_all_optional_fields() -> None:
 def test_compact_strict_true_is_included() -> None:
     """XPassedResult strict=True includes strict so Rust enforces xpass-as-failure."""
     wire = _wire(XPassedResult(strict=True))
-    assert "strict" in wire, "strict=True must be present"
-    assert wire["strict"] is True, "strict must be True"
+    assert "strict" in wire, (
+        "strict=True must appear in wire so Rust enforces xpass-as-failure semantics"
+    )
+    assert wire["strict"] is True, (
+        "strict must be exactly True (not truthy) -- Rust deserializes a bool and"
+        " treats xpass as failure only when strict is true"
+    )
 
 
 def test_failed_shape_includes_diagnostic_fields() -> None:
@@ -342,14 +383,38 @@ def test_failed_shape_includes_diagnostic_fields() -> None:
         ),
     )
     wire = _wire(result)
-    assert wire["message"] == "AssertionError: values differ", "message must round-trip"
-    assert wire["file"] == "tests/test_foo.py", "file must round-trip"
-    assert wire["lineno"] == 12, "lineno must round-trip"
-    assert wire["source_line"] == "assert x == y", "source_line must round-trip"
-    assert wire["left"] == "1", "left must round-trip"
-    assert wire["right"] == "2", "right must round-trip"
-    assert wire["op"] == "==", "op must round-trip"
-    assert "frames" in wire, "frames must be present"
+    assert wire["message"] == "AssertionError: values differ", (
+        "message must round-trip unchanged -- Rust displays it verbatim in reporter"
+        " output"
+    )
+    assert wire["file"] == "tests/test_foo.py", (
+        "file must round-trip unchanged -- Rust uses it to build source-location links"
+        " in the reporter"
+    )
+    assert wire["lineno"] == 12, (
+        "lineno must round-trip unchanged -- Rust pairs it with file to pinpoint the"
+        " failure location"
+    )
+    assert wire["source_line"] == "assert x == y", (
+        "source_line must round-trip unchanged -- Rust displays it inline in failure"
+        " reports for immediate context"
+    )
+    assert wire["left"] == "1", (
+        "left must round-trip unchanged -- Rust renders the left operand in diff-style"
+        " failure output"
+    )
+    assert wire["right"] == "2", (
+        "right must round-trip unchanged -- Rust renders the right operand in"
+        " diff-style failure output"
+    )
+    assert wire["op"] == "==", (
+        "op must round-trip unchanged -- Rust uses the operator string to format"
+        " comparison diagnostics"
+    )
+    assert "frames" in wire, (
+        "frames must be present so Rust can render the full traceback in failure"
+        " reports"
+    )
 
 
 def test_failed_shape_error_includes_message_and_frames() -> None:
@@ -363,12 +428,22 @@ def test_failed_shape_error_includes_message_and_frames() -> None:
         ),
     )
     wire = _wire(result)
-    assert wire["outcome"] == "error", "wrong outcome"
-    assert "message" in wire, "message must be present"
-    assert wire["message"] == "ImportError: no module named foo", (
-        "message must round-trip"
+    assert wire["outcome"] == "error", (
+        "ErrorResult must serialize as outcome='error' so Rust distinguishes test"
+        " errors from test failures in reporting"
     )
-    assert "frames" in wire, "frames must be present"
+    assert "message" in wire, (
+        "wire payload must include message so Rust can display the error description"
+        " without re-importing the exception"
+    )
+    assert wire["message"] == "ImportError: no module named foo", (
+        "message must round-trip unchanged -- Rust displays the error string verbatim"
+        " in reporter output"
+    )
+    assert "frames" in wire, (
+        "frames must be present so Rust can render the full traceback for import and"
+        " setup errors"
+    )
 
 
 @dataclass(frozen=True)
@@ -419,10 +494,15 @@ def test_frame_keys() -> None:
         ),
     )
     wire = _wire(result)
-    assert "frames" in wire, "frames must be present"
+    assert "frames" in wire, (
+        "frames must be present so Rust can render the traceback in failure reports"
+    )
     frame = wire["frames"][0]
     expected = {"file", "lineno", "name", "line", "locals"}
-    assert set(frame.keys()) == expected, f"wrong frame keys: {set(frame.keys())}"
+    assert set(frame.keys()) == expected, (
+        f"frame keys must exactly match Rust RawFrame fields -- extra or missing keys"
+        f" cause serde deserialization failures; got {set(frame.keys())}"
+    )
 
 
 def test_frame_multiple_frames_preserved() -> None:
@@ -435,10 +515,22 @@ def test_frame_multiple_frames_preserved() -> None:
         ),
     )
     wire = _wire(result)
-    assert "frames" in wire, "frames must be present"
-    assert len(wire["frames"]) == 2, "both frames needed"
-    assert wire["frames"][0]["file"] == "src/a.py", "frame[0] file"
-    assert wire["frames"][1]["file"] == "tests/test_a.py", "frame[1] file"
+    assert "frames" in wire, (
+        "frames must be present so Rust can render the full call chain in failure"
+        " reports"
+    )
+    assert len(wire["frames"]) == 2, (
+        "all frames must survive wire serialization -- Rust needs the complete call"
+        " chain to render accurate tracebacks"
+    )
+    assert wire["frames"][0]["file"] == "src/a.py", (
+        "frame ordering must be preserved -- Rust renders frames top-to-bottom and"
+        " wrong order produces misleading tracebacks"
+    )
+    assert wire["frames"][1]["file"] == "tests/test_a.py", (
+        "frame ordering must be preserved -- Rust renders frames top-to-bottom and"
+        " wrong order produces misleading tracebacks"
+    )
 
 
 # ── Cross-language constants ─────────────────────────────────────────────────
@@ -448,7 +540,10 @@ def test_protocol_version_always_present() -> None:
     """Every wire payload carries protocol_version so the coordinator spots drift."""
     result = PassedResult()
     wire = _wire(result, "t.py::test_a", 1.0)
-    assert "protocol_version" in wire, "protocol_version must always be in wire output"
+    assert "protocol_version" in wire, (
+        "every wire payload must carry protocol_version so the Rust coordinator can"
+        " reject incompatible workers"
+    )
     assert wire["protocol_version"] == PROTOCOL_VERSION, (
         f"expected {PROTOCOL_VERSION}, got {wire['protocol_version']}"
     )
@@ -473,8 +568,14 @@ def test_get_fixture_timings_returns_expected_shape() -> None:
     """get_fixture_timings() returns list of FixtureTiming dataclasses."""
     session = FixtureSession(FixtureRegistry())
     timings = session.get_fixture_timings()
-    assert isinstance(timings, tuple), "timings must be a tuple"
-    assert timings == (), "empty session should produce empty timings"
+    assert isinstance(timings, tuple), (
+        "get_fixture_timings must return a tuple (immutable) per ADR-0005"
+        " immutable-by-default return contract"
+    )
+    assert timings == (), (
+        "empty session must produce empty timings -- Rust iterates the collection and a"
+        " non-empty result would indicate phantom fixture activity"
+    )
 
 
 def test_get_fixture_timings_entry_has_required_attrs() -> None:
@@ -483,16 +584,35 @@ def test_get_fixture_timings_entry_has_required_attrs() -> None:
     session.get_fixture("timed_fx", "mod.py", [])
     timings = session.get_fixture_timings()
 
-    assert len(timings) == 1, "expected exactly one timing entry"
+    assert len(timings) == 1, (
+        "a single fixture invocation must produce exactly one timing entry -- Rust"
+        " aggregates per-fixture timing for cache and scheduling"
+    )
     entry = timings[0]
     assert isinstance(entry, FixtureTiming), (
-        f"expected FixtureTiming, got {type(entry)}"
+        f"timing entries must be FixtureTiming dataclasses so PyO3 FromPyObject can"
+        f" extract fields by name -- got {type(entry)}"
     )
-    assert isinstance(entry.name, str), "name must be str"
-    assert isinstance(entry.total_setup_ms, float), "total_setup_ms must be float"
-    assert isinstance(entry.setup_count, int), "setup_count must be int"
-    assert isinstance(entry.total_teardown_ms, float), "total_teardown_ms must be float"
-    assert isinstance(entry.teardown_count, int), "teardown_count must be int"
+    assert isinstance(entry.name, str), (
+        "name must be str -- Rust uses it as the fixture identifier key in timing"
+        " aggregation"
+    )
+    assert isinstance(entry.total_setup_ms, float), (
+        "total_setup_ms must be float -- Rust performs arithmetic on this value for"
+        " scheduling cost estimates"
+    )
+    assert isinstance(entry.setup_count, int), (
+        "setup_count must be int -- Rust divides total_setup_ms by this to compute"
+        " per-invocation averages"
+    )
+    assert isinstance(entry.total_teardown_ms, float), (
+        "total_teardown_ms must be float -- Rust performs arithmetic on this value for"
+        " scheduling cost estimates"
+    )
+    assert isinstance(entry.teardown_count, int), (
+        "teardown_count must be int -- Rust divides total_teardown_ms by this to"
+        " compute per-invocation averages"
+    )
 
 
 # ── FixtureSession bridge contract ────────────────────────────────────────────
@@ -513,7 +633,8 @@ def test_fixture_session_has_bridge_methods() -> None:
     }
     for method in bridge_methods:
         assert hasattr(session, method), (
-            f"FixtureSession missing bridge method: {method!r}"
+            f"FixtureSession must expose {method!r} -- Rust bridge.rs calls this method"
+            f" by name via PyO3 and a missing method causes a runtime panic"
         )
 
 

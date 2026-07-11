@@ -38,13 +38,16 @@ def test_partial_stores_target_type_and_fields() -> None:
     p = partial(MathCase, x=1, y=2)
 
     assert p.target_type is MathCase, (
-        f"partial should store target type, got {p.target_type!r}"
+        "target_type is needed at composition time to verify all layers use the same"
+        " dataclass"
     )
     assert p.fields == {"x": 1, "y": 2}, (
-        f"partial should store provided fields, got {p.fields!r}"
+        "fields carries the concrete values that get merged across layers during"
+        " cartesian expansion"
     )
     assert p.provided_fields == frozenset({"x", "y"}), (
-        f"partial should store provided field names, got {p.provided_fields!r}"
+        "provided_fields tracks which fields this layer covers to detect overlaps"
+        " between layers"
     )
 
 
@@ -79,7 +82,8 @@ def test_partial_detects_fixref_fields() -> None:
 
     p = partial(DbCase, db=my_db)
     assert p.fixref_fields == ("db",), (
-        f"partial should detect FixtureRef fields, got {p.fixref_fields!r}"
+        "fixref_fields must be detected at decoration time so the executor knows which"
+        " fields to resolve via the fixture session"
     )
 
 
@@ -109,9 +113,8 @@ def test_partial_cases_items_yields_field_repr_pairs() -> None:
 
     result = list(pc.items())
     assert result == [("add", [("x", "1"), ("y", "2"), ("expected", "3")])], (
-        "ResolvedCases.items() (composed mode) should"
-        f" yield (case_id, [(field, repr(val))...]),"
-        f" got {result}"
+        "items() must emit (case_id, field-repr pairs) so the reporter can render"
+        " human-readable parameter tables without re-parsing dataclass internals"
     )
 
 
@@ -125,14 +128,16 @@ def test_parametrize_stacks_partial_layers() -> None:
 
     meta = get_metadata(test_fn)
     assert isinstance(meta.param_cases, tuple), (
-        f"stacked parametrize should produce a tuple, got {type(meta.param_cases)!r}"
+        "param_cases must be a tuple so the collector can iterate layers for cartesian"
+        " expansion without mutability concerns"
     )
     assert len(meta.param_cases) == 2, (
-        f"two stacked decorators should produce 2-tuple, got {len(meta.param_cases)}"
+        "each @parametrize decorator contributes exactly one layer; losing a layer"
+        " would silently drop an axis of the cartesian product"
     )
     assert all(isinstance(layer, ComposedCases) for layer in meta.param_cases), (
-        f"all layers should be ComposedCases,"
-        f" got {[type(layer).__name__ for layer in meta.param_cases]}"
+        "partial-based layers must be ComposedCases so the collector knows to merge"
+        " fields across layers instead of treating each as a complete case"
     )
 
 
@@ -145,14 +150,16 @@ def test_parametrize_single_full_dataclass_is_1_tuple() -> None:
 
     meta = get_metadata(test_fn)
     assert isinstance(meta.param_cases, tuple), (
-        f"single parametrize should produce a tuple, got {type(meta.param_cases)!r}"
+        "even a single decorator must wrap in a tuple so the collector has a uniform"
+        " iterable interface regardless of layer count"
     )
     assert len(meta.param_cases) == 1, (
-        f"single decorator should produce 1-tuple, got {len(meta.param_cases)}"
+        "a non-stacked decorator must produce exactly one layer; more would introduce"
+        " phantom cartesian axes"
     )
     assert isinstance(meta.param_cases[0], DataclassCases), (
-        "layer should be DataclassCases (dataclass mode),"
-        f" got {type(meta.param_cases[0]).__name__}"
+        "full dataclass instances must produce DataclassCases so the executor can"
+        " inject all fields directly without partial merging"
     )
 
 
@@ -165,15 +172,16 @@ def test_parametrize_single_dict_is_1_tuple() -> None:
 
     meta = get_metadata(test_fn)
     assert isinstance(meta.param_cases, tuple), (
-        "single dict parametrize should produce a tuple,"
-        f" got {type(meta.param_cases)!r}"
+        "dict-mode parametrize must also use tuple wrapping so the collector does not"
+        " need separate code paths for dict vs dataclass cases"
     )
     assert len(meta.param_cases) == 1, (
-        f"single dict decorator should produce 1-tuple, got {len(meta.param_cases)}"
+        "a single dict decorator must produce exactly one layer to avoid phantom"
+        " cartesian axes in collection"
     )
     assert isinstance(meta.param_cases[0], DictCases), (
-        "layer should be DictCases (dict mode),"
-        f" got {type(meta.param_cases[0]).__name__}"
+        "dict kwargs must produce DictCases so the executor uses key-value injection"
+        " instead of dataclass field extraction"
     )
 
 
@@ -233,12 +241,13 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) ->
     )
     items, _ = collect_module(path)
     assert len(items) == 4, (
-        f"2x2 composition should yield 4 items, got {len(items)}: "
-        f"{[i.param_id for i in items]}"
+        "two layers of 2 cases each must expand to 4 items; fewer means the cartesian"
+        " product is dropping combinations"
     )
     param_ids = sorted(i.param_id for i in items)
     assert param_ids == ["a-c", "a-d", "b-c", "b-d"], (
-        f"expected cartesian product IDs, got {param_ids}"
+        "param_ids join layer case names with '-' to produce unique, readable test"
+        " identifiers for reporting and --lf/--ff filtering"
     )
 
 
@@ -259,14 +268,22 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> N
         "    pass\n",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"1x1 composition should yield 1 item, got {len(items)}"
+    assert len(items) == 1, (
+        "1x1 layers must produce exactly one combined item; more means the product is"
+        " duplicating rather than merging"
+    )
     item = items[0]
-    assert item.param_id == "a-c", f"expected 'a-c', got {item.param_id!r}"
+    assert item.param_id == "a-c", (
+        "the composed param_id must join layer names so the reporter can trace which"
+        " layer contributed which fields"
+    )
     assert ("x", "1") in item.param_values, (
-        f"('x', '1') should be in param_values, got {item.param_values}"
+        "the first layer's field must appear in param_values so the executor can inject"
+        " it into the test function"
     )
     assert ("y", "10") in item.param_values, (
-        f"('y', '10') should be in param_values, got {item.param_values}"
+        "the second layer's field must also appear in param_values; a missing field"
+        " would cause a TypeError at execution time"
     )
 
 
@@ -329,8 +346,14 @@ def test_collect_composed_3_layers(tmp: TempDir) -> None:
         "    pass\n",
     )
     items, _ = collect_module(path)
-    assert len(items) == 1, f"1x1x1 should yield 1 item, got {len(items)}"
-    assert items[0].param_id == "a-b-c", f"expected 'a-b-c', got {items[0].param_id!r}"
+    assert len(items) == 1, (
+        "three single-case layers must compose into exactly one item; composition must"
+        " scale beyond two layers"
+    )
+    assert items[0].param_id == "a-b-c", (
+        "all three layer names must appear in the param_id so each layer's contribution"
+        " is traceable in test output"
+    )
 
 
 # ── Composed resolution tests ─────────────────────────────────────────────────
@@ -356,8 +379,8 @@ def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
         param_id="a-c",
     )
     assert result.status == "passed", (
-        f"composed parametrize should pass, got status={result.status!r}, "
-        f"msg={result.message!r}"
+        "the executor must correctly merge fields from all partial layers before"
+        " injection; a failure here means field merging or injection is broken"
     )
 
 
@@ -381,7 +404,8 @@ def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
         param_id="a-c",
     )
     assert result.status == "failed", (
-        f"wrong expected should fail, got status={result.status!r}"
+        "a wrong expected value must propagate as a failure; if it passes, the executor"
+        " is silently swallowing the assertion error or injecting stale values"
     )
 
 
@@ -414,7 +438,10 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="a-c"
     )
-    assert result.status == "passed", result.message
+    assert result.status == "passed", (
+        "composed partial fields and Fixture[T] parameters must coexist; the executor"
+        " must resolve fixtures independently of the partial merge pipeline"
+    )
 
 
 def test_executor_composed_compact_mode(tmp: TempDir) -> None:
@@ -436,8 +463,9 @@ def test_executor_composed_compact_mode(tmp: TempDir) -> None:
         param_id="a-c",
     )
     assert result.status == "passed", (
-        f"compact mode with composition should pass, got status={result.status!r}, "
-        f"msg={result.message!r}"
+        "compact mode must assemble a full dataclass from merged partial fields and"
+        " inject it as a single 'case' parameter; broken assembly would cause a"
+        " missing-field TypeError"
     )
 
 
@@ -473,4 +501,8 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
     result = helpers.common.run_test(
         str(f), "test_db", session=session, param_id="pg-check"
     )
-    assert result.status == "passed", result.message
+    assert result.status == "passed", (
+        "FixtureRef fields inside composed partials must be resolved via the fixture"
+        " session at execution time, not at decoration time; eager resolution would"
+        " bind stale values"
+    )

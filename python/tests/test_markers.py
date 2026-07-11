@@ -38,9 +38,15 @@ from oxitest._bridge.result import (
 def test_mark_info_stores_name_args_kwargs() -> None:
     """MarkInfo preserves name, args, and kwargs exactly as supplied."""
     m = MarkInfo("slow", (), MappingProxyType({}))
-    assert m.name == "slow", f"expected name='slow', got {m.name!r}"
-    assert m.args == (), f"expected args=(), got {m.args!r}"
-    assert m.kwargs == {}, f"expected kwargs={{}}, got {m.kwargs!r}"
+    assert m.name == "slow", (
+        "MarkInfo must preserve the exact name supplied at construction"
+    )
+    assert m.args == (), (
+        "MarkInfo constructed with empty args must retain an empty tuple"
+    )
+    assert m.kwargs == {}, (
+        "MarkInfo constructed with empty kwargs must retain an empty mapping"
+    )
 
 
 def test_append_mark_creates_list_on_first_call() -> None:
@@ -52,10 +58,10 @@ def test_append_mark_creates_list_on_first_call() -> None:
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
     meta = get_metadata(fn)
     assert len(meta.marks) == 1, (
-        f"expected 1 mark after first append, got {len(meta.marks)}"
+        "_append_mark must initialise the marks list on the first call"
     )
     assert meta.marks[0].name == "slow", (
-        f"first mark name should be 'slow', got {meta.marks[0].name!r}"
+        "_append_mark must store the MarkInfo verbatim so evaluate_marks can route it"
     )
 
 
@@ -68,7 +74,7 @@ def test_append_mark_stacks_multiple_marks() -> None:
     _append_mark(fn, MarkInfo("slow", (), MappingProxyType({})))
     _append_mark(fn, MarkInfo("integration", (), MappingProxyType({})))
     assert len(get_metadata(fn).marks) == 2, (
-        f"expected 2 marks after two appends, got {len(get_metadata(fn).marks)}"
+        "each _append_mark call must grow the list so stacked decorators all register"
     )
 
 
@@ -82,13 +88,13 @@ def test_mark_bare_decorator_stamps_function() -> None:
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "bare mark decorator should register mark in metadata"
     assert meta.marks[0].name == "slow", (
-        f"mark name should be 'slow', got {meta.marks[0].name!r}"
+        "bare decorator must record the attribute name so evaluate_marks can route it"
     )
     assert meta.marks[0].args == (), (
-        f"bare mark should have empty args, got {meta.marks[0].args!r}"
+        "bare decorator form has no call site, so args must be empty"
     )
     assert meta.marks[0].kwargs == {}, (
-        f"bare mark should have empty kwargs, got {meta.marks[0].kwargs!r}"
+        "bare decorator form has no call site, so kwargs must be empty"
     )
 
 
@@ -101,10 +107,12 @@ def test_mark_parameterised_decorator_stores_args() -> None:
 
     meta = get_metadata(test_fn)
     assert meta.marks[0].name == "skip", (
-        f"mark name should be 'skip', got {meta.marks[0].name!r}"
+        "parameterised skip must register under 'skip' so evaluate_marks routes it to"
+        " _SkipHandler"
     )
     assert meta.marks[0].kwargs == {"reason": "not ready"}, (
-        f"mark kwargs should be {{'reason': 'not ready'}}, got {meta.marks[0].kwargs!r}"
+        "parameterised decorator must forward its kwargs verbatim so the handler"
+        " receives them"
     )
 
 
@@ -116,9 +124,12 @@ def test_mark_skip_when_true_stores_via_decorator() -> None:
         pass
 
     m = get_metadata(test_fn).marks[0]
-    assert m.name == "skip", f"mark name should be 'skip', got {m.name!r}"
+    assert m.name == "skip", (
+        "skip(when=True) must register under 'skip' so evaluate_marks routes it to"
+        " _SkipHandler"
+    )
     assert m.kwargs == {"reason": "always skip"}, (
-        f"skip kwargs should be {{'reason': 'always skip'}}, got {m.kwargs!r}"
+        "when=True must strip the 'when' kwarg and keep only 'reason' for the handler"
     )
 
 
@@ -139,12 +150,15 @@ def test_skip_mark_when_true_attaches_mark() -> None:
         pass
 
     meta = get_metadata(test_fn)
-    assert len(meta.marks) == 1, f"expected 1 mark, got {len(meta.marks)}"
+    assert len(meta.marks) == 1, (
+        "when=True must attach exactly one mark — duplicates would double-skip"
+    )
     assert meta.marks[0].name == "skip", (
-        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+        "when=True must register under 'skip' so the handler recognises it"
     )
     assert meta.marks[0].kwargs == {"reason": "not ready"}, (
-        f"expected kwargs={{'reason': 'not ready'}}, got {meta.marks[0].kwargs!r}"
+        "the reason must survive the when-gate so the skip message is meaningful to the"
+        " user"
     )
 
 
@@ -170,10 +184,12 @@ def test_skip_mark_bare_still_works() -> None:
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "bare @mark.skip should attach mark"
     assert meta.marks[0].name == "skip", (
-        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+        "bare @mark.skip must still register as 'skip' so evaluate_marks routes it"
+        " correctly"
     )
     assert meta.marks[0].kwargs == {"reason": ""}, (
-        f"bare @mark.skip should have reason='', got {meta.marks[0].kwargs!r}"
+        "bare form must default reason to '' so _SkipHandler always receives a reason"
+        " key"
     )
 
 
@@ -187,10 +203,11 @@ def test_skip_mark_empty_parens_same_as_bare() -> None:
     meta = get_metadata(test_fn)
     assert len(meta.marks) == 1, "@mark.skip() should attach mark"
     assert meta.marks[0].name == "skip", (
-        f"expected mark name 'skip', got {meta.marks[0].name!r}"
+        "empty-parens form must behave identically to bare — both route through"
+        " _SkipHandler"
     )
     assert meta.marks[0].kwargs == {"reason": ""}, (
-        f"@mark.skip() should have reason='', got {meta.marks[0].kwargs!r}"
+        "empty-parens must default reason to '' so the two forms are interchangeable"
     )
 
 
@@ -203,7 +220,8 @@ def test_skip_mark_reason_only() -> None:
 
     meta = get_metadata(test_fn)
     assert meta.marks[0].kwargs == {"reason": "WIP"}, (
-        f"expected kwargs={{'reason': 'WIP'}}, got {meta.marks[0].kwargs!r}"
+        "reason-only call must store only 'reason' — extra keys would confuse"
+        " _SkipHandler"
     )
 
 
@@ -224,10 +242,12 @@ def test_mark_xfail_stores_strict_false() -> None:
         pass
 
     m = get_metadata(test_fn).marks[0]
-    assert m.name == "xfail", f"mark name should be 'xfail', got {m.name!r}"
+    assert m.name == "xfail", (
+        "xfail decorator must register under 'xfail' so _XFailHandler receives it"
+    )
     assert m.kwargs == {"strict": False, "reason": "flaky"}, (
-        f"xfail kwargs should be {{'strict': False, 'reason': 'flaky'}}, got "
-        f"{m.kwargs!r}"
+        "strict and reason must both survive so _XFailHandler can decide pass-vs-fail"
+        " semantics"
     )
 
 
@@ -239,9 +259,13 @@ def test_mark_usefixtures_stores_fixture_names() -> None:
         pass
 
     m = get_metadata(test_fn).marks[0]
-    assert m.name == "usefixtures", f"mark name should be 'usefixtures', got {m.name!r}"
+    assert m.name == "usefixtures", (
+        "usefixtures must register under its own name so evaluate_marks resolves"
+        " fixtures inline"
+    )
     assert m.args == ("db", "cache"), (
-        f"usefixtures args should be ('db', 'cache'), got {m.args!r}"
+        "fixture names are positional args — evaluate_marks iterates them to resolve"
+        " each fixture"
     )
 
 
@@ -254,9 +278,11 @@ def test_mark_stacking_two_decorators() -> None:
         pass
 
     names = [m.name for m in get_metadata(test_fn).marks]
-    assert "slow" in names, f"'slow' should be in stacked marks, got {names}"
+    assert "slow" in names, (
+        "stacked decorators must all register — dropping one silently skips its handler"
+    )
     assert "integration" in names, (
-        f"'integration' should be in stacked marks, got {names}"
+        "stacked decorators must all register — dropping one silently skips its handler"
     )
 
 
@@ -355,12 +381,13 @@ def test_mark_executor_result(
     """Each mark variant produces the expected executor status when run."""
     result = helpers.common.exec_inline(tmp, "import oxitest\n" + code, "test_foo")
     assert result.status == expected_status, (
-        f"mark executor result: expected status={expected_status!r}, "
-        f"got {result.status!r} (message={result.message!r})"
+        "executor must honour the mark's semantics end-to-end, not just at the handler"
+        " level"
     )
     if message_contains:
         assert message_contains in result.message, (
-            f"expected {message_contains!r} in result.message, got {result.message!r}"
+            "the mark's reason must propagate through the executor into the final"
+            " result message"
         )
 
 
@@ -391,7 +418,8 @@ def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
         f"{result.status!r}"
     )
     assert log == ["setup"], (
-        f"usefixtures fixture should have run (side effect), got log={log!r}"
+        "usefixtures must actually invoke the fixture — side effects prove resolution"
+        " happened"
     )
 
 
@@ -399,11 +427,12 @@ def test_mark_eval_result_defaults() -> None:
     """MarkEvalResult() starts with short_circuit=None and wrapper=None."""
     r = MarkEvalResult()
     assert r.short_circuit is None, (
-        f"MarkEvalResult() short_circuit should default to None, got "
-        f"{r.short_circuit!r}"
+        "default MarkEvalResult must be inert — a non-None short_circuit would skip the"
+        " test"
     )
     assert r.wrapper is None, (
-        f"MarkEvalResult() wrapper should default to None, got {r.wrapper!r}"
+        "default MarkEvalResult must be inert — a non-None wrapper would alter test"
+        " outcomes"
     )
 
 
@@ -425,8 +454,8 @@ def test_skip_handler_returns_short_circuit() -> None:
         "_SkipHandler should produce a short_circuit result"
     )
     assert result.short_circuit.status == "skipped", (
-        f"_SkipHandler short_circuit status should be 'skipped', got "
-        f"{result.short_circuit.status!r}"
+        "_SkipHandler must produce a 'skipped' status so the reporter counts it"
+        " correctly"
     )
     helpers.common.assert_result(
         result.short_circuit, SkippedResult, message="not ready"
@@ -489,8 +518,8 @@ def test_xfail_wrapper_passes_through_skipped() -> None:
     skipped_result = SkippedResult(message="not my test")
     final = wrapper(lambda: skipped_result)
     assert final.status == "skipped", (
-        f"xfail wrapper should pass through 'skipped' result unchanged, got "
-        f"{final.status!r}"
+        "xfail must not intercept skips — SkipTest inside xfail is still a skip, not an"
+        " xfail"
     )
 
 
@@ -536,7 +565,8 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
     outcome = wrapper(slow_next)
     r = helpers.common.assert_result(outcome, TimeoutResult)
     assert "1s" in r.message, (
-        f"timeout message should mention the limit '1s', got {r.message!r}"
+        "timeout result must include the limit so the developer knows which deadline"
+        " was exceeded"
     )
 
 
@@ -569,13 +599,15 @@ def test_timeout_mark_stores_seconds() -> None:
 
     marks = get_metadata(test_ok).marks
     assert len(marks) == 1, (
-        f"expected 1 mark on test_ok after @mark.timeout, got {len(marks)}: {marks}"
+        "@mark.timeout must attach exactly one mark — duplicates would nest timeout"
+        " wrappers"
     )
     assert marks[0].name == "timeout", (
-        f"expected mark name 'timeout', got {marks[0].name!r}"
+        "timeout decorator must register under 'timeout' so _TimeoutHandler receives it"
     )
     assert marks[0].kwargs["seconds"] == 5, (
-        f"expected mark kwargs['seconds'] == 5, got {marks[0].kwargs.get('seconds')!r}"
+        "seconds must survive in kwargs because _TimeoutHandler reads it to set the"
+        " deadline"
     )
 
 
@@ -584,9 +616,9 @@ def test_evaluate_marks_returns_tuple() -> None:
     sc, wrappers = evaluate_marks(
         [], FixtureSession(FixtureRegistry()), "test_fake.py", []
     )
-    assert sc is None, f"evaluate_marks with no marks should return sc=None, got {sc!r}"
+    assert sc is None, "no marks means no handler ran, so nothing can short-circuit"
     assert wrappers == [], (
-        f"evaluate_marks with no marks should return empty wrappers, got {wrappers!r}"
+        "no marks means no handler ran, so no wrappers should be produced"
     )
 
 
@@ -600,11 +632,12 @@ def test_evaluate_marks_skip_returns_short_circuit() -> None:
     )
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
-        f"evaluate_marks skip short-circuit status should be 'skipped', got "
-        f"{sc.status!r}"
+        "skip short-circuit must carry 'skipped' status so the reporter tallies it"
+        " correctly"
     )
     assert wrappers == [], (
-        f"evaluate_marks with skip should return no wrappers, got {wrappers!r}"
+        "skip short-circuits before other handlers run, so no wrappers should be"
+        " collected"
     )
 
 
@@ -615,16 +648,17 @@ def test_all_builtin_handlers_registered() -> None:
     """_MARK_REGISTRY contains exactly the three built-in mark handlers."""
     expected = {"skip", "xfail", "timeout"}
     assert set(_MARK_REGISTRY.keys()) == expected, (
-        f"expected builtin mark handlers {expected}, got {set(_MARK_REGISTRY.keys())}"
+        "adding or removing a builtin handler without updating this test means"
+        " evaluate_marks routing is wrong"
     )
 
 
 def test_registered_handlers_are_mark_handler_instances() -> None:
     """Every entry in _MARK_REGISTRY is a MarkHandler subclass instance."""
-    for name, handler in _MARK_REGISTRY.items():
+    for handler in _MARK_REGISTRY.values():
         assert isinstance(handler, MarkHandler), (
-            f"handler for mark {name!r} should be a MarkHandler instance, "
-            f"got {type(handler).__name__}"
+            "every registry entry must be a MarkHandler so evaluate_marks can call"
+            " .handle() on it"
         )
 
 
@@ -642,8 +676,8 @@ def test_each_handler_has_mark_name_class_attr() -> None:
             f"{type(handler).__name__} missing mark_name class attribute"
         )
         assert handler.mark_name == name, (
-            f"handler.mark_name should match registry key {name!r}, got "
-            f"{handler.mark_name!r}"
+            "handler.mark_name must match its registry key or evaluate_marks will"
+            " dispatch to the wrong handler"
         )
 
 
@@ -653,7 +687,8 @@ def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
         tmp, "import oxitest\ndef test_foo(): assert False\n", "test_foo"
     )
     assert result.exc_type == "AssertionError", (
-        f"expected exc_type='AssertionError', got {result.exc_type!r}"
+        "executor must capture the exception class name so reporters can distinguish"
+        " assertion failures from other errors"
     )
 
 
@@ -663,7 +698,8 @@ def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
         tmp, "import oxitest\ndef test_foo(): raise ValueError('boom')\n", "test_foo"
     )
     assert result.exc_type == "ValueError", (
-        f"expected exc_type='ValueError', got {result.exc_type!r}"
+        "executor must capture the actual exception class name so reporters can show"
+        " what was raised"
     )
 
 
@@ -673,8 +709,8 @@ def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
         tmp, "import oxitest\ndef test_foo(): pass\n", "test_foo"
     )
     assert not hasattr(result, "exc_type"), (
-        f"PassedResult should not have exc_type, got "
-        f"{getattr(result, 'exc_type', None)!r}"
+        "PassedResult must omit exc_type — its presence would mislead reporters into"
+        " treating a pass as an error"
     )
 
 
@@ -695,7 +731,8 @@ def test_plugin_mark_handler_wraps_correctly() -> None:
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     assert handler.mark_name == "custom_mark", (
-        f"expected mark_name='custom_mark', got {handler.mark_name!r}"
+        "_PluginMarkHandler must derive mark_name from the plugin so evaluate_marks"
+        " routes correctly"
     )
     mark = MarkInfo("custom_mark", ("arg1",), MappingProxyType({"key": "val"}))
     result = handler.handle(mark)
@@ -706,7 +743,10 @@ def test_plugin_mark_handler_wraps_correctly() -> None:
     inner_result = WarnedResult(message="original")
     wrapped_result = result.wrapper(lambda: inner_result)
     r = helpers.common.assert_result(wrapped_result, WarnedResult)
-    assert "wrapped:" in r.message, f"wrapper should modify message, got {r.message!r}"
+    assert "wrapped:" in r.message, (
+        "plugin wrapper must transform the result so its side effects are visible to"
+        " the reporter"
+    )
 
 
 def test_marker_composition_skip_takes_precedence_over_others() -> None:
@@ -722,11 +762,13 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
 
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
-        f"skip should take precedence; expected status='skipped', got {sc.status!r}"
+        "skip must win over xfail and timeout — running a skipped test wastes time and"
+        " produces misleading results"
     )
     helpers.common.assert_result(sc, SkippedResult, message="not ready")
     assert wrappers == [], (
-        f"skip short-circuits before xfail/timeout wrappers are added, got {wrappers!r}"
+        "skip short-circuits before other handlers run, so xfail/timeout wrappers must"
+        " not be collected"
     )
 
 
@@ -744,5 +786,6 @@ def test_evaluate_marks_dispatches_plugin_handlers() -> None:
     )
     assert short_circuit is None, "should not short-circuit"
     assert len(wrappers) == 1, (
-        f"expected 1 wrapper from plugin handler, got {len(wrappers)}"
+        "plugin handler must contribute its wrapper or the plugin's test transformation"
+        " is silently lost"
     )

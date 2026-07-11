@@ -28,10 +28,12 @@ def test_plain_assertion_returns_failed() -> None:
     exc = AssertionError("plain message")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
-        f"plain AssertionError should produce status='failed', got {result.status!r}"
+        "AssertionError maps to 'failed' -- this is the core assertion-to-result"
+        " contract"
     )
     assert result.message == "plain message", (
-        f"result message should be 'plain message', got {result.message!r}"
+        "the original exception text must survive intact so test output shows the"
+        " developer's own words"
     )
 
 
@@ -40,11 +42,12 @@ def test_plain_assertion_no_message_gives_empty_message() -> None:
     exc = AssertionError()
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
-        f"AssertionError() should produce status='failed', got {result.status!r}"
+        "even a bare AssertionError (no args) is still a test failure -- the runner"
+        " must not silently pass it"
     )
     assert result.message == "", (
-        f"AssertionError() with no args should give empty message, got "
-        f"{result.message!r}"
+        "empty string (not None) ensures downstream code can safely .format() or"
+        " concatenate the message"
     )
 
 
@@ -53,15 +56,21 @@ def test_oxitest_assertion_with_lhs_rhs_populates_fields() -> None:
     exc = _OxitestAssertionError(1, 2, "==", "mismatch")
     result = _handle_assertion_error(exc)
     assert result.status == "failed", (
-        f"_OxitestAssertionError should produce status='failed', got {result.status!r}"
+        "enriched assertions are still failures -- extra diagnostics must not change"
+        " the outcome status"
     )
     assert result.left == "1", (
-        f"result.left should be '1' (repr of lhs), got {result.left!r}"
+        "left operand feeds the diff view in reporters -- a wrong value produces"
+        " misleading diagnostics"
     )
     assert result.right == "2", (
-        f"result.right should be '2' (repr of rhs), got {result.right!r}"
+        "right operand feeds the diff view in reporters -- a wrong value produces"
+        " misleading diagnostics"
     )
-    assert result.op == "==", f"result.op should be '==', got {result.op!r}"
+    assert result.op == "==", (
+        "the operator is displayed between left and right in failure output -- wrong op"
+        " misleads the developer"
+    )
 
 
 def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
@@ -69,8 +78,8 @@ def test_oxitest_assertion_no_rhs_gives_empty_right() -> None:
     exc = _OxitestAssertionError(42, _OXITEST_NO_RHS, "==", "")
     result = _handle_assertion_error(exc)
     assert result.right == "", (
-        f"_OXITEST_NO_RHS sentinel should produce empty result.right, got "
-        f"{result.right!r}"
+        "unary assertions (e.g. `assert x`) have no RHS -- reporters must get empty"
+        " string, not the sentinel object's repr"
     )
 
 
@@ -93,9 +102,13 @@ def test_skip_test_returns_skipped() -> None:
 
     exc = SkipTest("reason")
     result = _handle_runtime_exception(exc)
-    assert result is not None, "SkipTest exception should return a TestResult, not None"
+    assert result is not None, (
+        "SkipTest must be caught and converted -- returning None would cause the caller"
+        " to re-raise it as an unhandled crash"
+    )
     assert result.status == "skipped", (
-        f"SkipTest exception should produce status='skipped', got {result.status!r}"
+        "SkipTest is pytest's skip convention -- misclassifying it as error/failed"
+        " breaks skip-count accuracy in reports"
     )
 
 
@@ -105,7 +118,8 @@ def test_regular_exception_returns_error() -> None:
     result = _handle_runtime_exception(exc)
     r = helpers.common.assert_result(result, ErrorResult)
     assert "ValueError" in r.message, (
-        f"error message should contain 'ValueError', got {r.message!r}"
+        "the exception type name must appear in the message so developers can identify"
+        " the error class without a traceback"
     )
 
 
@@ -117,8 +131,8 @@ def test_base_exception_not_exception_returns_none() -> None:
 
     result = _handle_runtime_exception(MyBase("raw"))
     assert result is None, (  # caller must re-raise
-        f"BaseException (non-Exception) should return None so caller can re-raise, "
-        f"got {result!r}"
+        "KeyboardInterrupt/SystemExit must bubble up -- returning a result would"
+        " swallow shutdown signals"
     )
 
 
@@ -135,7 +149,8 @@ def test_compose_wraps_inner() -> None:
     composed = _compose(transform, inner)
     result = composed()
     assert result.status == "warned", (
-        f"composed wrapper should produce status='warned', got {result.status!r}"
+        "wrappers must be able to override the inner result -- this is how"
+        " timeout/xfail transform outcomes"
     )
 
 
@@ -150,8 +165,8 @@ def test_compose_passes_through() -> None:
 
     composed = _compose(wrapper, inner)
     assert composed().status == "failed", (
-        f"pass-through wrapper should propagate inner status='failed', got "
-        f"{composed().status!r}"
+        "a no-op wrapper must not alter the result -- silent mutation would make"
+        " middleware debugging impossible"
     )
 
 
@@ -177,16 +192,21 @@ def test_compose_chains_left_to_right() -> None:
     execute = _compose(w1, execute)
     execute()
     assert calls == ["w1", "w2"], (
-        f"wrappers should be called in order w1→w2, got {calls}"
+        "execution order must match reversed composition order -- outermost wrapper"
+        " runs first (onion model)"
     )
 
 
 def test_repr_max_is_positive_int() -> None:
     """_REPR_MAX is a positive integer that caps repr output length."""
     assert isinstance(_REPR_MAX, int), (
-        f"_REPR_MAX should be an int, got {type(_REPR_MAX).__name__}"
+        "_REPR_MAX is used in slicing and length comparisons -- a non-int would cause"
+        " TypeError at truncation time"
     )
-    assert _REPR_MAX > 0, f"_REPR_MAX should be positive, got {_REPR_MAX}"
+    assert _REPR_MAX > 0, (
+        "a zero or negative cap would truncate every repr to nothing, hiding all"
+        " diagnostic values from failure output"
+    )
 
 
 def test_repr_safe_truncates_long_string() -> None:
@@ -194,9 +214,8 @@ def test_repr_safe_truncates_long_string() -> None:
     long_str = "x" * (_REPR_MAX * 10)
     result = _repr_safe(long_str)
     assert len(result) <= _REPR_MAX + 20, (
-        f"_repr_safe should truncate to at most _REPR_MAX+20={_REPR_MAX + 20} "
-        "chars, "
-        f"got {len(result)}"
+        "unbounded repr output can blow up terminal buffers and CI log storage on"
+        " pathological values"
     )
 
 
@@ -212,15 +231,21 @@ def test_frames_captured_on_assertion_error() -> None:
     except AssertionError as exc:
         result = _handle_assertion_error(exc)
 
-    assert result.status == "failed", f"expected failed, got {result.status!r}"
+    assert result.status == "failed", (
+        "an assertion error with a live traceback must still map to 'failed' -- frame"
+        " capture must not alter the outcome"
+    )
     assert len(result.frames) >= 2, (
-        f"Expected at least 2 frames (test + inner), got {len(result.frames)}"
+        "at least test + inner frames are needed -- fewer means the traceback walker is"
+        " dropping frames developers need to locate the failure"
     )
     assert result.frames[-1].name == "inner", (
-        f"last frame should be 'inner', got {result.frames[-1].name!r}"
+        "the deepest frame must be the raise site -- reporters show it first so the"
+        " developer sees the exact failing line"
     )
     assert result.frames[-1].lineno > 0, (
-        f"lineno should be positive, got {result.frames[-1].lineno}"
+        "a zero or negative lineno would make source-view and editor jump links point"
+        " nowhere"
     )
 
 
@@ -237,9 +262,13 @@ def test_frames_captured_on_runtime_exception() -> None:
         result = _handle_runtime_exception(exc)
 
     r = helpers.common.assert_result(result, ErrorResult)
-    assert len(r.frames) >= 2, f"Expected at least 2 frames, got {len(r.frames)}"
+    assert len(r.frames) >= 2, (
+        "runtime errors need the same frame depth as assertion errors -- incomplete"
+        " traces leave developers guessing at the crash site"
+    )
     assert r.frames[-1].name == "blow_up", (
-        f"last frame should be 'blow_up', got {r.frames[-1].name!r}"
+        "the innermost frame must name the raise site so error reports pinpoint the"
+        " exact function that crashed"
     )
 
 
@@ -255,8 +284,8 @@ def test_bad_module_path_returns_error(tmp: TempDir) -> None:
     """run_test returns an error result when the module path does not exist."""
     result = helpers.common.run_test(str(tmp / "nonexistent.py"), "test_foo")
     assert result.status == "error", (
-        f"run_test with nonexistent module should return status='error', got "
-        f"{result.status!r}"
+        "a missing module is an infrastructure error, not a test failure --"
+        " misclassifying it hides broken test collection from the developer"
     )
 
 
@@ -266,6 +295,6 @@ def test_bad_fn_name_returns_error(tmp: TempDir) -> None:
     module.write_text("def test_real(): pass\n")
     result = helpers.common.run_test(str(module), "test_missing")
     assert result.status == "error", (
-        f"run_test with missing function name should return status='error', got "
-        f"{result.status!r}"
+        "a missing function name means the collector and executor disagree on what"
+        " exists -- this must surface as an error, not a silent pass"
     )
