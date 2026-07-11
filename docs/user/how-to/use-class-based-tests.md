@@ -9,16 +9,7 @@ Any class whose name starts with `Test` is collected. Methods whose name starts
 with `test_` become individual test items.
 
 ```python
-class TestStack:
-    def test_push(self):
-        stack = []
-        stack.append(1)
-        assert stack == [1]
-
-    def test_pop(self):
-        stack = [1, 2]
-        assert stack.pop() == 2
-        assert stack == [1]
+--8<-- "docs/user/examples/how-to/test_class_based.py:basic-class"
 ```
 
 Run: `oxitest tests/`
@@ -60,16 +51,7 @@ class TestUsers:
 Apply marks to the class (affects all methods) or to individual methods:
 
 ```python
-import oxitest
-
-@oxitest.mark.slow
-class TestExpensive:
-    def test_heavy_computation(self):
-        ...
-
-    @oxitest.mark.skip(reason="not yet implemented")
-    def test_future_feature(self):
-        ...
+--8<-- "docs/user/examples/how-to/test_class_based.py:class-marks"
 ```
 
 ## Limitations

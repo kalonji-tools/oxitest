@@ -214,9 +214,5 @@ The unused-fixture check does not detect `Fixture[TempDir]` as a usage. Use
 `Fixture[Path]` instead — both inject the same temporary directory:
 
 ```python
-from pathlib import Path
-from oxitest import Fixture
-
-def test_example(tmp: Fixture[Path]) -> None:
-    assert tmp.is_dir()
+--8<-- "docs/user/examples/how-to/test_troubleshooting.py:tempdir-path-workaround"
 ```
