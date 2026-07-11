@@ -605,3 +605,35 @@ def test_extract_helpers_from_conftest(tmp: TempDir) -> None:
     assert defs[0].source.conftest_path == str(conftest), (
         "conftest_path should be stamped"
     )
+
+
+# ── _load_conftest_module: sys.modules cleanup on failure ─────────────────────
+
+
+@oxitest.mark.inprocess
+def test_load_conftest_module_cleans_sys_modules_on_exec_failure(
+    tmp: TempDir, _clean_sys_modules: Fixture[None]
+) -> None:
+    """When exec_module raises, _load_conftest_module cleans both sys.modules keys."""
+    # Arrange: conftest that raises at module level
+    conftest = tmp / "conftest.py"
+    conftest.write_text("raise RuntimeError('boom')\n")
+    unique_name = f"_oxitest_conftest_{abs(hash(str(conftest)))}"
+    # Ensure neither key is pre-populated
+    sys.modules.pop(unique_name, None)
+    sys.modules.pop("conftest", None)
+    sentinel = sys.modules.get("conftest")
+
+    # Act + Assert: exception propagates
+    with raises(RuntimeError, match="boom"):
+        _load_conftest_module(str(conftest))
+
+    # Assert: both keys are cleaned up
+    assert unique_name not in sys.modules, (
+        "unique module name should be removed from sys.modules after exec failure; "
+        "a poisoned entry would cause confusing import errors on retry"
+    )
+    assert sys.modules.get("conftest") is sentinel, (
+        "sys.modules['conftest'] should not be set to the failed module; "
+        "leaving a poisoned alias would contaminate subsequent conftest imports"
+    )

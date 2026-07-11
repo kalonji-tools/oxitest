@@ -116,7 +116,12 @@ def _load_conftest_module(path: str) -> ModuleType | None:
         return None
     module = importlib.util.module_from_spec(spec)
     sys.modules[unique_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(unique_name, None)
+        sys.modules.pop("conftest", None)
+        raise
     sys.modules["conftest"] = module
     return module
 
