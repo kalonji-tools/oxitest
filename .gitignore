@@ -218,6 +218,9 @@ docs/superpowers/
 # Graphify (generated dependency graph output)
 graphify-out/
 
+# Doc examples lockfile (no deps, auto-generated noise)
+docs/user/examples/uv.lock
+
 # MkDocs build output
 docs/site/
 docs/internals/book/

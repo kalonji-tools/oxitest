@@ -4,8 +4,6 @@ Provides common fixtures referenced across multiple doc pages.
 Populated as migration batches add pages that need external symbols.
 """
 
-from __future__ import annotations
-
 # --8<-- [start:quickstart-setup]
 from oxitest import Fixtures
 
