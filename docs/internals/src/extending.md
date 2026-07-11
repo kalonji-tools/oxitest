@@ -361,6 +361,7 @@ The plugin system is defined in two places:
 | `fixture_provider` | `FixtureProvider` | Lazy | Many |
 | `execution_wrapper` | `ExecutionWrapper` | Lazy | Many |
 | `debugger_backend` | `DebuggerBackend` | Lazy | At most one |
+| `helper_provider` | `HelperProvider` | Lazy | Many |
 
 **Eager** protocols must be loaded at session start (before test execution).
 **Lazy** protocols are deferred until first use -- their plugin modules are not even imported until needed.
@@ -385,8 +386,13 @@ In `python/oxitest/plugin.py`:
 ```python
 @runtime_checkable
 class MyProtocol(Protocol):
-    def do_thing(self, arg: str) -> None: ...
+    def do_thing(self, *, arg: str) -> None: ...
 ```
+
+> **All protocol method parameters must be keyword-only** (use the `*`
+> separator).  oxitest invokes protocol methods via PyO3 kwargs dicts, not
+> positional arguments.  Test doubles should use `**_: Any` for unused
+> protocol args to satisfy structural conformance.
 
 #### 2. Add a field to the `Plugin` dataclass
 
@@ -397,18 +403,16 @@ class Plugin:
     my_protocols: tuple[MyProtocol, ...] = ()
 ```
 
-#### 3. Add a registry accessor in `plugin_loader.py`
+#### 3. Add a registry field in `plugin_loader.py`
 
-In `PluginRegistry`:
+`PluginRegistry` is a frozen dataclass — fields are eagerly computed in
+`_PluginRegistryBuilder.build()`, not cached properties:
 
 ```python
-@functools.cached_property
-def my_protocols(self) -> list[MyProtocol]:
-    return list(
-        itertools.chain.from_iterable(
-            e.plugin.my_protocols for e in self.entries if e.plugin is not None
-        )
-    )
+@dataclass(frozen=True, slots=True)
+class PluginRegistry:
+    # ...existing fields...
+    my_protocols: tuple[MyProtocol, ...] = ()
 ```
 
 #### 4. Classify as eager or lazy
