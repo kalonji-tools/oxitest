@@ -72,14 +72,14 @@ fmt *args: (_log _yellow "Formatting...")
 
 # Build all documentation sites
 docs-build: (_log _green "Building all docs...")
-    mkdocs build
+    uv run --group docs mkdocs build
     mdbook build docs/internals
     cargo doc --no-deps --document-private-items
 
 # Serve docs with live reload (hot-reload on save, but cross-discipline links 404)
 docs-serve: (_log _green "Starting doc servers...")
     cargo doc --no-deps --document-private-items
-    mkdocs serve --dev-addr localhost:8000 &
+    uv run --group docs mkdocs serve --dev-addr localhost:8000 &
     mdbook serve docs/internals --port 3000 &
     python3 -m http.server 3001 --directory target/doc &
     @just _log {{_green}} "User docs:      http://localhost:8000"
