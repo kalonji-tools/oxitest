@@ -55,6 +55,15 @@ ignore = [
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
 
+# ── Doc examples (user-facing code snippets) ───────────────────────────
+"docs/user/examples/*" = [
+    "ANN201",   # return type annotations — docs show beginner-friendly code
+    "D103",     # docstrings — snippets show minimal examples
+    "INP001",   # no __init__.py (not a package)
+    "PLR2004",  # magic values — examples use literal comparisons
+    "S101",     # assert — examples use assert for clarity
+]
+
 # ── PLC0415: intentionally lazy imports ─────────────────────────────────
 "python/tests/fixtures/oxitest_sample_infra/__init__.py" = ["PLC0415"]
 "python/tests/fixtures/oxitest_sample_metrics/__init__.py" = ["PLC0415"]
