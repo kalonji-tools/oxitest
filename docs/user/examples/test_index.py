@@ -1,7 +1,5 @@
 """Tested examples for the index page quick-start block."""
 
-from __future__ import annotations
-
 from oxitest import Fixture
 
 # --8<-- [start:quickstart-test]

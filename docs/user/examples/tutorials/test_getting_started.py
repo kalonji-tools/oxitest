@@ -1,7 +1,5 @@
 """Tested examples for the getting-started tutorial."""
 
-from __future__ import annotations
-
 
 # --8<-- [start:full-test-file]
 def test_addition():
