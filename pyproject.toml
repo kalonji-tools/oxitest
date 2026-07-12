@@ -57,7 +57,7 @@ ignore = [
 ]
 
 # ── Doc examples (user-facing code snippets) ───────────────────────────
-"docs/user/examples/**" = [
+"python/tests/docs/**" = [
     "ANN",      # all annotation rules — docs show beginner-friendly code
     "ARG001",   # unused args — parametrize examples may not use all params
     "ARG002",   # unused method args — stub methods ignore parameters
@@ -66,6 +66,7 @@ ignore = [
     "D102",     # method docstrings — test class methods are self-descriptive
     "D103",     # function docstrings — snippets show minimal examples
     "D107",     # __init__ docstrings — stub classes are self-documenting
+    "E402",     # import order — snippet blocks have imports after module-level code
     "E501",     # line length
     "F403",     # star imports — output tests use from _helpers import *
     "F405",     # undefined from star — output tests use from _helpers import * — assertion messages push past 88 chars
@@ -97,7 +98,8 @@ ignore = [
 
 # ── Scripts and benchmarks ──────────────────────────────────────────────
 "scripts/*" = ["T201"]
-"benchmarks/*.py" = ["T201", "E501", "PLR2004", "S101"]
+"benchmarks/*.py" = ["T201", "E402",     # import order — snippet blocks have imports after module-level code
+    "E501", "PLR2004", "S101"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
@@ -114,9 +116,13 @@ extra-paths = ["python/tests"]
 
 [tool.oxitest]
 testpaths = ["python/tests", "python/oxitest"]
+norecursedirs = ["docs"]
 python_files = ["test_*.py"]
 strict = "abort"
 timeout = 30
+markers = [
+    "docs: documentation example tests",
+]
 affected_base = "main"
 doctest_modules = true
 

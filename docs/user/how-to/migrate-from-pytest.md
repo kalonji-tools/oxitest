@@ -84,7 +84,7 @@ oxitest uses `@oxitest.parametrize` (a first-class decorator, not a mark) with k
 arguments as named cases. See [Use parametrize](use-parametrize.md) for full details.
 
 ```python
---8<-- "docs/user/examples/how-to/test_parametrize.py:dataclass-expanded"
+--8<-- "python/tests/docs/how-to/test_parametrize.py:dataclass-expanded"
 ```
 
 Unlike pytest's list-of-tuples style, oxitest parametrize uses named keyword arguments —

@@ -9,7 +9,7 @@ Any class whose name starts with `Test` is collected. Methods whose name starts
 with `test_` become individual test items.
 
 ```python
---8<-- "docs/user/examples/how-to/test_class_based.py:basic-class"
+--8<-- "python/tests/docs/how-to/test_class_based.py:basic-class"
 ```
 
 Run: `oxitest tests/`
@@ -51,7 +51,7 @@ class TestUsers:
 Apply marks to the class (affects all methods) or to individual methods:
 
 ```python
---8<-- "docs/user/examples/how-to/test_class_based.py:class-marks"
+--8<-- "python/tests/docs/how-to/test_class_based.py:class-marks"
 ```
 
 ## Limitations

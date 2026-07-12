@@ -39,7 +39,7 @@ $ mkdir -p my_project/tests && cd my_project
 Create a file called `tests/test_math.py` with the following content:
 
 ```python
---8<-- "docs/user/examples/tutorials/test_getting_started.py:full-test-file"
+--8<-- "python/tests/docs/tutorials/test_getting_started.py:full-test-file"
 ```
 
 oxitest discovers test files whose names match `test_*.py` or `*_test.py`, and
@@ -85,7 +85,7 @@ Edit `tests/test_math.py` and introduce a deliberate mistake in `test_multiplica
 
 ```python
 def test_multiplication():
-    --8<-- "docs/user/examples/tutorials/test_getting_started.py:failing-multiplication"
+    --8<-- "python/tests/docs/tutorials/test_getting_started.py:failing-multiplication"
 ```
 
 Run oxitest again:
@@ -125,7 +125,7 @@ Revert the change before continuing:
 
 ```python
 def test_multiplication():
-    --8<-- "docs/user/examples/tutorials/test_getting_started.py:fixed-multiplication"
+    --8<-- "python/tests/docs/tutorials/test_getting_started.py:fixed-multiplication"
 ```
 
 ## Step 6 — Add a pyproject.toml for configuration

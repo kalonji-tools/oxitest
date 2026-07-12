@@ -45,7 +45,7 @@ test *args: (_log _blue "Running tests...")
 
 # Run doc example tests (no rebuild — use `just build` first if Rust changed)
 test-docs *args: (_log _blue "Running doc example tests...")
-    cd docs/user/examples && PYTHONPATH={{justfile_directory()}}/python uv run python -m oxitest {{args}}
+    cd python/tests/docs && PYTHONPATH={{justfile_directory()}}/python uv run python -m oxitest {{args}}
 
 # Run Rust unit tests
 test-rust *args: (_log _blue "Running Rust tests...")

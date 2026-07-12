@@ -421,7 +421,7 @@ type safety and immutability.
 **Fix:** Replace the dictionary with a frozen dataclass:
 
 ```python
---8<-- "docs/user/examples/reference/test_errors.py:dataclass-parametrize-fix"
+--8<-- "python/tests/docs/reference/test_errors.py:dataclass-parametrize-fix"
 ```
 
 ---

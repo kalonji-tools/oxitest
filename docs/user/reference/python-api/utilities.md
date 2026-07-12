@@ -39,7 +39,7 @@ Assert that two values (or nested containers of values) are approximately equal.
 Supports floats, ints, `Decimal`, and nested lists/tuples/dicts.
 
 ```python
---8<-- "docs/user/examples/reference/test_utilities.py:approx"
+--8<-- "python/tests/docs/reference/test_utilities.py:approx"
 ```
 
 | Parameter | Type | Default | Description |
@@ -56,7 +56,7 @@ Comparison is symmetric and delegates to `math.isclose()` for scalars.
 Skip the current test at runtime. Call inside a test body to bail out early.
 
 ```python
---8<-- "docs/user/examples/reference/test_utilities.py:skip-runtime"
+--8<-- "python/tests/docs/reference/test_utilities.py:skip-runtime"
 ```
 
 | Parameter | Type | Default | Description |

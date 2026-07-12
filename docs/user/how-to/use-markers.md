@@ -25,7 +25,7 @@ oxitest strips it when validating marks.
 ## Apply a custom marker
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:custom-marker"
+--8<-- "python/tests/docs/how-to/test_markers.py:custom-marker"
 ```
 
 ## Filter by marker
@@ -50,24 +50,24 @@ Expressions are matched against the full set of marks on each test.
 
 === "With reason (recommended)"
     ```python
-    --8<-- "docs/user/examples/how-to/test_markers.py:skip-with-reason"
+    --8<-- "python/tests/docs/how-to/test_markers.py:skip-with-reason"
     ```
 
 === "Without reason"
     ```python
-    --8<-- "docs/user/examples/how-to/test_markers.py:skip-without-reason"
+    --8<-- "python/tests/docs/how-to/test_markers.py:skip-without-reason"
     ```
 
 You can also skip imperatively from inside a test:
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:skip-imperative"
+--8<-- "python/tests/docs/how-to/test_markers.py:skip-imperative"
 ```
 
 ## Skip conditionally
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:skip-conditional"
+--8<-- "python/tests/docs/how-to/test_markers.py:skip-conditional"
 ```
 
 The `when` argument is any expression evaluated at collection time. When falsy, the mark
@@ -76,7 +76,7 @@ is not applied and the test runs normally.
 ## Mark a test as expected to fail
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:xfail"
+--8<-- "python/tests/docs/how-to/test_markers.py:xfail"
 ```
 
 - If the test **fails** as expected: reported as `XFAIL` (not a failure).
@@ -85,7 +85,7 @@ is not applied and the test runs normally.
 ## Set a per-test timeout
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:timeout"
+--8<-- "python/tests/docs/how-to/test_markers.py:timeout"
 ```
 
 oxitest kills the test and marks it failed if it exceeds the timeout. `seconds` must be
@@ -98,13 +98,13 @@ Set the `oxi_mark` module-level variable to apply one or more marks to every
 test function in the file:
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:module-mark"
+--8<-- "python/tests/docs/how-to/test_markers.py:module-mark"
 ```
 
 Both tests inherit the 5-second timeout. To apply multiple marks, use a list:
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:module-mark-list"
+--8<-- "python/tests/docs/how-to/test_markers.py:module-mark-list"
 ```
 
 ## Force a test to run on the main process
@@ -113,7 +113,7 @@ Use `@oxi.mark.inprocess` to exclude a test from worker subprocesses during
 parallel runs. The test runs on the coordinator process instead:
 
 ```python
---8<-- "docs/user/examples/how-to/test_markers.py:inprocess"
+--8<-- "python/tests/docs/how-to/test_markers.py:inprocess"
 ```
 
 This is useful for tests that require `breakpoint()`, global mutable state, or

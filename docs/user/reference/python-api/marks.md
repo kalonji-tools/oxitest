@@ -14,7 +14,7 @@ each function's `_oxitest_marks` list and acts on them before executing the test
 Skip the test unconditionally, or conditionally when `when` is truthy.
 
 ```python
---8<-- "docs/user/examples/reference/test_marks.py:skip-reference"
+--8<-- "python/tests/docs/reference/test_marks.py:skip-reference"
 ```
 
 | Parameter | Type | Default | Description |
@@ -122,7 +122,7 @@ for tests that mutate process-global state (`os.environ`, `signal` handlers,
 `sys.modules`) or depend on session-scoped shared fixtures.
 
 ```python
---8<-- "docs/user/examples/reference/test_marks.py:inprocess-reference"
+--8<-- "python/tests/docs/reference/test_marks.py:inprocess-reference"
 ```
 
 No-op when `--serial` is active (all tests already run on main process).
