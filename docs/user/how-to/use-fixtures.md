@@ -87,7 +87,7 @@ A fixture with `autouse=True` runs for every test without being explicitly
 requested:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:autouse-fixture"
+--8<-- "docs/user/examples/how-to/fixtures/autouse/conftest.py:autouse-fixture"
 ```
 
 ## Use multiple namespaces

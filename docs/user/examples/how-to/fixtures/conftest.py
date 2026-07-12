@@ -97,12 +97,6 @@ def app_config() -> dict:
     return load_config("config.yaml")
 # --8<-- [end:shared-fixture]
 
-# --8<-- [start:autouse-fixture]
-@fx.fixture(autouse=True)
-def reset_database(db: Fixture[Connection]) -> Generator[None, None, None]:
-    yield
-    db.execute("DELETE FROM users")
-# --8<-- [end:autouse-fixture]
 # fmt: on
 
 
