@@ -66,12 +66,15 @@ ignore = [
     "D103",     # function docstrings — snippets show minimal examples
     "D107",     # __init__ docstrings — stub classes are self-documenting
     "E501",     # line length — assertion messages push past 88 chars
+    "ERA001",   # commented-out code — plugin examples show config patterns
+    "FBT003",   # boolean positional — reporter.finish([], False) is idiomatic
     "INP001",   # no __init__.py (not a package)
     "LOG015",   # root logger — docs show simplest logging pattern
     "PLC0415",  # import inside function — fixture stubs need local imports
     "PLR2004",  # magic values — examples use literal comparisons
     "PTH109",   # os.getcwd — docs show stdlib patterns users know
     "S101",     # assert — examples use assert for clarity
+    "SLF001",   # private member access — tests verify internal state of stubs
     "T201",     # print — capture examples must print to demonstrate the feature
 ]
 
