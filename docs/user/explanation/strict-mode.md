@@ -151,8 +151,8 @@ fixtures are excluded from this check.
     The unused-fixture check does not recognise `Fixture[TempDir]` as a usage
     because the strict checker inspects annotation names and excludes built-in
     inner types. If strict mode flags a `TempDir` fixture as unused, annotate
-    the test parameter as `Fixture[Path]` instead — both inject the same
-    temporary directory.
+    the test parameter as bare `TempDir` instead (it's `@injectable`, so no
+    `Fixture[T]` wrapper is needed).
 
 ## Two modes
 
