@@ -39,16 +39,7 @@ Assert that two values (or nested containers of values) are approximately equal.
 Supports floats, ints, `Decimal`, and nested lists/tuples/dicts.
 
 ```python
-import oxitest
-
-def test_pi():
-    assert 3.14 == oxitest.approx(3.14159, abs=0.01)
-
-def test_vector():
-    assert [0.1 + 0.2, 0.3] == oxitest.approx([0.3, 0.3])
-
-def test_mapping():
-    assert {"x": 1.0, "y": 2.0} == oxitest.approx({"x": 1.0, "y": 2.001}, abs=0.01)
+--8<-- "docs/user/examples/reference/test_utilities.py:approx"
 ```
 
 | Parameter | Type | Default | Description |
@@ -65,13 +56,7 @@ Comparison is symmetric and delegates to `math.isclose()` for scalars.
 Skip the current test at runtime. Call inside a test body to bail out early.
 
 ```python
-import oxitest
-
-def test_only_on_linux():
-    import sys
-    if sys.platform != "linux":
-        oxitest.skip("requires Linux")
-    assert True
+--8<-- "docs/user/examples/reference/test_utilities.py:skip-runtime"
 ```
 
 | Parameter | Type | Default | Description |
