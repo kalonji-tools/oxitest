@@ -62,12 +62,15 @@ ignore = [
     "ANN202",   # private method return types — stubs don't need annotations
     "ARG001",   # unused args — parametrize examples may not use all params
     "ARG002",   # unused method args — stub methods ignore parameters
+    "A002",     # builtin shadowing — stub User(id=...) mirrors real APIs
     "D101",     # class docstrings — dataclass examples are self-documenting
     "D102",     # method docstrings — test class methods are self-descriptive
     "D103",     # function docstrings — snippets show minimal examples
+    "D107",     # __init__ docstrings — stub classes are self-documenting
     "E501",     # line length — assertion messages push past 88 chars
     "INP001",   # no __init__.py (not a package)
     "LOG015",   # root logger — docs show simplest logging pattern
+    "PLC0415",  # import inside function — fixture stubs need local imports
     "PLR2004",  # magic values — examples use literal comparisons
     "PTH109",   # os.getcwd — docs show stdlib patterns users know
     "S101",     # assert — examples use assert for clarity
