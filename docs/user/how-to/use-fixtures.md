@@ -13,15 +13,9 @@ instance (or more — all are discovered automatically) and decorate your factor
 functions with `@fx.fixture`.
 
 ```python
-# conftest.py
-from __future__ import annotations
-import oxitest
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:declare-registry"
 
-fx = oxitest.Fixtures()
-
-@fx.fixture
-def sample_data() -> list[int]:
-    return [1, 2, 3, 4, 5]
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:simple-fixture"
 ```
 
 ## Inject a fixture into a test
@@ -31,11 +25,7 @@ matches the `T` in `Fixture[T]` against fixture return types. The parameter name
 is just for readability.
 
 ```python
-# tests/test_example.py
-from oxitest import Fixture
-
-def test_sum(data: Fixture[list[int]]) -> None:
-    assert sum(data) == 15
+--8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:inject-fixture"
 ```
 
 The parameter name `data` doesn't need to match the fixture name `sample_data` —
@@ -54,14 +44,7 @@ oxitest finds the fixture by its return type `list[int]`.
     runs as setup. Code after `yield` runs as teardown, even if the test raises.
 
     ```python
-    from collections.abc import Generator
-
-    @fx.fixture
-    def temp_db() -> Generator[Connection, None, None]:
-        conn = connect("sqlite:///:memory:")
-        conn.execute("CREATE TABLE t (id INTEGER)")
-        yield conn
-        conn.close()
+    --8<-- "docs/user/examples/how-to/fixtures/conftest.py:yield-fixture"
     ```
 
 === "Imperative (addfinalizer)"
@@ -70,16 +53,7 @@ oxitest finds the fixture by its return type `list[int]`.
     cleanup callbacks. Finalizers run in reverse registration order after the test.
 
     ```python
-    from pathlib import Path
-    import tempfile
-    from oxitest import TestContext
-
-    @fx.fixture
-    def managed_file(ctx: TestContext) -> Path:
-        path = Path(tempfile.mktemp())
-        path.write_text("hello")
-        ctx.addfinalizer(lambda: path.unlink(missing_ok=True))
-        return path
+    --8<-- "docs/user/examples/how-to/fixtures/conftest.py:imperative-teardown"
     ```
 
 ## Request a fixture from a fixture
@@ -87,10 +61,7 @@ oxitest finds the fixture by its return type `list[int]`.
 Fixtures can depend on other fixtures using the same `Fixture[T]` annotation:
 
 ```python
-@fx.fixture
-def user(db: Fixture[Connection]) -> User:
-    db.execute("INSERT INTO users VALUES (1, 'Alice')")
-    return User(id=1, name="Alice")
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:fixture-depends-on-fixture"
 ```
 
 ## Share a fixture across all tests with shared
@@ -103,9 +74,7 @@ across all tests. The value is immutable — any attribute or item write raises
 `SharedFixtureMutationError` at runtime.
 
 ```python
-@fx.fixture(shared=True)
-def app_config() -> dict:
-    return load_config("config.yaml")
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:shared-fixture"
 ```
 
 Use `shared=True` for read-only session-wide resources such as loaded
@@ -118,12 +87,7 @@ A fixture with `autouse=True` runs for every test without being explicitly
 requested:
 
 ```python
-from collections.abc import Generator
-
-@fx.fixture(autouse=True)
-def reset_database(db: Fixture[Connection]) -> Generator[None, None, None]:
-    yield
-    db.execute("DELETE FROM users")
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:autouse-fixture"
 ```
 
 ## Use multiple namespaces
@@ -132,31 +96,14 @@ Create multiple `Fixtures()` instances — one per concern. Each variable name b
 namespace:
 
 ```python
-# conftest.py
-import oxitest
-
-db = oxitest.Fixtures()
-http = oxitest.Fixtures()
-
-@db.fixture
-def conn() -> Connection:
-    return Database.connect()
-
-@http.fixture
-def client() -> HttpClient:
-    return HttpClient(base_url="http://localhost")
+--8<-- "docs/user/examples/how-to/fixtures/conftest.py:namespace-fixtures"
 ```
 
 Access all of them through a single `fx: Fixtures` parameter. Fixtures resolve lazily —
 only what the test accesses is created:
 
 ```python
-from oxitest import Fixtures
-
-def test_api_writes_to_db(fx: Fixtures) -> None:
-    response = fx.http.client.post("/users", json={"name": "Alice"})
-    row = fx.db.conn.query("SELECT name FROM users WHERE id = ?", response.json()["id"])
-    assert row["name"] == "Alice"
+--8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:namespace-test"
 ```
 
 If two namespaces define a fixture with the same name, `fx.db.conn` and `fx.http.conn`
@@ -168,12 +115,7 @@ The reserved `oxi` namespace exposes all [built-in fixtures](use-builtin-fixture
 under short names. Mix custom and built-in fixtures through the same `fx` parameter:
 
 ```python
-from oxitest import Fixtures
-
-def test_export(fx: Fixtures) -> None:
-    result = fx.db.conn.export()
-    (fx.oxi.tmp.path / "export.json").write_text(result)
-    assert fx.oxi.tmp.path.joinpath("export.json").exists()
+--8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:fx-oxi-test"
 ```
 
 | Attribute | Type |
@@ -197,10 +139,7 @@ Use `@oxitest.mark.usefixtures("name")` when a fixture should run for its side
 effects but its return value is not needed in the test body:
 
 ```python
-@oxitest.mark.usefixtures("reset_db")
-def test_insert_user() -> None:
-    db.execute("INSERT INTO users VALUES (1, 'Alice')")
-    assert db.query("SELECT count(*) FROM users") == 1
+--8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:usefixtures"
 ```
 
 The fixture runs (including any teardown) exactly as it would if requested via a
@@ -218,9 +157,7 @@ when only the side effect matters and no parameter is wanted.
 Multiple fixture names can be passed in a single decorator:
 
 ```python
-@oxitest.mark.usefixtures("reset_db", "clear_cache")
-def test_cold_start() -> None:
-    ...
+--8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:usefixtures-multiple"
 ```
 
 ## Understand conftest.py loading
