@@ -15,23 +15,7 @@ async def test_sleep_completes() -> None:
     await asyncio.sleep(0)
     assert True, "async test should complete"
 # --8<-- [end:basic-async]
-# fmt: on
 
-
-# --8<-- [start:async-fixture]
-@fx.fixture
-async def async_example_client() -> AsyncGenerator[dict, None]:
-    # async setup
-    conn = await asyncio.sleep(0) or {"connected": True}
-    yield conn
-    # async teardown
-    await asyncio.sleep(0)
-
-
-# --8<-- [end:async-fixture]
-
-
-# fmt: off
 # --8<-- [start:async-fixture-test]
 async def test_client_connected(client: Fixture[dict]) -> None:
     assert client["connected"] is True, "async fixture should provide connected client"
