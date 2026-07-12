@@ -51,7 +51,8 @@ ignore = [
 # ── Test infrastructure ─────────────────────────────────────────────────
 "python/tests/*" = [
     "PLR2004",  # magic values in comparisons — universal in test assertions
-    "S101",     # assert is the primary assertion mechanism in tests
+    "S101",     # assert
+    "S603",     # subprocess call — output tests run oxitest as subprocess is the primary assertion mechanism in tests
     "INP001",   # no __init__.py (test dirs are not packages)
 ]
 
@@ -65,7 +66,9 @@ ignore = [
     "D102",     # method docstrings — test class methods are self-descriptive
     "D103",     # function docstrings — snippets show minimal examples
     "D107",     # __init__ docstrings — stub classes are self-documenting
-    "E501",     # line length — assertion messages push past 88 chars
+    "E501",     # line length
+    "F403",     # star imports — output tests use from _helpers import *
+    "F405",     # undefined from star — output tests use from _helpers import * — assertion messages push past 88 chars
     "ERA001",   # commented-out code — plugin examples show config patterns
     "FBT003",   # boolean positional — reporter.finish([], False) is idiomatic
     "INP001",   # no __init__.py (not a package)
@@ -73,7 +76,8 @@ ignore = [
     "PLC0415",  # import inside function — fixture stubs need local imports
     "PLR2004",  # magic values — examples use literal comparisons
     "PTH109",   # os.getcwd — docs show stdlib patterns users know
-    "S101",     # assert — examples use assert for clarity
+    "S101",     # assert
+    "S603",     # subprocess call — output tests run oxitest as subprocess — examples use assert for clarity
     "SLF001",   # private member access — tests verify internal state of stubs
     "T201",     # print — capture examples must print to demonstrate the feature
 ]

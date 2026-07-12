@@ -1,0 +1,4 @@
+STRICT VIOLATIONS
+════════════════════════════════════════════════════════════════════════════════
+  <TMPDIR>/test_bare.py::test_example  bare-assert        line 3
+strict violations found — aborting (exit 3)
