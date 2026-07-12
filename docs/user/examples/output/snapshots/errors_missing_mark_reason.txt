@@ -1,0 +1,4 @@
+STRICT VIOLATIONS
+════════════════════════════════════════════════════════════════════════════════
+  <TMPDIR>/test_marks.py::test_no_reason  missing-mark-reason   skip
+strict violations found — aborting (exit 3)
