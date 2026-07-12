@@ -34,15 +34,7 @@ Helpers use explicit registration via a `Helpers()` instance, mirroring how fixt
 use `Fixtures()`:
 
 ```python
-# conftest.py
-from oxitest import Helpers
-
-utils = Helpers()
-
-@utils.helper
-def make_user(**overrides):
-    defaults = {"name": "test", "email": "test@example.com"}
-    return {**defaults, **overrides}
+--8<-- "docs/user/examples/how-to/helpers/conftest.py:define-helpers"
 ```
 
 Only functions decorated with `@helpers.helper` are registered. Other public functions
