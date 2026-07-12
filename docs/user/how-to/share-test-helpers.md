@@ -11,29 +11,7 @@ see [Conftest helpers](../explanation/conftest-helpers.md).
 Create a `Helpers()` instance and register functions with `@helpers.helper`:
 
 ```python
-# tests/conftest.py
-import oxitest
-from oxitest import Helpers
-
-fixtures = oxitest.Fixtures()
-utils = Helpers()
-
-@fixtures.fixture
-def db():
-    return connect()
-
-@utils.helper
-def make_user(**overrides):
-    defaults = {"name": "test", "email": "test@example.com"}
-    return {**defaults, **overrides}
-
-@utils.helper
-class FakeMailer:
-    def __init__(self):
-        self.sent = []
-
-    def send(self, msg):
-        self.sent.append(msg)
+--8<-- "docs/user/examples/how-to/helpers/conftest.py:define-helpers"
 ```
 
 The variable name (`utils`) becomes the namespace name.
@@ -41,17 +19,7 @@ The variable name (`utils`) becomes the namespace name.
 ## Use helpers in a test file
 
 ```python
-# tests/test_users.py
-from oxitest import helpers
-
-def test_user_defaults():
-    user = helpers.utils.make_user()
-    assert user["name"] == "test"
-
-def test_mailer():
-    mailer = helpers.utils.FakeMailer()
-    mailer.send("hello")
-    assert len(mailer.sent) == 1
+--8<-- "docs/user/examples/how-to/helpers/test_helpers.py:use-helpers"
 ```
 
 ## Add helpers at different directory levels

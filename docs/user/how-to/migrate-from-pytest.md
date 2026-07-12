@@ -84,21 +84,7 @@ oxitest uses `@oxitest.parametrize` (a first-class decorator, not a mark) with k
 arguments as named cases. See [Use parametrize](use-parametrize.md) for full details.
 
 ```python
-from dataclasses import dataclass
-import oxitest
-
-@dataclass(frozen=True)
-class AddCase:
-    x: int
-    y: int
-    expected: int
-
-@oxitest.parametrize(
-    basic=AddCase(x=1, y=2, expected=3),
-    negative=AddCase(x=-5, y=3, expected=-2),
-)
-def test_add(x: int, y: int, expected: int) -> None:
-    assert x + y == expected
+--8<-- "docs/user/examples/how-to/test_parametrize.py:dataclass-expanded"
 ```
 
 Unlike pytest's list-of-tuples style, oxitest parametrize uses named keyword arguments —

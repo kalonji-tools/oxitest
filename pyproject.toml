@@ -56,10 +56,8 @@ ignore = [
 ]
 
 # ── Doc examples (user-facing code snippets) ───────────────────────────
-"docs/user/examples/*" = [
-    "ANN001",   # parameter type annotations — docs show beginner-friendly code
-    "ANN201",   # return type annotations — docs show beginner-friendly code
-    "ANN202",   # private method return types — stubs don't need annotations
+"docs/user/examples/**" = [
+    "ANN",      # all annotation rules — docs show beginner-friendly code
     "ARG001",   # unused args — parametrize examples may not use all params
     "ARG002",   # unused method args — stub methods ignore parameters
     "A002",     # builtin shadowing — stub User(id=...) mirrors real APIs
