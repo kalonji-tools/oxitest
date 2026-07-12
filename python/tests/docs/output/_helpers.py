@@ -44,6 +44,10 @@ def _normalize(text, tmp_path=None):
     if tmp_path:
         path_str = str(tmp_path.path if isinstance(tmp_path, TempDir) else tmp_path)
         text = text.replace(path_str, "<TMPDIR>")
+    # Strip Python/nix store paths from tracebacks
+    # Strip Python/system paths from tracebacks
+    text = re.sub(r"/nix/store/\S+", "<PYTHON_PATH>", text)
+    text = re.sub(r'File "[^"]+"', 'File "<FILE>"', text)
     # Strip timing values like "0.42ms", "1.23s"
     text = re.sub(r"\d+\.\d+\s*ms", "<TIMING>", text)
     text = re.sub(r"\d+\.\d+\s*s\b", "<TIMING>", text)
