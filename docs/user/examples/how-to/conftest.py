@@ -42,9 +42,14 @@ def real_db() -> _StubConnection:
     return _StubConnection(rows=[1, 2, 3])
 
 
+# fmt: off
+# --8<-- [start:async-fixture]
 @fx.fixture
 async def client() -> AsyncGenerator[dict, None]:
-    """Async client stub for doc examples."""
+    # async setup
     conn = await asyncio.sleep(0) or {"connected": True}
     yield conn
+    # async teardown
     await asyncio.sleep(0)
+# --8<-- [end:async-fixture]
+# fmt: on

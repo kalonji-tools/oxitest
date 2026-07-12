@@ -31,7 +31,7 @@ teardown, exactly as with sync yield fixtures. The teardown code runs after the
 test completes, even if the test fails.
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:async-fixture"
+--8<-- "docs/user/examples/how-to/conftest.py:async-fixture"
 ```
 
 ```python
