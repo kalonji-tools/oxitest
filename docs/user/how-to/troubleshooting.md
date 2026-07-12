@@ -210,8 +210,9 @@ Include this output when filing bug reports or asking for help.
 
 ## Strict mode flags my TempDir fixture as unused
 
-The unused-fixture check does not detect `Fixture[TempDir]` as a usage. Use
-`Fixture[Path]` instead — both inject the same temporary directory:
+The unused-fixture check does not detect `Fixture[TempDir]` as a usage.
+Use the bare `TempDir` type annotation instead — `TempDir` is decorated with
+`@injectable`, so no `Fixture[T]` wrapper is needed:
 
 ```python
 --8<-- "docs/user/examples/how-to/test_troubleshooting.py:tempdir-path-workaround"

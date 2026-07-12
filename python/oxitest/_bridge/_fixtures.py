@@ -186,7 +186,7 @@ class Fixtures:
         regardless of pass or fail::
 
             @fixtures.fixture
-            def workspace(tmp_path: Fixture[Path]) -> Generator[Path, None, None]:
+            def workspace(tmp: TempDir) -> Generator[Path, None, None]:
                 yield tmp_path          # setup: value given to the test
                 shutil.rmtree(tmp_path) # teardown: runs after the test
 
@@ -203,7 +203,7 @@ class Fixtures:
                 log: Path
 
             @fixtures.fixture
-            def workspace_env(tmp: Fixture[Path]) -> WorkspaceEnv:
+            def workspace_env(tmp: TempDir) -> WorkspaceEnv:
                 return WorkspaceEnv(root=tmp, log=tmp / "run.log")
 
         At the call site, `workspace_env: Fixture[WorkspaceEnv]` gives IDE
