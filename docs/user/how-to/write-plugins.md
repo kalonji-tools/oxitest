@@ -21,12 +21,7 @@ A plugin is any Python package that exports an `oxitest_plugin` function
 returning a `Plugin` dataclass.
 
 ```python
-# my_plugin/__init__.py
-from oxitest.plugin import Plugin
-
-
-def oxitest_plugin(config=None):
-    return Plugin()
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:quick-start"
 ```
 
 Declare the plugin in your project's `pyproject.toml`:
@@ -60,9 +55,7 @@ retries = 3
 The plugin receives the config as a plain dict:
 
 ```python
-def oxitest_plugin(config=None):
-    # config == {"output": "report.json", "retries": 3}
-    return Plugin()
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:config-entry"
 ```
 
 If no `plugin_settings` table exists for the plugin, `config` is `None`.
@@ -217,34 +210,7 @@ class Reporter(Protocol):
 **Example** -- write test events to a JSON file:
 
 ```python
-import json
-from pathlib import Path
-from oxitest.plugin import Plugin
-
-
-class JsonReporter:
-    def __init__(self, output_path):
-        self._path = Path(output_path)
-        self._events = []
-
-    def test_started(self, item):
-        self._events.append({"event": "started", "item": str(item)})
-
-    def test_completed(self, item, outcome, duration_ms):
-        self._events.append({
-            "event": "completed",
-            "item": str(item),
-            "outcome": str(outcome),
-            "duration_ms": duration_ms,
-        })
-
-    def finish(self, collect_errors, interrupted):
-        self._events.append({"event": "finish", "interrupted": interrupted})
-        self._path.write_text(json.dumps(self._events, indent=2))
-
-
-def oxitest_plugin(config=None):
-    return Plugin(reporters=(JsonReporter(config["output"]),))
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:json-reporter"
 ```
 
 ### LogBackend
@@ -267,35 +233,7 @@ class LogBackend(Protocol):
 **Example** -- custom log handler that captures records with timestamps:
 
 ```python
-import logging
-from oxitest.plugin import Plugin
-
-
-class TimestampBackend:
-    def __init__(self):
-        self._handler = None
-        self._records = []
-
-    def install(self):
-        self._handler = logging.Handler()
-        self._handler.emit = lambda record: self._records.append({
-            "time": record.created,
-            "level": record.levelname,
-            "message": record.getMessage(),
-        })
-        logging.root.addHandler(self._handler)
-
-    def uninstall(self):
-        if self._handler:
-            logging.root.removeHandler(self._handler)
-
-    @property
-    def records(self):
-        return self._records
-
-
-def oxitest_plugin(config=None):
-    return Plugin(log_backends=(TimestampBackend(),))
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:timestamp-backend"
 ```
 
 ### FixtureProvider
@@ -334,48 +272,7 @@ Both are optional — existing plugins without these properties work unchanged.
 **Example** -- database connection pool:
 
 ```python
-from oxitest import injectable
-from oxitest.plugin import Plugin
-
-
-@injectable
-class ConnectionPool:
-    """The fixture type that tests receive."""
-    def __init__(self, dsn):
-        self._dsn = dsn
-        self._connections = []
-
-    def acquire(self):
-        conn = f"connection-to-{self._dsn}"
-        self._connections.append(conn)
-        return conn
-
-    def release_all(self):
-        self._connections.clear()
-
-
-class PoolProvider:
-    def __init__(self, dsn):
-        self._dsn = dsn
-
-    @property
-    def name(self):
-        return "pool"
-
-    @property
-    def fixture_type(self):
-        return ConnectionPool
-
-    def create(self, ctx):
-        return ConnectionPool(self._dsn)
-
-    def teardown(self, value):
-        value.release_all()
-
-
-def oxitest_plugin(config=None):
-    dsn = config["dsn"] if config else "localhost:5432/test"
-    return Plugin(fixture_providers=(PoolProvider(dsn),))
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:connection-pool"
 ```
 
 Tests inject the fixture using the provider's `fixture_type` (the parameter name
@@ -457,26 +354,7 @@ class ExecutionWrapper(Protocol):
 **Example** -- retry on failure:
 
 ```python
-from oxitest.plugin import Plugin
-
-
-class RetryWrapper:
-    @property
-    def marker(self):
-        return "retry"
-
-    def wrap(self, test_fn, marker_args):
-        count = marker_args.get("count", 1)
-        last_result = None
-        for _ in range(count):
-            last_result = test_fn()
-            if last_result.status == "passed":
-                return last_result
-        return last_result
-
-
-def oxitest_plugin(config=None):
-    return Plugin(execution_wrappers=(RetryWrapper(),))
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:retry-wrapper"
 ```
 
 Register the marker in `pyproject.toml` and use it in tests:
@@ -505,47 +383,7 @@ end-to-end.
 ### Plugin code
 
 ```python
-# reporter_plugin/__init__.py
-"""oxitest plugin: write test events to a JSON file."""
-
-import json
-from pathlib import Path
-
-from oxitest.plugin import Plugin
-
-
-class FileReporter:
-    """Collects test events and writes them to a JSON file on finish."""
-
-    def __init__(self, output_path: str):
-        self._path = Path(output_path)
-        self._events: list[dict] = []
-
-    def test_started(self, item):
-        self._events.append({"event": "started", "item": str(item)})
-
-    def test_completed(self, item, outcome, duration_ms):
-        self._events.append({
-            "event": "completed",
-            "item": str(item),
-            "outcome": str(outcome),
-            "duration_ms": duration_ms,
-        })
-
-    def finish(self, collect_errors, interrupted):
-        self._events.append({
-            "event": "finish",
-            "errors": len(collect_errors),
-            "interrupted": interrupted,
-        })
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._events, indent=2))
-
-
-def oxitest_plugin(config=None):
-    """Entry point called by oxitest at startup."""
-    output = config["output"] if config else "test-events.json"
-    return Plugin(reporters=(FileReporter(output),))
+--8<-- "docs/user/examples/how-to/test_write_plugins.py:file-reporter"
 ```
 
 ### Project configuration
