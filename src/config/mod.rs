@@ -114,6 +114,7 @@ pub enum TbStyle {
 pub enum StrictMode {
     Abort,
     Enforce,
+    Off,
 }
 
 #[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq)]

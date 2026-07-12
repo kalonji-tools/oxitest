@@ -200,6 +200,24 @@ fixtures are excluded from this check.
     mark reason) are reported as `ERROR` outcomes for the affected tests. Suite-level violations
     (marker without description) appear in a `STRICT` block after the failure list.
 
+=== "Off"
+    ```console
+    $ oxitest --strict=off
+    ```
+
+    ```toml
+    [tool.oxitest]
+    strict = "off"
+    ```
+
+    Disables strict mode, overriding any project-wide setting. Useful when running
+    a subset of tests (e.g. documentation examples) that intentionally use bare asserts.
+
+    !!! note
+        `strict = "off"` in `pyproject.toml` is valid but redundant — omitting the
+        `strict` key has the same effect. `--strict=off` is primarily useful on the
+        CLI to override a project-wide `strict = "abort"` setting.
+
     Use **enforce** when migrating an existing suite to strict compliance. Tests still run and
     their results are visible; violations appear alongside failures rather than preventing the
     suite from running at all.
