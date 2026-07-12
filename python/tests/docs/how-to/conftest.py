@@ -45,7 +45,7 @@ def real_db() -> _StubConnection:
 # fmt: off
 # --8<-- [start:async-fixture]
 @fx.fixture
-async def client() -> AsyncGenerator[dict, None]:
+async def async_client() -> AsyncGenerator[dict, None]:
     # async setup
     conn = await asyncio.sleep(0) or {"connected": True}
     yield conn
