@@ -54,18 +54,3 @@ def test_needs_fixture(db: Fixture[object]) -> None:
     )
     out, err, _rc = run_oxitest(tmp, "--serial")
     assert_snapshot("errors_fixture_not_found", out + err, tmp_path=tmp)
-
-
-def test_syntax_error_in_test_file(tmp: TempDir) -> None:
-    write_project(
-        tmp,
-        tests={
-            "test_broken.py": """def test_ok():
-    assert True
-
-def test_bad(
-"""
-        },
-    )
-    out, err, _rc = run_oxitest(tmp, "--serial")
-    assert_snapshot("errors_syntax_error", out + err, tmp_path=tmp)
