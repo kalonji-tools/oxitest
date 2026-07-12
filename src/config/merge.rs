@@ -241,6 +241,11 @@ impl Config {
             auto_arrange_threshold: None,
         });
 
+        // --strict=off disables strict, overriding any config value.
+        if self.markers.strict == Some(StrictMode::Off) {
+            self.markers.strict = None;
+        }
+
         // Apply workers after overrides (workers is no longer in Overrides).
         if let Some(w) = args.workers {
             self.exec.mode = ExecutionMode::Parallel { workers: w };
@@ -796,6 +801,24 @@ spawn_overhead_ms = 100.0
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.markers.strict, Some(StrictMode::Enforce));
+    }
+
+    #[test]
+    fn test_strict_off_overrides_toml_strict() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nstrict = \"abort\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let mut args = base_run_args();
+        args.strict = Some(StrictMode::Off);
+        let merged = cfg.merge_run_args(&args);
+        assert_eq!(
+            merged.markers.strict, None,
+            "--strict=off should clear strict regardless of pyproject.toml"
+        );
     }
 
     #[test]
