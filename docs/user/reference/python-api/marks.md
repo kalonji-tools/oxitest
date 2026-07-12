@@ -14,13 +14,7 @@ each function's `_oxitest_marks` list and acts on them before executing the test
 Skip the test unconditionally, or conditionally when `when` is truthy.
 
 ```python
-@oxitest.mark.skip(reason="not implemented yet")
-def test_feature() -> None:
-    ...
-
-@oxitest.mark.skip(when=sys.platform == "win32", reason="POSIX only")
-def test_symlinks() -> None:
-    ...
+--8<-- "docs/user/examples/reference/test_marks.py:skip-reference"
 ```
 
 | Parameter | Type | Default | Description |
@@ -128,11 +122,7 @@ for tests that mutate process-global state (`os.environ`, `signal` handlers,
 `sys.modules`) or depend on session-scoped shared fixtures.
 
 ```python
-@oxitest.mark.inprocess
-def test_env_mutation():
-    import os
-    os.environ["KEY"] = "value"
-    assert os.environ["KEY"] == "value"
+--8<-- "docs/user/examples/reference/test_marks.py:inprocess-reference"
 ```
 
 No-op when `--serial` is active (all tests already run on main process).
