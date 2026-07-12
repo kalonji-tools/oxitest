@@ -42,7 +42,7 @@ import oxitest
 def test_no_shadow(warn: oxitest.WarnCapture) -> None:
     # ... trigger fixture registration ...
     assert not any(
-        isinstance(w.message, oxitest.FixtureShadowWarning) for w in warn.list
+        isinstance(w.message, oxitest.FixtureShadowWarning) for w in warn.warnings
     ), "unexpected fixture shadow"
 ```
 
@@ -82,7 +82,7 @@ def test_connection_cleans_up(
 ) -> None:
     # exercise leaky_connection ...
     assert not any(
-        isinstance(w.message, oxitest.FixtureTeardownWarning) for w in warn.list
+        isinstance(w.message, oxitest.FixtureTeardownWarning) for w in warn.warnings
     ), "fixture teardown raised an exception"
 ```
 
@@ -100,16 +100,7 @@ cross-test contamination.
 **Example**:
 
 ```python
-import oxitest
-
-fx = oxitest.Fixtures()
-
-@fx.fixture(shared=True)
-def config() -> dict[str, str]:
-    return {"env": "test"}
-
-def test_mutation(config: oxitest.Fixture[dict[str, str]]) -> None:
-    config["env"] = "prod"  # raises SharedFixtureMutationError
+--8<-- "docs/user/examples/reference/test_exceptions.py:shared-mutation-error"
 ```
 
 Use `with oxitest.raises(oxitest.SharedFixtureMutationError):` to assert that
