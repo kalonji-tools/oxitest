@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -32,6 +33,10 @@ jobs:
               - 'Cargo.*'
               - 'pyproject.toml'
               - '.github/**'
+            docs:
+              - 'docs/user/**'
+              - 'python/tests/docs/**'
+              - 'mkdocs.yml'
 
   bridge-sync:
     name: Bridge Sync
@@ -137,9 +142,34 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  doc-tests:
+    name: Doc Tests
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      - uses: ./.github/actions/setup-python
+        with:
+          uv-sync-args: --group test
+
+      - name: Build extension
+        run: uv run maturin develop
+
+      - name: Doc example tests
+        run: cd python/tests/docs && PYTHONPATH=${{ github.workspace }}/python uv run python -m oxitest
+
   required:
     name: Tests (required)
-    needs: [bridge-sync, rust-tests, python-tests]
+    needs: [bridge-sync, rust-tests, python-tests, doc-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -147,7 +177,7 @@ jobs:
       - name: Check results
         shell: bash
         run: |
-          if [[ "${{ needs.bridge-sync.result }}" == "failure" || "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" ]]; then
+          if [[ "${{ needs.bridge-sync.result }}" == "failure" || "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" || "${{ needs.doc-tests.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
