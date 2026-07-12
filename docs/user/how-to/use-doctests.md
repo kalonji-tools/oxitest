@@ -27,7 +27,7 @@ A doctest is a code example in a docstring that uses the Python
 interactive prompt syntax:
 
 ```python
---8<-- "docs/user/examples/how-to/test_doctests_example.py:doctest-example"
+--8<-- "python/tests/docs/how-to/test_doctests_example.py:doctest-example"
 ```
 
 Each docstring with `>>>` examples becomes a single test item. The

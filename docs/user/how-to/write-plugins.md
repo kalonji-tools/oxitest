@@ -21,7 +21,7 @@ A plugin is any Python package that exports an `oxitest_plugin` function
 returning a `Plugin` dataclass.
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:quick-start"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:quick-start"
 ```
 
 Declare the plugin in your project's `pyproject.toml`:
@@ -55,7 +55,7 @@ retries = 3
 The plugin receives the config as a plain dict:
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:config-entry"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:config-entry"
 ```
 
 If no `plugin_settings` table exists for the plugin, `config` is `None`.
@@ -210,7 +210,7 @@ class Reporter(Protocol):
 **Example** -- write test events to a JSON file:
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:json-reporter"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:json-reporter"
 ```
 
 ### LogBackend
@@ -233,7 +233,7 @@ class LogBackend(Protocol):
 **Example** -- custom log handler that captures records with timestamps:
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:timestamp-backend"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:timestamp-backend"
 ```
 
 ### FixtureProvider
@@ -272,7 +272,7 @@ Both are optional — existing plugins without these properties work unchanged.
 **Example** -- database connection pool:
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:connection-pool"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:connection-pool"
 ```
 
 Tests inject the fixture using the provider's `fixture_type` (the parameter name
@@ -354,7 +354,7 @@ class ExecutionWrapper(Protocol):
 **Example** -- retry on failure:
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:retry-wrapper"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:retry-wrapper"
 ```
 
 Register the marker in `pyproject.toml` and use it in tests:
@@ -383,7 +383,7 @@ end-to-end.
 ### Plugin code
 
 ```python
---8<-- "docs/user/examples/how-to/test_write_plugins.py:file-reporter"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:file-reporter"
 ```
 
 ### Project configuration

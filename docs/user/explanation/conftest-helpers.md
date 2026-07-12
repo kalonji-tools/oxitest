@@ -34,7 +34,7 @@ Helpers use explicit registration via a `Helpers()` instance, mirroring how fixt
 use `Fixtures()`:
 
 ```python
---8<-- "docs/user/examples/how-to/helpers/conftest.py:define-helpers"
+--8<-- "python/tests/docs/how-to/helpers/conftest.py:define-helpers"
 ```
 
 Only functions decorated with `@helpers.helper` are registered. Other public functions

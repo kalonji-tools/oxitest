@@ -11,7 +11,7 @@ All built-in fixtures are injected by annotating a parameter with the bare type
 `TempDir` provides a unique temporary directory that is deleted after the test.
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:tempdir"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:tempdir"
 ```
 
 `tmp.path` is a `pathlib.Path`. The directory is removed after the test regardless
@@ -23,7 +23,7 @@ of pass or fail.
 temp directories or want to share a directory across tests:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:tempdirfactory"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:tempdirfactory"
 ```
 
 `factory.mktemp("label")` returns a `TempDir` with a unique subdirectory.
@@ -33,7 +33,7 @@ temp directories or want to share a directory across tests:
 `StdCapture` captures `sys.stdout` and `sys.stderr` at the Python stream level:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:stdcapture"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:stdcapture"
 ```
 
 `readouterr()` returns a `CaptureResult(out, err)` and resets the buffers.
@@ -41,7 +41,7 @@ temp directories or want to share a directory across tests:
 Use `cap.disabled()` to temporarily let output pass through:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:stdcapture-disabled"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:stdcapture-disabled"
 ```
 
 ## FdCapture — stdout/stderr at fd level
@@ -51,7 +51,7 @@ code under test writes directly to the OS file descriptors (e.g. C extensions,
 `os.write`):
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:fdcapture"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:fdcapture"
 ```
 
 The API is identical to `StdCapture`.
@@ -62,13 +62,13 @@ The API is identical to `StdCapture`.
 the test:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:patcher-env"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:patcher-env"
 
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:patcher-delenv"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:patcher-delenv"
 
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:patcher-setattr"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:patcher-setattr"
 
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:patcher-chdir"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:patcher-chdir"
 ```
 
 All changes are reverted after the test, even if the test raises.
@@ -78,9 +78,9 @@ All changes are reverted after the test, even if the test raises.
 `LogCapture` captures Python `logging` output:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:logcapture"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:logcapture"
 
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:logcapture-text"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:logcapture-text"
 ```
 
 - `log.records` — list of `logging.LogRecord` objects captured since last reset
@@ -89,7 +89,7 @@ All changes are reverted after the test, even if the test raises.
 - `log.at_level(level, logger=None)` — context manager: temporarily change capture level, then restore
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:logcapture-atlevel"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:logcapture-atlevel"
 ```
 
 ### Plugin backends
@@ -115,14 +115,14 @@ See [Plugin System](../reference/configuration.md#plugins) for how to declare pl
 warnings emitted in fixture teardown:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:warncapture"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:warncapture"
 ```
 
 - `warn.warnings` — `list[warnings.WarningMessage]`, all warnings captured so far
 - `warn.clear()` — reset `.warnings` to `[]` between assertion blocks
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:warncapture-clear"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:warncapture-clear"
 ```
 
 `WarnCapture` and `oxitest.warns()` are complementary:
@@ -139,7 +139,7 @@ Inject `TestContext` to access metadata about the running test and register
 teardown callbacks:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:testcontext"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:testcontext"
 ```
 
 ### Register a finalizer
@@ -148,7 +148,7 @@ Use `ctx.addfinalizer()` to register a callback that runs after the test,
 regardless of pass or fail:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:testcontext-finalizer"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:testcontext-finalizer"
 ```
 
 ### Access parametrize info
@@ -157,7 +157,7 @@ For parametrized tests, `ctx.param_id` and `ctx.param` provide the current
 case identifier and value:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:testcontext-parametrize"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:testcontext-parametrize"
 ```
 
 ## Access built-in fixtures via `fx.oxi`
@@ -167,7 +167,7 @@ If your test already uses the [namespace proxy](use-fixtures.md#access-built-in-
 parameter needed:
 
 ```python
---8<-- "docs/user/examples/how-to/test_builtin_fixtures.py:fx-oxi"
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:fx-oxi"
 ```
 
 This is equivalent to declaring `tmp: TempDir, patch: Patcher, log: LogCapture` as

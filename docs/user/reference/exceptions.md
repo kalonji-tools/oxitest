@@ -100,7 +100,7 @@ cross-test contamination.
 **Example**:
 
 ```python
---8<-- "docs/user/examples/reference/test_exceptions.py:shared-mutation-error"
+--8<-- "python/tests/docs/reference/test_exceptions.py:shared-mutation-error"
 ```
 
 Use `with oxitest.raises(oxitest.SharedFixtureMutationError):` to assert that

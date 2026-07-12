@@ -10,7 +10,7 @@ Declare a test as `async def` and oxitest runs it on the asyncio event loop
 automatically. No decorator or import is required.
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:basic-async"
+--8<-- "python/tests/docs/how-to/test_async_tests.py:basic-async"
 ```
 
 All the same features available to sync tests work with async tests: marks,
@@ -31,11 +31,11 @@ teardown, exactly as with sync yield fixtures. The teardown code runs after the
 test completes, even if the test fails.
 
 ```python
---8<-- "docs/user/examples/how-to/conftest.py:async-fixture"
+--8<-- "python/tests/docs/how-to/conftest.py:async-fixture"
 ```
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:async-fixture-test"
+--8<-- "python/tests/docs/how-to/test_async_tests.py:async-fixture-test"
 ```
 
 An async fixture can only be injected into an async test. Injecting an async
@@ -48,7 +48,7 @@ async fixtures are resolved once on a dedicated persistent event loop and torn
 down at the end of the session.
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:shared-async-fixture"
+--8<-- "python/tests/docs/how-to/test_async_tests.py:shared-async-fixture"
 ```
 
 A shared async fixture can only depend on sync fixtures or other shared async
@@ -62,7 +62,7 @@ for tests that need to spawn concurrent tasks. Tasks still running when the
 test body returns are cancelled automatically.
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:task-group"
+--8<-- "python/tests/docs/how-to/test_async_tests.py:task-group"
 ```
 
 ## Async marks and timeouts
@@ -70,7 +70,7 @@ test body returns are cancelled automatically.
 All standard marks work on async tests:
 
 ```python
---8<-- "docs/user/examples/how-to/test_async_tests.py:async-marks"
+--8<-- "python/tests/docs/how-to/test_async_tests.py:async-marks"
 ```
 
 The `@mark.timeout` decorator and the global `timeout` config key both apply to

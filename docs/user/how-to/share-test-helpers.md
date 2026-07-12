@@ -11,7 +11,7 @@ see [Conftest helpers](../explanation/conftest-helpers.md).
 Create a `Helpers()` instance and register functions with `@helpers.helper`:
 
 ```python
---8<-- "docs/user/examples/how-to/helpers/conftest.py:define-helpers"
+--8<-- "python/tests/docs/how-to/helpers/conftest.py:define-helpers"
 ```
 
 The variable name (`utils`) becomes the namespace name.
@@ -19,7 +19,7 @@ The variable name (`utils`) becomes the namespace name.
 ## Use helpers in a test file
 
 ```python
---8<-- "docs/user/examples/how-to/helpers/test_helpers.py:use-helpers"
+--8<-- "python/tests/docs/how-to/helpers/test_helpers.py:use-helpers"
 ```
 
 ## Add helpers at different directory levels

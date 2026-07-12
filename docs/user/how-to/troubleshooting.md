@@ -215,5 +215,5 @@ Use the bare `TempDir` type annotation instead — `TempDir` is decorated with
 `@injectable`, so no `Fixture[T]` wrapper is needed:
 
 ```python
---8<-- "docs/user/examples/how-to/test_troubleshooting.py:tempdir-path-workaround"
+--8<-- "python/tests/docs/how-to/test_troubleshooting.py:tempdir-path-workaround"
 ```

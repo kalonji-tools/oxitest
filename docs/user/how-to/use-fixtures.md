@@ -13,9 +13,9 @@ instance (or more — all are discovered automatically) and decorate your factor
 functions with `@fx.fixture`.
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:declare-registry"
+--8<-- "python/tests/docs/how-to/fixtures/conftest.py:declare-registry"
 
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:simple-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/conftest.py:simple-fixture"
 ```
 
 ## Inject a fixture into a test
@@ -25,7 +25,7 @@ matches the `T` in `Fixture[T]` against fixture return types. The parameter name
 is just for readability.
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:inject-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:inject-fixture"
 ```
 
 The parameter name `data` doesn't need to match the fixture name `sample_data` —
@@ -44,7 +44,7 @@ oxitest finds the fixture by its return type `list[int]`.
     runs as setup. Code after `yield` runs as teardown, even if the test raises.
 
     ```python
-    --8<-- "docs/user/examples/how-to/fixtures/conftest.py:yield-fixture"
+    --8<-- "python/tests/docs/how-to/fixtures/conftest.py:yield-fixture"
     ```
 
 === "Imperative (addfinalizer)"
@@ -53,7 +53,7 @@ oxitest finds the fixture by its return type `list[int]`.
     cleanup callbacks. Finalizers run in reverse registration order after the test.
 
     ```python
-    --8<-- "docs/user/examples/how-to/fixtures/conftest.py:imperative-teardown"
+    --8<-- "python/tests/docs/how-to/fixtures/conftest.py:imperative-teardown"
     ```
 
 ## Request a fixture from a fixture
@@ -61,7 +61,7 @@ oxitest finds the fixture by its return type `list[int]`.
 Fixtures can depend on other fixtures using the same `Fixture[T]` annotation:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:fixture-depends-on-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/conftest.py:fixture-depends-on-fixture"
 ```
 
 ## Share a fixture across all tests with shared
@@ -74,7 +74,7 @@ across all tests. The value is immutable — any attribute or item write raises
 `SharedFixtureMutationError` at runtime.
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:shared-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/conftest.py:shared-fixture"
 ```
 
 Use `shared=True` for read-only session-wide resources such as loaded
@@ -87,7 +87,7 @@ A fixture with `autouse=True` runs for every test without being explicitly
 requested:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/autouse/conftest.py:autouse-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/autouse/conftest.py:autouse-fixture"
 ```
 
 ## Use multiple namespaces
@@ -96,14 +96,14 @@ Create multiple `Fixtures()` instances — one per concern. Each variable name b
 namespace:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/conftest.py:namespace-fixtures"
+--8<-- "python/tests/docs/how-to/fixtures/conftest.py:namespace-fixtures"
 ```
 
 Access all of them through a single `fx: Fixtures` parameter. Fixtures resolve lazily —
 only what the test accesses is created:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:namespace-test"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:namespace-test"
 ```
 
 If two namespaces define a fixture with the same name, `fx.db.conn` and `fx.http.conn`
@@ -115,7 +115,7 @@ The reserved `oxi` namespace exposes all [built-in fixtures](use-builtin-fixture
 under short names. Mix custom and built-in fixtures through the same `fx` parameter:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:fx-oxi-test"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:fx-oxi-test"
 ```
 
 | Attribute | Type |
@@ -139,7 +139,7 @@ Use `@oxitest.mark.usefixtures("name")` when a fixture should run for its side
 effects but its return value is not needed in the test body:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:usefixtures"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:usefixtures"
 ```
 
 The fixture runs (including any teardown) exactly as it would if requested via a
@@ -157,7 +157,7 @@ when only the side effect matters and no parameter is wanted.
 Multiple fixture names can be passed in a single decorator:
 
 ```python
---8<-- "docs/user/examples/how-to/fixtures/test_fixtures.py:usefixtures-multiple"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:usefixtures-multiple"
 ```
 
 ## Understand conftest.py loading

@@ -24,8 +24,8 @@ Write a test:
 
 ```python
 from oxitest import Fixture
---8<-- "docs/user/examples/conftest.py:quickstart-setup"
---8<-- "docs/user/examples/test_index.py:quickstart-test"
+--8<-- "python/tests/docs/conftest.py:quickstart-setup"
+--8<-- "python/tests/docs/test_index.py:quickstart-test"
 ```
 
 Run it:

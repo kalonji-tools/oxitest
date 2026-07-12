@@ -13,7 +13,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     the test ID (e.g. `test_add[basic]`).
 
     ```python
-    --8<-- "docs/user/examples/how-to/test_parametrize.py:dataclass-expanded"
+    --8<-- "python/tests/docs/how-to/test_parametrize.py:dataclass-expanded"
     ```
 
     oxitest infers **expanded mode** from the signature: parameters whose names match
@@ -23,7 +23,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     Annotate a single parameter with the dataclass type to receive the whole instance:
 
     ```python
-    --8<-- "docs/user/examples/how-to/test_parametrize.py:compact-mode"
+    --8<-- "python/tests/docs/how-to/test_parametrize.py:compact-mode"
     ```
 
     oxitest detects compact mode when exactly one non-`Fixture[T]` parameter carries
@@ -34,7 +34,7 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
     keys must match the non-fixture parameters of the test function:
 
     ```python
-    --8<-- "docs/user/examples/how-to/test_parametrize.py:dict-mode"
+    --8<-- "python/tests/docs/how-to/test_parametrize.py:dict-mode"
     ```
 
 !!! tip "Which mode should I use?"
@@ -46,7 +46,7 @@ A dataclass field annotated `FixtureRef[T]` tells oxitest to inject a
 [fixture](use-fixtures.md) for that case. Pass a fixture function as the field value:
 
 ```python
---8<-- "docs/user/examples/how-to/test_parametrize.py:fixture-ref"
+--8<-- "python/tests/docs/how-to/test_parametrize.py:fixture-ref"
 ```
 
 The fixture is resolved at run time with the same scope/teardown rules as any other fixture.
@@ -58,7 +58,7 @@ writing every combination by hand is tedious. Stack multiple `@oxitest.parametri
 decorators with `oxitest.partial()` to express the cartesian product:
 
 ```python
---8<-- "docs/user/examples/how-to/test_parametrize.py:composed"
+--8<-- "python/tests/docs/how-to/test_parametrize.py:composed"
 ```
 
 This produces 4 test variants: `test_query[real-users]`, `test_query[real-empty]`,

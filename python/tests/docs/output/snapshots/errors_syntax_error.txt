@@ -4,10 +4,10 @@ COLLECTION ERRORS
 ════════════════════════════════════════════════════════════════════════════════
 collection error in <TMPDIR>/test_broken.py:
 Traceback (most recent call last):
-  File "/home/snregales/Projects/kalonji-tools/oxitest.feat-1434-output-validation/python/oxitest/_bridge/_loader.py", line 59, in _load_module
+  File "/home/snregales/Projects/kalonji-tools/oxitest.feat-1438-move-doc-tests/python/oxitest/_bridge/_loader.py", line 59, in _load_module
     tree, bare_asserts = rewrite_asserts(source, module_path)
                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/nix/store/9byi4wb4f290r8rni6lfgnbb1za0656n-python3-3.12.13-env/lib/python3.12/ast.py", line 52, in parse
+  File "/nix/store/wvgg9gh5502if47j3bifb2kfh0gslamf-python3-3.12.13-env/lib/python3.12/ast.py", line 52, in parse
     return compile(source, filename, mode, flags,
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "<TMPDIR>/test_broken.py", line 4
