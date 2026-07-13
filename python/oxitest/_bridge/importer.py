@@ -354,7 +354,7 @@ def _import_test_module(
 
     # Store in session module cache if available — executor will reuse this module.
     if session is not None:
-        cache = getattr(session, "_module_cache", None)
+        cache = getattr(session, "module_cache", None)
         if cache is not None:
             cache.set(path, module)
 
@@ -499,8 +499,9 @@ def collect_module(
         violations.extend(found_viols)
 
     # Plugin collectors — discover additional test items
-    _plugin_registry = getattr(session, "_plugin_registry", None)
-
+    _plugin_registry = (
+        getattr(session, "plugin_registry", None) if session is not None else None
+    )
     if _plugin_registry is not None:
         for collector in _plugin_registry.collectors:  # pragma: no cover
             collector_name = type(collector).__qualname__

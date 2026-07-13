@@ -1233,9 +1233,9 @@ class _FakeRegistry:
 
 @dataclass
 class _FakeSession:
-    """Minimal stand-in for a session object with a _plugin_registry."""
+    """Minimal stand-in for a session object with a plugin_registry."""
 
-    _plugin_registry: _FakeRegistry = field(default_factory=_FakeRegistry)
+    plugin_registry: _FakeRegistry = field(default_factory=_FakeRegistry)
 
 
 class _RaisingCollector:
@@ -1274,7 +1274,7 @@ def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
         tmp, "def test_ok(): pass\n", name="test_col_err.py"
     )
     session = _FakeSession(
-        _plugin_registry=_FakeRegistry(collectors=[_RaisingCollector()])
+        plugin_registry=_FakeRegistry(collectors=[_RaisingCollector()])
     )
 
     items, _ = collect_module(path, session=session)
@@ -1312,7 +1312,7 @@ def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> No
         tmp, "def test_ok(): pass\n", name="test_col_bad.py"
     )
     session = _FakeSession(
-        _plugin_registry=_FakeRegistry(collectors=[_BadReturnCollector()])
+        plugin_registry=_FakeRegistry(collectors=[_BadReturnCollector()])
     )
 
     items, _ = collect_module(path, session=session)
@@ -1352,9 +1352,7 @@ def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) 
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_good.py"
     )
-    session = _FakeSession(
-        _plugin_registry=_FakeRegistry(collectors=[_GoodCollector()])
-    )
+    session = _FakeSession(plugin_registry=_FakeRegistry(collectors=[_GoodCollector()]))
 
     items, _ = collect_module(path, session=session)
 

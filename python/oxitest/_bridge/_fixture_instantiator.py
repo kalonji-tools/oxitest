@@ -208,25 +208,22 @@ class FixtureInstantiator:
         try:
             defn = self._registry.resolve(inner, qualifier=param_name)
         except FixtureNotFoundError:
-            defn = None
+            # No type-based match. Fall back to name-based lookup.
+            if self._registry.get(param_name) is not None:
+                return True, resolve_user_fixture(param_name)
+            raise FixtureNotFoundError(param_name) from None
 
         # For Builtin/Plugin sources found by type, use direct instantiation
-        if defn is not None and not isinstance(defn.source, ConftestSource):
+        if not isinstance(defn.source, ConftestSource):
             return True, self._resolve_by_source(
                 defn, meta, fn_teardowns, resolve_user_fixture
             )
 
         # For ConftestSource: prefer name-based (preserves cycle detection),
-        # fall back to type-resolved name, or raise if neither exists.
+        # fall back to type-resolved name.
         resolve_name = (
-            param_name
-            if self._registry.get(param_name) is not None
-            else defn.name
-            if defn is not None
-            else None
+            param_name if self._registry.get(param_name) is not None else defn.name
         )
-        if resolve_name is None:
-            raise FixtureNotFoundError(param_name)
         return True, resolve_user_fixture(resolve_name)
 
     def _resolve_by_source(
