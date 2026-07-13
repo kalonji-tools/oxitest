@@ -93,7 +93,8 @@ Plugin errors occur when oxitest cannot load or initialize a declared plugin.
 ---
 
 ```text
-Plugin '<name>' not found
+plugin "<name>" not found. Is it installed?
+  <ImportError>
 ```
 
 **Cause:** A module listed in `plugins = [...]` in `pyproject.toml` cannot be
@@ -109,7 +110,7 @@ $ python -c "import <name>"
 ---
 
 ```text
-Plugin '<name>' has no oxitest_plugin() function
+plugin "<name>" has no oxitest_plugin() function
 ```
 
 **Cause:** The module exists and imports successfully, but it does not export
@@ -128,7 +129,7 @@ def oxitest_plugin(config=None) -> Plugin:
 ---
 
 ```text
-oxitest_plugin() did not return a Plugin instance
+oxitest_plugin() in '<name>' must return oxitest.Plugin, got <type>
 ```
 
 **Cause:** The entry point function returned a value that is not an instance of
@@ -147,7 +148,7 @@ def oxitest_plugin(config=None) -> Plugin:
 ---
 
 ```text
-Multiple plugins provide a debugger backend: <plugin_a>, <plugin_b>
+multiple plugins provide a debugger backend: <plugin_a>, <plugin_b>
 ```
 
 **Cause:** More than one plugin in `plugins = [...]` declares a
@@ -201,7 +202,7 @@ Fixture errors occur during fixture resolution or teardown.
 ---
 
 ```text
-FixtureNotFoundError: no fixture named '<name>'
+FixtureNotFoundError: fixture '<name>' not found
 ```
 
 **Cause:** A test parameter is annotated with `Fixture[T]` but no fixture
@@ -216,7 +217,7 @@ matching `T`.
 ---
 
 ```text
-FixtureCycleError: circular dependency detected among {<names>}
+FixtureCycleError: fixture cycle detected: <a> → <b> → <name>
 ```
 
 **Cause:** Two or more fixtures depend on each other, forming a cycle. For
@@ -228,7 +229,9 @@ setup into a third fixture that both can depend on without creating a loop.
 ---
 
 ```text
-UnannotatedFixtureParamError: parameter '<name>' has no Fixture[T] annotation
+UnannotatedFixtureParamError: parameter '<name>' in <fn_name> is not injected.
+To request a fixture, annotate it: <name>: Fixture[<type>]
+Unannotated parameters are not resolved by oxitest.
 ```
 
 **Cause:** A test function has a parameter that is not annotated with
@@ -385,7 +388,7 @@ design principles.
 ---
 
 ```text
-bare assert at line(s) <N, N, ...>
+<node_id>                                                     bare-assert        line <N>
 ```
 
 **Cause:** The test file contains `assert` statements that do not use a
@@ -411,7 +414,7 @@ For exception testing, use `oxitest.raises()` instead of bare `assert`.
 ---
 
 ```text
-dict-style parametrize at line(s) <N, N, ...>
+<node_id>                                                     dict-parametrize
 ```
 
 **Cause:** A `@parametrize` decorator uses a plain dictionary for test cases.
@@ -427,7 +430,7 @@ type safety and immutability.
 ---
 
 ```text
-missing mark reason for '@<marker>'
+<node_id>                                                     missing-mark-reason   <marker>
 ```
 
 **Cause:** A custom marker is declared in `[tool.oxitest] markers` without a
