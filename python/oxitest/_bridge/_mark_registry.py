@@ -10,8 +10,12 @@ from __future__ import annotations
 
 __all__ = [
     "ExecutionWrapper",
+    "MarkAction",
     "MarkHandler",
     "MarkWrapper",
+    "PassThrough",
+    "ShortCircuit",
+    "Wrap",
     "_PluginMarkHandler",
     "evaluate_marks",
 ]
@@ -41,15 +45,26 @@ ExecutionWrapper = MarkWrapper
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class MarkEvalResult:
-    """Result returned by a mark handler.
+class ShortCircuit:
+    """Mark evaluation result: skip test execution, return this result."""
 
-    short_circuit: return this TestResult immediately, skip execution.
-    wrapper: wrap the execution with this callable.
-    """
+    result: TestResult
 
-    short_circuit: TestResult | None = None
-    wrapper: MarkWrapper | None = None
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Wrap:
+    """Mark evaluation result: wrap the test execution with this callable."""
+
+    wrapper: MarkWrapper
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PassThrough:
+    """Mark evaluation result: no effect on execution."""
+
+
+MarkAction = ShortCircuit | Wrap | PassThrough
+_PASS_THROUGH = PassThrough()
 
 
 class MarkHandler(ABC):
@@ -58,22 +73,22 @@ class MarkHandler(ABC):
     mark_name: str = ""  # subclasses must override
 
     @abstractmethod
-    def handle(self, mark: MarkInfo) -> MarkEvalResult: ...
+    def handle(self, mark: MarkInfo) -> MarkAction: ...
 
 
 class _SkipHandler(MarkHandler):
     mark_name = "skip"
 
-    def handle(self, mark: MarkInfo) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkAction:
         """Short-circuit test execution with a `skipped` result."""
         reason = mark.kwargs.get("reason") or (mark.args[0] if mark.args else "")
-        return MarkEvalResult(short_circuit=SkippedResult(message=str(reason)))
+        return ShortCircuit(SkippedResult(message=str(reason)))
 
 
 class _XFailHandler(MarkHandler):
     mark_name = "xfail"
 
-    def handle(self, mark: MarkInfo) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkAction:
         """Wrap execution to convert failures to `xfailed` and passes to `xpassed`."""
         strict = mark.kwargs.get("strict", True)
         reason = mark.kwargs.get("reason", "")
@@ -98,16 +113,16 @@ class _XFailHandler(MarkHandler):
                 return result
             return XFailedResult(message=str(reason))
 
-        return MarkEvalResult(wrapper=xfail_wrapper)
+        return Wrap(xfail_wrapper)
 
 
 class _TimeoutHandler(MarkHandler):
     mark_name = "timeout"
 
-    def handle(self, mark: MarkInfo) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkAction:
         """Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded."""
         seconds = extract_timeout_seconds(mark.kwargs)
-        return MarkEvalResult(wrapper=make_timeout_wrapper(seconds))
+        return Wrap(make_timeout_wrapper(seconds))
 
 
 class _PluginMarkHandler(MarkHandler):
@@ -117,7 +132,7 @@ class _PluginMarkHandler(MarkHandler):
         self.mark_name = pw.marker
         self._pw = pw
 
-    def handle(self, mark: MarkInfo) -> MarkEvalResult:
+    def handle(self, mark: MarkInfo) -> MarkAction:
         args = {**dict(enumerate(mark.args)), **mark.kwargs}
         pw = self._pw
 
@@ -128,7 +143,7 @@ class _PluginMarkHandler(MarkHandler):
         ) -> TestResult:
             return _w.wrap(test_fn=next_fn, marker_args=_a)
 
-        return MarkEvalResult(wrapper=wrapper)
+        return Wrap(wrapper)
 
 
 # Registry pattern: module-level dict comprehension. Appropriate for a
@@ -155,7 +170,7 @@ def evaluate_marks(
     session: _SessionProtocol,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
-    plugin_handlers: list[MarkHandler] | None = None,
+    plugin_handlers: Sequence[MarkHandler] = (),
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Run marks through the handler registry.
 
@@ -176,9 +191,9 @@ def evaluate_marks(
         handler = registry.get(mark.name)
         if handler is None:
             continue
-        result = handler.handle(mark)
-        if result.short_circuit is not None:
-            return result.short_circuit, []
-        if result.wrapper is not None:
-            wrappers.append(result.wrapper)
+        action = handler.handle(mark)
+        if isinstance(action, ShortCircuit):
+            return action.result, []
+        if isinstance(action, Wrap):
+            wrappers.append(action.wrapper)
     return None, wrappers

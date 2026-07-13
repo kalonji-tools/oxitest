@@ -17,8 +17,10 @@ from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
-    MarkEvalResult,
     MarkHandler,
+    PassThrough,
+    ShortCircuit,
+    Wrap,
     _PluginMarkHandler,
     _SkipHandler,
     _TimeoutHandler,
@@ -423,16 +425,14 @@ def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
     )
 
 
-def test_mark_eval_result_defaults() -> None:
-    """MarkEvalResult() starts with short_circuit=None and wrapper=None."""
-    r = MarkEvalResult()
-    assert r.short_circuit is None, (
-        "default MarkEvalResult must be inert — a non-None short_circuit would skip the"
-        " test"
+def test_mark_pass_through_is_inert() -> None:
+    """PassThrough() is the inert mark action — no short-circuit and no wrapper."""
+    r = PassThrough()
+    assert not isinstance(r, ShortCircuit), (
+        "PassThrough must not be a ShortCircuit — a ShortCircuit would skip the test"
     )
-    assert r.wrapper is None, (
-        "default MarkEvalResult must be inert — a non-None wrapper would alter test"
-        " outcomes"
+    assert not isinstance(r, Wrap), (
+        "PassThrough must not be a Wrap — a Wrap would alter test outcomes"
     )
 
 
@@ -447,20 +447,18 @@ def test_usefixtures_mark_resolves_via_evaluate_marks() -> None:
 
 def test_skip_handler_returns_short_circuit() -> None:
     """_SkipHandler.handle produces a skipped short-circuit result and no wrapper."""
-    result = _SkipHandler().handle(
+    action = _SkipHandler().handle(
         MarkInfo("skip", (), MappingProxyType({"reason": "not ready"}))
     )
-    assert result.short_circuit is not None, (
-        "_SkipHandler should produce a short_circuit result"
+    assert isinstance(action, ShortCircuit), (
+        "_SkipHandler should produce a ShortCircuit action"
     )
-    assert result.short_circuit.status == "skipped", (
+    assert action.result.status == "skipped", (
         "_SkipHandler must produce a 'skipped' status so the reporter counts it"
         " correctly"
     )
-    helpers.common.assert_result(
-        result.short_circuit, SkippedResult, message="not ready"
-    )
-    assert result.wrapper is None, "_SkipHandler should not produce a wrapper"
+    helpers.common.assert_result(action.result, SkippedResult, message="not ready")
+    assert not isinstance(action, Wrap), "_SkipHandler should not produce a wrapper"
 
 
 def test_skip_when_false_not_in_marks() -> None:
@@ -477,20 +475,22 @@ def test_skip_when_false_not_in_marks() -> None:
 
 def test_xfail_handler_returns_wrapper() -> None:
     """_XFailHandler.handle produces a wrapper function and no short-circuit."""
-    result = _XFailHandler().handle(
+    action = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
-    assert result.short_circuit is None, "_XFailHandler should not short-circuit"
-    assert result.wrapper is not None, "_XFailHandler should produce a wrapper function"
+    assert not isinstance(action, ShortCircuit), (
+        "_XFailHandler should not short-circuit"
+    )
+    assert isinstance(action, Wrap), "_XFailHandler should produce a Wrap action"
 
 
 def test_xfail_wrapper_converts_failed_to_xfailed() -> None:
     """The xfail wrapper turns a failed inner result into an xfailed outcome."""
-    result = _XFailHandler().handle(
+    action = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"}))
     )
-    assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
-    wrapper = result.wrapper
+    assert isinstance(action, Wrap), "_XFailHandler should produce a Wrap action"
+    wrapper = action.wrapper
     failed_result = FailedResult(message="oops")
     assert wrapper(lambda: failed_result).status == "xfailed", (
         "xfail wrapper should convert 'failed' result to 'xfailed'"
@@ -499,11 +499,11 @@ def test_xfail_wrapper_converts_failed_to_xfailed() -> None:
 
 def test_xfail_wrapper_converts_passed_to_xpassed() -> None:
     """The xfail wrapper turns an unexpectedly passing inner result into xpassed."""
-    result = _XFailHandler().handle(
+    action = _XFailHandler().handle(
         MarkInfo("xfail", (), MappingProxyType({"reason": "known"}))
     )
-    assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
-    wrapper = result.wrapper
+    assert isinstance(action, Wrap), "_XFailHandler should produce a Wrap action"
+    wrapper = action.wrapper
     passed_result = PassedResult()
     assert wrapper(lambda: passed_result).status == "xpassed", (
         "xfail wrapper should convert unexpectedly 'passed' result to 'xpassed'"
@@ -512,9 +512,9 @@ def test_xfail_wrapper_converts_passed_to_xpassed() -> None:
 
 def test_xfail_wrapper_passes_through_skipped() -> None:
     """The xfail wrapper leaves a skipped inner result unchanged."""
-    result = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})))
-    assert result.wrapper is not None, "_XFailHandler should produce a wrapper"
-    wrapper = result.wrapper
+    action = _XFailHandler().handle(MarkInfo("xfail", (), MappingProxyType({})))
+    assert isinstance(action, Wrap), "_XFailHandler should produce a Wrap action"
+    wrapper = action.wrapper
     skipped_result = SkippedResult(message="not my test")
     final = wrapper(lambda: skipped_result)
     assert final.status == "skipped", (
@@ -524,26 +524,27 @@ def test_xfail_wrapper_passes_through_skipped() -> None:
 
 
 def test_timeout_handler_returns_wrapper() -> None:
-    """_TimeoutHandler.handle() returns a wrapper with no short-circuit outcome."""
-    result = _TimeoutHandler().handle(
+    """_TimeoutHandler.handle() returns a Wrap action with no short-circuit outcome."""
+    action = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 3}))
     )
-    assert result.wrapper is not None, (
-        "TimeoutHandler.handle() should return a wrapper, got None"
+    assert isinstance(action, Wrap), (
+        "TimeoutHandler.handle() should return a Wrap action, got non-Wrap"
     )
-    assert result.short_circuit is None, (
-        "TimeoutHandler.handle() should not short-circuit (short_circuit should be "
-        "None)"
+    assert not isinstance(action, ShortCircuit), (
+        "TimeoutHandler.handle() should not short-circuit"
     )
 
 
 def test_timeout_handler_wrapper_passes_fast_test() -> None:
     """The timeout wrapper passes a PassedResult when the test finishes in time."""
-    result = _TimeoutHandler().handle(
+    action = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5}))
     )
-    wrapper = result.wrapper
-    assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
+    assert isinstance(action, Wrap), (
+        "TimeoutHandler.handle() should produce a Wrap action"
+    )
+    wrapper = action.wrapper
     fast_result = PassedResult()
     assert wrapper(lambda: fast_result).status == "passed", (
         "timeout wrapper should pass through 'passed' result when test finishes quickly"
@@ -552,11 +553,13 @@ def test_timeout_handler_wrapper_passes_fast_test() -> None:
 
 def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
     """The timeout wrapper returns TimeoutResult when the test exceeds the deadline."""
-    result = _TimeoutHandler().handle(
+    action = _TimeoutHandler().handle(
         MarkInfo("timeout", (), MappingProxyType({"seconds": 1}))
     )
-    wrapper = result.wrapper
-    assert wrapper is not None, "TimeoutHandler.handle() should produce a wrapper"
+    assert isinstance(action, Wrap), (
+        "TimeoutHandler.handle() should produce a Wrap action"
+    )
+    wrapper = action.wrapper
 
     def slow_next() -> PassedResult:
         time.sleep(5)
@@ -727,7 +730,7 @@ class _FakePluginWrapper:
 
 
 def test_plugin_mark_handler_wraps_correctly() -> None:
-    """_PluginMarkHandler delegates wrapping to the plugin and returns a wrapper."""
+    """_PluginMarkHandler delegates wrapping to the plugin and returns a Wrap action."""
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     assert handler.mark_name == "custom_mark", (
@@ -735,13 +738,13 @@ def test_plugin_mark_handler_wraps_correctly() -> None:
         " routes correctly"
     )
     mark = MarkInfo("custom_mark", ("arg1",), MappingProxyType({"key": "val"}))
-    result = handler.handle(mark)
-    assert result.wrapper is not None, "handler should produce a wrapper"
-    assert result.short_circuit is None, "handler should not short-circuit"
+    action = handler.handle(mark)
+    assert isinstance(action, Wrap), "handler should produce a Wrap action"
+    assert not isinstance(action, ShortCircuit), "handler should not short-circuit"
 
     # Execute the wrapper — use WarnedResult since it has a message field
     inner_result = WarnedResult(message="original")
-    wrapped_result = result.wrapper(lambda: inner_result)
+    wrapped_result = action.wrapper(lambda: inner_result)
     r = helpers.common.assert_result(wrapped_result, WarnedResult)
     assert "wrapped:" in r.message, (
         "plugin wrapper must transform the result so its side effects are visible to"
