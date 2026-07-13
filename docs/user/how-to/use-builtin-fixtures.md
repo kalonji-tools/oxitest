@@ -118,8 +118,8 @@ warnings emitted in fixture teardown:
 --8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:warncapture"
 ```
 
-- `warn.warnings` — `list[warnings.WarningMessage]`, all warnings captured so far
-- `warn.clear()` — reset `.warnings` to `[]` between assertion blocks
+- `warn.warnings` — `tuple[warnings.WarningMessage, ...]`, all warnings captured so far
+- `warn.clear()` — reset `.warnings` to `()` between assertion blocks
 
 ```python
 --8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:warncapture-clear"

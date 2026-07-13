@@ -118,7 +118,7 @@ keep_tmp = "failed"
       show_root_toc_entry: false
       heading_level: 3
       members:
-        - list
+        - warnings
         - clear
 
 ## TestContext
@@ -147,7 +147,7 @@ from oxitest import Fixture, TestContext
 fixtures = oxi.Fixtures()
 
 @fixtures.fixture
-def db_schema(ctx: Fixture[TestContext]) -> str:
+def db_schema(ctx: TestContext) -> str:
     """Create a test-specific database schema."""
     schema = f"test_{ctx.name}"
     create_schema(schema)
