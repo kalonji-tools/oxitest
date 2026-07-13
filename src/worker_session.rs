@@ -165,8 +165,8 @@ pub(crate) struct WorkerParams {
     pub conftest_json: std::sync::Arc<serde_json::value::RawValue>,
     /// Per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
-    /// Directory to preserve temp files in; `None` = clean up after run.
-    pub keep_tmp: Option<std::sync::Arc<str>>,
+    /// How to handle temp directories: "cleanup", "failed", or "always".
+    pub keep_tmp: std::sync::Arc<str>,
     /// Whether to include local variables in failure tracebacks.
     pub show_locals: bool,
     /// Whether to include oxitest-internal frames in tracebacks.
@@ -239,7 +239,7 @@ fn run_worker_loop(
                 .collect(),
             conftest_paths: &conftest_json,
             timeout_secs,
-            keep_tmp: keep_tmp.as_deref(),
+            keep_tmp: keep_tmp.as_ref(),
             show_locals: if show_locals { Some(true) } else { None },
             show_internals: if show_internals { Some(true) } else { None },
         };
@@ -402,7 +402,7 @@ mod worker_session_tests {
             }],
             conftest_paths: conftest,
             timeout_secs: None,
-            keep_tmp: None,
+            keep_tmp: "cleanup",
             show_locals: None,
             show_internals: None,
         }
@@ -454,7 +454,7 @@ mod worker_session_tests {
             }],
             conftest_paths: &conftest,
             timeout_secs: Some(30),
-            keep_tmp: None,
+            keep_tmp: "cleanup",
             show_locals: None,
             show_internals: None,
         };

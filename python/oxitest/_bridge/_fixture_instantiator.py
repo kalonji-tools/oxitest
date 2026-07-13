@@ -401,8 +401,8 @@ class FixtureInstantiator:
     ) -> Any:
         """Create and return a built-in fixture value, respecting its declared scope."""
         run_ctx = _test_run_context.get()
-        _keep_tmp = run_ctx.keep_tmp if run_ctx else None
-        _result_cell = run_ctx.result_cell if run_ctx else None
+        _keep_tmp = run_ctx.keep_tmp
+        _result_cell = run_ctx.result_cell
 
         effective_session_scope = session_scope or self._session_scope
         if impl_cls.scope == "session" and effective_session_scope is not None:

@@ -68,7 +68,7 @@ pub(crate) fn run_phase_parallel(
         )
     };
     let timeout_secs = cfg.exec.timeout_secs;
-    let keep_tmp: Option<Arc<str>> = cfg.output.keep_tmp.as_ref().map(|m| Arc::from(m.as_str()));
+    let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
     let show_locals = cfg.output.show_locals;
     let show_internals = cfg.output.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);

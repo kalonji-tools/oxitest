@@ -20,12 +20,23 @@ pub(super) struct ExecutionContext<'a> {
 }
 
 /// Debug and display options passed through the execution pipeline.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct DebugOptions<'a> {
     pub debug_mode: Option<&'a str>,
-    pub keep_tmp: Option<&'a str>,
+    pub keep_tmp: &'a str,
     pub show_locals: bool,
     pub show_internals: bool,
+}
+
+impl Default for DebugOptions<'_> {
+    fn default() -> Self {
+        Self {
+            debug_mode: None,
+            keep_tmp: "cleanup",
+            show_locals: false,
+            show_internals: false,
+        }
+    }
 }
 
 fn resolve_timeout(
@@ -96,7 +107,7 @@ impl<'a> ExecutionDispatch<'a> {
             maxfail: ctx.cfg.exec.maxfail,
             opts: DebugOptions {
                 debug_mode: ctx.cfg.exec.mode.debug_mode().map(|m| m.as_str()),
-                keep_tmp: ctx.cfg.output.keep_tmp.as_ref().map(|m| m.as_str()),
+                keep_tmp: ctx.cfg.output.keep_tmp.as_str(),
                 show_locals: ctx.cfg.output.show_locals,
                 show_internals: ctx.cfg.output.show_internals,
             },

@@ -268,7 +268,7 @@ def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
-    keep_tmp: str | None = None,
+    keep_tmp: str = "cleanup",
     *,
     debug: DebugContext = NO_DEBUG,
 ) -> TestResult:
@@ -281,9 +281,9 @@ def run_test(
             a null session is used, meaning no user fixtures are available.
         default_timeout: Per-test timeout in seconds inherited from config.
             Overridden by a ``@mark.timeout`` decorator on the test.
-        keep_tmp: When set, preserve TempDir contents instead of cleaning up.
-            ``"failed"`` preserves only on test failure; ``"always"`` preserves
-            unconditionally.  ``None`` always cleans up (default).
+        keep_tmp: Controls TempDir cleanup. ``"cleanup"`` always removes the
+            directory (default). ``"failed"`` preserves only on test failure.
+            ``"always"`` preserves unconditionally.
         debug: Debug/trace and diagnostic display configuration. Controls
             interactive debugger mode, traceback local variables, and
             internal frame visibility.
@@ -302,13 +302,9 @@ def run_test(
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
-    _run_ctx = (
-        TestRunContext(
-            keep_tmp=keep_tmp,
-            result_cell=[None] if keep_tmp else None,
-        )
-        if keep_tmp is not None
-        else None
+    _run_ctx = TestRunContext(
+        keep_tmp=keep_tmp,
+        result_cell=[None] if keep_tmp != "cleanup" else [],
     )
     _run_ctx_token = _test_run_context.set(_run_ctx)
     backend = _resolve_debugger_backend(effective_session, debug.mode)
@@ -338,7 +334,7 @@ def run_test(
         )
         result = execute()
         _active_ctx = _test_run_context.get()
-        if _active_ctx is not None and _active_ctx.result_cell is not None:
+        if _active_ctx.result_cell:
             _active_ctx.result_cell[0] = result
         return result
     finally:

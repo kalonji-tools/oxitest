@@ -25,7 +25,7 @@ import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # ── Per-test teardown node ID ────────────────────────────────────────────────
@@ -41,12 +41,14 @@ _current_teardown_node_id: ContextVar[str] = ContextVar(
 class TestRunContext:
     """Per-test transient state, set by executor around run_test."""
 
-    keep_tmp: str | None = None
-    result_cell: list[Any] | None = None
+    keep_tmp: str = "cleanup"
+    result_cell: list[Any] = field(default_factory=list)
 
 
-_test_run_context: ContextVar[TestRunContext | None] = ContextVar(
-    "_test_run_context", default=None
+_DEFAULT_TEST_RUN_CONTEXT: TestRunContext = TestRunContext()
+
+_test_run_context: ContextVar[TestRunContext] = ContextVar(
+    "_test_run_context", default=_DEFAULT_TEST_RUN_CONTEXT
 )
 
 # ── Fixture resolution context ───────────────────────────────────────────────
