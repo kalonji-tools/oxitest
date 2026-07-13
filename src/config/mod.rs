@@ -150,9 +150,12 @@ pub enum ColorMode {
     Never,
 }
 
-#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(clap::ValueEnum, serde::Deserialize, Debug, Clone, Copy, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum KeepTmpMode {
+    /// Clean up temp dirs after every test (default).
+    #[default]
+    Cleanup,
     /// Preserve temp dirs only when the test fails
     Failed,
     /// Preserve every temp dir regardless of outcome
@@ -180,6 +183,7 @@ impl KeepTmpMode {
     /// Convert to the string representation sent across the Python bridge.
     pub fn as_str(&self) -> &'static str {
         match self {
+            KeepTmpMode::Cleanup => "cleanup",
             KeepTmpMode::Failed => "failed",
             KeepTmpMode::Always => "always",
         }
@@ -301,7 +305,7 @@ pub struct OutputConfig {
     /// Emit per-module collection timing profile.
     pub collection_profile: bool,
     /// Whether to keep temporary directories after the run.
-    pub keep_tmp: Option<KeepTmpMode>,
+    pub keep_tmp: KeepTmpMode,
 }
 
 impl Default for OutputConfig {
@@ -314,7 +318,7 @@ impl Default for OutputConfig {
             durations: None,
             color: ColorMode::Auto,
             collection_profile: false,
-            keep_tmp: None,
+            keep_tmp: KeepTmpMode::Cleanup,
         }
     }
 }
@@ -1028,9 +1032,13 @@ mod tests {
     }
 
     #[test]
-    fn test_keep_tmp_default_is_none() {
+    fn test_keep_tmp_default_is_cleanup() {
         let cfg = Config::default();
-        assert!(cfg.output.keep_tmp.is_none());
+        assert_eq!(
+            cfg.output.keep_tmp,
+            KeepTmpMode::Cleanup,
+            "keep_tmp should default to Cleanup (no-op mode)"
+        );
     }
 
     #[test]

@@ -15,7 +15,7 @@ impl Pipeline {
         let max_retries = self.cfg.exec.retries;
         let delay_secs = self.cfg.exec.retries_delay_secs;
         let timeout_secs = self.cfg.exec.timeout_secs;
-        let keep_tmp_str = self.cfg.output.keep_tmp;
+        let keep_tmp_str = self.cfg.output.keep_tmp.as_str();
         let show_locals = self.cfg.output.show_locals;
         let show_internals = self.cfg.output.show_internals;
 
@@ -46,7 +46,7 @@ impl Pipeline {
             timeout_secs,
             opts: execution::DebugOptions {
                 debug_mode: None,
-                keep_tmp: keep_tmp_str.as_ref().map(|m| m.as_str()),
+                keep_tmp: keep_tmp_str,
                 show_locals,
                 show_internals,
             },

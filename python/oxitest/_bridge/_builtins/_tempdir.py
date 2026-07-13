@@ -29,12 +29,13 @@ _PASS_STATUSES = frozenset(
 )
 
 
-def _should_keep(mode: str, result_cell: list | None) -> bool:
+def _should_keep(mode: str, result_cell: list) -> bool:
     """Decide whether to preserve a TempDir based on mode and test outcome."""
     if mode == "always":
         return True
     # mode == "failed": preserve only on failure
-    if result_cell is None or result_cell[0] is None:
+    # result_cell is empty (cleanup mode) or [None] (not yet set) — treat as no failure
+    if not result_cell or result_cell[0] is None:
         return False
     return result_cell[0].status not in _PASS_STATUSES
 
@@ -126,7 +127,7 @@ class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
         d = Path(tempfile.mkdtemp(prefix=prefix))
         tmp = TempDir(d)
 
-        if ctx.keep_tmp is None:
+        if ctx.keep_tmp == "cleanup":
             ctx.teardown_stack.append(lambda: shutil.rmtree(d, ignore_errors=True))
         else:
             mode = ctx.keep_tmp
@@ -147,7 +148,7 @@ class _TempDirFactoryFixture(BuiltinFixture, fixture_type=TempDirFactory):
 
     def create(self, *, ctx: _BuiltinContext) -> TempDirFactory:
         factory = TempDirFactory()
-        if ctx.keep_tmp is None:
+        if ctx.keep_tmp == "cleanup":
             ctx.teardown_stack.append(factory.close)
         else:
             # Session-scoped: no per-test result cell at teardown time.

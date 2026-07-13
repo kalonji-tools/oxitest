@@ -43,7 +43,7 @@ from oxitest.plugin import Plugin
 def _make_builtin_ctx(
     *,
     fn_name: str = "",
-    keep_tmp: str | None = None,
+    keep_tmp: str = "cleanup",
     inject_scope: str = "function",
     result_cell: list | None = None,
 ) -> tuple[_BuiltinContext, list[Callable[[], None]]]:
@@ -58,7 +58,7 @@ def _make_builtin_ctx(
         inject_scope=inject_scope,
         teardown_stack=teardowns,
         keep_tmp=keep_tmp,
-        result_cell=result_cell,
+        result_cell=result_cell if result_cell is not None else [],
     )
     return ctx, teardowns
 
@@ -99,10 +99,12 @@ def test_builtin_fixture_create_raises_not_implemented() -> None:
         BuiltinFixture().create(ctx=ctx)
 
 
-def test_builtin_context_keep_tmp_default_is_none() -> None:
-    """_BuiltinContext.keep_tmp defaults to None when no keep_tmp option is given."""
+def test_builtin_context_keep_tmp_default_is_cleanup() -> None:
+    """_BuiltinContext.keep_tmp defaults to 'cleanup' (no-op mode)."""
     ctx, _ = _make_builtin_ctx()
-    assert ctx.keep_tmp is None, "_BuiltinContext.keep_tmp should default to None"
+    assert ctx.keep_tmp == "cleanup", (
+        "_BuiltinContext.keep_tmp should default to 'cleanup'"
+    )
 
 
 def test_builtin_context_keep_tmp_accepts_value() -> None:

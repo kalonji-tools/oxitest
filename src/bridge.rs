@@ -580,10 +580,7 @@ fn try_run_test_with_session_obj(
         None => py.None().into_bound(py),
     };
 
-    let keep_tmp_obj: Bound<'_, PyAny> = match opts.keep_tmp {
-        Some(mode) => mode.into_pyobject(py)?.into_any(),
-        None => py.None().into_bound(py),
-    };
+    let keep_tmp_obj: Bound<'_, PyAny> = opts.keep_tmp.into_pyobject(py)?.into_any();
 
     // Construct DebugContext Python object
     let runners_mod = py.import("oxitest._bridge._runners")?;

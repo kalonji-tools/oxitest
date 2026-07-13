@@ -14,6 +14,7 @@ Task schema (stdin):
         }],
         "conftest_paths": [str],
         "timeout_secs": int | null,
+        "keep_tmp": str,
         "show_locals": bool | null,
         "show_internals": bool | null
     }
@@ -74,7 +75,7 @@ class WorkerTask(TypedDict):
     items: list[WorkerTaskItem]
     conftest_paths: list[str]
     timeout_secs: int | None
-    keep_tmp: NotRequired[str]
+    keep_tmp: str
     show_locals: NotRequired[bool]
     show_internals: NotRequired[bool]
 
@@ -98,7 +99,7 @@ def run(task: WorkerTask) -> None:
     items: list[WorkerTaskItem] = task["items"]
     conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
-    keep_tmp: str | None = task.get("keep_tmp")
+    keep_tmp: str = task.get("keep_tmp", "cleanup")
     debug = DebugContext(
         show_locals=task.get("show_locals", False),
         show_internals=task.get("show_internals", False),

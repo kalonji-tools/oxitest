@@ -83,7 +83,7 @@ impl Config {
         apply_if_some!(self.exec, retries, ovr.retries);
         apply_if_some!(self.exec, retries_delay_secs, ovr.retries_delay_secs);
         apply_if_some!(self.filter, failed, ovr.failed, wrap);
-        apply_if_some!(self.output, keep_tmp, ovr.keep_tmp, wrap);
+        apply_if_some!(self.output, keep_tmp, ovr.keep_tmp);
         apply_if_some!(
             self.exec,
             auto_arrange_threshold,
@@ -1272,13 +1272,13 @@ async_backend = "trio"
     #[test]
     fn test_keep_tmp_from_pyproject_failed() {
         let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"failed\"\n").unwrap();
-        assert_eq!(cfg.output.keep_tmp, Some(KeepTmpMode::Failed));
+        assert_eq!(cfg.output.keep_tmp, KeepTmpMode::Failed);
     }
 
     #[test]
     fn test_keep_tmp_from_pyproject_always() {
         let cfg = Config::from_str("[tool.oxitest]\nkeep_tmp = \"always\"\n").unwrap();
-        assert_eq!(cfg.output.keep_tmp, Some(KeepTmpMode::Always));
+        assert_eq!(cfg.output.keep_tmp, KeepTmpMode::Always);
     }
 
     #[test]
@@ -1292,7 +1292,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--keep-tmp=failed"]);
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.output.keep_tmp, Some(KeepTmpMode::Failed));
+        assert_eq!(merged.output.keep_tmp, KeepTmpMode::Failed);
     }
 
     #[test]
@@ -1306,7 +1306,7 @@ async_backend = "trio"
         let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
-        assert_eq!(merged.output.keep_tmp, Some(KeepTmpMode::Always));
+        assert_eq!(merged.output.keep_tmp, KeepTmpMode::Always);
     }
 
     #[test]
