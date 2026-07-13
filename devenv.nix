@@ -23,6 +23,8 @@ in
     # Task runner & git hooks
     just
     prek
+    # Snapshot testing (matches CI's cargo-insta)
+    cargo-insta
 
     # Benchmarking
     hyperfine
