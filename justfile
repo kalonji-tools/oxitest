@@ -47,9 +47,9 @@ test *args: (_log _blue "Running tests...")
 test-docs *args: (_log _blue "Running doc example tests...")
     cd python/tests/docs && PYTHONPATH={{justfile_directory()}}/python uv run python -m oxitest {{args}}
 
-# Run Rust unit tests
+# Run Rust unit tests (matches CI: rejects unreferenced snapshots)
 test-rust *args: (_log _blue "Running Rust tests...")
-    cargo test {{args}}
+    cargo insta test --unreferenced=reject {{args}}
 
 # Run all static checks (format, lint, clippy, spelling)
 check: (_log _blue "Running static checks...")
