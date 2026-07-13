@@ -334,9 +334,9 @@ Plugin reporters implement the `Reporter` protocol in `python/oxitest/plugin.py`
 ```python
 @runtime_checkable
 class Reporter(Protocol):
-    def test_started(self, item: Any) -> None: ...
-    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None: ...
-    def finish(self, collect_errors: list[Any], interrupted: bool) -> None: ...
+    def test_started(self, *, item: CollectedItem) -> None: ...
+    def test_completed(self, *, item: CollectedItem, outcome: TestResult, duration_ms: float) -> None: ...
+    def finish(self, *, collect_errors: list[Any], interrupted: bool) -> None: ...
 ```
 
 The plugin's `oxitest_plugin()` function returns a `Plugin` dataclass with populated `reporters` list. Each Python reporter is wrapped in a `PyPluginReporter` (Rust side) that bridges calls via PyO3.
@@ -486,8 +486,8 @@ Source markers control where each field is read from:
 | Function | File | Purpose |
 |----------|------|---------|
 | `discover_plugin_cli()` | `src/bridge.rs` | Import plugins, read extensions, introspect config |
-| `add_plugin_args()` | `src/config/cli.rs` | Add plugin flags to clap Command |
-| `extract_plugin_values()` | `src/config/cli.rs` | Extract parsed plugin values from ArgMatches |
+| `add_plugin_args()` | `src/config/cli/plugin.rs` | Add plugin flags to clap Command |
+| `extract_plugin_values()` | `src/config/cli/plugin.rs` | Extract parsed plugin values from ArgMatches |
 | `validate_prefix_uniqueness()` | `src/pipeline/mod.rs` | Error if two plugins claim the same prefix |
 
 #### Prefix uniqueness
