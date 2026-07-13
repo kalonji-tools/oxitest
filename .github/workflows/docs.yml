@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
+      doc-tests: ${{ steps.filter.outputs.doc-tests }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -33,6 +34,8 @@ jobs:
               - 'mkdocs.yml'
               - 'pyproject.toml'
               - '.github/workflows/docs.yml'
+            doc-tests:
+              - 'python/tests/docs/**'
 
   build:
     name: Build docs
@@ -84,9 +87,34 @@ jobs:
         with:
           path: deploy
 
+  doc-tests:
+    name: Doc Tests
+    needs: changes
+    if: needs.changes.outputs.doc-tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      - uses: ./.github/actions/setup-python
+        with:
+          uv-sync-args: --group test
+
+      - name: Build extension
+        run: uv run maturin develop
+
+      - name: Doc example tests
+        run: uv run python -m oxitest python/tests/docs/ --strict=off
+
   required:
-    name: Build docs (required)
-    needs: [build]
+    name: Docs (required)
+    needs: [build, doc-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -94,11 +122,11 @@ jobs:
       - name: Check build result
         shell: bash
         run: |
-          if [[ "${{ needs.build.result }}" == "failure" ]]; then
-            echo "Docs build failed"
+          if [[ "${{ needs.build.result }}" == "failure" || "${{ needs.doc-tests.result }}" == "failure" ]]; then
+            echo "One or more docs jobs failed"
             exit 1
           fi
-          echo "Docs build passed or was skipped"
+          echo "All docs jobs passed or were skipped"
 
   deploy:
     name: Deploy to GitHub Pages

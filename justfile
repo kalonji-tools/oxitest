@@ -41,11 +41,11 @@ build *args: (_log _green "Building extension...")
 
 # Run Python tests (no rebuild — use `just build` first if Rust changed)
 test *args: (_log _blue "Running tests...")
-    PYTHONPATH=python uv run python -m oxitest {{args}}
+    uv run python -m oxitest {{args}}
 
 # Run doc example tests (no rebuild — use `just build` first if Rust changed)
 test-docs *args: (_log _blue "Running doc example tests...")
-    cd python/tests/docs && PYTHONPATH={{justfile_directory()}}/python uv run python -m oxitest {{args}}
+    uv run python -m oxitest python/tests/docs/ --strict=off {{args}}
 
 # Run Rust unit tests (matches CI: rejects unreferenced snapshots)
 test-rust *args: (_log _blue "Running Rust tests...")
