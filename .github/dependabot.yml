@@ -22,3 +22,12 @@ updates:
       python-deps:
         patterns:
           - "*"
+
+  - package-ecosystem: "nix"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      nix-inputs:
+        patterns:
+          - "*"
