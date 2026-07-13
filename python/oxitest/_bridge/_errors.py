@@ -48,9 +48,19 @@ class FixtureNotFoundError(FixtureError):
 
     def __init__(self, name: str, *, namespace: str = "") -> None:
         if namespace:
-            super().__init__(f"fixture '{name}' not found in namespace '{namespace}'")
+            msg = (
+                f"fixture '{name}' not found in namespace '{namespace}'.\n"
+                f"  Hint: check that a Fixtures() instance in conftest.py "
+                f"defines a fixture named '{name}', or verify the spelling."
+            )
         else:
-            super().__init__(f"fixture '{name}' not found")
+            msg = (
+                f"fixture '{name}' not found.\n"
+                f"  Hint: ensure the fixture is defined in a Fixtures() "
+                f"instance in conftest.py or provided by a plugin, and "
+                f"annotated with Fixture[<type>] in the test signature."
+            )
+        super().__init__(msg)
         self.fixture_name = name
         self.namespace = namespace
 
@@ -60,14 +70,22 @@ class FixtureCycleError(FixtureError):
 
     def __init__(self, name: str, chain: set[str]) -> None:
         path = " → ".join(sorted(chain)) + f" → {name}"
-        super().__init__(f"fixture cycle detected: {path}")
+        super().__init__(
+            f"fixture cycle detected: {path}\n"
+            f"  Hint: break the cycle by removing a dependency or "
+            f"extracting shared setup into a separate fixture."
+        )
 
 
 class FixtureSetupError(FixtureError):
     """Raised when a fixture function raises an exception during setup."""
 
     def __init__(self, name: str, cause: Exception) -> None:
-        super().__init__(f"Error in fixture '{name}': {cause}")
+        super().__init__(
+            f"Error in fixture '{name}': {cause}\n"
+            f"  Hint: check the fixture function body for the exception above. "
+            f"If using a yield fixture, the error is in setup (before yield)."
+        )
         self.fixture_name = name
 
 
@@ -104,7 +122,9 @@ class BackendNotFoundError(OxitestError):
 
     def __init__(self, name: str) -> None:
         super().__init__(
-            f"async backend '{name}' not found \u2014 is the plugin installed?"
+            f"async backend '{name}' not found.\n"
+            f"  Hint: install the backend plugin (e.g. oxitest-asyncio) "
+            f"and ensure it is listed in [tool.oxitest] plugins."
         )
         self.backend_name = name
 
