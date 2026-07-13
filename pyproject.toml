@@ -112,7 +112,7 @@ error-on-warning = true
 
 [tool.ty.environment]
 python = ".venv"
-extra-paths = ["python/tests"]
+extra-paths = ["python", "python/tests"]
 
 [tool.oxitest]
 testpaths = ["python/tests", "python/oxitest"]
