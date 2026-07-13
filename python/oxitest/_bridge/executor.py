@@ -249,7 +249,7 @@ def _evaluate_marks_phase(
         session,
         module_path,
         resolved.fn_teardowns,
-        plugin_handlers=_plugin_handlers or None,
+        plugin_handlers=_plugin_handlers,
     )
 
 
