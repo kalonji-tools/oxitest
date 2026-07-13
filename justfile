@@ -60,8 +60,13 @@ check: (_log _blue "Running static checks...")
     cargo clippy -- -D warnings
     codespell --toml pyproject.toml
 
+# Validate lock files match manifests (matches prek pre-push hooks)
+check-locks: (_log _blue "Checking lock files...")
+    uv lock --check
+    cargo update --locked
+
 # Full pre-push gate: clean, check, test everything
-preflight: clean check test-rust build test test-docs
+preflight: clean check-locks check test-rust build test test-docs
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
