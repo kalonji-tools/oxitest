@@ -18,22 +18,22 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The seven checks
+## The nine checks
 
 ### Bare assert
 
 ```python
-assert result                  # triggers — no comparison operator
-assert result == expected      # clean — oxitest captures left/right
-assert result, "explanation"   # also clean — message explains intent
+assert result                        # triggers — no message
+assert result == expected            # triggers — no message
+assert result, "explanation"         # clean — message explains intent
+assert result == expected, "result must equal expected"  # clean
 ```
 
-A bare `assert` without a comparison operator (e.g. `assert result` rather than
-`assert result == expected`) prevents oxitest from generating enriched diagnostics that show
-both sides of the comparison. When it fails you see only `AssertionError` with no context about
-what the actual vs expected values were.
+Any `assert` without a message string is flagged, regardless of whether a comparison operator
+is present. Without a message, the only output on failure is `AssertionError` with no context
+about what was expected or why the assertion matters.
 
-Adding either a comparison operator or a message string satisfies the check.
+Adding a message string satisfies the check.
 
 Detected during test collection.
 
@@ -153,6 +153,61 @@ fixtures are excluded from this check.
     inner types. If strict mode flags a `TempDir` fixture as unused, annotate
     the test parameter as bare `TempDir` instead (it's `@injectable`, so no
     `Fixture[T]` wrapper is needed).
+
+### Broad fixture type
+
+=== "Triggers"
+
+    ```python
+    def test_something(data: Fixture[object]):  # too broad
+        ...
+
+    def test_other(value: Fixture[Any]):  # too broad
+        ...
+    ```
+
+=== "Clean"
+
+    ```python
+    def test_something(data: Fixture[MyData]):  # specific type
+        ...
+    ```
+
+Flagged when a fixture parameter uses a broad type like `object` or `Any`. These
+types defeat type checking and obscure what the fixture provides. Use the specific
+concrete type instead.
+
+Detected during test collection.
+
+### Registrar in test module
+
+=== "Triggers"
+
+    ```python
+    # tests/test_users.py
+    fx = oxitest.Fixtures()  # registrar in a test module, not conftest
+
+    @fx.fixture
+    def db() -> Database:
+        return Database()
+    ```
+
+=== "Clean"
+
+    ```python
+    # conftest.py
+    fx = oxitest.Fixtures()  # registrar belongs in conftest
+
+    @fx.fixture
+    def db() -> Database:
+        return Database()
+    ```
+
+Flagged when a `Fixtures()` or `Helpers()` registrar appears in a test module
+instead of `conftest.py`. Registrars in test modules are not visible to other
+test modules and indicate a structural mistake.
+
+Detected during test collection.
 
 ## Two modes
 
