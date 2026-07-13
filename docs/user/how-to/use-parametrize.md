@@ -40,6 +40,24 @@ oxitest supports three modes for parametrize cases. Dataclass mode is recommende
 !!! tip "Which mode should I use?"
     Start with **Dataclass mode** — it gives you named fields, type safety, and IDE completion. Use **Compact mode** when you have a single parameter with simple values. Use **Dict mode** only for backward compatibility.
 
+!!! info "How mode detection works"
+    oxitest examines the test function's type annotations to choose a mode:
+
+    1. **Compact mode**: exactly one non-`Fixture[T]` parameter is annotated
+       with the dataclass type used in the cases. That parameter receives the
+       whole dataclass instance.
+    2. **Expanded mode** (default): no parameter carries the case dataclass
+       type. Parameters whose names match dataclass fields receive the
+       corresponding field values.
+
+    **Common errors:**
+
+    - *"compact parametrize: multiple parameters annotated with 'Case'"* —
+      two or more parameters have the same case type annotation. Use at most
+      one, or switch to expanded mode by removing the type annotation.
+    - *Fields not injected in expanded mode* — parameter names must exactly
+      match dataclass field names. Check for typos.
+
 ## Inject fixtures into parametrize cases
 
 A dataclass field annotated `FixtureRef[T]` tells oxitest to inject a

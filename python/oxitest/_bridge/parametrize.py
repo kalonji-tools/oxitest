@@ -131,8 +131,12 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
     ]
     if len(matches) > 1:
         msg = (
-            "compact parametrize: multiple parameters annotated with"
-            f" '{case_type.__name__}': {matches!r}. Use at most one."
+            f"compact parametrize: multiple parameters annotated with"
+            f" '{case_type.__name__}': {matches!r}.\n"
+            f"  Hint: compact mode requires at most one non-Fixture[T] parameter"
+            f" with the case type annotation. Either remove the annotation from"
+            f" all but one parameter, or use expanded mode (name parameters"
+            f" after the dataclass fields instead)."
         )
         raise ParametrizeError(msg)
     if matches:
