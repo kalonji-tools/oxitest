@@ -83,7 +83,6 @@ struct Overrides {
     schedule: Option<ScheduleStrategy>,
     retries: Option<usize>,
     retries_delay_secs: Option<u64>,
-    workers: Option<WorkerCount>,
     failed: Option<FailedMode>,
     tb: Option<TbStyle>,
     color: Option<ColorMode>,
@@ -92,7 +91,7 @@ struct Overrides {
     keep_tmp: Option<KeepTmpMode>,
     show_locals: Option<bool>,
     show_internals: Option<bool>,
-    auto_arrange_threshold: Option<Option<u8>>,
+    auto_arrange_threshold: Option<u8>,
 }
 ```
 
@@ -214,7 +213,7 @@ fn test_my_threshold_cli_overrides_pyproject() {
 | | `norecursedirs` | `Vec<String>` | `.git`, `__pycache__`, `.venv`, etc. | -- | `norecursedirs` |
 | | `use_gitignore` | `bool` | `true` | `--no-use-gitignore` | `use_gitignore` |
 | | `doctest_modules` | `bool` | `false` | `--doctest-modules` | `doctest_modules` |
-| **`exec`** | `mode` | `ExecutionMode` | `Serial` | `--serial`, `-n N`, `debug` | -- |
+| **`exec`** | `mode` | `ExecutionMode` | `Parallel { workers: Auto }` | `--serial`, `-n N`, `debug` | -- |
 | | `maxfail` | `usize` | `0` (no limit) | `--maxfail N`, `-x` | `maxfail` |
 | | `timeout_secs` | `Option<u64>` | `None` | `--timeout SECS` | `timeout` |
 | | `timeout_multiplier` | `Option<f64>` | `None` | -- | `timeout_multiplier` |
@@ -251,7 +250,7 @@ fn test_my_threshold_cli_overrides_pyproject() {
 
 **`WorkerCount`** -- `Auto` or `Fixed(usize)`. Accepts `"auto"` or a positive integer in both CLI and TOML. Custom serde `Visitor` in `pyproject.rs` handles both string and integer deserialization.
 
-**`StrictMode`** -- `Abort` (violations are hard errors, exit 3) or `Enforce` (violations reported as per-test errors).
+**`StrictMode`** -- `Abort` (violations are hard errors, exit 3), `Enforce` (violations reported as per-test errors), or `Off` (disables strict mode, overriding any pyproject.toml value).
 
 **`ScheduleStrategy`** -- `LongestFirst` (default, uses cached timing data), `FailedFirst`, or `Random`.
 
@@ -275,24 +274,28 @@ fn test_my_threshold_cli_overrides_pyproject() {
 
 ## Debug mode side effects
 
-`DebugMode::apply_to` modifies multiple config fields at once:
+`merge_debug_args` in `src/config/merge.rs` applies debug-specific overrides directly before the shared `apply_overrides` call:
 
 ```rust
-pub fn apply_to(&self, cfg: &mut Config, cli_tb: Option<&TbStyle>) {
-    cfg.debug = Some(self.clone());
-    cfg.serial = true;          // force serial execution
-    cfg.timeout_secs = None;    // disable timeouts
-    cfg.show_internals = true;  // show oxitest frames
-    if cli_tb.is_none() {
-        cfg.tb = TbStyle::Detail;  // only if user didn't pass --tb
+pub fn merge_debug_args(mut self, args: &DebugArgs) -> Self {
+    // ...paths and node_ids merged first...
+
+    let mode = args.mode();
+    self.exec.mode = ExecutionMode::Debug(mode.clone());  // force debug execution mode
+    self.exec.timeout_secs = None;                        // disable timeouts
+    self.output.show_internals = true;                    // show oxitest frames
+    if args.tb.is_none() {
+        self.output.tb = TbStyle::Detail;  // only if user didn't pass --tb
     }
-    if matches!(self, DebugMode::PostMortem) {
-        cfg.maxfail = 1;          // stop on first failure
+    if matches!(mode, DebugMode::PostMortem) {
+        self.exec.maxfail = 1;  // stop on first failure
     }
+
+    // ...apply_overrides called after, so explicit --tb from user overwrites the default...
 }
 ```
 
-This runs inside `merge_debug_args`, before the shared `apply_overrides` call. An explicit `--tb` flag from the user will overwrite the debug default because it goes through `Overrides` after `apply_to`.
+`ExecutionMode::Debug(_)` implies serial execution: `is_serial()` returns `true` for both `Serial` and `Debug(_)` variants, and `worker_count()` returns 1 for both. An explicit `--tb` flag from the user will overwrite the debug default because it goes through `Overrides` after the direct field assignments above.
 
 ---
 
@@ -306,10 +309,9 @@ Two functions collaborate:
 
 ```rust
 pub(crate) fn compute_optimal_workers(
-    explicit_workers: Option<WorkerCount>,
-    serial: bool,
+    mode: &ExecutionMode,
     cpu_count: usize,
-    estimated: Option<Duration>,
+    estimated: Option<std::time::Duration>,
     spawn_overhead_ms: f64,
 ) -> usize
 ```
