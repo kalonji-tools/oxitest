@@ -36,7 +36,7 @@ with `Fixture[T]`:
 
 ```python
 from oxitest import Fixture
-from conftest import db_conn
+from my_plugin import Connection
 
 class TestUsers:
     def test_create(self, db_conn: Fixture[Connection]):
@@ -57,7 +57,7 @@ Apply marks to the class (affects all methods) or to individual methods:
 ## Limitations
 
 - **No class-scoped fixtures.** Fixtures are scoped to `each` (per-test),
-  `shared` (per-module), or `session` (per-process) — there is no `class` scope.
+  `shared` (per-session), or `session` (per-process) — there is no `class` scope.
   Each test method gets its own `each`-scoped fixture instances.
 - **No `setup_method` / `teardown_method`.** Use fixtures with yield teardown
   instead.

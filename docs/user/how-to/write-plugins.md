@@ -240,7 +240,7 @@ type — tests request the fixture via `Fixture[T]` where `T` matches
 ```
 
 `scope` controls fixture lifetime: `"each"` (per-test, default), `"shared"`
-(per-module, FrozenProxy-wrapped), or `"session"` (per-process). `autouse`
+(per-session, FrozenProxy-wrapped), or `"session"` (per-process). `autouse`
 makes the fixture run for every test without explicit `Fixture[T]` annotation.
 Both are optional — existing plugins without these properties work unchanged.
 
@@ -492,7 +492,7 @@ tool.
 
 ```python
 from oxitest.plugin import Plugin, CoverageProvider
-from oxitest._bridge._coverage import CovReportFormat
+from oxitest import CovReportFormat
 ```
 
 ```python
