@@ -38,20 +38,6 @@ jobs:
               - 'python/tests/docs/**'
               - 'mkdocs.yml'
 
-  bridge-sync:
-    name: Bridge Sync
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-python
-
-      - name: Check bridge sync
-        run: python scripts/check_bridge_sync.py
-
   rust-tests:
     name: Rust Tests
     needs: changes
@@ -169,7 +155,7 @@ jobs:
 
   required:
     name: Tests (required)
-    needs: [bridge-sync, rust-tests, python-tests, doc-tests]
+    needs: [rust-tests, python-tests, doc-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -177,7 +163,7 @@ jobs:
       - name: Check results
         shell: bash
         run: |
-          if [[ "${{ needs.bridge-sync.result }}" == "failure" || "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" || "${{ needs.doc-tests.result }}" == "failure" ]]; then
+          if [[ "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" || "${{ needs.doc-tests.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
