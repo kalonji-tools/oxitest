@@ -112,7 +112,7 @@ class FixtureProvider(Protocol):
 
     @property
     def scope(self) -> str:
-        """Fixture scope: 'each', 'shared' (per-module), or 'session' (per-run).
+        """Fixture scope: 'each', 'shared' (per-session), or 'session' (per-run).
 
         Optional. Defaults to 'each' if not implemented.
         """
