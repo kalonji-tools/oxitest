@@ -27,6 +27,31 @@ class _MinimalType:
     """Marker type for minimal plugin provider tests."""
 
 
+class _FakeFixtureProvider:
+    """Test double for the FixtureProvider protocol."""
+
+    __module__ = "fake_plugin"
+
+    def __init__(
+        self,
+        name: str,
+        fixture_type: type,
+        *,
+        scope: str = "each",
+        autouse: bool = False,
+    ) -> None:
+        self.name = name
+        self.fixture_type = fixture_type
+        self.scope = scope
+        self.autouse = autouse
+
+    def create(self, **_: Any) -> object:
+        return self.fixture_type()
+
+    def teardown(self, **_: Any) -> None:
+        pass
+
+
 def test_setup_timing_recorded_for_function_scoped_fixture() -> None:
     """Fixture setup time is tracked on the session."""
 
@@ -206,3 +231,67 @@ def test_session_plugin_without_scope_autouse() -> None:
         "plugin without scope attr should default to EACH scope"
     )
     assert defn.autouse is False, "plugin without autouse attr should default to False"
+
+
+def _session_with(*providers: _FakeFixtureProvider) -> FixtureSession:
+    """Build a FixtureSession from fake providers."""
+    wrapped: Any = tuple(providers)
+    plugin = Plugin(fixture_providers=wrapped)
+    entry = PluginEntry(module_name="fake_plugin", plugin=plugin)
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(entry)
+    return FixtureSession([], builder.build())
+
+
+def test_register_plugin_fixtures_stamps_correct_fields() -> None:
+    """Plugin fixtures are registered with correct name, type, scope, and source."""
+    provider = _FakeFixtureProvider(
+        name="plugin_db",
+        fixture_type=_MinimalType,
+        scope="shared",
+        autouse=False,
+    )
+    session = _session_with(provider)
+
+    defn = session.registry.get("plugin_db")
+    assert defn is not None, (
+        "plugin fixture 'plugin_db' should be registered in the session registry"
+    )
+    assert defn.fixture_type is _MinimalType, (
+        "registered fixture type should match the provider's fixture_type"
+    )
+    assert defn.scope == FixtureScope.SHARED, (
+        "registered scope should match the provider's scope='shared'"
+    )
+    assert isinstance(defn.source, PluginSource), (
+        "registered source should be PluginSource, not ConftestSource"
+    )
+    assert defn.source.plugin_module == "fake_plugin", (
+        "PluginSource should record the provider's __module__"
+    )
+
+
+def test_register_plugin_fixtures_respects_autouse() -> None:
+    """Plugin fixtures with autouse=True are registered as autouse."""
+    provider = _FakeFixtureProvider(
+        name="auto_setup",
+        fixture_type=_MinimalType,
+        autouse=True,
+    )
+    session = _session_with(provider)
+
+    defn = session.registry.get("auto_setup")
+    assert defn is not None, "autouse plugin fixture should be registered"
+    assert defn.autouse is True, (
+        "autouse flag should be True on the registered FixtureDef"
+    )
+
+
+def test_register_plugin_fixtures_empty_registry_is_noop() -> None:
+    """Empty PluginRegistry adds no fixtures to the session."""
+    session = FixtureSession([], PluginRegistry())
+
+    all_names = list(session.registry)
+    assert all(not n.startswith("plugin") for n in all_names), (
+        f"empty registry should add no plugin fixtures, got {all_names}"
+    )
