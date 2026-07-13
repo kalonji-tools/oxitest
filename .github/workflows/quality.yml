@@ -54,7 +54,7 @@ jobs:
 
       - name: Install tools
         run: |
-          uv tool install prek
+          uv tool install prek==0.3.11
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run quality checks
