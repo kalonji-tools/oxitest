@@ -26,8 +26,8 @@ _ATTR = "_oxitest_meta"
 @dataclass(frozen=True, slots=True)
 class FunctionMetadata:
     marks: tuple[MarkInfo, ...] = ()
-    param_cases: tuple[ResolvedCases, ...] | None = None
-    fixture_name: str | None = None
+    param_cases: tuple[ResolvedCases, ...] = ()
+    fixture_name: str = ""
 
 
 def get_metadata(fn: object) -> FunctionMetadata:

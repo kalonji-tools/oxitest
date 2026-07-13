@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from oxitest import WarnCapture
-from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _unpack_sync
+from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _noop, _unpack_sync
 
 
 def test_unpack_sync_plain_value() -> None:
-    """_unpack_sync on a plain value should set value and leave teardown as None."""
+    """_unpack_sync on a plain value should set value and use _noop teardown."""
     outcome = _unpack_sync(42, "my_fix")
     assert outcome.value == 42, f"expected 42, got {outcome.value!r}"
-    assert outcome.teardown is None, "plain value should have no teardown"
+    assert outcome.teardown is _noop, "plain value should have _noop teardown"
 
 
 def test_unpack_sync_generator() -> None:
@@ -49,7 +49,7 @@ def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) ->
 
 
 def test_fixture_outcome_dataclass() -> None:
-    """_FixtureOutcome should default teardown to None when only value is provided."""
+    """_FixtureOutcome should default teardown to _noop when only value is provided."""
     o = _FixtureOutcome(value="x")
     assert o.value == "x", f"expected 'x', got {o.value!r}"
-    assert o.teardown is None, "default teardown should be None"
+    assert o.teardown is _noop, "default teardown should be _noop"

@@ -285,7 +285,7 @@ def _expand_item(
         fixture_deps=_get_fixture_deps(fn),
     )
     raw = get_metadata(fn).param_cases
-    if raw is None:
+    if not raw:
         return [
             CollectedItem(
                 fn_name=template.fn_name,

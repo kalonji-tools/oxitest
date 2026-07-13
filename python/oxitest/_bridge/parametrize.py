@@ -424,7 +424,7 @@ def _dict_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
         layer = _build_dict_cases(cases, fn)
-        if meta.param_cases is not None:
+        if meta.param_cases:
             msg = (
                 "parametrize: cannot mix dict-mode with stacked decorators."
                 " Use a single @parametrize call for dict mode."
@@ -443,7 +443,7 @@ def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
         existing = meta.param_cases
-        if existing is None:
+        if not existing:
             _update(fn, param_cases=(new_layer,))
             return fn
         composed = _as_composed(existing)
@@ -478,7 +478,7 @@ def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
 
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
-        if meta.param_cases is not None:
+        if meta.param_cases:
             msg = (
                 "parametrize: cannot mix full dataclass cases with stacked"
                 " decorators. Use partial() for composition."
@@ -556,7 +556,7 @@ def resolve_parametrize(
     if param_id is None:
         return {}, frozenset()
     layers = get_metadata(fn_raw).param_cases
-    if layers is None:
+    if not layers:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
         msg = (
             f"resolve_parametrize: {fn_name!r} has no parametrize cases"

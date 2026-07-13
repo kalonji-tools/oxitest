@@ -21,9 +21,7 @@ def _check_dict_parametrize(
     Dict-parametrize: any layer is a ``DictCases`` instance.
     """
     layers = get_metadata(fn).param_cases
-    if isinstance(layers, tuple) and any(
-        isinstance(layer, DictCases) for layer in layers
-    ):
+    if any(isinstance(layer, DictCases) for layer in layers):
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",
@@ -62,7 +60,7 @@ def _check_single_case_parametrize(
 ) -> list[CollectedViolation]:
     """Return a SINGLE_CASE_PARAMETRIZE violation if only one case is defined."""
     layers = get_metadata(fn).param_cases
-    if layers is not None and len(layers) == 1 and len(layers[0].cases) == 1:
+    if layers and len(layers) == 1 and len(layers[0].cases) == 1:
         return [
             CollectedViolation(
                 node_id=f"{path}::{fn_name}",

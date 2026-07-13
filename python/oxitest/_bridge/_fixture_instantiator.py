@@ -107,12 +107,16 @@ def _resolve_deps(
     return deps
 
 
+def _noop() -> None:
+    """No-op teardown for non-generator fixtures."""
+
+
 @dataclass(frozen=True, slots=True)
 class _FixtureOutcome:
     """Result of unpacking a fixture function call."""
 
     value: Any
-    teardown: Callable[[], None] | None = None
+    teardown: Callable[[], None] = _noop
 
 
 def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
@@ -372,7 +376,7 @@ class FixtureInstantiator:
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
 
-        if outcome.teardown is not None:
+        if outcome.teardown is not _noop:
             _original_td = outcome.teardown
             _td_name = defn.name
 
