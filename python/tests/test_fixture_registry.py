@@ -216,9 +216,12 @@ def test_fixture_not_found_error_with_namespace() -> None:
 def test_fixture_not_found_error_without_namespace() -> None:
     """FixtureNotFoundError without a namespace formats as 'fixture not found'."""
     exc = FixtureNotFoundError("conn")
-    assert str(exc) == "fixture 'conn' not found", (
-        f"FixtureNotFoundError without namespace should format as \"fixture 'conn' not "
-        f'found", got {str(exc)!r}'
+    assert str(exc).startswith("fixture 'conn' not found."), (
+        f"FixtureNotFoundError without namespace should start with "
+        f"\"fixture 'conn' not found.\", got {str(exc)!r}"
+    )
+    assert "Hint:" in str(exc), (
+        f"FixtureNotFoundError should include a corrective hint, got {str(exc)!r}"
     )
     assert exc.namespace == "", (
         f"FixtureNotFoundError without namespace should have exc.namespace='', got "
