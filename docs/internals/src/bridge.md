@@ -21,10 +21,13 @@ trait.
 
 ## Data types that must stay in sync
 
-Every `#[derive(FromPyObject)]` struct in `src/bridge.rs` has a Python counterpart
-in `python/oxitest/_bridge/result.py`. The field names on both sides **must match
-exactly** -- PyO3 extracts fields by attribute name, and a mismatch silently
-produces a default value or a runtime error.
+Most data types crossing the bridge have a Python counterpart in
+`python/oxitest/_bridge/result.py`. For types using `#[derive(FromPyObject)]`
+(e.g. `CollectedItem`, `RawViolation`), field names on both sides **must match
+exactly** — PyO3 extracts fields by attribute name, and a mismatch silently
+produces a default value or a runtime error. `TestResult` is an exception: it
+uses a manual `extract_outcome()` function rather than a derived struct (see
+below).
 
 ### TestResult
 
@@ -32,10 +35,16 @@ The primary result type for a single test execution.
 
 **Python** (`python/oxitest/_bridge/result.py`):
 
+`TestResult` is a **type alias** over per-outcome frozen dataclasses — there is no
+single unified `TestResult` class. Each outcome kind carries only the fields it needs:
+
 ```python
-@dataclass
-class TestResult:
-    status: StatusKind
+@dataclass(frozen=True, slots=True)
+class PassedResult:
+    no_message_lines: tuple[int, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class FailedResult:
     message: str = ""
     file: str = ""
     lineno: int = 0
@@ -44,39 +53,88 @@ class TestResult:
     left: str = ""
     right: str = ""
     op: str = ""
-    strict: bool = True
     exc_type: str = ""
     frames: tuple[Frame, ...] = ()
     field_diffs: tuple[tuple[str, str, str], ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class ErrorResult:
+    message: str = ""
+    file: str = ""
+    lineno: int = 0
+    source_line: str = ""
+    exc_type: str = ""
+    frames: tuple[Frame, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class SkippedResult:
+    message: str = ""
+
+@dataclass(frozen=True, slots=True)
+class WarnedResult:
+    message: str = ""
+    no_message_lines: tuple[int, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class XFailedResult:
+    message: str = ""
+
+@dataclass(frozen=True, slots=True)
+class XPassedResult:
+    strict: bool = True
+
+@dataclass(frozen=True, slots=True)
+class TimeoutResult:
+    message: str = ""
+
+TestResult = (
+    PassedResult | FailedResult | ErrorResult | SkippedResult
+    | WarnedResult | XFailedResult | XPassedResult | TimeoutResult
+)
 ```
+
+Every per-outcome class exposes a `status` property that returns the matching
+`StatusKind` value (e.g. `PassedResult.status` returns `StatusKind.PASSED`).
+The `to_wire()` method serialises the result to a JSON-compatible dict for the
+worker protocol.
 
 **Rust** (`src/bridge.rs`):
 
+There is **no** `#[derive(FromPyObject)] struct TestResult` on the Rust side.
+Instead, `extract_outcome()` reads the `status` attribute first, then extracts
+only the fields that are relevant to that outcome kind. This avoids redundant
+`getattr` calls for the common `passed` path:
+
 ```rust
-#[derive(FromPyObject)]
-struct TestResult {
-    status: String,
-    message: String,
-    file: String,
-    lineno: usize,
-    source_line: String,
-    no_message_lines: Vec<usize>,
-    left: String,
-    right: String,
-    op: String,
-    strict: bool,
-    exc_type: String,
-    frames: Vec<crate::worker_result::RawFrame>,
-    field_diffs: Vec<(String, String, String)>,
+fn extract_outcome(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
+    use crate::worker_result::RawOutcome;
+
+    let status: String = py_result.getattr("status")?.extract()?;
+
+    match status.as_str() {
+        "passed" => {
+            let no_message_lines: Vec<usize> =
+                py_result.getattr("no_message_lines")?.extract()?;
+            Ok(RawOutcome::Passed { no_message_lines }.into_test_outcome())
+        }
+        "failed" => {
+            let message: String = py_result.getattr("message")?.extract()?;
+            let file: String    = py_result.getattr("file")?.extract()?;
+            let lineno: usize   = py_result.getattr("lineno")?.extract()?;
+            // ... more fields ...
+            Ok(RawOutcome::Failed { message, file: file.into(), lineno: LineNo::new(lineno), /* … */ }
+                .into_test_outcome())
+        }
+        // "skipped", "xfailed", "xpassed", "timeout", "warned" — each arm
+        // extracts only its own fields.
+        _ => { /* treated as ErrorResult */ Ok(RawOutcome::Error { /* … */ }.into_test_outcome()) }
+    }
 }
 ```
 
-PyO3's `FromPyObject` derive generates code that calls `ob.getattr("status")?.extract()?`
-for each field. Python's `StatusKind` is a `StrEnum`, so it extracts as a `String` on
-the Rust side. Tuple fields like `no_message_lines: tuple[int, ...]` extract as `Vec<usize>`.
-
-Note that `exc_type` is marked `#[allow(dead_code)]` on the Rust side -- it exists
-solely to keep the contract in sync. The value is used only in the Python layer.
+`extract_outcome()` builds a [`RawOutcome`](../worker_result/convert.rs) variant and
+calls `into_test_outcome()` — the single conversion path shared with the JSON worker.
+Passed tests (the common case) go from 13 `getattr` calls down to 2.
 
 ### CollectedItem
 
@@ -131,19 +189,20 @@ Strict-mode violations detected at collection time.
 ```python
 class ViolationKind(StrEnum):
     BARE_ASSERT = "bare_assert"
-    BROAD_FIXTURE_TYPE = "broad_fixture_type"
     DICT_PARAMETRIZE = "dict_parametrize"
     INVALID_MODULE_MARK = "invalid_module_mark"
     MISSING_MARK_REASON = "missing_mark_reason"
     MISSING_RETURN_ANNOTATION = "missing_return_annotation"
+    REGISTRAR_IN_TEST_MODULE = "registrar_in_test_module"
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
+    BROAD_FIXTURE_TYPE = "broad_fixture_type"
     UNUSED_FIXTURE = "unused_fixture"
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CollectedViolation:
     node_id: str
     kind: ViolationKind
-    detail: str
+    detail: str  # kind-specific payload; empty string when unused
 ```
 
 **Rust** (`src/bridge.rs`):
@@ -211,28 +270,31 @@ in-process PyO3 path. Both paths convert to the domain `Frame` type via
 
 Adding a new field requires synchronized changes on both sides. The steps:
 
-1. **Add the field to the Python dataclass** in `python/oxitest/_bridge/result.py`.
-   Give it a default value so existing code is not broken:
+1. **Add the field to the appropriate per-outcome Python dataclass** in
+   `python/oxitest/_bridge/result.py`. Give it a default value so existing
+   code is not broken. Add it only to the outcome kinds that need it —
+   `TestResult` is a type alias, not a single class:
 
    ```python
-   @dataclass
-   class TestResult:
+   @dataclass(frozen=True, slots=True)
+   class FailedResult:
        # ... existing fields ...
        new_field: str = ""
    ```
 
-2. **Add the field to the Rust `FromPyObject` struct** in `src/bridge.rs`, using
-   the correct type mapping from the table above:
+2. **Extract the field in `extract_outcome()`** in `src/bridge.rs`, inside the
+   `match` arm for the relevant outcome status. There is no `FromPyObject` struct
+   to update — extraction is done imperatively:
 
    ```rust
-   #[derive(FromPyObject)]
-   struct TestResult {
-       // ... existing fields ...
-       new_field: String,
+   "failed" => {
+       // ... existing extractions ...
+       let new_field: String = py_result.getattr("new_field")?.extract()?;
+       Ok(RawOutcome::Failed { /* …, new_field */ }.into_test_outcome())
    }
    ```
 
-3. **Wire the field through** to where it is consumed. In bridge.rs,
+3. **Wire the field through** to where it is consumed. In `bridge.rs`,
    `extract_outcome()` maps Python fields to `RawOutcome` variants (defined in
    `worker_result/convert.rs`). If the field affects the domain, add it to the
    appropriate `RawOutcome` variant and update `into_test_outcome()`.
