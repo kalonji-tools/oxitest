@@ -9,8 +9,8 @@
 
 ## Overview
 
-Plugins extend oxitest through eight protocols: **Reporter**, **LogBackend**,
-**FixtureProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, **DebuggerBackend**, and **CoverageProvider**. Each plugin is a
+Plugins extend oxitest through nine protocols: **Reporter**, **LogBackend**,
+**FixtureProvider**, **HelperProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, **DebuggerBackend**, and **CoverageProvider**. Each plugin is a
 Python package declared in `pyproject.toml` and loaded at startup. Per-plugin
 configuration is passed via `plugin_settings` as a dictionary to the plugin's
 entry point function.
@@ -72,19 +72,13 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from oxitest import CliExtension, Both, Cli, Conf, Plugin
+```
 
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:cli-extension"
+```
 
-@dataclass(frozen=True)
-class MyConfig:
-    host: Annotated[str, Both(help="Target host", short="H", env="MY_HOST")]
-    verbose: Annotated[bool, Cli(help="Verbose output")] = False
-    retries: Annotated[int, Conf(help="Retry count (config only)")] = 3
-
-
-# Declares CLI flags under the "myplugin" prefix
-oxitest_cli_extension = CliExtension(prefix="myplugin", config_type=MyConfig)
-
-
+```python
 def oxitest_plugin(*, config: MyConfig | None = None) -> Plugin:
     # config is a fully typed MyConfig instance (not a dict)
     return Plugin()
@@ -146,6 +140,7 @@ distribute it to other teams.
 | I want to... | Use this protocol |
 |---|---|
 | Provide reusable fixtures across projects | `FixtureProvider` |
+| Provide reusable helper functions across projects | `HelperProvider` |
 | Add retry, profiling, or tracing around tests | `ExecutionWrapper` |
 | Send results to a dashboard or custom format | `Reporter` |
 | Use an alternative coverage tool | `CoverageProvider` |
@@ -177,20 +172,23 @@ that accompanies it (for example, a coverage plugin that also provides a
 
 ## Protocols
 
-The `Plugin` dataclass has seven fields — five tuple-based protocol fields and
-two singleton fields (`async_backend` and `debugger_backend`). Each tuple field
-allows a single plugin to provide multiple implementations of the same protocol.
+The `Plugin` dataclass has nine fields — six tuple-based protocol fields and
+three singleton fields (`async_backend`, `debugger_backend`, and
+`coverage_provider`). Each tuple field allows a single plugin to provide
+multiple implementations of the same protocol.
 
 ```python
 @dataclass(frozen=True)
 class Plugin:
     log_backends: tuple[LogBackend, ...] = ()
     fixture_providers: tuple[FixtureProvider, ...] = ()
+    helper_providers: tuple[HelperProvider, ...] = ()
     execution_wrappers: tuple[ExecutionWrapper, ...] = ()
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
     async_backend: AsyncBackend | None = None
     debugger_backend: DebuggerBackend | None = None
+    coverage_provider: CoverageProvider | None = None
 ```
 
 ### Reporter
@@ -201,10 +199,7 @@ completes, and when the entire run finishes.
 **Signatures:**
 
 ```python
-class Reporter(Protocol):
-    def test_started(self, item: Any) -> None: ...
-    def test_completed(self, item: Any, outcome: Any, duration_ms: float) -> None: ...
-    def finish(self, collect_errors: list[Any], interrupted: bool) -> None: ...
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:reporter-protocol"
 ```
 
 **Example** -- write test events to a JSON file:
@@ -222,12 +217,7 @@ property returns captured log entries.
 **Signatures:**
 
 ```python
-class LogBackend(Protocol):
-    def install(self) -> None: ...
-    def uninstall(self) -> None: ...
-
-    @property
-    def records(self) -> list[Any]: ...
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:logbackend-protocol"
 ```
 
 **Example** -- custom log handler that captures records with timestamps:
@@ -246,22 +236,7 @@ type — tests request the fixture via `Fixture[T]` where `T` matches
 **Signatures:**
 
 ```python
-class FixtureProvider(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def fixture_type(self) -> type: ...
-
-    def create(self, ctx: Any) -> object: ...
-    def teardown(self, value: object) -> None: ...
-
-    # Optional — defaults via getattr if not implemented:
-    @property
-    def scope(self) -> str: ...    # "each" (default), "shared", or "session"
-
-    @property
-    def autouse(self) -> bool: ... # False (default)
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:fixture-provider-protocol"
 ```
 
 `scope` controls fixture lifetime: `"each"` (per-test, default), `"shared"`
@@ -302,34 +277,22 @@ of `CollectedItem` objects.
 **Signatures:**
 
 ```python
-class Collector(Protocol):
-    def collect(self, path: str, module: object) -> list[Any]: ...
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:collector-protocol"
 ```
 
 **Example** -- discover `check_*` functions as tests:
 
 ```python
 import inspect
+from oxitest import CollectedItem
 from oxitest.plugin import Plugin
-from oxitest._bridge.result import CollectedItem
+```
 
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:check-collector"
+```
 
-class CheckCollector:
-    def collect(self, path, module):
-        items = []
-        for name, obj in inspect.getmembers(module, inspect.isfunction):
-            if name.startswith("check_"):
-                lineno = inspect.getsourcelines(obj)[1]
-                items.append(CollectedItem(
-                    fn_name=name,
-                    lineno=lineno,
-                    markers=[],
-                    param_id=None,
-                    param_values=[],
-                ))
-        return items
-
-
+```python
 def oxitest_plugin(config=None):
     return Plugin(collectors=(CheckCollector(),))
 ```
@@ -344,11 +307,7 @@ return a test result.
 **Signatures:**
 
 ```python
-class ExecutionWrapper(Protocol):
-    @property
-    def marker(self) -> str: ...
-
-    def wrap(self, test_fn: Any, marker_args: dict[str, Any]) -> Any: ...
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:execution-wrapper-protocol"
 ```
 
 **Example** -- retry on failure:
@@ -372,6 +331,37 @@ import oxitest
 def test_flaky_service():
     response = call_external_api()
     assert response.status == 200
+```
+
+### HelperProvider
+
+Helper providers contribute named callables to the helper registry. Tests
+access them via `helpers.<namespace>.<name>()`.
+
+**Signatures:**
+
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:helper-provider-protocol"
+```
+
+**Example** -- provide a URL builder helper:
+
+```python
+from oxitest.plugin import Plugin
+
+
+class UrlHelper:
+    @property
+    def name(self):
+        return "build_url"
+
+    @property
+    def helper(self):
+        return lambda base, path: f"{base.rstrip('/')}/{path.lstrip('/')}"
+
+
+def oxitest_plugin(config=None):
+    return Plugin(helper_providers=(UrlHelper(),))
 ```
 
 ## Complete example
@@ -401,13 +391,7 @@ output = "build/test-events.json"
 ### Test file
 
 ```python
-# tests/test_math.py
-def test_addition():
-    assert 1 + 1 == 2
-
-
-def test_multiplication():
-    assert 3 * 4 == 12
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:test-math-example"
 ```
 
 ### Output
@@ -436,34 +420,17 @@ Plugins can provide an alternative async runtime backend by implementing the
 
 ```python
 from oxitest import Plugin, AsyncBackend, SharedAsyncSession
+```
 
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:trio-shared-session"
+```
 
-class TrioSharedSession:
-    """Long-lived trio session for shared fixture resolution."""
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:trio-backend"
+```
 
-    def run(self, coro):
-        import trio
-        return trio.from_thread.run(coro)
-
-    def close(self):
-        pass  # trio manages its own cleanup
-
-
-class TrioBackend:
-    """Trio async backend for oxitest."""
-
-    @property
-    def name(self) -> str:
-        return "trio"
-
-    def run(self, coro):
-        import trio
-        return trio.run(coro)
-
-    def create_shared_session(self) -> SharedAsyncSession:
-        return TrioSharedSession()
-
-
+```python
 def oxitest_plugin(config=None) -> Plugin:
     return Plugin(async_backend=TrioBackend())
 ```
@@ -493,20 +460,13 @@ Plugins can provide an alternative debugger backend by implementing the
 ```python
 from oxitest.plugin import Plugin
 from oxitest import DebuggerBackend
+```
 
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:ipdb-backend"
+```
 
-class IpdbBackend:
-    """ipdb debugger backend for oxitest."""
-
-    def trace(self) -> None:
-        import ipdb
-        ipdb.set_trace()
-
-    def post_mortem(self, tb) -> None:
-        import ipdb
-        ipdb.post_mortem(tb)
-
-
+```python
 def oxitest_plugin(config=None) -> Plugin:
     return Plugin(debugger_backend=IpdbBackend())
 ```
@@ -533,22 +493,13 @@ tool.
 ```python
 from oxitest.plugin import Plugin, CoverageProvider
 from oxitest._bridge._coverage import CovReportFormat
+```
 
+```python
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:slipcover-provider"
+```
 
-class SlipCoverProvider:
-    def start(self, config: dict) -> None:
-        # Initialize alternative coverage tool
-        ...
-
-    def stop(self) -> None:
-        # Stop collection, save data
-        ...
-
-    def report(self, fmt: CovReportFormat) -> int:
-        # Generate report in requested format
-        ...
-
-
+```python
 def oxitest_plugin(config=None):
     return Plugin(coverage_provider=SlipCoverProvider())
 ```

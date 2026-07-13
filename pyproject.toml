@@ -80,6 +80,7 @@ ignore = [
     "S101",     # assert
     "S603",     # subprocess call — output tests run oxitest as subprocess — examples use assert for clarity
     "SLF001",   # private member access — tests verify internal state of stubs
+    "T100",     # debugger — ipdb backend snippet shows set_trace/post_mortem usage
     "T201",     # print — capture examples must print to demonstrate the feature
 ]
 
@@ -113,6 +114,15 @@ error-on-warning = true
 [tool.ty.environment]
 python = ".venv"
 extra-paths = ["python", "python/tests"]
+
+[[tool.ty.overrides]]
+# Doc-example test files may import optional deps (trio, ipdb) not in devenv,
+# and use dynamic attribute assignment on ModuleType in collector tests.
+include = ["python/tests/docs/how-to/test_write_plugins.py"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
 
 [tool.oxitest]
 testpaths = ["python/tests", "python/oxitest"]
