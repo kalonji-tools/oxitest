@@ -176,6 +176,89 @@ def test_resolve_param_by_type_not_name() -> None:
     )
 
 
+def test_resolve_param_type_miss_name_fallback() -> None:
+    """When type-based resolution fails but name matches, fall back to name."""
+
+    class UnrelatedType:
+        pass
+
+    defn = helpers.common.make_fixture_def(
+        "my_fixture",
+        lambda: "value",
+        conftest_path="/c.py",
+        fixture_type=str,
+    )
+    inst, _reg = _make_instantiator(defn)
+    teardowns: list = []
+    meta = TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x")
+
+    resolved, value = inst.resolve_param(
+        "my_fixture",
+        Fixture[UnrelatedType],
+        meta,
+        fn_teardowns=teardowns,
+        resolve_user_fixture=lambda n: inst.resolve_fixture(
+            n, _ResolutionContext("t.py", teardowns, frozenset(), lambda _defn: None)
+        ),
+    )
+    assert resolved is True, "name fallback should resolve the fixture"
+    assert value == "value", "should return the fixture value via name-based lookup"
+
+
+def test_resolve_param_type_and_name_both_miss() -> None:
+    """When both type and name resolution fail, raise FixtureNotFoundError."""
+
+    class NoSuchType:
+        pass
+
+    inst, _reg = _make_instantiator()
+    teardowns: list = []
+    meta = TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x")
+
+    with raises(FixtureNotFoundError, match="no_such_fixture"):
+        inst.resolve_param(
+            "no_such_fixture",
+            Fixture[NoSuchType],
+            meta,
+            fn_teardowns=teardowns,
+            resolve_user_fixture=lambda _: None,
+        )
+
+
+def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
+    """ConftestSource: prefer param name when both type and name match."""
+
+    class DbConn:
+        pass
+
+    defn_primary = helpers.common.make_fixture_def(
+        "db",
+        DbConn,
+        conftest_path="/c.py",
+        fixture_type=DbConn,
+    )
+    inst, _reg = _make_instantiator(defn_primary)
+    teardowns: list = []
+    meta = TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x")
+
+    resolved_names: list[str] = []
+
+    def tracking_resolve(name: str) -> DbConn:
+        resolved_names.append(name)
+        return DbConn()
+
+    inst.resolve_param(
+        "db",
+        Fixture[DbConn],
+        meta,
+        fn_teardowns=teardowns,
+        resolve_user_fixture=tracking_resolve,
+    )
+    assert resolved_names == ["db"], (
+        "should resolve using param name 'db', not type-resolved name"
+    )
+
+
 # ─── _resolve_by_source dispatch ────────────────────────────────────────────
 
 
