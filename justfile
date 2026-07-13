@@ -40,12 +40,8 @@ build *args: (_log _green "Building extension...")
     {{maturin_env}} maturin develop {{args}}
 
 # Run Python tests (no rebuild — use `just build` first if Rust changed)
-test *args: (_log _blue "Running tests...")
+test-python *args: (_log _blue "Running Python tests...")
     uv run python -m oxitest {{args}}
-
-# Run doc example tests (no rebuild — use `just build` first if Rust changed)
-test-docs *args: (_log _blue "Running doc example tests...")
-    uv run python -m oxitest python/tests/docs/ --strict=off {{args}}
 
 # Run Rust unit tests (matches CI: rejects unreferenced snapshots)
 test-rust *args: (_log _blue "Running Rust tests...")
@@ -66,7 +62,9 @@ check-locks: (_log _blue "Checking lock files...")
     cargo update --locked
 
 # Full pre-push gate: clean, check, test everything
-preflight: clean check-locks check test-rust build test test-docs
+preflight: clean check-locks check test-rust build test-python
+    @just _log {{_blue}} "Running doc example tests..."
+    uv run python -m oxitest python/tests/docs/ --strict=off
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
