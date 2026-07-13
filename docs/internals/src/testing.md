@@ -143,9 +143,8 @@ and accessed via `from oxitest import helpers`:
 ### Running Python tests
 
 ```bash
-just test                          # build + run all Python tests
-just test python/tests/test_fixtures.py  # single file
-just test-py                       # skip rebuild (Python-only changes)
+just test-python                          # run all Python tests (no rebuild)
+just test-python python/tests/test_fixtures.py  # single file
 ```
 
 ## oxitest-consumer

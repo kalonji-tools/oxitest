@@ -30,12 +30,11 @@ trade-offs were resolved.
 ## Building docs locally
 
 ```bash
-just docs-internals-serve    # internals book with live reload at localhost:3000
-just docs-internals          # build only (output in docs/internals/book/)
-just docs-rust               # Rust API docs (cargo doc) — opens in browser
+just docs-serve    # all docs with live reload (user docs at localhost:8000, internals at localhost:3000)
+just docs-build    # build only (user docs in docs/site/, internals in docs/internals/book/)
 ```
 
-For type definitions, struct fields, and method signatures, use `just docs-rust`
+For type definitions, struct fields, and method signatures, use `cargo doc --open`
 rather than reading source files. The Rust API docs are auto-generated and always
 current.
 

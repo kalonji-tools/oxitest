@@ -27,7 +27,7 @@ oxitest is split into a **Rust core** (`src/`) and a **Python bridge** (`python/
 - **Test module import** (`_bridge/importer.py`) -- imports a test file into the Python runtime, discovers `test_*` functions, returns `CollectedItem` objects.
 - **Test execution** (`_bridge/executor.py`) -- resolves fixtures, evaluates parametrize, runs the test function, catches exceptions, returns a `TestResult`.
 - **Fixture lifecycle** (`_bridge/_fixture_session.py`, `_bridge/_fixture_registry.py`) -- scope-based caching, yield teardown, autouse injection.
-- **Mark evaluation** (`_bridge/_mark_registry.py`, `_bridge/marks.py`) -- evaluates runtime mark conditions (e.g., `skip(when=sys.platform == "win32")`).
+- **Mark evaluation** (`_bridge/_mark_registry.py`, `_bridge/_mark_api.py`) -- evaluates runtime mark conditions (e.g., `skip(when=sys.platform == "win32")`).
 - **Worker subprocess** (`_bridge/worker.py`) -- entry point for parallel workers. Reads JSON tasks from stdin, writes JSON result lines to stdout.
 
 ### Why this boundary
