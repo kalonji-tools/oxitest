@@ -95,7 +95,7 @@ Both values are configurable in `pyproject.toml`:
 ```toml
 [tool.oxitest]
 min_parallel_tests = 50       # lower the threshold
-spawn_overhead_ms  = 100.0    # adjust if workers start faster/slower
+spawn_overhead_ms  = 250.0    # adjust if workers start faster/slower
 ```
 
 The command line accepts explicit overrides:

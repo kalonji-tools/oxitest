@@ -123,7 +123,7 @@ $ oxitest --schedule longest-first
 
 | Strategy | Description |
 |----------|-------------|
-| `longest-first` | Schedule the slowest tests first (requires warm cache). Default when cache is available. |
+| `longest-first` | Schedule the slowest tests first (falls back to item count without cache). Default. |
 | `failed-first` | Run previously-failed tests before others. |
 | `random` | Randomize execution order. Useful for detecting order-dependent tests. |
 

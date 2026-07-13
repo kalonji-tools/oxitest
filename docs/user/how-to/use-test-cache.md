@@ -34,6 +34,9 @@ $ oxitest --failed=first
 Runs all tests, but failed tests from the previous run are executed first. This
 gives faster feedback during a fix-iterate cycle without skipping any tests.
 
+!!! tip
+    `--lf` is shorthand for `--failed=only` and `--ff` is shorthand for `--failed=first`.
+
 ## Show the slowest tests and fixtures
 
 ```console
