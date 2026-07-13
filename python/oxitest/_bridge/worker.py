@@ -147,7 +147,12 @@ def main() -> None:
     for raw in sys.stdin:
         line = raw.strip()
         if line:
-            task: WorkerTask = json.loads(line)
+            try:
+                task: WorkerTask = json.loads(line)
+            except json.JSONDecodeError as exc:
+                msg = f"oxitest worker: malformed JSON from coordinator: {exc}\n"
+                sys.stderr.write(msg)
+                continue
             run(task)
 
 

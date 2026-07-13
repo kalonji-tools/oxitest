@@ -8,8 +8,13 @@ from typing import Any, Never
 
 import oxitest
 from oxitest import helpers, raises
-from oxitest._bridge._errors import ConflictingDebuggerError
-from oxitest._bridge.plugin_loader import PluginLoadError, PluginRegistry, load_plugins
+from oxitest._bridge._errors import ConflictingDebuggerError, OxitestError
+from oxitest._bridge.plugin_loader import (
+    PluginLoadError,
+    PluginRegistry,
+    activate_deferred_plugins,
+    load_plugins,
+)
 from oxitest.plugin import Plugin
 
 
@@ -267,3 +272,17 @@ def test_fixture_provider_scope_custom() -> None:
     assert getattr(provider, "autouse", False) is True, (
         "provider with autouse=True should return True"
     )
+
+
+def test_activate_deferred_plugins_rejects_invalid_settings_json() -> None:
+    """activate_deferred_plugins raises OxitestError on malformed settings JSON."""
+    registry = PluginRegistry()
+    with raises(OxitestError, match="invalid plugin settings JSON"):
+        activate_deferred_plugins(registry, "not valid json", "{}")
+
+
+def test_activate_deferred_plugins_rejects_invalid_cli_json() -> None:
+    """activate_deferred_plugins raises OxitestError on malformed CLI values JSON."""
+    registry = PluginRegistry()
+    with raises(OxitestError, match="invalid CLI values JSON"):
+        activate_deferred_plugins(registry, "{}", "not valid json")

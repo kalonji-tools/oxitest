@@ -112,3 +112,29 @@ def test_worker_emits_structured_failure_fields(tmp: TempDir) -> None:
     assert r.get("right") not in (None, ""), f"right missing or empty: {r}"
     assert r.get("op") not in (None, ""), f"op missing or empty: {r}"
     assert r.get("source_line") not in (None, ""), f"source_line missing or empty: {r}"
+
+
+def test_worker_handles_malformed_json_gracefully() -> None:
+    """Worker logs to stderr and continues on malformed stdin JSON."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+    result = subprocess.run(
+        [sys.executable, "-m", "oxitest._bridge.worker"],
+        input="this is not valid json",
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, (
+        f"worker should exit cleanly after malformed JSON, got rc={result.returncode}"
+    )
+    assert result.stdout.strip() == "", (
+        f"worker should not emit anything to stdout for malformed input, "
+        f"got {result.stdout!r}"
+    )
+    assert "malformed JSON" in result.stderr, (
+        f"worker should log 'malformed JSON' to stderr, got {result.stderr!r}"
+    )
