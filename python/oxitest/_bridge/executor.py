@@ -92,9 +92,8 @@ def _resolve_debugger_backend(
     """
     if debug_mode is None:
         return None
-    registry = getattr(session, "_plugin_registry", None)
-    if registry is not None and registry.debugger_backend is not None:
-        return registry.debugger_backend
+    if session.plugin_registry.debugger_backend is not None:
+        return session.plugin_registry.debugger_backend
     return _PdbBackend()
 
 
@@ -125,8 +124,8 @@ def _load_and_resolve(
 
     Returns _ResolvedTest on success, or TestResult on module/fn/resolve errors.
     """
-    _cache = getattr(session, "_module_cache", None)
-    _cached = _cache.get(meta.module_path) if _cache is not None else None
+    _cache = session.module_cache
+    _cached = _cache.get(meta.module_path)
     if _cached is not None:
         module = _cached
         sys.modules[unique_name] = module
@@ -135,8 +134,7 @@ def _load_and_resolve(
             module = _load_module(meta.module_path, unique_name)
         except _LoadError as e:
             return e.result
-        if _cache is not None:
-            _cache.set(meta.module_path, module)
+        _cache.set(meta.module_path, module)
     try:
         fn_raw, fn = _resolve_fn(module, meta.fn_name, meta.module_path)
     except _LoadError as e:
@@ -237,12 +235,9 @@ def _evaluate_marks_phase(
     marks: Sequence[MarkInfo],
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Evaluate marks and return (short_circuit, wrappers)."""
-    _plugin_registry = getattr(session, "_plugin_registry", None)
-    _plugin_handlers: list[MarkHandler] = []
-    if _plugin_registry is not None:  # pragma: no cover
-        _plugin_handlers = [
-            _PluginMarkHandler(pw) for pw in _plugin_registry.execution_wrappers
-        ]
+    _plugin_handlers: list[MarkHandler] = [
+        _PluginMarkHandler(pw) for pw in session.plugin_registry.execution_wrappers
+    ]
 
     return evaluate_marks(
         marks,

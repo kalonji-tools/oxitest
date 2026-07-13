@@ -173,8 +173,7 @@ class LogCapture:
 class _LogCaptureFixture(BuiltinFixture, fixture_type=LogCapture):
     def create(self, *, ctx: _BuiltinContext) -> LogCapture:
         backends: list[LogBackend] = [StdlibLogBackend()]
-        if ctx.plugin_registry is not None:
-            backends.extend(ctx.plugin_registry.log_backends)
+        backends.extend(ctx.plugin_registry.log_backends)
         cap = LogCapture(backends)
         ctx.teardown_stack.append(cap.close)
         return cap

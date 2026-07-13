@@ -10,7 +10,8 @@ from oxitest._bridge._fixture_type import injectable
 
 if TYPE_CHECKING:
     from oxitest._bridge._test_meta import TestMeta
-    from oxitest._bridge.plugin_loader import PluginRegistry
+
+from oxitest._bridge.plugin_loader import PluginRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +21,7 @@ class _BuiltinContext:
     meta: TestMeta
     inject_scope: str  # "function" for test-level injections
     teardown_stack: list[Callable[[], None]]
-    plugin_registry: PluginRegistry | None = field(default=None, repr=False)
+    plugin_registry: PluginRegistry = field(default_factory=PluginRegistry, repr=False)
     keep_tmp: str = "cleanup"
     result_cell: list[Any] = field(default_factory=list, repr=False)
 

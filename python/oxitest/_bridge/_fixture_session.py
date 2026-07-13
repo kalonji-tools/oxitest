@@ -67,6 +67,12 @@ class _SessionProtocol(Protocol):
     by constructing `FixtureSession([])` when no conftest is present.
     """
 
+    @property
+    def plugin_registry(self) -> PluginRegistry: ...
+
+    @property
+    def module_cache(self) -> ModuleCache: ...
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
@@ -404,6 +410,16 @@ class FixtureSession:
     @property
     def _used_shared_async(self) -> bool:
         return self._async_mgr.was_used
+
+    @property
+    def plugin_registry(self) -> PluginRegistry:
+        """Read-only access to the plugin registry."""
+        return self._plugin_registry
+
+    @property
+    def module_cache(self) -> ModuleCache:
+        """Read-only access to the module cache."""
+        return self._module_cache
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
