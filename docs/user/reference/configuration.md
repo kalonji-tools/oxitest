@@ -42,7 +42,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `workers` | `"auto"` or integer | cpu count | Number of parallel worker processes. `"auto"` uses all available CPUs. A positive integer sets an explicit count. CLI `--workers`/`-n` overrides this value. |
 | `schedule` | string | `"longest-first"` | Group scheduling strategy for parallel runs. One of: `"longest-first"` (modules in descending duration order), `"failed-first"` (failed modules first, then by duration), `"random"` (random order). |
 | `failed` | string | — | Failed-test mode. `"only"` runs just previously-failed tests; `"first"` runs failures before the rest. When omitted, all tests run in normal order. |
-| `keep_tmp` | `str` | `"no"` | Preserve `TempDir` contents. Values: `"no"`, `"failed"` (keep on failure), `"always"`. Also available as `--keep-tmp` CLI flag. |
+| `keep_tmp` | `str` | — | Preserve `TempDir` contents. Values: `"failed"` (keep on failure), `"always"`. When omitted, temp dirs are always cleaned up. Also available as `--keep-tmp` CLI flag. |
 | `strict` | string | — | Enforce strict conventions at run time. `"abort"` exits with code 3 before any tests run. `"enforce"` runs tests but turns violations into errors. `"off"` disables strict mode — valid but redundant in config since omitting `strict` has the same effect; primarily useful as `--strict=off` on the CLI to override a project-wide setting. |
 | `affected_base` | string | — | Default git ref for `--affected`. When set, bare `--affected` compares against this ref instead of `HEAD`. CLI `--affected=REF` overrides. |
 | `async_backend` | `str` | `"asyncio"` | Async runtime backend. Used by async test execution. Can be overridden by a plugin providing `AsyncBackend`. |
