@@ -286,7 +286,7 @@ def test_collected_item_can_be_constructed() -> None:
         fn_name="test_foo",
         lineno=1,
         markers=(),
-        param_id=None,
+        param_id="",
         param_values=(),
         is_async=False,
     )
@@ -302,8 +302,8 @@ def test_collected_item_can_be_constructed() -> None:
         f"default-constructed items must have empty markers so no skip/xfail/timeout"
         f" behavior is accidentally triggered: {item.markers}"
     )
-    assert item.param_id is None, (
-        f"param_id=None signals a non-parametrized test -- a non-None default would"
+    assert item.param_id == "", (
+        f"param_id='' signals a non-parametrized test -- a non-empty default would"
         f" cause the runner to look up nonexistent parameter sets: {item.param_id!r}"
     )
     assert item.param_values == (), (
@@ -1262,7 +1262,7 @@ class _GoodCollector:
                 fn_name="test_from_plugin",
                 lineno=1,
                 markers=(),
-                param_id=None,
+                param_id="",
                 param_values=(),
             )
         ]

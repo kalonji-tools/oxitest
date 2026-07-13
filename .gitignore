@@ -207,6 +207,7 @@ benchmarks/results_*.json
 
 # Test output
 junit.xml
+docs/user/examples/output/
 
 # Bacon
 .bacon-locations

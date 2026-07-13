@@ -244,7 +244,7 @@ def run_oxitest_subcmd(
 def make_meta(
     module_path: str = "t.py",
     fn_name: str = "test_fn",
-    param_id: str | None = None,
+    param_id: str = "",
 ) -> TestMeta:
     """Create a ``TestMeta`` with sensible defaults for tests."""
     node_id = f"{module_path}::{fn_name}"
@@ -272,7 +272,7 @@ def run_test(
     module_path: str,
     fn_name: str,
     session: _SessionProtocol | None = None,
-    param_id: str | None = None,
+    param_id: str = "",
     default_timeout: int | None = None,
 ) -> TestResult:
     """Wrap ``executor.run_test`` for tests.
@@ -297,7 +297,7 @@ def exec_inline(  # noqa: PLR0913 — test helper, all kwargs have defaults
     *,
     session: _SessionProtocol | None = None,
     name: str | None = None,
-    param_id: str | None = None,
+    param_id: str = "",
     default_timeout: int | None = None,
 ) -> TestResult:
     """Write *code* to a temp test file and execute *fn_name* from it.

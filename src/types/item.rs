@@ -213,7 +213,7 @@ pub struct TestItem {
     pub(crate) fn_name: Arc<str>,
     pub(crate) lineno: LineNo,
     pub(crate) markers: MarkerSet,
-    pub(crate) param_id: Option<String>,
+    pub(crate) param_id: String,
     pub(crate) param_values: Vec<ParamPair>,
     #[serde(default)]
     pub(crate) is_async: bool,
@@ -249,7 +249,7 @@ impl TestItem {
             fn_name: fn_name.to_string(),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
@@ -266,7 +266,7 @@ impl TestItem {
             fn_name: node_id.to_string(),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
@@ -282,11 +282,11 @@ mod item_tests {
     #[test]
     fn test_item_has_param_fields() {
         let item = TestItem {
-            node_id: NodeId::new("test.py", "test_add", Some("basic")),
+            node_id: NodeId::new("test.py", "test_add", "basic"),
             fn_name: Arc::from("test_add"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: Some("basic".to_string()),
+            param_id: "basic".to_string(),
             param_values: vec![ParamPair {
                 name: "x".to_string(),
                 value: "1".to_string(),
@@ -295,35 +295,35 @@ mod item_tests {
             fixture_deps: vec![],
             fixref_deps: vec![],
         };
-        assert_eq!(item.param_id, Some("basic".to_string()));
+        assert_eq!(item.param_id, "basic");
         assert_eq!(item.param_values.len(), 1);
     }
 
     #[test]
-    fn test_item_non_parametrize_has_none_param_id() {
+    fn test_item_non_parametrize_has_empty_param_id() {
         let item = TestItem {
-            node_id: NodeId::new("test.py", "test_foo", None),
+            node_id: NodeId::new("test.py", "test_foo", ""),
             fn_name: Arc::from("test_foo"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
         };
-        assert!(item.param_id.is_none());
+        assert!(item.param_id.is_empty());
         assert!(item.param_values.is_empty());
     }
 
     #[test]
     fn test_item_has_is_async_field() {
         let sync_item = TestItem {
-            node_id: NodeId::new("test.py", "test_sync", None),
+            node_id: NodeId::new("test.py", "test_sync", ""),
             fn_name: Arc::from("test_sync"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
@@ -332,11 +332,11 @@ mod item_tests {
         assert!(!sync_item.is_async);
 
         let async_item = TestItem {
-            node_id: NodeId::new("test.py", "test_async", None),
+            node_id: NodeId::new("test.py", "test_async", ""),
             fn_name: Arc::from("test_async"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: true,
             fixture_deps: vec![],
@@ -353,7 +353,7 @@ mod item_tests {
         assert_eq!(&*item.fn_name, "test_add");
         assert_eq!(item.lineno, LineNo::new(1));
         assert!(item.markers.is_empty());
-        assert!(item.param_id.is_none());
+        assert!(item.param_id.is_empty());
         assert!(item.param_values.is_empty());
         assert!(!item.is_async);
         assert!(item.fixture_deps.is_empty());
@@ -397,7 +397,7 @@ mod item_tests {
             item.node_id.to_string(),
             "tests/test_foo.py::test_add[case0]"
         );
-        assert_eq!(item.param_id, Some("case0".to_string()));
+        assert_eq!(item.param_id, "case0");
     }
 
     #[test]

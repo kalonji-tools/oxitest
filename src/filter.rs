@@ -582,7 +582,7 @@ mod tests {
         let source_files = std::collections::HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].param_id, Some("case1".to_string()));
+        assert_eq!(filtered[0].param_id, "case1");
     }
 
     #[test]
@@ -675,11 +675,7 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 2);
-        assert!(
-            filtered
-                .iter()
-                .all(|i| i.param_id.as_ref().unwrap().starts_with("case"))
-        );
+        assert!(filtered.iter().all(|i| i.param_id.starts_with("case")));
     }
 
     #[test]
@@ -777,7 +773,7 @@ mod tests {
         let source_files = HashSet::new();
         let filtered = filter_by_node_ids(items, &ids, &source_files);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].param_id.as_deref(), Some("case_basic"));
+        assert_eq!(filtered[0].param_id, "case_basic");
     }
 
     // ── Allocation-free prefix matching ─────────────────────────────────────

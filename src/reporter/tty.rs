@@ -99,9 +99,10 @@ impl TtyReporter {
         let raw_ms = duration_ms.as_f64();
         let ms = color_dim(&format!("{:.1}ms", raw_ms), self.opts.use_color);
         let c = self.opts.use_color;
-        let param_suffix = match &item.param_id {
-            Some(pid) => format!("[ {} ]", color_bold_white(pid, c)),
-            None => String::new(),
+        let param_suffix = if item.param_id.is_empty() {
+            String::new()
+        } else {
+            format!("[ {} ]", color_bold_white(&item.param_id, c))
         };
         let w = self.opts.name_width;
         let name_part = truncate_name(&item.fn_name, w);
@@ -217,7 +218,7 @@ impl TtyReporter {
                 ) {
                     continue;
                 }
-                let case_id = item.param_id.as_deref().unwrap_or("");
+                let case_id = item.param_id.as_str();
                 self.pb.println("");
                 let header = format!("       {}[ {} ]", color_dim(&group.fn_name, c), case_id,);
                 self.pb.println(header);
@@ -308,7 +309,7 @@ impl Reporter for TtyReporter {
             |(i, _, _, _), target| i.node_id.as_ref() == target,
         );
 
-        let is_parametrized = item.param_id.is_some();
+        let is_parametrized = !item.param_id.is_empty();
         let is_verbose = self.opts.verbosity >= Verbosity::Detailed;
 
         // Three display modes:

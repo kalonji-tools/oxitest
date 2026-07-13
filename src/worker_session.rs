@@ -232,7 +232,7 @@ fn run_worker_loop(
                 .iter()
                 .map(|item| WorkerTaskItem {
                     fn_name: &item.fn_name,
-                    param_id: item.param_id.as_deref(),
+                    param_id: &item.param_id,
                     node_id: &item.node_id,
                     markers: item.markers.iter().collect(),
                 })
@@ -396,7 +396,7 @@ mod worker_session_tests {
             module_path: "tests/test_example.py",
             items: vec![WorkerTaskItem {
                 fn_name: "test_add",
-                param_id: None,
+                param_id: "",
                 node_id: "tests/test_example.py::test_add",
                 markers: vec![],
             }],
@@ -448,7 +448,7 @@ mod worker_session_tests {
             module_path: "tests/test_math.py",
             items: vec![WorkerTaskItem {
                 fn_name: "test_mul",
-                param_id: Some("x=2-y=3"),
+                param_id: "x=2-y=3",
                 node_id: "tests/test_math.py::test_mul[x=2-y=3]",
                 markers: vec!["slow"],
             }],

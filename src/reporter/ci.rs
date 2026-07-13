@@ -54,7 +54,8 @@ impl CiReporter {
         if diag.is_empty() {
             return;
         }
-        let header = if let Some(pid) = &item.param_id {
+        let header = if !item.param_id.is_empty() {
+            let pid = &item.param_id;
             let sep = case_sep(c);
             match outcome {
                 TestOutcome::Failed(..) => {
@@ -354,11 +355,11 @@ mod tests {
     fn test_ci_reporter_parametrize_fail_uses_case_id_format() {
         let mut reporter = make_ci_reporter(TbStyle::Detail);
         let item = TestItem {
-            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("neg")),
+            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", "neg"),
             fn_name: Arc::from("test_add"),
             lineno: LineNo::new(5),
             markers: MarkerSet::new(),
-            param_id: Some("neg".to_string()),
+            param_id: "neg".to_string(),
             param_values: vec![crate::types::ParamPair {
                 name: "x".to_string(),
                 value: "-1".to_string(),

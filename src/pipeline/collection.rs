@@ -259,13 +259,13 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
         let locations = crate::doctest::scan_doctests(file);
         for loc in locations {
             let fn_name = format!("<doctest>{}", loc.name);
-            let node_id = types::NodeId::new(file.as_str(), &fn_name, None);
+            let node_id = types::NodeId::new(file.as_str(), &fn_name, "");
             items.push(Arc::new(types::TestItem {
                 node_id,
                 fn_name: Arc::from(fn_name.as_str()),
                 lineno: types::LineNo::new(loc.lineno),
                 markers: types::MarkerSet::from(vec!["doctest".to_string()]),
-                param_id: None,
+                param_id: String::new(),
                 param_values: vec![],
                 is_async: false,
                 fixture_deps: vec![],

@@ -70,13 +70,13 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
     )
 
 
-def test_collect_non_parametrize_has_none_param_id(tmp: TempDir) -> None:
-    """Non-parametrized tests have param_id=None and empty param_values."""
+def test_collect_non_parametrize_has_empty_param_id(tmp: TempDir) -> None:
+    """Non-parametrized tests have param_id='' and empty param_values."""
     path = helpers.common.write_test_module(tmp, "def test_foo(): pass\n")
     items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
-    assert items[0].param_id is None, (
-        f"non-parametrized test should have param_id=None, got {items[0].param_id!r}"
+    assert items[0].param_id == "", (
+        f"non-parametrized test should have param_id='', got {items[0].param_id!r}"
     )
     assert items[0].param_values == (), (
         f"non-parametrized test should have empty param_values, got "

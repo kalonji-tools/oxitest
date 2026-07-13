@@ -87,7 +87,7 @@ class BenchCollector:
                         fn_name=name,
                         lineno=lineno,
                         markers=(),
-                        param_id=None,
+                        param_id="",
                         param_values=(),
                     )
                 )

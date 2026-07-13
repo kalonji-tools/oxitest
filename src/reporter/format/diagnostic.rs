@@ -532,12 +532,12 @@ mod tests {
     #[test]
     fn test_diagnostic_shows_inline_params() {
         let item = std::sync::Arc::new(TestItem {
-            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
+            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", "basic"),
 
             fn_name: Arc::from("test_add"),
             lineno: LineNo::ZERO,
             markers: MarkerSet::new(),
-            param_id: Some("basic".to_string()),
+            param_id: "basic".to_string(),
             param_values: vec![
                 crate::types::ParamPair {
                     name: "x".to_string(),
@@ -575,12 +575,12 @@ mod tests {
     #[test]
     fn test_diagnostic_params_appear_between_path_and_source() {
         let item = std::sync::Arc::new(TestItem {
-            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", Some("basic")),
+            node_id: crate::types::NodeId::new("tests/test_foo.py", "test_add", "basic"),
 
             fn_name: Arc::from("test_add"),
             lineno: LineNo::ZERO,
             markers: MarkerSet::new(),
-            param_id: Some("basic".to_string()),
+            param_id: "basic".to_string(),
             param_values: vec![crate::types::ParamPair {
                 name: "x".to_string(),
                 value: "1".to_string(),
@@ -655,7 +655,7 @@ mod tests {
             fn_name: Arc::from("test_check"),
             lineno: LineNo::new(10),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
@@ -704,7 +704,7 @@ mod tests {
             fn_name: Arc::from("test_direct"),
             lineno: LineNo::new(3),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],

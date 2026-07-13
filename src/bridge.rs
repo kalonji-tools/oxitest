@@ -160,7 +160,7 @@ struct CollectedItem {
     fn_name: String,
     lineno: usize,
     markers: Vec<String>,
-    param_id: Option<String>,
+    param_id: String,
     param_values: Vec<(String, String)>,
     is_async: bool,
     fixture_deps: Vec<(String, String)>,
@@ -264,7 +264,7 @@ pub(crate) fn collect_module_with_session_obj(
     let items_vec = raw_items
         .into_iter()
         .map(|item| TestItem {
-            node_id: NodeId::new(path_str, &item.fn_name, item.param_id.as_deref()),
+            node_id: NodeId::new(path_str, &item.fn_name, &item.param_id),
             fn_name: Arc::from(item.fn_name.as_str()),
             lineno: LineNo::new(item.lineno),
             markers: MarkerSet::from(item.markers),
@@ -558,10 +558,7 @@ fn try_run_test_with_session_obj(
     let test_meta_mod = py.import("oxitest._bridge._test_meta")?;
     let test_meta_cls = test_meta_mod.getattr("TestMeta")?;
 
-    let param_id_obj: Bound<'_, PyAny> = match &item.param_id {
-        Some(pid) => pid.as_str().into_pyobject(py)?.into_any(),
-        None => py.None().into_bound(py),
-    };
+    let param_id_obj = item.param_id.as_str().into_pyobject(py)?;
 
     let marker_strs: Vec<String> = item.markers.iter().map(|s| s.to_string()).collect();
     let markers_frozen = pyo3::types::PyFrozenSet::new(py, &marker_strs)?;

@@ -77,8 +77,8 @@ class TestContext:
         return self._meta.node_id
 
     @property
-    def param_id(self) -> str | None:
-        """Parametrize case ID string, or ``None`` for non-parametrized tests."""
+    def param_id(self) -> str:
+        """Parametrize case ID string, or ``""`` for non-parametrized tests."""
         return self._meta.param_id
 
     @property

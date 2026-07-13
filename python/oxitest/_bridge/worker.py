@@ -8,7 +8,7 @@ Task schema (stdin):
         "module_path": str,
         "items": [{
             "fn_name": str,
-            "param_id": str | null,
+            "param_id": str,
             "node_id": str,
             "markers": [str]
         }],
@@ -59,7 +59,7 @@ class WorkerTaskItem(TypedDict):
     """A single test item within a worker task."""
 
     fn_name: str
-    param_id: str | None
+    param_id: str
     node_id: str
     markers: list[str]
 
@@ -119,7 +119,7 @@ def run(task: WorkerTask) -> None:
             module_path=module_path,
             fn_name=item["fn_name"],
             node_id=item["node_id"],
-            param_id=item.get("param_id"),
+            param_id=item.get("param_id") or "",
             markers=frozenset(item.get("markers", [])),
         )
 

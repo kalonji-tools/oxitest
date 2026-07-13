@@ -546,14 +546,14 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
 def resolve_parametrize(
     fn_raw: object,
     fn: Callable[..., Any],
-    param_id: str | None,
+    param_id: str,
 ) -> tuple[dict[str, Any], frozenset[str]]:
     """Resolve a parametrize case into (param_kwargs, fixref_names).
 
-    Returns ({}, frozenset()) for non-parametrized tests (param_id is None).
+    Returns ({}, frozenset()) for non-parametrized tests (param_id is empty).
     Raises ParametrizeError on misconfiguration (e.g., compact + FixtureRef).
     """
-    if param_id is None:
+    if not param_id:
         return {}, frozenset()
     layers = get_metadata(fn_raw).param_cases
     if layers is None:

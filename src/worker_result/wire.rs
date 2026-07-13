@@ -32,7 +32,7 @@ pub(crate) struct WorkerTask<'a> {
 #[derive(serde::Serialize)]
 pub(crate) struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
-    pub param_id: Option<&'a str>,
+    pub param_id: &'a str,
     pub node_id: &'a str,
     pub markers: Vec<&'a str>,
 }

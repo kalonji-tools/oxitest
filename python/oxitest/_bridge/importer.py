@@ -291,7 +291,7 @@ def _expand_item(
                 fn_name=template.fn_name,
                 lineno=template.lineno,
                 markers=template.markers,
-                param_id=None,
+                param_id="",
                 param_values=(),
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,

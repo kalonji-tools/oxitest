@@ -19,5 +19,5 @@ class TestMeta:
     module_path: str
     fn_name: str
     node_id: str
-    param_id: str | None = None
+    param_id: str = ""
     markers: frozenset[str] = frozenset()

@@ -9,12 +9,16 @@ use std::sync::Arc;
 pub struct NodeId(Arc<str>);
 
 impl NodeId {
-    pub fn new(module_path: &str, fn_name: &str, param_id: Option<&str>) -> Self {
-        let extra = param_id.map_or(0, |id| id.len() + 2); // "[" + id + "]"
+    pub fn new(module_path: &str, fn_name: &str, param_id: &str) -> Self {
+        let extra = if param_id.is_empty() {
+            0
+        } else {
+            param_id.len() + 2
+        }; // "[" + id + "]"
         let mut s = String::with_capacity(module_path.len() + 2 + fn_name.len() + extra);
         let _ = write!(s, "{}::{}", module_path, fn_name);
-        if let Some(id) = param_id {
-            let _ = write!(s, "[{}]", id);
+        if !param_id.is_empty() {
+            let _ = write!(s, "[{}]", param_id);
         }
         NodeId(s.into())
     }
@@ -150,25 +154,25 @@ mod node_id_tests {
 
     #[test]
     fn test_node_id_new_without_param() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", None);
+        let id = NodeId::new("tests/test_foo.py", "test_add", "");
         assert_eq!(id.to_string(), "tests/test_foo.py::test_add");
     }
 
     #[test]
     fn test_node_id_new_with_param() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", Some("basic"));
+        let id = NodeId::new("tests/test_foo.py", "test_add", "basic");
         assert_eq!(id.to_string(), "tests/test_foo.py::test_add[basic]");
     }
 
     #[test]
     fn test_node_id_deref_contains() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", None);
+        let id = NodeId::new("tests/test_foo.py", "test_add", "");
         assert!(id.contains("test_add"));
     }
 
     #[test]
     fn test_node_id_clone_equals_original() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", None);
+        let id = NodeId::new("tests/test_foo.py", "test_add", "");
         assert_eq!(id, id.clone());
     }
 
@@ -180,19 +184,19 @@ mod node_id_tests {
 
     #[test]
     fn test_node_id_module_path_standalone() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", None);
+        let id = NodeId::new("tests/test_foo.py", "test_add", "");
         assert_eq!(id.module_path(), Some("tests/test_foo.py"));
     }
 
     #[test]
     fn test_node_id_module_path_class_method() {
-        let id = NodeId::new("tests/test_foo.py", "TestSuite::test_add", None);
+        let id = NodeId::new("tests/test_foo.py", "TestSuite::test_add", "");
         assert_eq!(id.module_path(), Some("tests/test_foo.py"));
     }
 
     #[test]
     fn test_node_id_module_path_parametrized() {
-        let id = NodeId::new("tests/test_foo.py", "test_add", Some("case1"));
+        let id = NodeId::new("tests/test_foo.py", "test_add", "case1");
         assert_eq!(id.module_path(), Some("tests/test_foo.py"));
     }
 

@@ -385,7 +385,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
                                 fn_name=name,
                                 lineno=lineno,
                                 markers=(),
-                                param_id=None,
+                                param_id="",
                                 param_values=(),
                             ))
                     return items

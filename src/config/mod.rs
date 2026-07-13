@@ -1066,8 +1066,8 @@ mod tests {
 
         let cfg = FilterConfig {
             node_ids: vec![
-                NodeId::new("tests/test_math.py", "test_add", None),
-                NodeId::new("tests/test_str.py", "test_upper", None),
+                NodeId::new("tests/test_math.py", "test_add", ""),
+                NodeId::new("tests/test_str.py", "test_upper", ""),
                 // This one contains a glob — must be excluded
                 NodeId::from_raw("tests/test_*.py::test_foo"),
             ],

@@ -413,11 +413,11 @@ mod drain_tests {
 
         fn make_test_item(path: &str, fn_name: &str) -> Arc<TestItem> {
             Arc::new(TestItem {
-                node_id: NodeId::new(path, fn_name, None),
+                node_id: NodeId::new(path, fn_name, ""),
                 fn_name: Arc::from(fn_name),
                 lineno: crate::types::LineNo::new(1),
                 markers: crate::types::MarkerSet::new(),
-                param_id: None,
+                param_id: String::new(),
                 param_values: vec![],
                 is_async: false,
                 fixture_deps: vec![],

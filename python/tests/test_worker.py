@@ -17,7 +17,7 @@ def _make_task(path: str, fn_name: str) -> dict:
         "items": [
             {
                 "fn_name": fn_name,
-                "param_id": None,
+                "param_id": "",
                 "node_id": f"{path}::{fn_name}",
                 "markers": [],
             }

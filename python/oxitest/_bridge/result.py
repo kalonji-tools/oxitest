@@ -315,7 +315,7 @@ class CollectedItem:
     fn_name: str
     lineno: int
     markers: tuple[str, ...]
-    param_id: str | None
+    param_id: str
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
     fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)

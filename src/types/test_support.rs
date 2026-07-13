@@ -18,7 +18,7 @@ pub(crate) struct TestItemBuilder {
     pub(crate) fn_name: String,
     pub(crate) lineno: LineNo,
     pub(crate) markers: MarkerSet,
-    pub(crate) param_id: Option<String>,
+    pub(crate) param_id: String,
     pub(crate) param_values: Vec<ParamPair>,
     pub(crate) is_async: bool,
     pub(crate) fixture_deps: Vec<(String, String)>,
@@ -37,7 +37,7 @@ impl TestItemBuilder {
     }
 
     pub(crate) fn param_id(mut self, id: String) -> Self {
-        self.param_id = Some(id);
+        self.param_id = id;
         self
     }
 
@@ -63,11 +63,7 @@ impl TestItemBuilder {
 
     pub(crate) fn build(self) -> TestItem {
         let node_id = self.node_id.unwrap_or_else(|| {
-            NodeId::new(
-                self.module_path.as_str(),
-                &self.fn_name,
-                self.param_id.as_deref(),
-            )
+            NodeId::new(self.module_path.as_str(), &self.fn_name, &self.param_id)
         });
         TestItem {
             node_id,

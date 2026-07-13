@@ -232,7 +232,7 @@ def test_collected_item_manual_construction() -> None:
         fn_name="test_foo",
         lineno=1,
         markers=(),
-        param_id=None,
+        param_id="",
         param_values=(),
         is_async=False,
     )

@@ -23,7 +23,7 @@ impl TestCache {
             .iter()
             .map(|d| {
                 let mut item = d.clone();
-                item.node_id = NodeId::new(key, &item.fn_name, item.param_id.as_deref());
+                item.node_id = NodeId::new(key, &item.fn_name, &item.param_id);
                 Arc::new(item)
             })
             .collect();
@@ -77,24 +77,24 @@ mod tests {
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![
             Arc::new(TestItem {
-                node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+                node_id: NodeId::new("tests/test_foo.py", "test_a", ""),
 
                 fn_name: Arc::from("test_a"),
                 lineno: LineNo::new(5),
                 markers: MarkerSet::from(vec!["slow".to_string()]),
-                param_id: None,
+                param_id: String::new(),
                 param_values: vec![],
                 is_async: false,
                 fixture_deps: vec![],
                 fixref_deps: vec![],
             }),
             Arc::new(TestItem {
-                node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
+                node_id: NodeId::new("tests/test_foo.py", "test_b", "x0"),
 
                 fn_name: Arc::from("test_b"),
                 lineno: LineNo::new(10),
                 markers: MarkerSet::new(),
-                param_id: Some("x0".to_string()),
+                param_id: "x0".to_string(),
                 param_values: vec![crate::types::ParamPair {
                     name: "x".to_string(),
                     value: "0".to_string(),
@@ -112,7 +112,7 @@ mod tests {
         assert_eq!(cached[0].lineno, LineNo::new(5));
         assert_eq!(cached[0].markers.to_vec(), vec!["slow".to_string()]);
         assert_eq!(&*cached[1].fn_name, "test_b");
-        assert_eq!(cached[1].param_id, Some("x0".to_string()));
+        assert_eq!(cached[1].param_id, "x0");
         assert_eq!(
             cached[1].param_values,
             vec![crate::types::ParamPair {
@@ -127,11 +127,11 @@ mod tests {
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
-            node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+            node_id: NodeId::new("tests/test_foo.py", "test_a", ""),
             fn_name: Arc::from("test_a"),
             lineno: LineNo::new(1),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],
@@ -207,11 +207,11 @@ mod tests {
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
-            node_id: NodeId::new("tests/test_foo.py", "test_a", None),
+            node_id: NodeId::new("tests/test_foo.py", "test_a", ""),
             fn_name: Arc::from("test_a"),
             lineno: LineNo::new(3),
             markers: MarkerSet::new(),
-            param_id: None,
+            param_id: String::new(),
             param_values: vec![],
             is_async: false,
             fixture_deps: vec![],

@@ -51,9 +51,10 @@ fn to_classname(module_path: &str) -> String {
 
 /// Build the test name: `fn_name` or `fn_name[param_id]`.
 fn to_testname(item: &TestItem) -> String {
-    match &item.param_id {
-        Some(pid) => format!("{}[{}]", item.fn_name, pid),
-        None => item.fn_name.to_string(),
+    if item.param_id.is_empty() {
+        item.fn_name.to_string()
+    } else {
+        format!("{}[{}]", item.fn_name, item.param_id)
     }
 }
 
