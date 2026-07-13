@@ -1,6 +1,108 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [2.0.0] - 2026-07-13
+
+### Bug Fixes
+
+
+- Emit error sentinel for completely malformed worker JSON (#1095)
+- Add size-bounded line reading for worker stdout (#1097)
+- Collapse nested if per clippy collapsible_if (#1118)
+- Narrow worker exception, deduplicate detail intersection, add type hint logging (#1154)
+- Enforce frozen immutability in ComposedCases and fix _Scope type annotations (#1160)
+- Release GIL before inspect TUI and handle None fixture_type (#1167)
+- Document intentional reader thread detach in worker_session (#1192)
+- Disable PT019 globally + remove orphaned _cap_outer param (#1311)
+- Drop signature from query helpers default columns (#1130)
+- Immutable public API for WarnCapture, TempDirFactory, TestContext (#1345)
+- Immutable return types for fixture internals and metadata (#1346)
+- Immutable return types for plugin loader, middleware, async orchestrator (#1347)
+- Immutable return types for builtins read accessors (#1348)
+- Immutable return types for registry defs properties (#1349)
+- Redesign PluginEntry as frozen dataclass (#1350)
+- Redesign FunctionMetadata as frozen dataclass (#1351)
+- Redesign PluginRegistry as frozen dataclass (#1352, #1364)
+- Refresh Cargo.lock for thread_local v1.1.10 (#1365)
+- Clean up sys.modules on conftest exec_module failure (#1393)
+- Add exception handling to deferred plugin ensure_loaded() (#1394)
+- Only clean unique key on conftest exec failure, preserve previous alias (#1393)
+- Use uv run for mkdocs in justfile (#1404)
+- Make cargo doc non-blocking in docs-serve (#1404)
+- Prevent ruff from adding blank lines around snippet markers (#1404)
+- Remove dead async_example_client fixture, use conftest snippet (#1416)
+- Isolate autouse fixture to prevent cross-directory teardown warnings (#1430)
+- Replace stale Fixture[Path] with TempDir in docs and docstrings (#1432)
+- Rename async client fixture to avoid name collision (#1441)
+- Align just test-rust with CI snapshot check (#1447)
+- Add lock validation to preflight (#1448)
+- Add concurrency guard to release.yml (#1450)
+- Align ty check via config extra-paths (#1451)
+- Remove duplicate bridge-sync job from test.yml (#1452)
+- Pin prek to 0.3.11 in CI (#1453)
+- Move doc-tests job from test.yml to docs.yml (#1446)
+- Align CI test paths with config and rename test recipes (#1449)
+- Shared scope "per-module" → "per-session" + conftest import pattern (#1464, #1465)
+- WarnCapture list→tuple + Fixture[TestContext]→bare annotation (#1467, #1472)
+- CovReportFormat import, --lf/--ff docs, longest-first, keep_tmp, spawn_overhead (#1466, #1468, #1469, #1471, #1475)
+- Strict-mode 7→9 checks + HelperProvider in provisional-apis and lazy-collection (#1473, #1474)
+- Internals docs — stale signatures, file paths, and just recipes (#1478, #1479)
+- Update config.md stale sections — StrictMode::Off, compute_optimal_workers, exec defaults (#1477)
+- Align errors.md message templates with actual source code (#1470)
+- Update bridge.md to match refactored TestResult and ViolationKind (#1476)
+
+### Features
+
+
+- Add nixpkgs derivation for oxitest (#1008)
+- Unified FixtureDef, dual-index registry, and FixtureProvider protocol (#1111, #1110)
+- FixtureSession unification and type-based resolution (#1111)
+- Replace fixture_names with fixture_deps across Python/Rust boundary (#1111, #1110)
+- Add docstring and signature extraction to helpers (#1112)
+- Add oxitest inspect CLI subcommand and ratatui app shell (#1115)
+- Deprecate fixtures subcommand in favor of query fixtures (#1113)
+- Add search with fuzzy matching and DSL auto-detection (#1118)
+- Add inspect graph data model and builder (#1114)
+- Add stack-based navigation with home screen and direct jump (#1116)
+- Add inspect node detail views for all 6 types (#1117)
+- Add inspect CLI startup filters (#1120)
+- Add progressive loading for inspect TUI (#1119)
+- Add parametrized test collapsing in inspect (#1121)
+- Add inspect session history (#1122)
+- Wire search into inspect TUI with resilience improvements (#1153)
+- Make inspect Phase 2 timeout configurable (#1165)
+- Add Screen/Trail nav types, overview sections, and preview rendering (#1169, #1170, #1171)
+- Migrate app/ui/input to two-mode navigation model (#1169, #1170, #1171, #1172)
+- Signals overview, context-scoped search, Tab toggle (#1174, #1175)
+- Add manual graph refresh with r key (#1177)
+- Wire test→fixture consumer edges in inspect graph (#1182)
+- In-TUI source view and $EDITOR integration (#1173)
+- Register uses() as valid predicate for tests and fixtures (#1107)
+- Populate uses field for fixture entries from depends_on (#1107)
+- Enrich test entries with fixture deps for uses() predicate (#1107)
+- Add verbose diagnostics for --affected test selection (#1108)
+- Add explicit helper registrar with plugin support (#1224)
+- Update Rust inspect and query for helper registrar (#1224)
+- Add allow-comment gate for registrar-in-test-module (#1227)
+- [**breaking**] Make protocol parameters keyword-only (#1305)
+- [**breaking**] Switch Rust bridge to keyword args for protocol calls (#1305)
+- Add integration tests for oxitest debug subcommand (#1330)
+- Add agent-health recipe for skill checks (#1380)
+- Wire health to call agent-health when agent detected (#1380)
+- Add doc example test files for index and tutorials (#1404)
+- Add output snapshot tests for CLI output blocks (#1434, #1435, #1436)
+- Add conditional doc tests job to CI (#1441)
+- Add --strict=off to disable strict mode (#1444)
+- Migrate write-plugins.md inline blocks to tested snippets (#1462)
+
+### Performance
+
+
+- Pre-compile regex in DSL evaluator (#1094)
+- Single-pass AST extraction, early Phase 2, and parallel file parsing (#1164)
+- Replace Vec::contains() with HashSet in graph builder edge resolution (#1186)
+- Defer in-flight snapshot to failure path in parallel drain (#1188)
+
 ## [1.0.0] - 2026-06-27
 
 ### Bug Fixes
