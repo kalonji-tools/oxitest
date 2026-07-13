@@ -17,7 +17,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._errors import ConflictingCoverageError, ConflictingDebuggerError
+from oxitest._bridge._errors import (
+    ConflictingCoverageError,
+    ConflictingDebuggerError,
+    OxitestError,
+)
 from oxitest._bridge._plugin_config import (
     CliExtension,
     IntrospectionError,
@@ -431,8 +435,17 @@ def activate_deferred_plugins(
         A new frozen PluginRegistry with all deferred plugins activated.
 
     """
-    plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
-    cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
+    try:
+        plugin_settings: dict[str, dict[str, object]] = json.loads(plugin_settings_json)
+    except json.JSONDecodeError as exc:
+        msg = f"invalid plugin settings JSON from Rust bridge: {exc}"
+        raise OxitestError(msg) from exc
+
+    try:
+        cli_values: dict[str, dict[str, object]] = json.loads(cli_values_json)
+    except json.JSONDecodeError as exc:
+        msg = f"invalid CLI values JSON from Rust bridge: {exc}"
+        raise OxitestError(msg) from exc
 
     builder = _PluginRegistryBuilder(
         entries=registry.entries,
