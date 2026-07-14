@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from oxitest._bridge._builtins._base import BuiltinFixture
     from oxitest._bridge._mark_api import MarkInfo
     from oxitest._bridge.parametrize import ResolvedCases
 
@@ -28,6 +29,9 @@ class FunctionMetadata:
     marks: tuple[MarkInfo, ...] = ()
     param_cases: tuple[ResolvedCases, ...] | None = None
     fixture_name: str | None = None
+    arranged: tuple[
+        type[BuiltinFixture] | str, ...
+    ] = ()  # fixture types or names requested via @oxi.arrange
 
 
 def get_metadata(fn: object) -> FunctionMetadata:
