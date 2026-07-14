@@ -16,14 +16,13 @@ import oxitest._bridge._builtins as builtins_pkg
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
-from oxitest import Fixture, TempDir, helpers, raises
+from oxitest import Fixture, TempDir, TestContext, helpers, raises
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins import (
     LogCapture,
     Patcher,
     StdCapture,
     TempDirFactory,
-    TestContext,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import _FdCaptureFixture, _StdCaptureFixture
@@ -852,7 +851,7 @@ def test_logcapture_injected_via_session() -> None:
 
 
 @oxitest.mark.inprocess
-def test_logcapture_includes_plugin_backends() -> None:
+def test_logcapture_includes_plugin_backends(ctx: TestContext) -> None:
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
 
     class FakePluginBackend:
@@ -876,22 +875,20 @@ def test_logcapture_includes_plugin_backends() -> None:
         "fake_log_plugin",
         lambda **_: Plugin(log_backends=(fake_backend,)),
     )
-    sys.modules["fake_log_plugin"] = mod
-    try:
-        registry = load_plugins(["fake_log_plugin"], {})
-        backends = [StdlibLogBackend(), *registry.log_backends]
-        cap = LogCapture(backends)
+    helpers.common.install_module(ctx, "fake_log_plugin", mod)
 
-        assert fake_backend.installed, (
-            "Plugin log backend should be installed when LogCapture is created"
-        )
-        assert len(cap.backends) == 2, (
-            f"Expected 2 backends (stdlib + plugin), got {len(cap.backends)}"
-        )
+    registry = load_plugins(["fake_log_plugin"], {})
+    backends = [StdlibLogBackend(), *registry.log_backends]
+    cap = LogCapture(backends)
 
-        cap.close()
-        assert not fake_backend.installed, (
-            "Plugin log backend should be uninstalled after teardown"
-        )
-    finally:
-        sys.modules.pop("fake_log_plugin", None)
+    assert fake_backend.installed, (
+        "Plugin log backend should be installed when LogCapture is created"
+    )
+    assert len(cap.backends) == 2, (
+        f"Expected 2 backends (stdlib + plugin), got {len(cap.backends)}"
+    )
+
+    cap.close()
+    assert not fake_backend.installed, (
+        "Plugin log backend should be uninstalled after teardown"
+    )

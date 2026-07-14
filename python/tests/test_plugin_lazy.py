@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 import types
 from typing import Any, Never
 
 import oxitest
-from oxitest import helpers, raises
+from oxitest import TestContext, helpers, raises
 from oxitest._bridge.plugin_loader import (
     EAGER_PROTOCOLS,
     LAZY_PROTOCOLS,
@@ -127,34 +126,31 @@ def test_plugin_entry_default_is_loaded() -> None:
 
 
 @oxitest.mark.inprocess
-def test_deferred_entry_ensure_loaded_imports_module() -> None:
+def test_deferred_entry_ensure_loaded_imports_module(ctx: TestContext) -> None:
     """ensure_loaded() imports the module, creates the plugin, marks entry loaded."""
     mod = helpers.common.make_plugin_module("lazy_fixture_plugin", Plugin)
-    sys.modules["lazy_fixture_plugin"] = mod
-    try:
-        entry = PluginEntry.deferred("lazy_fixture_plugin", ["fixture_provider"])
-        assert entry.is_loaded is False, (
-            "deferred entry should not be loaded yet, "
-            f"got is_loaded={entry.is_loaded!r}"
-        )
+    helpers.common.install_module(ctx, "lazy_fixture_plugin", mod)
 
-        new_entry, plugin = entry.ensure_loaded()
+    entry = PluginEntry.deferred("lazy_fixture_plugin", ["fixture_provider"])
+    assert entry.is_loaded is False, (
+        f"deferred entry should not be loaded yet, got is_loaded={entry.is_loaded!r}"
+    )
 
-        assert isinstance(plugin, Plugin), (
-            f"ensure_loaded() should return Plugin, got {type(plugin).__name__}"
-        )
-        assert entry.is_loaded is False, (
-            f"original entry should remain unloaded (frozen), got {entry.is_loaded!r}"
-        )
-        assert new_entry.is_loaded is True, (
-            "new entry should be marked loaded after ensure_loaded(), "
-            f"got {new_entry.is_loaded!r}"
-        )
-        assert new_entry.plugin is plugin, (
-            "new_entry.plugin should be the same object returned by ensure_loaded()"
-        )
-    finally:
-        sys.modules.pop("lazy_fixture_plugin", None)
+    new_entry, plugin = entry.ensure_loaded()
+
+    assert isinstance(plugin, Plugin), (
+        f"ensure_loaded() should return Plugin, got {type(plugin).__name__}"
+    )
+    assert entry.is_loaded is False, (
+        f"original entry should remain unloaded (frozen), got {entry.is_loaded!r}"
+    )
+    assert new_entry.is_loaded is True, (
+        "new entry should be marked loaded after ensure_loaded(), "
+        f"got {new_entry.is_loaded!r}"
+    )
+    assert new_entry.plugin is plugin, (
+        "new_entry.plugin should be the same object returned by ensure_loaded()"
+    )
 
 
 def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
@@ -173,75 +169,64 @@ def test_ensure_loaded_on_already_loaded_entry_returns_plugin() -> None:
 
 
 @oxitest.mark.inprocess
-def test_load_plugins_defers_lazy_only_plugin() -> None:
+def test_load_plugins_defers_lazy_only_plugin(ctx: TestContext) -> None:
     """load_plugins defers plugins with only lazy protocols (no startup import)."""
     mod = helpers.common.make_plugin_module("lazy_only_plugin", Plugin)
-    sys.modules["lazy_only_plugin"] = mod
-    try:
-        registry = load_plugins(
-            ["lazy_only_plugin"],
-            {"lazy_only_plugin": {"protocols": ["fixture_provider"]}},
-        )
-        assert len(registry.entries) == 1, (
-            f"expected 1 entry, got {len(registry.entries)}"
-        )
-        entry = registry.entries[0]
-        assert entry.module_name == "lazy_only_plugin", (
-            f"expected module_name 'lazy_only_plugin', got {entry.module_name!r}"
-        )
-        assert entry.is_loaded is False, (
-            f"lazy-only plugin should be deferred, got is_loaded={entry.is_loaded!r}"
-        )
-        assert entry.plugin is None, (
-            f"deferred plugin should be None, got {entry.plugin!r}"
-        )
-    finally:
-        sys.modules.pop("lazy_only_plugin", None)
+    helpers.common.install_module(ctx, "lazy_only_plugin", mod)
+
+    registry = load_plugins(
+        ["lazy_only_plugin"],
+        {"lazy_only_plugin": {"protocols": ["fixture_provider"]}},
+    )
+    assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
+    entry = registry.entries[0]
+    assert entry.module_name == "lazy_only_plugin", (
+        f"expected module_name 'lazy_only_plugin', got {entry.module_name!r}"
+    )
+    assert entry.is_loaded is False, (
+        f"lazy-only plugin should be deferred, got is_loaded={entry.is_loaded!r}"
+    )
+    assert entry.plugin is None, f"deferred plugin should be None, got {entry.plugin!r}"
 
 
 @oxitest.mark.inprocess
-def test_load_plugins_eager_imports_plugin_with_eager_protocol() -> None:
+def test_load_plugins_eager_imports_plugin_with_eager_protocol(
+    ctx: TestContext,
+) -> None:
     """load_plugins eagerly imports plugins that declare a reporter protocol."""
     mod = helpers.common.make_plugin_module(
         "eager_reporter_plugin", lambda **_: Plugin()
     )
-    sys.modules["eager_reporter_plugin"] = mod
-    try:
-        registry = load_plugins(
-            ["eager_reporter_plugin"],
-            {"eager_reporter_plugin": {"protocols": ["reporter"]}},
-        )
-        assert len(registry.entries) == 1, (
-            f"expected 1 entry, got {len(registry.entries)}"
-        )
-        entry = registry.entries[0]
-        assert entry.is_loaded is True, (
-            "reporter plugin should be eagerly loaded, "
-            f"got is_loaded={entry.is_loaded!r}"
-        )
-        assert entry.plugin is not None, "eagerly loaded plugin should not be None"
-    finally:
-        sys.modules.pop("eager_reporter_plugin", None)
+    helpers.common.install_module(ctx, "eager_reporter_plugin", mod)
+
+    registry = load_plugins(
+        ["eager_reporter_plugin"],
+        {"eager_reporter_plugin": {"protocols": ["reporter"]}},
+    )
+    assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
+    entry = registry.entries[0]
+    assert entry.is_loaded is True, (
+        f"reporter plugin should be eagerly loaded, got is_loaded={entry.is_loaded!r}"
+    )
+    assert entry.plugin is not None, "eagerly loaded plugin should not be None"
 
 
 @oxitest.mark.inprocess
-def test_load_plugins_eager_imports_plugin_with_no_protocols_declared() -> None:
+def test_load_plugins_eager_imports_plugin_with_no_protocols_declared(
+    ctx: TestContext,
+) -> None:
     """load_plugins eagerly imports plugins with no protocol declaration (default)."""
     mod = helpers.common.make_plugin_module("no_protocols_plugin", lambda **_: Plugin())
-    sys.modules["no_protocols_plugin"] = mod
-    try:
-        registry = load_plugins(["no_protocols_plugin"], {})
-        assert len(registry.entries) == 1, (
-            f"expected 1 entry, got {len(registry.entries)}"
-        )
-        entry = registry.entries[0]
-        assert entry.is_loaded is True, (
-            f"plugin without protocol declaration should be eagerly loaded, "
-            f"got is_loaded={entry.is_loaded!r}"
-        )
-        assert entry.plugin is not None, "eagerly loaded plugin should not be None"
-    finally:
-        sys.modules.pop("no_protocols_plugin", None)
+    helpers.common.install_module(ctx, "no_protocols_plugin", mod)
+
+    registry = load_plugins(["no_protocols_plugin"], {})
+    assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
+    entry = registry.entries[0]
+    assert entry.is_loaded is True, (
+        f"plugin without protocol declaration should be eagerly loaded, "
+        f"got is_loaded={entry.is_loaded!r}"
+    )
+    assert entry.plugin is not None, "eagerly loaded plugin should not be None"
 
 
 @oxitest.mark.inprocess
@@ -260,7 +245,7 @@ def test_builder_add_entry_appends_deferred_entry() -> None:
 
 
 @oxitest.mark.inprocess
-def test_deferred_fixture_plugin_loaded_via_ensure_loaded() -> None:
+def test_deferred_fixture_plugin_loaded_via_ensure_loaded(ctx: TestContext) -> None:
     """A deferred fixture plugin can be loaded via ensure_loaded, exposing providers."""
 
     class FakeToken:
@@ -293,22 +278,20 @@ def test_deferred_fixture_plugin_loaded_via_ensure_loaded() -> None:
         "deferred_fixture_plugin",
         lambda: Plugin(fixture_providers=(FakeFixtureProvider(),)),
     )
-    sys.modules["deferred_fixture_plugin"] = mod
-    try:
-        entry = PluginEntry.deferred("deferred_fixture_plugin", ["fixture_provider"])
-        new_entry, plugin = entry.ensure_loaded()
+    helpers.common.install_module(ctx, "deferred_fixture_plugin", mod)
 
-        providers = plugin.fixture_providers
-        assert len(providers) == 1, f"expected 1 fixture provider, got {len(providers)}"
-        assert isinstance(providers[0], FakeFixtureProvider), (
-            f"expected FakeFixtureProvider, got {type(providers[0]).__name__}"
-        )
-        assert new_entry.is_loaded is True, (
-            "deferred fixture plugin should be loaded after ensure_loaded, "
-            f"got is_loaded={new_entry.is_loaded!r}"
-        )
-    finally:
-        sys.modules.pop("deferred_fixture_plugin", None)
+    entry = PluginEntry.deferred("deferred_fixture_plugin", ["fixture_provider"])
+    new_entry, plugin = entry.ensure_loaded()
+
+    providers = plugin.fixture_providers
+    assert len(providers) == 1, f"expected 1 fixture provider, got {len(providers)}"
+    assert isinstance(providers[0], FakeFixtureProvider), (
+        f"expected FakeFixtureProvider, got {type(providers[0]).__name__}"
+    )
+    assert new_entry.is_loaded is True, (
+        "deferred fixture plugin should be loaded after ensure_loaded, "
+        f"got is_loaded={new_entry.is_loaded!r}"
+    )
 
 
 @oxitest.mark.inprocess
@@ -330,7 +313,7 @@ def test_builder_builds_registry_with_deferred_non_fixture_plugin() -> None:
 
 
 @oxitest.mark.inprocess
-def test_deferred_fixture_plugin_activated_in_phase_2() -> None:
+def test_deferred_fixture_plugin_activated_in_phase_2(ctx: TestContext) -> None:
     """activate_deferred_plugins loads non-CLI deferred fixture plugins."""
 
     class FakeFixtureProvider:
@@ -353,31 +336,29 @@ def test_deferred_fixture_plugin_activated_in_phase_2() -> None:
         return Plugin(fixture_providers=providers)
 
     mod = helpers.common.make_plugin_module("deferred_fx_phase2", oxitest_plugin)
-    sys.modules["deferred_fx_phase2"] = mod
-    try:
-        # Load with declared fixture_provider protocol → deferred (no CLI ext)
-        registry = load_plugins(
-            ["deferred_fx_phase2"],
-            {"deferred_fx_phase2": {"protocols": ["fixture_provider"]}},
-        )
-        assert not registry.entries[0].is_loaded, (
-            "fixture_provider plugin should be deferred after load_plugins"
-        )
-        assert registry.fixture_providers == (), (
-            "deferred plugin's providers should not appear before activation"
-        )
+    helpers.common.install_module(ctx, "deferred_fx_phase2", mod)
 
-        activated = activate_deferred_plugins(registry, "{}", "{}")
+    # Load with declared fixture_provider protocol → deferred (no CLI ext)
+    registry = load_plugins(
+        ["deferred_fx_phase2"],
+        {"deferred_fx_phase2": {"protocols": ["fixture_provider"]}},
+    )
+    assert not registry.entries[0].is_loaded, (
+        "fixture_provider plugin should be deferred after load_plugins"
+    )
+    assert registry.fixture_providers == (), (
+        "deferred plugin's providers should not appear before activation"
+    )
 
-        assert activated.entries[0].is_loaded, (
-            "fixture_provider plugin should be loaded after activate_deferred_plugins"
-        )
-        assert len(activated.fixture_providers) == 1, (
-            "activated registry should contain the fixture provider, "
-            f"got {activated.fixture_providers!r}"
-        )
-    finally:
-        sys.modules.pop("deferred_fx_phase2", None)
+    activated = activate_deferred_plugins(registry, "{}", "{}")
+
+    assert activated.entries[0].is_loaded, (
+        "fixture_provider plugin should be loaded after activate_deferred_plugins"
+    )
+    assert len(activated.fixture_providers) == 1, (
+        "activated registry should contain the fixture provider, "
+        f"got {activated.fixture_providers!r}"
+    )
 
 
 def test_ensure_loaded_import_error_raises_plugin_load_error() -> None:
@@ -391,21 +372,23 @@ def test_ensure_loaded_import_error_raises_plugin_load_error() -> None:
 
 
 @oxitest.mark.inprocess
-def test_ensure_loaded_missing_entry_point_raises_plugin_load_error() -> None:
+def test_ensure_loaded_missing_entry_point_raises_plugin_load_error(
+    ctx: TestContext,
+) -> None:
     """ensure_loaded() raises PluginLoadError when module has no oxitest_plugin()."""
     mod = types.ModuleType("no_entry_deferred")
-    sys.modules["no_entry_deferred"] = mod
-    try:
-        entry = PluginEntry.deferred("no_entry_deferred", ["fixture_provider"])
+    helpers.common.install_module(ctx, "no_entry_deferred", mod)
 
-        with raises(PluginLoadError, match="no oxitest_plugin\\(\\) function"):
-            entry.ensure_loaded()
-    finally:
-        sys.modules.pop("no_entry_deferred", None)
+    entry = PluginEntry.deferred("no_entry_deferred", ["fixture_provider"])
+
+    with raises(PluginLoadError, match="no oxitest_plugin\\(\\) function"):
+        entry.ensure_loaded()
 
 
 @oxitest.mark.inprocess
-def test_ensure_loaded_entry_raises_wrapped_in_plugin_load_error() -> None:
+def test_ensure_loaded_entry_raises_wrapped_in_plugin_load_error(
+    ctx: TestContext,
+) -> None:
     """ensure_loaded() wraps exceptions from oxitest_plugin() in PluginLoadError."""
 
     def broken_entry() -> Never:
@@ -414,11 +397,9 @@ def test_ensure_loaded_entry_raises_wrapped_in_plugin_load_error() -> None:
 
     mod = types.ModuleType("broken_deferred_plugin")
     setattr(mod, "oxitest_plugin", broken_entry)  # noqa: B010 — dynamic module attr
-    sys.modules["broken_deferred_plugin"] = mod
-    try:
-        entry = PluginEntry.deferred("broken_deferred_plugin", ["fixture_provider"])
+    helpers.common.install_module(ctx, "broken_deferred_plugin", mod)
 
-        with raises(PluginLoadError, match="raised"):
-            entry.ensure_loaded()
-    finally:
-        sys.modules.pop("broken_deferred_plugin", None)
+    entry = PluginEntry.deferred("broken_deferred_plugin", ["fixture_provider"])
+
+    with raises(PluginLoadError, match="raised"):
+        entry.ensure_loaded()
