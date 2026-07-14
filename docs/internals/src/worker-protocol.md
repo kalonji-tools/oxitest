@@ -283,7 +283,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `2`) in both `src/worker_result/wire.rs` and
+- The `PROTOCOL_VERSION` constant (currently `3`) in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
