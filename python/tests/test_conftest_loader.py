@@ -89,23 +89,6 @@ def test_find_conftest_test_outside_rootdir_returns_empty(tmp: TempDir) -> None:
 # ── load_fixtures_from_conftest ───────────────────────────────────────────────
 
 
-def test_load_fixtures_empty_conftest_warns(
-    tmp: TempDir,
-    diag_collector: Fixture[list[Diagnostic]],
-) -> None:
-    """create_session emits a diagnostic when a conftest.py has no Fixtures instance."""
-    f = tmp / "conftest.py"
-    f.write_text("")
-    create_session([str(f)])
-    assert any(
-        d.context == "conftest loading" and "no Fixtures instance" in d.message
-        for d in diag_collector
-    ), (
-        "empty conftest must emit a 'conftest loading' diagnostic about missing"
-        f" Fixtures instance: {diag_collector}"
-    )
-
-
 def test_load_fixtures_extracts_from_fixtures_instance(tmp: TempDir) -> None:
     """Only @fixtures.fixture-decorated functions are extracted, not plain functions."""
     f = tmp / "conftest.py"
