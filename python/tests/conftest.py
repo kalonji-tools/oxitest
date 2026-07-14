@@ -17,7 +17,7 @@ from types import TracebackType
 from typing import TypeVar
 
 import oxitest
-from oxitest import Helpers, TempDir, TestResult, Yields
+from oxitest import Helpers, TempDir, TestContext, TestResult, Yields
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import (
@@ -38,6 +38,7 @@ __all__ = [
     "RecordingDebugger",
     "assert_result",
     "exec_inline",
+    "install_module",
     "make_exc",
     "make_fixture_def",
     "make_meta",
@@ -99,6 +100,13 @@ def diag_collector() -> Yields[list[Diagnostic]]:
 
 @fx.fixture
 def _clean_sys_modules() -> Yields[None]:
+    """Snapshot-restore sys.modules — cleans up transitive imports a test triggers.
+
+    Prefer ``helpers.common.install_module(ctx, name, mod)`` for cleanup of a
+    specific fake module a test installs by name. This fixture complements it
+    by also cleaning up modules loaded transitively (e.g. through
+    ``spec.loader.exec_module``).
+    """
     saved = sys.modules.copy()
     yield
     for key in list(sys.modules):
@@ -370,6 +378,21 @@ def make_plugin_module(
     for attr_name, value in attrs.items():
         setattr(mod, attr_name, value)
     return mod
+
+
+@common.helper
+def install_module(
+    ctx: TestContext,
+    name: str,
+    module: types.ModuleType,
+) -> None:
+    """Install ``module`` under ``name`` in ``sys.modules``; auto-remove on teardown."""
+
+    def cleanup() -> None:
+        sys.modules.pop(name, None)
+
+    sys.modules[name] = module
+    ctx.on_teardown(cleanup)
 
 
 @common.helper
