@@ -1,89 +1,47 @@
-# Exceptions and warnings reference
+# Exceptions and diagnostics reference
 
-This page documents the public exception and warning types exported by oxitest.
-Import them directly from the `oxitest` package:
+This page documents the public exception types and diagnostic messages produced
+by oxitest.
 
 ```python
-from oxitest import (
-    FixtureShadowWarning,
-    FixtureTeardownWarning,
-    SharedFixtureMutationError,
-)
+from oxitest import SharedFixtureMutationError
 ```
 
 ---
 
-## `FixtureShadowWarning`
+## Diagnostics
 
-**Type**: `UserWarning`
+oxitest emits **diagnostics** for conditions that are worth reporting but do not
+fail the test. Diagnostics appear in the summary block at the end of the run,
+grouped by severity (error → warning → notice) and deduplicated.
 
-Emitted when a fixture defined in a child conftest shadows a fixture of the same
-name from a parent conftest.
+### Fixture teardown failure
 
-oxitest uses locality-wins semantics — the most-local definition takes effect —
-but it warns you when shadowing occurs so the override is never silent.
+**Severity**: warning
+**Context**: `fixture teardown`
 
-**Example**:
+Emitted when an exception is raised during the cleanup phase of a yield
+fixture. The exception is caught, the diagnostic is recorded, and test
+execution continues — preventing a teardown failure from masking the
+original test result. The message includes the fixture name and the test
+node ID where the failure occurred.
+
+### Fixture shadow
+
+**Severity**: notice
+**Context**: `fixture registration`
+
+Emitted when a fixture defined in a child conftest shadows a fixture of the
+same name from a parent conftest. oxitest uses locality-wins semantics — the
+most-local definition takes effect — but it notifies you when shadowing
+occurs so the override is never silent.
 
 ```
 tests/
   conftest.py          # defines fixture 'db'
   integration/
-    conftest.py        # also defines fixture 'db' → FixtureShadowWarning
+    conftest.py        # also defines fixture 'db' → shadow diagnostic
     test_queries.py
-```
-
-Capture this warning in tests with `WarnCapture` if you need to assert that
-shadowing does or does not occur:
-
-```python
-import oxitest
-
-def test_no_shadow(warn: oxitest.WarnCapture) -> None:
-    # ... trigger fixture registration ...
-    assert not any(
-        isinstance(w.message, oxitest.FixtureShadowWarning) for w in warn.warnings
-    ), "unexpected fixture shadow"
-```
-
----
-
-## `FixtureTeardownWarning`
-
-**Type**: `UserWarning`
-
-Emitted when an exception is raised inside the teardown phase of a yield
-fixture. The exception is caught, converted to a warning, and test execution
-continues — preventing a teardown failure from masking the original test result.
-
-The warning message includes the fixture name and the test node ID where the
-failure occurred.
-
-**Example**:
-
-```python
-import oxitest
-
-fx = oxitest.Fixtures()
-
-@fx.fixture
-def leaky_connection() -> oxitest.Yields[object]:
-    conn = connect()
-    yield conn
-    conn.close()   # if this raises, FixtureTeardownWarning is emitted
-```
-
-Capture this warning to assert clean teardown:
-
-```python
-def test_connection_cleans_up(
-    leaky_connection: oxitest.Fixture[object],
-    warn: oxitest.WarnCapture,
-) -> None:
-    # exercise leaky_connection ...
-    assert not any(
-        isinstance(w.message, oxitest.FixtureTeardownWarning) for w in warn.warnings
-    ), "fixture teardown raised an exception"
 ```
 
 ---

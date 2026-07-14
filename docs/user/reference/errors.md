@@ -282,13 +282,13 @@ strict mode (`strict = "abort"`). Type-based resolution requires a concrete type
 ---
 
 ```text
-FixtureTeardownWarning: fixture '<name>' teardown failed during <node_id>: <error>
+[warning] fixture teardown — fixture '<name>' teardown failed during <node_id>: <error>
 ```
 
 **Cause:** An exception was raised during the cleanup phase of a yield fixture.
-The warning now includes the test `node_id` that triggered the teardown, making
-it easier to identify which test exposed the issue. This is a **warning**, not
-an error -- the test result itself is not affected.
+The diagnostic includes the test `node_id` that triggered the teardown, making
+it easier to identify which test exposed the issue. This is a **diagnostic**,
+not an error — the test result itself is not affected.
 
 **Fix:** Fix the teardown code in the fixture. Common causes include trying to
 close an already-closed resource or referencing a variable that was not
@@ -297,7 +297,7 @@ assigned because setup failed.
 ---
 
 ```text
-FixtureShadowWarning: fixture '<name>' in <child_conftest> shadows definition in <parent_conftest>
+[notice] fixture registration — fixture '<name>' in <child_conftest> shadows definition in <parent_conftest>
 ```
 
 **Cause:** A `conftest.py` file defines a fixture with the same name as one
@@ -305,8 +305,7 @@ already registered by a parent `conftest.py`. The child definition silently
 overrides the parent within its directory tree.
 
 **Fix:** Rename the fixture in either the child or parent conftest to avoid
-ambiguity. If the shadowing is intentional, suppress the warning with a
-standard `warnings.filterwarnings` call in the child conftest.
+ambiguity. If the shadowing is intentional, the notice is informational only.
 
 ---
 

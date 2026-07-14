@@ -82,9 +82,21 @@
 
 **Flaky** — A test that failed on the initial run but passed on retry. Not a hard failure.
 
+## Diagnostic System
+
+**Diagnostic** — A user-facing message emitted by the Python bridge and rendered by the Rust reporter. Carries severity (error, warning, notice), context (e.g. "fixture teardown"), message, and optional file/lineno. Frozen dataclass in `result.py`, `DiagnosticEntry` struct in `stats.rs`.
+
+**DiagnosticSeverity** — One of `error`, `warning`, or `notice`. Controls color in the reporter summary block (red, yellow, dim) and sort order (errors first).
+
+**emit_diagnostic()** — The single Python call site for emitting user-facing diagnostics. Appends to a `ContextVar`-based collector (`_diagnostic_collector_var`) owned by `FixtureSession`. No-op when no session is active.
+
+**Trace** — A developer-level log event routed through Rust's `tracing` crate via the `trace()` PyO3 function (serial path) or LDJSON `{"type": "trace"}` (worker path). Gated by `RUST_LOG` environment variable.
+
+**Wire Protocol v3** — The LDJSON protocol between workers and the Rust coordinator. Each stdout line has a `"type"` discriminator: `"result"` (test outcome), `"diagnostic"` (user-facing), or `"trace"` (developer). Missing `"type"` defaults to `"result"` for backwards compatibility.
+
 ## Execution Model
 
-**Worker** — A subprocess (`python -m oxitest._bridge.worker`) that receives test tasks over stdin and writes results to stdout. Persistent within a run.
+**Worker** — A subprocess (`python -m oxitest._bridge.worker`) that receives test tasks over stdin and writes results to stdout as LDJSON (wire protocol v3). Persistent within a run.
 
 **Serial Execution** — Tests run sequentially in the main process. Used when the test count is below `min_parallel_tests` or when `--serial` is passed.
 
