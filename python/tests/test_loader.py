@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import sys
 
 import oxitest
-from oxitest import Fixture, TempDir, raises
+from oxitest import Fixture, TempDir, TestContext, helpers, raises
 from oxitest._bridge._loader import _load_module, _LoadError, _resolve_fn
 
 
@@ -48,7 +47,7 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
 
 @oxitest.mark.inprocess
 def test_resolve_fn_returns_callable(
-    tmp: TempDir, _clean_sys_modules: Fixture[None]
+    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn returns a (module, callable) tuple for a valid function name."""
     f = tmp / "mod.py"
@@ -57,7 +56,7 @@ def test_resolve_fn_returns_callable(
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    sys.modules["_test_mod_tmp"] = module
+    helpers.common.install_module(ctx, "_test_mod_tmp", module)
     spec.loader.exec_module(module)
 
     _, fn = _resolve_fn(module, "test_bar", str(f))
@@ -69,7 +68,7 @@ def test_resolve_fn_returns_callable(
 
 @oxitest.mark.inprocess
 def test_resolve_fn_raises_load_error_on_missing_function(
-    tmp: TempDir, _clean_sys_modules: Fixture[None]
+    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn raises _LoadError with status='error' when the function is absent."""
     f = tmp / "mod.py"
@@ -78,7 +77,7 @@ def test_resolve_fn_raises_load_error_on_missing_function(
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    sys.modules["_test_mod_tmp2"] = module
+    helpers.common.install_module(ctx, "_test_mod_tmp2", module)
     spec.loader.exec_module(module)
 
     with raises(_LoadError) as exc_info:
@@ -95,7 +94,7 @@ def test_resolve_fn_raises_load_error_on_missing_function(
 
 @oxitest.mark.inprocess
 def test_resolve_fn_handles_class_method(
-    tmp: TempDir, _clean_sys_modules: Fixture[None]
+    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
 ) -> None:
     """_resolve_fn should resolve 'ClassName::method_name' to the unbound method."""
     f = tmp / "mod.py"
@@ -104,7 +103,7 @@ def test_resolve_fn_handles_class_method(
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    sys.modules["_test_mod_tmp3"] = module
+    helpers.common.install_module(ctx, "_test_mod_tmp3", module)
     spec.loader.exec_module(module)
 
     _, fn = _resolve_fn(module, "TestFoo::test_method", str(f))

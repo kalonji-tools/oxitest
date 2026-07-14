@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 import types
 from typing import Any, Never
 
 import oxitest
-from oxitest import helpers, raises
+from oxitest import TestContext, helpers, raises
 from oxitest._bridge._errors import ConflictingDebuggerError, OxitestError
 from oxitest._bridge.plugin_loader import (
     PluginLoadError,
@@ -16,16 +15,6 @@ from oxitest._bridge.plugin_loader import (
     load_plugins,
 )
 from oxitest.plugin import Plugin
-
-
-def _install_fake_module(name: str, module: types.ModuleType) -> None:
-    """Install a fake module into sys.modules for testing."""
-    sys.modules[name] = module
-
-
-def _remove_fake_module(name: str) -> None:
-    """Remove a fake module from sys.modules."""
-    sys.modules.pop(name, None)
 
 
 def test_load_empty_plugins_returns_empty_registry() -> None:
@@ -38,25 +27,21 @@ def test_load_empty_plugins_returns_empty_registry() -> None:
 
 
 @oxitest.mark.inprocess
-def test_load_valid_plugin() -> None:
+def test_load_valid_plugin(ctx: TestContext) -> None:
     """A module with a valid oxitest_plugin() entry function is loaded."""
     mod = helpers.common.make_plugin_module("fake_plugin", lambda **_: Plugin())
-    _install_fake_module("fake_plugin", mod)
-    try:
-        registry = load_plugins(["fake_plugin"], {})
-        assert len(registry.entries) == 1, (
-            f"expected 1 entry, got {len(registry.entries)}"
-        )
-        actual = registry.entries[0].module_name
-        assert actual == "fake_plugin", (
-            f"expected module_name 'fake_plugin', got {actual!r}"
-        )
-    finally:
-        _remove_fake_module("fake_plugin")
+    helpers.common.install_module(ctx, "fake_plugin", mod)
+
+    registry = load_plugins(["fake_plugin"], {})
+    assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
+    actual = registry.entries[0].module_name
+    assert actual == "fake_plugin", (
+        f"expected module_name 'fake_plugin', got {actual!r}"
+    )
 
 
 @oxitest.mark.inprocess
-def test_load_plugin_receives_config() -> None:
+def test_load_plugin_receives_config(ctx: TestContext) -> None:
     """Plugin config from pyproject.toml is forwarded to oxitest_plugin()."""
     received: dict = {}
 
@@ -65,14 +50,12 @@ def test_load_plugin_receives_config() -> None:
         return Plugin()
 
     mod = helpers.common.make_plugin_module("cfg_plugin", entry)
-    _install_fake_module("cfg_plugin", mod)
-    try:
-        load_plugins(["cfg_plugin"], {"cfg_plugin": {"level": "DEBUG"}})
-        assert received["config"] == {"level": "DEBUG"}, (
-            f"expected config dict, got {received['config']!r}"
-        )
-    finally:
-        _remove_fake_module("cfg_plugin")
+    helpers.common.install_module(ctx, "cfg_plugin", mod)
+
+    load_plugins(["cfg_plugin"], {"cfg_plugin": {"level": "DEBUG"}})
+    assert received["config"] == {"level": "DEBUG"}, (
+        f"expected config dict, got {received['config']!r}"
+    )
 
 
 def test_load_missing_module_raises() -> None:
@@ -82,31 +65,27 @@ def test_load_missing_module_raises() -> None:
 
 
 @oxitest.mark.inprocess
-def test_load_no_entry_function_raises() -> None:
+def test_load_no_entry_function_raises(ctx: TestContext) -> None:
     """load_plugins raises PluginLoadError when the module has no oxitest_plugin."""
     mod = types.ModuleType("no_entry")
-    _install_fake_module("no_entry", mod)
-    try:
-        with raises(PluginLoadError, match="has no oxitest_plugin"):
-            load_plugins(["no_entry"], {})
-    finally:
-        _remove_fake_module("no_entry")
+    helpers.common.install_module(ctx, "no_entry", mod)
+
+    with raises(PluginLoadError, match="has no oxitest_plugin"):
+        load_plugins(["no_entry"], {})
 
 
 @oxitest.mark.inprocess
-def test_load_wrong_return_type_raises() -> None:
+def test_load_wrong_return_type_raises(ctx: TestContext) -> None:
     """load_plugins raises PluginLoadError when oxitest_plugin() returns non-Plugin."""
     mod = helpers.common.make_plugin_module("bad_return", lambda **_: "not a Plugin")
-    _install_fake_module("bad_return", mod)
-    try:
-        with raises(PluginLoadError, match="must return oxitest.Plugin"):
-            load_plugins(["bad_return"], {})
-    finally:
-        _remove_fake_module("bad_return")
+    helpers.common.install_module(ctx, "bad_return", mod)
+
+    with raises(PluginLoadError, match="must return oxitest.Plugin"):
+        load_plugins(["bad_return"], {})
 
 
 @oxitest.mark.inprocess
-def test_load_entry_raises_wraps_error() -> None:
+def test_load_entry_raises_wraps_error(ctx: TestContext) -> None:
     """Exceptions from oxitest_plugin() are wrapped in PluginLoadError with context."""
 
     def bad_entry(**_: object) -> Never:
@@ -114,16 +93,14 @@ def test_load_entry_raises_wraps_error() -> None:
         raise ValueError(msg)
 
     mod = helpers.common.make_plugin_module("raises_plugin", bad_entry)
-    _install_fake_module("raises_plugin", mod)
-    try:
-        with raises(PluginLoadError, match="raised"):
-            load_plugins(["raises_plugin"], {})
-    finally:
-        _remove_fake_module("raises_plugin")
+    helpers.common.install_module(ctx, "raises_plugin", mod)
+
+    with raises(PluginLoadError, match="raised"):
+        load_plugins(["raises_plugin"], {})
 
 
 @oxitest.mark.inprocess
-def test_registry_aggregates_across_plugins() -> None:
+def test_registry_aggregates_across_plugins(ctx: TestContext) -> None:
     """PluginRegistry collects contributions (e.g. log_backends) from all plugins."""
 
     class FakeBackend:
@@ -145,20 +122,17 @@ def test_registry_aggregates_across_plugins() -> None:
         "plug2",
         lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
-    _install_fake_module("plug1", mod1)
-    _install_fake_module("plug2", mod2)
-    try:
-        registry = load_plugins(["plug1", "plug2"], {})
-        assert len(registry.log_backends) == 2, (
-            f"expected 2 log backends, got {len(registry.log_backends)}"
-        )
-    finally:
-        _remove_fake_module("plug1")
-        _remove_fake_module("plug2")
+    helpers.common.install_module(ctx, "plug1", mod1)
+    helpers.common.install_module(ctx, "plug2", mod2)
+
+    registry = load_plugins(["plug1", "plug2"], {})
+    assert len(registry.log_backends) == 2, (
+        f"expected 2 log backends, got {len(registry.log_backends)}"
+    )
 
 
 @oxitest.mark.inprocess
-def test_conflicting_debugger_backends_raises() -> None:
+def test_conflicting_debugger_backends_raises(ctx: TestContext) -> None:
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
     mod_a = helpers.common.make_plugin_module(
         "dbg_plugin_a",
@@ -168,20 +142,17 @@ def test_conflicting_debugger_backends_raises() -> None:
         "dbg_plugin_b",
         lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
-    _install_fake_module("dbg_plugin_a", mod_a)
-    _install_fake_module("dbg_plugin_b", mod_b)
-    try:
-        with raises(ConflictingDebuggerError) as exc_info:
-            load_plugins(["dbg_plugin_a", "dbg_plugin_b"], {})
-        assert "dbg_plugin_a" in str(exc_info.value), (
-            f"error should name first plugin: {exc_info.value}"
-        )
-        assert "dbg_plugin_b" in str(exc_info.value), (
-            f"error should name second plugin: {exc_info.value}"
-        )
-    finally:
-        _remove_fake_module("dbg_plugin_a")
-        _remove_fake_module("dbg_plugin_b")
+    helpers.common.install_module(ctx, "dbg_plugin_a", mod_a)
+    helpers.common.install_module(ctx, "dbg_plugin_b", mod_b)
+
+    with raises(ConflictingDebuggerError) as exc_info:
+        load_plugins(["dbg_plugin_a", "dbg_plugin_b"], {})
+    assert "dbg_plugin_a" in str(exc_info.value), (
+        f"error should name first plugin: {exc_info.value}"
+    )
+    assert "dbg_plugin_b" in str(exc_info.value), (
+        f"error should name second plugin: {exc_info.value}"
+    )
 
 
 def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
@@ -199,20 +170,18 @@ def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
 
 
 @oxitest.mark.inprocess
-def test_single_debugger_backend_is_valid() -> None:
+def test_single_debugger_backend_is_valid(ctx: TestContext) -> None:
     """One plugin providing a debugger backend should not raise."""
     mod = helpers.common.make_plugin_module(
         "solo_dbg",
         lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
     )
-    _install_fake_module("solo_dbg", mod)
-    try:
-        registry = load_plugins(["solo_dbg"], {})
-        assert registry.debugger_backend is not None, (
-            "expected a debugger backend, got None"
-        )
-    finally:
-        _remove_fake_module("solo_dbg")
+    helpers.common.install_module(ctx, "solo_dbg", mod)
+
+    registry = load_plugins(["solo_dbg"], {})
+    assert registry.debugger_backend is not None, (
+        "expected a debugger backend, got None"
+    )
 
 
 def test_fixture_provider_scope_default() -> None:

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 import unittest
 from typing import Any
 
 import oxitest
-from oxitest import Fixture, Fixtures, helpers, raises
+from oxitest import Fixture, Fixtures, TestContext, helpers, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
@@ -531,7 +530,7 @@ def test_fixtures_namespace_name() -> None:
 
 
 @oxitest.mark.inprocess
-def test_plugin_fixture_provider_injected() -> None:
+def test_plugin_fixture_provider_injected(ctx: TestContext) -> None:
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
 
     class FakeDatabase:
@@ -570,18 +569,15 @@ def test_plugin_fixture_provider_injected() -> None:
         "db_plugin",
         lambda **_: Plugin(fixture_providers=(provider,)),
     )
-    sys.modules["db_plugin"] = mod
+    helpers.common.install_module(ctx, "db_plugin", mod)
 
-    try:
-        registry = load_plugins(["db_plugin"], {})
-        assert len(registry.fixture_providers) == 1, (
-            f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
-        )
-        assert registry.fixture_providers[0].fixture_type is FakeDatabase, (
-            "Provider fixture_type should be FakeDatabase"
-        )
-    finally:
-        sys.modules.pop("db_plugin", None)
+    registry = load_plugins(["db_plugin"], {})
+    assert len(registry.fixture_providers) == 1, (
+        f"Expected 1 fixture provider, got {len(registry.fixture_providers)}"
+    )
+    assert registry.fixture_providers[0].fixture_type is FakeDatabase, (
+        "Provider fixture_type should be FakeDatabase"
+    )
 
 
 def test_fixtures_captures_source_line() -> None:
