@@ -21,7 +21,10 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple, get_type_hints
 
 from oxitest._bridge._boundary import safe_type_hints
-from oxitest._bridge._diagnostic_collector import emit_diagnostic
+from oxitest._bridge._diagnostic_collector import (
+    _diagnostic_collector_var,
+    emit_diagnostic,
+)
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -270,9 +273,28 @@ def create_session(
     diagnostics) where diagnostics contains any Diagnostic instances
     emitted during conftest loading.
     """
-    defs, violations, helper_registry = create_conftest_fixtures(conftest_paths)
+    # If no diagnostic collector is active, set up a temporary one so that
+    # diagnostics emitted during conftest loading (before the session exists)
+    # are captured.  When a collector is already active (e.g. in unit tests
+    # that inject diag_collector), we leave it alone so callers still see
+    # the diagnostics.
+    existing = _diagnostic_collector_var.get(None)
+    token = None
+    pre_session_diags: list[Diagnostic] = []
+    if existing is None:
+        token = _diagnostic_collector_var.set(pre_session_diags)
+
+    try:
+        defs, violations, helper_registry = create_conftest_fixtures(conftest_paths)
+    finally:
+        if token is not None:
+            _diagnostic_collector_var.reset(token)
+
     session = FixtureSession(defs)
     session.set_helper_registry(helper_registry)
+    # Transfer pre-session diagnostics into the session so they are
+    # visible to drain_session_diagnostics on the Rust side.
+    if pre_session_diags:
+        session.diagnostics.extend(pre_session_diags)
     diagnostics = list(session.diagnostics)
-    session.diagnostics.clear()
     return SessionResult(session, violations, diagnostics)

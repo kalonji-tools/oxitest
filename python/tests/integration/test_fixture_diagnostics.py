@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import oxitest as oxi
 from oxitest import TempDir, helpers
 
 
@@ -58,9 +57,6 @@ def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
     )
 
 
-@oxi.mark.skip(
-    reason="diagnostics not yet rendered in runner output (pending reporter)"
-)
 def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
     """Shadow diagnostic appears when child conftest overrides parent fixture."""
     # Arrange — root conftest defines 'db', sub/ conftest overrides it
@@ -89,16 +85,13 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
     )
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(root)
+    out, stderr, rc = helpers.common.run_oxitest(root, "--warnings")
 
     # Assert — test passes but shadow warning appears
     helpers.integ.assert_passed(out, rc)
     helpers.integ.assert_contains((out + stderr).lower(), "shadow")
 
 
-@oxi.mark.skip(
-    reason="diagnostics not yet rendered in runner output (pending reporter)"
-)
 def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
     """Teardown error diagnostic includes the test node_id for attribution."""
     # Arrange — yield fixture that raises during teardown
@@ -118,7 +111,7 @@ def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
     )
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(tmp)
+    out, stderr, rc = helpers.common.run_oxitest(tmp, "--warnings")
 
     # Assert — test passes, teardown warning includes test function name
     helpers.integ.assert_passed(out, rc)

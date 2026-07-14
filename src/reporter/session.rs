@@ -52,6 +52,10 @@ impl ReporterSession {
         self.stats.fixture_timings = timings;
     }
 
+    pub(crate) fn record_diagnostics(&mut self, entries: Vec<stats::DiagnosticEntry>) {
+        self.stats.diagnostics.entries.extend(entries);
+    }
+
     pub(crate) fn record_teardown_warning(&mut self, context: &str, error: &str) {
         self.stats.diagnostics.entries.push(stats::DiagnosticEntry {
             severity: stats::DiagnosticSeverity::Warning,

@@ -75,6 +75,12 @@ impl Pipeline {
             plugin_reporters,
         );
 
+        // Drain diagnostics emitted during collection (conftest loading, etc.)
+        let collection_diags = bridge::drain_session_diagnostics(py, &session);
+        if !collection_diags.is_empty() {
+            rep.record_diagnostics(collection_diags);
+        }
+
         let exec_ctx = ExecutionContext {
             cfg: &shared.cfg,
             cache: &shared.cache,

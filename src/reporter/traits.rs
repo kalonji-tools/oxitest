@@ -62,6 +62,9 @@ pub trait Reporter {
     /// `error` is the stringified error message.
     fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
 
+    /// Record diagnostic entries emitted by the Python bridge (default: no-op).
+    fn record_diagnostics(&mut self, _entries: Vec<stats::DiagnosticEntry>) {}
+
     /// Set fixture cache statistics for display in the summary.
     fn set_fixture_cache_stats(
         &mut self,
