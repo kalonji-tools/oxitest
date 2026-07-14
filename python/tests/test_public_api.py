@@ -11,7 +11,6 @@ from oxitest import (
     Cli,
     CliExtension,
     Conf,
-    FixtureTeardownWarning,
 )
 
 
@@ -53,13 +52,6 @@ def test_yields_exported_from_oxitest() -> None:
     assert "Yields" in oxitest.__all__, "'Yields' should be listed in oxitest.__all__"
 
 
-def test_fixture_teardown_warning_exported_from_oxitest() -> None:
-    """FixtureTeardownWarning is importable from oxitest as a UserWarning subclass."""
-    assert issubclass(FixtureTeardownWarning, UserWarning), (
-        "FixtureTeardownWarning should be a subclass of UserWarning"
-    )
-
-
 def test_internal_types_not_in_all() -> None:
     """Internal implementation types are absent from __all__ to avoid leaking them."""
     removed = [
@@ -75,8 +67,6 @@ def test_exception_types_in_all() -> None:
     """Public exception and warning types are listed in __all__ for discoverability."""
     promoted = [
         "SharedFixtureMutationError",
-        "FixtureShadowWarning",
-        "FixtureTeardownWarning",
     ]
     for name in promoted:
         assert name in oxitest.__all__, (

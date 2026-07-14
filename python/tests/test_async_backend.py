@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import Never
 
-from oxitest import raises, warns
+from oxitest import Fixture, raises
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
+from oxitest._bridge.result import Diagnostic
 
 
 def test_asyncio_backend_name() -> None:
@@ -67,8 +68,10 @@ def test_shared_session_close_is_idempotent() -> None:
     session.close()  # must not raise
 
 
-def test_shared_session_cleans_stray_tasks() -> None:
-    """close() should detect and warn about tasks that were leaked inside run()."""
+def test_shared_session_cleans_stray_tasks(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """run() should detect and emit a diagnostic about tasks that were leaked."""
     session = AsyncioSharedSession()
 
     async def spawner() -> str:
@@ -78,8 +81,14 @@ def test_shared_session_cleans_stray_tasks() -> None:
         asyncio.ensure_future(background())  # noqa: RUF006 — intentional leak for detection test
         return "done"
 
-    with warns(UserWarning, match="(?i)leaked"):
-        result = session.run(spawner())
+    result = session.run(spawner())
 
     assert result == "done", f"expected 'done', got {result!r}"
+    assert any(
+        d.context == "async session" and "leaked" in d.message.lower()
+        for d in diag_collector
+    ), (
+        "leaked tasks must surface as diagnostics so developers know to await or cancel"
+        f" them: {diag_collector}"
+    )
     session.close()

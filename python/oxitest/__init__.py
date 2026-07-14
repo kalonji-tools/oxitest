@@ -130,12 +130,6 @@ from oxitest._bridge._debugger import (
 from oxitest._bridge._errors import (
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
-from oxitest._bridge._fixture_context import (
-    FixtureTeardownWarning as FixtureTeardownWarning,
-)
-from oxitest._bridge._fixture_registry import (
-    FixtureShadowWarning as FixtureShadowWarning,
-)
 from oxitest._bridge._fixture_type import (
     Fixture as Fixture,
     FixtureRef as FixtureRef,
@@ -188,8 +182,6 @@ __all__ = [
     "FdCapture",
     "Fixture",
     "FixtureRef",
-    "FixtureShadowWarning",
-    "FixtureTeardownWarning",
     "Fixtures",
     "Helpers",
     "LogCapture",

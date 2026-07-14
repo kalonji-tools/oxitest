@@ -5,7 +5,6 @@ from __future__ import annotations
 __all__ = ["fixture_entries", "helper_entries", "plugin_entries", "test_fixture_deps"]
 
 import inspect
-import logging
 from typing import Any
 
 from oxitest._bridge._fixture_registry import (
@@ -15,8 +14,7 @@ from oxitest._bridge._fixture_registry import (
     PluginSource,
 )
 from oxitest._bridge.importer import collect_module
-
-logger = logging.getLogger(__name__)
+from oxitest._oxitest import trace as _rust_trace
 
 # Protocol fields in display order, matching Plugin dataclass field names.
 _PROTOCOL_FIELDS = (
@@ -125,7 +123,7 @@ def test_fixture_deps(
         try:
             items, _ = collect_module(path, session)
         except Exception as exc:  # noqa: BLE001 — skip unimportable files during query
-            logger.debug("Skipping %s: %s", path, exc)
+            _rust_trace("debug", __name__, f"Skipping {path}: {exc}")
             continue
         for item in items:
             if not item.fixture_deps:

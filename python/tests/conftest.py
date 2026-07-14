@@ -19,6 +19,7 @@ from typing import TypeVar
 import oxitest
 from oxitest import Helpers, TempDir, TestResult, Yields
 from oxitest._bridge._boundary import safe_type_hints
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -29,6 +30,7 @@ from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.executor import run_test as _run_test
 from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge.result import Diagnostic
 
 common = Helpers()
 
@@ -80,6 +82,19 @@ def fixture_session(_tmp: TempDir) -> Yields[FixtureSession]:
     session = FixtureSession([], PluginRegistry())
     yield session
     session.end_session()
+
+
+@fx.fixture
+def diag_collector() -> Yields[list[Diagnostic]]:
+    """Provide a fresh diagnostic collector, wired to the ContextVar.
+
+    Use in tests that call bridge code expecting ``emit_diagnostic()``
+    to land somewhere.  Yields the list so tests can assert on it.
+    """
+    diags: list[Diagnostic] = []
+    token = _diagnostic_collector_var.set(diags)
+    yield diags
+    _diagnostic_collector_var.reset(token)
 
 
 @fx.fixture

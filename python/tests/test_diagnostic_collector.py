@@ -15,13 +15,13 @@ from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
 def test_diagnostic_severity_values() -> None:
     """DiagnosticSeverity auto() produces lowercase string values."""
     assert DiagnosticSeverity.ERROR == "error", (
-        "ERROR should produce 'error' via auto()"
+        "StrEnum auto() must produce lowercase — Rust deserializes severity strings"
     )
     assert DiagnosticSeverity.WARNING == "warning", (
-        "WARNING should produce 'warning' via auto()"
+        "StrEnum auto() must produce lowercase — Rust deserializes severity strings"
     )
     assert DiagnosticSeverity.NOTICE == "notice", (
-        "NOTICE should produce 'notice' via auto()"
+        "StrEnum auto() must produce lowercase — Rust deserializes severity strings"
     )
 
 
@@ -35,12 +35,14 @@ def test_diagnostic_frozen_dataclass() -> None:
         lineno=42,
     )
     assert diag.severity == DiagnosticSeverity.WARNING, (
-        "severity field should match constructor value"
+        "frozen dataclass must preserve severity — mutation would misroute diagnostics"
     )
     assert diag.context == "fixture teardown", (
-        "context field should match constructor value"
+        "frozen dataclass must preserve context — Rust reporter groups by this field"
     )
-    assert diag.file == "/conftest.py", "file field should match constructor value"
+    assert diag.file == "/conftest.py", (
+        "frozen dataclass must preserve file — reporter uses it for location rendering"
+    )
 
 
 def test_diagnostic_default_fields() -> None:
@@ -50,8 +52,12 @@ def test_diagnostic_default_fields() -> None:
         context="tempdir",
         message="KEPT /tmp/foo",
     )
-    assert diag.file == "", "file should default to empty string"
-    assert diag.lineno == 0, "lineno should default to 0"
+    assert diag.file == "", (
+        "omitted file must default to empty — Rust converts empty to None for rendering"
+    )
+    assert diag.lineno == 0, (
+        "omitted lineno must default to 0 — Rust converts 0 to None for rendering"
+    )
 
 
 def test_diagnostic_to_wire() -> None:
@@ -64,14 +70,24 @@ def test_diagnostic_to_wire() -> None:
         lineno=434,
     )
     wire = diag.to_wire()
-    assert wire["type"] == "diagnostic", "wire format must include type discriminator"
-    assert wire["severity"] == "error", (
-        "severity should serialize as StrEnum string value"
+    assert wire["type"] == "diagnostic", (
+        "type discriminator is how the Rust drain dispatches diagnostic vs result lines"
     )
-    assert wire["context"] == "plugin activation", "context should be passed through"
-    assert wire["message"] == "invalid JSON", "message should be passed through"
-    assert wire["file"] == "plugin_loader.py", "file should be passed through"
-    assert wire["lineno"] == 434, "lineno should be passed through"
+    assert wire["severity"] == "error", (
+        "severity must serialize as lowercase string — Rust match arms expect it"
+    )
+    assert wire["context"] == "plugin activation", (
+        "context loss would make the Rust reporter group diagnostics incorrectly"
+    )
+    assert wire["message"] == "invalid JSON", (
+        "message loss would produce empty diagnostic entries in the summary block"
+    )
+    assert wire["file"] == "plugin_loader.py", (
+        "file loss would prevent location-aware rendering in the reporter"
+    )
+    assert wire["lineno"] == 434, (
+        "lineno loss would prevent location-aware rendering in the reporter"
+    )
 
 
 def test_emit_diagnostic_appends_to_collector() -> None:
@@ -85,13 +101,14 @@ def test_emit_diagnostic_appends_to_collector() -> None:
             "error in teardown",
         )
         assert len(collector) == 1, (
-            "emit_diagnostic should append exactly one Diagnostic"
+            "each emit must append exactly one entry — duplicates or drops would"
+            " corrupt the Rust reporter's dedup counts"
         )
         assert collector[0].severity == DiagnosticSeverity.WARNING, (
-            "emitted diagnostic should have the given severity"
+            "severity mismatch would miscolor the diagnostic in the reporter output"
         )
         assert collector[0].context == "fixture teardown", (
-            "emitted diagnostic should have the given context"
+            "context mismatch would misgroup the diagnostic in dedup and rendering"
         )
     finally:
         _diagnostic_collector_var.reset(token)
@@ -110,10 +127,11 @@ def test_emit_diagnostic_with_location() -> None:
             lineno=10,
         )
         assert collector[0].file == "/test.py", (
-            "file should be passed through to Diagnostic"
+            "file must survive emit → Diagnostic — Rust uses it for location rendering"
         )
         assert collector[0].lineno == 10, (
-            "lineno should be passed through to Diagnostic"
+            "lineno must survive emit → Diagnostic — Rust uses it for"
+            " location rendering"
         )
     finally:
         _diagnostic_collector_var.reset(token)
@@ -188,9 +206,11 @@ def test_create_session_returns_diagnostics_tuple() -> None:
     )
     session, violations, diagnostics = result
     assert isinstance(session, FixtureSession), (
-        "first element should be a FixtureSession"
+        "Rust bridge extracts the session via PyO3 — wrong type would crash the run"
     )
-    assert isinstance(violations, list), "second element should be a list of violations"
+    assert isinstance(violations, list), (
+        "Rust bridge iterates violations for strict-mode — wrong type would crash"
+    )
     assert isinstance(diagnostics, list), (
-        "third element should be a list of diagnostics"
+        "Rust bridge drains diagnostics into RunStats — wrong type would crash"
     )

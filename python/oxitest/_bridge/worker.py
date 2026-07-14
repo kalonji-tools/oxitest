@@ -164,8 +164,15 @@ def main() -> None:
             try:
                 task: WorkerTask = json.loads(line)
             except json.JSONDecodeError as exc:
-                msg = f"oxitest worker: malformed JSON from coordinator: {exc}\n"
-                sys.stderr.write(msg)
+                from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
+
+                _emit(
+                    Diagnostic(
+                        severity=DiagnosticSeverity.WARNING,
+                        context="worker",
+                        message=f"malformed JSON from coordinator: {exc}",
+                    ).to_wire()
+                )
                 continue
             run(task)
 

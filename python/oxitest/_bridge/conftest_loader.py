@@ -14,15 +14,14 @@ __all__ = [
 import collections.abc
 import dataclasses
 import importlib.util
-import logging
 import sys
-import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, NamedTuple, get_type_hints
 
 from oxitest._bridge._boundary import safe_type_hints
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
@@ -34,6 +33,7 @@ from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
+from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
     from oxitest._bridge._helper_registry import HelperDef
@@ -46,9 +46,6 @@ class SessionResult(NamedTuple):
     session: FixtureSession
     violations: list[CollectedViolation]
     diagnostics: list[Diagnostic]
-
-
-logger = logging.getLogger(__name__)
 
 
 def _extract_fixture_type(func: Callable[..., Any]) -> type:
@@ -245,11 +242,12 @@ def create_conftest_fixtures(
         has_helper_fns = _has_helpers(module)
 
         if not has_fixtures and not has_helper_fns:
-            warnings.warn(
+            emit_diagnostic(
+                DiagnosticSeverity.NOTICE,
+                "conftest loading",
                 f"{path}: conftest.py contains no Fixtures instance. "
                 "Did you forget to create one? (e.g. `fixtures = oxitest.Fixtures()`)",
-                UserWarning,
-                stacklevel=2,
+                file=path,
             )
 
         for defn in fixtures:

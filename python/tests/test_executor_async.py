@@ -6,11 +6,10 @@ from collections.abc import AsyncGenerator
 
 from oxitest import (
     Fixture,
-    FixtureTeardownWarning,
     TempDir,
-    WarnCapture,
     helpers,
 )
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 
@@ -401,9 +400,9 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir) -> None:
 
 
 def test_async_yield_fixture_teardown_error_warns(
-    tmp: TempDir, warn: WarnCapture
+    tmp: TempDir,
 ) -> None:
-    """Teardown exception should warn, not crash."""
+    """Teardown exception should emit a diagnostic, not crash."""
 
     async def async_yield_factory() -> AsyncGenerator[int, None]:
         yield 42
@@ -411,24 +410,27 @@ def test_async_yield_fixture_teardown_error_warns(
         raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("val", async_yield_factory)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "async def test_ok(val: Fixture[int]) -> None:\n"
-        "    assert val == 42\n",
-        "test_ok",
-        session=session,
-    )
+    diag_token = _diagnostic_collector_var.set(session.diagnostics)
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "async def test_ok(val: Fixture[int]) -> None:\n"
+            "    assert val == 42\n",
+            "test_ok",
+            session=session,
+        )
+    finally:
+        _diagnostic_collector_var.reset(diag_token)
     assert result.status == "passed", (
         f"teardown errors must not retroactively fail a passing test -- the test body "
         f"already succeeded and its assertions are valid, got {result.status!r}, "
         f"msg={result.message!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"teardown failures must surface as warnings so they are visible in the report"
-        f" -- "
-        f"silently swallowing them hides resource leaks and broken cleanup, got"
-        f" {warn.warnings!r}"
+    assert any(d.context == "fixture teardown" for d in session.diagnostics), (
+        f"teardown failures must surface as diagnostics so they are visible in the"
+        f" report -- silently swallowing them hides resource leaks and broken cleanup,"
+        f" got {session.diagnostics!r}"
     )
 
 
@@ -574,7 +576,7 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
     )
 
 
-def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> None:
+def test_shared_async_stray_task_cleanup(tmp: TempDir) -> None:
     """Stray tasks from one test should not affect the next test."""
     f = tmp / "test_shared_stray.py"
     f.write_text(
@@ -600,8 +602,12 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> Non
         )
     )
     session = FixtureSession(reg)
-    r1 = helpers.common.run_test(str(f), "test_leaker", session)
-    r2 = helpers.common.run_test(str(f), "test_clean", session)
+    diag_token = _diagnostic_collector_var.set(session.diagnostics)
+    try:
+        r1 = helpers.common.run_test(str(f), "test_leaker", session)
+        r2 = helpers.common.run_test(str(f), "test_clean", session)
+    finally:
+        _diagnostic_collector_var.reset(diag_token)
     assert r1.status == "passed", (
         f"the leaker test must pass so we can verify its stray tasks are cleaned up "
         f"before the next test runs: {r1.status!r}, {r1.message!r}"
@@ -611,12 +617,15 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir, warn: WarnCapture) -> Non
         f"requires each test to start with a clean task set: {r2.status!r},"
         f" {r2.message!r}"
     )
-    leaked_warns = [w for w in warn.warnings if "leaked" in str(w.message).lower()]
-    assert len(leaked_warns) >= 1, (
-        f"leaked tasks must be surfaced as warnings so developers know to await or"
-        f" cancel "
-        f"them -- silent cleanup hides concurrency bugs, got"
-        f" {[str(w.message) for w in warn.warnings]}"
+    leaked_diags = [
+        d
+        for d in session.diagnostics
+        if d.context == "async session" and "leaked" in d.message.lower()
+    ]
+    assert len(leaked_diags) >= 1, (
+        f"leaked tasks must be surfaced as diagnostics so developers know to await or"
+        f" cancel them -- silent cleanup hides concurrency bugs, got"
+        f" {session.diagnostics!r}"
     )
     session.end_session()
 

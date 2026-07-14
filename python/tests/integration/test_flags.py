@@ -2,7 +2,9 @@
 
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import oxitest
@@ -217,9 +219,18 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 """,
         "test_fail_tmp.py",
     )
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
+    out, _stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
     helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(stderr, "KEPT", "--keep-tmp")
+    # The TempDir prefix is the test function name; find any preserved artifact.
+    # tempfile.gettempdir() gives the system temp dir without hardcoding /tmp.
+    tmp_root = Path(tempfile.gettempdir())
+    preserved = list(tmp_root.rglob("test_uses_tmp_*/artifact.txt"))
+    assert preserved, (
+        "--keep-tmp should preserve the TempDir on failure; "
+        f"no artifact.txt found under {tmp_root}/test_uses_tmp_*"
+    )
+    for f in preserved:
+        shutil.rmtree(f.parent, ignore_errors=True)
 
 
 def test_keep_tmp_cleans_on_pass(tmp: TempDir) -> None:

@@ -3,7 +3,6 @@ from __future__ import annotations
 __all__ = ["TempDir", "TempDirFactory", "_TempDirFactoryFixture", "_TempDirFixture"]
 
 import shutil
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,8 +12,9 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 
 if TYPE_CHECKING:
     from oxitest._bridge._builtin_context import _BuiltinContext
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._fixture_type import injectable
-from oxitest._bridge.result import StatusKind
+from oxitest._bridge.result import DiagnosticSeverity, StatusKind
 
 # Statuses where the test did NOT fail — TempDir can be cleaned up safely.
 # Note: TIMEOUT and XPASSED are NOT included because they are failures
@@ -135,7 +135,11 @@ class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
 
             def _teardown() -> None:
                 if _should_keep(mode, cell):
-                    sys.stderr.write(f"KEPT {d} (--keep-tmp)\n")
+                    emit_diagnostic(
+                        DiagnosticSeverity.NOTICE,
+                        "tempdir",
+                        f"KEPT {d} (--keep-tmp)",
+                    )
                 else:
                     shutil.rmtree(d, ignore_errors=True)
 
@@ -155,7 +159,11 @@ class _TempDirFactoryFixture(BuiltinFixture, fixture_type=TempDirFactory):
             # Preserve all factory dirs when --keep-tmp is set (any mode).
             def _teardown() -> None:
                 for d in factory.dirs:
-                    sys.stderr.write(f"KEPT {d} (--keep-tmp)\n")
+                    emit_diagnostic(
+                        DiagnosticSeverity.NOTICE,
+                        "tempdir",
+                        f"KEPT {d} (--keep-tmp)",
+                    )
 
             ctx.teardown_stack.append(_teardown)
         return factory

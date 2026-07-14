@@ -7,48 +7,53 @@ from dataclasses import dataclass
 
 from oxitest import (
     Fixture,
-    FixtureTeardownWarning,
     TempDir,
-    WarnCapture,
     helpers,
     parametrize,
+)
+from oxitest._bridge._diagnostic_collector import (
+    _diagnostic_collector_var,
 )
 from oxitest._bridge._fixture_context import _current_teardown_node_id, _warn_teardown
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge.result import Diagnostic
 
 
-def test_warn_teardown_emits_fixture_teardown_warning(warn: WarnCapture) -> None:
-    """_warn_teardown() emits a FixtureTeardownWarning containing the fixture name."""
+def test_warn_teardown_emits_diagnostic(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """_warn_teardown() emits a diagnostic containing the fixture name."""
     _warn_teardown("my_fix", RuntimeError("boom"))
 
-    assert len(warn.warnings) == 1, (
-        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+    assert len(diag_collector) == 1, (
+        f"teardown diagnostics are one-per-fixture -- multiple or zero means the emit"
         f" logic is broken: "
-        f"{warn.warnings!r}"
+        f"{diag_collector!r}"
     )
-    assert issubclass(warn.warnings[0].category, FixtureTeardownWarning), (
-        f"teardown failures must use FixtureTeardownWarning so users can filter them"
-        f" separately from "
-        f"regular warnings: {warn.warnings[0].category!r}"
+    assert diag_collector[0].context == "fixture teardown", (
+        f"teardown failures must use 'fixture teardown' context so tooling can filter"
+        f" them: {diag_collector[0].context!r}"
     )
-    assert "my_fix" in str(warn.warnings[0].message), (
+    assert "my_fix" in diag_collector[0].message, (
         f"the fixture name identifies which cleanup failed -- without it, users cannot"
         f" diagnose "
-        f"resource leaks: {str(warn.warnings[0].message)!r}"
+        f"resource leaks: {diag_collector[0].message!r}"
     )
 
 
-def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
-    """_warn_teardown() includes the node_id in the warning message when provided."""
+def test_warn_teardown_includes_node_id(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """_warn_teardown() includes the node_id in the diagnostic message when provided."""
     _warn_teardown("my_fix", RuntimeError("boom"), node_id="tests/test_a.py::test_foo")
 
-    assert len(warn.warnings) == 1, (
-        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+    assert len(diag_collector) == 1, (
+        f"teardown diagnostics are one-per-fixture -- multiple or zero means the emit"
         f" logic is broken: "
-        f"{warn.warnings!r}"
+        f"{diag_collector!r}"
     )
-    msg = str(warn.warnings[0].message)
+    msg = diag_collector[0].message
     assert "my_fix" in msg, (
         f"the fixture name identifies which cleanup failed -- without it, users cannot"
         f" diagnose "
@@ -57,49 +62,34 @@ def test_warn_teardown_includes_node_id(warn: WarnCapture) -> None:
     assert "test_foo" in msg, (
         f"the node_id tells users which test triggered the teardown failure -- without"
         f" it, the "
-        f"warning is not actionable: {msg!r}"
+        f"diagnostic is not actionable: {msg!r}"
     )
 
 
-def test_warn_teardown_without_node_id(warn: WarnCapture) -> None:
-    """_warn_teardown() still emits a warning when no node_id is given."""
-    _warn_teardown("my_fix", RuntimeError("boom"))
-
-    assert len(warn.warnings) == 1, (
-        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
-        f" logic is broken: "
-        f"{warn.warnings!r}"
-    )
-    msg = str(warn.warnings[0].message)
-    assert "my_fix" in msg, (
-        f"the fixture name identifies which cleanup failed -- without it, users cannot"
-        f" diagnose "
-        f"resource leaks: {msg!r}"
-    )
-
-
-def test_warn_teardown_picks_up_contextvar(warn: WarnCapture) -> None:
+def test_warn_teardown_picks_up_contextvar(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
     """_warn_teardown() reads node_id from _current_teardown_node_id ContextVar."""
-    token = _current_teardown_node_id.set("tests/test_b.py::test_bar")
+    node_token = _current_teardown_node_id.set("tests/test_b.py::test_bar")
     try:
         _warn_teardown("db", RuntimeError("oops"))
     finally:
-        _current_teardown_node_id.reset(token)
+        _current_teardown_node_id.reset(node_token)
 
-    assert len(warn.warnings) == 1, (
-        f"teardown warnings are one-per-fixture -- multiple or zero means the emit"
+    assert len(diag_collector) == 1, (
+        f"teardown diagnostics are one-per-fixture -- multiple or zero means the emit"
         f" logic is broken: "
-        f"{warn.warnings!r}"
+        f"{diag_collector!r}"
     )
-    msg = str(warn.warnings[0].message)
+    msg = diag_collector[0].message
     assert "db" in msg, (
         f"the fixture name identifies which cleanup failed -- without it, users cannot"
         f" diagnose "
         f"resource leaks: {msg!r}"
     )
     assert "test_bar" in msg, (
-        f"ContextVar-based node_id must propagate into the warning so users know which"
-        f" test "
+        f"ContextVar-based node_id must propagate into the diagnostic so users know"
+        f" which test "
         f"triggered the teardown failure: {msg!r}"
     )
 
@@ -528,7 +518,7 @@ def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
 
 
 def test_yield_fixture_teardown_exception_does_not_affect_test_result(
-    tmp: TempDir, warn: WarnCapture
+    tmp: TempDir,
 ) -> None:
     """A RuntimeError raised inside fixture teardown must not change test status."""
     torn_down: list[str] = []
@@ -540,14 +530,20 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         raise RuntimeError(msg)
 
     session = helpers.common.make_session_with("val", factory)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "def test_ok(val: Fixture[int]) -> None:\n"
-        "    assert val == 42\n",
-        "test_ok",
-        session=session,
-    )
+    # Force the diagnostic collector to point to this session's diagnostics
+    # so teardown diagnostics land here instead of the outer test runner's session.
+    diag_token = _diagnostic_collector_var.set(session.diagnostics)
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "def test_ok(val: Fixture[int]) -> None:\n"
+            "    assert val == 42\n",
+            "test_ok",
+            session=session,
+        )
+    finally:
+        _diagnostic_collector_var.reset(diag_token)
     assert result.status == "passed", (
         f"teardown errors are side-effects -- they must not retroactively change a"
         f" passing verdict "
@@ -559,15 +555,15 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         f" (closing "
         f"connections, deleting temps) happen before the raise: {torn_down!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"teardown failures must surface as warnings so developers know cleanup failed"
-        f" without "
-        f"the test being retroactively marked broken: {warn.warnings!r}"
+    assert any(d.context == "fixture teardown" for d in session.diagnostics), (
+        f"teardown failures must surface as diagnostics so developers know cleanup"
+        f" failed without "
+        f"the test being retroactively marked broken: {session.diagnostics!r}"
     )
 
 
 def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
-    tmp: TempDir, warn: WarnCapture
+    tmp: TempDir,
 ) -> None:
     """Teardown exception in first fixture must not block teardown of second fixture."""
     log: list[str] = []
@@ -586,15 +582,19 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
     reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
-        "    assert a == 1\n"
-        "    assert b == 2\n",
-        "test_ok",
-        session=session,
-    )
+    diag_token = _diagnostic_collector_var.set(session.diagnostics)
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
+            "    assert a == 1\n"
+            "    assert b == 2\n",
+            "test_ok",
+            session=session,
+        )
+    finally:
+        _diagnostic_collector_var.reset(diag_token)
     assert result.status == "passed", (
         f"teardown errors are side-effects -- they must not retroactively change a"
         f" passing verdict "
@@ -611,17 +611,17 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         f" block another "
         f"fixture's cleanup or resources accumulate across the session: log={log!r}"
     )
-    assert any(issubclass(w.category, FixtureTeardownWarning) for w in warn.warnings), (
-        f"teardown failures must surface as warnings so developers know cleanup failed"
-        f" without "
-        f"the test being retroactively marked broken: {warn.warnings!r}"
+    assert any(d.context == "fixture teardown" for d in session.diagnostics), (
+        f"teardown failures must surface as diagnostics so developers know cleanup"
+        f" failed without "
+        f"the test being retroactively marked broken: {session.diagnostics!r}"
     )
 
 
 def test_multiple_teardown_failures_all_reported(
-    tmp: TempDir, warn: WarnCapture
+    tmp: TempDir,
 ) -> None:
-    """When ALL fixture teardowns fail, each emits a warning and test still passes."""
+    """When ALL fixture teardowns fail, each emits a diagnostic; test passes."""
     log: list[str] = []
 
     def factory_a() -> Generator[int, None, None]:
@@ -640,15 +640,19 @@ def test_multiple_teardown_failures_all_reported(
     reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
     reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
-        "    assert a == 1\n"
-        "    assert b == 2\n",
-        "test_ok",
-        session=session,
-    )
+    diag_token = _diagnostic_collector_var.set(session.diagnostics)
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
+            "    assert a == 1\n"
+            "    assert b == 2\n",
+            "test_ok",
+            session=session,
+        )
+    finally:
+        _diagnostic_collector_var.reset(diag_token)
     assert result.status == "passed", (
         f"teardown errors are side-effects -- even when all teardowns fail, the test"
         f" body passed "
@@ -665,13 +669,12 @@ def test_multiple_teardown_failures_all_reported(
         f" block another "
         f"fixture's cleanup or resources accumulate across the session: log={log!r}"
     )
-    teardown_warnings = [
-        w for w in warn.warnings if issubclass(w.category, FixtureTeardownWarning)
-    ]
-    assert len(teardown_warnings) == 2, (
-        f"each failing teardown must emit its own warning -- collapsing them hides"
+    teardown_diags = [d for d in session.diagnostics if d.context == "fixture teardown"]
+    assert len(teardown_diags) == 2, (
+        f"each failing teardown must emit its own diagnostic -- collapsing them hides"
         f" which fixtures "
-        f"leaked resources: {len(teardown_warnings)} warnings in {warn.warnings!r}"
+        f"leaked resources: {len(teardown_diags)} diagnostics in"
+        f" {session.diagnostics!r}"
     )
 
 

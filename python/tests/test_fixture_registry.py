@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from oxitest import WarnCapture, helpers, raises
+from oxitest import Fixture, helpers, raises
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
     FixtureNotFoundError,
 )
-from oxitest._bridge._fixture_registry import (
-    FixtureRegistry,
-    FixtureShadowWarning,
-)
-from oxitest._bridge.result import ViolationKind
+from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge.result import Diagnostic, ViolationKind
 
 # ── FixtureRegistry ───────────────────────────────────────────────────────────
 
@@ -128,8 +125,10 @@ def test_register_returns_empty_for_typed_fixture() -> None:
 # ── FixtureRegistry: shadow warnings ──────────────────────────────────────────
 
 
-def test_register_duplicate_name_warns(warn: WarnCapture) -> None:
-    """Registering the same name from two conftests emits a FixtureShadowWarning."""
+def test_register_duplicate_name_warns(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Registering the same name from two conftests emits a shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
     parent_def = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
@@ -140,21 +139,28 @@ def test_register_duplicate_name_warns(warn: WarnCapture) -> None:
     reg.register(child_def)
 
     # Assert
-    shadow_warnings = [
-        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
-    ]
-    assert len(shadow_warnings) == 1, (
-        f"registering 'db' from a different conftest should emit 1 shadow warning, "
-        f"got {len(shadow_warnings)}"
+    shadow_diags = [d for d in diag_collector if d.context == "fixture registration"]
+    assert len(shadow_diags) == 1, (
+        f"registering 'db' from a different conftest should emit 1 shadow diagnostic, "
+        f"got {len(shadow_diags)}"
     )
-    msg = str(shadow_warnings[0].message)
-    assert "db" in msg, f"warning should mention fixture name 'db', got {msg!r}"
-    assert "conftest.py" in msg, f"warning should mention parent path, got {msg!r}"
-    assert "tests/conftest.py" in msg, f"warning should mention child path, got {msg!r}"
+    msg = shadow_diags[0].message
+    assert "db" in msg, (
+        "without the fixture name, users cannot tell which fixture was"
+        f" shadowed: {msg!r}"
+    )
+    assert "conftest.py" in msg, (
+        f"without the parent path, users cannot find the original definition: {msg!r}"
+    )
+    assert "tests/conftest.py" in msg, (
+        f"without the child path, users cannot find the shadowing definition: {msg!r}"
+    )
 
 
-def test_register_first_fixture_no_shadow_warning(warn: WarnCapture) -> None:
-    """First registration of a fixture name never emits a shadow warning."""
+def test_register_first_fixture_no_shadow_diagnostic(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """First registration of a fixture name never emits a shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
     defn = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
@@ -163,17 +169,17 @@ def test_register_first_fixture_no_shadow_warning(warn: WarnCapture) -> None:
     reg.register(defn)
 
     # Assert
-    shadow_warnings = [
-        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
-    ]
-    assert shadow_warnings == [], (
-        "first registration of a fixture should not emit a shadow warning, "
-        f"got {len(shadow_warnings)}"
+    shadow_diags = [d for d in diag_collector if d.context == "fixture registration"]
+    assert shadow_diags == [], (
+        "first registration of a fixture should not emit a shadow diagnostic, "
+        f"got {len(shadow_diags)}"
     )
 
 
-def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
-    """Re-registering a fixture from the same conftest emits no shadow warning."""
+def test_register_same_conftest_no_shadow_diagnostic(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Re-registering a fixture from the same conftest emits no shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
     first = helpers.common.make_fixture_def("db", conftest_path="conftest.py")
@@ -184,12 +190,10 @@ def test_register_same_conftest_no_shadow_warning(warn: WarnCapture) -> None:
     reg.register(second)
 
     # Assert
-    shadow_warnings = [
-        w for w in warn.warnings if issubclass(w.category, FixtureShadowWarning)
-    ]
-    assert shadow_warnings == [], (
-        "re-registering 'db' from the same conftest should not emit a shadow warning, "
-        f"got {len(shadow_warnings)}"
+    shadow_diags = [d for d in diag_collector if d.context == "fixture registration"]
+    assert shadow_diags == [], (
+        "re-registering 'db' from the same conftest should not emit a shadow"
+        f" diagnostic, got {len(shadow_diags)}"
     )
 
 
