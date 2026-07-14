@@ -71,6 +71,10 @@ impl Reporter for CompositeReporter {
         }
     }
 
+    fn record_diagnostics(&mut self, entries: Vec<stats::DiagnosticEntry>) {
+        self.session.record_diagnostics(entries);
+    }
+
     fn set_fixture_cache_stats(
         &mut self,
         hits: usize,

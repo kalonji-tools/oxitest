@@ -162,7 +162,6 @@ impl FixtureSession {
 /// Reads `session.diagnostics`, converts each to a `DiagnosticEntry`, clears the
 /// Python list, and returns the entries. Callers (pipeline code) push these into
 /// `RunStats.diagnostics.entries`.
-#[allow(dead_code)] // called by pipeline code in Task 8 (reporter integration)
 pub(crate) fn drain_session_diagnostics(
     py: Python<'_>,
     session: &FixtureSession,

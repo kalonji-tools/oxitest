@@ -140,6 +140,11 @@ impl<'a> ExecutionDispatch<'a> {
                         let timeout =
                             resolve_timeout(cache, item, *timeout_secs, *timeout_multiplier);
                         let (outcome, duration_ms) = run_timed(*py, item, session, timeout, *opts);
+                        // Drain diagnostics emitted during test execution
+                        let diags = bridge::drain_session_diagnostics(*py, session);
+                        if !diags.is_empty() {
+                            rep.record_diagnostics(diags);
+                        }
                         timings.push(types::TestTiming {
                             node_id: item.node_id.clone(),
                             duration_ms,
