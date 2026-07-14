@@ -64,7 +64,11 @@ impl FixtureSession {
         let loader = py.import("oxitest._bridge.conftest_loader")?;
         let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
         let result = loader.call_method1("create_session", (paths,))?;
-        let (session, violations): (Bound<'_, PyAny>, Vec<RawViolation>) = result.extract()?;
+        let (session, violations, _diagnostics): (
+            Bound<'_, PyAny>,
+            Vec<RawViolation>,
+            Bound<'_, PyAny>,
+        ) = result.extract()?;
         Ok((Self(session.into()), violations))
     }
 
@@ -151,6 +155,68 @@ impl FixtureSession {
     pub(crate) fn stub(py: Python<'_>) -> Self {
         Self(py.None().into())
     }
+}
+
+/// Drain diagnostics from the Python session and convert to DiagnosticEntry.
+///
+/// Reads `session.diagnostics`, converts each to a `DiagnosticEntry`, clears the
+/// Python list, and returns the entries. Callers (pipeline code) push these into
+/// `RunStats.diagnostics.entries`.
+#[allow(dead_code)] // called by pipeline code in Task 8 (reporter integration)
+pub(crate) fn drain_session_diagnostics(
+    py: Python<'_>,
+    session: &FixtureSession,
+) -> Vec<crate::reporter::stats::DiagnosticEntry> {
+    let session_obj = session.as_py_object(py);
+    drain_diagnostics_from(&session_obj).unwrap_or_default()
+}
+
+fn drain_diagnostics_from(
+    session_obj: &Bound<'_, PyAny>,
+) -> PyResult<Vec<crate::reporter::stats::DiagnosticEntry>> {
+    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+
+    let diag_list = session_obj.getattr("diagnostics")?;
+    let len: usize = diag_list.len()?;
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::with_capacity(len);
+    for i in 0..len {
+        let diag = diag_list.get_item(i)?;
+        let severity_str: String = diag.getattr("severity")?.extract()?;
+        let context: String = diag.getattr("context")?.extract()?;
+        let message: String = diag.getattr("message")?.extract()?;
+        let file: String = diag.getattr("file")?.extract()?;
+        let lineno: u32 = diag.getattr("lineno")?.extract()?;
+
+        let severity = match severity_str.as_str() {
+            "error" => DiagnosticSeverity::Error,
+            "warning" => DiagnosticSeverity::Warning,
+            _ => DiagnosticSeverity::Notice,
+        };
+
+        entries.push(DiagnosticEntry {
+            severity,
+            context: Arc::from(context.as_str()),
+            message,
+            file: if file.is_empty() {
+                None
+            } else {
+                Some(Utf8PathBuf::from(file))
+            },
+            lineno: if lineno == 0 {
+                None
+            } else {
+                Some(LineNo::new(lineno as usize))
+            },
+        });
+    }
+
+    // Clear the Python list
+    diag_list.call_method0("clear")?;
+    Ok(entries)
 }
 
 /// Collected test item extracted from Python. Field names MUST stay in sync with

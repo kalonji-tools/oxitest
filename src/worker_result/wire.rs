@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
-pub(crate) const PROTOCOL_VERSION: u32 = 2;
+pub(crate) const PROTOCOL_VERSION: u32 = 3;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
@@ -179,6 +179,41 @@ pub(crate) enum WireResult {
 pub(crate) struct WireMinimal {
     pub node_id: String,
     pub duration_ms: f64,
+}
+
+/// Envelope for dispatching worker stdout lines by message type.
+///
+/// Deserialized first to determine which full type to parse.
+/// Missing `type` field defaults to "result" for backwards compatibility.
+#[derive(serde::Deserialize)]
+pub(crate) struct WireEnvelope {
+    #[serde(rename = "type", default = "default_result_type")]
+    pub(crate) msg_type: String,
+}
+
+fn default_result_type() -> String {
+    "result".to_string()
+}
+
+/// A diagnostic message from a worker subprocess.
+#[derive(serde::Deserialize)]
+#[expect(dead_code, reason = "fields consumed by reporter in a follow-up PR")]
+pub(crate) struct WireDiagnostic {
+    pub severity: String,
+    pub context: String,
+    pub message: String,
+    #[serde(default)]
+    pub file: String,
+    #[serde(default)]
+    pub lineno: u32,
+}
+
+/// A developer trace from a worker subprocess.
+#[derive(serde::Deserialize)]
+pub(crate) struct WireTrace {
+    pub level: String,
+    pub module: String,
+    pub message: String,
 }
 
 impl WireResult {

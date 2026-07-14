@@ -21,7 +21,7 @@ mod print;
 mod session;
 pub(crate) use session::ReporterSession;
 pub(crate) mod parametrize_buffer;
-mod stats;
+pub(crate) mod stats;
 pub(crate) mod tracing_writer;
 mod traits;
 mod tty;

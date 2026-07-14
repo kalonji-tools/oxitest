@@ -56,6 +56,52 @@ pub(crate) fn drain_worker_results(
                     // Empty line: skip without resetting the deadline.
                     continue;
                 }
+                // Dispatch non-result message types first; they don't count
+                // toward `received` and are handled inline.
+                let msg_type =
+                    match serde_json::from_str::<crate::worker_result::WireEnvelope>(trimmed) {
+                        Ok(env) => env.msg_type,
+                        Err(_) => "result".to_string(), // fallback: assume result
+                    };
+                match msg_type.as_str() {
+                    "diagnostic" => {
+                        result_deadline = Instant::now() + watchdog;
+                        if let Ok(wd) =
+                            serde_json::from_str::<crate::worker_result::WireDiagnostic>(trimmed)
+                        {
+                            tracing::info!(
+                                severity = %wd.severity,
+                                context = %wd.context,
+                                "worker diagnostic: {}",
+                                wd.message
+                            );
+                        }
+                        continue;
+                    }
+                    "trace" => {
+                        result_deadline = Instant::now() + watchdog;
+                        if let Ok(wt) =
+                            serde_json::from_str::<crate::worker_result::WireTrace>(trimmed)
+                        {
+                            match wt.level.as_str() {
+                                "debug" => tracing::debug!(module = %wt.module, "{}", wt.message),
+                                "info" => tracing::info!(module = %wt.module, "{}", wt.message),
+                                "warn" => tracing::warn!(module = %wt.module, "{}", wt.message),
+                                "error" => tracing::error!(module = %wt.module, "{}", wt.message),
+                                _ => tracing::trace!(module = %wt.module, "{}", wt.message),
+                            }
+                        }
+                        continue;
+                    }
+                    "result" => {} // fall through to result handling below
+                    _ => {
+                        result_deadline = Instant::now() + watchdog;
+                        tracing::warn!(msg_type = %msg_type, "unknown worker message type — skipping");
+                        continue;
+                    }
+                }
+
+                // Result handling — unchanged from pre-v3 protocol.
                 match serde_json::from_str::<WireResult>(trimmed) {
                     Ok(r) => {
                         received += 1;
@@ -69,7 +115,6 @@ pub(crate) fn drain_worker_results(
                             );
                             version_warned = true;
                         }
-                        // Reset deadline: subprocess is alive and responding.
                         result_deadline = Instant::now() + watchdog;
                         let resolved = r.into_outcome();
                         let _ = tx.send(WorkerResult {

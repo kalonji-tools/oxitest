@@ -440,7 +440,7 @@ mod compact_and_error_tests {
 
     #[test]
     fn protocol_version_round_trips() {
-        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":2}"#;
+        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":3}"#;
         let r: WireResult = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(r.protocol_version(), PROTOCOL_VERSION);
     }

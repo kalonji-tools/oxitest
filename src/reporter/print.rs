@@ -6,7 +6,7 @@ use crate::types::{CollectError, ExitCode};
 
 use super::colors;
 use super::exit::compute_exit_code;
-use super::format::{fmt_summary, fmt_tip_block, fmt_warning_block};
+use super::format::{fmt_diagnostics_block, fmt_summary, fmt_tip_block};
 use super::stats::RunStats;
 use super::{ReporterOpts, sep_width};
 
@@ -38,8 +38,8 @@ pub(crate) fn print_summary_section(
     interrupted: bool,
 ) -> ExitCode {
     let tip_block = fmt_tip_block(&stats.diagnostics.tip_lines, opts.show_tips, opts.use_color);
-    let warn_block = fmt_warning_block(
-        &stats.diagnostics.warning_msgs,
+    let warn_block = fmt_diagnostics_block(
+        &stats.diagnostics.entries,
         opts.show_warnings,
         opts.use_color,
     );

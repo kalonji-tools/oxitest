@@ -64,11 +64,26 @@ pub(crate) struct TipLine {
     pub(crate) lineno: crate::types::LineNo,
 }
 
-/// A warning captured during session setup/teardown.
+/// Severity of a diagnostic message from the Python bridge.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum DiagnosticSeverity {
+    Error,
+    Warning,
+    Notice,
+}
+
+/// A diagnostic message emitted by the Python bridge or Rust pipeline.
+///
+/// Replaces `WarningEntry` — carries severity for differentiated rendering.
 #[derive(Clone, Debug)]
-pub(crate) struct WarningEntry {
+pub(crate) struct DiagnosticEntry {
+    pub(crate) severity: DiagnosticSeverity,
     pub(crate) context: Arc<str>,
     pub(crate) message: String,
+    #[allow(dead_code)] // reserved for future location-aware rendering
+    pub(crate) file: Option<camino::Utf8PathBuf>,
+    #[allow(dead_code)] // reserved for future location-aware rendering
+    pub(crate) lineno: Option<crate::types::LineNo>,
 }
 
 /// Outcome counters indexed by [`OutcomeKind`].
@@ -114,7 +129,7 @@ impl OutcomeCounters {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct DiagnosticBag {
     pub(crate) tip_lines: Vec<TipLine>,
-    pub(crate) warning_msgs: Vec<WarningEntry>,
+    pub(crate) entries: Vec<DiagnosticEntry>,
 }
 
 #[derive(Clone)]
@@ -202,9 +217,12 @@ impl RunStats {
         no_message_lines: &[usize],
     ) {
         self.counts.increment(OutcomeKind::Warned);
-        self.diagnostics.warning_msgs.push(WarningEntry {
+        self.diagnostics.entries.push(DiagnosticEntry {
+            severity: DiagnosticSeverity::Warning,
             context: item.fn_name.clone(),
             message: reason.to_string(),
+            file: None,
+            lineno: None,
         });
         self.collect_tips(item, no_message_lines);
     }
