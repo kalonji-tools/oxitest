@@ -53,13 +53,13 @@ impl ReporterSession {
     }
 
     pub(crate) fn record_teardown_warning(&mut self, context: &str, error: &str) {
-        self.stats
-            .diagnostics
-            .warning_msgs
-            .push(stats::WarningEntry {
-                context: Arc::from(context),
-                message: error.to_string(),
-            });
+        self.stats.diagnostics.entries.push(stats::DiagnosticEntry {
+            severity: stats::DiagnosticSeverity::Warning,
+            context: Arc::from(context),
+            message: error.to_string(),
+            file: None,
+            lineno: None,
+        });
     }
 }
 
@@ -119,13 +119,13 @@ mod tests {
     fn record_teardown_warning_appends_to_stats() {
         let mut session = ReporterSession::new(0);
         session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
-        assert_eq!(session.stats().diagnostics.warning_msgs.len(), 1);
+        assert_eq!(session.stats().diagnostics.entries.len(), 1);
         assert_eq!(
-            &*session.stats().diagnostics.warning_msgs[0].context,
+            &*session.stats().diagnostics.entries[0].context,
             "end_module(test.py)"
         );
         assert_eq!(
-            session.stats().diagnostics.warning_msgs[0].message,
+            session.stats().diagnostics.entries[0].message,
             "RuntimeError: boom"
         );
     }

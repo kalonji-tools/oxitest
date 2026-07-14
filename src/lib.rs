@@ -53,6 +53,21 @@ fn rewrite_asserts(
     assert_rewriter::rewrite_asserts(py, source, filename)
 }
 
+/// Emit a tracing event from Python bridge code.
+///
+/// Called directly by Python for developer-level traces on the serial path.
+/// Worker subprocesses use LDJSON `{"type": "trace"}` instead.
+#[pyfunction]
+fn trace(level: &str, module: &str, message: &str) {
+    match level {
+        "debug" => tracing::debug!(python_module = module, "{}", message),
+        "info" => tracing::info!(python_module = module, "{}", message),
+        "warn" => tracing::warn!(python_module = module, "{}", message),
+        "error" => tracing::error!(python_module = module, "{}", message),
+        _ => tracing::trace!(python_module = module, "{}", message),
+    }
+}
+
 #[pymodule]
 fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register a stderr tracing subscriber. try_init() is a no-op if a global
@@ -68,5 +83,6 @@ fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run, m)?)?;
     m.add_function(wrap_pyfunction!(rewrite_asserts, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_markers, m)?)?;
+    m.add_function(wrap_pyfunction!(trace, m)?)?;
     Ok(())
 }

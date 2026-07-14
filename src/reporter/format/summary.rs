@@ -153,45 +153,114 @@ pub(crate) fn fmt_tip_block(
     }
 }
 
-pub(crate) fn fmt_warning_block(
-    warning_msgs: &[crate::reporter::stats::WarningEntry],
-    show_warnings: bool,
+pub(crate) fn fmt_diagnostics_block(
+    entries: &[crate::reporter::stats::DiagnosticEntry],
+    show_diagnostics: bool,
     use_color: bool,
 ) -> String {
-    if warning_msgs.is_empty() {
+    use crate::reporter::stats::DiagnosticSeverity;
+
+    if entries.is_empty() {
         return String::new();
     }
-    let label = color_warn("warn", use_color);
-    if show_warnings {
-        let mut block = format!("  {}  {} warnings:\n", label, warning_msgs.len());
-        for w in warning_msgs {
-            block.push_str(&format!(
-                "        {} {}\n",
-                color_dim("┌─", use_color),
-                color_dim(&w.context, use_color),
-            ));
-            for line in w.message.split('\n') {
-                if !line.is_empty() {
-                    block.push_str(&format!(
-                        "        {}  {}\n",
-                        color_dim("│", use_color),
-                        color_warn(line, use_color),
-                    ));
-                }
-            }
-            block.push_str(&format!("        {}\n", color_dim("└─", use_color)));
+
+    // Deduplicate by (severity, context, message), counting occurrences.
+    // Use Vec to preserve insertion order (first-seen order).
+    let mut dedup_keys: Vec<(DiagnosticSeverity, String, String)> = Vec::new();
+    let mut dedup_counts: Vec<usize> = Vec::new();
+    for e in entries {
+        let key = (e.severity.clone(), e.context.to_string(), e.message.clone());
+        if let Some(pos) = dedup_keys.iter().position(|k| *k == key) {
+            dedup_counts[pos] += 1;
+        } else {
+            dedup_keys.push(key);
+            dedup_counts.push(1);
         }
-        block
-    } else {
-        let count = warning_msgs.len();
-        format!(
-            "  {}  {} warning{}  {}\n",
-            label,
-            count,
-            plural(count),
-            color_dim("(--warnings to expand)", use_color)
-        )
     }
+
+    // Sort by severity: Error (0) first, then Warning (1), then Notice (2).
+    let mut indices: Vec<usize> = (0..dedup_keys.len()).collect();
+    indices.sort_by_key(|&i| match dedup_keys[i].0 {
+        DiagnosticSeverity::Error => 0,
+        DiagnosticSeverity::Warning => 1,
+        DiagnosticSeverity::Notice => 2,
+    });
+
+    if !show_diagnostics {
+        // Collapsed: count per severity
+        let mut error_count = 0usize;
+        let mut warn_count = 0usize;
+        let mut notice_count = 0usize;
+        for (i, count) in dedup_counts.iter().enumerate() {
+            match dedup_keys[i].0 {
+                DiagnosticSeverity::Error => error_count += count,
+                DiagnosticSeverity::Warning => warn_count += count,
+                DiagnosticSeverity::Notice => notice_count += count,
+            }
+        }
+        let mut parts = Vec::new();
+        if error_count > 0 {
+            parts.push(color_fail(
+                &format!("{} error{}", error_count, plural(error_count)),
+                use_color,
+            ));
+        }
+        if warn_count > 0 {
+            parts.push(color_warn(
+                &format!("{} warning{}", warn_count, plural(warn_count)),
+                use_color,
+            ));
+        }
+        if notice_count > 0 {
+            parts.push(color_dim(
+                &format!("{} notice{}", notice_count, plural(notice_count)),
+                use_color,
+            ));
+        }
+        let summary = parts.join(" · ");
+        return format!(
+            "  {}  {}\n",
+            summary,
+            color_dim("(--warnings to expand)", use_color)
+        );
+    }
+
+    // Expanded: one box per unique diagnostic, sorted by severity
+    let mut block = String::new();
+    for &idx in &indices {
+        let (ref sev, ref context, ref message) = dedup_keys[idx];
+        let count = dedup_counts[idx];
+
+        let line_color: fn(&str, bool) -> String = match sev {
+            DiagnosticSeverity::Error => color_fail,
+            DiagnosticSeverity::Warning => color_warn,
+            DiagnosticSeverity::Notice => color_dim,
+        };
+
+        let count_suffix = if count > 1 {
+            format!(" (×{})", count)
+        } else {
+            String::new()
+        };
+
+        block.push_str(&format!(
+            "        {} {}{}\n",
+            color_dim("┌─", use_color),
+            color_dim(context, use_color),
+            count_suffix,
+        ));
+        for line in message.split('\n') {
+            if !line.is_empty() {
+                block.push_str(&format!(
+                    "        {}  {}\n",
+                    color_dim("│", use_color),
+                    line_color(line, use_color),
+                ));
+            }
+        }
+        block.push_str(&format!("        {}\n", color_dim("└─", use_color)));
+    }
+    block
 }
 
 #[cfg(test)]
@@ -338,53 +407,123 @@ mod tests {
     }
 
     #[test]
-    fn test_warning_block_empty_returns_empty() {
-        assert!(fmt_warning_block(&[], false, false).is_empty());
-        assert!(fmt_warning_block(&[], true, false).is_empty());
+    fn test_diagnostics_block_empty_returns_empty() {
+        assert!(fmt_diagnostics_block(&[], false, false).is_empty());
+        assert!(fmt_diagnostics_block(&[], true, false).is_empty());
     }
 
     #[test]
-    fn test_warning_block_collapsed_plural() {
-        use crate::reporter::stats::WarningEntry;
+    fn test_diagnostics_block_collapsed_shows_counts() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
         let warnings = vec![
-            WarningEntry {
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Warning,
                 context: Arc::from("tests/test_foo.py::test_a"),
                 message: "DeprecationWarning".to_string(),
+                file: None,
+                lineno: None,
             },
-            WarningEntry {
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Warning,
                 context: Arc::from("tests/test_foo.py::test_b"),
                 message: "DeprecationWarning".to_string(),
+                file: None,
+                lineno: None,
             },
         ];
-        let s = fmt_warning_block(&warnings, false, false);
+        let s = fmt_diagnostics_block(&warnings, false, false);
         assert!(s.contains("2 warnings"));
         assert!(s.contains("--warnings to expand"));
         assert!(!s.contains("test_a"));
     }
 
     #[test]
-    fn test_warning_block_collapsed_singular() {
-        use crate::reporter::stats::WarningEntry;
-        let warnings = vec![WarningEntry {
+    fn test_diagnostics_block_collapsed_singular() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        let warnings = vec![DiagnosticEntry {
+            severity: DiagnosticSeverity::Warning,
             context: Arc::from("tests/test_foo.py::test_a"),
             message: "DeprecationWarning".to_string(),
+            file: None,
+            lineno: None,
         }];
-        let s = fmt_warning_block(&warnings, false, false);
+        let s = fmt_diagnostics_block(&warnings, false, false);
         assert!(s.contains("1 warning"));
         assert!(!s.contains("1 warnings"));
     }
 
     #[test]
-    fn test_warning_block_expanded_shows_node_and_reason() {
-        use crate::reporter::stats::WarningEntry;
-        let warnings = vec![WarningEntry {
+    fn test_diagnostics_block_expanded_shows_context_and_message() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        let warnings = vec![DiagnosticEntry {
+            severity: DiagnosticSeverity::Warning,
             context: Arc::from("tests/test_foo.py::test_a"),
             message: "use new_api() instead".to_string(),
+            file: None,
+            lineno: None,
         }];
-        let s = fmt_warning_block(&warnings, true, false);
+        let s = fmt_diagnostics_block(&warnings, true, false);
         assert!(s.contains("tests/test_foo.py::test_a"));
         assert!(s.contains("use new_api() instead"));
         assert!(!s.contains("--warnings to expand"));
+    }
+
+    #[test]
+    fn test_diagnostics_block_deduplicates_identical_entries() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        let entries = vec![
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Warning,
+                context: Arc::from("teardown"),
+                message: "RuntimeError: boom".to_string(),
+                file: None,
+                lineno: None,
+            },
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Warning,
+                context: Arc::from("teardown"),
+                message: "RuntimeError: boom".to_string(),
+                file: None,
+                lineno: None,
+            },
+        ];
+        let s = fmt_diagnostics_block(&entries, true, false);
+        // Should show ×2 count, not two separate boxes
+        assert!(s.contains("×2"), "duplicate entries should show ×2 count");
+        // Should only have one ┌─ (one box, not two)
+        assert_eq!(
+            s.matches("┌─").count(),
+            1,
+            "should deduplicate into one box"
+        );
+    }
+
+    #[test]
+    fn test_diagnostics_block_sorts_by_severity() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        let entries = vec![
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Notice,
+                context: Arc::from("notice-ctx"),
+                message: "info message".to_string(),
+                file: None,
+                lineno: None,
+            },
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Error,
+                context: Arc::from("error-ctx"),
+                message: "bad thing".to_string(),
+                file: None,
+                lineno: None,
+            },
+        ];
+        let s = fmt_diagnostics_block(&entries, true, false);
+        let error_pos = s.find("error-ctx").expect("should contain error-ctx");
+        let notice_pos = s.find("notice-ctx").expect("should contain notice-ctx");
+        assert!(
+            error_pos < notice_pos,
+            "errors should appear before notices"
+        );
     }
 
     #[test]
