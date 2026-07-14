@@ -143,7 +143,7 @@ prek run --all-files
 
 ### Two-layer design
 
-**Rust layer** (`src/`): Entry point is `src/lib.rs`, which exposes a single `run(args)` PyO3 function. The Rust layer handles:
+**Rust layer** (`src/`): Entry point is `src/lib.rs`, which exposes `run(args)` and `trace(level, module, message)` PyO3 functions. The Rust layer handles:
 - `config.rs` — CLI parsing (clap) and `pyproject.toml` config under `[tool.oxitest]`
 - `collector.rs` — file discovery based on `testpaths`/`python_files` patterns
 - `cache.rs` — timing cache for parallel scheduling decisions and `--lf`/`--ff` support
@@ -151,16 +151,16 @@ prek run --all-files
 - `query/` — query DSL compiler, evaluator, and `oxitest query` subcommand
 - `parallel.rs` — spawns worker subprocesses; each worker runs `python/oxitest/_bridge/worker.py`
 - `scheduler.rs` — distributes test groups across workers
-- `reporter/` — TTY, CI, and JSON (CTRF) reporters
+- `reporter/` — TTY, CI, and JSON (CTRF) reporters; `DiagnosticEntry`/`DiagnosticSeverity` in `stats.rs`; severity-sorted dedup rendering in `format/summary.rs`
 - `strict.rs` — strict-mode violation checking (bare asserts, dict parametrize, missing mark reason)
-- `bridge.rs` — PyO3 calls into the Python bridge: `collect_module`, `run_test`, `FixtureSession`
+- `bridge.rs` — PyO3 calls into the Python bridge: `collect_module`, `run_test`, `FixtureSession`, `drain_session_diagnostics`
 
 **Python bridge** (`python/oxitest/_bridge/`): Pure-Python layer that does the actual test execution. Key modules by responsibility:
 
 *Fixture system:*
 - `_fixture_registry.py` — `FixtureDef`, `FixtureRegistry`; fixture definition and registry
 - `_fixture_session.py` — `FixtureSession`, `_SessionProtocol`, `_Scope`; fixture lifecycle (scope caching, yield teardown, autouse)
-- `_fixture_context.py` — fixture resolution context
+- `_fixture_context.py` — fixture resolution context, `_warn_teardown` diagnostic helper
 - `_fixture_instantiator.py` — fixture instantiation and dependency injection
 - `_fixture_type.py` — `Fixture[T]`, `FixtureRef[T]`, `Yields[T]` type aliases
 - `_fixture_validator.py` — fixture signature and type validation
@@ -182,8 +182,8 @@ prek run --all-files
 *Execution:*
 - `executor.py` — `run_test()`: loads module, resolves fixtures/parametrize, runs test, returns `TestResult`
 - `_runners.py` — test execution runners (serial, debug)
-- `result.py` — `TestResult` and outcome types
-- `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes results to stdout
+- `result.py` — `TestResult` and outcome types, `Diagnostic` and `DiagnosticSeverity`
+- `worker.py` — entry point for parallel worker subprocesses; reads JSON tasks from stdin, writes LDJSON results/diagnostics/traces to stdout via `_emit()`
 - `parametrize.py` — resolves `@mark.parametrize` kwargs into per-case values
 
 *Collection:*
@@ -197,6 +197,7 @@ prek run --all-files
 - `_fn_metadata.py` — `FunctionMetadata` frozen dataclass
 - `_violation_checkers.py` — strict-mode violation checking
 - `_namespace_validation.py` — fixture/helper namespace validation
+- `_diagnostic_collector.py` — `ContextVar`-based `emit_diagnostic()` and `_diagnostic_collector_var`
 - `_assert_error.py` — `_OxitestAssertionError` and enriched assertion diagnostics
 
 ### PyO3 data contract
@@ -205,7 +206,7 @@ Both the serial PyO3 path (`bridge.rs`) and the parallel JSON path (`worker_resu
 
 ### Parallel execution
 
-The Rust scheduler spawns `python -m oxitest._bridge.worker` subprocesses. Each worker receives a JSON task (module path + items + conftest paths) via stdin and writes one JSON result line per test to stdout. The worker is persistent within a run — it processes tasks until stdin is closed.
+The Rust scheduler spawns `python -m oxitest._bridge.worker` subprocesses. Each worker receives a JSON task (module path + items + conftest paths) via stdin and writes LDJSON lines to stdout (wire protocol v3). Each line has a `"type"` discriminator: `"result"` (test outcome), `"diagnostic"` (user-facing message), or `"trace"` (developer log). The drain loop in `parallel/drain.rs` dispatches on this field. The worker is persistent within a run — it processes tasks until stdin is closed.
 
 ### Fixture injection protocol
 
