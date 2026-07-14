@@ -39,7 +39,7 @@ Result schema (stdout, one line per test):
 
 from __future__ import annotations
 
-__all__ = ["main", "run"]
+__all__ = ["_emit", "main", "run"]
 
 import contextlib
 import io
@@ -54,6 +54,20 @@ try:
     import coverage as _coverage
 except ImportError:
     _coverage: types.ModuleType | None = None
+
+
+def _emit(
+    obj: dict[str, object],
+    out: io.TextIOBase | None = None,
+) -> None:
+    """Write a JSON object as a single line to the worker IPC channel.
+
+    All worker → Rust communication flows through this function.
+    The ``out`` parameter exists for testing; production uses ``sys.stdout``.
+    """
+    target = out or sys.stdout
+    target.write(json.dumps(obj) + "\n")
+    target.flush()
 
 
 class WorkerTaskItem(TypedDict):
@@ -105,7 +119,7 @@ def run(task: WorkerTask) -> None:
         show_internals=task.get("show_internals", False),
     )
 
-    session, _violations = create_session(conftest_paths)
+    session, _violations, _diagnostics = create_session(conftest_paths)
 
     # Register fixtures declared in the test module itself (e.g. a Fixtures()
     # instance at module level). This mirrors what the serial runner does via
@@ -133,7 +147,7 @@ def run(task: WorkerTask) -> None:
             debug=debug,
         )
         duration_ms = (time.monotonic() - start) * 1000.0
-        print(json.dumps(result.to_wire(meta.node_id, duration_ms)))  # noqa: T201 — worker IPC via stdout
+        _emit(result.to_wire(meta.node_id, duration_ms))
 
 
 def main() -> None:

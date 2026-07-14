@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 
 from oxitest import TempDir
+from oxitest._bridge.worker import _emit
 
 
 def _make_task(path: str, fn_name: str) -> dict:
@@ -137,4 +139,18 @@ def test_worker_handles_malformed_json_gracefully() -> None:
     )
     assert "malformed JSON" in result.stderr, (
         f"worker should log 'malformed JSON' to stderr, got {result.stderr!r}"
+    )
+
+
+def test_emit_writes_json_line_to_stdout() -> None:
+    """_emit writes a JSON object followed by newline to stdout."""
+    buf = io.StringIO()
+    _emit({"type": "result", "outcome": "passed"}, out=buf)
+    output = buf.getvalue()
+    assert output.endswith("\n"), (
+        "_emit should terminate output with newline for LDJSON"
+    )
+    parsed = json.loads(output.strip())
+    assert parsed == {"type": "result", "outcome": "passed"}, (
+        "_emit should write valid JSON matching the input dict"
     )

@@ -17,6 +17,7 @@ from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
     UnannotatedFixtureParamError,
@@ -48,7 +49,7 @@ from oxitest._bridge._read_fixtures import _fixtures_registry_var
 from oxitest._bridge._read_helpers import _helpers_registry_var
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.proxy_ns import FixturesProxy
-from oxitest._bridge.result import CacheEntry, CacheStats
+from oxitest._bridge.result import CacheEntry, CacheStats, Diagnostic
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import (
@@ -320,6 +321,11 @@ class FixtureSession:
             self._registry, self._plugin_registry, self._module_cache
         )
 
+        self.diagnostics: list[Diagnostic] = []
+        self._prev_diag_var = _diagnostic_collector_var.get(None)
+        if self._prev_diag_var is None:
+            _diagnostic_collector_var.set(self.diagnostics)
+
         self._prev_fixtures_var = _fixtures_registry_var.get(None)
         self._prev_helpers_var = _helpers_registry_var.get(None)
         # Only overwrite the fixtures contextvar if there is no outer
@@ -437,10 +443,13 @@ class FixtureSession:
         # (i.e., _prev was None, meaning we were the outermost session).
         prev_fx = getattr(self, "_prev_fixtures_var", None)
         prev_hlp = getattr(self, "_prev_helpers_var", None)
+        prev_diag = getattr(self, "_prev_diag_var", None)
         if prev_fx is None:
             _fixtures_registry_var.set(None)
         if prev_hlp is None:
             _helpers_registry_var.set(None)
+        if prev_diag is None:
+            _diagnostic_collector_var.set(None)
 
     def get_cache_stats(self) -> CacheStats:
         """Return shared fixture cache hit/miss statistics."""

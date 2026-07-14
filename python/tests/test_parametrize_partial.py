@@ -434,7 +434,7 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
         "    assert x * multiplier == expected\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="a-c"
     )
@@ -497,7 +497,7 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "def test_db(db: Fixture[str], expected: str) -> None:\n"
         "    assert db == expected\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(
         str(f), "test_db", session=session, param_id="pg-check"
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "SessionResult",
     "_extract_depends_on",
     "_extract_fixture_type",
     "_extract_helpers",
@@ -19,7 +20,7 @@ import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, get_type_hints
+from typing import TYPE_CHECKING, Any, NamedTuple, get_type_hints
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
@@ -36,7 +37,16 @@ from oxitest._bridge._namespace_validation import validate_namespace_name
 
 if TYPE_CHECKING:
     from oxitest._bridge._helper_registry import HelperDef
-    from oxitest._bridge.result import CollectedViolation
+    from oxitest._bridge.result import CollectedViolation, Diagnostic
+
+
+class SessionResult(NamedTuple):
+    """Result of ``create_session``: session, violations, diagnostics."""
+
+    session: FixtureSession
+    violations: list[CollectedViolation]
+    diagnostics: list[Diagnostic]
+
 
 logger = logging.getLogger(__name__)
 
@@ -255,13 +265,16 @@ def create_conftest_fixtures(
 
 def create_session(
     conftest_paths: Sequence[str],
-) -> tuple[FixtureSession, list[CollectedViolation]]:
+) -> SessionResult:
     """Build a FixtureSession from all conftest paths.
 
-    Convenience wrapper around ``create_conftest_fixtures`` that constructs
-    the ``FixtureSession`` for callers that still expect one.
+    Returns a ``SessionResult`` named tuple of (session, violations,
+    diagnostics) where diagnostics contains any Diagnostic instances
+    emitted during conftest loading.
     """
     defs, violations, helper_registry = create_conftest_fixtures(conftest_paths)
     session = FixtureSession(defs)
     session.set_helper_registry(helper_registry)
-    return session, violations
+    diagnostics = list(session.diagnostics)
+    session.diagnostics.clear()
+    return SessionResult(session, violations, diagnostics)

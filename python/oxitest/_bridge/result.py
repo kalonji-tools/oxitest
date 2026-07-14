@@ -4,6 +4,8 @@ __all__ = [
     "PROTOCOL_VERSION",
     "CacheEntry",
     "CacheStats",
+    "Diagnostic",
+    "DiagnosticSeverity",
     "ErrorResult",
     "FailedResult",
     "FixtureTiming",
@@ -19,7 +21,7 @@ __all__ = [
 ]
 
 from dataclasses import asdict, dataclass
-from enum import StrEnum
+from enum import StrEnum, auto
 from typing import Any
 
 
@@ -63,12 +65,48 @@ _NON_FAILURE_STATUSES = frozenset(
     }
 )
 
-PROTOCOL_VERSION: int = 2
+
+class DiagnosticSeverity(StrEnum):
+    """Severity of a diagnostic message emitted by the bridge."""
+
+    ERROR = auto()
+    WARNING = auto()
+    NOTICE = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class Diagnostic:
+    """A diagnostic message emitted by the Python bridge.
+
+    User-facing diagnostics route through Rust's reporter.
+    Frozen per ADR-0005.
+    """
+
+    severity: DiagnosticSeverity
+    context: str
+    message: str
+    file: str = ""
+    lineno: int = 0
+
+    def to_wire(self) -> dict[str, Any]:
+        """Serialize for the worker LDJSON protocol."""
+        return {
+            "type": "diagnostic",
+            "severity": str(self.severity),
+            "context": self.context,
+            "message": self.message,
+            "file": self.file,
+            "lineno": self.lineno,
+        }
+
+
+PROTOCOL_VERSION: int = 3
 
 
 def _wire_base(outcome: str, node_id: str, duration_ms: float) -> dict[str, Any]:
     """Build the required wire fields shared by all outcome types."""
     return {
+        "type": "result",
         "node_id": node_id,
         "outcome": outcome,
         "duration_ms": duration_ms,
