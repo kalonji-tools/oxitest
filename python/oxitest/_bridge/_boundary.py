@@ -1,10 +1,8 @@
-"""Trust-boundary helpers — stdlib-only leaf module.
+"""Trust-boundary helpers.
 
 Provides ``safe_call`` for catching arbitrary exceptions at boundaries
 where user/plugin code is executed, plus focused wrappers for common
 patterns (type-hint resolution, fixture teardown).
-
-Zero oxitest imports — this module depends only on the standard library.
 """
 
 from __future__ import annotations
@@ -16,11 +14,10 @@ __all__ = [
     "safe_type_hints",
 ]
 
-import logging
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar, get_type_hints as _stdlib_hints
 
-logger = logging.getLogger(__name__)
+from oxitest._oxitest import trace as _trace
 
 _T = TypeVar("_T")
 
@@ -74,8 +71,8 @@ def safe_type_hints(obj: Any, **kwargs: Any) -> dict[str, Any] | None:
     return safe_call(
         lambda: _stdlib_hints(obj, **kwargs),
         default=None,
-        on_error=lambda exc: logger.debug(
-            "Could not resolve type hints for %r: %s", obj, exc
+        on_error=lambda exc: _trace(
+            "debug", __name__, f"Could not resolve type hints for {obj!r}: {exc}"
         ),
     )
 
@@ -97,6 +94,6 @@ def safe_teardown(
         on_error=lambda exc: (
             warn(name, exc)
             if warn is not None
-            else logger.debug("Teardown %r failed: %s", name, exc)
+            else _trace("debug", __name__, f"Teardown {name!r} failed: {exc}")
         ),
     )

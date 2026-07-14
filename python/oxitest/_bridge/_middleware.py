@@ -13,7 +13,6 @@ __all__ = [
 import asyncio
 import contextlib
 import inspect
-import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -21,8 +20,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._boundary import async_safe_call
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import FixtureSetupError
-from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge._runners import run_base_async
 
 if TYPE_CHECKING:
@@ -33,7 +32,7 @@ from oxitest._bridge._timeout import (
     extract_timeout_seconds,
     make_timeout_wrapper,
 )
-from oxitest._bridge.result import TestResult, _error_result
+from oxitest._bridge.result import DiagnosticSeverity, TestResult, _error_result
 
 
 def _compose(
@@ -179,11 +178,10 @@ async def _teardown_async_generators(
         await async_safe_call(
             _drain(),
             default=None,
-            on_error=lambda exc, fixture_name=name: warnings.warn(
-                FixtureTeardownWarning(
-                    f"error in teardown of fixture '{fixture_name}': {exc}"
-                ),
-                stacklevel=2,
+            on_error=lambda exc, fixture_name=name: emit_diagnostic(
+                DiagnosticSeverity.WARNING,
+                "fixture teardown",
+                f"error in teardown of fixture '{fixture_name}': {exc}",
             ),
         )
 

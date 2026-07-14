@@ -8,8 +8,9 @@ from typing import Any
 import oxitest as oxi
 from oxitest._bridge._async_backend import AsyncioBackend, SharedAsyncSession
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import FixtureSetupError
-from oxitest._bridge._fixture_context import FixtureTeardownWarning
+from oxitest._bridge.result import Diagnostic
 
 # ── Stub backend / session ────────────────────────────────────────────────────
 
@@ -306,5 +307,17 @@ def test_async_generator_fixture_teardown_exception_reported() -> None:
     assert value == 42, f"should yield the value before teardown, got {value!r}"
     assert len(mgr.teardowns) == 1, "should track one teardown"
 
-    with oxi.warns(FixtureTeardownWarning, match="teardown exploded"):
+    diags: list[Diagnostic] = []
+    token = _diagnostic_collector_var.set(diags)
+    try:
         mgr.cleanup()
+    finally:
+        _diagnostic_collector_var.reset(token)
+
+    assert any(
+        d.context == "fixture teardown" and "teardown exploded" in d.message
+        for d in diags
+    ), (
+        "async fixture teardown errors must emit a diagnostic so users know cleanup"
+        " failed -- silently swallowing them hides resource leaks"
+    )

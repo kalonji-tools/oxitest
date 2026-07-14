@@ -5,10 +5,9 @@ from __future__ import annotations
 import sys
 import textwrap
 import types
-import warnings
 
 import oxitest
-from oxitest import Fixture, TempDir, Yields, helpers, raises, warns
+from oxitest import Fixture, TempDir, Yields, helpers, raises
 from oxitest._bridge._fixture_registry import ConftestSource
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperRegistry
@@ -22,6 +21,7 @@ from oxitest._bridge.conftest_loader import (
     find_conftest_paths,
     load_fixtures_from_conftest,
 )
+from oxitest._bridge.result import Diagnostic
 
 # ── find_conftest_paths ───────────────────────────────────────────────────────
 
@@ -88,12 +88,21 @@ def test_find_conftest_test_outside_rootdir_returns_empty(tmp: TempDir) -> None:
 # ── load_fixtures_from_conftest ───────────────────────────────────────────────
 
 
-def test_load_fixtures_empty_conftest_warns(tmp: TempDir) -> None:
-    """create_session warns when a conftest.py contains no Fixtures instance."""
+def test_load_fixtures_empty_conftest_warns(
+    tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """create_session emits a diagnostic when a conftest.py has no Fixtures instance."""
     f = tmp / "conftest.py"
     f.write_text("")
-    with warns(UserWarning, match="no Fixtures instance"):
-        create_session([str(f)])
+    create_session([str(f)])
+    assert any(
+        d.context == "conftest loading" and "no Fixtures instance" in d.message
+        for d in diag_collector
+    ), (
+        "empty conftest must emit a 'conftest loading' diagnostic about missing"
+        f" Fixtures instance: {diag_collector}"
+    )
 
 
 def test_load_fixtures_extracts_from_fixtures_instance(tmp: TempDir) -> None:
@@ -466,10 +475,11 @@ def test_create_session_stores_helper_registry(tmp: TempDir) -> None:
     )
 
 
-def test_create_session_helpers_only_conftest_no_fixtures_no_warning(
+def test_create_session_helpers_only_conftest_no_fixtures_no_diagnostic(
     tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
 ) -> None:
-    """A conftest with only Helpers() (no Fixtures) should not warn."""
+    """A conftest with only Helpers() (no Fixtures) should not emit a diagnostic."""
     f = tmp / "conftest.py"
     f.write_text(
         "from oxitest import Helpers\n"
@@ -478,17 +488,29 @@ def test_create_session_helpers_only_conftest_no_fixtures_no_warning(
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        create_session([str(f)])
+    create_session([str(f)])
+    conftest_diags = [d for d in diag_collector if d.context == "conftest loading"]
+    assert conftest_diags == [], (
+        "conftest with only Helpers() should not emit conftest loading diagnostics,"
+        f" got {conftest_diags}"
+    )
 
 
-def test_create_session_empty_conftest_still_warns(tmp: TempDir) -> None:
-    """A conftest with NO fixtures AND NO helpers should still warn."""
+def test_create_session_empty_conftest_still_warns(
+    tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """A conftest with NO fixtures AND NO helpers should still emit a diagnostic."""
     f = tmp / "conftest.py"
     f.write_text("")
-    with warns(UserWarning, match="no Fixtures instance"):
-        create_session([str(f)])
+    create_session([str(f)])
+    assert any(
+        d.context == "conftest loading" and "no Fixtures instance" in d.message
+        for d in diag_collector
+    ), (
+        "empty conftest must emit a 'conftest loading' diagnostic about missing"
+        f" Fixtures instance: {diag_collector}"
+    )
 
 
 def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir) -> None:

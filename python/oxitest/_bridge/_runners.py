@@ -30,6 +30,7 @@ from oxitest._bridge._diagnostics import (
 )
 from oxitest._bridge._timeout import OxitestTimeoutError
 from oxitest._bridge.result import PassedResult, WarnedResult
+from oxitest._oxitest import trace as _rust_trace
 
 if TYPE_CHECKING:
     from oxitest._bridge._debugger import DebuggerBackend
@@ -76,13 +77,16 @@ def _print_banner(
     file: Any = None,
 ) -> None:
     """Print a debug/trace banner with optional body lines."""
-    out = file if file is not None else _sys.__stderr__
     width = max(60, len(node_id) + 12)
     header = f"── {mode} {node_id} "
     header += "─" * (width - len(header))
-    print(header, file=out)
-    for line in body_lines:
-        print(line, file=out)
+    # Use "warn" level so banners are visible with the default tracing
+    # filter ("warn").  Only fires during explicit --debug sessions.
+    for text in (header, *body_lines):
+        if file is not None:
+            print(text, file=file)
+        else:
+            _rust_trace("warn", __name__, text)
 
 
 def _trace_before_test(

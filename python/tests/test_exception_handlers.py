@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest import FixtureTeardownWarning, WarnCapture, helpers
+from oxitest import WarnCapture, helpers
 from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
@@ -39,18 +39,6 @@ def test_check_warnings_with_relevant_warning() -> None:
     assert "something fishy" in msg, "expected warning text in message"
 
 
-def test_check_warnings_excludes_teardown_warnings() -> None:
-    """FixtureTeardownWarning is filtered out."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        warnings.warn(FixtureTeardownWarning("teardown oops"), stacklevel=1)
-
-    has, msg = _check_warnings(caught, {})
-
-    assert has is False, "teardown warnings should be excluded"
-    assert msg == "", "expected empty message for teardown-only warnings"
-
-
 def test_check_warnings_excludes_captured_ids() -> None:
     """Warnings already captured by WarnCapture are filtered out."""
     with warnings.catch_warnings(record=True) as caught:
@@ -68,11 +56,10 @@ def test_check_warnings_excludes_captured_ids() -> None:
 
 
 def test_check_warnings_mixed() -> None:
-    """Only non-teardown, non-captured warnings are returned."""
+    """Only non-captured warnings are returned."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         warnings.warn("relevant one", UserWarning, stacklevel=1)
-        warnings.warn(FixtureTeardownWarning("teardown"), stacklevel=1)
         warnings.warn("relevant two", DeprecationWarning, stacklevel=1)
 
     has, msg = _check_warnings(caught, {})
@@ -80,7 +67,6 @@ def test_check_warnings_mixed() -> None:
     assert has is True, "expected relevant warnings detected"
     assert "relevant one" in msg, "expected first relevant warning"
     assert "relevant two" in msg, "expected second relevant warning"
-    assert "teardown" not in msg, "teardown warning should be excluded"
 
 
 # ---------------------------------------------------------------------------

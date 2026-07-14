@@ -6,13 +6,10 @@ __all__ = [
     "FixtureDef",
     "FixtureRegistry",
     "FixtureScope",
-    "FixtureShadowWarning",
     "FixtureSource",
     "PluginSource",
     "_fixture_inner_type",
 ]
-
-import warnings
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import StrEnum
@@ -27,9 +24,10 @@ from typing import (
 )
 
 from oxitest._bridge._boundary import safe_type_hints
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
-from oxitest._bridge.result import CollectedViolation, ViolationKind
+from oxitest._bridge.result import CollectedViolation, DiagnosticSeverity, ViolationKind
 
 T = TypeVar("T")
 
@@ -60,10 +58,6 @@ class BuiltinSource:
 
 
 FixtureSource = ConftestSource | PluginSource | BuiltinSource
-
-
-class FixtureShadowWarning(UserWarning):
-    """Emitted when a child conftest shadows a parent conftest fixture."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,12 +225,11 @@ class FixtureRegistry:
         existing = self._by_name.get(defn.name)
         if existing and existing[-1].conftest_path != defn.conftest_path:
             parent = existing[-1]
-            warnings.warn(
-                FixtureShadowWarning(
-                    f"fixture '{defn.name}' in {defn.conftest_path} "
-                    f"shadows definition in {parent.conftest_path}"
-                ),
-                stacklevel=2,
+            emit_diagnostic(
+                DiagnosticSeverity.NOTICE,
+                "fixture registration",
+                f"fixture '{defn.name}' in {defn.conftest_path} "
+                f"shadows definition in {parent.conftest_path}",
             )
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)

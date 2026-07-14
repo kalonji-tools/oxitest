@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import shutil
 import sys
 import types
 from collections.abc import Callable
-from contextlib import redirect_stderr
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +34,14 @@ from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import load_plugins
-from oxitest._bridge.result import ErrorResult, FailedResult, PassedResult, TestResult
+from oxitest._bridge.result import (
+    Diagnostic,
+    DiagnosticSeverity,
+    ErrorResult,
+    FailedResult,
+    PassedResult,
+    TestResult,
+)
 from oxitest.plugin import Plugin
 
 
@@ -237,13 +242,10 @@ def test_tempdir_keep_tmp_failed_preserves_on_error() -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
-def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
-    """Preserved TempDir path and --keep-tmp hint are printed to stderr on teardown."""
-    # NOTE: This test uses stdlib redirect_stderr instead of dogfooding StdCapture
-    # because the stderr output is produced inside teardowns[0](), which runs
-    # outside the normal test flow. StdCapture/FdCapture would need to be set up
-    # around the teardown invocation and would interfere with the teardown's own
-    # stream writes. The stdlib approach is the correct choice here.
+def test_tempdir_keep_tmp_emits_diagnostic(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Preserved TempDir path emits a NOTICE diagnostic on teardown."""
     result_cell: list[TestResult | None] = [None]
     ctx, teardowns = _make_builtin_ctx(
         fn_name="fail_test", keep_tmp="failed", result_cell=result_cell
@@ -252,16 +254,28 @@ def test_tempdir_keep_tmp_prints_path_to_stderr() -> None:
     path = tmp.path
 
     result_cell[0] = FailedResult(message="oops")
+    teardowns[0]()
 
-    buf = io.StringIO()
-    with redirect_stderr(buf):
-        teardowns[0]()
-    stderr_output = buf.getvalue()
-    assert str(path) in stderr_output, (
-        f"Preserved TempDir path should be printed to stderr, got: {stderr_output!r}"
+    assert len(diag_collector) == 1, (
+        "TempDir must emit exactly one KEPT diagnostic per preserved directory —"
+        f" duplicates clutter the summary: {diag_collector!r}"
     )
-    assert "--keep-tmp" in stderr_output, (
-        f"Stderr message should mention --keep-tmp, got: {stderr_output!r}"
+    diag = diag_collector[0]
+    assert diag.severity == DiagnosticSeverity.NOTICE, (
+        "KEPT diagnostics are informational — ERROR or WARNING would alarm users"
+        f" for normal --keep-tmp behavior: {diag.severity!r}"
+    )
+    assert diag.context == "tempdir", (
+        "the reporter groups diagnostics by context — wrong context would scatter"
+        f" KEPT messages across unrelated sections: {diag.context!r}"
+    )
+    assert str(path) in diag.message, (
+        "without the path, users cannot find the preserved directory on disk:"
+        f" {diag.message!r}"
+    )
+    assert "--keep-tmp" in diag.message, (
+        "the --keep-tmp hint tells users WHY the directory was preserved —"
+        f" without it, a leftover dir looks like a cleanup bug: {diag.message!r}"
     )
     shutil.rmtree(path, ignore_errors=True)
 

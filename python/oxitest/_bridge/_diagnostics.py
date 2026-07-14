@@ -15,7 +15,6 @@ __all__ = [
 ]
 
 import linecache
-import logging
 import reprlib
 import warnings
 from typing import TYPE_CHECKING, Any, cast
@@ -26,18 +25,16 @@ from oxitest._bridge._assert_error import (
 )
 from oxitest._bridge._boundary import safe_call
 from oxitest._bridge._builtins._warncapture import WarnCapture
-from oxitest._bridge._fixture_context import FixtureTeardownWarning
 from oxitest._bridge.result import (
     ErrorResult,
     FailedResult,
     Frame,
     SkippedResult,
 )
+from oxitest._oxitest import trace as _rust_trace
 
 if TYPE_CHECKING:
     from oxitest._bridge.result import TestResult
-
-logger = logging.getLogger(__name__)
 
 _REPR_MAX = 80
 
@@ -158,8 +155,10 @@ def _compute_field_diffs(
         diff = safe_call(
             _compare,
             default=None,
-            on_error=lambda _, field_name=name: logger.debug(
-                "Field %r comparison failed, skipping diff", field_name
+            on_error=lambda _, field_name=name: _rust_trace(
+                "debug",
+                __name__,
+                f"Field {field_name!r} comparison failed, skipping diff",
             ),
         )
         if diff is not None:
@@ -228,7 +227,7 @@ def check_warnings(
     caught: list[warnings.WarningMessage],
     all_kwargs: dict[str, Any],
 ) -> tuple[bool, str]:
-    """Filter caught warnings, excluding captured and teardown warnings."""
+    """Filter caught warnings, excluding those already captured by WarnCapture."""
     warn_capture = next(
         (v for v in all_kwargs.values() if isinstance(v, WarnCapture)), None
     )
@@ -236,8 +235,7 @@ def check_warnings(
     relevant = "\n".join(
         f"{wi.category.__name__}: {wi.message}"
         for wi in caught
-        if not issubclass(wi.category, FixtureTeardownWarning)
-        and id(wi) not in captured_ids
+        if id(wi) not in captured_ids
     )
     if not relevant:
         return False, ""

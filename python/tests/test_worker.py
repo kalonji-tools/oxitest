@@ -117,7 +117,7 @@ def test_worker_emits_structured_failure_fields(tmp: TempDir) -> None:
 
 
 def test_worker_handles_malformed_json_gracefully() -> None:
-    """Worker logs to stderr and continues on malformed stdin JSON."""
+    """Worker emits a diagnostic via _emit() and continues on malformed stdin JSON."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     result = subprocess.run(
@@ -133,12 +133,23 @@ def test_worker_handles_malformed_json_gracefully() -> None:
     assert result.returncode == 0, (
         f"worker should exit cleanly after malformed JSON, got rc={result.returncode}"
     )
-    assert result.stdout.strip() == "", (
-        f"worker should not emit anything to stdout for malformed input, "
-        f"got {result.stdout!r}"
+    assert result.stderr.strip() == "", (
+        f"worker should not write anything to stderr for malformed input, "
+        f"got {result.stderr!r}"
     )
-    assert "malformed JSON" in result.stderr, (
-        f"worker should log 'malformed JSON' to stderr, got {result.stderr!r}"
+    stdout_line = result.stdout.strip()
+    assert stdout_line, (
+        "worker should emit a diagnostic JSON line to stdout for malformed input"
+    )
+    diagnostic = json.loads(stdout_line)
+    assert diagnostic.get("type") == "diagnostic", (
+        f"expected type='diagnostic' in worker output, got {diagnostic!r}"
+    )
+    assert diagnostic.get("severity") == "warning", (
+        f"expected severity='warning' in worker diagnostic, got {diagnostic!r}"
+    )
+    assert "malformed JSON" in diagnostic.get("message", ""), (
+        f"expected 'malformed JSON' in diagnostic message, got {diagnostic!r}"
     )
 
 

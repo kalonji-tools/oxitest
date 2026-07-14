@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from oxitest import WarnCapture
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_instantiator import _FixtureOutcome, _unpack_sync
+from oxitest._bridge.result import Diagnostic
 
 
 def test_unpack_sync_plain_value() -> None:
@@ -27,8 +28,8 @@ def test_unpack_sync_generator() -> None:
     outcome.teardown()
 
 
-def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) -> None:
-    """An exception raised during generator teardown should be captured as a warning."""
+def test_unpack_sync_generator_teardown_captures_exception() -> None:
+    """Generator teardown exception should be captured as a diagnostic."""
 
     def gen() -> Generator[str, None, None]:
         yield "val"
@@ -38,13 +39,15 @@ def test_unpack_sync_generator_teardown_captures_exception(warn: WarnCapture) ->
     outcome = _unpack_sync(gen(), "exploding")
     assert outcome.value == "val", f"expected 'val', got {outcome.value!r}"
     assert outcome.teardown is not None, "generator should have teardown"
-    outcome.teardown()
-    assert len(warn.warnings) == 1, (
-        f"expected 1 teardown warning, got {len(warn.warnings)}"
-    )
-    assert "exploding" in str(warn.warnings[0].message), (
-        f"warning should contain fixture name 'exploding', got "
-        f"{str(warn.warnings[0].message)!r}"
+    diags: list[Diagnostic] = []
+    token = _diagnostic_collector_var.set(diags)
+    try:
+        outcome.teardown()
+    finally:
+        _diagnostic_collector_var.reset(token)
+    assert len(diags) == 1, f"expected 1 teardown diagnostic, got {len(diags)}"
+    assert "exploding" in diags[0].message, (
+        f"diagnostic should contain fixture name 'exploding', got {diags[0].message!r}"
     )
 
 

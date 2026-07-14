@@ -6,9 +6,7 @@ import dataclasses
 import hashlib
 import inspect
 import itertools
-import logging
 import sys
-import warnings
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
@@ -16,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 
 from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
@@ -29,18 +28,13 @@ from oxitest._bridge.parametrize import ComposedCases, _as_composed
 from oxitest._bridge.result import (
     CollectedItem,
     CollectedViolation,
+    DiagnosticSeverity,
     ErrorResult,
     ViolationKind,
 )
 
 if TYPE_CHECKING:
     from oxitest._bridge.parametrize import ResolvedCases
-
-logger = logging.getLogger(__name__)
-
-
-class PluginCollectorWarning(UserWarning):
-    """Issued when a plugin collector raises or returns unexpected types."""
 
 
 def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
@@ -511,19 +505,19 @@ def collect_module(
                     if isinstance(item, CollectedItem):
                         items.append(item)
                     else:
-                        warnings.warn(
+                        emit_diagnostic(
+                            DiagnosticSeverity.WARNING,
+                            "plugin collector",
                             f"Plugin collector {collector_name!r} returned "
                             f"{type(item).__name__!r} instead of CollectedItem "
                             f"while collecting {path!r} — item dropped",
-                            PluginCollectorWarning,
-                            stacklevel=1,
                         )
             except Exception as exc:  # noqa: BLE001 — plugin collector is external code
-                warnings.warn(
+                emit_diagnostic(
+                    DiagnosticSeverity.WARNING,
+                    "plugin collector",
                     f"Plugin collector {collector_name!r} raised "
                     f"{type(exc).__name__}: {exc} while collecting {path!r}",
-                    PluginCollectorWarning,
-                    stacklevel=1,
                 )
 
     # Bare-assert detection is now handled in Rust (bare_asserts.rs).

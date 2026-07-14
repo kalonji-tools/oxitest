@@ -7,14 +7,13 @@ from types import MappingProxyType, ModuleType
 from typing import Any
 
 import oxitest
-from oxitest import CollectedItem, TempDir, WarnCapture, helpers, raises
+from oxitest import CollectedItem, TempDir, helpers, raises
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_type import Fixture
 from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
-    PluginCollectorWarning,
     _apply_module_marks,
     _collect_items,
     _extract_module_marks,
@@ -24,7 +23,7 @@ from oxitest._bridge.importer import (
     collect_module,
 )
 from oxitest._bridge.parametrize import DictCases
-from oxitest._bridge.result import ViolationKind
+from oxitest._bridge.result import Diagnostic, ViolationKind
 
 
 def test_collect_empty_module(tmp: TempDir) -> None:
@@ -1268,15 +1267,17 @@ class _GoodCollector:
         ]
 
 
-def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
-    """A collector that raises emits PluginCollectorWarning."""
+def test_collector_error_emits_diagnostic(
+    tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """A collector that raises emits a plugin collector diagnostic."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_err.py"
     )
     session = _FakeSession(
         plugin_registry=_FakeRegistry(collectors=[_RaisingCollector()])
     )
-
     items, _ = collect_module(path, session=session)
 
     # The regular test item should still be collected despite the collector error
@@ -1286,35 +1287,34 @@ def test_collector_error_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
         f"{len(items)}"
     )
 
-    collector_warnings = [
-        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
-    ]
-    assert len(collector_warnings) == 1, (
-        "a failing collector must emit exactly one PluginCollectorWarning so users know"
-        " the plugin is broken -- zero means silent failure, more than one means"
-        " duplicate reporting: "
-        f"{warn.warnings}"
+    collector_diags = [d for d in diag_collector if d.context == "plugin collector"]
+    assert len(collector_diags) == 1, (
+        "a failing collector must emit exactly one diagnostic so users know the plugin"
+        " is broken -- zero means silent failure, more than one means duplicate"
+        f" reporting: {diag_collector}"
     )
-    msg = str(collector_warnings[0].message)
+    msg = collector_diags[0].message
     assert "_RaisingCollector" in msg, (
-        f"the warning must identify the collector class so the user knows which plugin"
-        f" to fix or disable: {msg}"
+        f"the diagnostic must identify the collector class so the user knows which"
+        f" plugin to fix or disable: {msg}"
     )
     assert "collector went boom" in msg, (
-        f"the warning must include the original error message so users can diagnose the"
-        f" root cause without re-running with debug logging: {msg}"
+        f"the diagnostic must include the original error message so users can diagnose"
+        f" the root cause without re-running with debug logging: {msg}"
     )
 
 
-def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> None:
-    """A collector returning non-CollectedItem values emits a warning per bad item."""
+def test_non_collected_item_emits_diagnostic(
+    tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Collector returning non-CollectedItem emits a diagnostic per bad item."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_bad.py"
     )
     session = _FakeSession(
         plugin_registry=_FakeRegistry(collectors=[_BadReturnCollector()])
     )
-
     items, _ = collect_module(path, session=session)
 
     # Only the base test should be collected; bad returns are dropped
@@ -1323,37 +1323,37 @@ def test_non_collected_item_emits_warning(tmp: TempDir, warn: WarnCapture) -> No
         f" cannot corrupt the test schedule: {len(items)}"
     )
 
-    collector_warnings = [
-        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
-    ]
-    assert len(collector_warnings) == 2, (
-        "each non-CollectedItem return value must produce a separate warning so the"
+    collector_diags = [d for d in diag_collector if d.context == "plugin collector"]
+    assert len(collector_diags) == 2, (
+        "each non-CollectedItem return value must produce a separate diagnostic so the"
         " plugin author can identify every invalid item: "
-        f"{warn.warnings}"
+        f"{diag_collector}"
     )
-    msg0 = str(collector_warnings[0].message)
+    msg0 = collector_diags[0].message
     assert "_BadReturnCollector" in msg0, (
-        f"the warning must name the collector class so the plugin author knows which"
+        f"the diagnostic must name the collector class so the plugin author knows which"
         f" collector returned invalid data: {msg0}"
     )
     assert "str" in msg0, (
-        f"the warning must name the unexpected return type so the plugin author knows"
-        f" what to fix (expected CollectedItem, got str): {msg0}"
+        f"the diagnostic must name the unexpected return type so the plugin author"
+        f" knows what to fix (expected CollectedItem, got str): {msg0}"
     )
-    msg1 = str(collector_warnings[1].message)
+    msg1 = collector_diags[1].message
     assert "int" in msg1, (
         f"each bad return must name its specific type so the plugin author can fix each"
         f" one individually: {msg1}"
     )
 
 
-def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) -> None:
-    """A well-behaved collector adds items and emits no warnings."""
+def test_good_collector_adds_items_no_diagnostics(
+    tmp: TempDir,
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """A well-behaved collector adds items and emits no diagnostics."""
     path = helpers.common.write_test_module(
         tmp, "def test_ok(): pass\n", name="test_col_good.py"
     )
     session = _FakeSession(plugin_registry=_FakeRegistry(collectors=[_GoodCollector()]))
-
     items, _ = collect_module(path, session=session)
 
     assert len(items) == 2, (
@@ -1367,13 +1367,11 @@ def test_good_collector_adds_items_no_warnings(tmp: TempDir, warn: WarnCapture) 
         f"{[i.fn_name for i in items]}"
     )
 
-    collector_warnings = [
-        w for w in warn.warnings if issubclass(w.category, PluginCollectorWarning)
-    ]
-    assert len(collector_warnings) == 0, (
+    collector_diags = [d for d in diag_collector if d.context == "plugin collector"]
+    assert len(collector_diags) == 0, (
         f"a well-behaved collector returning valid CollectedItems must not trigger"
-        f" warnings -- false warnings would train plugin authors to ignore real"
-        f" problems: {collector_warnings}"
+        f" diagnostics -- false diagnostics would train plugin authors to ignore real"
+        f" problems: {collector_diags}"
     )
 
 

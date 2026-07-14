@@ -13,12 +13,12 @@ __all__ = ["OxitestTimeoutError", "extract_timeout_seconds", "make_timeout_wrapp
 import ctypes
 import signal
 import threading
-import warnings
 from collections.abc import Mapping
 from typing import Any
 
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import OxitestTimeoutError
-from oxitest._bridge.result import TimeoutResult
+from oxitest._bridge.result import DiagnosticSeverity, TimeoutResult
 
 
 class _UnixTimeoutContext:
@@ -77,10 +77,10 @@ class _WindowsTimeoutContext:
         # result == 1: success
         # result > 1: set on multiple threads (should not happen)
         if result == 0:
-            warnings.warn(
+            emit_diagnostic(
+                DiagnosticSeverity.WARNING,
+                "timeout",
                 "OxitestTimeoutError could not be injected: thread not found",
-                RuntimeWarning,
-                stacklevel=1,
             )
         elif result > 1:
             # Undo: we accidentally set the exception on multiple threads

@@ -16,11 +16,12 @@ __all__ = [
 
 import asyncio
 import contextlib
-import warnings
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
+from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
     from oxitest._bridge.plugin_loader import PluginRegistry
@@ -91,9 +92,10 @@ class AsyncioSharedSession:
                 self._loop.run_until_complete(
                     asyncio.gather(*stray, return_exceptions=True)
                 )
-                warnings.warn(
+                emit_diagnostic(
+                    DiagnosticSeverity.WARNING,
+                    "async session",
                     f"leaked {len(stray)} task(s) (cancelled)",
-                    stacklevel=2,
                 )
 
     def close(self) -> None:
