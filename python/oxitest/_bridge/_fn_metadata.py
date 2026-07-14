@@ -27,11 +27,11 @@ _ATTR = "_oxitest_meta"
 @dataclass(frozen=True, slots=True)
 class FunctionMetadata:
     marks: tuple[MarkInfo, ...] = ()
-    param_cases: tuple[ResolvedCases, ...] | None = None
-    fixture_name: str | None = None
     arranged: tuple[
         type[BuiltinFixture] | str, ...
     ] = ()  # fixture types or names requested via @oxi.arrange
+    param_cases: tuple[ResolvedCases, ...] | None = None
+    fixture_name: str | None = None
 
 
 def get_metadata(fn: object) -> FunctionMetadata:

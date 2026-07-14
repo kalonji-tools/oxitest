@@ -35,6 +35,11 @@ def test_get_or_create_creates_on_first_access() -> None:
         f"newly created FunctionMetadata should have fixture_name=None, "
         f"got {meta.fixture_name!r}"
     )
+    assert meta.arranged == (), (
+        f"newly created FunctionMetadata should have empty arranged, "
+        f"got {meta.arranged!r} — "
+        f"undecorated tests must not require explicit initialization of arranged"
+    )
 
 
 def test_get_or_create_returns_same_instance() -> None:
