@@ -8,6 +8,7 @@ import types
 
 import oxitest
 from oxitest import Fixture, TempDir, Yields, helpers, raises
+from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import ConftestSource
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperRegistry
@@ -533,6 +534,34 @@ def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir) -> N
     )
     assert list(registry) == [], (
         "helper_registry should be empty when conftest has no Helpers() instances"
+    )
+
+
+def test_create_session_pre_session_diagnostics_in_returned_tuple(
+    tmp: TempDir,
+) -> None:
+    """Diagnostics emitted during conftest loading land in the returned tuple.
+
+    This tests the production path where no ContextVar collector is active
+    before create_session — a temporary collector captures conftest-loading
+    diagnostics and transfers them into session.diagnostics.
+    """
+    # Clear any active collector to simulate the production path
+    token = _diagnostic_collector_var.set(None)
+    try:
+        f = tmp / "conftest.py"
+        f.write_text("")  # empty conftest → emits a NOTICE diagnostic
+        _session, _violations, diagnostics = create_session([str(f)])
+    finally:
+        _diagnostic_collector_var.reset(token)
+
+    assert any(
+        d.context == "conftest loading" and "no Fixtures instance" in d.message
+        for d in diagnostics
+    ), (
+        "pre-session diagnostics must be captured by the temporary collector"
+        " and returned in the SessionResult tuple so the Rust bridge can"
+        f" drain them: {diagnostics}"
     )
 
 

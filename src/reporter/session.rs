@@ -120,6 +120,42 @@ mod tests {
     }
 
     #[test]
+    fn record_diagnostics_extends_entries() {
+        let mut session = ReporterSession::new(0);
+        let entries = vec![
+            stats::DiagnosticEntry {
+                severity: stats::DiagnosticSeverity::Warning,
+                context: Arc::from("fixture teardown"),
+                message: "boom".to_string(),
+                file: None,
+                lineno: None,
+            },
+            stats::DiagnosticEntry {
+                severity: stats::DiagnosticSeverity::Notice,
+                context: Arc::from("conftest loading"),
+                message: "empty conftest".to_string(),
+                file: None,
+                lineno: None,
+            },
+        ];
+        session.record_diagnostics(entries);
+        assert_eq!(
+            session.stats().diagnostics.entries.len(),
+            2,
+            "record_diagnostics must extend the entries vec so the reporter \
+             renders all diagnostics in the summary block"
+        );
+        assert_eq!(
+            &*session.stats().diagnostics.entries[0].context,
+            "fixture teardown"
+        );
+        assert_eq!(
+            &*session.stats().diagnostics.entries[1].context,
+            "conftest loading"
+        );
+    }
+
+    #[test]
     fn record_teardown_warning_appends_to_stats() {
         let mut session = ReporterSession::new(0);
         session.record_teardown_warning("end_module(test.py)", "RuntimeError: boom");
