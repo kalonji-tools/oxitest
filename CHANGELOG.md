@@ -1,6 +1,25 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [2.1.0] - 2026-07-14
+
+### Bug Fixes
+
+
+- Eliminate keep_tmp None with Cleanup variant (#1489)
+- Replace MarkEvalResult dual-None with sum type (#1491)
+- Guarantee plugin_registry and module_cache on session (#1492)
+- Guard JSON deserialization in worker and plugin_loader (#1494)
+- Add corrective hints to fixture and backend error messages (#1497)
+
+### Features
+
+
+- Add Python diagnostic and trace infrastructure (#1508)
+- Add Rust diagnostic and trace infrastructure (#1508)
+- Migrate 17 feedback call sites to unified diagnostics (#1509)
+- Wire drain_session_diagnostics into pipeline (#1514)
+
 ## [2.0.0] - 2026-07-13
 
 ### Bug Fixes
