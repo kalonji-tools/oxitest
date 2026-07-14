@@ -191,7 +191,7 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
         "    assert x * multiplier == expected\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="double"
     )

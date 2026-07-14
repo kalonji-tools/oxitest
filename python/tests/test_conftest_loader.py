@@ -216,7 +216,7 @@ def test_load_fixtures_multiple_instances(tmp: TempDir) -> None:
 
 def test_create_session_empty_returns_session() -> None:
     """create_session([]) returns an empty FixtureSession with no violations."""
-    session, violations = create_session([])
+    session, violations, _diags = create_session([])
     assert isinstance(session, FixtureSession), (
         f"create_session([]) should return a FixtureSession, got "
         f"{type(session).__name__}"
@@ -240,7 +240,7 @@ def test_create_session_populates_registry(tmp: TempDir) -> None:
             return 42
     """)
     )
-    session, _ = create_session([str(f)])
+    session, _, _diags = create_session([str(f)])
 
     def fn(db: Fixture[int]) -> None:
         pass
@@ -280,7 +280,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
             return "local"
     """)
     )
-    session, _ = create_session([str(root_conf), str(sub_conf)])
+    session, _, _diags = create_session([str(root_conf), str(sub_conf)])
 
     def fn(val: Fixture[str]) -> None:
         pass
@@ -456,7 +456,7 @@ def test_create_session_stores_helper_registry(tmp: TempDir) -> None:
         "def make_thing():\n"
         "    return 'thing'\n"
     )
-    session, _ = create_session([str(f)])
+    session, _, _diags = create_session([str(f)])
     assert hasattr(session, "helper_registry"), (
         "session should have a helper_registry property after create_session"
     )
@@ -501,7 +501,7 @@ def test_create_session_helper_registry_empty_when_no_helpers(tmp: TempDir) -> N
         "def db():\n"
         "    return 42\n"
     )
-    session, _ = create_session([str(f)])
+    session, _, _diags = create_session([str(f)])
     assert hasattr(session, "helper_registry"), (
         "session should have helper_registry even with no Helpers() instances"
     )

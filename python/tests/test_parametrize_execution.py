@@ -148,7 +148,7 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir) -> None:
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
         "    assert x * multiplier == expected\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(
         str(f), "test_mul", session=session, param_id="double"
     )
@@ -202,7 +202,7 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
         "def test_db(db: Fixture[str], expected: str) -> None:\n"
         "    assert db == expected\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result_pg = helpers.common.run_test(
         str(f), "test_db", session=session, param_id="pg"
     )
@@ -258,7 +258,7 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
         "def test_db(db: Fixture[str]) -> None:\n"
         "    pass\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "error", (
         f"unregistered FixtureRef should produce status='error', got {result.status!r}"
@@ -362,7 +362,7 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "def test_query(store: Fixture[str]) -> None:\n"
         "    assert store == 'db-conn'\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(
         str(f), "test_query", session=session, param_id="prod"
     )
@@ -408,6 +408,6 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -
         "def test_db(db: Fixture[str]) -> None:\n"
         "    assert db == 'flat-pg'\n"
     )
-    session, _ = create_session([str(conftest)])
+    session, _, _diags = create_session([str(conftest)])
     result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
     assert result.status == "passed", result.message
