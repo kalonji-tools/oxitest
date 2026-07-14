@@ -368,20 +368,39 @@ def test_stdcapture_readouterr_resets_buffer() -> None:
 
 
 def test_stdcapture_disabled_passes_through() -> None:
-    """cap.disabled() context manager passes output through without capturing it."""
+    """StdCapture.disabled() restores sys.stdout to the pre-capture stream."""
     ctx, teardowns = _make_builtin_ctx()
+    real_stdout = sys.stdout
     cap = _StdCaptureFixture().create(ctx=ctx)
 
+    # Before disabled(): sys.stdout was replaced with the capture buffer.
+    assert sys.stdout is not real_stdout, (
+        "StdCapture.__init__ failed to install the capture buffer — subsequent "
+        "print() output in tests would escape capture and pollute the runner's output"
+    )
+
     with cap.disabled():
-        # While disabled, output goes to the real stdout (captured by cap_outer)
-        sys.stdout.write("passthrough\n")
+        # Inside disabled(): sys.stdout is restored to the pre-capture stream.
+        assert sys.stdout is real_stdout, (
+            "disabled() didn't suspend the capture — bytes written in this context "
+            "would leak into the capture buffer instead of passing through, breaking "
+            "the documented passthrough contract used by _runners.py"
+        )
+
+    # After disabled(): sys.stdout is the capture buffer again.
+    assert sys.stdout is not real_stdout, (
+        "disabled() context exit failed to re-install the capture buffer — "
+        "later writes in the test would escape capture"
+    )
 
     teardowns[0]()
-    # The text written inside disabled() was NOT captured by our cap
-    assert cap.readouterr().out == "", (
-        "text written while cap.disabled() should not appear in cap.readouterr().out"
+    # No bytes were written inside disabled(); the capture stays empty.
+    result = cap.readouterr()
+    assert result.out == "", (
+        "cross-test leak guard: nothing was written in this test, so the buffer must "
+        "be empty; bytes here indicate state leaked from a prior test — the regression "
+        "this PR fixes"
     )
-    teardowns[0]()  # idempotent second restore is fine
 
 
 def test_stdcapture_teardown_restores_streams() -> None:
@@ -434,20 +453,38 @@ def test_fdcapture_readouterr_resets_buffer() -> None:
 
 
 def test_fdcapture_disabled_passes_through() -> None:
-    """FdCapture.disabled() context manager lets fd writes pass through uncaptured."""
+    """FdCapture.disabled() restores fd 1 to the pre-capture destination."""
     ctx, teardowns = _make_builtin_ctx()
     cap = _FdCaptureFixture().create(ctx=ctx)
 
+    # Before disabled(): fd 1 points at the capture tmp, not the up-tree fd.
+    assert not os.path.sameopenfile(1, cap._old_stdout_fd), (  # noqa: SLF001
+        "FdCapture.__init__ failed to dup2 the tmp onto fd 1 — subsequent fd-level "
+        "writes (C extensions, subprocesses) would escape capture"
+    )
+
     with cap.disabled():
-        # While disabled, writes go to real fd 1 (not captured)
-        os.write(1, b"passthrough\n")
+        # Inside disabled(): fd 1 is restored to _old_stdout_fd (the up-tree fd).
+        assert os.path.sameopenfile(1, cap._old_stdout_fd), (  # noqa: SLF001
+            "disabled() didn't suspend fd redirection — fd-level writes in this "
+            "context would leak into the capture tmp instead of passing through, "
+            "breaking the documented passthrough contract used by _runners.py"
+        )
+
+    # After disabled(): fd 1 points at the capture tmp again.
+    assert not os.path.sameopenfile(1, cap._old_stdout_fd), (  # noqa: SLF001
+        "disabled() context exit failed to re-direct fd 1 to the capture tmp — "
+        "later fd writes in the test would escape capture"
+    )
 
     result = cap.readouterr()
     teardowns[0]()
 
+    # No bytes were written inside disabled(); the capture stays empty.
     assert result.out == "", (
-        f"FdCapture: bytes written while disabled() should not appear in "
-        f"readouterr().out, got {result.out!r}"
+        "cross-test leak guard: nothing was written in this test, so the buffer must "
+        "be empty; bytes here indicate state leaked from a prior test — the regression "
+        "this PR fixes"
     )
 
 
