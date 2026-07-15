@@ -449,7 +449,7 @@ def test_get_fixture_by_type_resolves_plugin_fixture() -> None:
     )
     assert len(teardowns) == 1, (
         "without teardown registration, plugin provider.teardown never "
-        "runs — _resolve_by_source appends a lambda per PluginSource resolution"
+        "runs — resolve_by_source appends a lambda per PluginSource resolution"
     )
 
 
