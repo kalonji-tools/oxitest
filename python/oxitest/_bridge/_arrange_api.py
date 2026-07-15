@@ -12,7 +12,7 @@ from oxitest._bridge._fn_metadata import _update, get_or_create
 _F = TypeVar("_F", bound=Callable[..., object])
 
 
-def arrange(*args: type[object] | str) -> Callable[[_F], _F]:
+def arrange(*args: type | str) -> Callable[[_F], _F]:
     """Declare fixtures to run around a test without binding their values.
 
     Args:
@@ -22,7 +22,20 @@ def arrange(*args: type[object] | str) -> Callable[[_F], _F]:
     Returns:
         The decorated function, with metadata attached for the collector.
 
+    Raises:
+        TypeError: If a type argument is not decorated with ``@injectable``
+            (i.e. does not carry ``__oxitest_injectable__``).
+
     """
+    for arg in args:
+        if isinstance(arg, type) and not getattr(arg, "__oxitest_injectable__", False):
+            msg = (
+                f"@oxi.arrange: {arg.__name__} is not @injectable — "
+                f"must be a BuiltinFixture (TempDir/StdCapture/Patcher/...), "
+                f"a plugin-provided @injectable type, or a conftest fixture "
+                f"with matching return annotation (passed via string name)"
+            )
+            raise TypeError(msg)
 
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
