@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import Any
 
 import oxitest
-from oxitest import Fixture, TempDir, helpers
+from oxitest import Fixture, TempDir, TempDirFactory, helpers
 from oxitest._bridge._errors import FixtureNotFoundError, FixtureTypeNotFoundError
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
@@ -301,13 +302,16 @@ def test_register_plugin_fixtures_empty_registry_is_noop() -> None:
 
 
 def test_session_protocol_declares_get_fixture_by_type() -> None:
-    """_SessionProtocol must declare get_fixture_by_type.
+    """_SessionProtocol must declare get_fixture_by_type with the expected signature.
 
-    FixtureSession implements it — the protocol is the public contract.
+    Parameter names are load-bearing — arrange (#1268) calls this method with
+    kwargs, so renaming t/module_path/fn_teardowns silently breaks arrange.
     """
-    assert hasattr(_SessionProtocol, "get_fixture_by_type"), (
-        "_SessionProtocol must declare get_fixture_by_type — public API contract "
-        "for arrange (#1268) resolving types through the unified registry"
+    sig = inspect.signature(_SessionProtocol.get_fixture_by_type)
+    params = list(sig.parameters)
+    assert params == ["self", "t", "module_path", "fn_teardowns"], (
+        f"arrange (#1268) calls this with kwargs — renaming "
+        f"t/module_path/fn_teardowns silently breaks arrange; got {params}"
     )
 
 
@@ -322,13 +326,42 @@ def test_get_fixture_by_type_resolves_builtin(
     result = fixture_session.get_fixture_by_type(TempDir, "test_mod.py", teardowns)
 
     assert isinstance(result, TempDir), (
-        "get_fixture_by_type(TempDir) must return a TempDir instance — "
-        "arrange (#1268) needs this for @oxi.arrange(TempDir) side effects"
+        "arrange (#1268)'s @oxi.arrange(TempDir) relies on this dispatch "
+        "path for side effects"
     )
     assert len(teardowns) > 0, (
-        "function-scoped fixtures must register teardown on fn_teardowns list — "
-        "reverse-order cleanup is required for correct fixture lifecycle "
-        "(session-scoped fixtures land teardowns on the session scope instead)"
+        "without teardown registration, function-scoped resources leak "
+        "across tests — reverse-order cleanup requires fn_teardowns entries"
+    )
+
+
+def test_get_fixture_by_type_resolves_session_scoped_builtin(
+    fixture_session: Fixture[FixtureSession],
+) -> None:
+    """A session-scoped builtin (TempDirFactory) resolves via get_fixture_by_type.
+
+    Teardown lands on the session scope, NOT on the caller's fn_teardowns list —
+    session-scoped fixtures live beyond a single test. Arrange (#1268) callers
+    with @oxi.arrange(TempDirFactory) rely on this routing to avoid double-teardown.
+    """
+    fn_teardowns: list[Callable[[], None]] = []
+    result = fixture_session.get_fixture_by_type(
+        TempDirFactory, "test_mod.py", fn_teardowns
+    )
+
+    assert isinstance(result, TempDirFactory), (
+        "arrange (#1268)'s @oxi.arrange(TempDirFactory) relies on this "
+        "dispatch path for session-scoped resource setup"
+    )
+    assert len(fn_teardowns) == 0, (
+        f"routing to fn_teardowns would cause teardown-per-test instead of "
+        f"teardown-at-session-end — session-scoped resources need to survive "
+        f"across tests; got {len(fn_teardowns)} entries"
+    )
+    session_teardowns = fixture_session._session_scope.teardowns  # noqa: SLF001 — no public API exposes session-scope teardown count; this is the only way to verify routing
+    assert len(session_teardowns) > 0, (
+        "without session-scope teardown registration, session-scoped "
+        "resources leak past the test run"
     )
 
 
@@ -358,10 +391,11 @@ def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
 
     Uses make_fixture_def with fixture_type= to set the binding type explicitly
     (bypasses the from __future__ import annotations string-annotation issue).
+    Uses a generator factory so teardown registration is exercised.
     """
 
-    def _my_result_factory() -> _MyResult:
-        return _MyResult()
+    def _my_result_factory() -> Generator[_MyResult]:
+        yield _MyResult()
 
     # Arrange: build a session with a conftest-sourced fixture bound to _MyResult
     session = helpers.common.make_session(
@@ -377,12 +411,16 @@ def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
     result = session.get_fixture_by_type(_MyResult, "test_x.py", teardowns)
 
     assert isinstance(result, _MyResult), (
-        "get_fixture_by_type must resolve conftest fixtures registered by return "
-        "type — arrange (#1268) with @oxi.arrange(MyType) needs this path"
+        "arrange (#1268)'s @oxi.arrange(MyType) requires conftest fixtures "
+        "indexed by return type to resolve via this dispatch"
     )
     assert result.value == 42, (
         "conftest fixture body must actually execute — a resolved-but-not-run "
         "fixture would be a null implementation"
+    )
+    assert len(teardowns) > 0, (
+        "without teardown registration, generator fixtures leak their "
+        "post-yield cleanup — reverse-order cleanup requires fn_teardowns entries"
     )
 
 
@@ -401,13 +439,17 @@ def test_get_fixture_by_type_resolves_plugin_fixture() -> None:
     result = session.get_fixture_by_type(_PluginValue, "test_mod.py", teardowns)
 
     assert isinstance(result, _PluginValue), (
-        "get_fixture_by_type must resolve plugin-provided types — "
-        "arrange (#1268) requires @oxi.arrange(PluginType) to work via PluginSource"
+        "arrange (#1268)'s @oxi.arrange(PluginType) relies on the "
+        "PluginSource dispatch path"
     )
     assert result.marker == "from_plugin", (
         "provider.create() must actually run and return _PluginValue() — "
         "a default-constructed instance carries marker='from_plugin'; "
         "any other value means the wrong path executed"
+    )
+    assert len(teardowns) == 1, (
+        "without teardown registration, plugin provider.teardown never "
+        "runs — _resolve_by_source appends a lambda per PluginSource resolution"
     )
 
 
@@ -436,14 +478,17 @@ def test_get_fixture_by_type_raises_on_unknown_type() -> None:
         "existing 'except FixtureNotFoundError' catch sites must keep working"
     )
     assert "BuiltinFixture" in msg, (
-        "error message must mention 'BuiltinFixture' as a valid registration route — "
-        "Fixture[T] annotation hint is wrong for @oxi.arrange(MyType) users"
+        "@oxi.arrange(MyType) users need to know BuiltinFixture is one of "
+        "three valid registration routes — the by-name Fixture[T] hint is "
+        "misleading here"
     )
     assert "FixtureProvider" in msg or "plugin" in msg, (
-        "error message must mention plugin-provided fixtures as a registration route"
+        "@oxi.arrange(MyType) users need to know plugin-provided types are "
+        "one of three valid registration routes"
     )
     assert "conftest" in msg, (
-        "error message must mention conftest return annotation as a registration route"
+        "@oxi.arrange(MyType) users need to know conftest fixtures with "
+        "matching return annotations are one of three valid registration routes"
     )
     assert "Fixture[" not in msg, (
         "error message must NOT mention 'Fixture[<type>]' — that hint applies to "
