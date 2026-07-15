@@ -581,7 +581,7 @@ def test_get_fixture_timings_returns_expected_shape() -> None:
 def test_get_fixture_timings_entry_has_required_attrs() -> None:
     """Each timing entry has the 5 required attributes with correct types."""
     session = helpers.common.make_session_with("timed_fx", lambda: 1)
-    session.get_fixture("timed_fx", "mod.py", [])
+    session.get_fixture_by_name("timed_fx", "mod.py", [])
     timings = session.get_fixture_timings()
 
     assert len(timings) == 1, (
@@ -624,7 +624,7 @@ def test_fixture_session_has_bridge_methods() -> None:
     bridge_methods = {
         "end_module",
         "end_session",
-        "get_fixture",
+        "get_fixture_by_name",
         "resolve_for_test",
         "has_shared_fixtures",
         "shared_fixture_names",

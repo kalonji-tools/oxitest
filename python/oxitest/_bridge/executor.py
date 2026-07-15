@@ -167,7 +167,7 @@ def _load_and_resolve(
                     fixture_name, namespace, meta.module_path, fn_teardowns
                 )
             else:
-                param_kwargs[field_name] = session.get_fixture(
+                param_kwargs[field_name] = session.get_fixture_by_name(
                     fixture_name, meta.module_path, fn_teardowns
                 )
     except (FixtureSetupError, FixtureNotFoundError) as exc:

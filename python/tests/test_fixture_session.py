@@ -61,7 +61,7 @@ def test_setup_timing_recorded_for_function_scoped_fixture() -> None:
 
     session = helpers.common.make_session_with("slow_fixture", slow_fixture)
     teardowns: list[Callable[[], None]] = []
-    session.get_fixture("slow_fixture", "test_mod.py", teardowns)
+    session.get_fixture_by_name("slow_fixture", "test_mod.py", teardowns)
 
     timings = session.get_fixture_timings()
     assert len(timings) == 1, f"expected exactly 1 timing entry, got {len(timings)}"
@@ -96,7 +96,7 @@ def test_teardown_timing_recorded_for_yield_fixture() -> None:
 
     session = helpers.common.make_session_with("yield_fx", yield_fixture)
     teardowns: list[Callable[[], None]] = []
-    session.get_fixture("yield_fx", "test_mod.py", teardowns)
+    session.get_fixture_by_name("yield_fx", "test_mod.py", teardowns)
 
     # Run teardowns (simulates end-of-test cleanup)
     for td in reversed(teardowns):
@@ -127,8 +127,8 @@ def test_shared_fixture_setup_timed_once() -> None:
     )
     teardowns: list[Callable[[], None]] = []
 
-    session.get_fixture("shared_fx", "test_mod.py", teardowns)
-    session.get_fixture("shared_fx", "test_mod.py", teardowns)
+    session.get_fixture_by_name("shared_fx", "test_mod.py", teardowns)
+    session.get_fixture_by_name("shared_fx", "test_mod.py", teardowns)
 
     timings = session.get_fixture_timings()
     assert len(timings) == 1, f"expected 1 timing entry, got {len(timings)}"
@@ -149,8 +149,8 @@ def test_multiple_fixtures_each_tracked_separately() -> None:
         )
     )
 
-    session.get_fixture("fast_a", "test_mod.py", teardowns)
-    session.get_fixture("fast_b", "test_mod.py", teardowns)
+    session.get_fixture_by_name("fast_a", "test_mod.py", teardowns)
+    session.get_fixture_by_name("fast_b", "test_mod.py", teardowns)
 
     timings = session.get_fixture_timings()
     names = [t.name for t in timings]
