@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from typing import Any
 
+import oxitest
 from oxitest import Fixture, TempDir, helpers
+from oxitest._bridge._errors import FixtureNotFoundError
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
@@ -327,3 +330,95 @@ def test_get_fixture_by_type_resolves_builtin(
         "reverse-order cleanup is required for correct fixture lifecycle "
         "(session-scoped fixtures land teardowns on the session scope instead)"
     )
+
+
+@dataclass
+class _MyResult:
+    """Synthetic return type for conftest fixture resolution tests."""
+
+    value: int = 42
+
+
+@dataclass
+class _PluginValue:
+    """Synthetic return type for plugin fixture resolution tests."""
+
+    marker: str = "from_plugin"
+
+
+class _UnregisteredType:
+    """Type with no fixture registration — used to exercise the error path."""
+
+
+def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
+    """A conftest ConftestSource fixture must resolve via get_fixture_by_type.
+
+    The unified registry indexes FixtureDefs by return type; passing _MyResult
+    to get_fixture_by_type must find and run the conftest factory.
+
+    Uses make_fixture_def with fixture_type= to set the binding type explicitly
+    (bypasses the from __future__ import annotations string-annotation issue).
+    """
+
+    def _my_result_factory() -> _MyResult:
+        return _MyResult()
+
+    # Arrange: build a session with a conftest-sourced fixture bound to _MyResult
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "my_result",
+            _my_result_factory,
+            conftest_path="/fake/conftest.py",
+            fixture_type=_MyResult,
+        )
+    )
+
+    teardowns: list[Callable[[], None]] = []
+    result = session.get_fixture_by_type(_MyResult, "test_x.py", teardowns)
+
+    assert isinstance(result, _MyResult), (
+        "get_fixture_by_type must resolve conftest fixtures registered by return "
+        "type — arrange (#1268) with @oxi.arrange(MyType) needs this path"
+    )
+    assert result.value == 42, (
+        "conftest fixture body must actually execute — a resolved-but-not-run "
+        "fixture would be a null implementation"
+    )
+
+
+def test_get_fixture_by_type_resolves_plugin_fixture() -> None:
+    """Plugin FixtureProvider must resolve via get_fixture_by_type.
+
+    Arrange (#1268) with a plugin-provided type must go through this path.
+    Uses the existing _FakeFixtureProvider test double and _session_with helper
+    (both defined above) so registration ceremony stays minimal.
+    """
+    # Arrange: build a session with a plugin-sourced fixture bound to _PluginValue
+    provider = _FakeFixtureProvider(name="plugin_value", fixture_type=_PluginValue)
+    session = _session_with(provider)
+
+    teardowns: list[Callable[[], None]] = []
+    result = session.get_fixture_by_type(_PluginValue, "test_mod.py", teardowns)
+
+    assert isinstance(result, _PluginValue), (
+        "get_fixture_by_type must resolve plugin-provided types — "
+        "arrange (#1268) requires @oxi.arrange(PluginType) to work via PluginSource"
+    )
+    assert result.marker == "from_plugin", (
+        "provider.create() must actually run and return _PluginValue() — "
+        "a default-constructed instance carries marker='from_plugin'; "
+        "any other value means the wrong path executed"
+    )
+
+
+def test_get_fixture_by_type_raises_on_unknown_type() -> None:
+    """An unregistered class must raise FixtureNotFoundError.
+
+    Silent failure would let @oxi.arrange(UnknownType) silently skip,
+    hiding user mistakes.
+    """
+    session = helpers.common.make_session()  # empty registry — no fixtures registered
+    teardowns: list[Callable[[], None]] = []
+
+    with oxitest.raises(FixtureNotFoundError, match=r"_UnregisteredType"):
+        session.get_fixture_by_type(_UnregisteredType, "test_mod.py", teardowns)
