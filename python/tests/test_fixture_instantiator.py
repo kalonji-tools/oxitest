@@ -12,6 +12,7 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
 )
 from oxitest._bridge._fixture_instantiator import (
+    DispatchContext,
     FixtureInstantiator,
     ScopeRefs,
     _ResolutionContext,
@@ -259,7 +260,7 @@ def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
     )
 
 
-# ─── _resolve_by_source dispatch ────────────────────────────────────────────
+# ─── resolve_by_source dispatch ────────────────────────────────────────────
 
 
 def test_resolve_by_source_plugin() -> None:
@@ -296,12 +297,12 @@ def test_resolve_by_source_plugin() -> None:
     )
     inst, _reg = _make_instantiator(defn)
     teardowns: list = []
-    value = inst._resolve_by_source(  # noqa: SLF001 — testing internal dispatch of PluginSource; no public entry point exposes this directly
-        defn,
-        TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x"),
-        teardowns,
-        lambda _: None,
+    ctx = DispatchContext(
+        meta=TestMeta(module_path="t.py", fn_name="test_x", node_id="t.py::test_x"),
+        fn_teardowns=teardowns,
+        resolve_user_fixture=lambda _: None,
     )
+    value = inst.resolve_by_source(defn, ctx)
     assert value == "plugin_value", (
         "should return provider.create() result for PluginSource fixture"
     )

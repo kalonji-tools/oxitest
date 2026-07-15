@@ -28,6 +28,7 @@ from oxitest._bridge._fixture_context import (
     _warn_teardown,
 )
 from oxitest._bridge._fixture_instantiator import (
+    DispatchContext,
     FixtureInstantiator as _FixtureInstantiator,
     ScopeRefs,
     _ResolutionContext,
@@ -644,12 +645,14 @@ class FixtureSession:
         except FixtureNotFoundError:
             raise FixtureTypeNotFoundError(t.__name__) from None
         meta = TestMeta(module_path=module_path, fn_name="", node_id="")
-        return self._instantiator._resolve_by_source(  # noqa: SLF001
-            defn,
-            meta,
-            fn_teardowns,
-            lambda n: self.get_fixture_by_name(n, module_path, fn_teardowns),
+        ctx = DispatchContext(
+            meta=meta,
+            fn_teardowns=fn_teardowns,
+            resolve_user_fixture=lambda n: self.get_fixture_by_name(
+                n, module_path, fn_teardowns
+            ),
         )
+        return self._instantiator.resolve_by_source(defn, ctx)
 
     def get_fixture_in_namespace(
         self,

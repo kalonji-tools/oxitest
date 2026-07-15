@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "AsyncPolicy",
+    "DispatchContext",
     "FixtureInstantiator",
     "ScopeRefs",
     "_FixtureOutcome",
@@ -67,6 +68,25 @@ class ScopeRefs:
     teardowns: list[Callable[[], None]]
     hits: dict[str, int]
     misses: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchContext:
+    """Context threaded through source-based fixture dispatch.
+
+    Bundled args for FixtureInstantiator.resolve_by_source. Separate from
+    _ResolutionContext (which threads by-name resolution state including
+    cycle detection).
+
+    Fields:
+        meta: forwarded to BuiltinSource injection
+        fn_teardowns: accumulator for PluginSource teardown lambdas
+        resolve_user_fixture: cycle-safe resolver for ConftestSource
+    """
+
+    meta: TestMeta
+    fn_teardowns: list[Callable[[], None]]
+    resolve_user_fixture: Callable[[str], Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,14 +215,19 @@ class FixtureInstantiator:
         if not is_fx:
             return False, None
 
+        # Hoist ctx once — reused by both branches below
+        ctx = DispatchContext(
+            meta=meta,
+            fn_teardowns=fn_teardowns,
+            resolve_user_fixture=resolve_user_fixture,
+        )
+
         # Broad type fallback (Fixture[Any] / Fixture[object])
         if inner is Any or inner is object:
             defn = self._registry.get(param_name)
             if defn is None:
                 raise FixtureNotFoundError(param_name)
-            return True, self._resolve_by_source(
-                defn, meta, fn_teardowns, resolve_user_fixture
-            )
+            return True, self.resolve_by_source(defn, ctx)
 
         # Unified type-based resolution — try type first
         try:
@@ -215,9 +240,7 @@ class FixtureInstantiator:
 
         # For Builtin/Plugin sources found by type, use direct instantiation
         if not isinstance(defn.source, ConftestSource):
-            return True, self._resolve_by_source(
-                defn, meta, fn_teardowns, resolve_user_fixture
-            )
+            return True, self.resolve_by_source(defn, ctx)
 
         # For ConftestSource: prefer name-based (preserves cycle detection),
         # fall back to type-resolved name.
@@ -226,28 +249,32 @@ class FixtureInstantiator:
         )
         return True, resolve_user_fixture(resolve_name)
 
-    def _resolve_by_source(
+    def resolve_by_source(
         self,
         defn: FixtureDef[Any],
-        meta: TestMeta,
-        fn_teardowns: list[Callable[[], None]],
-        resolve_user_fixture: Callable[[str], Any],
+        ctx: DispatchContext,
     ) -> Any:
-        """Dispatch instantiation based on the fixture's source variant.
+        """Instantiate a fixture from its FixtureDef via source-based dispatch.
 
-        For ConftestSource, routes through ``resolve_user_fixture`` to preserve
-        cycle detection and scope caching.  For PluginSource and BuiltinSource,
-        creates the value directly (no cycle risk — they have no registry deps).
+        Dispatches per ``FixtureSource`` variant:
+
+        - ``ConftestSource``: routes through ``ctx.resolve_user_fixture`` to preserve
+          cycle detection and scope caching.
+        - ``PluginSource``: invokes ``provider.create(ctx=None)`` and appends the
+          provider's teardown to ``ctx.fn_teardowns``.
+        - ``BuiltinSource``: delegates to ``inject_builtin`` with function scope.
         """
         match defn.source:
             case ConftestSource():
-                return resolve_user_fixture(defn.name)
+                return ctx.resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
                 value = provider.create(ctx=None)
-                fn_teardowns.append(lambda v=value, p=provider: p.teardown(value=v))
+                ctx.fn_teardowns.append(lambda v=value, p=provider: p.teardown(value=v))
                 return value
             case BuiltinSource(impl_cls=impl_cls):
-                return self.inject_builtin(impl_cls, meta, "function", fn_teardowns)
+                return self.inject_builtin(
+                    impl_cls, ctx.meta, "function", ctx.fn_teardowns
+                )
 
     # ── Fixture resolution ───────────────────────────────────────────────
 
