@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Generator
 from typing import Any
 
-from oxitest import TempDir, helpers
+from oxitest import Fixture, TempDir, helpers
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
@@ -14,7 +14,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureScope,
     PluginSource,
 )
-from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge.plugin_loader import (
     PluginEntry,
     PluginRegistry,
@@ -294,4 +294,36 @@ def test_register_plugin_fixtures_empty_registry_is_noop() -> None:
     all_names = list(session.registry)
     assert all(not n.startswith("plugin") for n in all_names), (
         f"empty registry should add no plugin fixtures, got {all_names}"
+    )
+
+
+def test_session_protocol_declares_get_fixture_by_type() -> None:
+    """_SessionProtocol must declare get_fixture_by_type.
+
+    FixtureSession implements it — the protocol is the public contract.
+    """
+    assert hasattr(_SessionProtocol, "get_fixture_by_type"), (
+        "_SessionProtocol must declare get_fixture_by_type — public API contract "
+        "for arrange (#1268) resolving types through the unified registry"
+    )
+
+
+def test_get_fixture_by_type_resolves_builtin(
+    fixture_session: Fixture[FixtureSession],
+) -> None:
+    """Passing TempDir to get_fixture_by_type must resolve via the BuiltinSource path.
+
+    Returns a TempDir instance via the BuiltinSource dispatch path.
+    """
+    teardowns: list[Callable[[], None]] = []
+    result = fixture_session.get_fixture_by_type(TempDir, "test_mod.py", teardowns)
+
+    assert isinstance(result, TempDir), (
+        "get_fixture_by_type(TempDir) must return a TempDir instance — "
+        "arrange (#1268) needs this for @oxi.arrange(TempDir) side effects"
+    )
+    assert len(teardowns) > 0, (
+        "function-scoped fixtures must register teardown on fn_teardowns list — "
+        "reverse-order cleanup is required for correct fixture lifecycle "
+        "(session-scoped fixtures land teardowns on the session scope instead)"
     )

@@ -47,6 +47,7 @@ from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
 from oxitest._bridge._read_helpers import _helpers_registry_var
+from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.proxy_ns import FixturesProxy
 from oxitest._bridge.result import CacheEntry, CacheStats, Diagnostic
@@ -56,7 +57,6 @@ if TYPE_CHECKING:
         AsyncBackend,
         SharedAsyncSession,
     )
-    from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.result import FixtureTiming
 
 
@@ -85,6 +85,13 @@ class _SessionProtocol(Protocol):
     def get_fixture_by_name(
         self,
         name: str,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+    ) -> Any: ...
+
+    def get_fixture_by_type(
+        self,
+        t: type,
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
     ) -> Any: ...
@@ -615,6 +622,31 @@ class FixtureSession:
             module_path, fn_teardowns, frozenset(), self._scope_for
         )
         return self._instantiator.resolve_fixture(name, ctx)
+
+    def get_fixture_by_type(
+        self,
+        t: type,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+    ) -> Any:
+        """Resolve a fixture by its public type through the unified registry.
+
+        Handles any registered @injectable — builtin (via BuiltinFixture registry),
+        plugin (via FixtureProvider), or conftest fixture registered by return type.
+        Returns the fixture value; setup runs and teardown is registered on
+        ``fn_teardowns``. Raises ``FixtureNotFoundError`` if ``t`` is not resolvable.
+
+        Note: ``TestContext`` resolved via this method will have empty ``name``,
+        ``node_id``, and ``marks`` — no test identity is available outside a test.
+        """
+        defn = self._registry.resolve(t, qualifier=t.__name__)
+        meta = TestMeta(module_path=module_path, fn_name="", node_id="")
+        return self._instantiator._resolve_by_source(  # noqa: SLF001
+            defn,
+            meta,
+            fn_teardowns,
+            lambda n: self.get_fixture_by_name(n, module_path, fn_teardowns),
+        )
 
     def get_fixture_in_namespace(
         self,
