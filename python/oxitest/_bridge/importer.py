@@ -196,6 +196,7 @@ class _ItemTemplate:
     markers: tuple[str, ...]
     is_async: bool
     fixture_deps: tuple[tuple[str, str], ...]
+    arranged: tuple[type | str, ...]
 
 
 def _expand_composed(
@@ -221,6 +222,7 @@ def _expand_composed(
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
                 fixref_deps=fixref_deps,
+                arranged=template.arranged,
             )
         )
     return items
@@ -264,6 +266,21 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     return tuple(deps)
 
 
+def _dedupe_arranged(entries: tuple[type | str, ...]) -> tuple[type | str, ...]:
+    """Dedupe arranged entries preserving first-occurrence order.
+
+    Types are compared by identity, strings by value — both are hashable so a
+    set covers both cases with a single pass.
+    """
+    seen: set[type | str] = set()
+    result: list[type | str] = []
+    for entry in entries:
+        if entry not in seen:
+            seen.add(entry)
+            result.append(entry)
+    return tuple(result)
+
+
 def _expand_item(
     fn_name: str,
     lineno: int,
@@ -271,14 +288,16 @@ def _expand_item(
     fn: object,
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
+    fn_meta = get_metadata(fn)
     template = _ItemTemplate(
         fn_name=fn_name,
         lineno=lineno,
         markers=tuple(marker_names),
         is_async=inspect.iscoroutinefunction(fn),
         fixture_deps=_get_fixture_deps(fn),
+        arranged=_dedupe_arranged(fn_meta.arranged),
     )
-    raw = get_metadata(fn).param_cases
+    raw = fn_meta.param_cases
     if raw is None:
         return [
             CollectedItem(
@@ -289,6 +308,7 @@ def _expand_item(
                 param_values=(),
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
+                arranged=template.arranged,
             )
         ]
     # Composition: all layers are ComposedCases (partial)
@@ -319,6 +339,7 @@ def _expand_item(
             is_async=template.is_async,
             fixture_deps=template.fixture_deps,
             fixref_deps=fixref_deps,
+            arranged=template.arranged,
         )
         for case_id, pv in raw[0].items()
     ]
