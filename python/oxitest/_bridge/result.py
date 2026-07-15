@@ -358,6 +358,7 @@ class CollectedItem:
     is_async: bool = False
     fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
     fixref_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
+    arranged: tuple[type | str, ...] = ()  # fixture types/names from @oxi.arrange
 
 
 class ViolationKind(StrEnum):

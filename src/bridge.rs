@@ -230,6 +230,9 @@ struct CollectedItem {
     is_async: bool,
     fixture_deps: Vec<(String, String)>,
     fixref_deps: Vec<(String, String)>,
+    // Task 14 will propagate this to TestItem — suppressed until then.
+    #[allow(dead_code)]
+    arranged: Vec<Py<PyAny>>,
 }
 
 /// Typed violation kind coming from Python. Variants map 1-to-1 to the
