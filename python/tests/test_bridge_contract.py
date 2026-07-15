@@ -45,6 +45,7 @@ from oxitest._bridge.result import (
 
 _SRC_DIR = pathlib.Path(__file__).parent.parent.parent / "src"
 _BRIDGE_RS = _SRC_DIR / "bridge.rs"
+_BRIDGE_RS_FILES = [_SRC_DIR / "bridge.rs", _SRC_DIR / "reporter" / "bridge.rs"]
 _WORKER_RESULT_RS = _SRC_DIR / "worker_result" / "wire.rs"
 
 
@@ -73,6 +74,39 @@ def _rust_violation_kind_values(source: str) -> frozenset[str]:
     by design — ``Unknown`` has no corresponding Python enum value.
     """
     return frozenset(re.findall(r'"(\w+)"\s*=>\s*ViolationKind::', source))
+
+
+def _rust_bridge_method_calls(source: str) -> frozenset[str]:
+    r"""Extract FixtureSession method names called via PyO3 call_method in bridge files.
+
+    Matches ``call_method0/1`` calls on the Python-side FixtureSession object,
+    which appears in Rust as either::
+
+        self.0.bind(py).call_method0("name", ...)   # inside impl FixtureSession
+        session.0.bind(py).call_method1("name", ...)  # standalone fn, &FixtureSession
+        session_obj.call_method0("name", ...)  # via session.as_py_object(py)
+        obj.call_method0("name", ...)  # via session.as_py_object(py), local name "obj"
+
+    Uses ``re.VERBOSE`` (``\\s`` includes newlines) to handle Rust's chained-method
+    style where each ``.method()`` is on its own indented line.
+    """
+    pattern = re.compile(
+        r"""
+        (?:
+            # self.0.bind(py) or session.0.bind(py) — the raw PyObject field
+            (?:self|session) \s*\.\s* 0 \s*\.\s* bind \s*\(\s* py \s*\)
+            |
+            # session_obj or obj — already bound via session.as_py_object(py)
+            (?:session_obj|obj)
+        )
+        \s*\.\s*            # chained dot (newlines allowed by \s)
+        call_method \d?     # call_method0, call_method1, or call_method
+        \s*\(\s*            # opening paren
+        " ([a-z_][a-z0-9_]*) "  # the Python method name as a string literal
+        """,
+        re.VERBOSE,
+    )
+    return frozenset(pattern.findall(source))
 
 
 def _wire(
@@ -619,22 +653,23 @@ def test_get_fixture_timings_entry_has_required_attrs() -> None:
 
 
 def test_fixture_session_has_bridge_methods() -> None:
-    """FixtureSession exposes the methods called by the Rust bridge."""
+    """FixtureSession exposes the methods invoked from bridge source files via PyO3.
+
+    A missing method here causes a runtime PyO3 error (call_method finds no
+    matching Python method). Python-callers of FixtureSession are protected
+    by static type checking (ty) and don't need runtime hasattr coverage.
+
+    The set of required methods is scraped from src/bridge.rs and
+    src/reporter/bridge.rs at test-run time so it stays in sync automatically
+    as the Rust side evolves.
+    """
+    source = "\n".join(f.read_text() for f in _BRIDGE_RS_FILES)
+    bridge_methods = _rust_bridge_method_calls(source)
     session = FixtureSession(FixtureRegistry())
-    bridge_methods = {
-        "end_module",
-        "end_session",
-        "get_fixture_by_name",
-        "resolve_for_test",
-        "has_shared_fixtures",
-        "shared_fixture_names",
-        "validate_fixture_names",
-        "find_unused_fixtures",
-    }
-    for method in bridge_methods:
+    for method in sorted(bridge_methods):
         assert hasattr(session, method), (
-            f"FixtureSession must expose {method!r} -- Rust bridge.rs calls this method"
-            f" by name via PyO3 and a missing method causes a runtime panic"
+            f"Rust bridge invokes {method!r} via PyO3 call_method — "
+            f"a missing method causes a runtime PyO3 error"
         )
 
 
