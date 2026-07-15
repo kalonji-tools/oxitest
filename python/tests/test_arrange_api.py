@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import oxitest
 from oxitest._bridge._arrange_api import arrange
-from oxitest._bridge._builtins import TempDir
+from oxitest._bridge._builtins import StdCapture, TempDir
 from oxitest._bridge._fn_metadata import get_or_create
 
 
@@ -102,3 +102,40 @@ def test_arrange_rejects_non_type_non_str_arg() -> None:
         match=r"@oxi\.arrange: expected an @injectable class or a fixture name",
     ):
         arrange(cast("Any", 42))
+
+
+def test_arrange_stacked_decorators_merge_outer_first() -> None:
+    """Stacked @arrange(A) @arrange(B) merges into a single arranged tuple.
+
+    Python decorator evaluation order: bottom-up. @arrange(B) applies first (inner),
+    then @arrange(A) applies (outer). Both call _update on the same function.
+    """
+
+    @arrange(TempDir)
+    @arrange(StdCapture)
+    def target() -> None: ...
+
+    meta = get_or_create(target)
+    # Inner (StdCapture) runs first, outer (TempDir) second — order follows appends
+    assert meta.arranged == (StdCapture, TempDir), (
+        "stacked arrange must preserve decorator evaluation order — "
+        "inner (bottom) decorator runs first, outer (top) appends after"
+    )
+
+
+def test_arrange_on_class_attaches_to_class() -> None:
+    """@arrange(...) on a class stores metadata on the CLASS object.
+
+    Importer will later propagate to methods (Task 10); this verifies decoration
+    itself works on classes without erroring.
+    """
+
+    @arrange(TempDir)
+    class TargetClass:
+        def test_x(self) -> None: ...
+
+    meta = get_or_create(TargetClass)
+    assert meta.arranged == (TempDir,), (
+        "class-level arrange must store metadata on the class — "
+        "importer relies on this to propagate to methods (Task 10)"
+    )
