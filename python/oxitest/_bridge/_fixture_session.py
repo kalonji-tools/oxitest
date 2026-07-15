@@ -82,7 +82,7 @@ class _SessionProtocol(Protocol):
         skip_names: frozenset[str] = frozenset(),
     ) -> tuple[dict[str, Any], list[Callable[[], None]]]: ...
 
-    def get_fixture(
+    def get_fixture_by_name(
         self,
         name: str,
         module_path: str,
@@ -579,7 +579,7 @@ class FixtureSession:
             # explicitly requested
             for defn in self._registry.get_autouse():
                 if defn.name not in requested_names:
-                    self.get_fixture(defn.name, meta.module_path, fn_teardowns)
+                    self.get_fixture_by_name(defn.name, meta.module_path, fn_teardowns)
 
             # Resolve Fixture[T]-annotated parameters
             kwargs: dict[str, Any] = {}
@@ -598,7 +598,7 @@ class FixtureSession:
                     hint,
                     meta,
                     fn_teardowns=fn_teardowns,
-                    resolve_user_fixture=lambda n: self.get_fixture(
+                    resolve_user_fixture=lambda n: self.get_fixture_by_name(
                         n, meta.module_path, fn_teardowns
                     ),
                 )
@@ -608,7 +608,7 @@ class FixtureSession:
             _check_unannotated_params(fn, hints, kwargs, skip_names, self._registry)
             return kwargs, fn_teardowns
 
-    def get_fixture(
+    def get_fixture_by_name(
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
     ) -> Any:
         ctx = _ResolutionContext(

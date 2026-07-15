@@ -97,7 +97,7 @@ class FixtureAccessor:
                 self._oxitest_fixture_name, namespace, module_path, fn_teardowns
             )
         else:
-            resolved = session.get_fixture(
+            resolved = session.get_fixture_by_name(
                 self._oxitest_fixture_name, module_path, fn_teardowns
             )
         return getattr(resolved, attr)

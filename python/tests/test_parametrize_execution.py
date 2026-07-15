@@ -370,11 +370,11 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
 
 
 def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -> None:
-    """FixtureRef function without a namespace falls back to flat get_fixture.
+    """FixtureRef function without a namespace falls back to flat get_fixture_by_name.
 
     The fixture function is not registered in the session's registry (defined
     locally in the test file), so the registry returns no namespace and the
-    executor falls back to the flat get_fixture call.
+    executor falls back to the flat get_fixture_by_name call.
     """
     conftest = tmp / "conftest.py"
     conftest.write_text(

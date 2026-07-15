@@ -186,7 +186,7 @@ def evaluate_marks(
     for mark in marks:
         if mark.name == "usefixtures":
             for fx_name in mark.args:
-                session.get_fixture(str(fx_name), module_path, fn_teardowns)
+                session.get_fixture_by_name(str(fx_name), module_path, fn_teardowns)
             continue
         handler = registry.get(mark.name)
         if handler is None:
