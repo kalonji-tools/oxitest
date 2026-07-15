@@ -1,6 +1,8 @@
 """Collection-time behavior of @oxi.arrange."""
 
+import oxitest
 from oxitest import TempDir, helpers
+from oxitest._bridge._errors import CollectionError
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.result import CollectedItem
 
@@ -65,3 +67,44 @@ def test_importer_dedupes_stacked_arrange(tmp: TempDir) -> None:
         "importer must dedupe identical arranged entries — stacked @arrange with "
         "the same fixture is idempotent, not a duplication bug"
     )
+
+
+def test_importer_errors_on_type_collision(tmp: TempDir) -> None:
+    """@arrange(TempDir) + param `foo: TempDir` — both would produce TempDir, error.
+
+    Redundant declaration + potential double-instantiation risk. Fail loud at
+    collection so user picks one form.
+    """
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "from oxitest import TempDir\n"
+        "\n"
+        "@oxitest.arrange(TempDir)\n"
+        "def test_x(foo: TempDir) -> None: ...\n",
+    )
+    with oxitest.raises(
+        CollectionError,
+        match=r"arranged .*TempDir.* also declared as parameter",
+    ):
+        collect_module(path)
+
+
+def test_importer_errors_on_name_collision(tmp: TempDir) -> None:
+    """@arrange("foo") + param named `foo` — same fixture requested twice.
+
+    Named conftest fixture arranged AND injected as parameter — pick one.
+    """
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "from oxitest import Fixture\n"
+        "\n"
+        "@oxitest.arrange('foo')\n"
+        "def test_x(foo: Fixture[int]) -> None: ...\n",
+    )
+    with oxitest.raises(
+        CollectionError,
+        match=r"arranged 'foo' also declared as parameter",
+    ):
+        collect_module(path)

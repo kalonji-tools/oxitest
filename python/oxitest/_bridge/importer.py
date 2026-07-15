@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
+from oxitest._bridge._errors import CollectionError
 from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
@@ -281,6 +282,50 @@ def _dedupe_arranged(entries: tuple[type | str, ...]) -> tuple[type | str, ...]:
     return tuple(result)
 
 
+def _check_arrange_collisions(
+    fn: object,
+    arranged: tuple[type | str, ...],
+) -> None:
+    """Raise CollectionError if any arranged entry also appears as a parameter.
+
+    Two collision variants:
+    - Name collision: arranged string name matches a parameter name.
+    - Type collision: arranged type matches a parameter annotation (bare or Fixture[T]).
+    """
+    if not arranged:
+        return
+    sig_params = inspect.signature(cast("Callable[..., Any]", fn)).parameters
+    param_names = set(sig_params.keys())
+    hints = safe_type_hints(fn, include_extras=True) or {}
+
+    for entry in arranged:
+        if isinstance(entry, str):
+            # Name collision: arranged fixture name == parameter name
+            if entry in param_names:
+                qualname = getattr(fn, "__qualname__", repr(fn))
+                msg = (
+                    f"@oxi.arrange in {qualname}: arranged {entry!r} also declared "
+                    f"as parameter. Choose one — arrange runs side effects only; "
+                    f"parameter injection binds the value."
+                )
+                raise CollectionError(msg)
+        else:
+            # Type collision: arranged type matches a parameter annotation
+            for pname, hint in hints.items():
+                if pname == "return":
+                    continue
+                is_fx, inner = _fixture_inner_type(hint)
+                if (is_fx and inner is entry) or hint is entry:
+                    qualname = getattr(fn, "__qualname__", repr(fn))
+                    msg = (
+                        f"@oxi.arrange in {qualname}: arranged {entry.__name__} "
+                        f"also declared as parameter {pname!r}. Choose one — "
+                        f"arrange runs side effects only; parameter injection binds "
+                        f"the value."
+                    )
+                    raise CollectionError(msg)
+
+
 def _expand_item(
     fn_name: str,
     lineno: int,
@@ -289,13 +334,15 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     fn_meta = get_metadata(fn)
+    arranged = _dedupe_arranged(fn_meta.arranged)
+    _check_arrange_collisions(fn, arranged)
     template = _ItemTemplate(
         fn_name=fn_name,
         lineno=lineno,
         markers=tuple(marker_names),
         is_async=inspect.iscoroutinefunction(fn),
         fixture_deps=_get_fixture_deps(fn),
-        arranged=_dedupe_arranged(fn_meta.arranged),
+        arranged=arranged,
     )
     raw = fn_meta.param_cases
     if raw is None:
