@@ -139,3 +139,14 @@ def test_arrange_on_class_attaches_to_class() -> None:
         "class-level arrange must store metadata on the class — "
         "importer relies on this to propagate to methods (Task 10)"
     )
+
+
+def test_arrange_is_exported_at_top_level() -> None:
+    """@oxitest.arrange must be reachable as oxitest.arrange.
+
+    Matches the top-level canonical form used by oxitest.raises / oxitest.parametrize.
+    """
+    assert oxitest.arrange is arrange, (
+        "oxitest.arrange must be the same object as _arrange_api.arrange — "
+        "aliased or re-imported forms would fragment the public API"
+    )
