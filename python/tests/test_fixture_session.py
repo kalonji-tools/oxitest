@@ -9,7 +9,7 @@ from typing import Any
 
 import oxitest
 from oxitest import Fixture, TempDir, helpers
-from oxitest._bridge._errors import FixtureNotFoundError
+from oxitest._bridge._errors import FixtureNotFoundError, FixtureTypeNotFoundError
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
@@ -412,13 +412,40 @@ def test_get_fixture_by_type_resolves_plugin_fixture() -> None:
 
 
 def test_get_fixture_by_type_raises_on_unknown_type() -> None:
-    """An unregistered class must raise FixtureNotFoundError.
+    """An unregistered class must raise FixtureTypeNotFoundError.
 
+    FixtureTypeNotFoundError is a FixtureNotFoundError subclass, so existing
+    catch sites remain unbroken.  The message must mention the three valid
+    registration routes (BuiltinFixture, plugin FixtureProvider, conftest
+    return annotation) and must NOT mention 'Fixture[<type>]' — that hint
+    is for the by-name path and is misleading for @oxi.arrange(MyType) users.
     Silent failure would let @oxi.arrange(UnknownType) silently skip,
     hiding user mistakes.
     """
     session = helpers.common.make_session()  # empty registry — no fixtures registered
     teardowns: list[Callable[[], None]] = []
 
-    with oxitest.raises(FixtureNotFoundError, match=r"_UnregisteredType"):
+    with oxitest.raises(
+        FixtureTypeNotFoundError, match=r"_UnregisteredType"
+    ) as exc_info:
         session.get_fixture_by_type(_UnregisteredType, "test_mod.py", teardowns)
+
+    msg = str(exc_info.value)
+    assert isinstance(exc_info.value, FixtureNotFoundError), (
+        "FixtureTypeNotFoundError must be a subclass of FixtureNotFoundError — "
+        "existing 'except FixtureNotFoundError' catch sites must keep working"
+    )
+    assert "BuiltinFixture" in msg, (
+        "error message must mention 'BuiltinFixture' as a valid registration route — "
+        "Fixture[T] annotation hint is wrong for @oxi.arrange(MyType) users"
+    )
+    assert "FixtureProvider" in msg or "plugin" in msg, (
+        "error message must mention plugin-provided fixtures as a registration route"
+    )
+    assert "conftest" in msg, (
+        "error message must mention conftest return annotation as a registration route"
+    )
+    assert "Fixture[" not in msg, (
+        "error message must NOT mention 'Fixture[<type>]' — that hint applies to "
+        "the by-name path, not the by-type path used by @oxi.arrange(MyType)"
+    )

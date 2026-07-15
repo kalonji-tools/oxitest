@@ -20,6 +20,7 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
+    FixtureTypeNotFoundError,
     UnannotatedFixtureParamError,
 )
 from oxitest._bridge._fixture_context import (
@@ -633,13 +634,15 @@ class FixtureSession:
 
         Handles any registered @injectable — builtin (via BuiltinFixture registry),
         plugin (via FixtureProvider), or conftest fixture registered by return type.
-        Returns the fixture value; setup runs and teardown is registered on
-        ``fn_teardowns``. Raises ``FixtureNotFoundError`` if ``t`` is not resolvable.
+        Raises ``FixtureNotFoundError`` if ``t`` is not resolvable.
 
         Note: ``TestContext`` resolved via this method will have empty ``name``,
         ``node_id``, and ``marks`` — no test identity is available outside a test.
         """
-        defn = self._registry.resolve(t, qualifier=t.__name__)
+        try:
+            defn = self._registry.resolve(t, qualifier=t.__name__)
+        except FixtureNotFoundError:
+            raise FixtureTypeNotFoundError(t.__name__) from None
         meta = TestMeta(module_path=module_path, fn_name="", node_id="")
         return self._instantiator._resolve_by_source(  # noqa: SLF001
             defn,

@@ -14,6 +14,7 @@ __all__ = [
     "FixtureError",
     "FixtureNotFoundError",
     "FixtureSetupError",
+    "FixtureTypeNotFoundError",
     "LoadError",
     "OxitestError",
     "OxitestTimeoutError",
@@ -43,26 +44,54 @@ class ExecutionError(OxitestError):
 # ─── Fixture errors ─────────────────────────────────────────────────────────
 
 
+def _default_fixture_not_found_message(name: str, namespace: str) -> str:
+    """Build the default error message for a missing fixture lookup by name."""
+    if namespace:
+        return (
+            f"fixture '{name}' not found in namespace '{namespace}'.\n"
+            f"  Hint: check that a Fixtures() instance in conftest.py "
+            f"defines a fixture named '{name}', or verify the spelling."
+        )
+    return (
+        f"fixture '{name}' not found.\n"
+        f"  Hint: ensure the fixture is defined in a Fixtures() "
+        f"instance in conftest.py or provided by a plugin, and "
+        f"annotated with Fixture[<type>] in the test signature."
+    )
+
+
 class FixtureNotFoundError(FixtureError):
     """Raised when a requested fixture name cannot be found in the registry."""
 
-    def __init__(self, name: str, *, namespace: str = "") -> None:
-        if namespace:
-            msg = (
-                f"fixture '{name}' not found in namespace '{namespace}'.\n"
-                f"  Hint: check that a Fixtures() instance in conftest.py "
-                f"defines a fixture named '{name}', or verify the spelling."
-            )
-        else:
-            msg = (
-                f"fixture '{name}' not found.\n"
-                f"  Hint: ensure the fixture is defined in a Fixtures() "
-                f"instance in conftest.py or provided by a plugin, and "
-                f"annotated with Fixture[<type>] in the test signature."
-            )
-        super().__init__(msg)
+    def __init__(
+        self,
+        name: str,
+        *,
+        namespace: str = "",
+        message: str | None = None,
+    ) -> None:
+        if message is None:
+            message = _default_fixture_not_found_message(name, namespace)
+        super().__init__(message)
         self.fixture_name = name
         self.namespace = namespace
+
+
+class FixtureTypeNotFoundError(FixtureNotFoundError):
+    """Raised by get_fixture_by_type when no fixture is registered for the given type.
+
+    Message names the three registration routes (BuiltinFixture, plugin
+    FixtureProvider, conftest return annotation) instead of the by-name hint.
+    """
+
+    def __init__(self, type_name: str) -> None:
+        msg = (
+            f"no fixture registered for type '{type_name}' — must be a "
+            f"BuiltinFixture, a plugin-provided FixtureProvider with matching "
+            f"fixture_type, or a conftest fixture with '{type_name}' as its "
+            f"return annotation."
+        )
+        super().__init__(type_name, message=msg)
 
 
 class FixtureCycleError(FixtureError):
