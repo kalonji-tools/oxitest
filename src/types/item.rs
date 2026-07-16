@@ -75,13 +75,12 @@ impl From<FieldDiff> for (String, String, String) {
 // Builtin marker bitflags
 const MARKER_SKIP: u8 = 1;
 const MARKER_XFAIL: u8 = 2;
-const MARKER_USEFIXTURES: u8 = 4;
-const MARKER_TIMEOUT: u8 = 8;
-const MARKER_INPROCESS: u8 = 16;
+const MARKER_TIMEOUT: u8 = 4;
+const MARKER_INPROCESS: u8 = 8;
 
 /// Type-safe marker set with O(1) access for builtin markers.
 ///
-/// Stores the 5 builtin markers as bitflags and custom markers in a HashSet.
+/// Stores the 4 builtin markers as bitflags and custom markers in a HashSet.
 /// Replaces `Vec<String>` for marker storage in `TestItem`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MarkerSet {
@@ -89,7 +88,7 @@ pub struct MarkerSet {
     custom: HashSet<Arc<str>>,
 }
 
-#[allow(dead_code)] // has_skip, has_xfail, has_usefixtures, has_timeout, has, is_empty, len are test-only
+#[allow(dead_code)] // has_skip, has_xfail, has_timeout, has, is_empty, len are test-only
 impl MarkerSet {
     pub fn new() -> Self {
         Self {
@@ -104,9 +103,6 @@ impl MarkerSet {
     pub fn has_xfail(&self) -> bool {
         self.builtins & MARKER_XFAIL != 0
     }
-    pub fn has_usefixtures(&self) -> bool {
-        self.builtins & MARKER_USEFIXTURES != 0
-    }
     pub fn has_timeout(&self) -> bool {
         self.builtins & MARKER_TIMEOUT != 0
     }
@@ -119,7 +115,6 @@ impl MarkerSet {
         match name {
             "skip" => self.has_skip(),
             "xfail" => self.has_xfail(),
-            "usefixtures" => self.has_usefixtures(),
             "timeout" => self.has_timeout(),
             "inprocess" => self.has_inprocess(),
             _ => self.custom.contains(name),
@@ -139,7 +134,6 @@ impl MarkerSet {
         let builtins = [
             (MARKER_SKIP, "skip"),
             (MARKER_XFAIL, "xfail"),
-            (MARKER_USEFIXTURES, "usefixtures"),
             (MARKER_TIMEOUT, "timeout"),
             (MARKER_INPROCESS, "inprocess"),
         ];
@@ -176,7 +170,6 @@ impl From<Vec<String>> for MarkerSet {
             match name.as_str() {
                 "skip" => set.builtins |= MARKER_SKIP,
                 "xfail" => set.builtins |= MARKER_XFAIL,
-                "usefixtures" => set.builtins |= MARKER_USEFIXTURES,
                 "timeout" => set.builtins |= MARKER_TIMEOUT,
                 "inprocess" => set.builtins |= MARKER_INPROCESS,
                 _ => {

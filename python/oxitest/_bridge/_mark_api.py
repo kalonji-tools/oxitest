@@ -175,7 +175,6 @@ class _MarkNamespace:
     - `mark.skip(when=True, reason="...")` — skip when *when* is truthy.
     - `mark.xfail(reason="...", strict=True, raises=None)` — expect failure.
     - `mark.timeout(seconds)` — fail if the test exceeds *seconds*.
-    - `mark.usefixtures(*names)` — inject fixtures by name without a parameter.
     - `mark.parametrize(**cases)` — alias for `@oxitest.parametrize`.
 
     Custom marks declared in `[tool.oxitest] markers` are also accessible here

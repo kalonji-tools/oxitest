@@ -522,7 +522,7 @@ Markers have two halves: Rust (collection-time validation) and Python (execution
 
 ```rust
 pub(crate) const BUILTIN_MARKERS: &[&str] =
-    &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
+    &["skip", "xfail", "timeout", "inprocess"];
 ```
 
 Add your marker name to this array. These names are exempt from the "unknown marker" validation -- users do not need to register them in `pyproject.toml`.
@@ -546,7 +546,7 @@ class _MyMarkerHandler(MarkHandler):
             return result
         return MarkEvalResult(wrapper=wrapper)
 
-        # Option C: side effects only (like usefixtures)
+        # Option C: side effects only
         return MarkEvalResult()
 ```
 
@@ -556,7 +556,6 @@ Register it in `_MARK_REGISTRY`:
 _MARK_REGISTRY: dict[str, MarkHandler] = {
     h.mark_name: h
     for h in [
-        _UsefixturesHandler(),
         _SkipHandler(),
         _XFailHandler(),
         _TimeoutHandler(),

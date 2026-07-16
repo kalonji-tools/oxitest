@@ -25,14 +25,13 @@ use crate::types::{CollectError, TestItem};
 ///
 /// Must stay in sync with `_BUILTIN_HANDLER_NAMES` in
 /// `python/oxitest/_bridge/_mark_registry.py`; enforced by `test_int_marker_sync.py`.
-pub(crate) const BUILTIN_MARKERS: &[&str] =
-    &["skip", "xfail", "usefixtures", "timeout", "inprocess"];
+pub(crate) const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "timeout", "inprocess"];
 
 /// Check that every marker name on every item is either a built-in or registered.
 ///
 /// Returns one [`CollectError`] per unknown marker, each with a hint showing the
 /// `[tool.oxitest]` TOML snippet needed to register it. Built-in markers
-/// (`skip`, `xfail`, `usefixtures`, `timeout`) are always allowed.
+/// (`skip`, `xfail`, `timeout`) are always allowed.
 pub fn validate_markers(
     items: &[Arc<TestItem>],
     registered: &std::collections::HashSet<&str>,
@@ -460,10 +459,6 @@ mod tests {
             "'xfail' missing — add XFailHandler to marks.py _MARK_REGISTRY"
         );
         assert!(
-            BUILTIN_MARKERS.contains(&"usefixtures"),
-            "'usefixtures' missing — add UsefixturesHandler to marks.py _MARK_REGISTRY"
-        );
-        assert!(
             BUILTIN_MARKERS.contains(&"timeout"),
             "'timeout' missing — add TimeoutHandler to marks.py _MARK_REGISTRY"
         );
@@ -471,10 +466,9 @@ mod tests {
             BUILTIN_MARKERS.contains(&"inprocess"),
             "'inprocess' missing — scheduling mark for main-process execution"
         );
-        let expected: std::collections::HashSet<&str> =
-            ["skip", "xfail", "usefixtures", "timeout", "inprocess"]
-                .into_iter()
-                .collect();
+        let expected: std::collections::HashSet<&str> = ["skip", "xfail", "timeout", "inprocess"]
+            .into_iter()
+            .collect();
         let actual: std::collections::HashSet<&str> = BUILTIN_MARKERS.iter().copied().collect();
         assert_eq!(
             actual,

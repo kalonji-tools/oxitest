@@ -230,9 +230,7 @@ _NULL_SESSION: _SessionProtocol = FixtureSession([])
 
 
 def _evaluate_marks_phase(
-    resolved: _ResolvedTest,
     session: _SessionProtocol,
-    module_path: str,
     marks: Sequence[MarkInfo],
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Evaluate marks and return (short_circuit, wrappers)."""
@@ -242,9 +240,6 @@ def _evaluate_marks_phase(
 
     return evaluate_marks(
         marks,
-        session,
-        module_path,
-        resolved.fn_teardowns,
         plugin_handlers=_plugin_handlers,
     )
 
@@ -315,9 +310,7 @@ def run_test(
 
     try:
         marks = get_marks(fn_raw)
-        short_circuit, wrappers = _evaluate_marks_phase(
-            resolved, effective_session, meta.module_path, marks
-        )
+        short_circuit, wrappers = _evaluate_marks_phase(effective_session, marks)
         if short_circuit is not None:
             return short_circuit
 

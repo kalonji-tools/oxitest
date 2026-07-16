@@ -172,10 +172,10 @@ def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
     )
 
 
-def test_propagate_class_marks_copies_usefixtures() -> None:
-    """_propagate_class_metadata appends usefixtures marks from class to function."""
+def test_propagate_class_metadata_copies_arranged() -> None:
+    """_propagate_class_metadata prepends arranged entries from class to function."""
 
-    @oxitest.mark.usefixtures("db")
+    @oxitest.arrange("db")
     class FakeClass:
         pass
 
@@ -183,9 +183,9 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
         pass
 
     _propagate_class_metadata(test_fn, FakeClass)
-    marks = get_metadata(test_fn).marks
-    assert any(m.name == "usefixtures" for m in marks), (
-        "class-level usefixtures must propagate to methods -- without propagation,"
+    meta = get_metadata(test_fn)
+    assert "db" in meta.arranged, (
+        "class-level arranged must propagate to methods -- without propagation,"
         " fixture dependencies declared on the class silently disappear and methods run"
         " without required fixtures"
     )
@@ -232,12 +232,12 @@ def test_collect_class_methods_use_qualified_name(tmp: TempDir) -> None:
     )
 
 
-def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> None:
-    """The usefixtures mark on a class propagates to each test method at collection."""
+def test_collect_class_methods_with_arrange_propagation(tmp: TempDir) -> None:
+    """Class-level @oxi.arrange propagates to each test method at collection."""
     path = helpers.common.write_test_module(
         tmp,
         "import oxitest\n"
-        "@oxitest.mark.usefixtures('db')\n"
+        "@oxitest.arrange('db')\n"
         "class TestSuite:\n"
         "    def test_foo(self): pass\n"
         "    def test_bar(self): pass\n",
@@ -249,11 +249,11 @@ def test_collect_class_methods_with_usefixtures_propagation(tmp: TempDir) -> Non
         f" never runs: {[i.fn_name for i in items]}"
     )
     for item in items:
-        assert "usefixtures" in item.markers, (
-            f"class-level usefixtures must propagate to every method -- without it,"
+        assert "db" in item.arranged, (
+            f"class-level arranged must propagate to every method -- without it,"
             f" {item.fn_name!r} runs without the required fixture setup and produces"
             f" unreliable results: "
-            f"{item.markers}"
+            f"arranged={item.arranged}"
         )
 
 

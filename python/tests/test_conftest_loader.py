@@ -287,10 +287,9 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
     )
 
 
+@oxitest.arrange("_clean_sys_modules")
 @oxitest.mark.inprocess
-def test_load_fixtures_registers_conftest_in_sys_modules(
-    tmp: TempDir, _clean_sys_modules: Fixture[None]
-) -> None:
+def test_load_fixtures_registers_conftest_in_sys_modules(tmp: TempDir) -> None:
     """load_fixtures_from_conftest registers the module as sys.modules['conftest']."""
     f = tmp / "conftest.py"
     f.write_text(
@@ -645,9 +644,10 @@ def test_extract_helpers_from_conftest(tmp: TempDir) -> None:
 # ── _load_conftest_module: sys.modules cleanup on failure ─────────────────────
 
 
+@oxitest.arrange("_clean_sys_modules")
 @oxitest.mark.inprocess
 def test_load_conftest_module_cleans_sys_modules_on_exec_failure(
-    tmp: TempDir, _clean_sys_modules: Fixture[None]
+    tmp: TempDir,
 ) -> None:
     """exec_module failure cleans unique key but preserves previous conftest."""
     # Arrange: conftest that raises at module level

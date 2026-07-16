@@ -82,24 +82,6 @@ def test_fast_path() -> None:
 
 ---
 
-## mark.usefixtures
-
-Inject one or more fixtures by name without adding them as parameters. Useful
-for autouse-style side effects when the fixture value is not needed.
-
-```python
-@oxitest.mark.usefixtures("reset_db", "clear_cache")
-def test_insert() -> None:
-    # reset_db and clear_cache run before this test
-    ...
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `*names` | `str` | Fixture names to inject. Each must be registered in a ``conftest.py`` ``Fixtures()`` instance visible to this test. |
-
----
-
 ## mark.parametrize
 
 Alias for ``@oxitest.parametrize``. Applies named test cases to a test function.

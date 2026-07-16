@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import oxitest
 from oxitest import TempDir
 
 
@@ -20,7 +21,8 @@ def _run_completions(shell: str) -> tuple[str, str, int]:
     return result.stdout, result.stderr, result.returncode
 
 
-def test_completions_bash_outputs_script(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_completions_bash_outputs_script() -> None:
     """'completions bash' should output a valid bash completion script and exit 0."""
     out, _err, rc = _run_completions("bash")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
@@ -29,7 +31,8 @@ def test_completions_bash_outputs_script(_tmp: TempDir) -> None:
     )
 
 
-def test_completions_zsh_outputs_script(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_completions_zsh_outputs_script() -> None:
     """'completions zsh' should output a valid zsh completion script and exit 0."""
     out, _err, rc = _run_completions("zsh")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
@@ -38,7 +41,8 @@ def test_completions_zsh_outputs_script(_tmp: TempDir) -> None:
     )
 
 
-def test_completions_fish_outputs_script(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_completions_fish_outputs_script() -> None:
     """'completions fish' should output a valid fish completion script and exit 0."""
     out, _err, rc = _run_completions("fish")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
