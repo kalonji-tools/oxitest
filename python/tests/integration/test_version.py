@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import oxitest
 from oxitest import TempDir
 
 
@@ -20,7 +21,8 @@ def _run_version_flag(*args: str) -> tuple[str, str, int]:
     return result.stdout, result.stderr, result.returncode
 
 
-def test_version_flag_prints_version_and_exits_zero(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_version_flag_prints_version_and_exits_zero() -> None:
     """``oxitest --version`` prints the version string and exits 0."""
     out, _stderr, rc = _run_version_flag("--version")
     assert rc == 0, f"expected exit 0, got {rc}\nstdout:\n{out}"
@@ -31,7 +33,8 @@ def test_version_flag_prints_version_and_exits_zero(_tmp: TempDir) -> None:
     assert any("." in p for p in parts), f"no version number found in: {version_line}"
 
 
-def test_short_version_flag(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_short_version_flag() -> None:
     """``oxitest -V`` is equivalent to ``--version``."""
     out_long, _, rc_long = _run_version_flag("--version")
     out_short, _, rc_short = _run_version_flag("-V")

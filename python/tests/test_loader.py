@@ -6,7 +6,7 @@ import hashlib
 import importlib.util
 
 import oxitest
-from oxitest import Fixture, TempDir, TestContext, helpers, raises
+from oxitest import TempDir, TestContext, helpers, raises
 from oxitest._bridge._loader import _load_module, _LoadError, _resolve_fn
 
 
@@ -29,7 +29,8 @@ def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
     )
 
 
-def test_load_module_raises_load_error_on_bad_path(_tmp: TempDir) -> None:
+@oxitest.arrange(TempDir)
+def test_load_module_raises_load_error_on_bad_path() -> None:
     """_load_module should raise _LoadError when the file path does not exist."""
     unique = _unique_name("/nonexistent/path/test_x.py")
     with raises(_LoadError):
@@ -45,10 +46,9 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
         _load_module(str(f), unique)
 
 
+@oxitest.arrange("_clean_sys_modules")
 @oxitest.mark.inprocess
-def test_resolve_fn_returns_callable(
-    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
-) -> None:
+def test_resolve_fn_returns_callable(tmp: TempDir, ctx: TestContext) -> None:
     """_resolve_fn returns a (module, callable) tuple for a valid function name."""
     f = tmp / "mod.py"
     f.write_text("def test_bar(): return 42\n")
@@ -66,9 +66,10 @@ def test_resolve_fn_returns_callable(
     assert fn() == 42, f"resolved function should return 42, got {fn()!r}"
 
 
+@oxitest.arrange("_clean_sys_modules")
 @oxitest.mark.inprocess
 def test_resolve_fn_raises_load_error_on_missing_function(
-    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
+    tmp: TempDir, ctx: TestContext
 ) -> None:
     """_resolve_fn raises _LoadError with status='error' when the function is absent."""
     f = tmp / "mod.py"
@@ -92,10 +93,9 @@ def test_resolve_fn_raises_load_error_on_missing_function(
     )
 
 
+@oxitest.arrange("_clean_sys_modules")
 @oxitest.mark.inprocess
-def test_resolve_fn_handles_class_method(
-    tmp: TempDir, ctx: TestContext, _clean_sys_modules: Fixture[None]
-) -> None:
+def test_resolve_fn_handles_class_method(tmp: TempDir, ctx: TestContext) -> None:
     """_resolve_fn should resolve 'ClassName::method_name' to the unbound method."""
     f = tmp / "mod.py"
     f.write_text("class TestFoo:\n    def test_method(self): return 'ok'\n")

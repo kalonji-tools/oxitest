@@ -79,7 +79,7 @@ def assert_result(
 
 
 @fx.fixture
-def fixture_session(_tmp: TempDir) -> Yields[FixtureSession]:
+def fixture_session() -> Yields[FixtureSession]:
     session = FixtureSession([], PluginRegistry())
     yield session
     session.end_session()
