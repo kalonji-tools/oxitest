@@ -335,16 +335,36 @@ pub(crate) fn collect_module_with_session_obj(
     let result = importer
         .call_method("collect_module", (path_str, session_obj), Some(&kwargs))
         .map_err(|e: PyErr| {
-            // e.to_string() formats as "ImportError: <message>"; strip the redundant
-            // type prefix because CollectError::ImportError already labels the context.
             let full = e.to_string();
-            let message = full
-                .strip_prefix("ImportError: ")
-                .unwrap_or(&full)
-                .to_string();
-            CollectError::ImportError {
-                path: path.to_owned(),
-                message,
+            // Extract the Python exception class name so we can route
+            // CollectionError (arrange-collision) separately from ImportError.
+            // e.to_string() formats as "<ExcType>: <message>".
+            let exc_class = e
+                .get_type(py)
+                .name()
+                .map(|n| n.to_string())
+                .unwrap_or_default();
+            if exc_class == "CollectionError" {
+                // Arrange-collision or similar collection-time misconfiguration —
+                // strip the "CollectionError: " prefix (already in exc_class label)
+                // and surface with a clear classification.
+                let message = full
+                    .strip_prefix("CollectionError: ")
+                    .unwrap_or(&full)
+                    .to_string();
+                CollectError::PyError(format!("collection error: {message}"))
+            } else {
+                // ImportError (syntax error, missing module, etc.) — strip the
+                // redundant type prefix because CollectError::ImportError already
+                // labels the context.
+                let message = full
+                    .strip_prefix("ImportError: ")
+                    .unwrap_or(&full)
+                    .to_string();
+                CollectError::ImportError {
+                    path: path.to_owned(),
+                    message,
+                }
             }
         })?;
 

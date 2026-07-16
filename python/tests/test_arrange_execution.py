@@ -12,6 +12,7 @@ from collections.abc import Generator
 from oxitest import TempDir, helpers
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._loader import _load_module
 from oxitest._bridge.plugin_loader import PluginRegistry
 
 
@@ -170,4 +171,63 @@ def test_arrange_multiple_entries_all_setup(tmp: TempDir) -> None:
     )
     assert "extra_teardown" in log, (
         f"string-based arranged fixture 'extra' must run teardown — log={log!r}"
+    )
+
+
+def test_arrange_ambiguous_type_reports_error(tmp: TempDir) -> None:
+    """@oxi.arrange(SomeType) where two fixtures provide SomeType → error result.
+
+    Guards against the arrange phase's except clause missing AmbiguousFixtureError.
+    When two conftest fixtures resolve to the same binding type and the decorator
+    uses type-based arrange, run_test must return status='error' with an
+    'ambiguous' message rather than propagating an unhandled exception.
+    """
+    # Write a module that defines an @injectable sentinel type and uses it in
+    # @arrange.  The class is written to disk so the executor can load it, and
+    # we pre-load the same module here to extract the _AmbigSentinel class so
+    # that the FixtureDefs reference the SAME type object the executor will see.
+    code = (
+        "import oxitest\n"
+        "\n"
+        "class _AmbigSentinel:\n"
+        "    __oxitest_injectable__ = True\n"
+        "\n"
+        "@oxitest.arrange(_AmbigSentinel)\n"
+        "def test_ambiguous() -> None:\n"
+        "    pass\n"
+    )
+    path = helpers.common.write_test_module(tmp, code, name="test_ambig.py")
+
+    # Pre-load the module via the same loader the executor uses, then seed it
+    # into the session cache so the executor reuses the exact same module
+    # object (and thus the same _AmbigSentinel class identity).
+    unique_name = "_oxitest_preloaded_ambig"
+    preloaded = _load_module(path, unique_name)
+    ambig_type: type = preloaded._AmbigSentinel  # noqa: SLF001
+
+    # Build a session with TWO fixtures for the same type but different names.
+    # registry.resolve(ambig_type) sees two candidates; neither name matches
+    # the qualifier "_AmbigSentinel" ("alpha"/"beta"), so AmbiguousFixtureError
+    # is raised.
+    session = helpers.common.make_session(
+        helpers.common.make_fixture_def(
+            "alpha", fixture_type=ambig_type, conftest_path="/conftest.py"
+        ),
+        helpers.common.make_fixture_def(
+            "beta", fixture_type=ambig_type, conftest_path="/conftest.py"
+        ),
+    )
+    # Seed the cache so the executor loads the same module we pre-loaded.
+    session.module_cache.set(path, preloaded)
+
+    result = helpers.common.run_test(path, "test_ambiguous", session=session)
+
+    assert result.status == "error", (
+        "an ambiguous arranged fixture is an infrastructure error — "
+        "run_test must catch AmbiguousFixtureError and return status='error', "
+        f"not propagate it as an unhandled exception: got status={result.status!r}"
+    )
+    assert "ambiguous" in result.message.lower(), (
+        "the error message must mention 'ambiguous' so the user understands why "
+        f"the test could not run: got message={result.message!r}"
     )

@@ -30,7 +30,12 @@ from typing import Any
 
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
-from oxitest._bridge._errors import FixtureNotFoundError, FixtureSetupError
+from oxitest._bridge._errors import (
+    AmbiguousFixtureError,
+    FixtureCycleError,
+    FixtureNotFoundError,
+    FixtureSetupError,
+)
 from oxitest._bridge._fixture_context import (
     TestRunContext,
     _current_teardown_node_id,
@@ -327,7 +332,12 @@ def run_test(
                         effective_session.get_fixture_by_name(
                             entry, meta.module_path, fn_teardowns
                         )
-            except (FixtureSetupError, FixtureNotFoundError) as exc:
+            except (
+                FixtureSetupError,
+                FixtureNotFoundError,
+                AmbiguousFixtureError,
+                FixtureCycleError,
+            ) as exc:
                 return _error_result(str(exc))
 
         execute = _build_execution_chain(
