@@ -135,29 +135,29 @@ under short names. Mix custom and built-in fixtures through the same `fx` parame
 
 ## Inject fixtures without a parameter
 
-Use `@oxitest.mark.usefixtures("name")` when a fixture should run for its side
+Use `@oxitest.arrange("name")` when a fixture should run for its side
 effects but its return value is not needed in the test body:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:usefixtures"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:arrange"
 ```
 
 The fixture runs (including any teardown) exactly as it would if requested via a
 `Fixture[T]` parameter — the only difference is that the value is discarded.
 
 **How it differs from `autouse=True`:** `autouse=True` on a fixture declaration
-makes it run for *every* test in the session. `@mark.usefixtures` is per-test —
+makes it run for *every* test in the session. `@oxi.arrange` is per-test —
 it opts a single test (or a class of tests) into the fixture without affecting
 anything else.
 
 **How it differs from `Fixture[T]` injection:** a `Fixture[T]` parameter gives
-the test access to the fixture's value. `@mark.usefixtures` is the right choice
+the test access to the fixture's value. `@oxi.arrange` is the right choice
 when only the side effect matters and no parameter is wanted.
 
 Multiple fixture names can be passed in a single decorator:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:usefixtures-multiple"
+--8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:arrange-multiple"
 ```
 
 ## Understand conftest.py loading

@@ -24,15 +24,15 @@ def test_export(fx: Fixtures) -> None:
     assert fx.oxi.tmp.path.joinpath("export.json").exists(), "export file should exist"
 # --8<-- [end:fx-oxi-test]
 
-# --8<-- [start:usefixtures]
-@oxitest.mark.usefixtures("reset_database")
+# --8<-- [start:arrange]
+@oxitest.arrange("reset_database")
 def test_insert_user() -> None:
     assert True, "reset_database fixture should run for side effects"
-# --8<-- [end:usefixtures]
+# --8<-- [end:arrange]
 
-# --8<-- [start:usefixtures-multiple]
-@oxitest.mark.usefixtures("reset_database", "app_config")
+# --8<-- [start:arrange-multiple]
+@oxitest.arrange("reset_database", "app_config")
 def test_cold_start() -> None:
     assert True, "fixtures should run for side effects"
-# --8<-- [end:usefixtures-multiple]
+# --8<-- [end:arrange-multiple]
 # fmt: on
