@@ -106,6 +106,7 @@ import sys
 from typing import Any as _Any, NoReturn as _NoReturn
 
 from oxitest._bridge._approx import ApproxBase as ApproxBase, approx as approx
+from oxitest._bridge._arrange_api import arrange as arrange
 from oxitest._bridge._async_backend import (
     AsyncBackend as AsyncBackend,
     SharedAsyncSession as SharedAsyncSession,
@@ -197,6 +198,7 @@ __all__ = [
     "WarnCapture",
     "Yields",
     "approx",
+    "arrange",
     "fixtures",
     "helpers",
     "importorskip",
