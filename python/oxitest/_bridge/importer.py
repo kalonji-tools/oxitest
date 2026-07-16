@@ -19,7 +19,7 @@ from oxitest._bridge._errors import CollectionError
 from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._fn_metadata import get_metadata
+from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
@@ -55,14 +55,22 @@ def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
     return tuple(deps)
 
 
-def _propagate_class_marks(fn: object, cls: object) -> None:
-    """Copy marks from a class onto a test method.
+def _propagate_class_metadata(fn: object, cls: object) -> None:
+    """Copy marks AND arranged from a class onto a test method.
 
     Called at collection time when a test method is collected from a class.
-    All marks on the class are propagated to each method.
+    All marks on the class are propagated to each method. Class-level arranged
+    entries are prepended to any method-level arranged entries so the class
+    baseline comes first, then per-method additions.
     """
     for m in get_marks(cls):
         _append_mark(fn, m)
+
+    cls_meta = get_metadata(cls)
+    if cls_meta.arranged:
+        method_meta = get_metadata(fn)
+        merged_arranged = (*cls_meta.arranged, *method_meta.arranged)
+        _update(fn, arranged=merged_arranged)
 
 
 def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
@@ -558,7 +566,7 @@ def _class_members(module: ModuleType) -> Iterable[tuple[str, object]]:
         for method_name, method in inspect.getmembers(cls, inspect.isfunction):
             if not method_name.startswith("test_"):
                 continue
-            _propagate_class_marks(method, cls)
+            _propagate_class_metadata(method, cls)
             yield f"{cls_name}::{method_name}", method
 
 

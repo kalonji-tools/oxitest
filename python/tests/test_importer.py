@@ -19,7 +19,7 @@ from oxitest._bridge.importer import (
     _extract_module_marks,
     _get_fixture_deps,
     _module_members,
-    _propagate_class_marks,
+    _propagate_class_metadata,
     collect_module,
 )
 from oxitest._bridge.parametrize import DictCases
@@ -173,7 +173,7 @@ def test_collect_extracts_multiple_markers(tmp: TempDir) -> None:
 
 
 def test_propagate_class_marks_copies_usefixtures() -> None:
-    """_propagate_class_marks appends usefixtures marks from class to function."""
+    """_propagate_class_metadata appends usefixtures marks from class to function."""
 
     @oxitest.mark.usefixtures("db")
     class FakeClass:
@@ -182,7 +182,7 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
     def test_fn() -> None:
         pass
 
-    _propagate_class_marks(test_fn, FakeClass)
+    _propagate_class_metadata(test_fn, FakeClass)
     marks = get_metadata(test_fn).marks
     assert any(m.name == "usefixtures" for m in marks), (
         "class-level usefixtures must propagate to methods -- without propagation,"
@@ -192,7 +192,7 @@ def test_propagate_class_marks_copies_usefixtures() -> None:
 
 
 def test_propagate_class_marks_copies_all_marks() -> None:
-    """_propagate_class_marks copies ALL marks from class to function."""
+    """_propagate_class_metadata copies ALL marks from class to function."""
 
     @oxitest.mark.skip(reason="class skip")
     class FakeClass:
@@ -201,7 +201,7 @@ def test_propagate_class_marks_copies_all_marks() -> None:
     def test_fn() -> None:
         pass
 
-    _propagate_class_marks(test_fn, FakeClass)
+    _propagate_class_metadata(test_fn, FakeClass)
     assert any(m.name == "skip" for m in get_metadata(test_fn).marks), (
         "class-level marks propagate unconditionally -- skip on a class means all its"
         " methods are skipped, otherwise individual methods run when the author"

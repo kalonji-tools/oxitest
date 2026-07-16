@@ -1,7 +1,7 @@
 """Collection-time behavior of @oxi.arrange."""
 
 import oxitest
-from oxitest import TempDir, helpers
+from oxitest import StdCapture, TempDir, helpers
 from oxitest._bridge._errors import CollectionError
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.result import CollectedItem
@@ -136,4 +136,55 @@ def test_arranged_fixtures_appear_in_fixture_deps(tmp: TempDir) -> None:
     assert "db" in qualifier_names, (
         "arranged string 'db' must appear in fixture_deps as qualifier 'db' so "
         "the Rust bridge includes it in fixture_names for the unused-fixture check"
+    )
+
+
+def test_class_arrange_propagates_to_methods(tmp: TempDir) -> None:
+    """@oxi.arrange on a class propagates to every test_* method.
+
+    Users write class-level arrange to share fixture side effects across
+    multiple test methods without repeating the decorator on each.
+    """
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "from oxitest import TempDir\n"
+        "\n"
+        "@oxitest.arrange(TempDir)\n"
+        "class TestGroup:\n"
+        "    def test_a(self) -> None: ...\n"
+        "    def test_b(self) -> None: ...\n",
+    )
+    items, _ = collect_module(path)
+    assert len(items) == 2, (
+        f"expected exactly 2 collected items (test_a, test_b), got {len(items)}"
+    )
+    for item in items:
+        assert item.arranged == (TempDir,), (
+            f"class-level @arrange must propagate to {item.fn_name} — "
+            "without propagation, TestGroup's shared side effects are lost"
+        )
+
+
+def test_class_and_method_arrange_merge_class_first(tmp: TempDir) -> None:
+    """Class-level + method-level @arrange combine, class entries first.
+
+    Method adds to (not replaces) class-level arrangement; the merged tuple
+    preserves declaration semantics.
+    """
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "from oxitest import TempDir, StdCapture\n"
+        "\n"
+        "@oxitest.arrange(TempDir)\n"
+        "class TestGroup:\n"
+        "    @oxitest.arrange(StdCapture)\n"
+        "    def test_x(self) -> None: ...\n",
+    )
+    items, _ = collect_module(path)
+    assert len(items) == 1, f"expected exactly 1 collected item, got {len(items)}"
+    assert items[0].arranged == (TempDir, StdCapture), (
+        "class-level TempDir must come first, then method-level StdCapture — "
+        "class-level = shared baseline, method-level = per-test additions"
     )
