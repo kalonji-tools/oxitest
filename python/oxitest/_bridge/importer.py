@@ -275,21 +275,6 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     return tuple(deps)
 
 
-def _dedupe_arranged(entries: tuple[type | str, ...]) -> tuple[type | str, ...]:
-    """Dedupe arranged entries preserving first-occurrence order.
-
-    Types are compared by identity, strings by value — both are hashable so a
-    set covers both cases with a single pass.
-    """
-    seen: set[type | str] = set()
-    result: list[type | str] = []
-    for entry in entries:
-        if entry not in seen:
-            seen.add(entry)
-            result.append(entry)
-    return tuple(result)
-
-
 def _check_arrange_collisions(
     fn: object,
     arranged: tuple[type | str, ...],
@@ -373,7 +358,7 @@ def _expand_item(
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
     fn_meta = get_metadata(fn)
-    arranged = _dedupe_arranged(fn_meta.arranged)
+    arranged = tuple(dict.fromkeys(fn_meta.arranged))
     _check_arrange_collisions(fn, arranged)
     augmented_fixture_deps = _augment_fixture_deps(_get_fixture_deps(fn), arranged)
     template = _ItemTemplate(

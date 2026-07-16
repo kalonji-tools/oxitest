@@ -7,7 +7,7 @@ __all__ = ["arrange"]
 from collections.abc import Callable
 from typing import TypeVar
 
-from oxitest._bridge._fn_metadata import _update, get_or_create
+from oxitest._bridge._fn_metadata import _update, get_metadata
 
 _F = TypeVar("_F", bound=Callable[..., object])
 
@@ -32,22 +32,24 @@ def arrange(*args: type | str) -> Callable[[_F], _F]:
         TypeError: If the same fixture appears more than once in a single call
             — the duplicate is almost certainly a copy-paste mistake.
 
-    """
-    # Bare form: @oxi.arrange (no parens) passes the decorated function as the
-    # sole argument.  A function is callable but not a type, so we catch it here
-    # before the empty-args check and give the same "no fixtures" message.
-    if len(args) == 1 and callable(args[0]) and not isinstance(args[0], type):
-        msg = (
-            "@oxi.arrange requires at least one fixture — "
-            "did you forget the parentheses? Use @oxi.arrange(TempDir) not @oxi.arrange"
-        )
-        raise TypeError(msg)
+    Note:
+        Mark evaluation (skip, xfail, timeout) happens **before** the arrange
+        phase, so arranged fixtures do NOT run for skipped or xfailed tests.
+        This is intentional — arrange represents test-run setup, not overhead
+        that should fire unconditionally.
 
-    # Empty-args: @oxi.arrange() — callers must name at least one fixture.
-    if not args:
+    """
+    # Bare form @oxi.arrange (no parens) passes the decorated function as the sole
+    # argument — a callable but not a type.  Empty-args @oxi.arrange() is also
+    # invalid.  Both share the same root cause (no fixtures named), so one guard
+    # and one message covers both.
+    if not args or (
+        len(args) == 1 and callable(args[0]) and not isinstance(args[0], type)
+    ):
         msg = (
             "@oxi.arrange requires at least one fixture — "
-            "pass one or more @injectable classes or fixture name strings"
+            "pass one or more @injectable classes or fixture name strings "
+            "(and remember the parentheses: @oxi.arrange(TempDir) not @oxi.arrange)"
         )
         raise TypeError(msg)
 
@@ -86,8 +88,7 @@ def arrange(*args: type | str) -> Callable[[_F], _F]:
         seen.add(arg)
 
     def decorator(fn: _F) -> _F:
-        meta = get_or_create(fn)
-        _update(fn, arranged=(*meta.arranged, *args))
+        _update(fn, arranged=(*get_metadata(fn).arranged, *args))
         return fn
 
     return decorator
