@@ -1,4 +1,4 @@
-"""Mark handler registry for skip/xfail/timeout/usefixtures evaluation.
+"""Mark handler registry for skip/xfail/timeout evaluation.
 
 Marker *conditions* are evaluated here at test execution time.
 Marker *names* are collected at collection time by validate_markers() in
@@ -25,7 +25,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from oxitest._bridge._fixture_session import _SessionProtocol
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._timeout import extract_timeout_seconds, make_timeout_wrapper
 from oxitest._bridge.result import (
@@ -167,9 +166,6 @@ _BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
 
 def evaluate_marks(
     marks: Sequence[MarkInfo],
-    session: _SessionProtocol,
-    module_path: str,
-    fn_teardowns: list[Callable[[], None]],
     plugin_handlers: Sequence[MarkHandler] = (),
 ) -> tuple[TestResult | None, list[MarkWrapper]]:
     """Run marks through the handler registry.
@@ -184,10 +180,6 @@ def evaluate_marks(
         registry = {**_MARK_REGISTRY, **{h.mark_name: h for h in plugin_handlers}}
     wrappers: list[MarkWrapper] = []
     for mark in marks:
-        if mark.name == "usefixtures":
-            for fx_name in mark.args:
-                session.get_fixture_by_name(str(fx_name), module_path, fn_teardowns)
-            continue
         handler = registry.get(mark.name)
         if handler is None:
             continue

@@ -86,8 +86,8 @@ class TestContext:
     def marks(self) -> frozenset[str]:
         """All mark names applied to this test (e.g. ``frozenset({"slow"})``).
 
-        Includes both built-in marks (``skip``, ``xfail``, ``timeout``,
-        ``usefixtures``) and custom marks.
+        Includes both built-in marks (``skip``, ``xfail``, ``timeout``)
+        and custom marks.
         """
         return self._meta.markers
 

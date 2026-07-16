@@ -11,8 +11,6 @@ from typing import Any
 import oxitest
 import oxitest as oxi
 from oxitest import TempDir, helpers, parametrize, raises
-from oxitest._bridge._fixture_registry import FixtureRegistry
-from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
@@ -253,24 +251,6 @@ def test_mark_xfail_stores_strict_false() -> None:
     )
 
 
-def test_mark_usefixtures_stores_fixture_names() -> None:
-    """@mark.usefixtures stores fixture names as positional args on the MarkInfo."""
-
-    @oxitest.mark.usefixtures("db", "cache")
-    def test_fn() -> None:
-        pass
-
-    m = get_metadata(test_fn).marks[0]
-    assert m.name == "usefixtures", (
-        "usefixtures must register under its own name so evaluate_marks resolves"
-        " fixtures inline"
-    )
-    assert m.args == ("db", "cache"), (
-        "fixture names are positional args — evaluate_marks iterates them to resolve"
-        " each fixture"
-    )
-
-
 def test_mark_stacking_two_decorators() -> None:
     """Stacking two mark decorators registers both marks on the function."""
 
@@ -393,38 +373,6 @@ def test_mark_executor_result(
         )
 
 
-def test_usefixtures_resolves_fixture(tmp: TempDir) -> None:
-    """The usefixtures mark runs the named fixture, producing its side effects."""
-    reg = FixtureRegistry()
-    log: list[str] = []
-
-    def side_effect_fixture() -> None:
-        log.append("setup")
-
-    reg.register(helpers.common.make_fixture_def("my_fixture", side_effect_fixture))
-    session = FixtureSession(reg)
-
-    code = (
-        "import oxitest\n"
-        "@oxitest.mark.usefixtures('my_fixture')\n"
-        "def test_foo(): pass\n"
-    )
-    result = helpers.common.exec_inline(
-        tmp,
-        code,
-        "test_foo",
-        session=session,
-    )
-    assert result.status == "passed", (  # usefixtures does not short-circuit
-        f"@mark.usefixtures should not short-circuit, expected status='passed', got "
-        f"{result.status!r}"
-    )
-    assert log == ["setup"], (
-        "usefixtures must actually invoke the fixture — side effects prove resolution"
-        " happened"
-    )
-
-
 def test_mark_pass_through_is_inert() -> None:
     """PassThrough() is the inert mark action — no short-circuit and no wrapper."""
     r = PassThrough()
@@ -434,15 +382,6 @@ def test_mark_pass_through_is_inert() -> None:
     assert not isinstance(r, Wrap), (
         "PassThrough must not be a Wrap — a Wrap would alter test outcomes"
     )
-
-
-def test_usefixtures_mark_resolves_via_evaluate_marks() -> None:
-    """Usefixtures is resolved inline in evaluate_marks, not by a MarkHandler."""
-    session = FixtureSession(FixtureRegistry())
-    marks = [MarkInfo("usefixtures", (), MappingProxyType({}))]
-    sc, wrappers = evaluate_marks(marks, session, "test_fake.py", [])
-    assert sc is None, "usefixtures should not short-circuit"
-    assert wrappers == [], "usefixtures should not produce wrappers"
 
 
 def test_skip_handler_returns_short_circuit() -> None:
@@ -616,9 +555,7 @@ def test_timeout_mark_stores_seconds() -> None:
 
 def test_evaluate_marks_returns_tuple() -> None:
     """evaluate_marks with no marks returns (None, [])."""
-    sc, wrappers = evaluate_marks(
-        [], FixtureSession(FixtureRegistry()), "test_fake.py", []
-    )
+    sc, wrappers = evaluate_marks([])
     assert sc is None, "no marks means no handler ran, so nothing can short-circuit"
     assert wrappers == [], (
         "no marks means no handler ran, so no wrappers should be produced"
@@ -629,9 +566,6 @@ def test_evaluate_marks_skip_returns_short_circuit() -> None:
     """evaluate_marks with a skip mark short-circuits to a skipped result."""
     sc, wrappers = evaluate_marks(
         [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))],
-        FixtureSession(FixtureRegistry()),
-        "test_fake.py",
-        [],
     )
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
@@ -759,9 +693,7 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})),
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5})),
     ]
-    sc, wrappers = evaluate_marks(
-        marks, FixtureSession(FixtureRegistry()), "test_fake.py", []
-    )
+    sc, wrappers = evaluate_marks(marks)
 
     assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
     assert sc.status == "skipped", (
@@ -782,9 +714,6 @@ def test_evaluate_marks_dispatches_plugin_handlers() -> None:
     marks = [MarkInfo("custom_mark", (), MappingProxyType({}))]
     short_circuit, wrappers = evaluate_marks(
         marks,
-        FixtureSession(FixtureRegistry()),
-        "/fake.py",
-        [],
         plugin_handlers=[handler],
     )
     assert short_circuit is None, "should not short-circuit"
