@@ -202,6 +202,27 @@ impl<'de> serde::Deserialize<'de> for MarkerSet {
     }
 }
 
+/// One entry from `@oxi.arrange(...)` — either a fixture type (class) or a
+/// fixture name (string).
+///
+/// The Python side stores `tuple[type | str, ...]`. On the Rust side we
+/// serialise as a tagged JSON object so the shape survives the cache round-trip
+/// and any future JSON worker path.
+///
+/// # JSON shape
+/// ```json
+/// {"kind": "Type", "value": "TempDir"}
+/// {"kind": "Name", "value": "my_fixture"}
+/// ```
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "value")]
+pub enum ArrangedEntry {
+    /// A fixture class, identified by its `__name__`.
+    Type(String),
+    /// A fixture name string.
+    Name(String),
+}
+
 /// A collected test with all metadata needed for execution and reporting.
 ///
 /// Produced by `bridge::collect_module` after Python imports the test file.
@@ -221,6 +242,8 @@ pub struct TestItem {
     pub(crate) fixture_deps: Vec<(String, String)>,
     #[serde(default)]
     pub(crate) fixref_deps: Vec<(String, String)>,
+    #[serde(default)]
+    pub(crate) arranged: Vec<ArrangedEntry>,
 }
 
 impl TestItem {
@@ -254,6 +277,7 @@ impl TestItem {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         }
     }
 
@@ -271,6 +295,7 @@ impl TestItem {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         }
     }
 }
@@ -294,6 +319,7 @@ mod item_tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         assert_eq!(item.param_id, Some("basic".to_string()));
         assert_eq!(item.param_values.len(), 1);
@@ -311,6 +337,7 @@ mod item_tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         assert!(item.param_id.is_none());
         assert!(item.param_values.is_empty());
@@ -328,6 +355,7 @@ mod item_tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         assert!(!sync_item.is_async);
 
@@ -341,6 +369,7 @@ mod item_tests {
             is_async: true,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         assert!(async_item.is_async);
     }

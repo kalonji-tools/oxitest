@@ -366,6 +366,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         let outcome = TestOutcome::failed("")
             .lineno(5)

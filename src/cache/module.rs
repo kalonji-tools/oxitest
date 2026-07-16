@@ -87,6 +87,7 @@ mod tests {
                 is_async: false,
                 fixture_deps: vec![],
                 fixref_deps: vec![],
+                arranged: vec![],
             }),
             Arc::new(TestItem {
                 node_id: NodeId::new("tests/test_foo.py", "test_b", Some("x0")),
@@ -102,6 +103,7 @@ mod tests {
                 is_async: false,
                 fixture_deps: vec![],
                 fixref_deps: vec![],
+                arranged: vec![],
             }),
         ];
         cache.update_module_cache(module_path, 12345, &items);
@@ -136,6 +138,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         })];
         cache.update_module_cache(module_path, 12345, &items);
         assert!(cache.cached_module_items(module_path, 99999).is_none());
@@ -216,6 +219,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         })];
         cache.update_module_cache(module_path, 9999, &items);
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();

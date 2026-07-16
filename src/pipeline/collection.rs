@@ -270,6 +270,7 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
                 is_async: false,
                 fixture_deps: vec![],
                 fixref_deps: vec![],
+                arranged: vec![],
             }));
         }
     }

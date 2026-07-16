@@ -230,9 +230,31 @@ struct CollectedItem {
     is_async: bool,
     fixture_deps: Vec<(String, String)>,
     fixref_deps: Vec<(String, String)>,
-    // Task 14 will propagate this to TestItem — suppressed until then.
-    #[allow(dead_code)]
-    arranged: Vec<Py<PyAny>>,
+    arranged: Vec<RawArrangedEntry>,
+}
+
+/// Raw extraction type for one `@oxi.arrange(...)` entry.
+///
+/// Python stores `tuple[type | str, ...]`. We inspect each element: if it is a
+/// Python `type` (class), we extract its `__name__`; otherwise we extract the
+/// string directly. The result is stored as [`crate::types::ArrangedEntry`].
+struct RawArrangedEntry(crate::types::ArrangedEntry);
+
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for RawArrangedEntry {
+    type Error = pyo3::PyErr;
+
+    fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
+        // Check if the object is a Python type (class) by calling builtins.isinstance(ob, type).
+        // PyAny::is_instance_of::<pyo3::types::PyType> checks if *ob itself* is a type.
+        use crate::types::ArrangedEntry;
+        if ob.is_instance_of::<pyo3::types::PyType>() {
+            let name: String = ob.getattr("__name__")?.extract()?;
+            Ok(RawArrangedEntry(ArrangedEntry::Type(name)))
+        } else {
+            let name: String = ob.extract()?;
+            Ok(RawArrangedEntry(ArrangedEntry::Name(name)))
+        }
+    }
 }
 
 /// Typed violation kind coming from Python. Variants map 1-to-1 to the
@@ -341,6 +363,7 @@ pub(crate) fn collect_module_with_session_obj(
             is_async: item.is_async,
             fixture_deps: item.fixture_deps,
             fixref_deps: item.fixref_deps,
+            arranged: item.arranged.into_iter().map(|r| r.0).collect(),
         })
         .collect();
 

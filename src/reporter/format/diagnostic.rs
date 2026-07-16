@@ -555,6 +555,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         });
         let outcome = TestOutcome::failed("")
             .lineno(8)
@@ -588,6 +589,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         });
         let outcome = TestOutcome::failed("")
             .lineno(8)
@@ -660,6 +662,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         let outcome = TestOutcome::failed("assert failed")
             .file("test_foo.py")
@@ -709,6 +712,7 @@ mod tests {
             is_async: false,
             fixture_deps: vec![],
             fixref_deps: vec![],
+            arranged: vec![],
         };
         let outcome = TestOutcome::failed("oops")
             .file("t.py")
