@@ -40,6 +40,7 @@ from oxitest._bridge._fixture_session import (
     FixtureSession,
     _SessionProtocol,
 )
+from oxitest._bridge._fn_metadata import get_metadata as _get_metadata
 from oxitest._bridge._loader import (
     _load_module,
     _LoadError,
@@ -319,6 +320,22 @@ def run_test(
         )
         if short_circuit is not None:
             return short_circuit
+
+        # --- Arrange phase (side-effect-only fixtures declared via @oxi.arrange) ---
+        arranged = _get_metadata(fn_raw).arranged
+        if arranged:
+            try:
+                for entry in arranged:
+                    if isinstance(entry, type):
+                        effective_session.get_fixture_by_type(
+                            entry, meta.module_path, fn_teardowns
+                        )
+                    else:  # str
+                        effective_session.get_fixture_by_name(
+                            entry, meta.module_path, fn_teardowns
+                        )
+            except (FixtureSetupError, FixtureNotFoundError) as exc:
+                return _error_result(str(exc))
 
         execute = _build_execution_chain(
             resolved,
