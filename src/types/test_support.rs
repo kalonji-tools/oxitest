@@ -23,6 +23,7 @@ pub(crate) struct TestItemBuilder {
     pub(crate) is_async: bool,
     pub(crate) fixture_deps: Vec<(String, String)>,
     pub(crate) fixref_deps: Vec<(String, String)>,
+    pub(crate) arranged: Vec<super::ArrangedEntry>,
 }
 
 impl TestItemBuilder {
@@ -79,6 +80,7 @@ impl TestItemBuilder {
             is_async: self.is_async,
             fixture_deps: self.fixture_deps,
             fixref_deps: self.fixref_deps,
+            arranged: self.arranged,
         }
     }
 
