@@ -15,10 +15,11 @@ from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
+from oxitest._bridge._errors import CollectionError
 from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._fn_metadata import get_metadata
+from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
@@ -54,14 +55,22 @@ def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
     return tuple(deps)
 
 
-def _propagate_class_marks(fn: object, cls: object) -> None:
-    """Copy marks from a class onto a test method.
+def _propagate_class_metadata(fn: object, cls: object) -> None:
+    """Copy marks AND arranged from a class onto a test method.
 
     Called at collection time when a test method is collected from a class.
-    All marks on the class are propagated to each method.
+    All marks on the class are propagated to each method. Class-level arranged
+    entries are prepended to any method-level arranged entries so the class
+    baseline comes first, then per-method additions.
     """
     for m in get_marks(cls):
         _append_mark(fn, m)
+
+    cls_meta = get_metadata(cls)
+    if cls_meta.arranged:
+        method_meta = get_metadata(fn)
+        merged_arranged = (*cls_meta.arranged, *method_meta.arranged)
+        _update(fn, arranged=merged_arranged)
 
 
 def _coerce_to_mark_info(entry: object) -> MarkInfo | None:
@@ -196,6 +205,7 @@ class _ItemTemplate:
     markers: tuple[str, ...]
     is_async: bool
     fixture_deps: tuple[tuple[str, str], ...]
+    arranged: tuple[type | str, ...]
 
 
 def _expand_composed(
@@ -221,6 +231,7 @@ def _expand_composed(
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
                 fixref_deps=fixref_deps,
+                arranged=template.arranged,
             )
         )
     return items
@@ -264,6 +275,96 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
     return tuple(deps)
 
 
+def _dedupe_arranged(entries: tuple[type | str, ...]) -> tuple[type | str, ...]:
+    """Dedupe arranged entries preserving first-occurrence order.
+
+    Types are compared by identity, strings by value — both are hashable so a
+    set covers both cases with a single pass.
+    """
+    seen: set[type | str] = set()
+    result: list[type | str] = []
+    for entry in entries:
+        if entry not in seen:
+            seen.add(entry)
+            result.append(entry)
+    return tuple(result)
+
+
+def _check_arrange_collisions(
+    fn: object,
+    arranged: tuple[type | str, ...],
+) -> None:
+    """Raise CollectionError if any arranged entry also appears as a parameter.
+
+    Two collision variants:
+    - Name collision: arranged string name matches a parameter name.
+    - Type collision: arranged type matches a parameter annotation (bare or Fixture[T]).
+    """
+    if not arranged:
+        return
+    sig_params = inspect.signature(cast("Callable[..., Any]", fn)).parameters
+    param_names = set(sig_params.keys())
+    hints = safe_type_hints(fn, include_extras=True) or {}
+
+    for entry in arranged:
+        if isinstance(entry, str):
+            # Name collision: arranged fixture name == parameter name
+            if entry in param_names:
+                qualname = getattr(fn, "__qualname__", repr(fn))
+                msg = (
+                    f"@oxi.arrange in {qualname}: arranged {entry!r} also declared "
+                    f"as parameter. Choose one — arrange runs side effects only; "
+                    f"parameter injection binds the value."
+                )
+                raise CollectionError(msg)
+        else:
+            # Type collision: arranged type matches a parameter annotation
+            for pname, hint in hints.items():
+                if pname == "return":
+                    continue
+                is_fx, inner = _fixture_inner_type(hint)
+                if (is_fx and inner is entry) or hint is entry:
+                    qualname = getattr(fn, "__qualname__", repr(fn))
+                    msg = (
+                        f"@oxi.arrange in {qualname}: arranged {entry.__name__} "
+                        f"also declared as parameter {pname!r}. Choose one — "
+                        f"arrange runs side effects only; parameter injection binds "
+                        f"the value."
+                    )
+                    raise CollectionError(msg)
+
+
+def _augment_fixture_deps(
+    fixture_deps: tuple[tuple[str, str], ...],
+    arranged: tuple[type | str, ...],
+) -> tuple[tuple[str, str], ...]:
+    """Append arranged canonical names to fixture_deps so the validator sees them.
+
+    FixtureValidator.find_unused_fixtures() reads fixture_names, which Rust
+    builds from fixture_deps qualifiers.  Arranged fixtures never appear in
+    regular fixture_deps (they have no parameter annotation), so without this
+    augmentation strict-mode would flag every arranged fixture as unused.
+
+    Entries are deduplicated (dict.fromkeys preserves first-occurrence order).
+    For type entries the qualifier and type_name are both set to ``type.__name__``,
+    so validate_fixture_names' builtin-qualifier logic correctly skips built-ins.
+    For string entries the type_name is left empty — the validator will check the
+    registry, which is the right behaviour (arranged conftest fixtures must exist).
+    """
+    existing_qualifiers = {q for q, _ in fixture_deps}
+    extra: list[tuple[str, str]] = []
+    for entry in arranged:
+        if isinstance(entry, str):
+            name, type_name = entry, ""
+        else:
+            name = entry.__name__
+            type_name = entry.__name__
+        if name not in existing_qualifiers:
+            extra.append((name, type_name))
+            existing_qualifiers.add(name)
+    return (*fixture_deps, *extra)
+
+
 def _expand_item(
     fn_name: str,
     lineno: int,
@@ -271,14 +372,19 @@ def _expand_item(
     fn: object,
 ) -> list[CollectedItem]:
     """Return one CollectedItem per parametrize case, or a single item if no cases."""
+    fn_meta = get_metadata(fn)
+    arranged = _dedupe_arranged(fn_meta.arranged)
+    _check_arrange_collisions(fn, arranged)
+    augmented_fixture_deps = _augment_fixture_deps(_get_fixture_deps(fn), arranged)
     template = _ItemTemplate(
         fn_name=fn_name,
         lineno=lineno,
         markers=tuple(marker_names),
         is_async=inspect.iscoroutinefunction(fn),
-        fixture_deps=_get_fixture_deps(fn),
+        fixture_deps=augmented_fixture_deps,
+        arranged=arranged,
     )
-    raw = get_metadata(fn).param_cases
+    raw = fn_meta.param_cases
     if raw is None:
         return [
             CollectedItem(
@@ -289,6 +395,7 @@ def _expand_item(
                 param_values=(),
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
+                arranged=template.arranged,
             )
         ]
     # Composition: all layers are ComposedCases (partial)
@@ -319,6 +426,7 @@ def _expand_item(
             is_async=template.is_async,
             fixture_deps=template.fixture_deps,
             fixref_deps=fixref_deps,
+            arranged=template.arranged,
         )
         for case_id, pv in raw[0].items()
     ]
@@ -458,7 +566,7 @@ def _class_members(module: ModuleType) -> Iterable[tuple[str, object]]:
         for method_name, method in inspect.getmembers(cls, inspect.isfunction):
             if not method_name.startswith("test_"):
                 continue
-            _propagate_class_marks(method, cls)
+            _propagate_class_metadata(method, cls)
             yield f"{cls_name}::{method_name}", method
 
 

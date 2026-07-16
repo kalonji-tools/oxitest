@@ -6,6 +6,7 @@ __all__ = [
     "AmbiguousFixtureError",
     "BackendNotFoundError",
     "BroadFixtureTypeError",
+    "CollectionError",
     "ConflictingBackendError",
     "ConflictingCoverageError",
     "ConflictingDebuggerError",
@@ -198,6 +199,14 @@ class LoadError(OxitestError):
 
     def __init__(self, result: TestResult) -> None:
         self.result = result
+
+
+class CollectionError(OxitestError):
+    """Raised when a test function is misconfigured at collection time.
+
+    Examples include @oxi.arrange specifying a fixture that is also declared
+    as a parameter — a redundant declaration that risks double-instantiation.
+    """
 
 
 # ─── Unified fixture backend errors ──────────────────────────────────────────
