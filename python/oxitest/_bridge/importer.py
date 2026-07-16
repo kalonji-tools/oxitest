@@ -326,6 +326,37 @@ def _check_arrange_collisions(
                     raise CollectionError(msg)
 
 
+def _augment_fixture_deps(
+    fixture_deps: tuple[tuple[str, str], ...],
+    arranged: tuple[type | str, ...],
+) -> tuple[tuple[str, str], ...]:
+    """Append arranged canonical names to fixture_deps so the validator sees them.
+
+    FixtureValidator.find_unused_fixtures() reads fixture_names, which Rust
+    builds from fixture_deps qualifiers.  Arranged fixtures never appear in
+    regular fixture_deps (they have no parameter annotation), so without this
+    augmentation strict-mode would flag every arranged fixture as unused.
+
+    Entries are deduplicated (dict.fromkeys preserves first-occurrence order).
+    For type entries the qualifier and type_name are both set to ``type.__name__``,
+    so validate_fixture_names' builtin-qualifier logic correctly skips built-ins.
+    For string entries the type_name is left empty — the validator will check the
+    registry, which is the right behaviour (arranged conftest fixtures must exist).
+    """
+    existing_qualifiers = {q for q, _ in fixture_deps}
+    extra: list[tuple[str, str]] = []
+    for entry in arranged:
+        if isinstance(entry, str):
+            name, type_name = entry, ""
+        else:
+            name = entry.__name__
+            type_name = entry.__name__
+        if name not in existing_qualifiers:
+            extra.append((name, type_name))
+            existing_qualifiers.add(name)
+    return (*fixture_deps, *extra)
+
+
 def _expand_item(
     fn_name: str,
     lineno: int,
@@ -336,12 +367,13 @@ def _expand_item(
     fn_meta = get_metadata(fn)
     arranged = _dedupe_arranged(fn_meta.arranged)
     _check_arrange_collisions(fn, arranged)
+    augmented_fixture_deps = _augment_fixture_deps(_get_fixture_deps(fn), arranged)
     template = _ItemTemplate(
         fn_name=fn_name,
         lineno=lineno,
         markers=tuple(marker_names),
         is_async=inspect.iscoroutinefunction(fn),
-        fixture_deps=_get_fixture_deps(fn),
+        fixture_deps=augmented_fixture_deps,
         arranged=arranged,
     )
     raw = fn_meta.param_cases

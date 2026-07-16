@@ -108,3 +108,32 @@ def test_importer_errors_on_name_collision(tmp: TempDir) -> None:
         match=r"arranged 'foo' also declared as parameter",
     ):
         collect_module(path)
+
+
+def test_arranged_fixtures_appear_in_fixture_deps(tmp: TempDir) -> None:
+    """Arranged fixtures must be added to CollectedItem.fixture_deps at collection time.
+
+    Without this, the Rust bridge's find_unused_fixtures builds its fixture_names
+    dict solely from fixture_deps qualifiers — arranged fixtures would be invisible
+    to FixtureValidator.find_unused_fixtures(), causing strict mode to flag them
+    as unused and abort the run.
+    """
+    path = helpers.common.write_test_module(
+        tmp,
+        "import oxitest\n"
+        "from oxitest import TempDir\n"
+        "\n"
+        "@oxitest.arrange(TempDir, 'db')\n"
+        "def test_x() -> None: ...\n",
+    )
+    items, _ = collect_module(path)
+    assert len(items) == 1, f"expected exactly 1 collected item, got {len(items)}"
+    qualifier_names = {q for q, _ in items[0].fixture_deps}
+    assert "TempDir" in qualifier_names, (
+        "arranged type TempDir must appear in fixture_deps as qualifier 'TempDir' so "
+        "the Rust bridge includes it in fixture_names for the unused-fixture check"
+    )
+    assert "db" in qualifier_names, (
+        "arranged string 'db' must appear in fixture_deps as qualifier 'db' so "
+        "the Rust bridge includes it in fixture_names for the unused-fixture check"
+    )
