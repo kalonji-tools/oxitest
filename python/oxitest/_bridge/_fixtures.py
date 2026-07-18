@@ -22,6 +22,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
+from oxitest._bridge._errors import AutouseRegistrationError
 from oxitest._bridge._fixture_context import _fixture_context
 from oxitest._bridge._fixture_registry import ConftestSource, FixtureDef, FixtureScope
 from oxitest._bridge._fn_metadata import _update, get_metadata
@@ -223,15 +224,16 @@ class Fixtures:
         def _register(f: _F) -> _F:
             fixture_name = name or getattr(f, "__name__", repr(f))
             _update(f, fixture_name=fixture_name)
+            is_async = inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
+            if autouse and not shared and is_async:
+                raise AutouseRegistrationError(f)
             defn = FixtureDef(
                 name=fixture_name,
                 fixture_type=object,  # placeholder — overwritten by conftest_loader
                 scope=FixtureScope.SHARED if shared else FixtureScope.EACH,
                 source=ConftestSource(func=f, conftest_path=""),
                 autouse=autouse,
-                is_async=(
-                    inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
-                ),
+                is_async=is_async,
             )
             self._defs.append(defn)
             self._defs_by_name[fixture_name] = defn
