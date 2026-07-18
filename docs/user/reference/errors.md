@@ -202,6 +202,34 @@ Fixture errors occur during fixture resolution or teardown.
 ---
 
 ```text
+AutouseRegistrationError: cannot register async fixture '<name>' as function-scope autouse.
+  Defined at:  <file>:<lineno>
+  Scope:       each  (autouse=True)
+  Why:         a function-scope async autouse would only fire on
+               async tests; silently skipping sync tests hides the
+               mismatch. oxitest is strict: refuse the combination
+               at registration so the intent is stated up front.
+  Two ways forward:
+    1. Drop autouse=True and use @arrange('<name>') on
+       the async tests that need it.
+    2. Pass shared=True — a shared-scope async autouse
+       applies to both sync and async tests.
+```
+
+**Cause:** `@Fixtures.fixture(autouse=True)` was applied to an `async def`
+factory with `shared=False` (the default). The combination is refused at
+decorator time — before any test runs. A function-scope async autouse would
+only fire on async tests, silently skipping sync tests in the same suite.
+
+**Fix:** Choose one of the two exits the diagnostic names — drop
+`autouse=True` and use `@arrange('<name>')` on the async tests that need it,
+or change the scope to `shared=True` (applies to both sync and async
+tests). See
+[Async autouse — legal combinations](../how-to/use-fixtures.md#async-autouse-legal-combinations).
+
+---
+
+```text
 FixtureNotFoundError: fixture '<name>' not found
 ```
 

@@ -90,6 +90,41 @@ requested:
 --8<-- "python/tests/docs/how-to/fixtures/autouse/conftest.py:autouse-fixture"
 ```
 
+### Async autouse — legal combinations
+
+Not every `autouse` × `async` combination has legal semantics. The table
+below shows what registers and what is refused at decorator time.
+
+| autouse × scope × async factory | Registers? |
+| --- | --- |
+| sync factory, any scope | legal, unchanged |
+| async factory, `shared=True` | legal — applies to sync AND async tests |
+| async factory, `shared=False` (default) | **AutouseRegistrationError** |
+
+**Why the third row is refused.** A function-scope async autouse would
+only fire on async tests, silently skipping sync tests in the same suite
+— a divergence that hides itself. oxitest's `strict = "abort"` DNA refuses
+that ambiguity at registration.
+
+**Two ways forward if you hit this:**
+
+```python
+# Option 1: drop autouse=True and @arrange on the tests that need it.
+@fx.fixture
+async def each_txn():
+    yield
+
+@arrange("each_txn")
+async def test_async_write(): ...
+
+# Option 2: change to shared scope — applies to both test kinds.
+@fx.fixture(autouse=True, shared=True)
+async def db_pool():
+    yield
+```
+
+See `AutouseRegistrationError` in the [error reference](../reference/errors.md).
+
 ## Use multiple namespaces
 
 Create multiple `Fixtures()` instances — one per concern. Each variable name becomes a
