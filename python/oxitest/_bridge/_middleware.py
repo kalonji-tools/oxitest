@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
 
-from oxitest._bridge._async_backend import AsyncioBackend
+from oxitest._bridge._async_backend import AsyncBackend, AsyncioBackend, AsyncSession
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
@@ -58,8 +58,8 @@ class ExecutionPlan:
     no_message_lines: tuple[int, ...]
     is_async: bool
     default_timeout: int | None
-    backend: Any  # AsyncBackend | None
-    shared_session: Any  # AsyncSession | None
+    backend: AsyncBackend | None
+    shared_session: AsyncSession | None
 
 
 class Middleware(Protocol):
@@ -218,9 +218,10 @@ class AsyncBridgeMiddleware:
                 await _teardown_async_generators(async_teardowns)
 
         if plan.shared_session is not None:
+            shared_session = plan.shared_session
 
             def _base() -> TestResult:  # pragma: no cover
-                return plan.shared_session.run(_async_core())
+                return shared_session.run(_async_core())
         else:
 
             def _base() -> TestResult:
