@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import Never
 
-from oxitest import Fixture, raises
+from oxitest import AsyncBackend, AsyncSession, Fixture, raises
 from oxitest._bridge._async_backend import (
     AsyncioBackend,
     AsyncioSession,
@@ -18,6 +18,37 @@ def test_asyncio_backend_name() -> None:
     """AsyncioBackend.name should identify the backend as 'asyncio'."""
     backend = AsyncioBackend()
     assert backend.name == "asyncio", f"expected 'asyncio', got {backend.name!r}"
+
+
+def test_asyncio_backend_conforms_to_async_backend_protocol() -> None:
+    """AsyncioBackend must satisfy the AsyncBackend @runtime_checkable protocol.
+
+    A missing or renamed protocol member breaks plugin authors' expectations at
+    resolution time. isinstance catches the drift here — one frame from the
+    protocol definition, not deep inside fixture resolution.
+    """
+    backend = AsyncioBackend()
+    assert isinstance(backend, AsyncBackend), (
+        "AsyncioBackend must satisfy AsyncBackend structurally — any missing"
+        " member (name, acquire_session, supports_nested_acquire) would break"
+        " plugin authors relying on the protocol as documented"
+    )
+
+
+def test_asyncio_session_conforms_to_async_session_protocol() -> None:
+    """AsyncioSession must satisfy the AsyncSession @runtime_checkable protocol.
+
+    The framework treats sessions as opaque handles typed by AsyncSession;
+    isinstance guards against accidental drift in the concrete class.
+    """
+    session = AsyncioSession()
+    try:
+        assert isinstance(session, AsyncSession), (
+            "AsyncioSession must satisfy AsyncSession structurally — the"
+            " framework drives session.run() through this protocol"
+        )
+    finally:
+        session.__exit__(None, None, None)
 
 
 def test_asyncio_backend_supports_nested_acquire_defaults_false() -> None:
