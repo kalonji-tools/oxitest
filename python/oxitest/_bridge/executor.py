@@ -18,17 +18,18 @@ __all__ = [
     "run_test",
 ]
 
-import asyncio
 import contextlib
 import functools
 import hashlib
 import inspect
 import sys
 from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
@@ -87,6 +88,7 @@ from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import TestResult, _error_result
 
 if TYPE_CHECKING:
+    from oxitest._bridge._async_backend import AsyncBackend, AsyncSession
     from oxitest._bridge._fixture_registry import FixtureRegistry
 
 
@@ -218,16 +220,14 @@ def _load_and_resolve(
     return _ResolvedTest(module, fn_raw, fn, meta.fn_name, all_kwargs, fn_teardowns)
 
 
-def _build_execution_chain(
+def _build_execution_plan(
     resolved: _ResolvedTest,
     mark_result: _MarkResult,
     default_timeout: int | None,
-    session: _SessionProtocol | None = None,
-    *,
-    debug: DebugContext = NO_DEBUG,
-) -> Callable[[], TestResult]:
-    """Build the composed execution callable via middleware pipeline."""
-    # Resolve bare-assert lines (was BareAssertMiddleware)
+    session: _SessionProtocol | None,
+    arrange_session: AsyncSession | None,
+) -> ExecutionPlan:
+    """Assemble the immutable ExecutionPlan from resolved test + async context."""
     _bare_map: dict[str, list[int]] = getattr(
         resolved.module, "_oxitest_bare_asserts", {}
     )
@@ -237,7 +237,7 @@ def _build_execution_chain(
     _used_shared = getattr(session, "_used_shared_async", False)
     _shared = getattr(session, "_shared_session", None) if _used_shared else None
 
-    plan = ExecutionPlan(
+    return ExecutionPlan(
         fn=resolved.fn,
         fn_name=resolved.fn_name,
         kwargs=MappingProxyType(resolved.all_kwargs),
@@ -245,9 +245,19 @@ def _build_execution_chain(
         no_message_lines=no_message_lines,
         is_async=inspect.iscoroutinefunction(resolved.fn),
         default_timeout=default_timeout,
-        backend=getattr(session, "_async_backend", None),
+        backend=getattr(session, "async_backend", None),
         shared_session=_shared,
+        arrange_session=arrange_session,
     )
+
+
+def _build_execution_chain(
+    resolved: _ResolvedTest,
+    plan: ExecutionPlan,
+    mark_result: _MarkResult,
+    debug: DebugContext = NO_DEBUG,
+) -> Callable[[], TestResult]:
+    """Build the composed execution callable via middleware pipeline."""
 
     def _base() -> TestResult:
         return _run_base(
@@ -257,7 +267,7 @@ def _build_execution_chain(
             debug=debug,
         )
 
-    execute = MiddlewareBuilder().build(plan, _base, default_timeout)
+    execute = MiddlewareBuilder().build(plan, _base, plan.default_timeout)
 
     # Apply mark wrappers (from evaluate_marks) around the pipeline result
     for wrapper in reversed(mark_result.wrappers):
@@ -298,17 +308,21 @@ def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None
 def _drive_arrange_async_each(
     value: Any,
     fixture_name: str,
-    loop: asyncio.AbstractEventLoop,
+    session: AsyncSession,
     fn_teardowns: list[Callable[[], None]],
 ) -> None:
-    """Advance an arranged async-each fixture on the caller-supplied loop.
+    """Advance an arranged async-each fixture on the caller-supplied session.
 
     The fixture instantiator returns coroutines/asyncgens for async fixtures
     unchanged (pass-through). For arranged fixtures this would leave setup
     un-run and teardown unregistered. Advance the coroutine or async generator
-    on the per-test loop, and register a teardown that drains the generator
-    on the same loop, routing failures through `safe_teardown` +
+    on the per-test session, and register a teardown that drains the generator
+    on the same session, routing failures through `safe_teardown` +
     `_warn_teardown` — the sync convention.
+
+    The session is the same one later reused by the middleware for the test
+    body, so async resources bound to the session's loop (Events, Queues,
+    etc.) yielded in setup remain valid across setup → body → teardown.
     """
     if inspect.isasyncgen(value):
         agen = value
@@ -316,7 +330,7 @@ def _drive_arrange_async_each(
         async def _first() -> Any:
             return await agen.__anext__()
 
-        loop.run_until_complete(_first())
+        session.run(_first())
 
         def _teardown(agen_ref: Any = agen, name: str = fixture_name) -> None:
             async def _drain() -> None:
@@ -324,7 +338,7 @@ def _drive_arrange_async_each(
                     await agen_ref.__anext__()
 
             safe_teardown(
-                lambda: loop.run_until_complete(_drain()),
+                lambda: session.run(_drain()),
                 name,
                 warn=_warn_teardown,
             )
@@ -332,7 +346,7 @@ def _drive_arrange_async_each(
         fn_teardowns.append(_teardown)
         return
     # coroutine — await it; no teardown for plain coroutine fixtures
-    loop.run_until_complete(value)
+    session.run(value)
 
 
 def _resolve_arranged_entry(
@@ -340,12 +354,13 @@ def _resolve_arranged_entry(
     effective_session: _SessionProtocol,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
-    get_each_loop: Callable[[], asyncio.AbstractEventLoop],
+    get_each_session: Callable[[], AsyncSession],
 ) -> None:
     """Resolve one arranged entry (name or type) and drive if async-each.
 
-    `get_each_loop` is a lazy accessor: the caller only pays for a loop
-    when at least one arranged entry turns out to be an async fixture.
+    `get_each_session` is a lazy accessor: the caller only pays for an
+    async session when at least one arranged entry turns out to be an
+    async fixture.
     """
     if isinstance(entry, type):
         value = effective_session.get_fixture_by_type(entry, module_path, fn_teardowns)
@@ -355,10 +370,56 @@ def _resolve_arranged_entry(
         fixture_name = entry
     # If the fixture is async (each-scope), the value returned by the
     # instantiator is the raw coroutine/asyncgen (pass-through from
-    # _unpack_sync). Advance it on the per-test loop so the fixture's
+    # _unpack_sync). Advance it on the per-test session so the fixture's
     # setup actually runs and its teardown lands in fn_teardowns.
     if inspect.iscoroutine(value) or inspect.isasyncgen(value):
-        _drive_arrange_async_each(value, fixture_name, get_each_loop(), fn_teardowns)
+        _drive_arrange_async_each(value, fixture_name, get_each_session(), fn_teardowns)
+
+
+@dataclass(frozen=True, slots=True)
+class _ArrangeResult:
+    """Output of the arrange phase.
+
+    ``error`` is an error TestResult when arrange failed; ``session`` is the
+    per-test async session that was lazily acquired for async-each fixtures,
+    or ``None`` when no async-each fixture ran. The session is threaded to
+    the middleware so the async test body reuses the same loop the arrange
+    fixtures were set up on — closing the ADR-0006 body-loop-identity gap.
+    """
+
+    error: TestResult | None
+    session: AsyncSession | None
+
+
+def _acquire_each_session(
+    backend: AsyncBackend,
+    fn_teardowns: list[Callable[[], None]],
+) -> AsyncSession:
+    """Acquire a per-test AsyncSession and register its close on ``fn_teardowns``.
+
+    Extracted from ``_run_arrange_phase`` for direct unit testing. Callers use
+    this inside a lazy accessor closure so the session is only acquired when
+    at least one arranged fixture turns out to be async — sync-only arranges
+    still pay nothing.
+
+    Args:
+        backend: The AsyncBackend supplying the session (via the guard).
+        fn_teardowns: The per-test teardown list. This function appends
+            exactly one callable that closes the acquired session's stack.
+
+    Returns:
+        A live ``AsyncSession`` that ``.run(coro)`` can be called on. The
+        session stays open until the appended teardown fires (typically at
+        the end of ``_run_teardowns`` in reverse LIFO order).
+    """
+    stack = ExitStack()
+    session = stack.enter_context(acquire_session_guarded(backend))
+
+    def _close_stack() -> None:
+        stack.close()
+
+    fn_teardowns.append(_close_stack)
+    return session
 
 
 def _run_arrange_phase(
@@ -366,8 +427,8 @@ def _run_arrange_phase(
     effective_session: _SessionProtocol,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
-) -> TestResult | None:
-    """Execute the arrange phase for a test. Returns an error result on failure.
+) -> _ArrangeResult:
+    """Execute the arrange phase for a test.
 
     Scans for async-mismatch entries first (all-or-nothing loud rejection),
     then instantiates each arranged fixture in order. Fixture-error
@@ -375,14 +436,21 @@ def _run_arrange_phase(
     missing arranged fixtures are caught upstream by the Rust
     FixtureValidationPhase and reach this catch only if that phase misses.
 
-    A per-test event loop is created lazily on the first arranged
-    async-each fixture and closed by a teardown registered ahead of any
-    async-each teardown — reversed LIFO order guarantees the close runs
-    after every async-each teardown has drained on the same loop.
+    A per-test async session is acquired lazily on the first arranged
+    async-each fixture via ``acquire_session_guarded(backend)`` pushed onto
+    an ``ExitStack``. The stack's ``close`` is registered as a teardown so
+    the session is finalized (loop closed, asyncgens shut down) after every
+    async-each teardown has drained — LIFO ordering guarantees the close
+    runs last on the shared loop.
+
+    Returns:
+        ``_ArrangeResult`` with ``error=None, session=<acquired-or-None>``
+        on success (session non-None only if an async-each fixture ran),
+        or ``error=<TestResult>, session=None`` on failure.
     """
     arranged = _get_metadata(fn_raw).arranged
     if not arranged:
-        return None
+        return _ArrangeResult(error=None, session=None)
     test_is_async = inspect.iscoroutinefunction(fn_raw)
     illegal = _scan_arrange_entries_for_async_mismatch(
         arranged,
@@ -390,28 +458,24 @@ def _run_arrange_phase(
         test_is_async=test_is_async,
     )
     if illegal:
-        return _error_result(str(ArrangeError(fn_raw, illegal)))
+        return _ArrangeResult(
+            error=_error_result(str(ArrangeError(fn_raw, illegal))), session=None
+        )
 
-    each_loop: asyncio.AbstractEventLoop | None = None
+    each_session: AsyncSession | None = None
 
-    def get_each_loop() -> asyncio.AbstractEventLoop:
-        nonlocal each_loop
-        if each_loop is None:
-            loop = asyncio.new_event_loop()
-            each_loop = loop
-
-            def _close_loop() -> None:
-                with contextlib.suppress(Exception):
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.close()
-
-            fn_teardowns.append(_close_loop)
-        return each_loop
+    def get_each_session() -> AsyncSession:
+        nonlocal each_session
+        if each_session is None:
+            each_session = _acquire_each_session(
+                effective_session.async_backend, fn_teardowns
+            )
+        return each_session
 
     try:
         for entry in arranged:
             _resolve_arranged_entry(
-                entry, effective_session, module_path, fn_teardowns, get_each_loop
+                entry, effective_session, module_path, fn_teardowns, get_each_session
             )
     except (
         FixtureNotFoundError,
@@ -419,8 +483,8 @@ def _run_arrange_phase(
         AmbiguousFixtureError,
         FixtureCycleError,
     ) as exc:
-        return _error_result(str(exc))
-    return None
+        return _ArrangeResult(error=_error_result(str(exc)), session=None)
+    return _ArrangeResult(error=None, session=each_session)
 
 
 def run_test(
@@ -486,16 +550,18 @@ def run_test(
         arrange_result = _run_arrange_phase(
             fn_raw, effective_session, meta.module_path, fn_teardowns
         )
-        if arrange_result is not None:
-            return arrange_result
+        if arrange_result.error is not None:
+            return arrange_result.error
 
-        execute = _build_execution_chain(
+        mark_result = _MarkResult(marks=tuple(marks), wrappers=tuple(wrappers))
+        plan = _build_execution_plan(
             resolved,
-            _MarkResult(marks=tuple(marks), wrappers=tuple(wrappers)),
+            mark_result,
             default_timeout,
-            session=effective_session,
-            debug=debug,
+            effective_session,
+            arrange_result.session,
         )
+        execute = _build_execution_chain(resolved, plan, mark_result, debug=debug)
         result = execute()
         _active_ctx = _test_run_context.get()
         if _active_ctx.result_cell:

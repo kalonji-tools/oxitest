@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable, Coroutine, Iterator
+from contextlib import contextmanager
+from typing import Any
 
 from oxitest import (
+    AsyncSession,
     Fixture,
     TempDir,
     helpers,
 )
+from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge.executor import _acquire_each_session
 
 
 def test_async_test_passes(tmp: TempDir) -> None:
@@ -888,3 +893,160 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
         f"scope is too narrow, not that the fixture itself is broken, got"
         f" {result.message!r}"
     )
+
+
+# ── _acquire_each_session ────────────────────────────────────────────────────
+
+
+class _StubSession:
+    """Minimal AsyncSession — records .run/.close for assertions."""
+
+    def __init__(self) -> None:
+        self.run_count = 0
+        self.exited = False
+
+    def run(self, coro: Coroutine[Any, Any, Any], /) -> Any:
+        self.run_count += 1
+        try:
+            coro.send(None)
+        except StopIteration as e:
+            return e.value
+        msg = "coroutine did not complete in one step"
+        raise RuntimeError(msg)
+
+
+class _StubBackend:
+    """AsyncBackend that yields a _StubSession and records acquire_session calls."""
+
+    name = "stub"
+    supports_nested_acquire = False
+
+    def __init__(self) -> None:
+        self.acquire_count = 0
+        self.session = _StubSession()
+
+    @contextmanager
+    def acquire_session(self) -> Iterator[AsyncSession]:
+        self.acquire_count += 1
+        try:
+            yield self.session
+        finally:
+            self.session.exited = True
+
+
+def test_acquire_each_session_returns_live_session() -> None:
+    """_acquire_each_session returns a session ready for ``.run(coro)``.
+
+    The helper is the extraction point where the lazy closure in
+    ``_run_arrange_phase`` actually grabs a session. Regressing here would
+    silently break every arrange path that uses async-each fixtures.
+    """
+    backend = _StubBackend()
+    fn_teardowns: list[Callable[[], None]] = []
+
+    session = _acquire_each_session(backend, fn_teardowns)
+
+    async def value() -> int:
+        return 42
+
+    assert session is backend.session, (
+        "helper must return the session the backend yielded via the guard —"
+        " otherwise the arrange path drives a different session than the one"
+        " tracked for teardown"
+    )
+    result = session.run(value())
+    assert result == 42, (
+        f"the returned session must be live (.run must work), got {result!r}"
+    )
+
+
+def test_acquire_each_session_registers_exactly_one_teardown() -> None:
+    """_acquire_each_session appends exactly one teardown to fn_teardowns.
+
+    Multiple teardowns would double-close the ExitStack (silently OK today but
+    a bug waiting for a future non-idempotent resource). Zero teardowns would
+    leak the session across tests. The exact-one invariant is load-bearing.
+    """
+    backend = _StubBackend()
+    fn_teardowns: list[Callable[[], None]] = []
+
+    _acquire_each_session(backend, fn_teardowns)
+
+    assert len(fn_teardowns) == 1, (
+        f"exactly one teardown must be registered per acquire — got"
+        f" {len(fn_teardowns)}, would either leak (0) or double-close (>1)"
+    )
+
+
+def test_acquire_each_session_teardown_closes_the_session() -> None:
+    """Invoking the registered teardown closes the ExitStack around the session.
+
+    The registered teardown is what the executor's LIFO teardown loop calls
+    to finalize the per-test session (loop close, asyncgen shutdown). If it
+    fails to close the stack, the session's event loop leaks — one loop per
+    test that used an async-each arrange fixture.
+    """
+    backend = _StubBackend()
+    fn_teardowns: list[Callable[[], None]] = []
+
+    _acquire_each_session(backend, fn_teardowns)
+
+    assert not backend.session.exited, (
+        "session must not be closed before the teardown fires — that would"
+        " break the arrange-body loop-identity contract"
+    )
+
+    (teardown,) = fn_teardowns
+    teardown()
+
+    assert backend.session.exited, (
+        "the registered teardown must close the ExitStack, which invokes the"
+        " session's __exit__ (loop close + asyncgen shutdown); without this"
+        " the per-test loop leaks"
+    )
+
+
+def test_acquire_each_session_calls_backend_exactly_once() -> None:
+    """A single acquire call hits the backend exactly once.
+
+    Together with the lazy closure inside ``_run_arrange_phase`` (which only
+    calls this helper on the FIRST async-each fixture), this guarantees at
+    most one session per test regardless of how many arranged async fixtures
+    the test declares.
+    """
+    backend = _StubBackend()
+    fn_teardowns: list[Callable[[], None]] = []
+
+    _acquire_each_session(backend, fn_teardowns)
+
+    assert backend.acquire_count == 1, (
+        f"one acquire per call — got {backend.acquire_count}; the caller"
+        f" (the lazy closure) is responsible for the once-per-test invariant"
+    )
+
+
+def test_acquire_each_session_with_real_asyncio_backend_end_to_end() -> None:
+    """Real AsyncioBackend integration: session is usable and teardown closes the loop.
+
+    Guards the wire between _acquire_each_session and the real
+    acquire_session_guarded + AsyncioSession implementation. If either seam
+    changes shape, this smoke test catches it before subprocess integration
+    tests would.
+    """
+    backend = AsyncioBackend()
+    fn_teardowns: list[Callable[[], None]] = []
+
+    session = _acquire_each_session(backend, fn_teardowns)
+
+    async def ping() -> str:
+        return "ok"
+
+    assert session.run(ping()) == "ok", (
+        "real AsyncioBackend must return a session whose .run drives a"
+        " coroutine to completion — otherwise the arrange path is broken"
+        " end-to-end"
+    )
+    assert len(fn_teardowns) == 1, "real backend must still register one teardown"
+
+    (teardown,) = fn_teardowns
+    teardown()  # must not raise — closes the loop cleanly

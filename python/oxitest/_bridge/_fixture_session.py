@@ -79,6 +79,9 @@ class _SessionProtocol(Protocol):
     @property
     def registry(self) -> FixtureRegistry: ...
 
+    @property
+    def async_backend(self) -> AsyncBackend: ...
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
@@ -409,14 +412,14 @@ class FixtureSession:
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         return None
 
-    # ── Async delegation properties (used by executor.py via getattr) ────────
+    # ── Async delegation properties ─────────────────────────────────────────
 
     @property
-    def _async_backend(self) -> AsyncBackend:
+    def async_backend(self) -> AsyncBackend:
         return self._async_mgr.backend
 
-    @_async_backend.setter
-    def _async_backend(self, value: AsyncBackend) -> None:
+    @async_backend.setter
+    def async_backend(self, value: AsyncBackend) -> None:
         self._async_mgr.cleanup()
         self._async_mgr = SharedAsyncManager(value)
         self._instantiator.async_mgr = self._async_mgr
