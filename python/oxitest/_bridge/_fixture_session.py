@@ -76,6 +76,9 @@ class _SessionProtocol(Protocol):
     @property
     def module_cache(self) -> ModuleCache: ...
 
+    @property
+    def registry(self) -> FixtureRegistry: ...
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],

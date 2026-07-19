@@ -18,6 +18,7 @@ __all__ = [
     "run_test",
 ]
 
+import asyncio
 import contextlib
 import functools
 import hashlib
@@ -26,12 +27,14 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
+    ArrangeError,
     FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,
@@ -40,7 +43,9 @@ from oxitest._bridge._fixture_context import (
     TestRunContext,
     _current_teardown_node_id,
     _test_run_context,
+    _warn_teardown,
 )
+from oxitest._bridge._fixture_registry import FixtureScope
 from oxitest._bridge._fixture_session import (
     FixtureSession,
     _SessionProtocol,
@@ -80,6 +85,36 @@ from oxitest._bridge._runners import (
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import TestResult, _error_result
+
+if TYPE_CHECKING:
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+
+
+def _scan_arrange_entries_for_async_mismatch(
+    arranged: tuple[Any, ...],
+    registry: FixtureRegistry,
+    *,
+    test_is_async: bool,
+) -> list[tuple[str, Any]]:
+    """Return the list of (name, FixtureDef) entries that are illegal.
+
+    Illegal cell: fixture.is_async AND scope == EACH AND test is sync.
+    Missing fixtures are NOT collected here — they surface via the
+    existing not_found path so the diagnostic wording stays specific.
+    """
+    illegal: list[tuple[str, Any]] = []
+    for entry in arranged:
+        if isinstance(entry, type):
+            defs = registry.get_by_type(entry)
+            defn = defs[0] if defs else None
+        else:  # str
+            defn = registry.get(entry)
+        if defn is None:
+            continue  # not-found handled by existing arrange loop
+        if defn.is_async and defn.scope == FixtureScope.EACH and not test_is_async:
+            name = entry if isinstance(entry, str) else defn.name
+            illegal.append((name, defn))
+    return illegal
 
 
 @functools.cache
@@ -260,6 +295,134 @@ def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None
         _current_teardown_node_id.reset(token)
 
 
+def _drive_arrange_async_each(
+    value: Any,
+    fixture_name: str,
+    loop: asyncio.AbstractEventLoop,
+    fn_teardowns: list[Callable[[], None]],
+) -> None:
+    """Advance an arranged async-each fixture on the caller-supplied loop.
+
+    The fixture instantiator returns coroutines/asyncgens for async fixtures
+    unchanged (pass-through). For arranged fixtures this would leave setup
+    un-run and teardown unregistered. Advance the coroutine or async generator
+    on the per-test loop, and register a teardown that drains the generator
+    on the same loop, routing failures through `safe_teardown` +
+    `_warn_teardown` — the sync convention.
+    """
+    if inspect.isasyncgen(value):
+        agen = value
+
+        async def _first() -> Any:
+            return await agen.__anext__()
+
+        loop.run_until_complete(_first())
+
+        def _teardown(agen_ref: Any = agen, name: str = fixture_name) -> None:
+            async def _drain() -> None:
+                with contextlib.suppress(StopAsyncIteration):
+                    await agen_ref.__anext__()
+
+            safe_teardown(
+                lambda: loop.run_until_complete(_drain()),
+                name,
+                warn=_warn_teardown,
+            )
+
+        fn_teardowns.append(_teardown)
+        return
+    # coroutine — await it; no teardown for plain coroutine fixtures
+    loop.run_until_complete(value)
+
+
+def _resolve_arranged_entry(
+    entry: Any,
+    effective_session: _SessionProtocol,
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
+    get_each_loop: Callable[[], asyncio.AbstractEventLoop],
+) -> None:
+    """Resolve one arranged entry (name or type) and drive if async-each.
+
+    `get_each_loop` is a lazy accessor: the caller only pays for a loop
+    when at least one arranged entry turns out to be an async fixture.
+    """
+    if isinstance(entry, type):
+        value = effective_session.get_fixture_by_type(entry, module_path, fn_teardowns)
+        fixture_name = entry.__name__
+    else:  # str
+        value = effective_session.get_fixture_by_name(entry, module_path, fn_teardowns)
+        fixture_name = entry
+    # If the fixture is async (each-scope), the value returned by the
+    # instantiator is the raw coroutine/asyncgen (pass-through from
+    # _unpack_sync). Advance it on the per-test loop so the fixture's
+    # setup actually runs and its teardown lands in fn_teardowns.
+    if inspect.iscoroutine(value) or inspect.isasyncgen(value):
+        _drive_arrange_async_each(value, fixture_name, get_each_loop(), fn_teardowns)
+
+
+def _run_arrange_phase(
+    fn_raw: Any,
+    effective_session: _SessionProtocol,
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
+) -> TestResult | None:
+    """Execute the arrange phase for a test. Returns an error result on failure.
+
+    Scans for async-mismatch entries first (all-or-nothing loud rejection),
+    then instantiates each arranged fixture in order. Fixture-error
+    exceptions surface as error results via the existing convention;
+    missing arranged fixtures are caught upstream by the Rust
+    FixtureValidationPhase and reach this catch only if that phase misses.
+
+    A per-test event loop is created lazily on the first arranged
+    async-each fixture and closed by a teardown registered ahead of any
+    async-each teardown — reversed LIFO order guarantees the close runs
+    after every async-each teardown has drained on the same loop.
+    """
+    arranged = _get_metadata(fn_raw).arranged
+    if not arranged:
+        return None
+    test_is_async = inspect.iscoroutinefunction(fn_raw)
+    illegal = _scan_arrange_entries_for_async_mismatch(
+        arranged,
+        effective_session.registry,
+        test_is_async=test_is_async,
+    )
+    if illegal:
+        return _error_result(str(ArrangeError(fn_raw, illegal)))
+
+    each_loop: asyncio.AbstractEventLoop | None = None
+
+    def get_each_loop() -> asyncio.AbstractEventLoop:
+        nonlocal each_loop
+        if each_loop is None:
+            loop = asyncio.new_event_loop()
+            each_loop = loop
+
+            def _close_loop() -> None:
+                with contextlib.suppress(Exception):
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.close()
+
+            fn_teardowns.append(_close_loop)
+        return each_loop
+
+    try:
+        for entry in arranged:
+            _resolve_arranged_entry(
+                entry, effective_session, module_path, fn_teardowns, get_each_loop
+            )
+    except (
+        FixtureNotFoundError,
+        FixtureSetupError,
+        AmbiguousFixtureError,
+        FixtureCycleError,
+    ) as exc:
+        return _error_result(str(exc))
+    return None
+
+
 def run_test(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
@@ -320,25 +483,11 @@ def run_test(
             return short_circuit
 
         # --- Arrange phase (side-effect-only fixtures declared via @oxi.arrange) ---
-        arranged = _get_metadata(fn_raw).arranged
-        if arranged:
-            try:
-                for entry in arranged:
-                    if isinstance(entry, type):
-                        effective_session.get_fixture_by_type(
-                            entry, meta.module_path, fn_teardowns
-                        )
-                    else:  # str
-                        effective_session.get_fixture_by_name(
-                            entry, meta.module_path, fn_teardowns
-                        )
-            except (
-                FixtureSetupError,
-                FixtureNotFoundError,
-                AmbiguousFixtureError,
-                FixtureCycleError,
-            ) as exc:
-                return _error_result(str(exc))
+        arrange_result = _run_arrange_phase(
+            fn_raw, effective_session, meta.module_path, fn_teardowns
+        )
+        if arrange_result is not None:
+            return arrange_result
 
         execute = _build_execution_chain(
             resolved,
