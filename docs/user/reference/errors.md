@@ -202,6 +202,33 @@ Fixture errors occur during fixture resolution or teardown.
 ---
 
 ```text
+ArrangeError: cannot arrange async fixture(s) on a sync test — 1 illegal entry.
+  Arranged at:  test_foo.py:42
+  Test kind:    sync (`def test_...`)
+  Illegal:
+    - 'redis_client' (function scope) — defined at conftest.py:15
+  Three ways forward:
+    1. Make the test async — `async def test_...`
+    2. Change fixture scope to 'shared' or 'session'
+    3. Convert fixture to sync — remove `async` from def
+```
+
+**Cause:** A sync test used `@oxi.arrange` on one or more async function-scope
+fixtures — the illegal cell of the (test kind × fixture kind) matrix. Async
+tests may legally arrange async-each fixtures; sync fixtures compose freely on
+either test kind.
+
+**Fix:** Pick one of the three escape hatches the diagnostic names.
+
+Other `@arrange` failure modes surface through the existing error hierarchy:
+missing arranged fixtures via `FixtureNotFoundError`, factory raises via
+`FixtureSetupError` — both documented below.
+
+See [`@arrange` with async fixtures](../how-to/use-async-tests.md#arrange-with-async-fixtures) for the async-composition rules.
+
+---
+
+```text
 AutouseRegistrationError: cannot register async fixture '<name>' as function-scope autouse.
   Defined at:  <file>:<lineno>
   Scope:       each  (autouse=True)

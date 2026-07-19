@@ -41,6 +41,69 @@ test completes, even if the test fails.
 An async fixture can only be injected into an async test. Injecting an async
 fixture into a sync test is an error (see [Common errors](#common-errors)).
 
+### `@arrange` with async fixtures
+
+`@oxi.arrange` declares side-effect fixtures that should run around a test
+without binding their values. It composes with async fixtures with one
+constraint — the test must be async if the fixture is function-scope.
+
+#### What's legal
+
+| Test kind | Fixture kind | Result |
+| --- | --- | --- |
+| `def test_...` | sync fixture | works today |
+| `async def test_...` | sync fixture | works today |
+| any test kind | shared-scope async fixture | works today (session loop) |
+| `async def test_...` | function-scope async fixture | **new** — runs on per-test loop |
+| `def test_...` | function-scope async fixture | **ArrangeError** at test-start |
+
+#### Example — the newly-supported case
+
+```python
+from oxitest import Fixtures, arrange
+
+fx = Fixtures()
+
+
+@fx.fixture
+async def each_txn():
+    # Setup runs on the per-test loop.
+    yield
+    # Teardown runs on the same loop, after the test body.
+
+
+@arrange("each_txn")
+async def test_async_write():
+    ...
+```
+
+#### Example — the refused case
+
+```python
+@arrange("each_txn")  # each_txn is async, this test is sync
+def test_sync_read():
+    ...
+```
+
+Produces:
+
+```text
+cannot arrange async fixture(s) on a sync test — 1 illegal entry.
+  Arranged at:  test_foo.py:5
+  Test kind:    sync (`def test_...`)
+  Illegal:
+    - 'each_txn' (function scope) — defined at conftest.py:6
+  Three ways forward:
+    1. Make the test async — `async def test_...`
+    2. Change fixture scope to 'shared' or 'session'
+    3. Convert fixture to sync — remove `async` from def
+```
+
+Multiple illegal entries in the same `@arrange` are reported in one diagnostic
+— the scan is all-or-nothing.
+
+See `ArrangeError` in the [error reference](../reference/errors.md).
+
 ### Shared async fixtures
 
 Add `shared=True` to cache the fixture value across all tests in a run. Shared
