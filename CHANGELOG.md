@@ -1,6 +1,28 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [2.2.0] - 2026-07-19
+
+### Bug Fixes
+
+
+- Eliminate byte-write side effect in disabled() tests (#1493)
+- Overhaul bridge_methods contract to guard all Rust-called methods (#1526)
+- Address pre-merge review + audit findings (#1268)
+
+### Features
+
+
+- Add FixtureSession.get_fixture_by_type (#1523)
+- Add FixtureTypeNotFoundError for by-type failures (#1523)
+- Add @oxi.arrange decorator (#1268)
+- Wire @oxi.arrange into collection + execution (#1268)
+- Wire arranged field through Rust CollectedItem into TestItem (#1268)
+- Reject async function-scope autouse at registration (#1539)
+- Implement @arrange async support with pre-arrange scan and loud rejection (#1540)
+- Reshape AsyncBackend around AsyncSession seam (#1537)
+- Share arrange_session with async body loop (#1545)
+
 ## [2.1.0] - 2026-07-14
 
 ### Bug Fixes
