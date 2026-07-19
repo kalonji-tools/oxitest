@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Coroutine
-from typing import Any, Never
+from typing import Never
 
 import oxitest
 from oxitest._bridge._async_backend import (
@@ -22,28 +21,26 @@ from oxitest.plugin import Plugin
 class _FakeBackend:
     """Minimal backend stub that raises NotImplementedError on use."""
 
+    supports_nested_acquire = False
+
     @property
     def name(self) -> str:
         return "fake"
 
-    def run(self, coro: Coroutine[Any, Any, Any]) -> Never:
-        raise NotImplementedError
-
-    def create_shared_session(self) -> Never:
+    def acquire_session(self) -> Never:
         raise NotImplementedError
 
 
 class _AsyncioNamedBackend:
     """A plugin backend that collides with the built-in name."""
 
+    supports_nested_acquire = False
+
     @property
     def name(self) -> str:
         return "asyncio"
 
-    def run(self, coro: Coroutine[Any, Any, Any]) -> Never:
-        raise NotImplementedError
-
-    def create_shared_session(self) -> Never:
+    def acquire_session(self) -> Never:
         raise NotImplementedError
 
 

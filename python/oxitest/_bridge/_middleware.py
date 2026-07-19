@@ -19,6 +19,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
 
 from oxitest._bridge._async_backend import AsyncioBackend
+from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import FixtureSetupError
@@ -58,7 +59,7 @@ class ExecutionPlan:
     is_async: bool
     default_timeout: int | None
     backend: Any  # AsyncBackend | None
-    shared_session: Any  # SharedAsyncSession | None
+    shared_session: Any  # AsyncSession | None
 
 
 class Middleware(Protocol):
@@ -223,7 +224,8 @@ class AsyncBridgeMiddleware:
         else:
 
             def _base() -> TestResult:
-                return backend.run(_async_core())
+                with acquire_session_guarded(backend) as session:
+                    return session.run(_async_core())
 
         return _base
 

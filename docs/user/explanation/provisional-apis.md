@@ -12,7 +12,7 @@ Some oxitest plugin protocols are marked **provisional**. This means:
 |----------|--------|
 | `Collector` | Untested; signature may need config or fixture registry access |
 | `LogBackend` | Untested; may not fit structured logging libraries |
-| `AsyncBackend` | Untested; coupled to async orchestrator internals |
+| `AsyncBackend` | Untested; coupled to async orchestrator internals. Shape changed in 2.2.0 (see CHANGELOG) |
 | `DebuggerBackend` | Untested; coupled to pdb interface assumptions |
 
 ## Stable protocols

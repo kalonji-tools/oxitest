@@ -109,7 +109,7 @@ from oxitest._bridge._approx import ApproxBase as ApproxBase, approx as approx
 from oxitest._bridge._arrange_api import arrange as arrange
 from oxitest._bridge._async_backend import (
     AsyncBackend as AsyncBackend,
-    SharedAsyncSession as SharedAsyncSession,
+    AsyncSession as AsyncSession,
 )
 from oxitest._bridge._builtins import (
     CaptureResult as CaptureResult,
@@ -173,6 +173,7 @@ from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugi
 __all__ = [
     "ArrangeError",
     "AsyncBackend",
+    "AsyncSession",
     "AutouseRegistrationError",
     "Both",
     "CaptureResult",
@@ -192,7 +193,6 @@ __all__ = [
     "LogCapture",
     "Patcher",
     "Plugin",
-    "SharedAsyncSession",
     "SharedFixtureMutationError",
     "StdCapture",
     "TempDir",

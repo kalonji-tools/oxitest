@@ -57,7 +57,7 @@ from oxitest._bridge.result import CacheEntry, CacheStats, Diagnostic
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import (
         AsyncBackend,
-        SharedAsyncSession,
+        AsyncSession,
     )
     from oxitest._bridge.result import FixtureTiming
 
@@ -422,7 +422,7 @@ class FixtureSession:
         self._instantiator.async_mgr = self._async_mgr
 
     @property
-    def _shared_session(self) -> SharedAsyncSession | None:
+    def _shared_session(self) -> AsyncSession | None:
         return self._async_mgr.session
 
     @property

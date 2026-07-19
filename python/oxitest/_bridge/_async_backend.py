@@ -2,22 +2,33 @@
 
 Abstracts the async runtime so alternative backends (trio, uvloop) can be
 swapped in via the plugin system.
+
+The seam is scoped around an :class:`AsyncSession` context manager: backends
+implement :func:`AsyncBackend.acquire_session` and the framework drives runtime
+work through :meth:`AsyncSession.run`. Session lifetime is a caller decision —
+short-lived usage inlines a ``with`` block; long-lived usage (e.g., shared
+fixture managers) holds the session via :class:`contextlib.ExitStack`.
+
+Session-scope asyncgen finalization runs on ``__exit__`` (previously incorrect:
+``asyncio.run`` finalized on every call). Stray-task detection runs on every
+``run`` call and applies to all sessions (previously shared-only).
 """
 
 from __future__ import annotations
 
 __all__ = [
     "AsyncBackend",
+    "AsyncSession",
     "AsyncioBackend",
-    "AsyncioSharedSession",
-    "SharedAsyncSession",
+    "AsyncioSession",
     "resolve_backend",
 ]
 
 import asyncio
 import contextlib
-from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
+from collections.abc import Coroutine, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, runtime_checkable
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
@@ -30,55 +41,88 @@ _T = TypeVar("_T")
 
 
 @runtime_checkable
-class SharedAsyncSession(Protocol):
-    """A long-lived async session for shared fixture resolution."""
+class AsyncSession(Protocol):
+    """A scoped async runtime session.
 
-    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        """Execute a coroutine on the persistent session."""
-        ...
+    Multiple :meth:`run` calls on the same session share one runtime context.
+    Backends decide what "shared context" means (asyncio: one event loop; trio:
+    one nursery/runtime). The framework treats sessions as opaque handles.
+    """
 
-    def close(self) -> None:
-        """Tear down the session and release resources."""
+    def run(self, coro: Coroutine[Any, Any, _T], /) -> _T:
+        """Execute a coroutine to completion on this session."""
         ...
 
 
 @runtime_checkable
 class AsyncBackend(Protocol):
-    """Pluggable async runtime backend."""
+    """Pluggable async runtime backend.
+
+    Backends produce :class:`AsyncSession` instances via
+    :meth:`acquire_session`. Nested acquires are rejected by default at the
+    framework guard; opt in by setting :attr:`supports_nested_acquire` to
+    ``True`` on the concrete backend class.
+    """
 
     @property
     def name(self) -> str:
         """Unique name for this backend (e.g. 'asyncio', 'trio')."""
         ...
 
-    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        """Run a coroutine to completion (per-test, fresh context)."""
+    def acquire_session(self) -> AbstractContextManager[AsyncSession]:
+        """Return a context manager that yields a fresh :class:`AsyncSession`.
+
+        The session is scoped to the ``with`` block. Backends must finalize
+        session-scope resources (event loops, nurseries, pending async
+        generators) on context exit.
+        """
         ...
 
-    def create_shared_session(self) -> SharedAsyncSession:
-        """Create a long-lived session for shared fixture resolution."""
-        ...
+    supports_nested_acquire: bool = False
 
 
-class AsyncioSharedSession:
-    """Wraps an asyncio event loop as a SharedAsyncSession."""
+class AsyncioSession:
+    """asyncio implementation of :class:`AsyncSession`.
+
+    Owns a single :class:`asyncio.AbstractEventLoop` for the session's
+    lifetime. Multiple :meth:`run` calls share the loop, so async generators
+    yielded from one ``run`` remain finalizable on ``__exit__`` — this is the
+    whole reason for the session shape.
+
+    On context exit, pending async generators are finalized via
+    ``loop.shutdown_asyncgens()`` and the loop is closed.
+
+    Stray tasks (created during a ``run`` but not awaited) are cancelled and
+    surfaced as diagnostics on every ``run`` call.
+    """
 
     def __init__(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
 
-    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        """Execute a coroutine on the persistent event loop and return its result.
+    def __enter__(self) -> Self:
+        return self
 
-        After the coroutine completes, any tasks that were created during
-        execution but not awaited (stray tasks) are cancelled and awaited to
-        prevent resource leaks.  A warning is emitted for each cancelled task.
+    def __exit__(self, *_exc: object) -> None:
+        if self._loop is not None and not self._loop.is_closed():
+            with contextlib.suppress(Exception):
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            self._loop.close()
+        self._loop = None
+
+    def run(self, coro: Coroutine[Any, Any, _T], /) -> _T:
+        """Execute a coroutine on this session's event loop.
+
+        After the coroutine completes, any tasks created during execution
+        but not awaited (stray tasks) are cancelled and awaited to prevent
+        resource leaks. A diagnostic is emitted for each such leak so
+        developers know to await or cancel intentionally.
 
         Raises:
-            RuntimeError: If the session has already been closed.
+            RuntimeError: If the session has already exited.
 
         """
         if self._loop is None or self._loop.is_closed():
-            msg = "SharedAsyncSession is closed"
+            msg = "AsyncioSession has already exited"
             raise RuntimeError(msg)
         before = asyncio.all_tasks(self._loop)
         try:
@@ -98,26 +142,21 @@ class AsyncioSharedSession:
                     f"leaked {len(stray)} task(s) (cancelled)",
                 )
 
-    def close(self) -> None:
-        if self._loop is not None and not self._loop.is_closed():
-            with contextlib.suppress(Exception):
-                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
-            self._loop.close()
-        self._loop = None
-
 
 class AsyncioBackend:
-    """Default async backend using `asyncio`."""
+    """Default async backend using :mod:`asyncio`."""
+
+    supports_nested_acquire: bool = False
 
     @property
     def name(self) -> str:
         return "asyncio"
 
-    def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        return asyncio.run(coro)
-
-    def create_shared_session(self) -> SharedAsyncSession:
-        return AsyncioSharedSession()
+    @contextmanager
+    def acquire_session(self) -> Iterator[AsyncSession]:
+        session = AsyncioSession()
+        with session:
+            yield session
 
 
 def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
