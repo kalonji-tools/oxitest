@@ -9,6 +9,7 @@ from typing import Any
 import oxitest as oxi
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncSession
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
+from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge.result import Diagnostic
@@ -408,3 +409,47 @@ def test_shared_async_manager_cleanup_is_idempotent() -> None:
 
     assert session.exited, "first cleanup must have exited the session"
     assert mgr.session is None, "second cleanup must remain a no-op"
+
+
+def test_shared_manager_does_not_poison_middleware_guard() -> None:
+    """SharedAsyncManager's long-lived session must not trip the guard for others.
+
+    Regression test pinning the SharedAsyncManager design decision (#1537
+    post-impl audit finding F2): the manager acquires ``backend.acquire_session``
+    directly instead of routing through ``acquire_session_guarded``. If it did
+    route through the guard, the guard's ``_SESSION_OPEN`` ContextVar would
+    stay ``True`` for the manager's entire lifetime (until ``cleanup()`` runs
+    at end-of-session), causing every subsequent test with no shared fixtures
+    to raise ``RuntimeError("nested acquire")`` when the middleware's own
+    guarded acquire fires.
+
+    Failure here means the manager started routing through the guard again,
+    or the guard's ContextVar semantics changed in a way that breaks the
+    "held long-lived vs. nested" distinction.
+    """
+    backend = AsyncioBackend()
+    mgr = SharedAsyncManager(backend)
+
+    async def shared_fx() -> str:
+        return "shared"
+
+    try:
+        mgr.resolve(shared_fx, {})
+
+        # Manager now holds a session (via ExitStack). A middleware-style
+        # guarded acquire for a subsequent test that does not use shared
+        # fixtures must succeed — otherwise every non-shared test after a
+        # shared one would raise.
+        async def body() -> int:
+            return 42
+
+        with acquire_session_guarded(backend) as session:
+            result = session.run(body())
+
+        assert result == 42, (
+            "middleware's guarded acquire must succeed while the manager holds"
+            " a session — the divergence exists precisely to prevent"
+            " cross-test guard poisoning"
+        )
+    finally:
+        mgr.cleanup()
