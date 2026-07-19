@@ -247,20 +247,18 @@ def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
     assert "2 passed" in stdout, f"both tests must pass, got:\n{stdout}"
 
 
-def test_per_test_loop_shared_across_setup_and_teardown(
+def test_per_test_loop_shared_across_setup_body_and_teardown(
     tmp: TempDir,
 ) -> None:
-    """Setup and teardown of an async-each fixture share the per-test loop.
+    """Setup, body, and teardown of an async-each fixture share one loop.
 
     Setup and teardown of an async-each arranged fixture must run on the same
     loop so the async generator can advance past its yield without being
-    finalized by a different loop's `asyncio.run` on close.
-
-    NOTE: The async test body currently runs on a separate loop (created by
-    AsyncBackend.run). Aligning the body loop with the per-test loop requires
-    the `AsyncBackend.run` seam refactor tracked outside this PR (per
-    ADR-0006 Consequences). Setup+teardown identity is the invariant this PR
-    provides; body loop identity is a follow-up.
+    finalized by a different loop's `asyncio.run` on close. The async test
+    body must also run on the same loop — ADR-0006 §Decision requires setup,
+    body, and teardown share one loop identity so loop-bound resources
+    yielded by the fixture (Events, Queues, aiohttp sessions) stay valid in
+    the body. Body-loop identity is the invariant this test guards.
     """
     (tmp / "conftest.py").write_text(
         "import asyncio\n"
@@ -276,17 +274,21 @@ def test_per_test_loop_shared_across_setup_and_teardown(
         "    seen['teardown'] = id(asyncio.get_running_loop())\n"
     )
     (tmp / "test_sample.py").write_text(
+        "import asyncio\n"
         "from oxitest import arrange\n"
         "from conftest import seen\n"
         "\n"
         "@arrange('probe')\n"
         "async def test_probe():\n"
-        "    pass\n"
+        "    seen['body'] = id(asyncio.get_running_loop())\n"
         "\n"
-        "def test_setup_teardown_ids_match():\n"
-        "    assert seen['setup'] == seen['teardown'], (\n"
-        "        f'per-test loop identity must be stable across setup and '\n"
-        "        f'teardown, got {seen}'\n"
+        "def test_setup_body_teardown_ids_match():\n"
+        "    assert (\n"
+        "        seen['setup'] == seen['body'] == seen['teardown']\n"
+        "    ), (\n"
+        "        f'per-test loop identity must be stable across setup, body, '\n"
+        "        f'and teardown so loop-bound arrange resources are usable '\n"
+        "        f'in the body (ADR-0006), got {seen}'\n"
         "    )\n"
     )
 
@@ -489,4 +491,194 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
     )
     assert "2 passed" in stdout, (
         f"both the async body test and the setup-ran verifier must pass, got:\n{stdout}"
+    )
+
+
+def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
+    """Loop-bound Task created by @arrange is awaitable in the async body.
+
+    Concrete bug ADR-0006 called out: an ``asyncio.Task`` is bound to the
+    loop that scheduled it. Before this refactor, the arrange fixture ran
+    on the executor's per-test loop while the body ran on a fresh loop
+    from ``AsyncBackend.acquire_session()``. Awaiting the Task in the
+    body raised
+    ``RuntimeError: Task ... got Future ... attached to a different loop``.
+    (Verified against pre-refactor code — the exact error surface.)
+
+    The fixture publishes the pending Task into a module-global
+    ``shared_state`` dict (arrange fixtures are side-effect-only — they
+    do not inject values), and the async body cancels and awaits it.
+    After sharing ``arrange_session`` with the middleware, setup, body,
+    and teardown share one loop, so the Task stays awaitable throughout.
+    """
+    (tmp / "conftest.py").write_text(
+        "import asyncio\n"
+        "from oxitest import Fixtures\n"
+        "\n"
+        "fx = Fixtures()\n"
+        "shared_state: dict = {}\n"
+        "\n"
+        "\n"
+        "async def _idle() -> None:\n"
+        "    # Long sleep — the test cancels this before it wakes.\n"
+        "    await asyncio.sleep(60)\n"
+        "\n"
+        "\n"
+        "@fx.fixture\n"
+        "async def publish_task():\n"
+        "    # create_task binds this Task to whichever loop is running here.\n"
+        "    task = asyncio.create_task(_idle())\n"
+        "    shared_state['task'] = task\n"
+        "    yield\n"
+        "    shared_state.clear()\n"
+    )
+    (tmp / "test_sample.py").write_text(
+        "import asyncio\n"
+        "from oxitest import arrange\n"
+        "from conftest import shared_state\n"
+        "\n"
+        "@arrange('publish_task')\n"
+        "async def test_cross_loop_task() -> None:\n"
+        "    task = shared_state['task']\n"
+        "    # Pre-refactor raises 'got Future attached to a different loop'.\n"
+        "    task.cancel()\n"
+        "    try:\n"
+        "        await task\n"
+        "    except asyncio.CancelledError:\n"
+        "        pass\n"
+        "    assert task.done(), (\n"
+        "        'the arrange fixture created this Task on the arrange loop; '\n"
+        "        'awaiting it here without a cross-loop RuntimeError proves '\n"
+        "        'body and arrange share one loop (ADR-0006 body-loop identity)'\n"
+        "    )\n"
+    )
+
+    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+
+    assert rc == 0, (
+        f"cross-loop Task usage must succeed once arrange_session is "
+        f"shared with the middleware, got rc={rc}\nstdout:\n{stdout}"
+    )
+    assert "1 passed" in stdout, (
+        f"the async body must await the loop-bound Task without a "
+        f"cross-loop RuntimeError, got:\n{stdout}"
+    )
+    assert "attached to a different loop" not in stdout, (
+        f"cross-loop RuntimeError must not appear — that is the exact "
+        f"bug this refactor fixes, got:\n{stdout}"
+    )
+
+
+def test_async_test_without_arrange_uses_fresh_session_fallback(
+    tmp: TempDir,
+) -> None:
+    """Async test with no ``@arrange`` still runs via the fresh-session fallback.
+
+    The middleware's ``_base`` has three branches: shared_session (longest-
+    lived), arrange_session (per-test), and — when neither is present —
+    a fresh ``acquire_session_guarded(backend)`` for just this test. When
+    an async test does not use ``@arrange``, ``plan.arrange_session`` is
+    ``None`` and the fallback path must still produce a working session.
+    """
+    (tmp / "test_sample.py").write_text(
+        "import asyncio\n"
+        "\n"
+        "async def test_no_arrange() -> None:\n"
+        "    # A trivial async operation — proves a working loop is available\n"
+        "    # via the fallback path even without any arrange fixtures.\n"
+        "    await asyncio.sleep(0)\n"
+        "    assert asyncio.get_running_loop() is not None, (\n"
+        "        'the fallback acquire_session_guarded path must supply a '\n"
+        "        'running loop for async tests with no @arrange fixtures'\n"
+        "    )\n"
+    )
+
+    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+
+    assert rc == 0, (
+        f"async test without @arrange must pass via the fresh-session "
+        f"fallback, got rc={rc}\nstdout:\n{stdout}"
+    )
+    assert "1 passed" in stdout, (
+        f"the fallback path is exercised whenever no shared_session or "
+        f"arrange_session exists, got:\n{stdout}"
+    )
+
+
+def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
+    """When both are present, ``shared_session`` wins for the body loop.
+
+    Pins the middleware's documented precedence in ``_middleware.py::
+    AsyncBridgeMiddleware.apply``: if both ``plan.shared_session`` and
+    ``plan.arrange_session`` are populated, the body runs on the shared
+    session's loop. Rationale: shared fixtures may yield loop-bound
+    resources on that session; running the body elsewhere would break
+    them.
+
+    Known limitation (pre-existing before #1545): when both are present,
+    an @arrange fixture that yields a loop-bound resource on the arrange
+    session's loop cannot be used from the body — same cross-loop issue
+    as pre-refactor code. Fixing the mixed case is a bigger design
+    question about coalescing session lifetimes; out of scope for #1545.
+    """
+    (tmp / "conftest.py").write_text(
+        "import asyncio\n"
+        "from oxitest import Fixtures\n"
+        "\n"
+        "fx = Fixtures()\n"
+        "seen = {}\n"
+        "\n"
+        "@fx.fixture(shared=True)\n"
+        "async def shared_ping() -> int:\n"
+        "    seen['shared'] = id(asyncio.get_running_loop())\n"
+        "    return 1\n"
+        "\n"
+        "@fx.fixture\n"
+        "async def arrange_ping():\n"
+        "    seen['arrange'] = id(asyncio.get_running_loop())\n"
+        "    yield\n"
+    )
+    (tmp / "test_sample.py").write_text(
+        "import asyncio\n"
+        "from oxitest import Fixture, arrange\n"
+        "from conftest import seen\n"
+        "\n"
+        "@arrange('arrange_ping')\n"
+        "async def test_body(shared_ping: Fixture[int]) -> None:\n"
+        "    seen['body'] = id(asyncio.get_running_loop())\n"
+        "\n"
+        "def test_body_ran_on_shared_loop_not_arrange_loop():\n"
+        "    assert seen.get('shared') is not None, (\n"
+        "        'shared fixture must run so we can compare loops; '\n"
+        "        f'got seen={seen}'\n"
+        "    )\n"
+        "    assert seen.get('arrange') is not None, (\n"
+        "        'arrange fixture must run so we can compare loops; '\n"
+        "        f'got seen={seen}'\n"
+        "    )\n"
+        "    assert seen.get('body') is not None, (\n"
+        "        'async body must run so we can compare loops; '\n"
+        "        f'got seen={seen}'\n"
+        "    )\n"
+        "    assert seen['body'] == seen['shared'], (\n"
+        "        'body loop must equal shared session loop when both '\n"
+        "        'shared_session and arrange_session are present — the '\n"
+        "        'middleware picks shared_session first because shared '\n"
+        "        f'fixtures may yield loop-bound resources on it; got {seen}'\n"
+        "    )\n"
+        "    assert seen['body'] != seen['arrange'], (\n"
+        "        'sanity: arrange session should be a different loop from '\n"
+        "        'shared session (otherwise the precedence test proves '\n"
+        "        f'nothing); got {seen}'\n"
+        "    )\n"
+    )
+
+    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+
+    assert rc == 0, (
+        f"both tests must pass to prove shared_session wins the body-loop "
+        f"race when both are present, got rc={rc}\nstdout:\n{stdout}"
+    )
+    assert "2 passed" in stdout, (
+        f"async body + precedence-check test must both pass, got:\n{stdout}"
     )

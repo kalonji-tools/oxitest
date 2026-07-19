@@ -49,7 +49,16 @@ def _compose(
 
 @dataclass(frozen=True, slots=True)
 class ExecutionPlan:
-    """Immutable context passed through the middleware stack."""
+    """Immutable context passed through the middleware stack.
+
+    ``arrange_session`` is populated by the executor when the arrange phase
+    acquired a per-test :class:`AsyncSession` for async-each fixtures. The
+    :class:`AsyncBridgeMiddleware` reuses it for the async test body so
+    setup, body, and teardown share one loop identity — resources bound to
+    the arrange loop (e.g. :class:`asyncio.Event`) remain valid in the body.
+    Precedence when both are present: ``shared_session`` wins because it is
+    longer-lived (session/shared scope) than ``arrange_session`` (each).
+    """
 
     fn: Callable[..., Any]
     fn_name: str
@@ -60,6 +69,7 @@ class ExecutionPlan:
     default_timeout: int | None
     backend: AsyncBackend | None
     shared_session: AsyncSession | None
+    arrange_session: AsyncSession | None
 
 
 class Middleware(Protocol):
@@ -222,6 +232,16 @@ class AsyncBridgeMiddleware:
 
             def _base() -> TestResult:  # pragma: no cover
                 return shared_session.run(_async_core())
+        elif plan.arrange_session is not None:
+            # Reuse the per-test session created by the executor's arrange
+            # phase. This closes the ADR-0006 body-loop-identity gap: setup,
+            # body, and teardown all run on the same event loop, so any loop-
+            # bound resource yielded by an arrange fixture (asyncio.Event,
+            # Queue, aiohttp.ClientSession, ...) stays valid in the body.
+            arrange_session = plan.arrange_session
+
+            def _base() -> TestResult:
+                return arrange_session.run(_async_core())
         else:
 
             def _base() -> TestResult:
