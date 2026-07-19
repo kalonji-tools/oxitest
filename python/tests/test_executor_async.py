@@ -514,14 +514,17 @@ def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
         )
     )
     session = FixtureSession(reg)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "async def test_uses_pool(pool: Fixture[int]) -> None:\n"
-        "    assert pool == 99\n",
-        "test_uses_pool",
-        session=session,
-    )
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "async def test_uses_pool(pool: Fixture[int]) -> None:\n"
+            "    assert pool == 99\n",
+            "test_uses_pool",
+            session=session,
+        )
+    finally:
+        session.end_session()
     assert result.status == "passed", (
         f"shared async fixtures amortize expensive setup across tests -- if the value "
         f"does not arrive, the entire sharing mechanism is broken, got"
@@ -558,8 +561,11 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
         )
     )
     session = FixtureSession(reg)
-    r1 = helpers.common.run_test(str(f), "test_a", session)
-    r2 = helpers.common.run_test(str(f), "test_b", session)
+    try:
+        r1 = helpers.common.run_test(str(f), "test_a", session)
+        r2 = helpers.common.run_test(str(f), "test_b", session)
+    finally:
+        session.end_session()
     assert r1.status == "passed", (
         f"test_a must pass to prove the shared fixture delivered the correct value on "
         f"first access: {r1.status!r}, {r1.message!r}"
@@ -704,20 +710,21 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
         )
     )
     session = FixtureSession(reg)
-    r1 = helpers.common.run_test(str(f), "test_shared", session)
-    r2 = helpers.common.run_test(str(f), "test_independent", session)
+    try:
+        r1 = helpers.common.run_test(str(f), "test_shared", session)
+        r2 = helpers.common.run_test(str(f), "test_independent", session)
+    finally:
+        session.end_session()
     assert r1.status == "passed", (
         f"shared-fixture test must pass to confirm the session loop is running -- "
         f"failure here means the shared loop itself is broken: {r1.status!r},"
         f" {r1.message!r}"
     )
     assert r2.status == "passed", (
-        f"tests without shared fixtures must get their own event loop via asyncio.run()"
-        f" -- "
-        f"reusing the shared session loop would leak state between unrelated tests: "
-        f"{r2.status!r}, {r2.message!r}"
+        f"tests without shared fixtures must acquire a session via the backend"
+        f" -- reusing the shared session loop would leak state between unrelated"
+        f" tests: {r2.status!r}, {r2.message!r}"
     )
-    session.end_session()
 
 
 # ── Built-in task_group fixture ──────────────────────────────────────────────
@@ -812,14 +819,17 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
         helpers.common.make_fixture_def("combo", sync_factory, conftest_path="/c.py")
     )
     session = FixtureSession(reg)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "async def test_uses_combo(combo: Fixture[str]) -> None:\n"
-        "    pass\n",
-        "test_uses_combo",
-        session=session,
-    )
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "async def test_uses_combo(combo: Fixture[str]) -> None:\n"
+            "    pass\n",
+            "test_uses_combo",
+            session=session,
+        )
+    finally:
+        session.end_session()
     assert result.status == "error", (
         f"a sync fixture cannot await its async dependency -- allowing this silently "
         f"injects a coroutine object instead of the resolved value, "
@@ -854,14 +864,17 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
         )
     )
     session = FixtureSession(reg)
-    result = helpers.common.exec_inline(
-        tmp,
-        "from oxitest import Fixture\n"
-        "async def test_uses_pool(pool: Fixture[str]) -> None:\n"
-        "    pass\n",
-        "test_uses_pool",
-        session=session,
-    )
+    try:
+        result = helpers.common.exec_inline(
+            tmp,
+            "from oxitest import Fixture\n"
+            "async def test_uses_pool(pool: Fixture[str]) -> None:\n"
+            "    pass\n",
+            "test_uses_pool",
+            session=session,
+        )
+    finally:
+        session.end_session()
     assert result.status == "error", (
         f"a shared fixture outlives individual tests -- depending on a non-shared"
         f" fixture "

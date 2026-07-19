@@ -19,12 +19,13 @@ __all__ = [
 import contextlib
 import inspect
 from collections.abc import Callable
+from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import (
         AsyncBackend,
-        SharedAsyncSession,
+        AsyncSession,
     )
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._errors import FixtureSetupError
@@ -73,13 +74,17 @@ class SharedAsyncManager:
     """Manages shared async fixture lifecycle: session creation, resolution, teardown.
 
     Extracted from FixtureSession to isolate the async fixture management concern.
-    The manager lazily creates a SharedAsyncSession on the first resolve() call,
-    tracks async generator teardowns, and drains them in LIFO order on cleanup().
+    The manager lazily acquires an :class:`AsyncSession` on the first
+    :meth:`resolve` call by pushing ``acquire_session_guarded(backend)`` onto an
+    :class:`~contextlib.ExitStack`; the stack's ``close`` finalizes the session
+    (asyncgen shutdown, loop close) on :meth:`cleanup`. Teardowns are tracked
+    and drained in LIFO order before the session closes.
     """
 
     def __init__(self, async_backend: AsyncBackend) -> None:
         self._backend = async_backend
-        self._session: SharedAsyncSession | None = None
+        self._session: AsyncSession | None = None
+        self._stack: ExitStack = ExitStack()
         self._teardowns: list[tuple[str, Any]] = []
         self._used = False
 
@@ -103,7 +108,7 @@ class SharedAsyncManager:
         return tuple(self._teardowns)
 
     @property
-    def session(self) -> SharedAsyncSession | None:
+    def session(self) -> AsyncSession | None:
         """The underlying shared async session, or None if not yet created."""
         return self._session
 
@@ -125,7 +130,15 @@ class SharedAsyncManager:
 
         """
         if self._session is None:
-            self._session = self._backend.create_shared_session()
+            # The manager holds this session across every test in the fixture
+            # session. It calls ``backend.acquire_session()`` directly rather
+            # than routing through ``acquire_session_guarded`` because the
+            # guard's ``ContextVar`` would stay ``True`` for the manager's
+            # entire lifetime (until ``cleanup()``), tripping middleware's
+            # own guarded acquire for the next test that does not use shared
+            # fixtures. The framework owns this seam; the guard protects
+            # short-lived acquires that would nest in the same call stack.
+            self._session = self._stack.enter_context(self._backend.acquire_session())
 
         self._used = True
 
@@ -145,7 +158,12 @@ class SharedAsyncManager:
         return value
 
     def cleanup(self) -> None:
-        """Drain async teardowns in LIFO order, then close the session."""
+        """Drain async teardowns in LIFO order, then close the session stack.
+
+        Closing the :class:`~contextlib.ExitStack` runs the session's
+        ``__exit__`` (asyncgen shutdown, loop close) — session lifetime is
+        owned by the stack.
+        """
         if self._session is None:
             return
         for name, gen in reversed(self._teardowns):
@@ -155,6 +173,6 @@ class SharedAsyncManager:
                     session.run(anext(generator))
 
             safe_teardown(_drain, name, warn=_warn_teardown)
-        self._session.close()
+        self._stack.close()
         self._session = None
         self._teardowns.clear()

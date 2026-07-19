@@ -1,12 +1,16 @@
-"""Tests for AsyncioBackend and AsyncioSharedSession event-loop lifecycle."""
+"""Tests for AsyncioBackend and AsyncioSession — the acquire_session seam."""
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from typing import Never
 
 from oxitest import Fixture, raises
-from oxitest._bridge._async_backend import AsyncioBackend, AsyncioSharedSession
+from oxitest._bridge._async_backend import (
+    AsyncioBackend,
+    AsyncioSession,
+)
 from oxitest._bridge.result import Diagnostic
 
 
@@ -16,79 +20,161 @@ def test_asyncio_backend_name() -> None:
     assert backend.name == "asyncio", f"expected 'asyncio', got {backend.name!r}"
 
 
-def test_asyncio_backend_runs_coroutine() -> None:
-    """AsyncioBackend.run() should execute a coroutine and return its result."""
+def test_asyncio_backend_supports_nested_acquire_defaults_false() -> None:
+    """Asyncio nested acquire raises at runtime — default must be strict False."""
     backend = AsyncioBackend()
+    assert backend.supports_nested_acquire is False, (
+        "asyncio raises on nested asyncio.run — backend must default to strict False"
+        " so the framework guard rejects nesting before runtime does"
+    )
 
-    async def coro() -> int:
-        return 42
 
-    result = backend.run(coro())
+def test_acquire_session_yields_asyncio_session() -> None:
+    """acquire_session() must yield an AsyncioSession the framework can drive."""
+    backend = AsyncioBackend()
+    with backend.acquire_session() as session:
+        assert isinstance(session, AsyncioSession), (
+            f"expected AsyncioSession, got {type(session).__name__}"
+            " — the framework relies on the concrete type for asyncgen finalization"
+        )
+
+
+def test_asyncio_session_runs_coroutine() -> None:
+    """AsyncioSession.run must execute a coroutine and return its result."""
+    with AsyncioSession() as session:
+
+        async def coro() -> int:
+            return 42
+
+        result = session.run(coro())
+
     assert result == 42, f"expected 42, got {result!r}"
 
 
-def test_asyncio_backend_propagates_exception() -> None:
-    """AsyncioBackend.run() should propagate exceptions raised inside the coroutine."""
-    backend = AsyncioBackend()
+def test_asyncio_session_propagates_exception() -> None:
+    """AsyncioSession.run must propagate exceptions from the coroutine."""
+    with AsyncioSession() as session:
 
-    async def coro() -> Never:
-        msg = "boom"
-        raise ValueError(msg)
+        async def coro() -> Never:
+            msg = "boom"
+            raise ValueError(msg)
 
-    with raises(ValueError, match="boom"):
-        backend.run(coro())
+        with raises(ValueError, match="boom"):
+            session.run(coro())
 
 
-def test_asyncio_backend_creates_shared_session() -> None:
-    """create_shared_session() should return an AsyncioSharedSession instance."""
-    backend = AsyncioBackend()
-    session = backend.create_shared_session()
-    assert isinstance(session, AsyncioSharedSession), (
-        f"expected AsyncioSharedSession, got {type(session).__name__}"
+def test_asyncio_session_multiple_run_calls_share_runtime() -> None:
+    """Multiple .run calls on one session must share a single event loop.
+
+    Session identity of the runtime is the whole reason for the shape: an
+    asyncgen yielded from one run stays finalizable on __exit__, so a shared
+    fixture set up on call A can be torn down on call B — impossible if each
+    run spun up its own loop.
+    """
+    loops: list[asyncio.AbstractEventLoop] = []
+
+    async def capture_loop() -> None:
+        loops.append(asyncio.get_running_loop())
+
+    with AsyncioSession() as session:
+        session.run(capture_loop())
+        session.run(capture_loop())
+
+    assert len(loops) == 2, f"expected two run calls, got {len(loops)}"
+    assert loops[0] is loops[1], (
+        "multiple .run calls must share the same event loop — asyncgen"
+        " finalization at __exit__ depends on it"
     )
-    session.close()
 
 
-def test_shared_session_runs_coroutine() -> None:
-    """AsyncioSharedSession.run() should execute a coroutine and return its result."""
-    session = AsyncioSharedSession()
+def test_asyncio_session_finalizes_asyncgens_on_exit() -> None:
+    """Asyncgen shutdown runs on __exit__, not per-run.
+
+    The pre-refactor code called asyncio.run per session.run, which finalized
+    every asyncgen on each call. The new shape defers finalization to session
+    exit, so setup-yield-teardown across two run calls works.
+    """
+    torn_down: list[bool] = []
+
+    async def _gen() -> AsyncGenerator[int, None]:
+        try:
+            yield 1
+        finally:
+            torn_down.append(True)
+
+    session = AsyncioSession()
+    with session:
+        gen = _gen()
+
+        async def _prime() -> int:
+            return await anext(gen)
+
+        value = session.run(_prime())
+        assert value == 1, f"expected 1 from asyncgen, got {value!r}"
+        assert torn_down == [], (
+            "asyncgen must not be finalized while session is still open —"
+            " pre-refactor asyncio.run() closed it too early"
+        )
+
+    assert torn_down == [True], (
+        "asyncgen finalize must run on session __exit__ (loop.shutdown_asyncgens)"
+        " — this is the whole reason for the refactor"
+    )
+
+
+def test_asyncio_session_run_after_exit_raises() -> None:
+    """AsyncioSession.run after __exit__ must raise a clear RuntimeError.
+
+    A muddled error here (e.g. AttributeError on ``None._loop``) makes bugs
+    in fixture-manager cleanup order hard to trace.
+    """
+    session = AsyncioSession()
+    with session:
+        pass
 
     async def coro() -> int:
-        return 99
+        return 1
 
-    result = session.run(coro())
-    assert result == 99, f"expected 99, got {result!r}"
-    session.close()
-
-
-def test_shared_session_close_is_idempotent() -> None:
-    """Calling close() twice on a shared session should not raise."""
-    session = AsyncioSharedSession()
-    session.close()
-    session.close()  # must not raise
+    dead = coro()
+    try:
+        with raises(RuntimeError, match="already exited"):
+            session.run(dead)
+    finally:
+        dead.close()  # avoid coroutine-never-awaited warning
 
 
-def test_shared_session_cleans_stray_tasks(
+def test_asyncio_session_double_exit_is_idempotent() -> None:
+    """Exiting an AsyncioSession twice must not raise (cleanup guard)."""
+    session = AsyncioSession()
+    session.__exit__(None, None, None)
+    session.__exit__(None, None, None)  # must not raise
+
+
+def test_asyncio_session_stray_task_diagnostic(
     diag_collector: Fixture[list[Diagnostic]],
 ) -> None:
-    """run() should detect and emit a diagnostic about tasks that were leaked."""
-    session = AsyncioSharedSession()
+    """Every session — not just shared ones — emits a diagnostic on stray tasks.
 
-    async def spawner() -> str:
-        async def background() -> None:
-            await asyncio.sleep(999)
+    Any test that spawns a task and forgets to await it is a bug regardless of
+    whether the session lives long. Pre-refactor this only fired for the
+    shared session; universal detection catches leaks in every code path.
+    """
+    with AsyncioSession() as session:
 
-        asyncio.ensure_future(background())  # noqa: RUF006 — intentional leak for detection test
-        return "done"
+        async def spawner() -> str:
+            async def background() -> None:
+                await asyncio.sleep(999)
 
-    result = session.run(spawner())
+            asyncio.ensure_future(background())  # noqa: RUF006 — intentional leak for detection test
+            return "done"
+
+        result = session.run(spawner())
 
     assert result == "done", f"expected 'done', got {result!r}"
     assert any(
         d.context == "async session" and "leaked" in d.message.lower()
         for d in diag_collector
     ), (
-        "leaked tasks must surface as diagnostics so developers know to await or cancel"
-        f" them: {diag_collector}"
+        "leaked tasks must surface as diagnostics so developers know to await"
+        f" or cancel them: {diag_collector}"
     )
-    session.close()

@@ -416,14 +416,24 @@ mismatches -- are documented in the [error reference](../reference/errors.md).
 ## Async backend
 
 Plugins can provide an alternative async runtime backend by implementing the
-`AsyncBackend` and `SharedAsyncSession` protocols.
+`AsyncBackend` and `AsyncSession` protocols.
+
+The seam is scoped around an `AsyncSession` context manager. The framework
+calls `backend.acquire_session()` to obtain a session, drives work through
+`session.run(coro)`, and lets the session's `__exit__` finalize the runtime
+(shutting down async generators, closing loops or nurseries). Session
+lifetime is a caller decision — short-lived usage inlines a `with` block;
+long-lived usage (e.g., the shared async fixture manager) holds the session
+via a `contextlib.ExitStack`.
 
 ```python
-from oxitest import Plugin, AsyncBackend, SharedAsyncSession
+from contextlib import contextmanager
+
+from oxitest import Plugin, AsyncBackend, AsyncSession
 ```
 
 ```python
---8<-- "python/tests/docs/how-to/test_write_plugins.py:trio-shared-session"
+--8<-- "python/tests/docs/how-to/test_write_plugins.py:trio-session"
 ```
 
 ```python
@@ -451,6 +461,24 @@ async_backend = "trio"
   found, oxitest raises `BackendNotFoundError`.
 - The built-in `"asyncio"` backend is always available. Plugins must not use the
   name `"asyncio"`.
+
+### `supports_nested_acquire`
+
+`AsyncBackend` carries a `supports_nested_acquire: bool = False` class
+attribute. The framework's internal call sites acquire sessions through a
+guard that rejects nesting unless the backend opts in. Every runtime the
+framework knows about treats nested acquire as an antipattern:
+
+- **trio** forbids nested `trio.run` by design — a single nursery/runtime
+  per call is the whole model.
+- **asyncio** raises on the common nested case — `asyncio.run` while another
+  loop is already running fails at runtime.
+- Cross-loop bugs (a resource bound to loop A used from loop B) surface as
+  runtime errors far from the acquire site.
+
+Backend authors know their runtime best. If your backend genuinely tolerates
+nested acquires, set `supports_nested_acquire = True` on the class. The
+default (`False`) is safe.
 
 ## Debugger backend
 

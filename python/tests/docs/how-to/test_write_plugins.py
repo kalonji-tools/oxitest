@@ -9,6 +9,7 @@ import json
 import logging
 import tempfile
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated, Any, Protocol
@@ -502,32 +503,46 @@ def test_check_collector_discovers_check_functions():
 
 
 # fmt: off
-# --8<-- [start:trio-shared-session]
-class TrioSharedSession:
-    """Long-lived trio session for shared fixture resolution."""
+# --8<-- [start:trio-session]
+class TrioSession:
+    """Scoped trio session — one nursery per session lifetime.
 
-    def run(self, coro):
+    ``run`` awaits the coroutine on the session's runtime; ``__exit__``
+    finalizes the runtime (cancels the nursery, closes async generators).
+    """
+
+    def __init__(self):
+        self._runtime = None  # opened in __enter__
+
+    def __enter__(self):
+        """Open the trio runtime / nursery."""
+        return self
+
+    def __exit__(self, *exc):
+        """Cancel outstanding tasks + close asyncgens."""
+        self._runtime = None
+
+    def run(self, coro, /):
         import trio
         return trio.from_thread.run(coro)
-
-    def close(self):
-        pass  # trio manages its own cleanup
-# --8<-- [end:trio-shared-session]
+# --8<-- [end:trio-session]
 
 # --8<-- [start:trio-backend]
 class TrioBackend:
     """Trio async backend for oxitest."""
 
+    # trio forbids nested trio.run — leave strict.
+    supports_nested_acquire = False
+
     @property
     def name(self) -> str:
         return "trio"
 
-    def run(self, coro):
-        import trio
-        return trio.run(coro)
-
-    def create_shared_session(self):
-        return TrioSharedSession()
+    @contextmanager
+    def acquire_session(self):
+        session = TrioSession()
+        with session:
+            yield session
 # --8<-- [end:trio-backend]
 
 # fmt: on
@@ -544,10 +559,21 @@ def test_trio_backend_wires_into_plugin():
     assert backend.name == "trio", "should expose backend name"
 
 
-def test_trio_shared_session_has_required_methods():
-    session = TrioSharedSession()
-    assert hasattr(session, "run"), "should have run method"
-    assert hasattr(session, "close"), "should have close method"
+def test_trio_backend_defaults_supports_nested_acquire_false():
+    backend = TrioBackend()
+    assert backend.supports_nested_acquire is False, (
+        "trio forbids nested trio.run — backend must declare strict False so"
+        " the framework guard rejects nesting before trio does"
+    )
+
+
+def test_trio_session_is_a_context_manager():
+    session = TrioSession()
+    assert hasattr(session, "__enter__"), (
+        "AsyncSession implementers own lifetime via CM"
+    )
+    assert hasattr(session, "__exit__"), "AsyncSession implementers own lifetime via CM"
+    assert hasattr(session, "run"), "AsyncSession contract: single .run(coro) method"
 
 
 # fmt: off

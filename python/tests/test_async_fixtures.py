@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Coroutine
+from collections.abc import AsyncGenerator, Coroutine, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import oxitest as oxi
-from oxitest._bridge._async_backend import AsyncioBackend, SharedAsyncSession
+from oxitest._bridge._async_backend import AsyncioBackend, AsyncSession
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import FixtureSetupError
@@ -26,34 +27,39 @@ def _exhaust_coro(coro: Coroutine[Any, Any, Any]) -> Any:
 
 
 class _StubSession:
-    """Minimal SharedAsyncSession that synchronously exhausts coroutines."""
+    """Minimal AsyncSession that synchronously exhausts coroutines.
+
+    No real event loop — tests using this stub only exercise dispatch logic,
+    not asyncio semantics. Real loop lifecycle is covered in
+    ``test_async_backend.py``.
+    """
 
     def __init__(self) -> None:
         self.run_count = 0
+        self.exited = False
 
-    def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
+    def run(self, coro: Coroutine[Any, Any, Any], /) -> Any:
         self.run_count += 1
         return _exhaust_coro(coro)
 
-    def close(self) -> None:
-        pass
-
 
 class _StubBackend:
-    """Minimal AsyncBackend that returns a _StubSession."""
+    """Minimal AsyncBackend yielding a _StubSession via acquire_session."""
 
     name = "stub"
+    supports_nested_acquire = False
 
     def __init__(self) -> None:
         self.session = _StubSession()
-        self.create_count = 0
+        self.acquire_count = 0
 
-    def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
-        return _exhaust_coro(coro)
-
-    def create_shared_session(self) -> SharedAsyncSession:
-        self.create_count += 1
-        return self.session
+    @contextmanager
+    def acquire_session(self) -> Iterator[AsyncSession]:
+        self.acquire_count += 1
+        try:
+            yield self.session
+        finally:
+            self.session.exited = True
 
 
 def _make_stub_backend() -> tuple[_StubBackend, _StubSession]:
@@ -106,7 +112,11 @@ def test_was_used_can_be_reset() -> None:
 
 
 def test_resolve_creates_session_lazily() -> None:
-    """The shared session is created on first resolve, not at construction time."""
+    """The shared session is acquired on first resolve, not at construction time.
+
+    Lazy acquisition matters because tests with no async fixtures should not
+    pay for event-loop creation or asyncgen finalization overhead.
+    """
     backend, session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -117,13 +127,20 @@ def test_resolve_creates_session_lazily() -> None:
 
     value = mgr.resolve(my_fixture, {})
 
-    assert mgr.session is session, "session should be created on first resolve"
+    assert mgr.session is session, "session should be acquired on first resolve"
     assert value == 42, "resolved value should be 42"
-    assert backend.create_count == 1, "session should be created exactly once"
+    assert backend.acquire_count == 1, (
+        "backend.acquire_session must be called exactly once — repeated"
+        " acquires would drop asyncgen finalization on the earlier session"
+    )
 
 
 def test_resolve_reuses_existing_session() -> None:
-    """Subsequent resolve calls reuse the same session rather than creating a new."""
+    """Subsequent resolve calls reuse the acquired session, not a fresh one.
+
+    Reuse guarantees that cross-fixture async state (e.g. shared connection
+    pools) lives on one runtime so teardown at cleanup can drain it.
+    """
     backend, _session = _make_stub_backend()
     mgr = SharedAsyncManager(backend)
 
@@ -136,7 +153,10 @@ def test_resolve_reuses_existing_session() -> None:
     mgr.resolve(fx_a, {})
     mgr.resolve(fx_b, {})
 
-    assert backend.create_count == 1, "session should be created exactly once"
+    assert backend.acquire_count == 1, (
+        "backend.acquire_session must be called exactly once — a second"
+        " acquire would leak the first session and break asyncgen finalization"
+    )
 
 
 def test_resolve_sets_was_used() -> None:
@@ -280,7 +300,13 @@ def test_backend_property() -> None:
 
 
 def test_resolve_raises_fixture_setup_error_on_exception() -> None:
-    """resolve() wraps exceptions in FixtureSetupError."""
+    """resolve() wraps exceptions in FixtureSetupError.
+
+    Cleanup runs unconditionally even after a failed resolve: the manager
+    holds a session/stack the moment the first resolve enters the guard, and
+    dropping the manager without ``cleanup()`` would leak both the event loop
+    and the guard's nested-acquire tracking.
+    """
     backend = AsyncioBackend()
     mgr = SharedAsyncManager(backend)
 
@@ -288,8 +314,11 @@ def test_resolve_raises_fixture_setup_error_on_exception() -> None:
         msg = "boom"
         raise ValueError(msg)
 
-    with oxi.raises(FixtureSetupError):
-        mgr.resolve(bad_fixture, {})
+    try:
+        with oxi.raises(FixtureSetupError):
+            mgr.resolve(bad_fixture, {})
+    finally:
+        mgr.cleanup()
 
 
 def test_async_generator_fixture_teardown_exception_reported() -> None:
@@ -321,3 +350,61 @@ def test_async_generator_fixture_teardown_exception_reported() -> None:
         "async fixture teardown errors must emit a diagnostic so users know cleanup"
         " failed -- silently swallowing them hides resource leaks"
     )
+
+
+# ── ExitStack lifetime ────────────────────────────────────────────────────────
+
+
+def test_shared_async_manager_holds_session_via_exitstack() -> None:
+    """One session lives across every resolve; cleanup drives its __exit__ once.
+
+    The whole reason the manager owns an ExitStack is to keep asyncgen
+    finalization deferred until end-of-session — driving __exit__ on every
+    resolve would defeat the refactor. This test pins that the stack is
+    responsible for exiting the session exactly once.
+    """
+    backend, session = _make_stub_backend()
+    mgr = SharedAsyncManager(backend)
+
+    async def fx_a() -> str:
+        return "a"
+
+    async def fx_b() -> str:
+        return "b"
+
+    mgr.resolve(fx_a, {})
+    mgr.resolve(fx_b, {})
+
+    assert backend.acquire_count == 1, (
+        f"exactly one acquire across resolves, got {backend.acquire_count}"
+    )
+    assert not session.exited, (
+        "session must stay open across resolves — asyncgen finalization at"
+        " session __exit__ depends on the stack keeping it open"
+    )
+
+    mgr.cleanup()
+
+    assert session.exited, (
+        "cleanup must close the ExitStack, which drives session __exit__ —"
+        " otherwise loops/nurseries leak and asyncgens never finalize"
+    )
+    assert mgr.session is None, (
+        "session slot must clear after cleanup so a second cleanup is a no-op"
+    )
+
+
+def test_shared_async_manager_cleanup_is_idempotent() -> None:
+    """A second cleanup must not re-drive the stack — session is already gone."""
+    backend, session = _make_stub_backend()
+    mgr = SharedAsyncManager(backend)
+
+    async def fx() -> str:
+        return "x"
+
+    mgr.resolve(fx, {})
+    mgr.cleanup()
+    mgr.cleanup()  # must not raise
+
+    assert session.exited, "first cleanup must have exited the session"
+    assert mgr.session is None, "second cleanup must remain a no-op"
