@@ -6,6 +6,7 @@ import os
 
 __all__ = [
     "AmbiguousFixtureError",
+    "ArrangeError",
     "AutouseRegistrationError",
     "BackendNotFoundError",
     "BroadFixtureTypeError",
@@ -289,5 +290,49 @@ class AutouseRegistrationError(TypeError):
             f"       the async tests that need it.\n"
             f"    2. Pass shared=True — a shared-scope async autouse\n"
             f"       applies to both sync and async tests.\n"
+        )
+        super().__init__(message)
+
+
+# ─── Arrange errors ──────────────────────────────────────────────────────────
+
+
+class ArrangeError(OxitestError):
+    """Raised when @oxi.arrange is used with an incompatible fixture.
+
+    Fires when a sync test arranges one or more async function-scope
+    fixtures — the illegal cell in the (test kind x fixture kind) matrix.
+    Async tests legally consume async-each fixtures; sync fixtures compose
+    freely on either test kind.
+
+    Other @arrange failure modes surface through the existing error
+    hierarchy: missing arranged fixtures via `FixtureNotFoundError`
+    (caught upstream by the Rust `FixtureValidationPhase`), factory
+    raises via `FixtureSetupError`.
+    """
+
+    def __init__(self, fn: Any, illegal: list[tuple[str, Any]]) -> None:
+        code = fn.__code__
+        arranged_at = f"{_relpath(code.co_filename)}:{code.co_firstlineno}"
+        count_word = (
+            "1 illegal entry"
+            if len(illegal) == 1
+            else f"{len(illegal)} illegal entries"
+        )
+        illegal_lines = "\n".join(
+            f"    - {name!r} (function scope) — defined at "
+            f"{_relpath(defn.source.func.__code__.co_filename)}:"
+            f"{defn.source.func.__code__.co_firstlineno}"
+            for name, defn in illegal
+        )
+        message = (
+            f"cannot arrange async fixture(s) on a sync test — {count_word}.\n"
+            f"  Arranged at:  {arranged_at}\n"
+            f"  Test kind:    sync (`def test_...`)\n"
+            f"  Illegal:\n{illegal_lines}\n"
+            f"  Three ways forward:\n"
+            f"    1. Make the test async — `async def test_...`\n"
+            f"    2. Change fixture scope to 'shared' or 'session'\n"
+            f"    3. Convert fixture to sync — remove `async` from def\n"
         )
         super().__init__(message)

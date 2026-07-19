@@ -129,6 +129,7 @@ from oxitest._bridge._debugger import (
     DebuggerBackend as DebuggerBackend,
 )
 from oxitest._bridge._errors import (
+    ArrangeError as ArrangeError,
     AutouseRegistrationError as AutouseRegistrationError,
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
@@ -170,6 +171,7 @@ from oxitest._oxitest import run
 from oxitest.plugin import CoverageProvider as CoverageProvider, Plugin as Plugin
 
 __all__ = [
+    "ArrangeError",
     "AsyncBackend",
     "AutouseRegistrationError",
     "Both",

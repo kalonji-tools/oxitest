@@ -136,7 +136,13 @@ class _FixtureOutcome:
 
 
 def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
-    """Unpack a sync fixture call: plain value or generator."""
+    """Unpack a sync fixture call: plain value or generator.
+
+    Coroutines and async generators are passed through as-is: the async
+    execution middleware (`_unpack_async_fixtures`) awaits/advances them
+    inside the test's event loop for parameter-injected async fixtures,
+    and `executor._drive_arrange_async_each` handles the arrange path.
+    """
     if inspect.isgenerator(result):
         value = next(result)
 
