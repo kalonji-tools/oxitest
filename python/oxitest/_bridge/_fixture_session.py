@@ -490,10 +490,6 @@ class FixtureSession:
         """Read-only access to the helper registry."""
         return self._helper_registry
 
-    def has_shared_fixtures(self) -> bool:
-        """Return True if the effective (most-local) definition has shared=True."""
-        return self._registry.has_shared()
-
     def shared_fixture_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
         return self._registry.shared_names()

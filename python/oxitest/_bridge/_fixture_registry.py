@@ -218,10 +218,8 @@ class FixtureRegistry:
         # type -> list of FixtureDef, indexed by fixture_type for type-based resolve
         self._by_type: dict[type, list[FixtureDef[Any]]] = {}
         self._namespaces: set[str] = set()  # O(1) namespace existence check
-        self._has_shared_cache: bool | None = None
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
-        self._has_shared_cache = None
         existing = self._by_name.get(defn.name)
         if existing and existing[-1].conftest_path != defn.conftest_path:
             parent = existing[-1]
@@ -325,12 +323,6 @@ class FixtureRegistry:
         if not shared_ancestors:
             return ()
         return _merge_components(shared_ancestors)
-
-    def has_shared(self) -> bool:
-        """Return True if any effective fixture definition has shared=True."""
-        if self._has_shared_cache is None:
-            self._has_shared_cache = len(self.shared_fixture_groups()) > 0
-        return self._has_shared_cache
 
     def shared_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
