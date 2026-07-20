@@ -49,10 +49,6 @@ def test_build_pipeline_no_middlewares() -> None:
         marks=(),
         no_message_lines=(),
         is_async=False,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
     def base() -> WarnedResult:
@@ -72,10 +68,6 @@ def test_build_pipeline_single_middleware() -> None:
         marks=(),
         no_message_lines=(),
         is_async=False,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
     def base() -> WarnedResult:
@@ -95,10 +87,6 @@ def test_build_pipeline_ordering() -> None:
         marks=(),
         no_message_lines=(),
         is_async=False,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
     def base() -> WarnedResult:
@@ -119,10 +107,6 @@ def test_build_pipeline_skip_middleware_is_noop() -> None:
         marks=(),
         no_message_lines=(),
         is_async=False,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
     def base() -> WarnedResult:
