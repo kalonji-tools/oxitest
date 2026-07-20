@@ -3,7 +3,7 @@
 **Status:** Proposed
 **Date:** 2026-07-20
 
-Python's `None` is cheap to reach for. Any field can start out unset, any parameter can carry an optional default, any return can substitute absence for a value. Left unmanaged, this produces the shape observed in the oxitest Python bridge today: after the [#1482](https://github.com/kalonji-tools/oxitest/issues/1482) sweep — which removed ~17 unnecessary Optionals and ~20 guards — `python/oxitest/_bridge/` still carries ~128 `| None` type annotations and ~146 `is None` / `is not None` guards across 274 total occurrences ([full catalog on #1552](https://github.com/kalonji-tools/oxitest/issues/1552)). The residual is not scattered mistakes — it clusters into six or seven recurring shapes (sum-type-in-disguise, fat-context Optional, lazy-init instance state, and so on), each of which admits a specific structural fix.
+Python's `None` is cheap to reach for. Any field can start out unset, any parameter can carry an optional default, any return can substitute absence for a value. Left unmanaged, this produces the shape observed in the oxitest Python source today: after the [#1482](https://github.com/kalonji-tools/oxitest/issues/1482) sweep — which removed ~17 unnecessary Optionals and ~20 guards — `python/oxitest/` still carries ~128 `| None` type annotations and ~146 `is None` / `is not None` guards across 274 total occurrences ([full catalog on #1552](https://github.com/kalonji-tools/oxitest/issues/1552)). The residual is not scattered mistakes — it clusters into six or seven recurring shapes (sum-type-in-disguise, fat-context Optional, lazy-init instance state, and so on), each of which admits a specific structural fix.
 
 Case-by-case cleanups (the [#1482](https://github.com/kalonji-tools/oxitest/issues/1482) approach) reach a floor. The same shapes reappear in new code because there is no rule identifying them as shapes. The [#1549](https://github.com/kalonji-tools/oxitest/issues/1549) grill on `ExecutionPlan` — a fat-context bundle of four Optionals passed to a middleware chain — surfaced this directly: the fix ("Composable Middleware with Constructor Injection") wasn't specific to `ExecutionPlan`; it was the answer for a whole shape, one the codebase re-invents each time.
 
@@ -19,7 +19,7 @@ This ADR establishes a project-wide design principle: **`None` is a last resort.
 
 ## Decision
 
-Option 3. The principle below governs all Python source under `python/oxitest/_bridge/`. Rules 1–6 name specific shapes and the pattern that must replace each. Rule 7 is the umbrella exception list — five sub-categories of Optional patterns that stay as-is; new code may use these patterns without justification.
+Option 3. The principle below governs all Python source under `python/oxitest/` — the Python bridge under `_bridge/` plus the public API module `plugin.py` alongside it. Rules 1–6 name specific shapes and the pattern that must replace each. Rule 7 is the umbrella exception list — five sub-categories of Optional patterns that stay as-is; new code may use these patterns without justification.
 
 Occurrences may fit two rules. Each occurrence carries one primary rule tag; cross-links to overlapping rules appear under "See also" at the bottom of each rule.
 
@@ -85,7 +85,7 @@ Reach for option 1 first; only fall back when the shape forces you to. Rule 4 ap
 
 An optional `Callable[..., ...] | None = None` parameter or field where None means "no callback wanted" must be replaced by a no-op default function of the same signature. Consumers call the callback unconditionally.
 
-The no-op default lives as a module-level function in the same file as its callsite — consistency within a module matters more than a single canonical location. No shared `_noops` module.
+No-op defaults are module-level functions colocated with each callsite — no shared `_noops` module.
 
 If the None case has semantic weight beyond "call vs don't call" (e.g., the presence of a callback selects a mode or gates behavior), that's Rule 1 territory (sum type), not Rule 5.
 
