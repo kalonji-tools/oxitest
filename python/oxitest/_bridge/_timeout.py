@@ -8,17 +8,48 @@ C extensions holding the GIL without yielding may delay the Windows interrupt.
 
 from __future__ import annotations
 
-__all__ = ["OxitestTimeoutError", "extract_timeout_seconds", "make_timeout_wrapper"]
+__all__ = [
+    "OxitestTimeoutError",
+    "Timeout",
+    "TimeoutOff",
+    "TimeoutSet",
+    "extract_timeout_seconds",
+    "make_timeout_wrapper",
+    "parse_timeout",
+]
 
 import ctypes
 import signal
 import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import OxitestTimeoutError
 from oxitest._bridge.result import DiagnosticSeverity, TimeoutResult
+
+
+@dataclass(frozen=True, slots=True)
+class TimeoutOff:
+    """Timeout absent — no wrapper applied."""
+
+
+@dataclass(frozen=True, slots=True)
+class TimeoutSet:
+    """Timeout set to `seconds`. `seconds=0` fires immediately (documents behavior)."""
+
+    seconds: int
+
+
+Timeout = TimeoutOff | TimeoutSet
+
+
+def parse_timeout(value: int | None) -> Timeout:
+    """Config-boundary conversion: None → TimeoutOff, int → TimeoutSet."""
+    if value is None:
+        return TimeoutOff()
+    return TimeoutSet(value)
 
 
 class _UnixTimeoutContext:
