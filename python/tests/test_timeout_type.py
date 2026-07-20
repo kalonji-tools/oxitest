@@ -48,10 +48,6 @@ def _make_plan(*, marks: tuple[Any, ...] = ()) -> ExecutionPlan:
         marks=marks,
         no_message_lines=(),
         is_async=False,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
 

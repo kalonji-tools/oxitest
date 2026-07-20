@@ -5,7 +5,6 @@ __all__ = [
     "AsyncDepGuardMiddleware",
     "ExecutionPlan",
     "Middleware",
-    "MiddlewareBuilder",
     "TimeoutMiddleware",
     "build_pipeline",
     "resolve_strategy",
@@ -15,11 +14,11 @@ import asyncio
 import contextlib
 import inspect
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, assert_never
 
-from oxitest._bridge._async_backend import AsyncBackend, AsyncioBackend, AsyncSession
+from oxitest._bridge._async_backend import AsyncBackend, AsyncSession
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
@@ -36,7 +35,6 @@ from oxitest._bridge._timeout import (
     TimeoutSet,
     extract_timeout_seconds,
     make_timeout_wrapper,
-    parse_timeout,
 )
 from oxitest._bridge.result import DiagnosticSeverity, TestResult, _error_result
 
@@ -101,15 +99,11 @@ def _compose(
 
 @dataclass(frozen=True, slots=True)
 class ExecutionPlan:
-    """Immutable context passed through the middleware stack.
+    """Immutable per-test data passed through the middleware stack.
 
-    ``arrange_session`` is populated by the executor when the arrange phase
-    acquired a per-test :class:`AsyncSession` for async-each fixtures. The
-    :class:`AsyncBridgeMiddleware` reuses it for the async test body so
-    setup, body, and teardown share one loop identity — resources bound to
-    the arrange loop (e.g. :class:`asyncio.Event`) remain valid in the body.
-    Precedence when both are present: ``shared_session`` wins because it is
-    longer-lived (session/shared scope) than ``arrange_session`` (each).
+    Post-ADR-0007 Rule 3 refactor: contains only pure test-shape data.
+    Session resources live on session middlewares; timeout config lives on
+    TimeoutMiddleware; async backend lives on AsyncBridgeMiddleware.
     """
 
     fn: Callable[..., Any]
@@ -118,10 +112,6 @@ class ExecutionPlan:
     marks: tuple[MarkInfo, ...]
     no_message_lines: tuple[int, ...]
     is_async: bool
-    default_timeout: int | None
-    backend: AsyncBackend | None
-    shared_session: AsyncSession | None
-    arrange_session: AsyncSession | None
 
 
 class Middleware(Protocol):
@@ -329,35 +319,40 @@ class AsyncBridgeMiddleware:
         return _base
 
 
-class MiddlewareBuilder:
-    """Legacy adapter for the middleware pipeline.
+@dataclass(slots=True)
+class _MiddlewarePipeline:
+    """Pipeline assembler for the executor middleware chain.
 
-    The default pipeline is::
+    Three internal zones — `_pre_guard`, `_post_guard`, `_pre_session` — are
+    reserved for a future plugin API. Empty today; adding plugin support later
+    is a ~30-line addition, no rework required.
 
-        AsyncDepGuardMiddleware -> TimeoutMiddleware -> <session middleware>
-
-    Task 3 replaces this call site with executor-side construction using
-    ``SessionStrategy`` / ``resolve_strategy`` directly.
+    Not ``frozen=True`` per ADR-0005: the zone lists are mutated as plugins
+    register into their zones during pipeline configuration. Private and
+    single-caller (only the executor constructs it), so the mutability is
+    contained.
     """
 
-    def build(
-        self,
-        plan: ExecutionPlan,
-        base: Callable[[], TestResult],
-        default_timeout: int | None,
-    ) -> Callable[[], TestResult]:
-        """Legacy adapter — Task 3 replaces this with executor-side construction."""
-        backend = plan.backend or AsyncioBackend()
-        session_mw: Middleware
-        if plan.shared_session is not None:
-            session_mw = _SessionRunMiddleware(session=plan.shared_session)
-        elif plan.arrange_session is not None:
-            session_mw = _SessionRunMiddleware(session=plan.arrange_session)
-        else:
-            session_mw = AsyncBridgeMiddleware(backend=backend)
-        instances: list[Middleware] = [
-            AsyncDepGuardMiddleware(),
-            TimeoutMiddleware(timeout=parse_timeout(default_timeout)),
-            session_mw,
-        ]
-        return build_pipeline(instances, plan, base)
+    timeout: Timeout
+    _pre_guard: list[Middleware] = field(default_factory=list)
+    _post_guard: list[Middleware] = field(default_factory=list)
+    _pre_session: list[Middleware] = field(default_factory=list)
+
+    def build_for(
+        self, plan: ExecutionPlan, strategy: SessionStrategy
+    ) -> list[Middleware]:
+        mws: list[Middleware] = []
+        mws.extend(self._pre_guard)
+        mws.append(AsyncDepGuardMiddleware())
+        mws.extend(self._post_guard)
+        mws.append(TimeoutMiddleware(timeout=self.timeout))
+        mws.extend(self._pre_session)
+        if plan.is_async:
+            match strategy:
+                case Shared(session=s) | Arrange(session=s):
+                    mws.append(_SessionRunMiddleware(session=s))
+                case Fresh(backend=b):
+                    mws.append(AsyncBridgeMiddleware(backend=b))
+                case _:
+                    assert_never(strategy)
+        return mws

@@ -29,6 +29,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
@@ -70,8 +71,10 @@ from oxitest._bridge._metadata import (
 )
 from oxitest._bridge._middleware import (
     ExecutionPlan,
-    MiddlewareBuilder,
     _compose,
+    _MiddlewarePipeline,
+    build_pipeline,
+    resolve_strategy,
 )
 from oxitest._bridge._runners import (
     NO_DEBUG,
@@ -84,6 +87,7 @@ from oxitest._bridge._runners import (
     run_base as _run_base,
 )
 from oxitest._bridge._test_meta import TestMeta
+from oxitest._bridge._timeout import parse_timeout
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
 from oxitest._bridge.result import TestResult, _error_result
 
@@ -146,6 +150,19 @@ class _MarkResult:
 
     marks: tuple[MarkInfo, ...]
     wrappers: tuple[MarkWrapper, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _ChainContext:
+    """Runtime resources needed to wire the middleware chain.
+
+    Bundles session, arrange-session, and timeout so ``_build_execution_chain``
+    stays within the five-argument limit (PLR0913).
+    """
+
+    default_timeout: int | None
+    session: _SessionProtocol | None
+    arrange_session: AsyncSession | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,19 +240,13 @@ def _load_and_resolve(
 def _build_execution_plan(
     resolved: _ResolvedTest,
     mark_result: _MarkResult,
-    default_timeout: int | None,
-    session: _SessionProtocol | None,
-    arrange_session: AsyncSession | None,
 ) -> ExecutionPlan:
-    """Assemble the immutable ExecutionPlan from resolved test + async context."""
+    """Assemble the immutable ExecutionPlan from the resolved test."""
     _bare_map: dict[str, list[int]] = getattr(
         resolved.module, "_oxitest_bare_asserts", {}
     )
     _simple_fn_name = resolved.fn_name.rsplit("::", maxsplit=1)[-1]
     no_message_lines = tuple(_bare_map.get(_simple_fn_name, []))
-
-    _used_shared = getattr(session, "_used_shared_async", False)
-    _shared = getattr(session, "_shared_session", None) if _used_shared else None
 
     return ExecutionPlan(
         fn=resolved.fn,
@@ -244,10 +255,6 @@ def _build_execution_plan(
         marks=mark_result.marks,
         no_message_lines=no_message_lines,
         is_async=inspect.iscoroutinefunction(resolved.fn),
-        default_timeout=default_timeout,
-        backend=getattr(session, "async_backend", None),
-        shared_session=_shared,
-        arrange_session=arrange_session,
     )
 
 
@@ -255,6 +262,7 @@ def _build_execution_chain(
     resolved: _ResolvedTest,
     plan: ExecutionPlan,
     mark_result: _MarkResult,
+    ctx: _ChainContext,
     debug: DebugContext = NO_DEBUG,
 ) -> Callable[[], TestResult]:
     """Build the composed execution callable via middleware pipeline."""
@@ -267,12 +275,21 @@ def _build_execution_chain(
             debug=debug,
         )
 
-    execute = MiddlewareBuilder().build(plan, _base, plan.default_timeout)
-
-    # Apply mark wrappers (from evaluate_marks) around the pipeline result
+    used_shared = getattr(ctx.session, "_used_shared_async", False)
+    shared = getattr(ctx.session, "_shared_session", None) if used_shared else None
+    backend = getattr(ctx.session, "async_backend", None) or AsyncioBackend()
+    strategy = resolve_strategy(
+        used_shared=used_shared,
+        shared=shared,
+        arrange=ctx.arrange_session,
+        default_backend=backend,
+    )
+    timeout = parse_timeout(ctx.default_timeout)
+    pipeline = _MiddlewarePipeline(timeout=timeout)
+    middlewares = pipeline.build_for(plan, strategy)
+    execute = build_pipeline(middlewares, plan, _base)
     for wrapper in reversed(mark_result.wrappers):
         execute = _compose(wrapper, execute)
-
     return execute
 
 
@@ -554,14 +571,15 @@ def run_test(
             return arrange_result.error
 
         mark_result = _MarkResult(marks=tuple(marks), wrappers=tuple(wrappers))
-        plan = _build_execution_plan(
-            resolved,
-            mark_result,
-            default_timeout,
-            effective_session,
-            arrange_result.session,
+        plan = _build_execution_plan(resolved, mark_result)
+        chain_ctx = _ChainContext(
+            default_timeout=default_timeout,
+            session=effective_session,
+            arrange_session=arrange_result.session,
         )
-        execute = _build_execution_chain(resolved, plan, mark_result, debug=debug)
+        execute = _build_execution_chain(
+            resolved, plan, mark_result, chain_ctx, debug=debug
+        )
         result = execute()
         _active_ctx = _test_run_context.get()
         if _active_ctx.result_cell:

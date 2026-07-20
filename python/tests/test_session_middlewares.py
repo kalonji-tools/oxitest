@@ -40,10 +40,6 @@ def _make_plan(*, is_async: bool, fn: Callable[..., Any]) -> ExecutionPlan:
         marks=(),
         no_message_lines=(),
         is_async=is_async,
-        default_timeout=None,
-        backend=None,
-        shared_session=None,
-        arrange_session=None,
     )
 
 

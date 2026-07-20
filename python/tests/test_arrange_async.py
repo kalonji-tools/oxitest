@@ -574,11 +574,14 @@ def test_async_test_without_arrange_uses_fresh_session_fallback(
 ) -> None:
     """Async test with no ``@arrange`` still runs via the fresh-session fallback.
 
-    The middleware's ``_base`` has three branches: shared_session (longest-
-    lived), arrange_session (per-test), and — when neither is present —
-    a fresh ``acquire_session_guarded(backend)`` for just this test. When
-    an async test does not use ``@arrange``, ``plan.arrange_session`` is
-    ``None`` and the fallback path must still produce a working session.
+    ``resolve_strategy()`` produces one of three ``SessionStrategy`` variants —
+    ``Shared`` (longest-lived), ``Arrange`` (per-test), or ``Fresh`` (fallback).
+    ``_MiddlewarePipeline.build_for()`` dispatches to the matching session
+    middleware (``SharedSessionMiddleware`` / ``ArrangeSessionMiddleware`` /
+    ``AsyncBridgeMiddleware``). When an async test does not use ``@arrange``,
+    no arrange session is acquired and the strategy falls through to
+    ``Fresh(default_backend)``, routing the body through
+    ``AsyncBridgeMiddleware`` which acquires a fresh session for the test.
     """
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
@@ -606,14 +609,14 @@ def test_async_test_without_arrange_uses_fresh_session_fallback(
 
 
 def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
-    """When both are present, ``shared_session`` wins for the body loop.
+    """When both are present, the shared session wins for the body loop.
 
-    Pins the middleware's documented precedence in ``_middleware.py::
-    AsyncBridgeMiddleware.apply``: if both ``plan.shared_session`` and
-    ``plan.arrange_session`` are populated, the body runs on the shared
-    session's loop. Rationale: shared fixtures may yield loop-bound
-    resources on that session; running the body elsewhere would break
-    them.
+    Pins the documented precedence in ``_middleware.py::resolve_strategy``:
+    if both a shared session (``used_shared=True``) and an arrange session
+    are candidates, ``resolve_strategy()`` returns ``Shared`` and the body
+    runs on the shared session's loop. Rationale: shared fixtures may yield
+    loop-bound resources on that session; running the body elsewhere would
+    break them.
 
     Known limitation (pre-existing before #1545): when both are present,
     an @arrange fixture that yields a loop-bound resource on the arrange
