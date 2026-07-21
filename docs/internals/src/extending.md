@@ -375,7 +375,7 @@ When loading plugins, `load_plugins()` checks each plugin's `plugin_settings.pro
 protocols = ["fixture_provider"]
 ```
 
-If the declared protocols are all in `LAZY_PROTOCOLS`, the plugin gets a `PluginEntry.deferred()` entry. Its module is not imported until `ensure_loaded()` is called.
+If the declared protocols are all in `LAZY_PROTOCOLS`, the plugin gets a `DeferredPluginEntry` (from `oxitest._bridge._plugin_entry`). Its module is not imported until `activate_entry()` promotes it to an `ActivatedPluginEntry`.
 
 ### Step-by-step: adding a new protocol
 
