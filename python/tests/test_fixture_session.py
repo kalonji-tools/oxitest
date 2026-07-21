@@ -20,7 +20,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
 from oxitest._bridge.plugin_loader import (
-    PluginEntry,
+    ActivatedPluginEntry,
     PluginRegistry,
     _PluginRegistryBuilder,
 )
@@ -217,7 +217,7 @@ def test_session_plugin_without_scope_autouse() -> None:
 
     providers: Any = (MinimalProvider(),)
     plugin = Plugin(fixture_providers=providers)
-    entry = PluginEntry(module_name="test_minimal", plugin=plugin)
+    entry = ActivatedPluginEntry(module_name="test_minimal", plugin=plugin)
     builder = _PluginRegistryBuilder()
     builder.add_entry(entry)
     registry = builder.build()
@@ -241,7 +241,7 @@ def _session_with(*providers: _FakeFixtureProvider) -> FixtureSession:
     """Build a FixtureSession from fake providers."""
     wrapped: Any = tuple(providers)
     plugin = Plugin(fixture_providers=wrapped)
-    entry = PluginEntry(module_name="fake_plugin", plugin=plugin)
+    entry = ActivatedPluginEntry(module_name="fake_plugin", plugin=plugin)
     builder = _PluginRegistryBuilder()
     builder.add_entry(entry)
     return FixtureSession([], builder.build())

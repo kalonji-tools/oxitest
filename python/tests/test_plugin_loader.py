@@ -14,12 +14,14 @@ from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._runners import DebugMode
 from oxitest._bridge.executor import _resolve_debugger_backend
 from oxitest._bridge.plugin_loader import (
-    PluginEntry,
+    ActivatedPluginEntry,
+    DeferredPluginEntry,
     PluginLoadError,
     PluginRegistry,
     _PluginRegistryBuilder,
     activate_deferred_plugins,
     load_plugins,
+    needs_eager_import,
 )
 from oxitest.plugin import Plugin
 
@@ -293,7 +295,7 @@ def test_null_debugger_post_mortem_raises() -> None:
 def test_registry_debugger_defaults_to_null_singleton() -> None:
     """PluginRegistry.debugger_backend is _NULL_DEBUGGER when no plugin provides one."""
     builder = _PluginRegistryBuilder()
-    builder.add_entry(PluginEntry(module_name="no_debugger", plugin=Plugin()))
+    builder.add_entry(ActivatedPluginEntry(module_name="no_debugger", plugin=Plugin()))
     reg = builder.build()
     assert reg.debugger_backend is _NULL_DEBUGGER, (
         f"expected _NULL_DEBUGGER, got {reg.debugger_backend!r}"
@@ -303,7 +305,7 @@ def test_registry_debugger_defaults_to_null_singleton() -> None:
 def test_registry_coverage_defaults_to_null_singleton() -> None:
     """PluginRegistry.coverage_provider is _NULL_COVERAGE with no coverage plugin."""
     builder = _PluginRegistryBuilder()
-    builder.add_entry(PluginEntry(module_name="no_coverage", plugin=Plugin()))
+    builder.add_entry(ActivatedPluginEntry(module_name="no_coverage", plugin=Plugin()))
     reg = builder.build()
     assert reg.coverage_provider is _NULL_COVERAGE, (
         f"expected _NULL_COVERAGE, got {reg.coverage_provider!r}"
@@ -314,13 +316,13 @@ def test_registry_builder_still_rejects_two_real_debuggers() -> None:
     """The at-most-one debugger invariant survives the null-object refactor."""
     builder = _PluginRegistryBuilder()
     builder.add_entry(
-        PluginEntry(
+        ActivatedPluginEntry(
             module_name="a",
             plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
         )
     )
     builder.add_entry(
-        PluginEntry(
+        ActivatedPluginEntry(
             module_name="b",
             plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
         )
@@ -361,4 +363,44 @@ def test_resolve_debugger_backend_returns_plugin_backend_when_registered() -> No
     result = _resolve_debugger_backend(session, DebugMode.ALWAYS)
     assert result is plugin_debugger, (
         f"expected the plugin-registered debugger, got {result!r}"
+    )
+
+
+def test_deferred_plugin_entry_construction() -> None:
+    """DeferredPluginEntry holds module name + declared protocols (empty tuple ok)."""
+    entry = DeferredPluginEntry(
+        module_name="pkg.x", declared_protocols=("log_backend",)
+    )
+    assert entry.module_name == "pkg.x", "module_name must be preserved verbatim"
+    assert entry.declared_protocols == ("log_backend",), (
+        "declared_protocols must be a tuple, not a list"
+    )
+
+    empty = DeferredPluginEntry(module_name="pkg.y")
+    assert empty.declared_protocols == (), (
+        "declared_protocols defaults to empty tuple (covers CLI-ext deferred case)"
+    )
+
+
+def test_activated_plugin_entry_construction() -> None:
+    """ActivatedPluginEntry holds a real Plugin instance."""
+    plugin = Plugin()
+    entry = ActivatedPluginEntry(module_name="pkg.y", plugin=plugin)
+    assert entry.module_name == "pkg.y", "module_name must be preserved verbatim"
+    assert entry.plugin is plugin, "plugin instance must be preserved by identity"
+    assert entry.declared_protocols == (), (
+        "declared_protocols defaults to empty tuple on the activated variant too"
+    )
+
+
+def test_needs_eager_import_module_fn() -> None:
+    """needs_eager_import() replaces the removed PluginEntry static method."""
+    assert needs_eager_import(()), (
+        "empty declared_protocols must require eager import (no protocol declaration)"
+    )
+    assert needs_eager_import(("collector",)), (
+        "collector is an EAGER_PROTOCOL — must require eager import"
+    )
+    assert not needs_eager_import(("log_backend",)), (
+        "log_backend is a LAZY_PROTOCOL — deferred import allowed"
     )

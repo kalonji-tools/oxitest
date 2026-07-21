@@ -6,9 +6,17 @@ plugin module paths and their per-plugin config dicts.
 
 from __future__ import annotations
 
-__all__ = ["PluginRegistry", "activate_deferred_plugins", "load_plugins"]
+__all__ = [
+    "ActivatedPluginEntry",
+    "DeferredPluginEntry",
+    "PluginEntry",
+    "PluginRegistry",
+    "activate_deferred_plugins",
+    "activate_entry",
+    "load_plugins",
+    "needs_eager_import",
+]
 
-import dataclasses
 import importlib
 import itertools
 import json
@@ -84,73 +92,79 @@ def _coerce_str_list(raw: object) -> list[str]:
 
 
 @dataclass(frozen=True, slots=True)
-class PluginEntry:
-    """A loaded plugin with its metadata."""
+class DeferredPluginEntry:
+    """A plugin declared in config but not yet imported.
+
+    Two paths land here: (1) plugins declaring only lazy protocols, deferred
+    until first use; (2) plugins with a CLI extension, awaiting typed-config
+    activation from ``activate_deferred_plugins``.
+    """
 
     module_name: str
-    plugin: Plugin | None = None
-    declared_protocols: list[str] | None = None
+    declared_protocols: tuple[str, ...] = ()
 
-    @property
-    def is_loaded(self) -> bool:
-        """A plugin is loaded when its Plugin instance is available."""
-        return self.plugin is not None
 
-    @classmethod
-    def deferred(cls, module_name: str, declared_protocols: list[str]) -> PluginEntry:
-        """Create an entry that is not yet imported."""
-        return cls(
-            module_name=module_name,
-            declared_protocols=declared_protocols,
+@dataclass(frozen=True, slots=True)
+class ActivatedPluginEntry:
+    """A loaded plugin whose ``Plugin`` instance is available."""
+
+    module_name: str
+    plugin: Plugin
+    declared_protocols: tuple[str, ...] = ()
+
+
+PluginEntry = DeferredPluginEntry | ActivatedPluginEntry
+
+
+def needs_eager_import(declared_protocols: tuple[str, ...]) -> bool:
+    """Return ``True`` if this plugin must be imported at session start."""
+    if not declared_protocols:
+        return True
+    return bool(set(declared_protocols) & EAGER_PROTOCOLS)
+
+
+def activate_entry(entry: DeferredPluginEntry) -> ActivatedPluginEntry:
+    """Import and initialise a deferred entry (no CLI-ext config path)."""
+    try:
+        module = importlib.import_module(entry.module_name)
+    except ImportError as e:
+        msg = f'plugin "{entry.module_name}" not found. Is it installed?\n  {e}'
+        raise PluginLoadError(msg) from e
+
+    entry_fn = getattr(module, "oxitest_plugin", None)
+    if entry_fn is None:
+        msg = f'plugin "{entry.module_name}" has no oxitest_plugin() function'
+        raise PluginLoadError(msg)
+    if not callable(entry_fn):
+        msg = f'plugin "{entry.module_name}" oxitest_plugin is not callable'
+        raise PluginLoadError(msg)
+
+    try:
+        result = entry_fn()
+    except Exception as e:
+        msg = f'plugin "{entry.module_name}" oxitest_plugin() raised: {e}'
+        raise PluginLoadError(msg) from e
+
+    if not isinstance(result, Plugin):
+        msg = (
+            f"oxitest_plugin() in {entry.module_name!r} must return"
+            f" oxitest.Plugin, got {type(result).__name__}"
         )
-
-    @staticmethod
-    def needs_eager_import(declared_protocols: list[str] | None) -> bool:
-        """Return True if this plugin must be imported at session start."""
-        if not declared_protocols:
-            return True
-        return bool(set(declared_protocols) & EAGER_PROTOCOLS)
-
-    def ensure_loaded(self) -> tuple[PluginEntry, Plugin]:
-        """Import and initialise the plugin, returning (updated_entry, plugin)."""
-        if self.plugin is not None:
-            return self, self.plugin
-
-        try:
-            module = importlib.import_module(self.module_name)
-        except ImportError as e:
-            msg = f'plugin "{self.module_name}" not found. Is it installed?\n  {e}'
-            raise PluginLoadError(msg) from e
-
-        entry_fn = getattr(module, "oxitest_plugin", None)
-        if entry_fn is None:
-            msg = f'plugin "{self.module_name}" has no oxitest_plugin() function'
-            raise PluginLoadError(msg)
-        if not callable(entry_fn):
-            msg = f'plugin "{self.module_name}" oxitest_plugin is not callable'
-            raise PluginLoadError(msg)
-
-        try:
-            result = entry_fn()
-        except Exception as e:
-            msg = f'plugin "{self.module_name}" oxitest_plugin() raised: {e}'
-            raise PluginLoadError(msg) from e
-
-        if not isinstance(result, Plugin):
-            msg = (
-                f"oxitest_plugin() in {self.module_name!r} must return"
-                f" oxitest.Plugin, got {type(result).__name__}"
-            )
-            raise PluginLoadError(msg)
-        new_entry = dataclasses.replace(self, plugin=result)
-        return new_entry, result
+        raise PluginLoadError(msg)
+    return ActivatedPluginEntry(
+        module_name=entry.module_name,
+        plugin=result,
+        declared_protocols=entry.declared_protocols,
+    )
 
 
 def _flatten_protocol(entries: Sequence[PluginEntry], attr: str) -> tuple[Any, ...]:
-    """Flatten a list-valued protocol attribute across all loaded plugins."""
+    """Flatten a list-valued protocol attribute across all activated plugins."""
     return tuple(
         itertools.chain.from_iterable(
-            getattr(e.plugin, attr) for e in entries if e.plugin is not None
+            getattr(e.plugin, attr)
+            for e in entries
+            if isinstance(e, ActivatedPluginEntry)
         )
     )
 
@@ -167,7 +181,7 @@ class PluginRegistry:
     Valid by construction: the builder validates before returning.
     """
 
-    entries: tuple[PluginEntry, ...] = ()
+    entries: tuple[DeferredPluginEntry | ActivatedPluginEntry, ...] = ()
     cli_extensions: MappingProxyType[
         str, tuple[CliExtension, list[FieldDescriptor]]
     ] = field(default_factory=lambda: MappingProxyType({}))
@@ -196,17 +210,17 @@ class _PluginRegistryBuilder:
 
     def __init__(
         self,
-        entries: Sequence[PluginEntry] = (),
+        entries: Sequence[DeferredPluginEntry | ActivatedPluginEntry] = (),
         cli_extensions: (
             dict[str, tuple[CliExtension, list[FieldDescriptor]]] | None
         ) = None,
     ) -> None:
-        self._entries: list[PluginEntry] = list(entries)
+        self._entries: list[DeferredPluginEntry | ActivatedPluginEntry] = list(entries)
         self._cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = (
             dict(cli_extensions) if cli_extensions is not None else {}
         )
 
-    def add_entry(self, entry: PluginEntry) -> None:
+    def add_entry(self, entry: DeferredPluginEntry | ActivatedPluginEntry) -> None:
         """Append a plugin entry."""
         self._entries.append(entry)
 
@@ -219,7 +233,9 @@ class _PluginRegistryBuilder:
         """Register a CLI extension for a plugin module."""
         self._cli_extensions[module_name] = (ext, descriptors)
 
-    def replace_entry(self, index: int, new_entry: PluginEntry) -> None:
+    def replace_entry(
+        self, index: int, new_entry: DeferredPluginEntry | ActivatedPluginEntry
+    ) -> None:
         """Replace an entry at the given index."""
         self._entries[index] = new_entry
 
@@ -235,18 +251,17 @@ class _PluginRegistryBuilder:
         collectors = _flatten_protocol(self._entries, "collectors")
         reporters = _flatten_protocol(self._entries, "reporters")
 
-        # Extract at-most-one singletons (compound guard: entry.plugin is not None
-        # remains for #1565 / ADR-0007 Rule 4 — the deferred-activation refactor)
+        # Extract at-most-one singletons
         debugger_entries = [
             entry
             for entry in self._entries
-            if entry.plugin is not None
+            if isinstance(entry, ActivatedPluginEntry)
             and entry.plugin.debugger_backend is not _NULL_DEBUGGER
         ]
         coverage_entries = [
             entry
             for entry in self._entries
-            if entry.plugin is not None
+            if isinstance(entry, ActivatedPluginEntry)
             and entry.plugin.coverage_provider is not _NULL_COVERAGE
         ]
 
@@ -260,15 +275,11 @@ class _PluginRegistryBuilder:
 
         debugger_backend: DebuggerBackend = _NULL_DEBUGGER
         if debugger_entries:
-            plugin = debugger_entries[0].plugin
-            if plugin is not None:
-                debugger_backend = plugin.debugger_backend
+            debugger_backend = debugger_entries[0].plugin.debugger_backend
 
         coverage_provider: CoverageProvider = _NULL_COVERAGE
         if coverage_entries:
-            plugin = coverage_entries[0].plugin
-            if plugin is not None:
-                coverage_provider = plugin.coverage_provider
+            coverage_provider = coverage_entries[0].plugin.coverage_provider
 
         return PluginRegistry(
             entries=entries,
@@ -325,12 +336,15 @@ def _load_single_plugin(
     # Check if this plugin declares only lazy protocols and can be deferred.
     mod_settings = plugin_configs.get(module_name, {})
     _raw_protocols = mod_settings.get("protocols")
-    declared_protocols: list[str] | None = (
-        _coerce_str_list(_raw_protocols) if _raw_protocols is not None else None
+    declared_protocols: tuple[str, ...] = (
+        tuple(_coerce_str_list(_raw_protocols)) if _raw_protocols is not None else ()
     )
 
-    if declared_protocols and not PluginEntry.needs_eager_import(declared_protocols):
-        entry = PluginEntry.deferred(module_name, list(declared_protocols))
+    if declared_protocols and not needs_eager_import(declared_protocols):
+        entry = DeferredPluginEntry(
+            module_name=module_name,
+            declared_protocols=declared_protocols,
+        )
         builder.add_entry(entry)
         return
 
@@ -373,7 +387,7 @@ def _load_single_plugin(
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
         builder.add_cli_extension(module_name, overridden_ext, descriptors)
         # Phase 1 complete — defer activation to activate_deferred_plugins()
-        builder.add_entry(PluginEntry(module_name=module_name))
+        builder.add_entry(DeferredPluginEntry(module_name=module_name))
         return
 
     # Call the entry point with config
@@ -392,7 +406,7 @@ def _load_single_plugin(
         )
         raise PluginLoadError(msg)
 
-    builder.add_entry(PluginEntry(module_name=module_name, plugin=result))
+    builder.add_entry(ActivatedPluginEntry(module_name=module_name, plugin=result))
 
 
 def load_plugins(
@@ -460,7 +474,7 @@ def activate_deferred_plugins(
     )
 
     for i, entry in enumerate(registry.entries):
-        if entry.is_loaded:
+        if isinstance(entry, ActivatedPluginEntry):
             continue
 
         # Activate CLI-extension plugins with typed config
@@ -472,10 +486,16 @@ def activate_deferred_plugins(
                 pyproject_values=pyproject_values,
                 cli_values=cli_values.get(entry.module_name, {}),
             )
-            builder.replace_entry(i, dataclasses.replace(entry, plugin=plugin))
+            builder.replace_entry(
+                i,
+                ActivatedPluginEntry(
+                    module_name=entry.module_name,
+                    plugin=plugin,
+                    declared_protocols=entry.declared_protocols,
+                ),
+            )
         else:
             # Activate remaining deferred plugins (e.g., fixture_provider)
-            loaded, _ = entry.ensure_loaded()
-            builder.replace_entry(i, loaded)
+            builder.replace_entry(i, activate_entry(entry))
 
     return builder.build()

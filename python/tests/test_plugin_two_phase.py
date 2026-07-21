@@ -13,6 +13,8 @@ from oxitest._bridge._plugin_config import (
     CliExtension,
 )
 from oxitest._bridge.plugin_loader import (
+    ActivatedPluginEntry,
+    DeferredPluginEntry,
     _activate_plugin,
     activate_deferred_plugins,
     load_plugins,
@@ -109,8 +111,8 @@ def test_activate_deferred_returns_new_registry(ctx: TestContext) -> None:
 
     old_registry = load_plugins(["fake_ext_plugin"], {})
     old_entry = old_registry.entries[0]
-    assert not old_entry.is_loaded, (
-        "deferred plugin should not be loaded before activation"
+    assert isinstance(old_entry, DeferredPluginEntry), (
+        "deferred plugin should be a DeferredPluginEntry before activation"
     )
 
     new_registry = activate_deferred_plugins(old_registry, "{}", "{}")
@@ -118,11 +120,11 @@ def test_activate_deferred_returns_new_registry(ctx: TestContext) -> None:
     assert new_registry is not old_registry, (
         "activate_deferred_plugins must return a new registry, not mutate in place"
     )
-    assert not old_registry.entries[0].is_loaded, (
-        "original registry's entry must remain unloaded after activation"
+    assert isinstance(old_registry.entries[0], DeferredPluginEntry), (
+        "original registry's entry must remain a DeferredPluginEntry after activation"
     )
-    assert new_registry.entries[0].is_loaded, (
-        "new registry's entry should be loaded after activation"
+    assert isinstance(new_registry.entries[0], ActivatedPluginEntry), (
+        "new registry's entry should be an ActivatedPluginEntry after activation"
     )
 
 

@@ -191,10 +191,13 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
         ConflictingBackendError: if multiple plugins register the same name.
 
     """
+    # Local import: plugin_loader → oxitest.plugin → _async_backend would cycle.
+    from oxitest._bridge.plugin_loader import ActivatedPluginEntry  # noqa: PLC0415
+
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)
         for entry in registry.entries
-        if entry.plugin is not None
+        if isinstance(entry, ActivatedPluginEntry)
         and entry.plugin.async_backend is not _NULL_ASYNC_BACKEND
     ]
 

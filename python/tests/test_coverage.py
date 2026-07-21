@@ -13,7 +13,7 @@ import oxitest._bridge.worker as worker_mod
 from oxitest import CovReportFormat
 from oxitest._bridge._coverage import _NULL_COVERAGE, CoveragePyProvider
 from oxitest._bridge._errors import ConflictingCoverageError
-from oxitest._bridge.plugin_loader import PluginEntry, _PluginRegistryBuilder
+from oxitest._bridge.plugin_loader import ActivatedPluginEntry, _PluginRegistryBuilder
 from oxitest._bridge.worker import _maybe_start_coverage
 from oxitest.plugin import CoverageProvider, Plugin
 
@@ -229,10 +229,14 @@ def test_conflicting_coverage_providers_raises() -> None:
 
     builder = _PluginRegistryBuilder()
     builder.add_entry(
-        PluginEntry(module_name="plugin_a", plugin=Plugin(coverage_provider=provider_a))
+        ActivatedPluginEntry(
+            module_name="plugin_a", plugin=Plugin(coverage_provider=provider_a)
+        )
     )
     builder.add_entry(
-        PluginEntry(module_name="plugin_b", plugin=Plugin(coverage_provider=provider_b))
+        ActivatedPluginEntry(
+            module_name="plugin_b", plugin=Plugin(coverage_provider=provider_b)
+        )
     )
 
     with oxitest.raises(ConflictingCoverageError):
