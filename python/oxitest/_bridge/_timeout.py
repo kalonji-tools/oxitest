@@ -80,7 +80,6 @@ class _IdleTimer:
 @dataclass(frozen=True, slots=True)
 class _ActiveTimer:
     timer: threading.Timer
-    thread_id: int
 
 
 _WindowsTimerState = _IdleTimer | _ActiveTimer
@@ -128,7 +127,7 @@ class _WindowsTimeoutContext:
     def __enter__(self) -> None:
         thread_id = threading.get_ident()
         timer = threading.Timer(self._seconds, lambda: self._inject(thread_id))
-        self._state = _ActiveTimer(timer=timer, thread_id=thread_id)
+        self._state = _ActiveTimer(timer=timer)
         timer.start()
 
     def __exit__(self, *_: object) -> None:

@@ -41,6 +41,11 @@ from oxitest._bridge._plugin_config import (
     introspect_config,
     merge_config,
 )
+from oxitest._bridge._plugin_entry import (
+    ActivatedPluginEntry,
+    DeferredPluginEntry,
+    PluginEntry,
+)
 from oxitest.plugin import CoverageProvider, Plugin
 
 if TYPE_CHECKING:
@@ -89,31 +94,6 @@ def _coerce_str_list(raw: object) -> list[str]:
     if isinstance(raw, (list, tuple)):
         return [str(p) for p in raw]
     return []
-
-
-@dataclass(frozen=True, slots=True)
-class DeferredPluginEntry:
-    """A plugin declared in config but not yet imported.
-
-    Two paths land here: (1) plugins declaring only lazy protocols, deferred
-    until first use; (2) plugins with a CLI extension, awaiting typed-config
-    activation from ``activate_deferred_plugins``.
-    """
-
-    module_name: str
-    declared_protocols: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ActivatedPluginEntry:
-    """A loaded plugin whose ``Plugin`` instance is available."""
-
-    module_name: str
-    plugin: Plugin
-    declared_protocols: tuple[str, ...] = ()
-
-
-PluginEntry = DeferredPluginEntry | ActivatedPluginEntry
 
 
 def needs_eager_import(declared_protocols: tuple[str, ...]) -> bool:
@@ -181,7 +161,7 @@ class PluginRegistry:
     Valid by construction: the builder validates before returning.
     """
 
-    entries: tuple[DeferredPluginEntry | ActivatedPluginEntry, ...] = ()
+    entries: tuple[PluginEntry, ...] = ()
     cli_extensions: MappingProxyType[
         str, tuple[CliExtension, list[FieldDescriptor]]
     ] = field(default_factory=lambda: MappingProxyType({}))
@@ -210,17 +190,17 @@ class _PluginRegistryBuilder:
 
     def __init__(
         self,
-        entries: Sequence[DeferredPluginEntry | ActivatedPluginEntry] = (),
+        entries: Sequence[PluginEntry] = (),
         cli_extensions: (
             dict[str, tuple[CliExtension, list[FieldDescriptor]]] | None
         ) = None,
     ) -> None:
-        self._entries: list[DeferredPluginEntry | ActivatedPluginEntry] = list(entries)
+        self._entries: list[PluginEntry] = list(entries)
         self._cli_extensions: dict[str, tuple[CliExtension, list[FieldDescriptor]]] = (
             dict(cli_extensions) if cli_extensions is not None else {}
         )
 
-    def add_entry(self, entry: DeferredPluginEntry | ActivatedPluginEntry) -> None:
+    def add_entry(self, entry: PluginEntry) -> None:
         """Append a plugin entry."""
         self._entries.append(entry)
 
@@ -233,9 +213,7 @@ class _PluginRegistryBuilder:
         """Register a CLI extension for a plugin module."""
         self._cli_extensions[module_name] = (ext, descriptors)
 
-    def replace_entry(
-        self, index: int, new_entry: DeferredPluginEntry | ActivatedPluginEntry
-    ) -> None:
+    def replace_entry(self, index: int, new_entry: PluginEntry) -> None:
         """Replace an entry at the given index."""
         self._entries[index] = new_entry
 

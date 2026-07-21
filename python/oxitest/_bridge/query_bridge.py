@@ -13,6 +13,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureScope,
     PluginSource,
 )
+from oxitest._bridge._plugin_entry import ActivatedPluginEntry
 from oxitest._bridge.importer import collect_module
 from oxitest._oxitest import trace as _rust_trace
 
@@ -98,8 +99,6 @@ def helper_entries(registry: Any) -> list[dict[str, str]]:
 
 def plugin_entries(plugin_registry: Any) -> list[dict[str, str]]:
     """Return plugin info as list of dicts for Rust query engine."""
-    from oxitest._bridge.plugin_loader import ActivatedPluginEntry  # noqa: PLC0415
-
     entries = []
     for entry in plugin_registry.entries:
         protocols = (
