@@ -98,9 +98,15 @@ def helper_entries(registry: Any) -> list[dict[str, str]]:
 
 def plugin_entries(plugin_registry: Any) -> list[dict[str, str]]:
     """Return plugin info as list of dicts for Rust query engine."""
+    from oxitest._bridge.plugin_loader import ActivatedPluginEntry  # noqa: PLC0415
+
     entries = []
     for entry in plugin_registry.entries:
-        protocols = _protocols_for(entry.plugin)
+        protocols = (
+            _protocols_for(entry.plugin)
+            if isinstance(entry, ActivatedPluginEntry)
+            else ()
+        )
         entries.append(
             {
                 "name": entry.module_name,

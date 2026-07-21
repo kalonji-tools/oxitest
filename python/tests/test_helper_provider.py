@@ -7,7 +7,7 @@ from typing import Any
 
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperRegistry
-from oxitest._bridge.plugin_loader import PluginEntry, PluginRegistry
+from oxitest._bridge.plugin_loader import ActivatedPluginEntry, PluginRegistry
 from oxitest.plugin import HelperProvider, Plugin
 
 
@@ -60,7 +60,7 @@ def test_plugin_helpers_registered_in_session() -> None:
     """set_helper_registry populates a HelperRegistry with plugin helpers."""
     provider = ConformingProvider()
     plugin = Plugin(helper_providers=(provider,))
-    entry = PluginEntry(module_name="my_plugin", plugin=plugin)
+    entry = ActivatedPluginEntry(module_name="my_plugin", plugin=plugin)
     plugin_reg = PluginRegistry(entries=(entry,), helper_providers=(provider,))
 
     session = FixtureSession([], plugin_registry=plugin_reg)

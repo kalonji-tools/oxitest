@@ -14,7 +14,7 @@ from oxitest._bridge._coverage import _NULL_COVERAGE
 from oxitest._bridge._debugger import _NULL_DEBUGGER
 from oxitest._bridge._errors import BackendNotFoundError
 from oxitest._bridge.plugin_loader import (
-    PluginEntry,
+    ActivatedPluginEntry,
     _PluginRegistryBuilder,
 )
 from oxitest.plugin import Plugin
@@ -75,15 +75,18 @@ def test_registry_entries_contain_async_backend() -> None:
     fake = _FakeBackend()
     builder = _PluginRegistryBuilder()
     builder.add_entry(
-        PluginEntry(module_name="with_backend", plugin=Plugin(async_backend=fake))
+        ActivatedPluginEntry(
+            module_name="with_backend", plugin=Plugin(async_backend=fake)
+        )
     )
-    # plugin=Plugin() with null async_backend default — "loaded but no backend provided"
-    builder.add_entry(PluginEntry(module_name="no_backend", plugin=Plugin()))
+    # Plugin() with null async_backend default — "loaded but no backend provided"
+    builder.add_entry(ActivatedPluginEntry(module_name="no_backend", plugin=Plugin()))
     reg = builder.build()
     backends = [
         e.plugin.async_backend
         for e in reg.entries
-        if e.plugin is not None and e.plugin.async_backend is not _NULL_ASYNC_BACKEND
+        if isinstance(e, ActivatedPluginEntry)
+        and e.plugin.async_backend is not _NULL_ASYNC_BACKEND
     ]
     assert len(backends) == 1, f"expected 1 backend, got {len(backends)}"
     assert backends[0] is fake, f"expected fake backend, got {backends[0]!r}"
@@ -112,7 +115,7 @@ def test_null_async_backend_acquire_session_raises() -> None:
 def test_resolve_backend_null_name_is_never_matched() -> None:
     """A null-backend plugin must never match a 'null' config name query."""
     builder = _PluginRegistryBuilder()
-    builder.add_entry(PluginEntry(module_name="only_null", plugin=Plugin()))
+    builder.add_entry(ActivatedPluginEntry(module_name="only_null", plugin=Plugin()))
     reg = builder.build()
 
     with oxi.raises(BackendNotFoundError):
