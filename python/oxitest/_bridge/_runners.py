@@ -23,6 +23,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._builtins._capture import _CaptureBase
+from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend
 from oxitest._bridge._diagnostics import (
     check_warnings,
     dispatch_exception,
@@ -33,34 +34,43 @@ from oxitest._bridge.result import PassedResult, WarnedResult
 from oxitest._oxitest import trace as _rust_trace
 
 if TYPE_CHECKING:
-    from oxitest._bridge._debugger import DebuggerBackend
     from oxitest._bridge.result import TestResult
+
+
+class DebugMode(StrEnum):
+    """Debug mode passed from Rust via the bridge.
+
+    ``OFF`` is the default; reifies "no debug" as a sentinel value so
+    ``DebugContext.mode`` can be non-Optional (ADR-0007 Rule 4 option 1).
+
+    StrEnum values match the Rust ``DebugMode::as_str()`` output so
+    PyO3 string extraction works without custom glue.
+    """
+
+    OFF = "off"
+    POST_MORTEM = "post-mortem"
+    ALWAYS = "always"
 
 
 @dataclass(frozen=True, slots=True)
 class DebugContext:
     """Debug/trace and diagnostic display configuration."""
 
-    mode: str | None = None
+    mode: DebugMode = DebugMode.OFF
     node_id: str = ""
-    backend: DebuggerBackend | None = None
+    backend: DebuggerBackend = _NULL_DEBUGGER
     file: Any = None
     show_locals: bool = False
     show_internals: bool = False
 
+    def __post_init__(self) -> None:
+        # Rust bridge passes ``mode`` as a raw string; coerce so identity
+        # checks (`is DebugMode.ALWAYS`) hold instead of only equality.
+        if not isinstance(self.mode, DebugMode):
+            object.__setattr__(self, "mode", DebugMode(self.mode))
+
 
 NO_DEBUG = DebugContext()
-
-
-class DebugMode(StrEnum):
-    """Debug mode passed from Rust via the bridge.
-
-    StrEnum values match the Rust ``DebugMode::as_str()`` output so
-    PyO3 string extraction works without custom glue.
-    """
-
-    POST_MORTEM = "post-mortem"
-    ALWAYS = "always"
 
 
 def _suspend_capture(all_kwargs: dict[str, Any]) -> None:
@@ -162,17 +172,15 @@ def run_base(
     debug: DebugContext = NO_DEBUG,
 ) -> TestResult:
     """Run the test function and map exceptions to TestResult."""
-    if debug.mode == DebugMode.ALWAYS and debug.backend is not None:
+    if debug.mode is DebugMode.ALWAYS:
         _trace_before_test(all_kwargs, debug.node_id, debug.backend, file=debug.file)
     try:
         return _call_with_warnings(fn, all_kwargs, no_message_lines)
     except OxitestTimeoutError:
         raise  # propagate to timeout wrapper
     except BaseException as exc:
-        if (
-            debug.mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS)
-            and debug.backend is not None
-            and is_debuggable(exc)
+        if debug.mode in (DebugMode.POST_MORTEM, DebugMode.ALWAYS) and is_debuggable(
+            exc
         ):
             _debug_post_mortem(
                 all_kwargs, debug.node_id, exc, debug.backend, file=debug.file

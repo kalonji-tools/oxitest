@@ -21,8 +21,10 @@ from dataclasses import dataclass
 
 import oxitest as oxi
 from oxitest import helpers
+from oxitest._bridge._debugger import _NULL_DEBUGGER
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._runners import NO_DEBUG, DebugContext, DebugMode
 from oxitest._bridge.result import (
     PROTOCOL_VERSION,
     CollectedItem,
@@ -678,3 +680,31 @@ def test_fixture_session_end_module_does_not_raise() -> None:
     """end_module accepts a module path without raising."""
     session = FixtureSession(FixtureRegistry())
     session.end_module("mod.py")
+
+
+def test_debug_context_defaults_are_off_and_null() -> None:
+    """DebugContext defaults must reify 'no debug' as concrete values, not None.
+
+    Per ADR-0007 Rule 4 option 1: mode=DebugMode.OFF (sentinel enum value),
+    backend=_NULL_DEBUGGER (null-object from #1567).
+    """
+    ctx = DebugContext()
+    assert ctx.mode is DebugMode.OFF, (
+        "Default DebugContext.mode must be DebugMode.OFF sentinel — not None"
+    )
+    assert ctx.backend is _NULL_DEBUGGER, (
+        "Default DebugContext.backend must be _NULL_DEBUGGER null-object — not None"
+    )
+    assert ctx.node_id == "", "Default DebugContext.node_id must be empty string"
+    assert ctx.file is None, (
+        "Default DebugContext.file must be None — Rule 7a no-value default (stdout)"
+    )
+    assert not ctx.show_locals, "Default DebugContext.show_locals must be False"
+    assert not ctx.show_internals, "Default DebugContext.show_internals must be False"
+
+
+def test_no_debug_matches_default_debug_context() -> None:
+    """The module-level NO_DEBUG sentinel must equal a fresh DebugContext()."""
+    assert DebugContext() == NO_DEBUG, (
+        "NO_DEBUG must remain the canonical default DebugContext instance"
+    )
