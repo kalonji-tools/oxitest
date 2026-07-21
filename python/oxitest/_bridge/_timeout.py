@@ -13,6 +13,10 @@ __all__ = [
     "Timeout",
     "TimeoutOff",
     "TimeoutSet",
+    "_ActiveHandler",
+    "_ActiveTimer",
+    "_IdleHandler",
+    "_IdleTimer",
     "extract_timeout_seconds",
     "make_timeout_wrapper",
     "parse_timeout",
@@ -52,6 +56,36 @@ def parse_timeout(value: int | None) -> Timeout:
     return TimeoutSet(value)
 
 
+# ── State variants for context-manager lifecycles (ADR-0007 Rule 4) ───────────
+
+
+@dataclass(frozen=True, slots=True)
+class _IdleHandler:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _ActiveHandler:
+    old_handler: Any
+
+
+_UnixHandlerState = _IdleHandler | _ActiveHandler
+
+
+@dataclass(frozen=True, slots=True)
+class _IdleTimer:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _ActiveTimer:
+    timer: threading.Timer
+    thread_id: int
+
+
+_WindowsTimerState = _IdleTimer | _ActiveTimer
+
+
 class _UnixTimeoutContext:
     """Timeout context manager using SIGALRM (Unix/macOS only).
 
@@ -61,15 +95,18 @@ class _UnixTimeoutContext:
 
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
-        self._old_handler: Any = None
+        self._state: _UnixHandlerState = _IdleHandler()
 
     def __enter__(self) -> None:
-        self._old_handler = signal.signal(signal.SIGALRM, self._raise)
+        old = signal.signal(signal.SIGALRM, self._raise)
+        self._state = _ActiveHandler(old_handler=old)
         signal.alarm(self._seconds)
 
     def __exit__(self, *_: object) -> None:
         signal.alarm(0)
-        signal.signal(signal.SIGALRM, self._old_handler)
+        if isinstance(self._state, _ActiveHandler):
+            signal.signal(signal.SIGALRM, self._state.old_handler)
+            self._state = _IdleHandler()
 
     @staticmethod
     def _raise(_signum: int, _frame: object) -> None:
@@ -86,27 +123,24 @@ class _WindowsTimeoutContext:
 
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
-        self._thread_id: int = 0
-        self._timer: threading.Timer | None = None
+        self._state: _WindowsTimerState = _IdleTimer()
 
     def __enter__(self) -> None:
-        self._thread_id = threading.get_ident()
-        self._timer = threading.Timer(self._seconds, self._inject)
-        self._timer.start()
+        thread_id = threading.get_ident()
+        timer = threading.Timer(self._seconds, lambda: self._inject(thread_id))
+        self._state = _ActiveTimer(timer=timer, thread_id=thread_id)
+        timer.start()
 
     def __exit__(self, *_: object) -> None:
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
+        if isinstance(self._state, _ActiveTimer):
+            self._state.timer.cancel()
+            self._state = _IdleTimer()
 
-    def _inject(self) -> None:
+    def _inject(self, thread_id: int) -> None:
         result = ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(self._thread_id),
+            ctypes.c_ulong(thread_id),
             ctypes.py_object(OxitestTimeoutError),
         )
-        # result == 0: thread not found (timeout silently failed)
-        # result == 1: success
-        # result > 1: set on multiple threads (should not happen)
         if result == 0:
             emit_diagnostic(
                 DiagnosticSeverity.WARNING,
@@ -114,9 +148,8 @@ class _WindowsTimeoutContext:
                 "OxitestTimeoutError could not be injected: thread not found",
             )
         elif result > 1:
-            # Undo: we accidentally set the exception on multiple threads
             ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                ctypes.c_ulong(self._thread_id),
+                ctypes.c_ulong(thread_id),
                 None,
             )
 
