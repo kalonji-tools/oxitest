@@ -5,6 +5,12 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 from oxitest import TempDir, helpers
+from oxitest._bridge._timeout import (
+    _IdleHandler,
+    _IdleTimer,
+    _UnixTimeoutContext,
+    _WindowsTimeoutContext,
+)
 
 
 def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
@@ -138,4 +144,22 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
     )
     assert torn_down == [True], (
         f"async yield fixture teardown should run on timeout, got {torn_down!r}"
+    )
+
+
+def test_windows_timeout_state_starts_idle() -> None:
+    """Fresh _WindowsTimeoutContext must be in _IdleTimer before __enter__ fires."""
+    ctx = _WindowsTimeoutContext(seconds=1)
+    assert isinstance(ctx._state, _IdleTimer), (  # noqa: SLF001
+        "Fresh Windows timer must be in _IdleTimer state"
+        " — no timer scheduled until __enter__"
+    )
+
+
+def test_unix_timeout_state_starts_idle() -> None:
+    """Fresh _UnixTimeoutContext must be in _IdleHandler before __enter__ fires."""
+    ctx = _UnixTimeoutContext(seconds=1)
+    assert isinstance(ctx._state, _IdleHandler), (  # noqa: SLF001
+        "Fresh Unix context must be in _IdleHandler state"
+        " — no signal handler installed until __enter__"
     )

@@ -26,7 +26,12 @@ from oxitest._bridge._builtins import (
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import _FdCaptureFixture, _StdCaptureFixture
-from oxitest._bridge._builtins._logcapture import StdlibLogBackend, _LogCaptureFixture
+from oxitest._bridge._builtins._logcapture import (
+    StdlibLogBackend,
+    _Installed,
+    _LogCaptureFixture,
+    _Uninstalled,
+)
 from oxitest._bridge._builtins._patch import _PatcherFixture
 from oxitest._bridge._builtins._tempdir import _TempDirFactoryFixture, _TempDirFixture
 from oxitest._bridge._fixture_registry import FixtureRegistry
@@ -929,3 +934,28 @@ def test_logcapture_includes_plugin_backends(ctx: TestContext) -> None:
     assert not fake_backend.installed, (
         "Plugin log backend should be uninstalled after teardown"
     )
+
+
+def test_stdlib_log_backend_starts_uninstalled() -> None:
+    """Fresh StdlibLogBackend is _Uninstalled — no handler attached until install()."""
+    backend = StdlibLogBackend()
+    assert isinstance(backend._state, _Uninstalled), (  # noqa: SLF001
+        "Fresh StdlibLogBackend must be _Uninstalled"
+        " — no handler attached to root logger yet"
+    )
+
+
+def test_stdlib_log_backend_install_idempotent() -> None:
+    """Calling install() twice must be a no-op: state object identity is preserved."""
+    backend = StdlibLogBackend()
+    backend.install()
+    first_state = backend._state  # noqa: SLF001
+    backend.install()  # second install must be a no-op
+    assert backend._state is first_state, (  # noqa: SLF001
+        "Idempotent install must not replace the state object"
+        " — otherwise old_level is lost"
+    )
+    assert isinstance(backend._state, _Installed), (  # noqa: SLF001
+        "State must be _Installed after install(), holding the captured old_level"
+    )
+    backend.uninstall()

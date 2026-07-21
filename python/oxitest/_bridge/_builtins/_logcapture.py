@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-__all__ = ["LogBackend", "LogCapture", "StdlibLogBackend", "_LogCaptureFixture"]
+__all__ = [
+    "LogBackend",
+    "LogCapture",
+    "StdlibLogBackend",
+    "_Installed",
+    "_LogCaptureFixture",
+    "_Uninstalled",
+]
 
 import logging
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from oxitest._bridge._builtins._base import BuiltinFixture
@@ -49,6 +57,19 @@ class _CapturingHandler(logging.Handler):
         return tuple(self._records)
 
 
+@dataclass(frozen=True, slots=True)
+class _Uninstalled:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _Installed:
+    old_level: int
+
+
+_LogState = _Uninstalled | _Installed
+
+
 class StdlibLogBackend:
     """Captures records from Python's stdlib `logging` module.
 
@@ -60,22 +81,22 @@ class StdlibLogBackend:
         self._level = level
         self._handler = _CapturingHandler()
         self._handler.setLevel(level)
-        self._old_level: int | None = None
+        self._state: _LogState = _Uninstalled()
 
     def install(self) -> None:
-        if self._old_level is not None:
+        if isinstance(self._state, _Installed):
             return  # already installed
         root = logging.getLogger()
-        self._old_level = root.level
+        self._state = _Installed(old_level=root.level)
         root.setLevel(self._level)
         root.addHandler(self._handler)
 
     def uninstall(self) -> None:
         root = logging.getLogger()
         root.removeHandler(self._handler)
-        if self._old_level is not None:
-            root.setLevel(self._old_level)
-            self._old_level = None
+        if isinstance(self._state, _Installed):
+            root.setLevel(self._state.old_level)
+            self._state = _Uninstalled()
 
     @property
     def records(self) -> list[logging.LogRecord]:
