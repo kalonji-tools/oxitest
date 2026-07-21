@@ -17,6 +17,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._coverage import _NULL_COVERAGE
+from oxitest._bridge._debugger import (
+    _NULL_DEBUGGER,
+    DebuggerBackend,
+)
 from oxitest._bridge._errors import (
     ConflictingCoverageError,
     ConflictingDebuggerError,
@@ -28,10 +33,9 @@ from oxitest._bridge._plugin_config import (
     introspect_config,
     merge_config,
 )
-from oxitest.plugin import Plugin
+from oxitest.plugin import CoverageProvider, Plugin
 
 if TYPE_CHECKING:
-    from oxitest._bridge._debugger import DebuggerBackend
     from oxitest._bridge._plugin_config import FieldDescriptor
     from oxitest.plugin import (
         Collector,
@@ -176,9 +180,9 @@ class PluginRegistry:
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
 
-    # At-most-one (validated at build time)
-    debugger_backend: DebuggerBackend | None = None
-    coverage_provider: object | None = None
+    # At-most-one (validated at build time; null-object defaults per ADR-0007 Rule 6)
+    debugger_backend: DebuggerBackend = _NULL_DEBUGGER
+    coverage_provider: CoverageProvider = _NULL_COVERAGE
 
 
 # ── Builder ──────────────────────────────────────────────────────────────────
@@ -231,16 +235,19 @@ class _PluginRegistryBuilder:
         collectors = _flatten_protocol(self._entries, "collectors")
         reporters = _flatten_protocol(self._entries, "reporters")
 
-        # Extract at-most-one singletons
+        # Extract at-most-one singletons (compound guard: entry.plugin is not None
+        # remains for #1565 / ADR-0007 Rule 4 — the deferred-activation refactor)
         debugger_entries = [
             entry
             for entry in self._entries
-            if entry.plugin is not None and entry.plugin.debugger_backend is not None
+            if entry.plugin is not None
+            and entry.plugin.debugger_backend is not _NULL_DEBUGGER
         ]
         coverage_entries = [
             entry
             for entry in self._entries
-            if entry.plugin is not None and entry.plugin.coverage_provider is not None
+            if entry.plugin is not None
+            and entry.plugin.coverage_provider is not _NULL_COVERAGE
         ]
 
         # Validate uniqueness
@@ -251,13 +258,13 @@ class _PluginRegistryBuilder:
             providers = [e.module_name for e in coverage_entries]
             raise ConflictingCoverageError(providers)
 
-        debugger_backend: DebuggerBackend | None = None
+        debugger_backend: DebuggerBackend = _NULL_DEBUGGER
         if debugger_entries:
             plugin = debugger_entries[0].plugin
             if plugin is not None:
                 debugger_backend = plugin.debugger_backend
 
-        coverage_provider: object | None = None
+        coverage_provider: CoverageProvider = _NULL_COVERAGE
         if coverage_entries:
             plugin = coverage_entries[0].plugin
             if plugin is not None:
