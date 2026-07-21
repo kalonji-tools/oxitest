@@ -11,7 +11,7 @@ import oxitest
 import oxitest._bridge._coverage as _cov_mod
 import oxitest._bridge.worker as worker_mod
 from oxitest import CovReportFormat
-from oxitest._bridge._coverage import CoveragePyProvider
+from oxitest._bridge._coverage import _NULL_COVERAGE, CoveragePyProvider
 from oxitest._bridge._errors import ConflictingCoverageError
 from oxitest._bridge.plugin_loader import PluginEntry, _PluginRegistryBuilder
 from oxitest._bridge.worker import _maybe_start_coverage
@@ -237,3 +237,31 @@ def test_conflicting_coverage_providers_raises() -> None:
 
     with oxitest.raises(ConflictingCoverageError):
         builder.build()
+
+
+# ─── _NullCoverage / _NULL_COVERAGE tests ────────────────────────────────────
+
+
+def test_null_coverage_is_structural_provider() -> None:
+    """The null singleton must satisfy the CoverageProvider protocol at runtime."""
+    assert isinstance(_NULL_COVERAGE, CoverageProvider), (
+        "null-object must conform to CoverageProvider for discovery to work"
+    )
+
+
+def test_null_coverage_start_raises() -> None:
+    """Calling .start() on the null bypassed the discovery filter — must fail loudly."""
+    with oxitest.raises(AssertionError, match="discovery filter is broken"):
+        _NULL_COVERAGE.start()
+
+
+def test_null_coverage_stop_raises() -> None:
+    """Calling .stop() on the null bypassed the discovery filter — must fail loudly."""
+    with oxitest.raises(AssertionError, match="discovery filter is broken"):
+        _NULL_COVERAGE.stop()
+
+
+def test_null_coverage_report_raises() -> None:
+    """Calling .report() on the null bypassed the discovery filter — must fail."""
+    with oxitest.raises(AssertionError, match="discovery filter is broken"):
+        _NULL_COVERAGE.report(fmt=CovReportFormat.TERM)
