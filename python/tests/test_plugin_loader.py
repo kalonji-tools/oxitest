@@ -11,6 +11,7 @@ from oxitest._bridge._coverage import _NULL_COVERAGE
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._errors import ConflictingDebuggerError, OxitestError
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._runners import DebugMode
 from oxitest._bridge.executor import _resolve_debugger_backend
 from oxitest._bridge.plugin_loader import (
     PluginEntry,
@@ -328,11 +329,15 @@ def test_registry_builder_still_rejects_two_real_debuggers() -> None:
         builder.build()
 
 
-def test_resolve_debugger_backend_returns_none_when_debug_mode_is_none() -> None:
-    """When user did not request debugging, resolver returns None."""
+def test_resolve_debugger_backend_returns_null_when_debug_mode_is_off() -> None:
+    """When user did not request debugging, resolver returns _NULL_DEBUGGER.
+
+    Per ADR-0007 Rule 4 option 1: the null-object short-circuit avoids
+    allocating a _PdbBackend on the happy (no-debug) path.
+    """
     session = FixtureSession([])
-    assert _resolve_debugger_backend(session, None) is None, (
-        "debug_mode=None must short-circuit and return None"
+    assert _resolve_debugger_backend(session, DebugMode.OFF) is _NULL_DEBUGGER, (
+        "debug_mode=OFF must short-circuit and return the _NULL_DEBUGGER singleton"
     )
 
 
@@ -340,7 +345,7 @@ def test_resolve_debugger_backend_falls_back_to_pdb_with_null_registry() -> None
     """When registry holds _NULL_DEBUGGER, resolver returns a _PdbBackend fallback."""
     session = FixtureSession([])  # defaults to _NULL_DEBUGGER in its registry
 
-    result = _resolve_debugger_backend(session, "always")
+    result = _resolve_debugger_backend(session, DebugMode.ALWAYS)
     assert isinstance(result, _PdbBackend), (
         f"expected _PdbBackend fallback, got {type(result).__name__}"
     )
@@ -353,7 +358,7 @@ def test_resolve_debugger_backend_returns_plugin_backend_when_registered() -> No
         [], plugin_registry=PluginRegistry(debugger_backend=plugin_debugger)
     )
 
-    result = _resolve_debugger_backend(session, "always")
+    result = _resolve_debugger_backend(session, DebugMode.ALWAYS)
     assert result is plugin_debugger, (
         f"expected the plugin-registered debugger, got {result!r}"
     )

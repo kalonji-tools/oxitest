@@ -130,14 +130,16 @@ def _exec_unique_name(module_path: str) -> str:
 
 def _resolve_debugger_backend(
     session: _SessionProtocol,
-    debug_mode: str | None,
-) -> DebuggerBackend | None:
+    debug_mode: DebugMode,
+) -> DebuggerBackend:
     """Resolve the debugger backend from the plugin registry or fall back to pdb.
 
-    Returns None when debug_mode is None (no debugging requested).
+    Returns ``_NULL_DEBUGGER`` when ``debug_mode is DebugMode.OFF`` (no
+    debugging requested) so callers do not waste a ``_PdbBackend``
+    allocation on the happy path.
     """
-    if debug_mode is None:
-        return None
+    if debug_mode is DebugMode.OFF:
+        return _NULL_DEBUGGER
     backend = session.plugin_registry.debugger_backend
     if backend is _NULL_DEBUGGER:
         return _PdbBackend()
