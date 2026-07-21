@@ -6,10 +6,10 @@ implementation that wraps stdlib ``pdb``.
 
 from __future__ import annotations
 
-__all__ = ["DebuggerBackend", "_PdbBackend"]
+__all__ = ["_NULL_DEBUGGER", "DebuggerBackend", "_PdbBackend"]
 
 import pdb  # noqa: T100
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Never, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -53,3 +53,29 @@ class _PdbBackend:
 
     def post_mortem(self, tb: TracebackType) -> None:
         pdb.post_mortem(tb)
+
+
+class _NullDebugger:
+    """Null-object stand-in when no plugin provides a debugger backend.
+
+    Held on ``Plugin.debugger_backend`` and ``PluginRegistry.debugger_backend``
+    as the canonical "no debugger registered" value. Discovery filters this
+    out by identity; any actual method call is a bug and raises
+    ``AssertionError``.
+    """
+
+    def trace(self) -> Never:
+        msg = "null-object DebuggerBackend method called — discovery filter is broken"
+        raise AssertionError(msg)
+
+    def post_mortem(self, tb: TracebackType) -> Never:
+        # Reference tb in the message to satisfy ARG002 while keeping the
+        # protocol-required parameter name.
+        msg = (
+            f"null-object DebuggerBackend method called (tb type={type(tb).__name__})"
+            " — discovery filter is broken"
+        )
+        raise AssertionError(msg)
+
+
+_NULL_DEBUGGER = _NullDebugger()

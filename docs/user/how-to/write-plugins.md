@@ -175,7 +175,9 @@ that accompanies it (for example, a coverage plugin that also provides a
 The `Plugin` dataclass has nine fields — six tuple-based protocol fields and
 three singleton fields (`async_backend`, `debugger_backend`, and
 `coverage_provider`). Each tuple field allows a single plugin to provide
-multiple implementations of the same protocol.
+multiple implementations of the same protocol. The three singleton fields
+default to null-object instances — omit the field entirely if your plugin
+does not provide the backend; do not pass `None` explicitly.
 
 ```python
 @dataclass(frozen=True)
@@ -186,9 +188,9 @@ class Plugin:
     execution_wrappers: tuple[ExecutionWrapper, ...] = ()
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
-    async_backend: AsyncBackend | None = None
-    debugger_backend: DebuggerBackend | None = None
-    coverage_provider: CoverageProvider | None = None
+    async_backend: AsyncBackend = _NULL_ASYNC_BACKEND
+    debugger_backend: DebuggerBackend = _NULL_DEBUGGER
+    coverage_provider: CoverageProvider = _NULL_COVERAGE
 ```
 
 ### Reporter
