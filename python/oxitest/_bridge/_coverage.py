@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-__all__ = ["CovReportFormat", "CoveragePyProvider", "resolve_provider_standalone"]
+__all__ = [
+    "_NULL_COVERAGE",
+    "CovReportFormat",
+    "CoveragePyProvider",
+    "resolve_provider_standalone",
+]
 
 import os
 import types
 from enum import Enum
-from typing import Any
+from typing import Any, Never
 
 try:
     import coverage as _coverage
@@ -87,3 +92,33 @@ def resolve_provider_standalone() -> CoveragePyProvider:
     provides the default when no plugin overrides coverage.
     """
     return CoveragePyProvider()
+
+
+class _NullCoverage:
+    """Null-object stand-in when no plugin provides a coverage provider.
+
+    Held on ``Plugin.coverage_provider`` and ``PluginRegistry.coverage_provider``
+    as the canonical "no provider registered" value. Discovery filters this
+    out by identity; any actual method call is a bug and raises
+    ``AssertionError``.
+    """
+
+    def start(self) -> Never:
+        msg = "null-object CoverageProvider method called — discovery filter is broken"
+        raise AssertionError(msg)
+
+    def stop(self) -> Never:
+        msg = "null-object CoverageProvider method called — discovery filter is broken"
+        raise AssertionError(msg)
+
+    def report(self, *, fmt: CovReportFormat) -> Never:
+        # Embed fmt in the message to satisfy ARG002 while keeping the
+        # protocol-required kwarg name.
+        msg = (
+            f"null-object CoverageProvider method called (fmt={fmt})"
+            " — discovery filter is broken"
+        )
+        raise AssertionError(msg)
+
+
+_NULL_COVERAGE = _NullCoverage()

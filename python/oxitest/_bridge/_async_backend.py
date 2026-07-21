@@ -17,6 +17,7 @@ Session-scope asyncgen finalization runs on ``__exit__`` (previously incorrect:
 from __future__ import annotations
 
 __all__ = [
+    "_NULL_ASYNC_BACKEND",
     "AsyncBackend",
     "AsyncSession",
     "AsyncioBackend",
@@ -28,7 +29,7 @@ import asyncio
 import contextlib
 from collections.abc import Coroutine, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Any, Never, Protocol, Self, TypeVar, runtime_checkable
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
@@ -159,6 +160,30 @@ class AsyncioBackend:
             yield session
 
 
+class _NullAsyncBackend:
+    """Null-object stand-in when no plugin provides an async backend.
+
+    Held on ``Plugin.async_backend`` and ``PluginRegistry`` fields as the
+    canonical "no backend registered" value. Discovery in
+    :func:`resolve_backend` filters this out by identity (``is not
+    _NULL_ASYNC_BACKEND``); any actual method call is a bug in the caller's
+    filter and raises ``AssertionError``.
+    """
+
+    supports_nested_acquire: bool = False  # required: runtime_checkable Protocol
+
+    @property
+    def name(self) -> str:
+        return "null"
+
+    def acquire_session(self) -> Never:
+        msg = "null-object AsyncBackend method called — discovery filter is broken"
+        raise AssertionError(msg)
+
+
+_NULL_ASYNC_BACKEND = _NullAsyncBackend()
+
+
 def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
     """Resolve the active backend by config name.
 
@@ -170,7 +195,8 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)
         for entry in registry.entries
-        if entry.plugin is not None and entry.plugin.async_backend is not None
+        if entry.plugin is not None
+        and entry.plugin.async_backend is not _NULL_ASYNC_BACKEND
     ]
 
     if name == "asyncio":

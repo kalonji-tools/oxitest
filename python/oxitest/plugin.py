@@ -12,10 +12,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from oxitest._bridge._async_backend import _NULL_ASYNC_BACKEND, AsyncBackend
+from oxitest._bridge._coverage import _NULL_COVERAGE
+from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend
+
 if TYPE_CHECKING:
-    from oxitest._bridge._async_backend import AsyncBackend
     from oxitest._bridge._coverage import CovReportFormat
-    from oxitest._bridge._debugger import DebuggerBackend
     from oxitest._bridge.result import CollectedItem, TestResult
 
 
@@ -281,11 +283,11 @@ class Plugin:
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
 
-    # Async runtime backend (at most one across all plugins)
-    async_backend: AsyncBackend | None = None
+    # Async runtime backend (at most one across all plugins; null-object default)
+    async_backend: AsyncBackend = _NULL_ASYNC_BACKEND
 
-    # Debugger backend (at most one across all plugins)
-    debugger_backend: DebuggerBackend | None = None
+    # Debugger backend (at most one across all plugins; null-object default)
+    debugger_backend: DebuggerBackend = _NULL_DEBUGGER
 
-    # Coverage backend (at most one across all plugins)
-    coverage_provider: CoverageProvider | None = None
+    # Coverage backend (at most one across all plugins; null-object default)
+    coverage_provider: CoverageProvider = _NULL_COVERAGE
