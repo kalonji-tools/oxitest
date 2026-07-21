@@ -6,8 +6,10 @@ __all__ = [
     "AsyncPolicy",
     "DispatchContext",
     "FixtureInstantiator",
+    "FixtureOutcome",
+    "HasTeardown",
+    "NoTeardown",
     "ScopeRefs",
-    "_FixtureOutcome",
     "_ResolutionContext",
     "_check_async_dep",
     "_reject_async_in_sync",
@@ -22,7 +24,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
 
 from oxitest._bridge._async_orchestrator import (
     AsyncPolicy,
@@ -128,14 +130,24 @@ def _resolve_deps(
 
 
 @dataclass(frozen=True, slots=True)
-class _FixtureOutcome:
-    """Result of unpacking a fixture function call."""
+class HasTeardown:
+    """Fixture unpacking produced a value plus a teardown callable."""
 
     value: Any
-    teardown: Callable[[], None] | None = None
+    teardown: Callable[[], None]
 
 
-def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
+@dataclass(frozen=True, slots=True)
+class NoTeardown:
+    """Fixture unpacking produced a plain value; no teardown to run."""
+
+    value: Any
+
+
+FixtureOutcome = HasTeardown | NoTeardown
+
+
+def _unpack_sync(result: Any, name: str) -> FixtureOutcome:
     """Unpack a sync fixture call: plain value or generator.
 
     Coroutines and async generators are passed through as-is: the async
@@ -153,8 +165,8 @@ def _unpack_sync(result: Any, name: str) -> _FixtureOutcome:
 
             safe_teardown(_drain, fixture_name, warn=_warn_teardown)
 
-        return _FixtureOutcome(value, teardown)
-    return _FixtureOutcome(result)
+        return HasTeardown(value=value, teardown=teardown)
+    return NoTeardown(value=result)
 
 
 # ── FixtureInstantiator ──────────────────────────────────────────────────────
@@ -402,22 +414,25 @@ class FixtureInstantiator:
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
 
-        if outcome.teardown is not None:
-            _original_td = outcome.teardown
-            _td_name = defn.name
+        match outcome:
+            case HasTeardown(value=value, teardown=teardown_fn):
 
-            def _timed_teardown(
-                _orig: Callable[[], None] = _original_td,
-                _name: str = _td_name,
-            ) -> None:
-                _td_start = time.monotonic()
-                _orig()
-                self._teardown_times[_name].append(
-                    (time.monotonic() - _td_start) * 1000.0
-                )
+                def _timed_teardown(
+                    _orig: Callable[[], None] = teardown_fn,
+                    _name: str = defn.name,
+                ) -> None:
+                    _td_start = time.monotonic()
+                    _orig()
+                    self._teardown_times[_name].append(
+                        (time.monotonic() - _td_start) * 1000.0
+                    )
 
-            scope_teardowns.append(_timed_teardown)
-        return outcome.value
+                scope_teardowns.append(_timed_teardown)
+                return value
+            case NoTeardown(value=value):
+                return value
+            case _:
+                assert_never(outcome)
 
     # ── Built-in injection ───────────────────────────────────────────────
 
