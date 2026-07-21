@@ -7,10 +7,16 @@ from typing import Any, Never
 
 import oxitest
 from oxitest import TestContext, helpers, raises
+from oxitest._bridge._coverage import _NULL_COVERAGE
+from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._errors import ConflictingDebuggerError, OxitestError
+from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge.executor import _resolve_debugger_backend
 from oxitest._bridge.plugin_loader import (
+    PluginEntry,
     PluginLoadError,
     PluginRegistry,
+    _PluginRegistryBuilder,
     activate_deferred_plugins,
     load_plugins,
 )
@@ -179,8 +185,8 @@ def test_single_debugger_backend_is_valid(ctx: TestContext) -> None:
     helpers.common.install_module(ctx, "solo_dbg", mod)
 
     registry = load_plugins(["solo_dbg"], {})
-    assert registry.debugger_backend is not None, (
-        "expected a debugger backend, got None"
+    assert registry.debugger_backend is not _NULL_DEBUGGER, (
+        "expected a real debugger backend from the loaded plugin, got null singleton"
     )
 
 
@@ -255,3 +261,99 @@ def test_activate_deferred_plugins_rejects_invalid_cli_json() -> None:
     registry = PluginRegistry()
     with raises(OxitestError, match="invalid CLI values JSON"):
         activate_deferred_plugins(registry, "{}", "not valid json")
+
+
+def test_null_debugger_is_structural_backend() -> None:
+    """The null singleton must satisfy the runtime_checkable DebuggerBackend protocol.
+
+    Discovery filters by identity — structural conformance is required for that
+    filter to be type-safe.
+    """
+    assert isinstance(_NULL_DEBUGGER, DebuggerBackend), (
+        "null-object must structurally conform to DebuggerBackend for discovery to work"
+    )
+
+
+def test_null_debugger_trace_raises() -> None:
+    """Calling .trace() on the null means the discovery filter is broken."""
+    with raises(AssertionError, match="discovery filter is broken"):
+        _NULL_DEBUGGER.trace()
+
+
+def test_null_debugger_post_mortem_raises() -> None:
+    """Null debugger .post_mortem() raises AssertionError - filter bypass is a bug."""
+    exc = helpers.common.make_exc(RuntimeError, "dummy")
+    tb = exc.__traceback__
+    assert tb is not None, "traceback must exist for the arrange phase"
+    with raises(AssertionError, match="discovery filter is broken"):
+        _NULL_DEBUGGER.post_mortem(tb)
+
+
+def test_registry_debugger_defaults_to_null_singleton() -> None:
+    """PluginRegistry.debugger_backend is _NULL_DEBUGGER when no plugin provides one."""
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(PluginEntry(module_name="no_debugger", plugin=Plugin()))
+    reg = builder.build()
+    assert reg.debugger_backend is _NULL_DEBUGGER, (
+        f"expected _NULL_DEBUGGER, got {reg.debugger_backend!r}"
+    )
+
+
+def test_registry_coverage_defaults_to_null_singleton() -> None:
+    """PluginRegistry.coverage_provider is _NULL_COVERAGE with no coverage plugin."""
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(PluginEntry(module_name="no_coverage", plugin=Plugin()))
+    reg = builder.build()
+    assert reg.coverage_provider is _NULL_COVERAGE, (
+        f"expected _NULL_COVERAGE, got {reg.coverage_provider!r}"
+    )
+
+
+def test_registry_builder_still_rejects_two_real_debuggers() -> None:
+    """The at-most-one debugger invariant survives the null-object refactor."""
+    builder = _PluginRegistryBuilder()
+    builder.add_entry(
+        PluginEntry(
+            module_name="a",
+            plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        )
+    )
+    builder.add_entry(
+        PluginEntry(
+            module_name="b",
+            plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        )
+    )
+    with raises(ConflictingDebuggerError):
+        builder.build()
+
+
+def test_resolve_debugger_backend_returns_none_when_debug_mode_is_none() -> None:
+    """When user did not request debugging, resolver returns None."""
+    session = FixtureSession([])
+    assert _resolve_debugger_backend(session, None) is None, (
+        "debug_mode=None must short-circuit and return None"
+    )
+
+
+def test_resolve_debugger_backend_falls_back_to_pdb_with_null_registry() -> None:
+    """When registry holds _NULL_DEBUGGER, resolver returns a _PdbBackend fallback."""
+    session = FixtureSession([])  # defaults to _NULL_DEBUGGER in its registry
+
+    result = _resolve_debugger_backend(session, "always")
+    assert isinstance(result, _PdbBackend), (
+        f"expected _PdbBackend fallback, got {type(result).__name__}"
+    )
+
+
+def test_resolve_debugger_backend_returns_plugin_backend_when_registered() -> None:
+    """When a plugin registers a debugger, resolver returns that backend directly."""
+    plugin_debugger = helpers.common.RecordingDebugger()
+    session = FixtureSession(
+        [], plugin_registry=PluginRegistry(debugger_backend=plugin_debugger)
+    )
+
+    result = _resolve_debugger_backend(session, "always")
+    assert result is plugin_debugger, (
+        f"expected the plugin-registered debugger, got {result!r}"
+    )
