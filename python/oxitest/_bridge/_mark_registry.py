@@ -13,6 +13,9 @@ __all__ = [
     "MarkAction",
     "MarkHandler",
     "MarkWrapper",
+    "MarksHalt",
+    "MarksOutcome",
+    "MarksProceed",
     "PassThrough",
     "ShortCircuit",
     "Wrap",
@@ -64,6 +67,23 @@ class PassThrough:
 
 MarkAction = ShortCircuit | Wrap | PassThrough
 _PASS_THROUGH = PassThrough()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MarksHalt:
+    """Mark evaluation aggregate: return this result without running the test."""
+
+    result: TestResult
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MarksProceed:
+    """Mark evaluation aggregate: run the test wrapped by these wrappers."""
+
+    wrappers: tuple[MarkWrapper, ...]
+
+
+MarksOutcome = MarksHalt | MarksProceed
 
 
 class MarkHandler(ABC):
@@ -167,12 +187,11 @@ _BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
 def evaluate_marks(
     marks: Sequence[MarkInfo],
     plugin_handlers: Sequence[MarkHandler] = (),
-) -> tuple[TestResult | None, list[MarkWrapper]]:
+) -> MarksOutcome:
     """Run marks through the handler registry.
 
-    Returns (short_circuit, wrappers).
-    short_circuit: if not None, return it immediately without running the test.
-    wrappers: callables to compose around the test execution, in order added.
+    Returns a MarksHalt(result) to short-circuit, or MarksProceed(wrappers)
+    with callables to compose around the test execution, in order added.
     plugin_handlers: additional handlers from plugin execution wrappers.
     """
     registry = _MARK_REGISTRY
@@ -185,7 +204,7 @@ def evaluate_marks(
             continue
         action = handler.handle(mark)
         if isinstance(action, ShortCircuit):
-            return action.result, []
+            return MarksHalt(result=action.result)
         if isinstance(action, Wrap):
             wrappers.append(action.wrapper)
-    return None, wrappers
+    return MarksProceed(wrappers=tuple(wrappers))

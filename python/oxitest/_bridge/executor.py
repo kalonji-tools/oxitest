@@ -27,7 +27,7 @@ from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, assert_never
 
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import safe_teardown
@@ -60,6 +60,9 @@ from oxitest._bridge._loader import (
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._mark_registry import (
     MarkHandler,
+    MarksHalt,
+    MarksOutcome,
+    MarksProceed,
     MarkWrapper,
     _PluginMarkHandler,
     evaluate_marks,
@@ -301,8 +304,8 @@ _NULL_SESSION: _SessionProtocol = FixtureSession([])
 def _evaluate_marks_phase(
     session: _SessionProtocol,
     marks: Sequence[MarkInfo],
-) -> tuple[TestResult | None, list[MarkWrapper]]:
-    """Evaluate marks and return (short_circuit, wrappers)."""
+) -> MarksOutcome:
+    """Evaluate marks over the plugin-augmented registry and return the outcome."""
     _plugin_handlers: list[MarkHandler] = [
         _PluginMarkHandler(pw) for pw in session.plugin_registry.execution_wrappers
     ]
@@ -561,9 +564,14 @@ def run_test(
 
     try:
         marks = get_marks(fn_raw)
-        short_circuit, wrappers = _evaluate_marks_phase(effective_session, marks)
-        if short_circuit is not None:
-            return short_circuit
+        marks_outcome = _evaluate_marks_phase(effective_session, marks)
+        match marks_outcome:
+            case MarksHalt(result=short_circuit_result):
+                return short_circuit_result
+            case MarksProceed(wrappers=mark_wrappers):
+                pass
+            case _:
+                assert_never(marks_outcome)
 
         # --- Arrange phase (side-effect-only fixtures declared via @oxi.arrange) ---
         arrange_result = _run_arrange_phase(
@@ -572,7 +580,7 @@ def run_test(
         if arrange_result.error is not None:
             return arrange_result.error
 
-        mark_result = _MarkResult(marks=tuple(marks), wrappers=tuple(wrappers))
+        mark_result = _MarkResult(marks=tuple(marks), wrappers=mark_wrappers)
         plan = _build_execution_plan(resolved, mark_result)
         chain_ctx = _ChainContext(
             default_timeout=default_timeout,
