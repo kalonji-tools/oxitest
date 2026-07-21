@@ -11,6 +11,8 @@ from __future__ import annotations
 __all__ = [
     "AsyncPolicy",
     "SharedAsyncManager",
+    "_Idle",
+    "_Live",
     "_check_async_dep",
     "_reject_async_in_sync",
     "_reject_nonshared_async",
@@ -20,6 +22,7 @@ import contextlib
 import inspect
 from collections.abc import Callable
 from contextlib import ExitStack
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -30,6 +33,21 @@ if TYPE_CHECKING:
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown
+
+# ── State variants for lazy session acquisition (ADR-0007 Rule 4) ────────────
+
+
+@dataclass(frozen=True, slots=True)
+class _Idle:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _Live:
+    session: AsyncSession
+
+
+_SessionState = _Idle | _Live
 
 # ── Async dependency policy functions ─────────────────────────────────────────
 
@@ -59,7 +77,7 @@ def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> N
         dep_val,
         fixture_name,
         f"shared fixture '{fixture_name}' cannot depend on "
-        f"non-shared async fixture '{dep_name}' \u2014 "
+        f"non-shared async fixture '{dep_name}' — "
         f"lifetime mismatch",
     )
 
@@ -83,7 +101,7 @@ class SharedAsyncManager:
 
     def __init__(self, async_backend: AsyncBackend) -> None:
         self._backend = async_backend
-        self._session: AsyncSession | None = None
+        self._state: _SessionState = _Idle()
         self._stack: ExitStack = ExitStack()
         self._teardowns: list[tuple[str, Any]] = []
         self._used = False
@@ -109,8 +127,15 @@ class SharedAsyncManager:
 
     @property
     def session(self) -> AsyncSession | None:
-        """The underlying shared async session, or None if not yet created."""
-        return self._session
+        """The underlying shared async session, or None if not yet created.
+
+        Returns None while state is _Idle; returns the AsyncSession when _Live.
+        Kept as ``AsyncSession | None`` at the property boundary — ADR-0007
+        Rule 7b (find-lookup) accepts Optional here.
+        """
+        if isinstance(self._state, _Live):
+            return self._state.session
+        return None
 
     def resolve(self, func: Callable[..., Any], deps: dict[str, Any]) -> Any:
         """Run an async fixture, track teardowns, return the resolved value.
@@ -129,7 +154,7 @@ class SharedAsyncManager:
             FixtureSetupError: If the fixture raises during setup.
 
         """
-        if self._session is None:
+        if isinstance(self._state, _Idle):
             # The manager holds this session across every test in the fixture
             # session. It calls ``backend.acquire_session()`` directly rather
             # than routing through ``acquire_session_guarded`` because the
@@ -138,17 +163,19 @@ class SharedAsyncManager:
             # own guarded acquire for the next test that does not use shared
             # fixtures. The framework owns this seam; the guard protects
             # short-lived acquires that would nest in the same call stack.
-            self._session = self._stack.enter_context(self._backend.acquire_session())
+            session = self._stack.enter_context(self._backend.acquire_session())
+            self._state = _Live(session=session)
 
         self._used = True
+        live_session = self._state.session
 
         try:
             result = func(**deps)
             if inspect.isasyncgen(result):
-                value = self._session.run(anext(result))
+                value = live_session.run(anext(result))
                 self._teardowns.append((getattr(func, "__name__", ""), result))
             elif inspect.iscoroutine(result):
-                value = self._session.run(result)
+                value = live_session.run(result)
             else:
                 value = result
         except Exception as exc:
@@ -164,15 +191,16 @@ class SharedAsyncManager:
         ``__exit__`` (asyncgen shutdown, loop close) — session lifetime is
         owned by the stack.
         """
-        if self._session is None:
+        if isinstance(self._state, _Idle):
             return
+        live_session = self._state.session
         for name, gen in reversed(self._teardowns):
 
-            def _drain(session: Any = self._session, generator: Any = gen) -> None:
+            def _drain(session: Any = live_session, generator: Any = gen) -> None:
                 with contextlib.suppress(StopAsyncIteration):
                     session.run(anext(generator))
 
             safe_teardown(_drain, name, warn=_warn_teardown)
         self._stack.close()
-        self._session = None
+        self._state = _Idle()
         self._teardowns.clear()

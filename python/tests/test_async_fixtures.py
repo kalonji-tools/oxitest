@@ -8,7 +8,7 @@ from typing import Any
 
 import oxitest as oxi
 from oxitest._bridge._async_backend import AsyncioBackend, AsyncSession
-from oxitest._bridge._async_orchestrator import SharedAsyncManager
+from oxitest._bridge._async_orchestrator import SharedAsyncManager, _Idle, _Live
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import FixtureSetupError
@@ -453,3 +453,38 @@ def test_shared_manager_does_not_poison_middleware_guard() -> None:
         )
     finally:
         mgr.cleanup()
+
+
+# ── State-machine sum type (_Idle / _Live) ────────────────────────────────────
+
+
+def test_shared_async_manager_starts_idle() -> None:
+    """Fresh manager is _Idle; session and was_used are unset; cleanup is a no-op."""
+    mgr = SharedAsyncManager(AsyncioBackend())
+    assert isinstance(mgr._state, _Idle), (  # noqa: SLF001
+        "Fresh manager must be _Idle — session not acquired until first resolve()"
+    )
+    assert mgr.session is None, (
+        ".session property must return None while idle (Rule 7b find-lookup)"
+    )
+    assert not mgr.was_used, "was_used flag must be False before any resolve() call"
+    mgr.cleanup()  # cleanup on idle must be a safe no-op
+
+
+def test_shared_async_manager_becomes_live_on_first_resolve() -> None:
+    """State transitions to _Live on first resolve(); .session and was_used are set."""
+
+    async def _fixture() -> int:
+        return 42
+
+    mgr = SharedAsyncManager(AsyncioBackend())
+    value = mgr.resolve(_fixture, {})
+    assert value == 42, "resolve() must run the coroutine and return its awaited value"
+    assert isinstance(mgr._state, _Live), (  # noqa: SLF001
+        "State must transition to _Live after first resolve() acquires a session"
+    )
+    assert mgr.session is not None, (
+        ".session property must return the AsyncSession when state is _Live"
+    )
+    assert mgr.was_used, "was_used flag must flip True on first resolve() call"
+    mgr.cleanup()
