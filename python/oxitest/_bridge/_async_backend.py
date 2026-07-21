@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Never, Protocol, Self, TypeVar, runtime_c
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import BackendNotFoundError, ConflictingBackendError
+from oxitest._bridge._plugin_entry import ActivatedPluginEntry
 from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
@@ -191,9 +192,6 @@ def resolve_backend(name: str, registry: PluginRegistry) -> AsyncBackend:
         ConflictingBackendError: if multiple plugins register the same name.
 
     """
-    # Local import: plugin_loader → oxitest.plugin → _async_backend would cycle.
-    from oxitest._bridge.plugin_loader import ActivatedPluginEntry  # noqa: PLC0415
-
     plugin_backends = [
         (entry.module_name, entry.plugin.async_backend)
         for entry in registry.entries
