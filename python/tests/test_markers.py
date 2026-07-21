@@ -16,6 +16,8 @@ from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
     _MARK_REGISTRY,
     MarkHandler,
+    MarksHalt,
+    MarksProceed,
     PassThrough,
     ShortCircuit,
     Wrap,
@@ -553,28 +555,29 @@ def test_timeout_mark_stores_seconds() -> None:
     )
 
 
-def test_evaluate_marks_returns_tuple() -> None:
-    """evaluate_marks with no marks returns (None, [])."""
-    sc, wrappers = evaluate_marks([])
-    assert sc is None, "no marks means no handler ran, so nothing can short-circuit"
-    assert wrappers == [], (
+def test_evaluate_marks_returns_proceed_when_empty() -> None:
+    """evaluate_marks with no marks returns MarksProceed with empty wrappers."""
+    outcome = evaluate_marks([])
+    assert isinstance(outcome, MarksProceed), (
+        "no marks means no handler short-circuited, so evaluate_marks must return"
+        " MarksProceed"
+    )
+    assert outcome.wrappers == (), (
         "no marks means no handler ran, so no wrappers should be produced"
     )
 
 
 def test_evaluate_marks_skip_returns_short_circuit() -> None:
-    """evaluate_marks with a skip mark short-circuits to a skipped result."""
-    sc, wrappers = evaluate_marks(
+    """evaluate_marks with a skip mark short-circuits to a MarksHalt(skipped)."""
+    outcome = evaluate_marks(
         [MarkInfo("skip", (), MappingProxyType({"reason": "x"}))],
     )
-    assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
-    assert sc.status == "skipped", (
+    assert isinstance(outcome, MarksHalt), (
+        "evaluate_marks with skip mark should return MarksHalt to short-circuit"
+    )
+    assert outcome.result.status == "skipped", (
         "skip short-circuit must carry 'skipped' status so the reporter tallies it"
         " correctly"
-    )
-    assert wrappers == [], (
-        "skip short-circuits before other handlers run, so no wrappers should be"
-        " collected"
     )
 
 
@@ -693,18 +696,16 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
         MarkInfo("xfail", (), MappingProxyType({"reason": "known bug"})),
         MarkInfo("timeout", (), MappingProxyType({"seconds": 5})),
     ]
-    sc, wrappers = evaluate_marks(marks)
+    outcome = evaluate_marks(marks)
 
-    assert sc is not None, "evaluate_marks with skip mark should return a short-circuit"
-    assert sc.status == "skipped", (
+    assert isinstance(outcome, MarksHalt), (
+        "evaluate_marks with skip mark should return MarksHalt to short-circuit"
+    )
+    assert outcome.result.status == "skipped", (
         "skip must win over xfail and timeout — running a skipped test wastes time and"
         " produces misleading results"
     )
-    helpers.common.assert_result(sc, SkippedResult, message="not ready")
-    assert wrappers == [], (
-        "skip short-circuits before other handlers run, so xfail/timeout wrappers must"
-        " not be collected"
-    )
+    helpers.common.assert_result(outcome.result, SkippedResult, message="not ready")
 
 
 def test_evaluate_marks_dispatches_plugin_handlers() -> None:
@@ -712,12 +713,14 @@ def test_evaluate_marks_dispatches_plugin_handlers() -> None:
     pw = _FakePluginWrapper()
     handler = _PluginMarkHandler(pw)
     marks = [MarkInfo("custom_mark", (), MappingProxyType({}))]
-    short_circuit, wrappers = evaluate_marks(
+    outcome = evaluate_marks(
         marks,
         plugin_handlers=[handler],
     )
-    assert short_circuit is None, "should not short-circuit"
-    assert len(wrappers) == 1, (
+    assert isinstance(outcome, MarksProceed), (
+        "plugin wrap must not short-circuit, so evaluate_marks must return MarksProceed"
+    )
+    assert len(outcome.wrappers) == 1, (
         "plugin handler must contribute its wrapper or the plugin's test transformation"
         " is silently lost"
     )
