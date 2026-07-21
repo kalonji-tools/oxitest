@@ -35,8 +35,8 @@ The precedent is `MarkAction = ShortCircuit | Wrap | PassThrough` in `_mark_regi
 
 **Exemplars:**
 - `ExecutionPlan.shared_session`, `arrange_session` (`_middleware.py:71-72`) — mutex session strategy
-- `_ArrangeResult.error`, `session` (`executor.py:390-391`) → `Success(session) | Failure(error)`
-- `_evaluate_marks_phase -> tuple[TestResult | None, list[MarkWrapper]]` (`executor.py:285`) → `ShortCircuit(result) | Continue(wrappers)`
+- `_ArrangeResult.error`, `session` (`executor.py:390-391`) → `ArrangeReady | ArrangeReadyAsync(session) | ArrangeFailed(error)` (shipped in #1574)
+- `_evaluate_marks_phase -> tuple[TestResult | None, list[MarkWrapper]]` (`executor.py:285`) → `MarksHalt(result) | MarksProceed(wrappers)` (shipped in #1574)
 
 **See also:** Rule 2 (Boundary-crossing discriminator) when the same pattern spans multiple files.
 
@@ -92,7 +92,7 @@ If the None case has semantic weight beyond "call vs don't call" (e.g., the pres
 **Exemplars:**
 - `safe_call(..., on_error: Callable | None = None)` (`_boundary.py:29`) → `safe_call(..., on_error=_no_on_error)`
 - `safe_teardown(..., warn: Callable | None = None)` (`_boundary.py:84`) → `safe_teardown(..., warn=_no_warn)`
-- `_FixtureOutcome.teardown: Callable[[], None] | None = None` (`_fixture_instantiator.py:135`) → `teardown: Callable[[], None] = _no_teardown`
+- `_FixtureOutcome.teardown: Callable[[], None] | None = None` (`_fixture_instantiator.py:135`) → `teardown: Callable[[], None] = _no_teardown` (reclassified to Rule 1 and shipped as `HasTeardown | NoTeardown` in #1574 — the None case gated behavior, per Rule 5's own carve-out)
 
 ### Rule 6 — Plugin-surface optionality
 

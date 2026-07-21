@@ -495,15 +495,21 @@ def _run_arrange_phase(
     if illegal:
         return ArrangeFailed(error=_error_result(str(ArrangeError(fn_raw, illegal))))
 
-    each_session: AsyncSession | None = None
+    cell: ArrangeReady | ArrangeReadyAsync = ArrangeReady()
 
     def get_each_session() -> AsyncSession:
-        nonlocal each_session
-        if each_session is None:
-            each_session = _acquire_each_session(
-                effective_session.async_backend, fn_teardowns
-            )
-        return each_session
+        nonlocal cell
+        match cell:
+            case ArrangeReadyAsync(session=existing):
+                return existing
+            case ArrangeReady():
+                session = _acquire_each_session(
+                    effective_session.async_backend, fn_teardowns
+                )
+                cell = ArrangeReadyAsync(session=session)
+                return session
+            case _:
+                assert_never(cell)
 
     try:
         for entry in arranged:
@@ -517,11 +523,7 @@ def _run_arrange_phase(
         FixtureCycleError,
     ) as exc:
         return ArrangeFailed(error=_error_result(str(exc)))
-    return (
-        ArrangeReadyAsync(session=each_session)
-        if each_session is not None
-        else ArrangeReady()
-    )
+    return cell
 
 
 def run_test(
