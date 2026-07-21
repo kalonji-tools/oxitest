@@ -98,17 +98,16 @@ class AsyncioSession:
     """
 
     def __init__(self) -> None:
-        self._loop: asyncio.AbstractEventLoop | None = asyncio.new_event_loop()
+        self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:
-        if self._loop is not None and not self._loop.is_closed():
+        if not self._loop.is_closed():
             with contextlib.suppress(Exception):
                 self._loop.run_until_complete(self._loop.shutdown_asyncgens())
             self._loop.close()
-        self._loop = None
 
     def run(self, coro: Coroutine[Any, Any, _T], /) -> _T:
         """Execute a coroutine on this session's event loop.
@@ -122,7 +121,7 @@ class AsyncioSession:
             RuntimeError: If the session has already exited.
 
         """
-        if self._loop is None or self._loop.is_closed():
+        if self._loop.is_closed():
             msg = "AsyncioSession has already exited"
             raise RuntimeError(msg)
         before = asyncio.all_tasks(self._loop)
