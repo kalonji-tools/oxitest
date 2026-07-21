@@ -29,10 +29,9 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import safe_teardown
-from oxitest._bridge._debugger import DebuggerBackend, _PdbBackend
+from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
@@ -139,9 +138,10 @@ def _resolve_debugger_backend(
     """
     if debug_mode is None:
         return None
-    if session.plugin_registry.debugger_backend is not None:
-        return session.plugin_registry.debugger_backend
-    return _PdbBackend()
+    backend = session.plugin_registry.debugger_backend
+    if backend is _NULL_DEBUGGER:
+        return _PdbBackend()
+    return backend
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +161,7 @@ class _ChainContext:
     """
 
     default_timeout: int | None
-    session: _SessionProtocol | None
+    session: _SessionProtocol
     arrange_session: AsyncSession | None
 
 
@@ -277,7 +277,7 @@ def _build_execution_chain(
 
     used_shared = getattr(ctx.session, "_used_shared_async", False)
     shared = getattr(ctx.session, "_shared_session", None) if used_shared else None
-    backend = getattr(ctx.session, "async_backend", None) or AsyncioBackend()
+    backend = ctx.session.async_backend
     strategy = resolve_strategy(
         used_shared=used_shared,
         shared=shared,
