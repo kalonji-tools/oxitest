@@ -399,18 +399,30 @@ def _resolve_arranged_entry(
 
 
 @dataclass(frozen=True, slots=True)
-class _ArrangeResult:
-    """Output of the arrange phase.
+class ArrangeReady:
+    """Arrange succeeded; no async-each fixture required a session."""
 
-    ``error`` is an error TestResult when arrange failed; ``session`` is the
-    per-test async session that was lazily acquired for async-each fixtures,
-    or ``None`` when no async-each fixture ran. The session is threaded to
-    the middleware so the async test body reuses the same loop the arrange
-    fixtures were set up on — closing the ADR-0006 body-loop-identity gap.
+
+@dataclass(frozen=True, slots=True)
+class ArrangeReadyAsync:
+    """Arrange succeeded; a per-test AsyncSession was acquired.
+
+    Threaded to the middleware so the async test body reuses the same loop
+    the arrange fixtures were set up on — closes the ADR-0006 body-loop-
+    identity gap.
     """
 
-    error: TestResult | None
-    session: AsyncSession | None
+    session: AsyncSession
+
+
+@dataclass(frozen=True, slots=True)
+class ArrangeFailed:
+    """Arrange failed with this error TestResult."""
+
+    error: TestResult
+
+
+_ArrangeResult = ArrangeReady | ArrangeReadyAsync | ArrangeFailed
 
 
 def _acquire_each_session(
@@ -466,13 +478,14 @@ def _run_arrange_phase(
     runs last on the shared loop.
 
     Returns:
-        ``_ArrangeResult`` with ``error=None, session=<acquired-or-None>``
-        on success (session non-None only if an async-each fixture ran),
-        or ``error=<TestResult>, session=None`` on failure.
+        ``ArrangeReady`` on success with no async-each fixture,
+        ``ArrangeReadyAsync(session)`` on success when an async-each fixture
+        triggered lazy session acquisition, or ``ArrangeFailed(error)`` on
+        failure.
     """
     arranged = _get_metadata(fn_raw).arranged
     if not arranged:
-        return _ArrangeResult(error=None, session=None)
+        return ArrangeReady()
     test_is_async = inspect.iscoroutinefunction(fn_raw)
     illegal = _scan_arrange_entries_for_async_mismatch(
         arranged,
@@ -480,9 +493,7 @@ def _run_arrange_phase(
         test_is_async=test_is_async,
     )
     if illegal:
-        return _ArrangeResult(
-            error=_error_result(str(ArrangeError(fn_raw, illegal))), session=None
-        )
+        return ArrangeFailed(error=_error_result(str(ArrangeError(fn_raw, illegal))))
 
     each_session: AsyncSession | None = None
 
@@ -505,8 +516,12 @@ def _run_arrange_phase(
         AmbiguousFixtureError,
         FixtureCycleError,
     ) as exc:
-        return _ArrangeResult(error=_error_result(str(exc)), session=None)
-    return _ArrangeResult(error=None, session=each_session)
+        return ArrangeFailed(error=_error_result(str(exc)))
+    return (
+        ArrangeReadyAsync(session=each_session)
+        if each_session is not None
+        else ArrangeReady()
+    )
 
 
 def run_test(
@@ -577,15 +592,22 @@ def run_test(
         arrange_result = _run_arrange_phase(
             fn_raw, effective_session, meta.module_path, fn_teardowns
         )
-        if arrange_result.error is not None:
-            return arrange_result.error
+        match arrange_result:
+            case ArrangeFailed(error=arrange_err):
+                return arrange_err
+            case ArrangeReadyAsync(session=acquired_session):
+                arrange_session: AsyncSession | None = acquired_session
+            case ArrangeReady():
+                arrange_session = None
+            case _:
+                assert_never(arrange_result)
 
         mark_result = _MarkResult(marks=tuple(marks), wrappers=mark_wrappers)
         plan = _build_execution_plan(resolved, mark_result)
         chain_ctx = _ChainContext(
             default_timeout=default_timeout,
             session=effective_session,
-            arrange_session=arrange_result.session,
+            arrange_session=arrange_session,
         )
         execute = _build_execution_chain(
             resolved, plan, mark_result, chain_ctx, debug=debug
