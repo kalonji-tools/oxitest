@@ -88,6 +88,57 @@ def test_each_loop_created_lazily_and_closed_after_test(
     )
 
 
+def test_two_async_each_fixtures_share_one_per_test_session(
+    tmp: TempDir,
+) -> None:
+    """Two async-each fixtures in one @arrange share the same per-test session.
+
+    The executor caches the acquired AsyncSession after the first async-each
+    fixture; subsequent async-each fixtures in the same arrange list must
+    reuse that session (loop identity is proxy for session identity). This
+    covers the cache-hit branch of ``get_each_session`` — first call acquires,
+    second call returns the cached session.
+    """
+    (tmp / "conftest.py").write_text(
+        "import asyncio\n"
+        "from oxitest import Fixtures\n"
+        "\n"
+        "fx = Fixtures()\n"
+        "loops = {}\n"
+        "\n"
+        "@fx.fixture\n"
+        "async def first_async():\n"
+        "    loops['first'] = id(asyncio.get_running_loop())\n"
+        "    yield\n"
+        "\n"
+        "@fx.fixture\n"
+        "async def second_async():\n"
+        "    loops['second'] = id(asyncio.get_running_loop())\n"
+        "    yield\n"
+    )
+    (tmp / "test_sample.py").write_text(
+        "from oxitest import arrange\n"
+        "from conftest import loops\n"
+        "\n"
+        "@arrange('first_async', 'second_async')\n"
+        "async def test_two_async_each():\n"
+        "    pass\n"
+        "\n"
+        "def test_shared_loop():\n"
+        "    assert loops['first'] == loops['second'], (\n"
+        "        f'two async-each fixtures in one @arrange must share the '\n"
+        "        f'per-test session (same loop id), got {loops}'\n"
+        "    )\n"
+    )
+
+    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+
+    assert "2 passed" in stdout, (
+        f"both tests must pass — cache-hit path in get_each_session must "
+        f"return the existing AsyncSession, got:\n{stdout}"
+    )
+
+
 def test_unpack_sync_passes_coroutine_through() -> None:
     """`_unpack_sync` passes coroutines through unchanged.
 
