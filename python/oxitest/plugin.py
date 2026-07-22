@@ -15,10 +15,28 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from oxitest._bridge._async_backend import _NULL_ASYNC_BACKEND, AsyncBackend
 from oxitest._bridge._coverage import _NULL_COVERAGE
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend
+from oxitest._bridge.result import (
+    SkippedResult,
+    StatusKind,
+    TestResult,
+    WarnedResult,
+    XFailedResult,
+)
+
+__all__ = [
+    "SkippedResult",
+    "StatusKind",
+    "TestResult",
+    "WarnedResult",
+    "XFailedResult",
+    "skipped",
+    "warned",
+    "xfailed",
+]
 
 if TYPE_CHECKING:
     from oxitest._bridge._coverage import CovReportFormat
-    from oxitest._bridge.result import CollectedItem, TestResult
+    from oxitest._bridge.result import CollectedItem
 
 
 @runtime_checkable
@@ -291,3 +309,21 @@ class Plugin:
 
     # Coverage backend (at most one across all plugins; null-object default)
     coverage_provider: CoverageProvider = _NULL_COVERAGE
+
+
+def skipped(*, message: str) -> SkippedResult:
+    """Skipped result for an ExecutionWrapper when a test cannot run."""
+    return SkippedResult(message=message)
+
+
+def xfailed(*, message: str) -> XFailedResult:
+    """XFailed result for an ExecutionWrapper when failure was expected."""
+    return XFailedResult(message=message)
+
+
+def warned(*, message: str) -> WarnedResult:
+    """Warned result for an ExecutionWrapper with a warning-level outcome.
+
+    `no_message_lines` deliberately not exposed; extend additively if needed.
+    """
+    return WarnedResult(message=message)
