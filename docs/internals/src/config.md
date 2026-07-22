@@ -317,3 +317,15 @@ pub(crate) fn compute_optimal_workers(
 ```
 
 The `spawn_overhead_ms` config field (default 250.0) represents the cost of spawning one worker subprocess. The heuristic divides the estimated total runtime by this overhead to decide how many workers are worthwhile.
+
+---
+
+## Inspect subcommand timeout
+
+`oxitest inspect` starts the TUI as soon as Phase 1 (Rust prescan) finishes; Phase 2 (Python-tier fixture resolution, plugin instantiation, etc.) runs in the background and populates additional sections as data arrives. If Phase 2 does not complete within `inspect_timeout` seconds, the TUI logs the timeout and continues serving whatever data is already loaded.
+
+- **Pyproject key:** `[tool.oxitest] inspect_timeout` (integer seconds)
+- **Default:** `30`
+- **CLI flag:** none — pyproject-only.
+- **Resolved field:** `Config::exec.inspect_timeout_secs` (`src/config/mod.rs`)
+- **Consumer:** `src/inspect/mod.rs` wraps the Phase-2 future in `Duration::from_secs(cfg.exec.inspect_timeout_secs)`.
