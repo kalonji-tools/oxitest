@@ -62,7 +62,7 @@ Classes whose purpose is stateful accumulation earn mutability. They are listed 
 | Class | Justification |
 |-------|---------------|
 | `CoveragePyProvider` | Wraps `coverage.py`, holds mutable coverage collector |
-| `AsyncioSharedSession` | Holds a mutable event loop reference |
+| `SharedAsyncManager` | Holds a mutable event loop / async session reference |
 
 ### Rule 5: Parameters are never mutated
 
