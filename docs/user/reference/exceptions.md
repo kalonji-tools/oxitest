@@ -68,7 +68,7 @@ mutation is correctly rejected in your own plugin or fixture code.
 
 ## `FixtureTypeNotFoundError`
 
-**Type**: `FixtureNotFoundError` (which inherits from `OxitestError`)
+**Inheritance**: `FixtureTypeNotFoundError` → `FixtureNotFoundError` → `FixtureError` → `OxitestError`
 
 Raised during by-type fixture resolution when no fixture is registered for
 the requested type. The message names the three legal registration routes
@@ -90,6 +90,3 @@ BuiltinFixture, a plugin-provided FixtureProvider with matching
 fixture_type, or a conftest fixture with 'DatabaseHandle' as its
 return annotation.
 ```
-
-The class is exported in `_bridge._errors.__all__`; there is no
-top-level re-export from `oxitest` today.

@@ -326,6 +326,5 @@ The `spawn_overhead_ms` config field (default 250.0) represents the cost of spaw
 
 - **Pyproject key:** `[tool.oxitest] inspect_timeout` (integer seconds)
 - **Default:** `30`
-- **CLI flag:** none — pyproject-only.
 - **Resolved field:** `Config::exec.inspect_timeout_secs` (`src/config/mod.rs`)
 - **Consumer:** `src/inspect/mod.rs` wraps the Phase-2 future in `Duration::from_secs(cfg.exec.inspect_timeout_secs)`.

@@ -90,16 +90,8 @@ jobs:
 
           failed=0
           for t in "${targets[@]}"; do
-            if [[ "$t" == */ ]]; then
-              if [[ -f "deploy/${t}index.html" ]]; then
-                echo "ok:  $t (directory index)"
-              else
-                echo "BAD: $t -> deploy/${t}index.html missing" >&2
-                failed=1
-              fi
-            elif [[ -e "deploy/$t" ]]; then
-              echo "ok:  $t"
-            else
+            [[ "$t" == */ ]] && t="${t}index.html"
+            if [[ ! -e "deploy/$t" ]]; then
               echo "BAD: $t -> deploy/$t missing" >&2
               failed=1
             fi
