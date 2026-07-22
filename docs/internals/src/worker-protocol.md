@@ -75,7 +75,7 @@ relevant fields (compact JSON, falsy fields omitted).
 | `node_id` | string | Full test identifier: `module_path::fn_name[param_id]` |
 | `outcome` | string | Test result status -- drives variant selection (see below) |
 | `duration_ms` | float | Wall-clock execution time in milliseconds |
-| `protocol_version` | int | Wire format version (currently `2`). The coordinator warns once per drain call on mismatch. |
+| `protocol_version` | int | Wire format version (currently `3`). The coordinator warns once per drain call on mismatch. |
 
 **Per-outcome fields:**
 
@@ -93,17 +93,17 @@ relevant fields (compact JSON, falsy fields omitted).
 **Examples:**
 
 ```json
-{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 2}
+{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 3}
 ```
 
 ```json
-{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 2,
+{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 3,
  "message": "assert 1 / 0", "file": "tests/test_math.py", "lineno": 8, "source_line": "assert 1 / 0 == 0",
  "left": "ZeroDivisionError", "right": "0", "op": "=="}
 ```
 
 ```json
-{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 2,
+{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 3,
  "message": "needs network"}
 ```
 
