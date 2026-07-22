@@ -1,6 +1,6 @@
 # ADR-0006: Async organizational strategy for oxitest
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-17
 
 oxitest's `@arrange` decorator silently no-ops when arranging a function-scope async fixture on either sync or async tests. The root cause is `_fixture_instantiator.py:138-151` — `_unpack_sync` only checks `inspect.isgenerator`, so a coroutine or async generator returned by the factory is stored as the outcome value and discarded without ever being awaited. Sync fixtures and shared-scope async fixtures compose with `@arrange` correctly; only function-scope async fixtures fall through the crack.

@@ -1,6 +1,6 @@
 # ADR-0007: None-by-exception
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-20
 
 Python's `None` is cheap to reach for. Any field can start out unset, any parameter can carry an optional default, any return can substitute absence for a value. Left unmanaged, this produces the shape observed in the oxitest Python source today: after the [#1482](https://github.com/kalonji-tools/oxitest/issues/1482) sweep — which removed ~17 unnecessary Optionals and ~20 guards — `python/oxitest/` still carries ~128 `| None` type annotations and ~146 `is None` / `is not None` guards across 274 total occurrences ([full catalog on #1552](https://github.com/kalonji-tools/oxitest/issues/1552)). The residual is not scattered mistakes — it clusters into six or seven recurring shapes (sum-type-in-disguise, fat-context Optional, lazy-init instance state, and so on), each of which admits a specific structural fix.
