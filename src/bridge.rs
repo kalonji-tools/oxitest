@@ -669,10 +669,15 @@ fn try_run_test_with_session_obj(
     let test_meta_mod = py.import("oxitest._bridge._test_meta")?;
     let test_meta_cls = test_meta_mod.getattr("TestMeta")?;
 
+    // Construct TestKind via _test_kind.from_wire — sum type is the source
+    // of truth on TestMeta; the wire boundary here mirrors the worker path.
+    let test_kind_mod = py.import("oxitest._bridge._test_kind")?;
+    let from_wire_fn = test_kind_mod.getattr("from_wire")?;
     let param_id_obj: Bound<'_, PyAny> = match &item.param_id {
         Some(pid) => pid.as_str().into_pyobject(py)?.into_any(),
         None => py.None().into_bound(py),
     };
+    let kind_obj = from_wire_fn.call1((param_id_obj,))?;
 
     let marker_strs: Vec<String> = item.markers.iter().map(|s| s.to_string()).collect();
     let markers_frozen = pyo3::types::PyFrozenSet::new(py, &marker_strs)?;
@@ -682,7 +687,7 @@ fn try_run_test_with_session_obj(
         item.module_path(),
         &*item.fn_name,
         node_id_str,
-        &param_id_obj,
+        kind_obj,
         markers_frozen,
     ))?;
 

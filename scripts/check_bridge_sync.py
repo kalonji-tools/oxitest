@@ -216,6 +216,17 @@ def _check_main_pairs(rust: dict[str, set[str]], python: dict[str, set[str]]) ->
             continue
         rust_only = rust_fields - py_fields
         py_only = py_fields - rust_fields
+        # CollectedItem.param_id (Rust) reads a @property backed by
+        # ``kind: TestKind`` on the Python side (#1564). PyO3 FromPyObject
+        # resolves via attribute lookup, so the property satisfies the Rust
+        # field. If we grow a second such bridge, promote this to a table.
+        if (
+            rust_name == "CollectedItem"
+            and rust_only == {"param_id"}
+            and "kind" in py_only
+        ):
+            rust_only = set()
+            py_only = py_only - {"kind"}
         label = py_name if isinstance(py_name, str) else "per-outcome union"
         if rust_only or py_only:
             print(f"MISMATCH: {rust_name} (Rust) vs {label} (Python)")

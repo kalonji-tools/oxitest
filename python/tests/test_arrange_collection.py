@@ -3,6 +3,7 @@
 import oxitest
 from oxitest import StdCapture, TempDir, helpers
 from oxitest._bridge._errors import CollectionError
+from oxitest._bridge._test_kind import Solitary
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.result import CollectedItem
 
@@ -17,7 +18,7 @@ def test_collected_item_defaults_arranged_to_empty_tuple() -> None:
         fn_name="test_x",
         lineno=1,
         markers=(),
-        param_id=None,
+        kind=Solitary(),
         param_values=(),
     )
     assert item.arranged == (), (

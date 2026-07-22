@@ -24,6 +24,7 @@ from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
+from oxitest._bridge._test_kind import Parametrized, Solitary
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import ComposedCases, _as_composed
 from oxitest._bridge.result import (
@@ -226,7 +227,7 @@ def _expand_composed(
                 fn_name=template.fn_name,
                 lineno=template.lineno,
                 markers=template.markers,
-                param_id=compound_id,
+                kind=Parametrized(param_id=compound_id),
                 param_values=tuple(merged_pv),
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
@@ -370,13 +371,13 @@ def _expand_item(
         arranged=arranged,
     )
     raw = fn_meta.param_cases
-    if raw is None:
+    if not raw:
         return [
             CollectedItem(
                 fn_name=template.fn_name,
                 lineno=template.lineno,
                 markers=template.markers,
-                param_id=None,
+                kind=Solitary(),
                 param_values=(),
                 is_async=template.is_async,
                 fixture_deps=template.fixture_deps,
@@ -406,7 +407,7 @@ def _expand_item(
             fn_name=template.fn_name,
             lineno=template.lineno,
             markers=template.markers,
-            param_id=case_id,
+            kind=Parametrized(param_id=case_id),
             param_values=tuple(pv),
             is_async=template.is_async,
             fixture_deps=template.fixture_deps,

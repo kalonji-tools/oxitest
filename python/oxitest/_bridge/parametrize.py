@@ -26,6 +26,7 @@ from oxitest._bridge._fixture_registry import _fixture_inner_type
 from oxitest._bridge._fixture_type import FixtureRef, _FixtureRefMarker
 from oxitest._bridge._fn_metadata import _update, get_metadata, get_or_create
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
+from oxitest._bridge._test_kind import Solitary, TestKind
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -428,7 +429,7 @@ def _dict_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
         layer = _build_dict_cases(cases, fn)
-        if meta.param_cases is not None:
+        if meta.param_cases:
             msg = (
                 "parametrize: cannot mix dict-mode with stacked decorators."
                 " Use a single @parametrize call for dict mode."
@@ -447,7 +448,7 @@ def _partial_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
         existing = meta.param_cases
-        if existing is None:
+        if not existing:
             _update(fn, param_cases=(new_layer,))
             return fn
         composed = _as_composed(existing)
@@ -482,7 +483,7 @@ def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
 
     def decorator(fn: _F) -> _F:
         meta = get_or_create(fn)
-        if meta.param_cases is not None:
+        if meta.param_cases:
             msg = (
                 "parametrize: cannot mix full dataclass cases with stacked"
                 " decorators. Use partial() for composition."
@@ -550,24 +551,25 @@ def parametrize(**cases: Any) -> Callable[[_F], _F]:
 def resolve_parametrize(
     fn_raw: object,
     fn: Callable[..., Any],
-    param_id: str | None,
+    kind: TestKind,
 ) -> tuple[dict[str, Any], frozenset[str]]:
     """Resolve a parametrize case into (param_kwargs, fixref_names).
 
-    Returns ({}, frozenset()) for non-parametrized tests (param_id is None).
+    Returns ({}, frozenset()) for Solitary tests.
     Raises ParametrizeError on misconfiguration (e.g., compact + FixtureRef).
     """
-    if param_id is None:
+    if isinstance(kind, Solitary):
         return {}, frozenset()
     layers = get_metadata(fn_raw).param_cases
-    if layers is None:
+    if not layers:
         fn_name = getattr(fn_raw, "__name__", repr(fn_raw))
         msg = (
             f"resolve_parametrize: {fn_name!r} has no parametrize cases"
-            f" but param_id={param_id!r} was requested."
+            f" but param_id={kind.param_id!r} was requested."
             " Use @oxitest.parametrize to register cases."
         )
         raise ParametrizeError(msg)
+    param_id = kind.param_id
     if len(layers) == 1 and not isinstance(layers[0], ComposedCases):
         return layers[0].resolve(fn, param_id)
     return _resolve_composed(layers, fn, param_id)

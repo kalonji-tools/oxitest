@@ -12,6 +12,7 @@ from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_type import Fixture
 from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._test_kind import Parametrized, Solitary
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.importer import (
     _apply_module_marks,
@@ -285,7 +286,7 @@ def test_collected_item_can_be_constructed() -> None:
         fn_name="test_foo",
         lineno=1,
         markers=(),
-        param_id=None,
+        kind=Solitary(),
         param_values=(),
         is_async=False,
     )
@@ -302,7 +303,7 @@ def test_collected_item_can_be_constructed() -> None:
         f" behavior is accidentally triggered: {item.markers}"
     )
     assert item.param_id is None, (
-        f"param_id=None signals a non-parametrized test -- a non-None default would"
+        f"kind=Solitary() means param_id is None -- a non-None default would"
         f" cause the runner to look up nonexistent parameter sets: {item.param_id!r}"
     )
     assert item.param_values == (), (
@@ -321,7 +322,7 @@ def test_collected_item_with_markers_and_param() -> None:
         fn_name="test_bar",
         lineno=5,
         markers=("slow",),
-        param_id="case_a",
+        kind=Parametrized(param_id="case_a"),
         param_values=(("x", "1"), ("y", "2")),
         is_async=False,
     )
@@ -1261,7 +1262,7 @@ class _GoodCollector:
                 fn_name="test_from_plugin",
                 lineno=1,
                 markers=(),
-                param_id=None,
+                kind=Solitary(),
                 param_values=(),
             )
         ]

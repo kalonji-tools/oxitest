@@ -373,6 +373,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
         plugin_code=textwrap.dedent("""\
             import inspect
             from oxitest.plugin import Plugin
+            from oxitest._bridge._test_kind import Solitary
             from oxitest._bridge.result import CollectedItem
 
             class CheckCollector:
@@ -385,7 +386,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
                                 fn_name=name,
                                 lineno=lineno,
                                 markers=(),
-                                param_id=None,
+                                kind=Solitary(),
                                 param_values=(),
                             ))
                     return items

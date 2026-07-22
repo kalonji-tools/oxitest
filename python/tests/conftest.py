@@ -27,6 +27,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureScope,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
+from oxitest._bridge._test_kind import from_wire
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.executor import run_test as _run_test
 from oxitest._bridge.plugin_loader import PluginRegistry
@@ -274,7 +275,10 @@ def make_meta(
     if param_id:
         node_id += f"[{param_id}]"
     return TestMeta(
-        module_path=module_path, fn_name=fn_name, node_id=node_id, param_id=param_id
+        module_path=module_path,
+        fn_name=fn_name,
+        node_id=node_id,
+        kind=from_wire(param_id),
     )
 
 
@@ -307,7 +311,7 @@ def run_test(
         module_path=module_path,
         fn_name=fn_name,
         node_id=f"{module_path}::{fn_name}" + (f"[{param_id}]" if param_id else ""),
-        param_id=param_id,
+        kind=from_wire(param_id),
     )
     return _run_test(meta, session=session, default_timeout=default_timeout)
 

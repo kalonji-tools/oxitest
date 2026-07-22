@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from oxitest._bridge._test_kind import Solitary
 from oxitest._bridge.result import CollectedItem
 
 from ._config import MetricsConfig
@@ -87,7 +88,7 @@ class BenchCollector:
                         fn_name=name,
                         lineno=lineno,
                         markers=(),
-                        param_id=None,
+                        kind=Solitary(),
                         param_values=(),
                     )
                 )

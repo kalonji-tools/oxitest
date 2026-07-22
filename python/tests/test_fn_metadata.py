@@ -27,9 +27,10 @@ def test_get_or_create_creates_on_first_access() -> None:
     assert meta.marks == (), (
         f"newly created FunctionMetadata should have empty marks, got {meta.marks!r}"
     )
-    assert meta.param_cases is None, (
-        f"newly created FunctionMetadata should have param_cases=None, "
-        f"got {meta.param_cases!r}"
+    assert meta.param_cases == (), (
+        f"newly created FunctionMetadata should have empty param_cases, "
+        f"got {meta.param_cases!r} — "
+        f"undecorated tests must default to solitary (no parametrize layers)"
     )
     assert meta.fixture_name is None, (
         f"newly created FunctionMetadata should have fixture_name=None, "
@@ -70,8 +71,9 @@ def test_get_metadata_returns_default_for_unknown_function() -> None:
     assert meta.marks == (), (
         f"default metadata marks should be empty, got {meta.marks!r}"
     )
-    assert meta.param_cases is None, (
-        f"default metadata param_cases should be None, got {meta.param_cases!r}"
+    assert meta.param_cases == (), (
+        f"default metadata param_cases should be empty, got {meta.param_cases!r} — "
+        f"get_metadata() must yield solitary-by-default metadata for unregistered fns"
     )
     assert meta.fixture_name is None, (
         f"default metadata fixture_name should be None, got {meta.fixture_name!r}"
