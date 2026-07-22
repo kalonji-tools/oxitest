@@ -31,6 +31,38 @@ graph LR
 Workers are **persistent** — one subprocess handles multiple module groups sequentially.
 This amortizes Python interpreter startup cost across many tests.
 
+## Message Envelope
+
+Starting with wire protocol v3, every LDJSON line the worker writes to stdout carries a top-level `"type"` discriminator. The Rust coordinator deserializes an envelope first (`WireEnvelope` in `src/worker_result/wire.rs`) and routes the full line to the correct payload type based on the `"type"` value:
+
+| `"type"` value | Payload struct | Purpose |
+|----------------|----------------|---------|
+| `"result"` | `WireResult` | Per-test outcome (see [Result Schema](#result-schema-stdout)) |
+| `"diagnostic"` | `WireDiagnostic` | User-facing message (severity, context, message, optional file/lineno) surfaced via the reporter summary block |
+| `"trace"` | `WireTrace` | Developer log event (level, module, message) routed to Rust's `tracing` crate; gated by `RUST_LOG` |
+
+Missing or unknown `"type"` values default to `"result"` for backwards compatibility with pre-v3 workers (see `default_result_type()` in `wire.rs`).
+
+**Diagnostic payload** (`{"type": "diagnostic", ...}`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `severity` | string | `"error"`, `"warning"`, or `"notice"` |
+| `context` | string | Short label (e.g. `"fixture teardown"`) |
+| `message` | string | Human-readable diagnostic body |
+| `file` | string | Optional. Source file, empty if not applicable |
+| `lineno` | int | Optional. Source line, 0 if not applicable |
+
+**Trace payload** (`{"type": "trace", ...}`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `level` | string | `"error"`, `"warn"`, `"info"`, `"debug"`, or `"trace"` |
+| `module` | string | Rust module name for the trace target |
+| `message` | string | Log message body |
+
+The coordinator's per-result watchdog deadline resets on each real line regardless of `"type"`, so diagnostic and trace lines keep the worker "alive" from the deadline's perspective.
+
 ## Task Schema (stdin)
 
 Each line on stdin is a JSON object:
@@ -63,6 +95,8 @@ Each line on stdin is a JSON object:
 | `show_internals` | `bool \| null` | Optional. When `true`, worker includes internal (oxitest) frames in tracebacks. |
 
 ## Result Schema (stdout)
+
+Result lines are one message type in the wire envelope — see [Message Envelope](#message-envelope) for the full dispatch scheme.
 
 For each test item, the worker writes exactly one JSON line to stdout. The `outcome`
 field determines which additional fields are present -- each outcome carries only its
