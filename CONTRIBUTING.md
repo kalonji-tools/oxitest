@@ -12,7 +12,17 @@ just health          # verify toolchain
 just preflight       # full pre-push gate: clean, check, test-rust, build, test
 ```
 
-Without Nix, install Rust (stable), Python 3.12+, and maturin manually.
+### Without Nix
+
+If you can't use devenv, install Rust (stable), Python 3.12+, and maturin
+manually. Then copy `.env.example` → `.env` and edit as needed:
+
+- **`VIRTUAL_ENV`** — path to your Python venv. `just build` needs this so `uv`
+  can find the venv's `python` symlink (otherwise it follows the symlink into
+  the immutable Nix store and fails).
+- **`RUST_LOG`** — tracing verbosity (e.g. `RUST_LOG=oxitest=debug`). Optional.
+
+Inside devenv, `.env` is not needed — Nix and `direnv` handle everything.
 
 ## Submitting changes
 
