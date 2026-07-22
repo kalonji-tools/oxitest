@@ -335,6 +335,50 @@ def test_flaky_service():
     assert response.status == 200
 ```
 
+#### Synthesizing result outcomes
+
+An `ExecutionWrapper.wrap()` implementation returns a `TestResult`. When
+your wrapper decides on an outcome without running the test — or wants to
+mark a run with a non-default status — use one of the factory functions on
+`oxitest.plugin`:
+
+- `skipped(message="...")` — the test cannot be run in this context.
+- `xfailed(message="...")` — the test's failure was expected (known-broken).
+- `warned(message="...")` — the wrapper flags a warning-level outcome
+  (e.g. degraded or partial execution).
+
+Example — a wrapper that skips tests when a platform prerequisite is missing.
+`is_nixos()` is illustrative; substitute your own platform check:
+
+```python
+from oxitest.plugin import ExecutionWrapper, TestResult, skipped
+
+
+class NixosOnlyWrapper:
+    @property
+    def marker(self) -> str:
+        return "nixos-only"
+
+    def wrap(self, *, test_fn, marker_args) -> TestResult:
+        if not is_nixos():
+            return skipped(message="requires NixOS")
+        return test_fn()
+```
+
+**Prefer factories over direct class construction.** `skipped(message="...")`
+is the canonical way to produce a Skipped outcome. The `SkippedResult` class
+is re-exported on `oxitest.plugin` for type-annotation and `isinstance`
+purposes, but direct construction (`SkippedResult(message="...")`) bypasses
+the factory contract — future oxitest versions may add validation, telemetry,
+or default derivation at the factory boundary that class construction
+wouldn't get.
+
+> **Not yet available: `errored()` factory.**
+> The `ErrorResult` variant carries traceback fields (`file`, `lineno`,
+> `frames`) that are captured from a real exception's traceback — no wrapper
+> case has yet demanded author-synthesis of these. If your plugin has one,
+> please [file an issue](https://github.com/kalonji-tools/oxitest/issues/new).
+
 ### HelperProvider
 
 Helper providers contribute named callables to the helper registry. Tests
