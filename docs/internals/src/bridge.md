@@ -143,17 +143,28 @@ Returned by `collect_module` for each discovered test function.
 **Python** (`python/oxitest/_bridge/result.py`):
 
 ```python
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CollectedItem:
     fn_name: str
     lineno: int
     markers: tuple[str, ...]
-    param_id: str | None
+    kind: TestKind                                  # Parametrized(param_id) | Solitary
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
     fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
     fixref_deps: tuple[tuple[str, str], ...] = ()   # (qualifier, type_name)
+
+    @property
+    def param_id(self) -> str | None:
+        # Wire adapter for the Rust FromPyObject extraction below.
+        return self.kind.to_wire()
 ```
+
+`kind: TestKind` (ADR-0007 Rule 2) is the sum-type source of truth; `param_id`
+is exposed as a `@property` so the Rust `#[derive(FromPyObject)]` extraction —
+which reads by attribute name — sees the same `Option<String>` shape as before.
+`scripts/check_bridge_sync.py` recognises the property bridge via its
+`PROPERTY_BRIDGES` table.
 
 **Rust** (`src/bridge.rs`):
 
@@ -163,7 +174,7 @@ struct CollectedItem {
     fn_name: String,
     lineno: usize,
     markers: Vec<String>,
-    param_id: Option<String>,
+    param_id: Option<String>,  // reads the @property adapter, not a field
     param_values: Vec<(String, String)>,
     is_async: bool,
     fixture_deps: Vec<(String, String)>,  // (qualifier, binding_type_name)
