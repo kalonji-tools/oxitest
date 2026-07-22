@@ -59,3 +59,5 @@ requirement is that the _why_ is captured before the _how_ is merged.
 | [0003](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0003-inspect-two-mode-navigation.md) | Inspect two-mode navigation | Accepted |
 | [0004](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0004-worker-lazy-imports.md) | Worker lazy imports | Accepted |
 | [0005](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0005-immutable-by-default-interfaces.md) | Immutable-by-default interfaces | Accepted |
+| [0006](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0006-async-organizational-strategy.md) | Async organizational strategy | Accepted |
+| [0007](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0007-none-by-exception.md) | None-by-exception | Accepted |
