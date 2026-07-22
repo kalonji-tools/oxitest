@@ -9,7 +9,9 @@ from __future__ import annotations
 
 __all__ = ["TestMeta"]
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from oxitest._bridge._test_kind import Solitary, TestKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,5 +21,10 @@ class TestMeta:
     module_path: str
     fn_name: str
     node_id: str
-    param_id: str | None = None
+    kind: TestKind = field(default_factory=Solitary)
     markers: frozenset[str] = frozenset()
+
+    @property
+    def param_id(self) -> str | None:
+        """Legacy accessor — see kind for the sum-type source of truth."""
+        return self.kind.to_wire()

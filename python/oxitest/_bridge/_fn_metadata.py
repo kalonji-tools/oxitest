@@ -30,7 +30,7 @@ class FunctionMetadata:
     arranged: tuple[
         type[BuiltinFixture] | str, ...
     ] = ()  # fixture types or names requested via @oxi.arrange
-    param_cases: tuple[ResolvedCases, ...] | None = None
+    param_cases: tuple[ResolvedCases, ...] = ()
     fixture_name: str | None = None
 
 

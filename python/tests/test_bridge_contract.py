@@ -25,6 +25,7 @@ from oxitest._bridge._debugger import _NULL_DEBUGGER
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._runners import NO_DEBUG, DebugContext, DebugMode
+from oxitest._bridge._test_kind import Solitary
 from oxitest._bridge.result import (
     PROTOCOL_VERSION,
     CollectedItem,
@@ -125,15 +126,30 @@ def _wire(
 
 
 def test_collected_item_fields_match_rust() -> None:
-    """CollectedItem Python fields must match the Rust struct to avoid PyO3 panics."""
+    """CollectedItem Python attrs must satisfy the Rust struct to avoid PyO3 panics.
+
+    Rust reads CollectedItem via #[derive(FromPyObject)] by attribute name.
+    ``param_id`` is now a @property on CollectedItem (backed by the ``kind``
+    field), so it is exposed as an attribute even though it is not a dataclass
+    field. The contract test verifies that every Rust field name is accessible
+    as a Python attribute on a sample instance.
+    """
     source = _BRIDGE_RS.read_text()
     rust_fields = _rust_struct_fields(source, "CollectedItem")
+    # Python dataclass fields — ``kind`` replaces the ``param_id`` field, but
+    # ``param_id`` is still exposed as a @property for Rust compat.
     python_fields = _python_fields(CollectedItem)
-    assert rust_fields == python_fields, (
-        "Field mismatch between CollectedItem (src/bridge.rs) and CollectedItem"
-        " (python/oxitest/_bridge/result.py).\n"
-        f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
-        f"  Only in Python: {sorted(python_fields - rust_fields)}"
+    # Wire-compat attributes: dataclass fields + the param_id property adapter.
+    python_attributes = python_fields | {"param_id"}
+    assert rust_fields <= python_attributes, (
+        "Rust CollectedItem has fields not accessible as Python attributes.\n"
+        "Every Rust field must be reachable via attribute access (dataclass field"
+        " or @property) — PyO3 FromPyObject uses attribute lookup, not field names.\n"
+        f"  Missing from Python: {sorted(rust_fields - python_attributes)}"
+    )
+    assert "kind" in python_fields, (
+        "CollectedItem must have a 'kind: TestKind' dataclass field — it is the"
+        " sum-type source of truth backing the param_id @property"
     )
 
 
@@ -268,7 +284,7 @@ def test_collected_item_manual_construction() -> None:
         fn_name="test_foo",
         lineno=1,
         markers=(),
-        param_id=None,
+        kind=Solitary(),
         param_values=(),
         is_async=False,
     )
@@ -276,7 +292,7 @@ def test_collected_item_manual_construction() -> None:
         "fn_name",
         "lineno",
         "markers",
-        "param_id",
+        "kind",
         "param_values",
         "is_async",
         "fixture_deps",

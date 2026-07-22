@@ -104,6 +104,7 @@ def run(task: WorkerTask) -> None:
     # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
     # PLC0415 is suppressed for this file in ruff per-file-ignores.
     from oxitest._bridge._runners import DebugContext
+    from oxitest._bridge._test_kind import from_wire
     from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.conftest_loader import create_session
     from oxitest._bridge.executor import run_test
@@ -134,7 +135,7 @@ def run(task: WorkerTask) -> None:
             module_path=module_path,
             fn_name=item["fn_name"],
             node_id=item["node_id"],
-            param_id=item.get("param_id"),
+            kind=from_wire(item.get("param_id")),
             markers=frozenset(item.get("markers", [])),
         )
 

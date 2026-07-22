@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any, Protocol
 
 from oxitest import Both, Cli, CliExtension, CollectedItem, Conf, injectable
+from oxitest._bridge._test_kind import Solitary
 from oxitest.plugin import Plugin
 
 
@@ -470,7 +471,7 @@ class CheckCollector:
                     fn_name=name,
                     lineno=lineno,
                     markers=(),
-                    param_id=None,
+                    kind=Solitary(),
                     param_values=(),
                 ))
         return items

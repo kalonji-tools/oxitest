@@ -207,7 +207,7 @@ def _load_and_resolve(
 
     # Resolve parametrize case values
     try:
-        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, meta.param_id)
+        param_kwargs, fixref_names = resolve_parametrize(fn_raw, fn, meta.kind)
     except ParametrizeError as exc:
         return _error_result(str(exc))
 

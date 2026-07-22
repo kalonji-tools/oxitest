@@ -24,6 +24,8 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum, auto
 from typing import Any
 
+from oxitest._bridge._test_kind import TestKind
+
 
 @dataclass(frozen=True, slots=True)
 class Frame:
@@ -348,17 +350,24 @@ class CollectedItem:
     """Bridge result returned by importer.collect_module and consumed by Rust bridge.
 
     Field names must match the Rust CollectedItem struct in src/bridge.rs.
+    Rust reads ``param_id`` via attribute access, which resolves to the
+    ``@property`` below; the underlying field is ``kind`` (TestKind).
     """
 
     fn_name: str
     lineno: int
     markers: tuple[str, ...]
-    param_id: str | None
+    kind: TestKind
     param_values: tuple[tuple[str, str], ...]
     is_async: bool = False
     fixture_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
     fixref_deps: tuple[tuple[str, str], ...] = ()  # (qualifier, type_name)
     arranged: tuple[type | str, ...] = ()  # fixture types/names from @oxi.arrange
+
+    @property
+    def param_id(self) -> str | None:
+        """Wire adapter — Rust bridge.rs extracts this via #[derive(FromPyObject)]."""
+        return self.kind.to_wire()
 
 
 class ViolationKind(StrEnum):
