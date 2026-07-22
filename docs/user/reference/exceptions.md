@@ -63,3 +63,33 @@ cross-test contamination.
 
 Use `with oxitest.raises(oxitest.SharedFixtureMutationError):` to assert that
 mutation is correctly rejected in your own plugin or fixture code.
+
+---
+
+## `FixtureTypeNotFoundError`
+
+**Type**: `FixtureNotFoundError` (which inherits from `OxitestError`)
+
+Raised during by-type fixture resolution when no fixture is registered for
+the requested type. The message names the three legal registration routes
+so the fix is discoverable from the traceback alone:
+
+1. A **BuiltinFixture** matching the requested type (see [Built-in fixtures](python-api/builtins.md))
+2. A **plugin-provided `FixtureProvider`** whose `fixture_type` matches (see [Write plugins](../how-to/write-plugins.md))
+3. A **conftest fixture** with the requested type as its return annotation
+
+Typically fires when a test parameter is annotated `Fixture[T]` for a type
+`T` that no source provides — check the fixture registration site and the
+type spelling.
+
+**Example message**:
+
+```
+no fixture registered for type 'DatabaseHandle' — must be a
+BuiltinFixture, a plugin-provided FixtureProvider with matching
+fixture_type, or a conftest fixture with 'DatabaseHandle' as its
+return annotation.
+```
+
+The class is exported in `_bridge._errors.__all__`; there is no
+top-level re-export from `oxitest` today.
