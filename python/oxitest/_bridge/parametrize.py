@@ -145,6 +145,34 @@ def _detect_compact_mode(fn: Callable[..., Any], case: object) -> tuple[bool, st
     return False, ""
 
 
+def _dispatch_compact_or_expand(
+    fn: Callable[..., Any],
+    instance: Any,
+    fixref_names: frozenset[str],
+) -> tuple[dict[str, Any], frozenset[str]]:
+    """Return (kwargs, fixref_names) via compact-mode dispatch.
+
+    Raises ParametrizeError when compact mode is selected but fixrefs are present.
+    ``instance`` is a dataclass instance (typed ``Any`` because the exact
+    dataclass type varies per parametrize case).
+    """
+    is_compact, compact_param = _detect_compact_mode(fn, instance)
+    if is_compact:
+        if fixref_names:
+            msg = (
+                "parametrize: compact mode is incompatible with FixtureRef fields"
+                f" ({', '.join(sorted(fixref_names))})."
+                " Use expanded mode — annotate individual fields in the test"
+                " function."
+            )
+            raise ParametrizeError(msg)
+        return {compact_param: instance}, fixref_names
+    param_kwargs = {
+        f.name: getattr(instance, f.name) for f in dataclasses.fields(instance)
+    }
+    return param_kwargs, fixref_names
+
+
 @dataclass(frozen=True, slots=True)
 class DictCases:
     """Dict-mode parametrize: cases are ``dict[str, dict[str, Any]]``."""
@@ -198,21 +226,7 @@ class DataclassCases:
         self, fn: Callable[..., Any], param_id: str
     ) -> tuple[dict[str, Any], frozenset[str]]:
         """Resolve a single dataclass case into ``(kwargs_dict, fixref_names)``."""
-        case = self.cases[param_id]
-        fixref_names = self.fixref_names
-        is_compact, compact_param = _detect_compact_mode(fn, case)
-        if is_compact:
-            if fixref_names:
-                msg = (
-                    "parametrize: compact mode is incompatible with FixtureRef fields"
-                    f" ({', '.join(sorted(fixref_names))})."
-                    " Use expanded mode — annotate individual fields in the test"
-                    " function."
-                )
-                raise ParametrizeError(msg)
-            return {compact_param: case}, fixref_names
-        param_kwargs = {f.name: getattr(case, f.name) for f in dataclasses.fields(case)}
-        return param_kwargs, fixref_names
+        return _dispatch_compact_or_expand(fn, self.cases[param_id], self.fixref_names)
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,21 +308,7 @@ def _resolve_composed(
     instance = target_type(**merged_fields)
     fixref_names = frozenset(all_fixref)
 
-    is_compact, compact_param = _detect_compact_mode(fn, instance)
-    if is_compact:
-        if fixref_names:
-            msg = (
-                "parametrize: compact mode is incompatible with FixtureRef fields"
-                f" ({', '.join(sorted(fixref_names))})."
-                " Use expanded mode — annotate individual fields in the test"
-                " function."
-            )
-            raise ParametrizeError(msg)
-        return {compact_param: instance}, fixref_names
-    param_kwargs = {
-        f.name: getattr(instance, f.name) for f in dataclasses.fields(instance)
-    }
-    return param_kwargs, fixref_names
+    return _dispatch_compact_or_expand(fn, instance, fixref_names)
 
 
 def _build_partial_cases(cases: dict[str, Any]) -> ComposedCases:
