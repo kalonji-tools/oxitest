@@ -311,6 +311,60 @@ def _check_wire_format() -> int:
     return 0
 
 
+def parse_protocol_version_py(path: Path) -> int | None:
+    """Extract PROTOCOL_VERSION from result.py via AST.
+
+    Finds a module-level ``PROTOCOL_VERSION: int = <N>`` annotated assignment.
+    Returns None if the constant is missing or does not have an integer literal.
+    """
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "PROTOCOL_VERSION"
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, int)
+        ):
+            return node.value.value
+    return None
+
+
+def parse_protocol_version_rs(path: Path) -> int | None:
+    """Extract PROTOCOL_VERSION from wire.rs via regex.
+
+    Matches ``pub(crate) const PROTOCOL_VERSION: u32 = <N>;``. Returns None
+    when the constant is missing.
+    """
+    text = path.read_text()
+    pattern = re.compile(
+        r"pub\(crate\)\s+const\s+PROTOCOL_VERSION\s*:\s*u32\s*=\s*(\d+)\s*;"
+    )
+    m = pattern.search(text)
+    if m is None:
+        return None
+    return int(m.group(1))
+
+
+def _check_protocol_version() -> int:
+    """Check PROTOCOL_VERSION equality between result.py and wire.rs."""
+    py_version = parse_protocol_version_py(PYTHON_PATH)
+    rs_version = parse_protocol_version_rs(WIRE_RUST_PATH)
+    if py_version is None:
+        print(f"ERROR: PROTOCOL_VERSION not found in {PYTHON_PATH}")
+        return 1
+    if rs_version is None:
+        print(f"ERROR: PROTOCOL_VERSION not found in {WIRE_RUST_PATH}")
+        return 1
+    if py_version != rs_version:
+        print("MISMATCH: PROTOCOL_VERSION")
+        print(f"    result.py={py_version}")
+        print(f"    wire.rs={rs_version}")
+        print("    bump both")
+        return 1
+    return 0
+
+
 def _check_task_format() -> int:
     """Check WorkerTaskItem (Rust) vs worker.py item reads."""
     rust_task_fields = parse_worker_task_item_fields(WIRE_RUST_PATH)
@@ -343,9 +397,13 @@ def main() -> int:
     errors += _check_raw_frame(python)
     errors += _check_wire_format()
     errors += _check_task_format()
+    errors += _check_protocol_version()
     if errors == 0:
         total = len(PAIRS) + len(REPORTER_PAIRS) + 1  # +1 for RawFrame
-        print(f"OK: all {total} bridge contracts + wire format + task format in sync")
+        print(
+            f"OK: all {total} bridge contracts + wire format + task format"
+            " + protocol version in sync"
+        )
     return 1 if errors else 0
 
 
