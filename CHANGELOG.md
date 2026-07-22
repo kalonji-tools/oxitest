@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [2.3.0] - 2026-07-22
+
+### Features
+
+
+- SessionStrategy and Timeout sum types with constructor-injected middlewares (#1561)
+- Null-object defaults for Plugin backend fields (#1567)
+- Replace _FixtureOutcome.teardown Optional with HasTeardown/NoTeardown sum type (#1563)
+- Replace evaluate_marks tuple return with MarksHalt/MarksProceed sum type (#1563)
+- Replace _ArrangeResult dual Optionals with ArrangeReady/ArrangeReadyAsync/ArrangeFailed (#1563)
+- Replace each_session nonlocal Optional with typed cell reusing arrange variants (#1563)
+- Add TestKind sum type for parametrize discriminator (#1564)
+
 ## [2.2.0] - 2026-07-19
 
 ### Bug Fixes
