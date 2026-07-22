@@ -76,6 +76,36 @@ jobs:
           cp -r docs/internals/book deploy/internals/book
           cp docs/internals/architecture-map.html deploy/internals/
 
+      - name: Validate landing page links
+        run: |
+          set -euo pipefail
+          landing="deploy/index.html"
+          [[ -f "$landing" ]] || { echo "missing $landing" >&2; exit 1; }
+
+          mapfile -t targets < <(
+            grep -oE '(href|src)="[^"]+"' "$landing" \
+              | sed -E 's/.*="([^"]+)"/\1/' \
+              | grep -vE '^(https?:|mailto:|#)'
+          )
+
+          failed=0
+          for t in "${targets[@]}"; do
+            if [[ "$t" == */ ]]; then
+              if [[ -f "deploy/${t}index.html" ]]; then
+                echo "ok:  $t (directory index)"
+              else
+                echo "BAD: $t -> deploy/${t}index.html missing" >&2
+                failed=1
+              fi
+            elif [[ -e "deploy/$t" ]]; then
+              echo "ok:  $t"
+            else
+              echo "BAD: $t -> deploy/$t missing" >&2
+              failed=1
+            fi
+          done
+          exit $failed
+
       - uses: actions/upload-artifact@v7
         if: github.event_name == 'pull_request'
         with:
