@@ -61,6 +61,14 @@ files = "\\.rs$"
 stages = ["pre-push"]
 
 [[repos.hooks]]
+id = "cargo-check"
+name = "cargo check"
+language = "system"
+entry = "cargo check"
+pass_filenames = false
+files = "\\.rs$"
+
+[[repos.hooks]]
 id = "uv-lock-check"
 name = "uv lock --check"
 language = "system"
