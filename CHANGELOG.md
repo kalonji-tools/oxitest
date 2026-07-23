@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [2.4.0] - 2026-07-23
+
+### Features
+
+
+- Expose plugin-facing result factories on oxitest.plugin (#1588)
+
 ## [2.3.0] - 2026-07-22
 
 ### Features

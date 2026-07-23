@@ -1263,7 +1263,7 @@ checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "oxitest"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "ahash",
  "assert_fs",
