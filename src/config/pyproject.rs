@@ -1,6 +1,71 @@
 use super::WorkerCount;
 use serde::Deserialize;
 
+/// Errors returned by config parsing when structural rules are violated.
+///
+/// This complements `toml::de::Error` (which handles syntax/type mismatches) by
+/// carrying oxitest-specific structural rejections — most notably legacy keys
+/// that were removed and now require migration.
+#[derive(Debug)]
+pub(crate) enum ConfigError {
+    /// A key was removed and users must migrate to a replacement location.
+    LegacyKey {
+        key: &'static str,
+        replacement: &'static str,
+    },
+    /// TOML syntax or type-shape error from serde.
+    Toml(toml::de::Error),
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LegacyKey { key, replacement } => write!(
+                f,
+                "`{key}` is no longer supported; move settings under {replacement} instead",
+            ),
+            Self::Toml(err) => std::fmt::Display::fmt(err, f),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+impl From<toml::de::Error> for ConfigError {
+    fn from(err: toml::de::Error) -> Self {
+        Self::Toml(err)
+    }
+}
+
+/// Reject legacy `[tool.oxitest]` keys that were removed in the doctest rework (#1602).
+///
+/// Called before serde deserialization so we can produce a helpful migration
+/// message pointing at the new sub-table, rather than letting the field be
+/// silently ignored or (worse) accepted into a stale field on `OxitestConfig`.
+pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
+    // Parse to a generic `toml::Value` — cheaper than reflecting on OxitestConfig
+    // and independent of the field set we're actively evolving.
+    let value: toml::Value = match toml::from_str(raw) {
+        Ok(v) => v,
+        // Syntax errors are the caller's problem; surface via normal deserialization.
+        Err(_) => return Ok(()),
+    };
+    let Some(oxitest) = value
+        .get("tool")
+        .and_then(|t| t.get("oxitest"))
+        .and_then(|o| o.as_table())
+    else {
+        return Ok(());
+    };
+    if oxitest.contains_key("doctest_modules") {
+        return Err(ConfigError::LegacyKey {
+            key: "tool.oxitest.doctest_modules",
+            replacement: "[tool.oxitest.doctest]",
+        });
+    }
+    Ok(())
+}
+
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub(super) enum AutoArrangeToml {
@@ -51,8 +116,34 @@ pub(super) struct OxitestConfig {
     pub(super) show_locals: Option<bool>,
     pub(super) show_internals: Option<bool>,
     pub(super) use_gitignore: Option<bool>,
-    pub(super) doctest_modules: Option<bool>,
+    pub(super) doctest: Option<DoctestConfig>,
     pub(super) inspect_timeout: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Default, PartialEq, Eq, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct DoctestConfig {
+    pub scope: Option<DoctestScope>,
+    pub strictness: Option<DoctestStrictness>,
+    pub allowlist: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum DoctestScope {
+    Public,
+    /// Reserved for M2 — currently identical to `Public` (no code path in
+    /// `src/doctest/` differentiates the two). See wayfinder #1602.
+    All,
+    Off,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum DoctestStrictness {
+    Required,
+    Warn,
+    Off,
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {
@@ -102,13 +193,24 @@ mod tests {
 
     /// Parse a `[tool.oxitest]` section from inline TOML and return `OxitestConfig`.
     fn parse_oxitest(toml: &str) -> OxitestConfig {
+        try_parse_oxitest(toml).expect("valid TOML")
+    }
+
+    /// Parse a `[tool.oxitest]` section, running the same structural checks
+    /// (legacy-key rejection) that `Config::load` uses in production.
+    ///
+    /// Sibling to `parse_oxitest` — returns `Result` so tests can inspect
+    /// migration errors from `check_no_legacy_keys` without every
+    /// happy-path caller having to `.unwrap()`.
+    fn try_parse_oxitest(toml: &str) -> Result<OxitestConfig, ConfigError> {
         let full = format!("[tool.oxitest]\n{toml}");
-        let parsed: PyprojectToml = toml::from_str(&full).expect("valid TOML");
-        parsed
+        check_no_legacy_keys(&full)?;
+        let parsed: PyprojectToml = toml::from_str(&full)?;
+        Ok(parsed
             .tool
             .expect("tool table present")
             .oxitest
-            .expect("oxitest table present")
+            .expect("oxitest table present"))
     }
 
     /// Parse a `[tool.oxitest]` section and expect deserialization to fail.
@@ -262,5 +364,148 @@ mod tests {
             Some(AutoArrangeToml::Disabled(false)) => {}
             other => panic!("expected Some(Disabled(false)), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn doctest_sub_table_parses_full_shape() {
+        let toml_src = r#"
+[tool.oxitest.doctest]
+scope = "public"
+strictness = "warn"
+allowlist = ".oxi-doctest-allowlist"
+"#;
+        let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
+        let cfg = parsed
+            .tool
+            .expect("tool table present")
+            .oxitest
+            .expect("oxitest table present");
+        let dt = cfg.doctest.expect("doctest sub-table present");
+        assert_eq!(
+            dt.scope,
+            Some(DoctestScope::Public),
+            "scope should parse as Public enum variant"
+        );
+        assert_eq!(
+            dt.strictness,
+            Some(DoctestStrictness::Warn),
+            "strictness should parse as Warn variant"
+        );
+        assert_eq!(
+            dt.allowlist.as_deref(),
+            Some(".oxi-doctest-allowlist"),
+            "allowlist path passes through as string"
+        );
+    }
+
+    #[test]
+    fn legacy_doctest_modules_key_hard_errors() {
+        let err = try_parse_oxitest(
+            r#"
+doctest_modules = true
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("doctest_modules"),
+            "error should mention the legacy key by name for a helpful message: got {}",
+            err
+        );
+        assert!(
+            err.to_string().contains("[tool.oxitest.doctest]"),
+            "error should point users at the new sub-table: got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn legacy_doctest_modules_false_also_hard_errors() {
+        // The rejection is value-agnostic — the key's presence is enough.
+        let err = try_parse_oxitest(
+            r#"
+doctest_modules = false
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("doctest_modules"),
+            "value-agnostic rejection: false should hard-error too, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn legacy_key_mixed_with_new_sub_table_still_errors() {
+        // Users mid-migration might paste both; the legacy key should still hard-error.
+        let err = try_parse_oxitest(
+            r#"
+doctest_modules = true
+
+[doctest]
+scope = "public"
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("doctest_modules"),
+            "legacy key + new sub-table ⇒ still errors on legacy key: got {}",
+            err
+        );
+    }
+
+    // ── Doctest sub-table: invalid values, unknown keys, defaults ─────────────
+
+    #[test]
+    fn invalid_scope_enum_hard_fails_at_parse() {
+        // Inline-table form keeps the doctest fields nested under
+        // `[tool.oxitest]` after the helper's prepend — a bare `[doctest]`
+        // header would land at the top level, bypassing DoctestConfig entirely.
+        let err = try_parse_oxitest(
+            r#"
+doctest = { scope = "invalid" }
+"#,
+        )
+        .unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("scope") || msg.contains("invalid"),
+            "TOML parse error should surface the bad enum: got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn unknown_keys_in_doctest_sub_table_hard_fail() {
+        let err = try_parse_oxitest(
+            r#"
+doctest = { scope = "public", bogus_key = "x" }
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("bogus_key"),
+            "deny_unknown_fields should name the offender: got {}",
+            err
+        );
+    }
+
+    #[test]
+    fn section_present_with_omitted_keys_uses_defaults_at_resolve_time() {
+        let cfg = try_parse_oxitest(
+            r#"
+doctest = {}
+"#,
+        )
+        .unwrap();
+        let dt = cfg.doctest.expect("empty sub-table still constructs Some");
+        assert_eq!(
+            dt.scope, None,
+            "raw sub-table stores None; defaults applied by Config::resolve"
+        );
+        assert_eq!(
+            dt.strictness, None,
+            "strictness omitted ⇒ None at parse time"
+        );
+        assert_eq!(dt.allowlist, None, "allowlist omitted ⇒ None at parse time");
     }
 }

@@ -70,16 +70,30 @@ impl Pipeline {
             &mut shared.cache,
         );
 
-        // Collect doctest items if --doctest-modules is enabled.
-        if shared.cfg.paths.doctest_modules {
+        // Collect doctest items when doctest collection is opted in — either
+        // via `--doctest-modules` on the CLI or a `[tool.oxitest.doctest]`
+        // table in pyproject.toml (unless `scope = "off"` disables it).
+        if shared.cfg.doctest_enabled() {
             let doctest_files = collector::collect_doctest_files(&shared.cfg);
             let doctest_items = collection::collect_doctest_items(&doctest_files);
-            tracing::info!(
+            tracing::debug!(
                 doctest_files = doctest_files.len(),
                 doctest_items = doctest_items.len(),
                 "collected doctest items"
             );
             items.extend(doctest_items);
+
+            // Run the doctest coverage rule and stash diagnostics for the
+            // reporter (drained in the `execute` transition).
+            let coverage_diags =
+                collection::collect_coverage_diagnostics(&doctest_files, &shared.cfg);
+            if !coverage_diags.is_empty() {
+                tracing::debug!(
+                    coverage_diagnostics = coverage_diags.len(),
+                    "doctest coverage diagnostics emitted"
+                );
+                shared.pending_diagnostics.extend(coverage_diags);
+            }
         }
 
         if !errors.is_empty() {
