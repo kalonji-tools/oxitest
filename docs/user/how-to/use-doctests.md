@@ -14,12 +14,18 @@ $ oxitest --doctest-modules
 Or permanently in `pyproject.toml`:
 
 ```toml
-[tool.oxitest]
-doctest_modules = true
+[tool.oxitest.doctest]
+scope = "public"      # target public subjects (names in __all__, or top-level non-underscore)
+strictness = "off"    # "off" | "warn" (M1) | "required" (M2 — allowlist ratchet)
 ```
+
+Present-with-defaults is enough: an empty `[tool.oxitest.doctest]` table enables collection with `scope = "public"`, `strictness = "warn"`. Set `scope = "off"` to disable entirely.
 
 When enabled, oxitest scans all `.py` files in your test paths for
 docstrings containing `>>>` interactive examples.
+
+!!! note "Migration from `doctest_modules = true`"
+    The legacy `doctest_modules` boolean at `[tool.oxitest]` was replaced by the `[tool.oxitest.doctest]` sub-table. Runs with the old key hard-error at config load — replace with the shape above.
 
 ## How doctests work
 
