@@ -60,7 +60,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `plugins` | list of strings | `[]` | Python module paths of oxitest plugins to load. Each module must export an `oxitest_plugin(config=None)` function returning `oxitest.Plugin`. |
 | `plugin_settings` | table | `{}` | Per-plugin configuration. Each key is a plugin module name, value is a table of settings passed to `oxitest_plugin(config=...)`. |
 | `use_gitignore` | boolean | `true` | Respect `.gitignore` files when discovering test files during collection. Pyproject.toml only (not a CLI flag). |
-| `doctest_modules` | boolean | `false` | Collect and run doctests from module docstrings. CLI `--doctest-modules` overrides. |
+| `[tool.oxitest.doctest]` | sub-table | — | Doctest collection + coverage. Present-with-default enables collection; keys documented below. See [Use doctests](../how-to/use-doctests.md). CLI `--doctest-modules` maps to `scope = "public"`. |
 | `inspect_timeout` | integer | `30` | Phase-2 (Python-tier) loading timeout for `oxitest inspect` in seconds. Pyproject.toml only (not a CLI flag). |
 
 ## plugins
