@@ -44,6 +44,7 @@ def write_project(
     tests: dict[str, str],
     pyproject: str | None = None,
     conftest: str | None = None,
+    extra_files: dict[str, str] | None = None,
 ) -> None:
     """Scaffold a project in tmp.
 
@@ -52,6 +53,10 @@ def write_project(
         tests: Mapping of {filename: code}. Code is dedented.
         pyproject: Optional pyproject.toml content (dedented).
         conftest: Optional conftest.py content (dedented).
+        extra_files: Optional mapping of {relative_path: content} for arbitrary
+            project files (e.g. package modules like ``mypkg/__init__.py``).
+            Parent directories are created automatically. Content is *not*
+            dedented — pass verbatim source (docstring indentation matters).
 
     """
     if pyproject:
@@ -60,6 +65,11 @@ def write_project(
         (tmp / "conftest.py").write_text(textwrap.dedent(conftest))
     for name, code in tests.items():
         (tmp / name).write_text(textwrap.dedent(code))
+    if extra_files:
+        for rel_path, content in extra_files.items():
+            target = tmp / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
 
 
 @integ.helper
