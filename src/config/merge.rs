@@ -117,7 +117,12 @@ impl Config {
         apply_if_some!(self.paths, python_files, tc.python_files);
         apply_if_some!(self.paths, norecursedirs, tc.norecursedirs);
         apply_if_some!(self.paths, use_gitignore, tc.use_gitignore);
-        apply_if_some!(self.paths, doctest_modules, tc.doctest_modules);
+
+        // A present [tool.oxitest.doctest] table opts in — the doctest_enabled()
+        // accessor treats `scope = "off"` as a real opt-out.
+        if let Some(dt) = tc.doctest {
+            self.doctest = Some(dt);
+        }
 
         // ── Execution (unique to TOML) ──────────────────────────────────
         apply_if_some!(self.exec, maxfail, tc.maxfail);
@@ -203,7 +208,19 @@ impl Config {
         }
         apply_if_some!(self.exec, timeout_secs, args.timeout, wrap);
         if args.doctest_modules {
-            self.paths.doctest_modules = true;
+            // `--doctest-modules` opts in to doctest collection.
+            //
+            // Map to `DoctestScope::Public` because M1 only implements the
+            // `Public` semantic — no code path in `src/doctest/` currently
+            // differentiates `All` from `Public`. Mapping to `All` would be
+            // a user-visible lie (help text promising broader scan than the
+            // engine delivers). M2 (per wayfinder #1602 planning) will
+            // define the `All` semantic and this mapping can be revisited
+            // then. The CLI still wins over TOML unconditionally, matching
+            // the established `strict`/`color`/`keep_tmp`/`timeout` pattern
+            // (a TOML `scope = "off"` should not silently defeat the flag).
+            let dt = self.doctest.get_or_insert_with(DoctestConfig::default);
+            dt.scope = Some(DoctestScope::Public);
         }
 
         // ── Filtering (unique to CLI) ───────────────────────────────────

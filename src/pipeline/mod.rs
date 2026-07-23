@@ -120,6 +120,9 @@ pub(crate) struct PipelineShared {
     pub(crate) ast_weight: Option<types::DurationMs>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    /// Rust-side diagnostics gathered pre-execution (e.g. doctest coverage in
+    /// `collect`) that need to reach the reporter once it exists in `execute`.
+    pub(crate) pending_diagnostics: Vec<reporter::stats::DiagnosticEntry>,
 }
 
 impl PipelineShared {
@@ -390,6 +393,7 @@ fn build_shared(
         ast_weight: None,
         test_files: vec![],
         conftest_files: vec![],
+        pending_diagnostics: vec![],
     })
 }
 

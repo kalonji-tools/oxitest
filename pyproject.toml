@@ -135,7 +135,11 @@ markers = [
     "slow: marks tests that take more than a second",
 ]
 affected_base = "main"
-doctest_modules = true
+
+[tool.oxitest.doctest]
+# Dogfooding of oxitest's own tree is deferred to M2 (allowlist + burn-down).
+# Keep the sub-table present so the migration path is exercised, but no scope active.
+scope = "off"
 
 [tool.coverage.run]
 source = ["python/oxitest"]

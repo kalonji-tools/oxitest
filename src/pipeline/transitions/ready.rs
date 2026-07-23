@@ -81,6 +81,13 @@ impl Pipeline {
             rep.record_diagnostics(collection_diags);
         }
 
+        // Drain pipeline-side pending diagnostics (e.g. doctest coverage from
+        // the `collect` transition) into the reporter.
+        let pending = std::mem::take(&mut shared.pending_diagnostics);
+        if !pending.is_empty() {
+            rep.record_diagnostics(pending);
+        }
+
         let exec_ctx = ExecutionContext {
             cfg: &shared.cfg,
             cache: &shared.cache,

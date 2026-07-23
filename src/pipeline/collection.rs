@@ -278,6 +278,63 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
     items
 }
 
+/// Run the doctest coverage rule and return the resulting diagnostics.
+///
+/// Called from `Pipeline::collect` right after `collect_doctest_items`. Returns
+/// an empty vec when doctest collection is disabled, when scope is `off`, or
+/// when strictness is `off`. In M1, `warn` and `required` both map to
+/// `DiagnosticSeverity::Warning` (Task 15 adds the one-time NOTICE about M2).
+pub(super) fn collect_coverage_diagnostics(
+    doctest_files: &[Utf8PathBuf],
+    config: &crate::config::Config,
+) -> Vec<crate::reporter::stats::DiagnosticEntry> {
+    use crate::config::{DoctestScope, DoctestStrictness};
+    use crate::doctest::alias::ModuleRoot;
+    use crate::doctest::coverage::run_coverage_check;
+    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+
+    let Some(dt) = config.doctest.as_ref() else {
+        return vec![];
+    };
+    // Defensive: the pipeline caller in session_ready.rs guards on
+    // `doctest_enabled()` which already filters scope=Off, so this branch
+    // is currently unreachable. Kept as belt-and-braces in case a future
+    // caller invokes this helper without that gate.
+    if matches!(dt.scope, Some(DoctestScope::Off)) {
+        return vec![];
+    }
+    let severity = match dt.strictness.unwrap_or(DoctestStrictness::Warn) {
+        DoctestStrictness::Off => return vec![],
+        // M1: `required` behaves like `warn`; the one-time NOTICE below warns
+        // users that the hard-fail semantics they configured haven't landed yet.
+        DoctestStrictness::Warn | DoctestStrictness::Required => DiagnosticSeverity::Warning,
+    };
+    let root = ModuleRoot {
+        root: config.rootdir.clone(),
+    };
+    // Convert absolute paths back to project-root-relative for dotted_path_for.
+    let rel_files: Vec<Utf8PathBuf> = doctest_files
+        .iter()
+        .filter_map(|abs| abs.strip_prefix(&config.rootdir).ok().map(|p| p.to_owned()))
+        .collect();
+    let mut diagnostics = run_coverage_check(&rel_files, &root, severity);
+    // M1-limit NOTICE: users who configured `required` asked for hard-fail; tell
+    // them once that this release still behaves like `warn` and point at M2.
+    // Reporter dedup collapses repeats if this ever fires more than once per run.
+    if matches!(dt.strictness, Some(DoctestStrictness::Required)) {
+        diagnostics.push(DiagnosticEntry {
+            severity: DiagnosticSeverity::Notice,
+            context: std::sync::Arc::from("doctest.coverage.m1-limit"),
+            message: "strictness=\"required\" behaves like \"warn\" in this release; \
+                      the hard-fail ratchet and allowlist ship in M2 (see #1602)"
+                .to_owned(),
+            file: None,
+            lineno: None,
+        });
+    }
+    diagnostics
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,5 +448,258 @@ mod tests {
     fn file_mtime_secs_returns_zero_for_missing_file() {
         let mtime = file_mtime_secs(camino::Utf8Path::new("/nonexistent/path/xyz.py"));
         assert_eq!(mtime, 0);
+    }
+
+    // ── collect_coverage_diagnostics ────────────────────────────────────────
+
+    fn write_pkg_with_missing_examples(root: &camino::Utf8Path) {
+        std::fs::create_dir_all(root.join("mypkg"))
+            .expect("test setup: mypkg dir must be creatable");
+        std::fs::write(
+            root.join("mypkg/__init__.py"),
+            "__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No examples.\"\"\"\n    pass\n",
+        )
+        .expect("test setup: mypkg/__init__.py must be writable");
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_emits_when_scope_public_and_strictness_warn() {
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+        use crate::reporter::stats::DiagnosticSeverity;
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            strictness: Some(DoctestStrictness::Warn),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        assert_eq!(
+            diags.len(),
+            1,
+            "one missing-header diagnostic expected for the single public subject"
+        );
+        assert_eq!(
+            diags[0].severity,
+            DiagnosticSeverity::Warning,
+            "M1 warn strictness must map to Warning severity so runs don't fail on gaps"
+        );
+        assert_eq!(
+            diags[0].context.as_ref(),
+            "doctest.coverage",
+            "reporter dedup groups on this exact context string"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_maps_required_to_warning_in_m1() {
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+        use crate::reporter::stats::DiagnosticSeverity;
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            strictness: Some(DoctestStrictness::Required),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        // Two diagnostics: the coverage warning + Task 15's M1-limit NOTICE.
+        // Filter to just the coverage rule here — the NOTICE is asserted by a
+        // dedicated test below.
+        let coverage: Vec<_> = diags
+            .iter()
+            .filter(|d| d.context.as_ref() == "doctest.coverage")
+            .collect();
+        assert_eq!(
+            coverage.len(),
+            1,
+            "required-mode still produces a coverage diagnostic; \
+             M1 downgrades severity per Task 15 note. got: {:?}",
+            diags
+        );
+        assert_eq!(
+            coverage[0].severity,
+            DiagnosticSeverity::Warning,
+            "M1 required behaves like warn — Task 15 emits the one-time NOTICE about M2"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_returns_empty_when_scope_off() {
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Off),
+            strictness: Some(DoctestStrictness::Warn),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        assert!(
+            diags.is_empty(),
+            "scope=off must short-circuit before running the rule — no diagnostics"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_returns_empty_when_strictness_off() {
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            strictness: Some(DoctestStrictness::Off),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        assert!(
+            diags.is_empty(),
+            "strictness=off silences the rule regardless of scope"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_returns_empty_when_no_doctest_config() {
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = None;
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        assert!(
+            diags.is_empty(),
+            "no [tool.oxitest.doctest] table ⇒ rule must not run — silent by default"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_emits_m1_notice_when_required() {
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+        use crate::reporter::stats::DiagnosticSeverity;
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            strictness: Some(DoctestStrictness::Required),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+
+        let notices: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.severity == DiagnosticSeverity::Notice
+                    && d.context.as_ref() == "doctest.coverage.m1-limit"
+            })
+            .collect();
+        assert_eq!(
+            notices.len(),
+            1,
+            "one-time NOTICE about `required` deferred to M2 must fire so users \
+             aren't surprised when hard-fail lands; got diags: {:?}",
+            diags
+        );
+        let notice = notices[0];
+        assert!(
+            notice.message.contains("required"),
+            "NOTICE message must name the strictness value so users can grep for it; \
+             got: {}",
+            notice.message
+        );
+        assert!(
+            notice.message.contains("M2"),
+            "NOTICE message must point at M2 so users know where the fix lands; \
+             got: {}",
+            notice.message
+        );
+        assert!(
+            notice.file.is_none(),
+            "M1-limit NOTICE is process-scoped, not file-scoped — no file attribution"
+        );
+        assert!(
+            notice.lineno.is_none(),
+            "M1-limit NOTICE has no source line"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_no_m1_notice_when_warn() {
+        // strictness = warn must NOT emit the M1-limit NOTICE — users who opted
+        // into warn already know it's advisory; the NOTICE is only relevant to
+        // users who asked for `required` and are getting downgraded.
+        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            strictness: Some(DoctestStrictness::Warn),
+            allowlist: None,
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+
+        let m1_notices: Vec<_> = diags
+            .iter()
+            .filter(|d| d.context.as_ref() == "doctest.coverage.m1-limit")
+            .collect();
+        assert_eq!(
+            m1_notices.len(),
+            0,
+            "strictness=warn must not trigger the M1-limit NOTICE — that's noise \
+             for users who didn't ask for hard-fail; got: {:?}",
+            m1_notices
+        );
     }
 }

@@ -7,6 +7,7 @@ mod merge;
 
 mod pyproject;
 use pyproject::PyprojectToml;
+pub use pyproject::{DoctestConfig, DoctestScope, DoctestStrictness};
 
 impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.
@@ -220,8 +221,6 @@ pub struct PathConfig {
     pub norecursedirs: Vec<String>,
     /// Respect `.gitignore` rules during file discovery.
     pub use_gitignore: bool,
-    /// Collect and run doctests from Python source modules.
-    pub doctest_modules: bool,
 }
 
 impl Default for PathConfig {
@@ -240,7 +239,6 @@ impl Default for PathConfig {
                 "node_modules".to_string(),
             ],
             use_gitignore: true,
-            doctest_modules: false,
         }
     }
 }
@@ -468,6 +466,12 @@ pub struct Config {
     pub filter: FilterConfig,
     /// Feature flags: plugins, coverage, async, caching.
     pub features: FeatureConfig,
+    /// Doctest collection settings.
+    ///
+    /// `None` means doctest collection is disabled. `Some` opts in — the
+    /// `scope` sub-field can still explicitly disable via `DoctestScope::Off`
+    /// (used by consumers as the enablement check).
+    pub doctest: Option<DoctestConfig>,
 }
 
 impl Default for Config {
@@ -480,7 +484,20 @@ impl Default for Config {
             markers: MarkerConfig::default(),
             filter: FilterConfig::default(),
             features: FeatureConfig::default(),
+            doctest: None,
         }
+    }
+}
+
+impl Config {
+    /// Return true when doctest collection should run.
+    ///
+    /// True when a `[tool.oxitest.doctest]` table is present OR `--doctest-modules`
+    /// was passed, unless the user explicitly set `scope = "off"` to disable it.
+    pub fn doctest_enabled(&self) -> bool {
+        self.doctest
+            .as_ref()
+            .is_some_and(|d| !matches!(d.scope, Some(DoctestScope::Off)))
     }
 }
 
@@ -555,6 +572,17 @@ impl Config {
             Ok(c) => c,
             Err(_) => return config,
         };
+        // Structural pre-check for removed keys — a serde-level default would
+        // silently accept the legacy field. Hard-error at load time so users
+        // see the migration message immediately (per wayfinder #1605).
+        //
+        // Exit as `ExitCode::UsageError` (4): the pyproject.toml is
+        // misconfigured. A raw `2` would collide with `ExitCode::Interrupted`
+        // and mislead CI (see `src/types/exit.rs`).
+        if let Err(err) = pyproject::check_no_legacy_keys(&content) {
+            eprintln!("error: {}: {}", pyproject_path, err);
+            std::process::exit(crate::types::ExitCode::UsageError.into());
+        }
         let pyproject: PyprojectToml = match toml::from_str(&content) {
             Ok(p) => p,
             Err(e) => {
@@ -622,6 +650,11 @@ pub(crate) fn compute_optimal_workers(
 #[cfg(test)]
 impl Config {
     pub fn from_str(s: &str) -> Result<Self, toml::de::Error> {
+        // Legacy-key check runs first so tests can also observe the migration
+        // error path. Panic (rather than shoehorn a new error type) since this
+        // is `#[cfg(test)]` and the assertion helps tests locate misuse.
+        pyproject::check_no_legacy_keys(s)
+            .unwrap_or_else(|e| panic!("legacy key rejected by Config::from_str: {e}"));
         let pyproject: PyprojectToml = toml::from_str(s)?;
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
         Ok(Config::default().merge_toml(tc, None))
@@ -1089,5 +1122,42 @@ mod tests {
             2,
             "glob-containing node IDs must not produce source files"
         );
+    }
+
+    #[test]
+    fn doctest_enabled_reflects_scope_semantics() {
+        use crate::config::pyproject::{DoctestConfig, DoctestScope};
+
+        // No sub-table ⇒ disabled.
+        let mut cfg = Config::default();
+        assert!(!cfg.doctest_enabled(), "no sub-table ⇒ disabled");
+
+        // Sub-table present, scope=None ⇒ enabled (uses default).
+        cfg.doctest = Some(DoctestConfig::default());
+        assert!(
+            cfg.doctest_enabled(),
+            "present sub-table with default scope ⇒ enabled"
+        );
+
+        // scope=Public ⇒ enabled.
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            ..Default::default()
+        });
+        assert!(cfg.doctest_enabled(), "scope=Public ⇒ enabled");
+
+        // scope=All ⇒ enabled.
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::All),
+            ..Default::default()
+        });
+        assert!(cfg.doctest_enabled(), "scope=All ⇒ enabled");
+
+        // scope=Off ⇒ disabled.
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Off),
+            ..Default::default()
+        });
+        assert!(!cfg.doctest_enabled(), "scope=Off ⇒ disabled");
     }
 }

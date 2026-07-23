@@ -35,7 +35,7 @@ pub struct RunArgs {
     #[arg(long, help_heading = "Execution")]
     pub serial: bool,
 
-    /// Collect and run doctests from all Python source modules
+    /// Collect and run doctests from public Python source modules (opt-in via `[tool.oxitest.doctest]` in pyproject.toml)
     #[arg(long, help_heading = "Execution")]
     pub doctest_modules: bool,
 
