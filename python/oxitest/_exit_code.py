@@ -6,10 +6,26 @@ __all__ = ["ExitCode"]
 
 
 class ExitCode(IntEnum):
-    """Exit codes returned by :func:`oxitest.main`.
+    """Process exit codes returned by oxitest runs.
 
     Inherits from :class:`int`, so ``sys.exit(ExitCode.SUCCESS)`` works
     directly and comparisons like ``rc == ExitCode.FAILURE`` are valid.
+
+    See Also:
+        - ``python -m oxitest`` — CLI entry point that maps its return
+          value to one of these codes via ``sys.exit``.
+
+    Examples:
+        >>> from oxitest import ExitCode
+        >>> ExitCode.SUCCESS
+        <ExitCode.SUCCESS: 0>
+        >>> int(ExitCode.FAILURE)
+        1
+        >>> ExitCode.INTERRUPTED == 2
+        True
+        >>> ExitCode(4).name
+        'USAGE_ERROR'
+
     """
 
     SUCCESS = 0
