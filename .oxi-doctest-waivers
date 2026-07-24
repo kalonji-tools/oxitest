@@ -21,9 +21,6 @@ oxitest.approx
 oxitest.arrange
 oxitest.CaptureResult
 oxitest.FdCapture
-oxitest.Fixture
-oxitest.FixtureRef
-oxitest.Fixtures
 oxitest.importorskip
 oxitest.injectable
 oxitest.LogCapture
@@ -45,4 +42,3 @@ oxitest.TempDirFactory
 oxitest.TestContext
 oxitest.WarnCapture
 oxitest.warns
-oxitest.Yields

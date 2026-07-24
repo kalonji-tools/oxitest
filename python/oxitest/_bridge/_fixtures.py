@@ -107,19 +107,45 @@ class FixtureAccessor:
 class Fixtures:
     """Instance-based fixture registry. Create one per conftest.py.
 
-    The optional `name` parameter sets the namespace name used when accessing
-    fixtures via `fx: Fixtures` (e.g. `fx.db.conn`). If omitted, the name
-    is derived from the variable name in conftest.py (`db = Fixtures()` →
-    namespace `"db"`).
+    Fixtures are setup routines that produce values injected into tests via
+    the :class:`Fixture` annotation. Register a callable with
+    :meth:`fixture` — either as a bare decorator or with options
+    (``autouse``, ``shared``, ``name``) — and the registered function
+    becomes discoverable at test-collection time.
 
-    Usage:
-        fixtures = Fixtures()
+    The optional ``name`` parameter on ``Fixtures()`` sets the namespace
+    name used when accessing fixtures via ``fx: Fixtures`` (e.g.
+    ``fx.db.conn``). If omitted, the name is derived from the variable
+    name in conftest.py (``db = Fixtures()`` → namespace ``"db"``).
 
-        @fixtures.fixture
-        def my_db(): ...
+    See Also:
+        - :class:`Fixture` — the injection-signal annotation.
+        - :class:`Yields` — return-type annotation for yield fixtures.
+        - :class:`Helpers` — the sibling registry for stateless test
+          utilities.
 
-        @fixtures.fixture
-        def my_client(my_db): ...
+    Examples:
+        Register fixtures on a module-level ``fixtures`` instance in
+        ``conftest.py``:
+
+        >>> from oxitest import Fixtures
+        >>> fixtures = Fixtures()
+        >>> @fixtures.fixture
+        ... def db() -> str:
+        ...     return "db://test"
+        >>> len(fixtures.defs)
+        1
+        >>> fixtures.defs[0].name
+        'db'
+
+        A custom name overrides the function name at registration:
+
+        >>> @fixtures.fixture(name="cache")
+        ... def _redis_client() -> str:
+        ...     return "redis://localhost"
+        >>> [d.name for d in fixtures.defs]
+        ['db', 'cache']
+
     """
 
     def __init__(self, name: str | None = None) -> None:

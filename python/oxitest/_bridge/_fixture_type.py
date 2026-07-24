@@ -11,24 +11,45 @@ class _FixtureMarker:
 class _FixtureType:
     """Injection signal for oxitest fixtures.
 
-    Annotating a test or fixture parameter with `Fixture[T]` tells oxitest
-    to inject the matching fixture at runtime. The annotation is the injection
-    signal — an unannotated parameter is NOT injected, even if its name matches
-    a registered fixture.
+    Annotating a test or fixture parameter with ``Fixture[T]`` tells
+    oxitest to inject the matching fixture at runtime. The annotation is
+    the injection signal — an unannotated parameter is NOT injected, even
+    if its name matches a registered fixture.
 
-    Example::
+    The type parameter ``T`` is the fixture's return type. IDEs and type
+    checkers resolve ``Fixture[list[int]]`` as ``list[int]`` at the call
+    site — no plugin required.
 
-        def test_example(numbers: Fixture[list[int]]) -> None:
-            assert sum(numbers) > 0
+    See Also:
+        - :class:`Fixtures` — the registry that owns fixture registrations.
+        - :class:`FixtureRef` — for fixture references inside parametrize
+          kwargs.
+        - :class:`Yields` — return-type annotation for yield fixtures.
 
-    The type parameter `T` is the fixture's return type. IDEs and type
-    checkers resolve `Fixture[list[int]]` as `list[int]` at the call site
-    — no plugin required.
+    Examples:
+        ``Fixture[T]`` expands to ``Annotated[T, _FixtureMarker()]`` — the
+        payload carries the marker sentinel that flags injection, while
+        the outer type resolves as ``T`` for IDEs and type checkers:
 
-    Incorrect (unannotated — oxitest will not inject this)::
+        >>> from oxitest import Fixture
+        >>> from oxitest._bridge._fixture_type import _FixtureMarker
+        >>> from typing import get_args
+        >>> args = get_args(Fixture[int])
+        >>> args[0]
+        <class 'int'>
+        >>> isinstance(args[1], _FixtureMarker)
+        True
 
-        def test_bad(numbers) -> None:  # missing Fixture[T]
-            assert sum(numbers) > 0    # TypeError at runtime
+        Correct usage on a test parameter::
+
+            def test_example(numbers: Fixture[list[int]]) -> None:
+                assert sum(numbers) > 0
+
+        Unannotated parameters are NOT injected::
+
+            def test_bad(numbers) -> None:  # missing Fixture[T]
+                assert sum(numbers) > 0    # TypeError at runtime
+
     """
 
     def __class_getitem__(cls, item: Any) -> Any:
@@ -43,29 +64,45 @@ class _FixtureRefMarker:
 
 
 class _FixtureRefType:
-    """Annotation for fixture references inside `@oxitest.parametrize` kwargs.
+    """Annotation for fixture references inside ``@oxitest.parametrize`` kwargs.
 
-    Use `FixtureRef[T]` as the type annotation on a frozen dataclass field to
-    signal that the field's value is a fixture function, not a literal value.
-    The runner resolves it to the live fixture instance before each test.
+    Use ``FixtureRef[T]`` as the type annotation on a frozen dataclass
+    field to signal that the field's value is a fixture function, not a
+    literal value. The runner resolves it to the live fixture instance
+    before each test.
 
-    Example:
-        ```python
-        from dataclasses import dataclass
-        import oxitest
-        from oxitest import Fixture, FixtureRef
+    See Also:
+        - :class:`Fixture` — the runtime-injection sibling.
+        - :func:`oxitest.parametrize` — the consumer that resolves refs.
 
-        @dataclass(frozen=True)
-        class BackendCase:
-            store: FixtureRef[KVault]
-            label: str
+    Examples:
+        ``FixtureRef[T]`` expands to
+        ``Annotated[Callable[..., T], _FixtureRefMarker()]`` — the marker
+        signals that the field carries a fixture reference:
 
-        @oxitest.parametrize(
-            memory=BackendCase(store=kvault.store, label="in-memory"),
-        )
-        def test_backend(store: Fixture[KVault], label: str) -> None:
-            assert store.ping()
-        ```
+        >>> from oxitest import FixtureRef
+        >>> from oxitest._bridge._fixture_type import _FixtureRefMarker
+        >>> from typing import get_args
+        >>> args = get_args(FixtureRef[int])
+        >>> isinstance(args[1], _FixtureRefMarker)
+        True
+
+        Usage on a parametrize case::
+
+            from dataclasses import dataclass
+            import oxitest
+            from oxitest import Fixture, FixtureRef
+
+            @dataclass(frozen=True)
+            class BackendCase:
+                store: FixtureRef[KVault]
+                label: str
+
+            @oxitest.parametrize(
+                memory=BackendCase(store=kvault.store, label="in-memory"),
+            )
+            def test_backend(store: Fixture[KVault], label: str) -> None:
+                assert store.ping()
 
     """
 
@@ -79,26 +116,40 @@ FixtureRef = _FixtureRefType
 class _YieldsAlias:
     """Return-type annotation for yield-based fixture teardown.
 
-    `Yields[T]` is shorthand for `Generator[T, None, None]` — the correct
-    return annotation for a fixture that uses `yield` to separate setup from
-    teardown. Without it, type checkers flag yield fixtures with an incorrect
-    return type and require `# type: ignore[return]` suppressions.
+    ``Yields[T]`` is shorthand for ``Generator[T, None, None]`` — the
+    correct return annotation for a fixture that uses ``yield`` to
+    separate setup from teardown. Without it, type checkers flag yield
+    fixtures with an incorrect return type and require
+    ``# type: ignore[return]`` suppressions.
 
-    This is a **return-type annotation only** — it does not carry an injection
-    marker and will not cause oxitest to inject anything.
+    Return-type annotation only — it does not carry an injection marker
+    and will not cause oxitest to inject anything.
 
-    Example::
+    See Also:
+        - :class:`Fixture` — the injection-signal annotation for parameters.
+        - :class:`Fixtures` — the registry that owns yield fixtures.
 
-        @fixtures.fixture
-        def store() -> Yields[KVault]:
-            s = KVault()
-            yield s        # value injected into tests
-            s.close()      # teardown runs after each test
+    Examples:
+        ``Yields[T]`` is exactly ``Generator[T, None, None]``:
 
-        @fixtures.fixture
-        def tx_cleanup(store: Fixture[KVault]) -> Yields[None]:
-            yield          # setup is a no-op; teardown does the work
-            store.rollback_if_open()
+        >>> from oxitest import Yields
+        >>> from collections.abc import Generator
+        >>> Yields[int] == Generator[int, None, None]
+        True
+
+        Usage on a yield fixture::
+
+            @fixtures.fixture
+            def store() -> Yields[KVault]:
+                s = KVault()
+                yield s        # value injected into tests
+                s.close()      # teardown runs after each test
+
+            @fixtures.fixture
+            def tx_cleanup(store: Fixture[KVault]) -> Yields[None]:
+                yield          # setup is a no-op; teardown does the work
+                store.rollback_if_open()
+
     """
 
     def __class_getitem__(cls, item: Any) -> Any:
