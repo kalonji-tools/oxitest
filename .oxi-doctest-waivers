@@ -29,7 +29,6 @@ oxitest.Conf
 oxitest.CoverageProvider
 oxitest.CovReportFormat
 oxitest.DebuggerBackend
-oxitest.ExitCode
 oxitest.FdCapture
 oxitest.Fixture
 oxitest.FixtureRef
