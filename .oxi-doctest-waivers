@@ -1,0 +1,87 @@
+# Doctest coverage waivers — shrink-only ratchet.
+#
+# Names on this file are known-missing public subjects granted a
+# temporary waiver from the coverage requirement. `oxitest` treats
+# each as a Notice (visible tech debt) rather than an Error under
+# `strict = "abort"`. Waivers are shrink-only: removing an entry fails
+# if the subject is still missing coverage; adding an entry fails if
+# the subject is already covered.
+#
+# Wayfinder map: #1602. Realizes decision #1604.
+#
+# NOTE: Public subjects that alias into `oxitest._bridge.*` submodules
+# (e.g. `oxitest.mark`, `oxitest.TestResult`) produce
+# `doctest.coverage.analysis` errors — the scanner cannot verify their
+# docstrings via the alias chain. Analysis errors bypass the waivers
+# ratchet entirely (they are not in the "missing subjects" set), so
+# listing them here would make them permanently stale. They are left
+# out; the analysis errors are visible under `--warnings` but do not
+# block the ratchet. Fix by adding docstrings to the aliased sources.
+conftest.assert_collection_error
+conftest.assert_contains
+conftest.assert_excludes
+conftest.assert_failed
+conftest.assert_passed
+conftest.assert_result
+conftest.clean_git_env
+conftest.exec_inline
+conftest.install_module
+conftest.make_exc
+conftest.make_fixture_def
+conftest.make_meta
+conftest.make_plugin_module
+conftest.make_registry
+conftest.make_session
+conftest.make_session_with
+conftest.RecordingDebugger
+conftest.run_oxitest
+conftest.run_oxitest_subcmd
+conftest.run_test
+conftest.write_project
+conftest.write_test_file
+conftest.write_test_module
+oxitest.approx
+oxitest.arrange
+oxitest.ArrangeError
+oxitest.AsyncBackend
+oxitest.AsyncSession
+oxitest.AutouseRegistrationError
+oxitest.Both
+oxitest.CaptureResult
+oxitest.Cli
+oxitest.CliExtension
+oxitest.CollectedItem
+oxitest.Conf
+oxitest.CoverageProvider
+oxitest.CovReportFormat
+oxitest.DebuggerBackend
+oxitest.ExitCode
+oxitest.FdCapture
+oxitest.Fixture
+oxitest.FixtureRef
+oxitest.Fixtures
+oxitest.Helpers
+oxitest.importorskip
+oxitest.injectable
+oxitest.LogCapture
+oxitest.parametrize
+oxitest.partial
+oxitest.Patcher
+oxitest.Plugin
+oxitest.plugin.skipped
+oxitest.plugin.SkippedResult
+oxitest.plugin.StatusKind
+oxitest.plugin.warned
+oxitest.plugin.WarnedResult
+oxitest.plugin.xfailed
+oxitest.plugin.XFailedResult
+oxitest.raises
+oxitest.SharedFixtureMutationError
+oxitest.skip
+oxitest.StdCapture
+oxitest.TempDir
+oxitest.TempDirFactory
+oxitest.TestContext
+oxitest.WarnCapture
+oxitest.warns
+oxitest.Yields
