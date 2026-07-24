@@ -347,11 +347,42 @@ def _error_result(
 
 @dataclass(frozen=True, slots=True)
 class CollectedItem:
-    """Bridge result returned by importer.collect_module and consumed by Rust bridge.
+    """Bridge result from importer.collect_module, consumed by the Rust bridge.
 
-    Field names must match the Rust CollectedItem struct in src/bridge.rs.
-    Rust reads ``param_id`` via attribute access, which resolves to the
-    ``@property`` below; the underlying field is ``kind`` (TestKind).
+    Represents one discovered test — a function name, source location,
+    applied marks, sync/async flavor, dependency graph, and (for
+    parametrized tests) the case id via ``kind``. Field names must match
+    the Rust ``CollectedItem`` struct in ``src/bridge.rs``. Rust reads
+    ``param_id`` via attribute access, which resolves to the ``@property``
+    below; the underlying discriminator is ``kind`` (a ``TestKind`` sum
+    type).
+
+    See Also:
+        - ``importer.collect_module`` — the producer.
+        - ``TestKind`` (``_bridge._test_kind``) — sum-type discriminator
+          (``Solitary`` for non-parametrized, ``Parametrized(param_id=...)``
+          for one case of a parametrized test).
+
+    Examples:
+        Bridge results are normally produced by ``collect_module``, but
+        plugin authors or test doubles can construct one directly:
+
+        >>> from oxitest import CollectedItem
+        >>> from oxitest._bridge._test_kind import Solitary
+        >>> item = CollectedItem(
+        ...     fn_name="test_add",
+        ...     lineno=42,
+        ...     markers=(),
+        ...     kind=Solitary(),
+        ...     param_values=(),
+        ... )
+        >>> item.fn_name
+        'test_add'
+        >>> item.is_async
+        False
+        >>> item.param_id is None
+        True
+
     """
 
     fn_name: str
