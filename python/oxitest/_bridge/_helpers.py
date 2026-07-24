@@ -15,13 +15,46 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 class Helpers:
     """Instance-based helper registry. Create one per conftest.py.
 
-    Example::
+    Helpers are stateless test utilities — factory functions, assertion
+    builders, or shared setup routines. Register them with :meth:`helper`
+    to expose them as attributes on the registry, then access via
+    ``helpers.<name>()``.
 
-        helpers = Helpers()
+    Namespace-aware injection into tests happens by declaring a
+    ``fx: Fixtures`` parameter and reading ``fx.helpers``. This class
+    itself is the registration surface only.
 
-        @helpers.helper
-        def create_test_user(name: str = "test") -> User:
-            return User(name=name)
+    See Also:
+        - :class:`oxitest.Fixtures` — the sibling registry for fixtures.
+
+    Examples:
+        Register helpers on a module-level ``helpers`` instance in your
+        ``conftest.py``, then call them by attribute:
+
+        >>> from oxitest import Helpers
+        >>> helpers = Helpers()
+        >>> @helpers.helper
+        ... def make_user(name: str = "test") -> str:
+        ...     return f"user:{name}"
+        >>> helpers.make_user()
+        'user:test'
+        >>> helpers.make_user("alice")
+        'user:alice'
+
+        A custom name can override the function name:
+
+        >>> @helpers.helper(name="build")
+        ... def _build() -> int:
+        ...     return 42
+        >>> helpers.build()
+        42
+
+        Unknown helper names raise ``AttributeError``:
+
+        >>> from oxitest import raises
+        >>> with raises(AttributeError):
+        ...     helpers.nonexistent
+
     """
 
     def __init__(self, name: str | None = None) -> None:

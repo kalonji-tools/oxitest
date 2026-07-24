@@ -28,7 +28,6 @@ oxitest.FdCapture
 oxitest.Fixture
 oxitest.FixtureRef
 oxitest.Fixtures
-oxitest.Helpers
 oxitest.importorskip
 oxitest.injectable
 oxitest.LogCapture
