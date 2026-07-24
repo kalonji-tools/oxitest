@@ -25,7 +25,6 @@ oxitest.Both
 oxitest.CaptureResult
 oxitest.Cli
 oxitest.CliExtension
-oxitest.CollectedItem
 oxitest.Conf
 oxitest.CoverageProvider
 oxitest.CovReportFormat
