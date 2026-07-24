@@ -22,6 +22,27 @@ class DebuggerBackend(Protocol):
     Plugins implement this to provide alternative debuggers (ipdb, pudb, etc.).
     oxitest owns capture management, banners, and *when* to call the debugger.
     The backend only provides the *what* — the actual debugger interaction.
+    Runtime-checkable, so ``isinstance()`` structurally verifies conformance.
+
+    See Also:
+        - ``oxitest.Plugin.debugger_backend`` — how a plugin exposes an
+          implementation to oxitest.
+        - ``pdb.set_trace`` / ``pdb.post_mortem`` — the stdlib fallback
+          used when no plugin registers a backend.
+
+    Examples:
+        Any object with matching ``trace`` and ``post_mortem`` methods
+        satisfies the protocol:
+
+        >>> from oxitest import DebuggerBackend
+        >>> class MyBackend:
+        ...     def trace(self) -> None: pass
+        ...     def post_mortem(self, tb) -> None: pass
+        >>> isinstance(MyBackend(), DebuggerBackend)
+        True
+        >>> isinstance(object(), DebuggerBackend)
+        False
+
     """
 
     def trace(self) -> None:
