@@ -17,10 +17,3 @@
 # listing them here would make them permanently stale. They are left
 # out; the analysis errors are visible under `--warnings` but do not
 # block the ratchet. Fix by adding docstrings to the aliased sources.
-oxitest.plugin.skipped
-oxitest.plugin.SkippedResult
-oxitest.plugin.StatusKind
-oxitest.plugin.warned
-oxitest.plugin.WarnedResult
-oxitest.plugin.xfailed
-oxitest.plugin.XFailedResult

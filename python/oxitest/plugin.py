@@ -375,18 +375,57 @@ class Plugin:
 
 
 def skipped(*, message: str) -> SkippedResult:
-    """Skipped result for an ExecutionWrapper when a test cannot run."""
+    """Skipped result for an ExecutionWrapper when a test cannot run.
+
+    See Also:
+        - :class:`SkippedResult` — the returned variant.
+
+    Examples:
+        >>> from oxitest.plugin import skipped, SkippedResult
+        >>> r = skipped(message="no network")
+        >>> isinstance(r, SkippedResult)
+        True
+        >>> r.message
+        'no network'
+
+    """
     return SkippedResult(message=message)
 
 
 def xfailed(*, message: str) -> XFailedResult:
-    """XFailed result for an ExecutionWrapper when failure was expected."""
+    """XFailed result for an ExecutionWrapper when failure was expected.
+
+    See Also:
+        - :class:`XFailedResult` — the returned variant.
+
+    Examples:
+        >>> from oxitest.plugin import xfailed, XFailedResult
+        >>> r = xfailed(message="known bug")
+        >>> isinstance(r, XFailedResult)
+        True
+        >>> r.message
+        'known bug'
+
+    """
     return XFailedResult(message=message)
 
 
 def warned(*, message: str) -> WarnedResult:
     """Warned result for an ExecutionWrapper with a warning-level outcome.
 
-    `no_message_lines` deliberately not exposed; extend additively if needed.
+    ``no_message_lines`` deliberately not exposed; extend additively if
+    needed.
+
+    See Also:
+        - :class:`WarnedResult` — the returned variant.
+
+    Examples:
+        >>> from oxitest.plugin import warned, WarnedResult
+        >>> r = warned(message="deprecation notice")
+        >>> isinstance(r, WarnedResult)
+        True
+        >>> r.message
+        'deprecation notice'
+
     """
     return WarnedResult(message=message)
