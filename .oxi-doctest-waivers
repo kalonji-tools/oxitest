@@ -37,8 +37,6 @@ oxitest.plugin.XFailedResult
 oxitest.raises
 oxitest.skip
 oxitest.StdCapture
-oxitest.TempDir
-oxitest.TempDirFactory
 oxitest.TestContext
 oxitest.WarnCapture
 oxitest.warns
