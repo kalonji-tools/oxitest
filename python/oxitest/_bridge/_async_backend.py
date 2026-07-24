@@ -46,14 +46,20 @@ _T = TypeVar("_T")
 class AsyncSession(Protocol):
     """A scoped async runtime session.
 
-    Multiple :meth:`run` calls on the same session share one runtime context.
-    Backends decide what "shared context" means (asyncio: one event loop; trio:
-    one nursery/runtime). The framework treats sessions as opaque handles.
-    Runtime-checkable, so ``isinstance()`` structurally verifies conformance.
+    Represents a single runtime context — one asyncio event loop, one trio
+    nursery, etc. Multiple :meth:`run` calls on the same session share that
+    context, so async generators produced by one call remain live for
+    finalization on session exit.
+
+    Sessions are context managers, and their lifetime is a caller decision.
+    Short-lived usage inlines a ``with`` block. Long-lived usage — like a
+    shared-scope fixture that spans many tests — holds the session via
+    :class:`contextlib.ExitStack` and finalizes it when the enclosing scope
+    tears down.
 
     See Also:
-        - ``AsyncBackend.acquire_session`` — the producer of session instances.
-        - ``AsyncioSession`` — the default asyncio implementation.
+        - :meth:`AsyncBackend.acquire_session` — how sessions are produced.
+        - :class:`AsyncioSession` — the default asyncio implementation.
 
     Examples:
         Any object with a matching ``run`` method satisfies the protocol:
@@ -79,17 +85,19 @@ class AsyncBackend(Protocol):
     """Pluggable async runtime backend.
 
     Backends produce :class:`AsyncSession` instances via
-    :meth:`acquire_session`. Nested acquires are rejected by default at the
-    framework guard; opt in by setting :attr:`supports_nested_acquire` to
-    ``True`` on the concrete backend class.  Runtime-checkable, so
-    ``isinstance()`` structurally verifies conformance.
+    :meth:`acquire_session`. The framework acquires a session per scope (one
+    per test for function-scope work, one for the whole run for shared-scope
+    work) and drives coroutines through :meth:`AsyncSession.run`.
+
+    One session at a time by default. Set :attr:`supports_nested_acquire`
+    to ``True`` on the concrete backend class to opt into overlapping
+    sessions — the framework guard rejects nested acquires otherwise.
 
     See Also:
-        - ``oxitest.Plugin.async_backend`` — how a plugin exposes an
-          implementation to oxitest.
-        - ``AsyncioBackend`` — the default implementation shipped with oxitest.
-        - ``resolve_backend`` — the discovery function that picks the active
-          backend from the plugin registry.
+        - :attr:`oxitest.Plugin.async_backend` — how a plugin exposes a
+          backend to oxitest.
+        - :class:`AsyncioBackend` — the default implementation shipped
+          with oxitest.
 
     Examples:
         Any object with a matching ``name`` property, ``acquire_session``
