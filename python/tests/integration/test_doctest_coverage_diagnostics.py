@@ -23,9 +23,9 @@ def test_missing_header_produces_warning(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
@@ -62,9 +62,9 @@ def test_header_present_no_examples_produces_warning(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
@@ -97,10 +97,10 @@ def test_header_present_no_examples_produces_warning(tmp: TempDir) -> None:
 
 
 def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
-    """No coverage diagnostics fire when ``strictness = "off"``.
+    """No coverage diagnostics fire when ``strict = "off"``.
 
-    Explicit opt-out via ``strictness = "off"`` must suppress every
-    ``doctest.coverage`` diagnostic — no matter what state the subjects
+    Explicit opt-out via ``strict = "off"`` at ``[tool.oxitest]`` must suppress
+    every ``doctest.coverage`` diagnostic — no matter what state the subjects
     are in.
     """
     helpers.integ.write_project(
@@ -109,9 +109,9 @@ def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "off"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "off"
         """,
         extra_files={
             "mypkg/__init__.py": '__all__ = ["foo"]\ndef foo(): pass\n',
@@ -120,7 +120,7 @@ def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
     out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "doctest.coverage" not in combined, (
-        "strictness=off must suppress all coverage-rule diagnostics — if any "
+        "strict=off must suppress all coverage-rule diagnostics — if any "
         "leak through, users who opted out will see spurious warnings and "
         f"lose trust in the config knob: {combined!r}"
     )
@@ -134,9 +134,9 @@ def test_covered_subject_produces_no_diagnostic(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
