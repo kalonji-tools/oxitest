@@ -141,7 +141,22 @@ class UnannotatedFixtureParamError(FixtureError):
 
 
 class SharedFixtureMutationError(RuntimeError, OxitestError):
-    """Raised when code attempts to mutate a shared (immutable) fixture value."""
+    """Raised when code attempts to mutate a shared (immutable) fixture value.
+
+    Shared and session-scope fixtures are exposed to tests as immutable proxies
+    so that per-test mutations cannot leak into sibling tests. Any write attempt
+    (attribute assignment, item assignment, or the setter half of an augmented
+    assign like ``x.attr += y``) on such a proxy fires this error.
+
+    Examples:
+        Users never construct this error directly — it is raised by the
+        fixture proxy when mutation is attempted.
+
+        >>> from oxitest import SharedFixtureMutationError
+        >>> issubclass(SharedFixtureMutationError, RuntimeError)
+        True
+
+    """
 
 
 # ─── Execution errors ────────────────────────────────────────────────────────
@@ -271,6 +286,17 @@ class AutouseRegistrationError(TypeError):
     so the intent is stated up front.
 
     See #1535 (Q5) and #1538.
+
+    Examples:
+        Users never construct this error directly — it is raised by
+        ``Fixtures.fixture`` when the illegal combination is registered.
+        The error message lists the two supported ways forward
+        (drop ``autouse=True``, or pass ``shared=True``).
+
+        >>> from oxitest import AutouseRegistrationError
+        >>> issubclass(AutouseRegistrationError, TypeError)
+        True
+
     """
 
     def __init__(self, func: Any) -> None:
@@ -309,6 +335,18 @@ class ArrangeError(OxitestError):
     hierarchy: missing arranged fixtures via `FixtureNotFoundError`
     (caught upstream by the Rust `FixtureValidationPhase`), factory
     raises via `FixtureSetupError`.
+
+    Examples:
+        Users never construct this error directly — it is raised during
+        collection when ``@oxi.arrange`` is applied to a sync test that
+        names one or more async function-scope fixtures. The error message
+        lists three remediations (make the test async, widen the fixture
+        scope, or convert the fixture to sync).
+
+        >>> from oxitest import ArrangeError
+        >>> issubclass(ArrangeError, Exception)
+        True
+
     """
 
     def __init__(self, fn: Any, illegal: list[tuple[str, Any]]) -> None:
