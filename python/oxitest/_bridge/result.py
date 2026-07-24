@@ -42,8 +42,23 @@ class StatusKind(StrEnum):
     """Status of a completed test.
 
     StrEnum values are plain strings — PyO3's FromPyObject extracts them
-    as String without custom glue because isinstance(StatusKind.PASSED,
-    str) is True. Wire format (JSON serialization) is unchanged.
+    as String without custom glue because ``isinstance(StatusKind.PASSED,
+    str)`` is True. Wire format (JSON serialization) is unchanged.
+
+    See Also:
+        - :class:`SkippedResult`, :class:`WarnedResult`,
+          :class:`XFailedResult` — variant result classes whose
+          ``status`` property returns a member of this enum.
+
+    Examples:
+        >>> from oxitest.plugin import StatusKind
+        >>> StatusKind.PASSED
+        <StatusKind.PASSED: 'passed'>
+        >>> StatusKind.PASSED.value
+        'passed'
+        >>> "passed" == StatusKind.PASSED
+        True
+
     """
 
     PASSED = "passed"
@@ -239,7 +254,25 @@ class ErrorResult:
 
 @dataclass(frozen=True, slots=True)
 class SkippedResult:
-    """Result for a skipped test."""
+    """Result for a skipped test.
+
+    Return this from an ExecutionWrapper plugin hook to report that the
+    test could not run (e.g. missing dependency, unsupported platform).
+    ``status`` always returns :attr:`StatusKind.SKIPPED`.
+
+    See Also:
+        - :func:`oxitest.plugin.skipped` — constructor helper.
+        - :class:`WarnedResult`, :class:`XFailedResult` — sibling variants.
+
+    Examples:
+        >>> from oxitest.plugin import SkippedResult, StatusKind
+        >>> r = SkippedResult(message="no network")
+        >>> r.status
+        <StatusKind.SKIPPED: 'skipped'>
+        >>> r.message
+        'no network'
+
+    """
 
     message: str = ""
 
@@ -255,7 +288,26 @@ class SkippedResult:
 
 @dataclass(frozen=True, slots=True)
 class WarnedResult:
-    """Result for a test that passed with warnings."""
+    """Result for a test that passed with warnings.
+
+    Return this from an ExecutionWrapper plugin hook to report that the
+    test itself passed but produced warning-level output that should
+    surface in the report. ``status`` always returns
+    :attr:`StatusKind.WARNED`.
+
+    See Also:
+        - :func:`oxitest.plugin.warned` — constructor helper.
+        - :class:`SkippedResult`, :class:`XFailedResult` — sibling variants.
+
+    Examples:
+        >>> from oxitest.plugin import WarnedResult
+        >>> r = WarnedResult(message="deprecation warning")
+        >>> r.status.value
+        'warned'
+        >>> r.message
+        'deprecation warning'
+
+    """
 
     message: str = ""
     no_message_lines: tuple[int, ...] = ()
@@ -276,7 +328,25 @@ class WarnedResult:
 
 @dataclass(frozen=True, slots=True)
 class XFailedResult:
-    """Result for an expected failure."""
+    """Result for an expected failure.
+
+    Return this from an ExecutionWrapper plugin hook to mark that a test
+    was expected to fail and did — the test run is not considered a
+    regression. ``status`` always returns :attr:`StatusKind.XFAILED`.
+
+    See Also:
+        - :func:`oxitest.plugin.xfailed` — constructor helper.
+        - :class:`SkippedResult`, :class:`WarnedResult` — sibling variants.
+
+    Examples:
+        >>> from oxitest.plugin import XFailedResult
+        >>> r = XFailedResult(message="known bug")
+        >>> r.status.value
+        'xfailed'
+        >>> r.message
+        'known bug'
+
+    """
 
     message: str = ""
 
