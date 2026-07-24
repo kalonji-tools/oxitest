@@ -62,7 +62,7 @@ impl Pipeline {
         };
         let mut shared = self.shared;
         shared.cache.invalidate_modules();
-        let (mut items, errors, raw_violations, profile) = collection::collect_items(
+        let (mut items, mut errors, raw_violations, profile) = collection::collect_items(
             py,
             &shared.test_files,
             &shared.cfg,
@@ -83,8 +83,10 @@ impl Pipeline {
             );
             items.extend(doctest_items);
 
-            // Run the doctest coverage rule and stash diagnostics for the
-            // reporter (drained in the `execute` transition).
+            // Run the doctest coverage rule. Error-severity diagnostics are
+            // promoted to collection errors so `strict = "abort"` exits
+            // non-zero via the existing early-exit path. Warning/Notice pass
+            // through as pending diagnostics for the reporter.
             let coverage_diags =
                 collection::collect_coverage_diagnostics(&doctest_files, &shared.cfg);
             if !coverage_diags.is_empty() {
@@ -92,7 +94,10 @@ impl Pipeline {
                     coverage_diagnostics = coverage_diags.len(),
                     "doctest coverage diagnostics emitted"
                 );
-                shared.pending_diagnostics.extend(coverage_diags);
+                let (coverage_errors, coverage_pending) =
+                    collection::split_coverage_diagnostics(coverage_diags);
+                shared.pending_diagnostics.extend(coverage_pending);
+                errors.extend(coverage_errors);
             }
         }
 

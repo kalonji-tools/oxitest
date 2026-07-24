@@ -22,7 +22,7 @@ fn normalize_path(path: &Utf8Path, _canonical_rootdir: &Utf8Path) -> Utf8PathBuf
     }
 }
 
-fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
+pub(crate) fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
         builder.add(GlobBuilder::new(pattern).build()?);

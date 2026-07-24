@@ -34,6 +34,52 @@ pub(crate) fn dotted_path_for(rel: &Utf8Path) -> String {
     parts.join(".")
 }
 
+/// Compute the dotted import path for a file, auto-detecting the source root.
+///
+/// Walks up from `rel` inside `rootdir`, finding the first ancestor that does
+/// NOT contain `__init__.py`. That ancestor is the source root; components at
+/// or above it are stripped from the dotted path.
+///
+/// Falls back to `dotted_path_for(rel)` if no filesystem lookup is possible
+/// (e.g. the file no longer exists).
+pub(crate) fn dotted_path_for_file(rel: &Utf8Path, rootdir: &Utf8Path) -> String {
+    // Start from the file's parent and walk up. Track how many components sit
+    // AT OR ABOVE the source root — those get stripped.
+    let mut strip_count = 0usize;
+    let mut current = rel.parent();
+    while let Some(dir) = current {
+        let init = rootdir.join(dir).join("__init__.py");
+        if init.exists() {
+            // This directory is part of a package. Keep walking to find its parent.
+            current = dir.parent();
+        } else {
+            // This directory has no __init__.py → it is the source root or above.
+            // Strip everything down to and including this directory.
+            strip_count = dir.components().count();
+            break;
+        }
+    }
+    if strip_count == 0 {
+        // No source root detected — delegate to the pure-string path which
+        // handles `.py` stripping and `__init__` removal identically.
+        return dotted_path_for(rel);
+    }
+    let mut kept: Vec<String> = rel
+        .components()
+        .map(|c| c.as_str().to_string())
+        .skip(strip_count)
+        .collect();
+    if let Some(last) = kept.last_mut()
+        && let Some(stem) = last.strip_suffix(".py")
+    {
+        *last = stem.to_string();
+    }
+    if kept.last().is_some_and(|s| s == "__init__") {
+        kept.pop();
+    }
+    kept.join(".")
+}
+
 /// Extract the string list from a top-level `__all__ = [...]` assignment, if present.
 ///
 /// Returns `None` when the module has no `__all__` — the fallback code path is expected
@@ -78,7 +124,7 @@ pub(crate) fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
 /// A public-facing subject the coverage rule may target.
 #[derive(Debug, Clone)]
 pub(crate) struct Subject {
-    /// Public dotted path — used in diagnostics and (M2) the allowlist.
+    /// Public dotted path — used in diagnostics and (M2) the waivers file.
     pub(crate) public_id: String,
     /// Where the binding lives in AST terms.
     pub(crate) source: SubjectSource,
@@ -591,6 +637,76 @@ class _Private: pass
         assert!(
             subjects.is_empty(),
             "all names underscore-prefixed and no __all__ ⇒ no public subjects"
+        );
+    }
+
+    #[test]
+    fn dotted_path_for_file_strips_source_root() {
+        use std::fs;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // Layout: python/ (no __init__.py) → oxitest/ (has __init__.py) → foo.py
+        fs::create_dir_all(root.join("python/oxitest")).unwrap();
+        fs::write(root.join("python/oxitest/__init__.py"), "").unwrap();
+        fs::write(root.join("python/oxitest/foo.py"), "").unwrap();
+        let rel = camino::Utf8PathBuf::from("python/oxitest/foo.py");
+        let dotted = dotted_path_for_file(&rel, &root);
+        assert_eq!(
+            dotted, "oxitest.foo",
+            "python/ has no __init__.py so it is the source root; strip its component from the dotted path — the real import path is `oxitest.foo`, not `python.oxitest.foo`"
+        );
+    }
+
+    #[test]
+    fn dotted_path_for_file_strips_source_root_for_init() {
+        use std::fs;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        fs::create_dir_all(root.join("python/oxitest")).unwrap();
+        fs::write(root.join("python/oxitest/__init__.py"), "").unwrap();
+        let rel = camino::Utf8PathBuf::from("python/oxitest/__init__.py");
+        let dotted = dotted_path_for_file(&rel, &root);
+        assert_eq!(
+            dotted, "oxitest",
+            "__init__.py resolves to the package itself, not a `.__init__` suffix"
+        );
+    }
+
+    #[test]
+    fn dotted_path_for_file_no_source_root_leaves_path_intact() {
+        use std::fs;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // No __init__.py anywhere — every directory is above the package root.
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(root.join("scripts/helper.py"), "").unwrap();
+        let rel = camino::Utf8PathBuf::from("scripts/helper.py");
+        let dotted = dotted_path_for_file(&rel, &root);
+        assert_eq!(
+            dotted, "helper",
+            "no packages ⇒ file stands alone with its stem as the dotted path"
+        );
+    }
+
+    #[test]
+    fn dotted_path_for_file_multi_level_package() {
+        use std::fs;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // Layout: src/ (no __init__.py) → pkg/ (__init__.py) → sub/ (__init__.py) → mod.py
+        fs::create_dir_all(root.join("src/pkg/sub")).unwrap();
+        fs::write(root.join("src/pkg/__init__.py"), "").unwrap();
+        fs::write(root.join("src/pkg/sub/__init__.py"), "").unwrap();
+        fs::write(root.join("src/pkg/sub/mod.py"), "").unwrap();
+        let rel = camino::Utf8PathBuf::from("src/pkg/sub/mod.py");
+        let dotted = dotted_path_for_file(&rel, &root);
+        assert_eq!(
+            dotted, "pkg.sub.mod",
+            "walk up until finding a dir without __init__.py; strip everything at and above that"
         );
     }
 }

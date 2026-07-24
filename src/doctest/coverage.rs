@@ -61,6 +61,14 @@ pub(crate) fn check_subject(
         SubjectSource::AliasImport { .. } | SubjectSource::LocalAlias { .. } => {
             match resolve_alias(root, &subject.source, starting_module) {
                 Ok(resolved) => (resolved.docstring, resolved.file, resolved.lineno),
+                Err(AliasError::UnknownTerminus { .. }) => {
+                    // Per wayfinder #1603, Call RHS / Name-to-non-def terminus is
+                    // silently skipped in subject enumeration. The walker gets the
+                    // same treatment: if the alias chain terminates on a shape
+                    // that isn't a class or function, we cannot check a docstring
+                    // — silently accept as "covered" (i.e., not a subject).
+                    return CheckOutcome::Covered;
+                }
                 Err(error) => return CheckOutcome::WalkError { error },
             }
         }
@@ -119,8 +127,8 @@ pub(crate) fn diagnostic_for_gap(
 ///
 /// - `files`: paths relative to `root.root`. Layer 1 (privacy) filter is applied per-file.
 /// - `root`: filesystem root for `dotted_path_for` inversion and cross-file walks.
-/// - `severity`: applied to every emitted diagnostic (M1: WARNING; M2 introduces ERROR
-///   mapping for `strictness = "required"`).
+/// - `severity`: applied to every emitted diagnostic. Callers derive this from the
+///   global `strict` mode: `Enforce` → `Warning`, `Abort` → `Error`.
 pub(crate) fn run_coverage_check(
     files: &[Utf8PathBuf],
     root: &ModuleRoot,
@@ -128,7 +136,9 @@ pub(crate) fn run_coverage_check(
 ) -> Vec<DiagnosticEntry> {
     use std::collections::HashMap;
 
-    use crate::doctest::subjects::{dotted_path_for, enumerate_subjects, is_public_module_path};
+    use crate::doctest::subjects::{
+        dotted_path_for_file, enumerate_subjects, is_public_module_path,
+    };
 
     // Parse each public file once; keep stmts + resolved file path + line index. The line
     // index is used to resolve LocalDefinition subjects' def line (fix for the audit
@@ -140,7 +150,7 @@ pub(crate) fn run_coverage_check(
     let mut all_subjects: Vec<(String, Subject)> = Vec::new();
 
     for file in files {
-        let dotted = dotted_path_for(file);
+        let dotted = dotted_path_for_file(file, &root.root);
         if !is_public_module_path(&dotted) {
             continue;
         }
@@ -181,7 +191,7 @@ pub(crate) fn run_coverage_check(
         if matches!(subject.source, SubjectSource::Unknown) {
             diagnostics.push(DiagnosticEntry {
                 severity: severity.clone(),
-                context: Arc::from("doctest.coverage"),
+                context: Arc::from("doctest.coverage.analysis"),
                 message: format!(
                     "`{}` unknown export shape — cannot check coverage",
                     subject.public_id
@@ -276,7 +286,7 @@ fn find_docstring_and_lineno_for_local_def(
     (None, 0)
 }
 
-fn diagnostic_for_walk_error(
+pub(crate) fn diagnostic_for_walk_error(
     subject: &Subject,
     error: &AliasError,
     file: Option<Utf8PathBuf>,
@@ -307,7 +317,7 @@ fn diagnostic_for_walk_error(
     };
     DiagnosticEntry {
         severity,
-        context: Arc::from("doctest.coverage"),
+        context: Arc::from("doctest.coverage.analysis"),
         message,
         file,
         // Walk failed before we could resolve the terminal def line — fall back to
@@ -382,6 +392,7 @@ mod tests {
         // LocalDefinition path doesn't hit the walker, so a fake ModuleRoot is fine.
         let root = ModuleRoot {
             root: Utf8PathBuf::from("/tmp"),
+            use_gitignore: true,
         };
         let subj = sample_subject();
         let outcome = check_subject(
@@ -402,6 +413,7 @@ mod tests {
     fn check_subject_local_def_missing_header_returns_gap() {
         let root = ModuleRoot {
             root: Utf8PathBuf::from("/tmp"),
+            use_gitignore: true,
         };
         let subj = sample_subject();
         let outcome = check_subject(
@@ -428,6 +440,7 @@ mod tests {
     fn check_subject_local_def_header_no_examples_returns_gap() {
         let root = ModuleRoot {
             root: Utf8PathBuf::from("/tmp"),
+            use_gitignore: true,
         };
         let subj = sample_subject();
         let outcome = check_subject(
@@ -454,6 +467,7 @@ mod tests {
     fn check_subject_no_docstring_returns_missing_header() {
         let root = ModuleRoot {
             root: Utf8PathBuf::from("/tmp"),
+            use_gitignore: true,
         };
         let subj = sample_subject();
         let outcome = check_subject(
@@ -499,7 +513,10 @@ def foo():
         )
         .unwrap();
 
-        let module_root = ModuleRoot { root };
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
         let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
         assert_eq!(
@@ -549,7 +566,10 @@ def foo():
         )
         .unwrap();
 
-        let module_root = ModuleRoot { root };
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
         let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
         assert!(
@@ -579,7 +599,10 @@ def uncovered():
         )
         .unwrap();
 
-        let module_root = ModuleRoot { root };
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
         let files = vec![
             Utf8PathBuf::from("mypkg/__init__.py"),
             Utf8PathBuf::from("mypkg/_private/__init__.py"),
@@ -606,7 +629,10 @@ def uncovered():
             "\"\"\"pkg\"\"\"\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No examples.\"\"\"\n    pass\n",
         )
         .unwrap();
-        let module_root = ModuleRoot { root };
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
         let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
         assert_eq!(diags.len(), 1, "one missing-header diagnostic expected");
@@ -638,7 +664,10 @@ B = A
         )
         .unwrap();
 
-        let module_root = ModuleRoot { root };
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
         let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
         assert!(!diags.is_empty(), "cycle should produce a diagnostic");
@@ -646,6 +675,52 @@ B = A
             .iter()
             .find(|d| d.message.contains("alias cycle"))
             .expect("expected an `alias cycle` diagnostic");
-        assert_eq!(cycle_diag.context.as_ref(), "doctest.coverage");
+        assert_eq!(
+            cycle_diag.context.as_ref(),
+            "doctest.coverage.analysis",
+            "walk errors emit under the analysis context — the ratchet must not treat them as coverage gaps"
+        );
+    }
+
+    #[test]
+    fn check_subject_alias_to_call_rhs_terminus_is_silently_covered() {
+        // Subject that aliases into a Name that isn't a class/function — the
+        // walker terminates on a Call RHS. Per wayfinder #1603, Call RHS is a
+        // silent skip for subject enumeration; the walker must honor the same
+        // rule for alias terminus.
+        use std::fs;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        fs::create_dir_all(root.join("mypkg")).unwrap();
+        fs::write(
+            root.join("mypkg/__init__.py"),
+            "\"\"\"pkg.\"\"\"\n\n__all__ = [\"thing\"]\n\nfrom mypkg._internal import thing\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("mypkg/_internal.py"),
+            "class _Thing:\n    pass\n\nthing = _Thing()\n",
+        )
+        .unwrap();
+
+        let module_root = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: true,
+        };
+        let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
+        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Error);
+
+        // Under the fix, the Call RHS terminus produces NO diagnostic — silent skip.
+        // Both `mypkg.thing` (coverage subject) and any alias walk terminating on
+        // `thing = _Thing()` should be silently accepted.
+        assert!(
+            diags.is_empty(),
+            "alias terminating on Call RHS must be silently skipped — the walker cannot verify a docstring on an instance, and #1603 says Call RHS is not a coverage subject; got diags: {:?}",
+            diags
+                .iter()
+                .map(|d| (d.context.as_ref(), &d.message))
+                .collect::<Vec<_>>()
+        );
     }
 }

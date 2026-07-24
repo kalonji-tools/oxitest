@@ -282,57 +282,175 @@ pub(super) fn collect_doctest_items(doctest_files: &[Utf8PathBuf]) -> Vec<Arc<ty
 ///
 /// Called from `Pipeline::collect` right after `collect_doctest_items`. Returns
 /// an empty vec when doctest collection is disabled, when scope is `off`, or
-/// when strictness is `off`. In M1, `warn` and `required` both map to
-/// `DiagnosticSeverity::Warning` (Task 15 adds the one-time NOTICE about M2).
+/// when the global `strict` mode is `None` or `Off`. Severity inherits from
+/// `[tool.oxitest].strict`:
+///
+/// - `None` / `Off` → rule is **silent** (no diagnostics returned).
+/// - `Enforce` → gaps + analysis errors surface at `Warning` severity.
+/// - `Abort` → gaps + analysis errors surface at `Error` severity;
+///   promoted to hard-fail by `split_coverage_diagnostics`.
+///
+/// The waivers ratchet downgrades waived entries to `Notice` and emits `Error`
+/// for stale entries regardless of strict mode (shrink-only invariant).
 pub(super) fn collect_coverage_diagnostics(
     doctest_files: &[Utf8PathBuf],
     config: &crate::config::Config,
 ) -> Vec<crate::reporter::stats::DiagnosticEntry> {
-    use crate::config::{DoctestScope, DoctestStrictness};
+    use std::sync::Arc;
+
+    use crate::config::{DoctestScope, StrictMode};
     use crate::doctest::alias::ModuleRoot;
     use crate::doctest::coverage::run_coverage_check;
+    use crate::doctest::waivers::load_waivers;
     use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+    use crate::types::LineNo;
 
     let Some(dt) = config.doctest.as_ref() else {
         return vec![];
     };
-    // Defensive: the pipeline caller in session_ready.rs guards on
-    // `doctest_enabled()` which already filters scope=Off, so this branch
-    // is currently unreachable. Kept as belt-and-braces in case a future
-    // caller invokes this helper without that gate.
     if matches!(dt.scope, Some(DoctestScope::Off)) {
         return vec![];
     }
-    let severity = match dt.strictness.unwrap_or(DoctestStrictness::Warn) {
-        DoctestStrictness::Off => return vec![],
-        // M1: `required` behaves like `warn`; the one-time NOTICE below warns
-        // users that the hard-fail semantics they configured haven't landed yet.
-        DoctestStrictness::Warn | DoctestStrictness::Required => DiagnosticSeverity::Warning,
+
+    // Severity is driven by the global strict mode — same axis, one vocabulary.
+    let severity = match config.markers.strict.as_ref() {
+        None | Some(StrictMode::Off) => return vec![],
+        Some(StrictMode::Enforce) => DiagnosticSeverity::Warning,
+        Some(StrictMode::Abort) => DiagnosticSeverity::Error,
     };
+
     let root = ModuleRoot {
         root: config.rootdir.clone(),
+        use_gitignore: config.paths.use_gitignore,
     };
-    // Convert absolute paths back to project-root-relative for dotted_path_for.
+    // `norecursedirs` is a semantic exclusion: directories with those names are
+    // never scanned for coverage regardless of how the files were discovered.
+    // This matters when the user passes an explicit path that is itself a
+    // norecursedirs directory (e.g. `python -m oxitest python/tests/docs/`
+    // where `norecursedirs = ["docs"]`): the collector's WalkBuilder does not
+    // prune the walk root, so the files appear in `doctest_files`. We enforce
+    // the exclusion here so coverage is consistent with full-testpaths runs.
+    let norecursedirs = &config.paths.norecursedirs;
+    // Exclude files matching `python_files` glob (default: `test_*.py`). Test
+    // modules aren't part of the public API surface — their `test_*` functions
+    // should not be treated as coverage subjects.
+    let python_files_glob = crate::collector::build_glob_set(&config.paths.python_files).ok();
+    // Filter out files matching any [tool.oxitest.doctest].skip prefix. Path
+    // prefixes are matched via `starts_with` — simple, no globs. Skipped files
+    // are excluded from both subject enumeration and alias-walking downstream.
     let rel_files: Vec<Utf8PathBuf> = doctest_files
         .iter()
         .filter_map(|abs| abs.strip_prefix(&config.rootdir).ok().map(|p| p.to_owned()))
+        .filter(|rel| {
+            !rel.components()
+                .any(|c| norecursedirs.iter().any(|d| d.as_str() == c.as_str()))
+        })
+        .filter(|rel| {
+            python_files_glob.as_ref().is_none_or(|g| {
+                // Match against filename only (same as the collector)
+                !rel.file_name().is_some_and(|name| g.is_match(name))
+            })
+        })
+        .filter(|rel| !dt.skip.iter().any(|prefix| rel.starts_with(prefix)))
         .collect();
-    let mut diagnostics = run_coverage_check(&rel_files, &root, severity);
-    // M1-limit NOTICE: users who configured `required` asked for hard-fail; tell
-    // them once that this release still behaves like `warn` and point at M2.
-    // Reporter dedup collapses repeats if this ever fires more than once per run.
-    if matches!(dt.strictness, Some(DoctestStrictness::Required)) {
-        diagnostics.push(DiagnosticEntry {
-            severity: DiagnosticSeverity::Notice,
-            context: std::sync::Arc::from("doctest.coverage.m1-limit"),
-            message: "strictness=\"required\" behaves like \"warn\" in this release; \
-                      the hard-fail ratchet and allowlist ship in M2 (see #1602)"
-                .to_owned(),
-            file: None,
-            lineno: None,
-        });
+
+    let raw_diags = run_coverage_check(&rel_files, &root, severity.clone());
+
+    let waivers_rel = dt.waivers.as_deref().unwrap_or(".oxi-doctest-waivers");
+    let waivers_path = config.rootdir.join(waivers_rel);
+    let waivers = load_waivers(&waivers_path);
+
+    let mut out: Vec<DiagnosticEntry> = Vec::new();
+    let mut missing_subjects: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for d in raw_diags {
+        if d.context.as_ref() == "doctest.coverage"
+            && let Some(subj) = d
+                .message
+                .strip_prefix('`')
+                .and_then(|s| s.find('`').map(|i| s[..i].to_owned()))
+        {
+            missing_subjects.insert(subj.clone());
+            if waivers.entries.contains(&subj) {
+                out.push(DiagnosticEntry {
+                    severity: DiagnosticSeverity::Notice,
+                    context: d.context,
+                    message: format!("{} (waived)", d.message),
+                    file: d.file,
+                    lineno: d.lineno,
+                });
+                continue;
+            }
+        }
+        out.push(d);
     }
-    diagnostics
+
+    // Stale-entry checking requires the full testpaths scan to be meaningful.
+    // Subset runs (explicit file paths) see only a fraction of the subjects, so
+    // waivers entries for unscanned files would be flagged as stale — a false
+    // positive. Skip the shrink-only check for subset runs.
+    if !config.filter.has_explicit_paths {
+        let mut stale: Vec<&String> = waivers
+            .entries
+            .iter()
+            .filter(|e| !missing_subjects.contains(*e))
+            .collect();
+        stale.sort();
+        for entry in stale {
+            let lineno = waivers.line_by_entry.get(entry).copied().unwrap_or(0);
+            out.push(DiagnosticEntry {
+                severity: DiagnosticSeverity::Error,
+                context: Arc::from("doctest.coverage.ratchet"),
+                message: format!(
+                    "`{}` is in `{}` but no longer needs coverage — shrink-only: remove this entry",
+                    entry, waivers_rel
+                ),
+                file: Some(waivers.path.clone()),
+                lineno: Some(LineNo::new(lineno.max(1) as usize)),
+            });
+        }
+    }
+
+    out
+}
+
+/// Split a coverage diagnostic set into hard-fail errors and pending diagnostics.
+///
+/// `doctest.coverage`, `doctest.coverage.ratchet`, and `doctest.coverage.analysis`
+/// Error-severity entries all become `CollectError::PyError` (hard fail under
+/// `strict = "abort"`). Under `abort`, an analysis error means "the scanner
+/// cannot verify coverage for this subject" — that is semantically a coverage
+/// failure. Users who need to allow unresolvable aliases must fix the alias
+/// chain or downgrade `strict` globally.
+///
+/// Warning/Notice always pass through to pending.
+pub(super) fn split_coverage_diagnostics(
+    diagnostics: Vec<crate::reporter::stats::DiagnosticEntry>,
+) -> (
+    Vec<crate::types::CollectError>,
+    Vec<crate::reporter::stats::DiagnosticEntry>,
+) {
+    use crate::reporter::stats::DiagnosticSeverity;
+    use crate::types::CollectError;
+    let mut errors = Vec::new();
+    let mut pending = Vec::new();
+    for d in diagnostics {
+        let is_hard_fail_context = matches!(
+            d.context.as_ref(),
+            "doctest.coverage" | "doctest.coverage.ratchet" | "doctest.coverage.analysis"
+        );
+        if d.severity == DiagnosticSeverity::Error && is_hard_fail_context {
+            let mut msg = d.message.clone();
+            if let Some(file) = &d.file
+                && let Some(lineno) = d.lineno
+            {
+                msg = format!("{} ({}:{})", msg, file, *lineno);
+            }
+            errors.push(CollectError::PyError(msg));
+        } else {
+            pending.push(d);
+        }
+    }
+    (errors, pending)
 }
 
 #[cfg(test)]
@@ -463,8 +581,8 @@ mod tests {
     }
 
     #[test]
-    fn collect_coverage_diagnostics_emits_when_scope_public_and_strictness_warn() {
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+    fn collect_coverage_diagnostics_emits_when_scope_public_and_strict_enforce() {
+        use crate::config::{DoctestConfig, DoctestScope, StrictMode};
         use crate::reporter::stats::DiagnosticSeverity;
 
         let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
@@ -474,10 +592,11 @@ mod tests {
 
         let mut cfg = crate::config::Config::default();
         cfg.rootdir = root.clone();
+        cfg.markers.strict = Some(StrictMode::Enforce);
         cfg.doctest = Some(DoctestConfig {
             scope: Some(DoctestScope::Public),
-            strictness: Some(DoctestStrictness::Warn),
-            allowlist: None,
+            waivers: None,
+            ..Default::default()
         });
 
         let files = vec![root.join("mypkg/__init__.py")];
@@ -490,7 +609,7 @@ mod tests {
         assert_eq!(
             diags[0].severity,
             DiagnosticSeverity::Warning,
-            "M1 warn strictness must map to Warning severity so runs don't fail on gaps"
+            "strict=enforce must map to Warning severity so runs don't fail on gaps"
         );
         assert_eq!(
             diags[0].context.as_ref(),
@@ -500,49 +619,8 @@ mod tests {
     }
 
     #[test]
-    fn collect_coverage_diagnostics_maps_required_to_warning_in_m1() {
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
-        use crate::reporter::stats::DiagnosticSeverity;
-
-        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
-            .expect("tempdir path must be valid UTF-8");
-        write_pkg_with_missing_examples(&root);
-
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            strictness: Some(DoctestStrictness::Required),
-            allowlist: None,
-        });
-
-        let files = vec![root.join("mypkg/__init__.py")];
-        let diags = collect_coverage_diagnostics(&files, &cfg);
-        // Two diagnostics: the coverage warning + Task 15's M1-limit NOTICE.
-        // Filter to just the coverage rule here — the NOTICE is asserted by a
-        // dedicated test below.
-        let coverage: Vec<_> = diags
-            .iter()
-            .filter(|d| d.context.as_ref() == "doctest.coverage")
-            .collect();
-        assert_eq!(
-            coverage.len(),
-            1,
-            "required-mode still produces a coverage diagnostic; \
-             M1 downgrades severity per Task 15 note. got: {:?}",
-            diags
-        );
-        assert_eq!(
-            coverage[0].severity,
-            DiagnosticSeverity::Warning,
-            "M1 required behaves like warn — Task 15 emits the one-time NOTICE about M2"
-        );
-    }
-
-    #[test]
     fn collect_coverage_diagnostics_returns_empty_when_scope_off() {
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+        use crate::config::{DoctestConfig, DoctestScope, StrictMode};
 
         let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
         let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
@@ -551,10 +629,11 @@ mod tests {
 
         let mut cfg = crate::config::Config::default();
         cfg.rootdir = root.clone();
+        cfg.markers.strict = Some(StrictMode::Enforce);
         cfg.doctest = Some(DoctestConfig {
             scope: Some(DoctestScope::Off),
-            strictness: Some(DoctestStrictness::Warn),
-            allowlist: None,
+            waivers: None,
+            ..Default::default()
         });
 
         let files = vec![root.join("mypkg/__init__.py")];
@@ -566,8 +645,8 @@ mod tests {
     }
 
     #[test]
-    fn collect_coverage_diagnostics_returns_empty_when_strictness_off() {
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
+    fn collect_coverage_diagnostics_returns_empty_when_strict_off() {
+        use crate::config::{DoctestConfig, DoctestScope, StrictMode};
 
         let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
         let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
@@ -576,17 +655,44 @@ mod tests {
 
         let mut cfg = crate::config::Config::default();
         cfg.rootdir = root.clone();
+        cfg.markers.strict = Some(StrictMode::Off);
         cfg.doctest = Some(DoctestConfig {
             scope: Some(DoctestScope::Public),
-            strictness: Some(DoctestStrictness::Off),
-            allowlist: None,
+            waivers: None,
+            ..Default::default()
         });
 
         let files = vec![root.join("mypkg/__init__.py")];
         let diags = collect_coverage_diagnostics(&files, &cfg);
         assert!(
             diags.is_empty(),
-            "strictness=off silences the rule regardless of scope"
+            "strict=off silences the rule regardless of scope"
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_returns_empty_when_strict_absent() {
+        use crate::config::{DoctestConfig, DoctestScope};
+
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        write_pkg_with_missing_examples(&root);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        // markers.strict is None by default
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            waivers: None,
+            ..Default::default()
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        assert!(
+            diags.is_empty(),
+            "strict absent (None) silences the rule — no diagnostics emitted"
         );
     }
 
@@ -609,97 +715,459 @@ mod tests {
         );
     }
 
-    #[test]
-    fn collect_coverage_diagnostics_emits_m1_notice_when_required() {
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
-        use crate::reporter::stats::DiagnosticSeverity;
+    // ── M2 helpers ──────────────────────────────────────────────────────────────
 
-        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
-            .expect("tempdir path must be valid UTF-8");
-        write_pkg_with_missing_examples(&root);
+    fn doctest_only_cfg(
+        scope: crate::config::DoctestScope,
+        strict: Option<crate::config::StrictMode>,
+        waivers: Option<String>,
+    ) -> (crate::config::Config, tempfile::TempDir) {
+        use crate::config::DoctestConfig;
 
+        let tmp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
         let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
+        cfg.rootdir = root;
+        cfg.markers.strict = strict;
         cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            strictness: Some(DoctestStrictness::Required),
-            allowlist: None,
+            scope: Some(scope),
+            waivers,
+            ..Default::default()
         });
+        (cfg, tmp)
+    }
 
-        let files = vec![root.join("mypkg/__init__.py")];
+    fn write_synth_missing_subject(cfg: &crate::config::Config) -> Vec<Utf8PathBuf> {
+        use std::fs;
+        fs::create_dir_all(cfg.rootdir.join("mypkg")).unwrap();
+        fs::write(
+            cfg.rootdir.join("mypkg/__init__.py"),
+            "\"\"\"pkg.\"\"\"\n\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No Examples section.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        vec![cfg.rootdir.join("mypkg/__init__.py")]
+    }
+
+    fn write_synth_fully_covered_subject(cfg: &crate::config::Config) -> Vec<Utf8PathBuf> {
+        use std::fs;
+        fs::create_dir_all(cfg.rootdir.join("mypkg")).unwrap();
+        fs::write(
+            cfg.rootdir.join("mypkg/__init__.py"),
+            "\"\"\"pkg.\"\"\"\n\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"Foo.\n\n    Examples:\n        >>> 1 + 1\n        2\n    \"\"\"\n    pass\n",
+        )
+        .unwrap();
+        vec![cfg.rootdir.join("mypkg/__init__.py")]
+    }
+
+    // ── M2 tests ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn m2_enforce_maps_to_warning_severity() {
+        let (cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Enforce),
+            None,
+        );
+        let files = write_synth_missing_subject(&cfg);
         let diags = collect_coverage_diagnostics(&files, &cfg);
-
-        let notices: Vec<_> = diags
-            .iter()
-            .filter(|d| {
-                d.severity == DiagnosticSeverity::Notice
-                    && d.context.as_ref() == "doctest.coverage.m1-limit"
-            })
-            .collect();
-        assert_eq!(
-            notices.len(),
-            1,
-            "one-time NOTICE about `required` deferred to M2 must fire so users \
-             aren't surprised when hard-fail lands; got diags: {:?}",
+        assert!(
             diags
-        );
-        let notice = notices[0];
-        assert!(
-            notice.message.contains("required"),
-            "NOTICE message must name the strictness value so users can grep for it; \
-             got: {}",
-            notice.message
-        );
-        assert!(
-            notice.message.contains("M2"),
-            "NOTICE message must point at M2 so users know where the fix lands; \
-             got: {}",
-            notice.message
-        );
-        assert!(
-            notice.file.is_none(),
-            "M1-limit NOTICE is process-scoped, not file-scoped — no file attribution"
-        );
-        assert!(
-            notice.lineno.is_none(),
-            "M1-limit NOTICE has no source line"
+                .iter()
+                .filter(|d| d.context.as_ref() == "doctest.coverage")
+                .all(|d| d.severity == crate::reporter::stats::DiagnosticSeverity::Warning),
+            "strict=enforce maps to Warning severity — run continues, gaps are visible"
         );
     }
 
     #[test]
-    fn collect_coverage_diagnostics_no_m1_notice_when_warn() {
-        // strictness = warn must NOT emit the M1-limit NOTICE — users who opted
-        // into warn already know it's advisory; the NOTICE is only relevant to
-        // users who asked for `required` and are getting downgraded.
-        use crate::config::{DoctestConfig, DoctestScope, DoctestStrictness};
-
-        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
-            .expect("tempdir path must be valid UTF-8");
-        write_pkg_with_missing_examples(&root);
-
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            strictness: Some(DoctestStrictness::Warn),
-            allowlist: None,
-        });
-
-        let files = vec![root.join("mypkg/__init__.py")];
+    fn m2_waived_missing_subject_downgraded_to_notice() {
+        let (mut cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Abort),
+            None,
+        );
+        let files = write_synth_missing_subject(&cfg);
+        std::fs::write(cfg.rootdir.join(".oxi-doctest-waivers"), "mypkg.foo\n").unwrap();
+        if let Some(dt) = cfg.doctest.as_mut() {
+            dt.waivers = Some(".oxi-doctest-waivers".to_owned());
+        }
         let diags = collect_coverage_diagnostics(&files, &cfg);
-
-        let m1_notices: Vec<_> = diags
+        let coverage_diags: Vec<_> = diags
             .iter()
-            .filter(|d| d.context.as_ref() == "doctest.coverage.m1-limit")
+            .filter(|d| d.context.as_ref() == "doctest.coverage")
+            .collect();
+        assert!(
+            !coverage_diags.is_empty(),
+            "waived subject still surfaces a diagnostic — visible tech debt, not silent"
+        );
+        assert!(
+            coverage_diags
+                .iter()
+                .all(|d| d.severity == crate::reporter::stats::DiagnosticSeverity::Notice),
+            "waivers ∩ missing must be Notice regardless of strict mode — that is the point of the waivers file"
+        );
+        assert!(
+            coverage_diags
+                .iter()
+                .any(|d| d.message.contains("(waived)")),
+            "the message must mark the entry as waived so users can find it in logs"
+        );
+    }
+
+    #[test]
+    fn m2_missing_subject_not_waived_under_abort_hard_fails() {
+        let (cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Abort),
+            None,
+        );
+        let files = write_synth_missing_subject(&cfg);
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        let cov: Vec<_> = diags
+            .iter()
+            .filter(|d| d.context.as_ref() == "doctest.coverage")
+            .collect();
+        assert!(
+            !cov.is_empty(),
+            "non-waived missing subject under abort must produce a coverage diagnostic"
+        );
+        assert!(
+            cov.iter()
+                .all(|d| d.severity == crate::reporter::stats::DiagnosticSeverity::Error),
+            "non-waived missing subject under abort must fire at Error severity"
+        );
+    }
+
+    #[test]
+    fn m2_stale_waivers_entry_hard_fails_regardless_of_strict() {
+        let (mut cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Enforce),
+            None,
+        );
+        let files = write_synth_fully_covered_subject(&cfg);
+        std::fs::write(cfg.rootdir.join(".oxi-doctest-waivers"), "mypkg.foo\n").unwrap();
+        if let Some(dt) = cfg.doctest.as_mut() {
+            dt.waivers = Some(".oxi-doctest-waivers".to_owned());
+        }
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        let stale: Vec<_> = diags
+            .iter()
+            .filter(|d| d.context.as_ref() == "doctest.coverage.ratchet")
             .collect();
         assert_eq!(
-            m1_notices.len(),
+            stale.len(),
+            1,
+            "one stale-entry diagnostic per name in the waivers file that is not currently missing; got {} diagnostics",
+            stale.len()
+        );
+        assert_eq!(
+            stale[0].severity,
+            crate::reporter::stats::DiagnosticSeverity::Error,
+            "shrink-only enforcement — stale entries must always Error, not respect strict mode"
+        );
+        assert!(
+            stale[0].message.contains("mypkg.foo"),
+            "stale-entry message names the stale subject; got: {}",
+            stale[0].message
+        );
+        assert!(
+            stale[0].message.contains("shrink-only"),
+            "stale-entry message explains the invariant; got: {}",
+            stale[0].message
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_excludes_test_files_from_public_subject_scan() {
+        let (cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Enforce),
+            None,
+        );
+        use std::fs;
+        // Non-test file with a missing subject
+        fs::create_dir_all(cfg.rootdir.join("pkg")).unwrap();
+        fs::write(cfg.rootdir.join("pkg/__init__.py"), "").unwrap();
+        fs::write(
+            cfg.rootdir.join("pkg/lib.py"),
+            "\"\"\"lib.\"\"\"\n\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No examples.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        // Test file with what would look like a subject if we didn't exclude it
+        fs::write(
+            cfg.rootdir.join("test_stuff.py"),
+            "\"\"\"tests.\"\"\"\n\ndef test_it():\n    \"\"\"No examples but this is a test.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        let files = vec![
+            cfg.rootdir.join("pkg/__init__.py"),
+            cfg.rootdir.join("pkg/lib.py"),
+            cfg.rootdir.join("test_stuff.py"),
+        ];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        // Should see a diagnostic for pkg.lib.foo but NOT for test_stuff.test_it.
+        let has_lib_foo = diags
+            .iter()
+            .any(|d| d.message.contains("pkg.lib.foo") || d.message.contains("lib.foo"));
+        let has_test_it = diags.iter().any(|d| d.message.contains("test_it"));
+        assert!(
+            has_lib_foo,
+            "the non-test file's public subject must still be checked; got diags: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        assert!(
+            !has_test_it,
+            "test_*.py files must be excluded from public-subject scanning — test functions aren't public API; got diags: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn m2_walk_error_not_waivable_even_if_subject_matches_waivers() {
+        use crate::reporter::stats::DiagnosticSeverity;
+        let (mut cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Abort),
+            None,
+        );
+        use std::fs;
+        // Synthesize a project where a public subject aliases into a non-existent module.
+        // The scanner should emit a ModuleFileNotFound walk error, not a missing-header
+        // gap. Under the fix, this diagnostic must NOT be waivable via the waivers file.
+        fs::create_dir_all(cfg.rootdir.join("mypkg")).unwrap();
+        fs::write(
+            cfg.rootdir.join("mypkg/__init__.py"),
+            "\"\"\"pkg.\"\"\"\n\n__all__ = [\"broken\"]\n\nfrom nonexistent_module import broken\n",
+        )
+        .unwrap();
+        // Waive the subject that's about to raise a walk error.
+        fs::write(cfg.rootdir.join(".oxi-doctest-waivers"), "mypkg.broken\n").unwrap();
+        if let Some(dt) = cfg.doctest.as_mut() {
+            dt.waivers = Some(".oxi-doctest-waivers".to_owned());
+        }
+        let files = vec![cfg.rootdir.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        // Find the walk error diagnostic.
+        let walk_error_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.context.as_ref() == "doctest.coverage.analysis")
+            .collect();
+        assert!(
+            !walk_error_diags.is_empty(),
+            "the scanner must emit an analysis-error diagnostic when an alias target module is missing; got contexts: {:?}",
+            diags.iter().map(|d| d.context.as_ref()).collect::<Vec<_>>()
+        );
+        assert!(
+            walk_error_diags
+                .iter()
+                .all(|d| d.severity == DiagnosticSeverity::Error),
+            "analysis-error diagnostics must not be waivable — the waivers file cannot mask a scanner failure that means we can't verify coverage at all"
+        );
+        // Also confirm no doctest.coverage-context Notice was produced for this subject
+        // (the waived downgrade path must NOT have fired).
+        let waived_downgrades: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.context.as_ref() == "doctest.coverage"
+                    && d.severity == DiagnosticSeverity::Notice
+                    && d.message.contains("mypkg.broken")
+            })
+            .collect();
+        assert!(
+            waived_downgrades.is_empty(),
+            "an analysis error must not be reclassified as a waived-coverage Notice; got waived downgrades: {:?}",
+            waived_downgrades
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn collect_coverage_diagnostics_respects_doctest_skip_prefix() {
+        let (mut cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Abort),
+            None,
+        );
+        if let Some(dt) = cfg.doctest.as_mut() {
+            dt.skip = vec!["fixtures".to_owned()];
+        }
+        use std::fs;
+        // Regular package
+        fs::create_dir_all(cfg.rootdir.join("mypkg")).unwrap();
+        fs::write(cfg.rootdir.join("mypkg/__init__.py"), "").unwrap();
+        fs::write(
+            cfg.rootdir.join("mypkg/lib.py"),
+            "\"\"\"lib.\"\"\"\n\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No examples.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        // Skipped path
+        fs::create_dir_all(cfg.rootdir.join("fixtures/sample")).unwrap();
+        fs::write(cfg.rootdir.join("fixtures/sample/__init__.py"), "").unwrap();
+        fs::write(
+            cfg.rootdir.join("fixtures/sample/mod.py"),
+            "\"\"\"skipped.\"\"\"\n\n__all__ = [\"bar\"]\n\ndef bar():\n    \"\"\"No examples.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+
+        let files = vec![
+            cfg.rootdir.join("mypkg/__init__.py"),
+            cfg.rootdir.join("mypkg/lib.py"),
+            cfg.rootdir.join("fixtures/sample/__init__.py"),
+            cfg.rootdir.join("fixtures/sample/mod.py"),
+        ];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+
+        // The mypkg subject should still fire a diagnostic; the skipped fixture subject should not.
+        let has_lib_foo = diags
+            .iter()
+            .any(|d| d.message.contains("mypkg.lib.foo") || d.message.contains("lib.foo"));
+        let has_bar = diags.iter().any(|d| d.message.contains("bar"));
+        assert!(
+            has_lib_foo,
+            "non-skipped subject must still produce a diagnostic; got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        assert!(
+            !has_bar,
+            "subject under a skipped prefix must be silently excluded; got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn m2_walk_error_diagnostic_context_is_analysis_not_coverage() {
+        // Focused test: ensure ALL AliasError variants emit at the analysis context.
+        use crate::doctest::alias::AliasError;
+        use crate::doctest::coverage::diagnostic_for_walk_error;
+        use crate::doctest::subjects::Subject;
+        use crate::reporter::stats::DiagnosticSeverity;
+        let subj = Subject {
+            public_id: "mypkg.foo".into(),
+            source: crate::doctest::subjects::SubjectSource::LocalDefinition,
+        };
+        let cases = [
+            AliasError::Cycle {
+                path: vec!["a".into(), "b".into()],
+            },
+            AliasError::UnknownTerminus { at: "b".into() },
+            AliasError::ParseFailure {
+                file: "x.py".into(),
+            },
+            AliasError::NameNotFound {
+                module: "m".into(),
+                name: "n".into(),
+            },
+            AliasError::ModuleFileNotFound { module: "m".into() },
+        ];
+        for err in &cases {
+            let d = diagnostic_for_walk_error(&subj, err, None, DiagnosticSeverity::Error);
+            assert_eq!(
+                d.context.as_ref(),
+                "doctest.coverage.analysis",
+                "every AliasError variant must produce an analysis-context diagnostic so the ratchet skips it; got context={} for error={:?}",
+                d.context.as_ref(),
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn split_coverage_diagnostics_separates_errors_from_pending() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        use std::sync::Arc;
+        let entries = vec![
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Error,
+                context: Arc::from("doctest.coverage"),
+                message: "`mypkg.a` missing `Examples:` header".into(),
+                file: None,
+                lineno: None,
+            },
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Warning,
+                context: Arc::from("doctest.coverage"),
+                message: "`mypkg.b` missing `Examples:` header".into(),
+                file: None,
+                lineno: None,
+            },
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Notice,
+                context: Arc::from("doctest.coverage"),
+                message: "`mypkg.c` missing `Examples:` header (waived)".into(),
+                file: None,
+                lineno: None,
+            },
+        ];
+        let (errors, pending) = split_coverage_diagnostics(entries);
+        assert_eq!(
+            errors.len(),
+            1,
+            "one Error entry ⇒ one CollectError promoted for hard-fail; got {} errors",
+            errors.len()
+        );
+        assert_eq!(
+            pending.len(),
+            2,
+            "Warning + Notice remain as pending diagnostics for the reporter to render; got {} pending",
+            pending.len()
+        );
+        let err_msg = errors[0].to_string();
+        assert!(
+            err_msg.contains("mypkg.a"),
+            "promoted CollectError carries the original diagnostic message so the user sees which subject failed; got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn split_coverage_diagnostics_analysis_error_hard_fails_under_abort() {
+        // Under strict=abort, an analysis-context Error means "the scanner cannot
+        // verify coverage for this subject" — semantically a coverage failure.
+        // Both the coverage gap and the analysis error must hard-fail.
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        use std::sync::Arc;
+        let entries = vec![
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Error,
+                context: Arc::from("doctest.coverage.analysis"),
+                message: "`mypkg.x` alias target module `mypkg._impl` file not found".into(),
+                file: None,
+                lineno: None,
+            },
+            DiagnosticEntry {
+                severity: DiagnosticSeverity::Error,
+                context: Arc::from("doctest.coverage"),
+                message: "`mypkg.y` missing `Examples:` header".into(),
+                file: None,
+                lineno: None,
+            },
+        ];
+        let (errors, pending) = split_coverage_diagnostics(entries);
+        assert_eq!(
+            errors.len(),
+            2,
+            "both coverage-gap and analysis-error Errors must hard-fail under abort; got {} errors",
+            errors.len()
+        );
+        assert_eq!(
+            pending.len(),
             0,
-            "strictness=warn must not trigger the M1-limit NOTICE — that's noise \
-             for users who didn't ask for hard-fail; got: {:?}",
-            m1_notices
+            "no pending diagnostics — all Errors promote to hard-fail; got {} pending",
+            pending.len()
+        );
+        let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        assert!(
+            msgs.iter().any(|m| m.contains("mypkg.x")),
+            "the analysis-error hard-fail must name the scanner failure; got: {:?}",
+            msgs
+        );
+        assert!(
+            msgs.iter().any(|m| m.contains("mypkg.y")),
+            "the coverage-gap hard-fail must name the missing subject; got: {:?}",
+            msgs
         );
     }
 }
