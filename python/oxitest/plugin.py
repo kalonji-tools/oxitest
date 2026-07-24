@@ -267,8 +267,31 @@ class CoverageProvider(Protocol):
     """Protocol for coverage collection backends.
 
     The built-in provider uses coverage.py. Plugins can override this
-    to use alternative coverage tools (e.g. slipcover).
-    At most one provider is allowed across all plugins.
+    to use alternative coverage tools (e.g. slipcover). At most one
+    provider is allowed across all plugins — registering more than one
+    is a conflict raised at plugin resolution as
+    :class:`ConflictingCoverageError`.
+
+    See Also:
+        - :attr:`oxitest.Plugin.coverage_provider` — how a plugin exposes
+          an implementation to oxitest.
+        - :class:`oxitest.CovReportFormat` — the report-format enum
+          consumed by :meth:`report`.
+
+    Examples:
+        Any object with matching ``start``, ``stop``, and ``report``
+        methods satisfies the protocol:
+
+        >>> from oxitest import CoverageProvider, CovReportFormat
+        >>> class MyProvider:
+        ...     def start(self) -> None: pass
+        ...     def stop(self) -> None: pass
+        ...     def report(self, *, fmt: CovReportFormat) -> int: return 0
+        >>> isinstance(MyProvider(), CoverageProvider)
+        True
+        >>> isinstance(object(), CoverageProvider)
+        False
+
     """
 
     def start(self) -> None:

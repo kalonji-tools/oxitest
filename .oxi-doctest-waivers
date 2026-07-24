@@ -24,8 +24,6 @@ oxitest.CaptureResult
 oxitest.Cli
 oxitest.CliExtension
 oxitest.Conf
-oxitest.CoverageProvider
-oxitest.CovReportFormat
 oxitest.FdCapture
 oxitest.Fixture
 oxitest.FixtureRef
