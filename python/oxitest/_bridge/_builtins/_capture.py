@@ -28,20 +28,26 @@ from oxitest._bridge._fixture_type import injectable
 
 @dataclass(frozen=True, slots=True)
 class CaptureResult:
-    r"""Captured stdout and stderr returned by `readouterr()`.
+    r"""Captured stdout and stderr returned by ``readouterr()``.
 
     Attributes:
-        out: Everything written to stdout since the last `readouterr()` call.
-        err: Everything written to stderr since the last `readouterr()` call.
+        out: Everything written to stdout since the last ``readouterr()`` call.
+        err: Everything written to stderr since the last ``readouterr()`` call.
 
-    Example:
-        ```python
-        def test_output(cap: StdCapture) -> None:
-            print("hello")
-            result = cap.readouterr()
-            assert result.out == "hello\\n"
-            assert result.err == ""
-        ```
+    See Also:
+        - :class:`StdCapture` — Python-stream-level capture producer.
+        - :class:`FdCapture` — fd-level capture producer.
+
+    Examples:
+        Frozen dataclass — construct directly for illustration or in
+        test doubles:
+
+        >>> from oxitest import CaptureResult
+        >>> result = CaptureResult(out="hello\n", err="")
+        >>> result.out
+        'hello\n'
+        >>> result.err
+        ''
 
     """
 
@@ -80,20 +86,39 @@ class _CaptureBase(ABC):
 
 @injectable
 class StdCapture(_CaptureBase):
-    r"""Captures `sys.stdout` and `sys.stderr` at the Python stream level.
+    r"""Captures ``sys.stdout`` and ``sys.stderr`` at the Python stream level.
 
-    Replaces `sys.stdout` and `sys.stderr` with in-memory `StringIO`
-    objects for the duration of the test. Does **not** capture output from C
-    extensions or subprocesses that write directly to file descriptors — use
-    `FdCapture` for that.
+    Replaces ``sys.stdout`` and ``sys.stderr`` with in-memory
+    :class:`io.StringIO` objects for the duration of the test. Does
+    **not** capture output from C extensions or subprocesses that write
+    directly to file descriptors — use :class:`FdCapture` for that.
 
-    Example:
-        ```python
-        def test_prints(cap: StdCapture) -> None:
-            print("hello")
-            captured = cap.readouterr()
-            assert captured.out == "hello\\n"
-        ```
+    See Also:
+        - :class:`FdCapture` — fd-level capture for C-extension and
+          subprocess output.
+        - :class:`CaptureResult` — return type of ``readouterr()``.
+
+    Examples:
+        Injected by parameter type — declare ``cap: StdCapture`` on the
+        test::
+
+            def test_prints(cap: StdCapture) -> None:
+                print("hello")
+                captured = cap.readouterr()
+                assert captured.out == "hello\n"
+
+        For illustration, construct + close directly (production code
+        should let oxitest manage the lifecycle):
+
+        >>> from oxitest import StdCapture
+        >>> cap = StdCapture()
+        >>> print("hello")
+        >>> result = cap.readouterr()
+        >>> cap.close()
+        >>> result.out
+        'hello\n'
+        >>> result.err
+        ''
 
     """
 
@@ -130,19 +155,39 @@ class StdCapture(_CaptureBase):
 
 @injectable
 class FdCapture(_CaptureBase):
-    """Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).
+    r"""Captures stdout and stderr at file-descriptor level (fd 1 and fd 2).
 
-    Redirects the underlying OS file descriptors, so output from C extensions,
-    subprocesses, and any code that writes directly to fd 1/2 is captured.
+    Redirects the underlying OS file descriptors, so output from C
+    extensions, subprocesses, and any code that writes directly to fd 1
+    or fd 2 is captured. Use :class:`StdCapture` when you only need to
+    capture ``print()``-style Python output — it's cheaper.
 
-    Example:
-        ```python
-        import ctypes
-        def test_c_output(cap: FdCapture) -> None:
-            ctypes.cdll.LoadLibrary("libc.so.6").puts(b"from C")
-            captured = cap.readouterr()
-            assert "from C" in captured.out
-        ```
+    See Also:
+        - :class:`StdCapture` — Python-stream-level capture (cheaper,
+          misses C/subprocess output).
+        - :class:`CaptureResult` — return type of ``readouterr()``.
+
+    Examples:
+        Injected by parameter type — declare ``cap: FdCapture`` on the
+        test::
+
+            import ctypes
+            def test_c_output(cap: FdCapture) -> None:
+                ctypes.cdll.LoadLibrary("libc.so.6").puts(b"from C")
+                captured = cap.readouterr()
+                assert "from C" in captured.out
+
+        For illustration, direct construction + close (production code
+        should let oxitest manage the lifecycle):
+
+        >>> from oxitest import FdCapture
+        >>> import os
+        >>> cap = FdCapture()
+        >>> _ = os.write(1, b"hello\n")
+        >>> result = cap.readouterr()
+        >>> cap.close()
+        >>> result.out
+        'hello\n'
 
     """
 
