@@ -21,8 +21,6 @@ oxitest.approx
 oxitest.arrange
 oxitest.importorskip
 oxitest.injectable
-oxitest.parametrize
-oxitest.partial
 oxitest.plugin.skipped
 oxitest.plugin.SkippedResult
 oxitest.plugin.StatusKind
