@@ -311,7 +311,47 @@ class CoverageProvider(Protocol):
 class Plugin:
     """Typed declaration of what a plugin provides.
 
-    Returned by the plugin's `oxitest_plugin()` entry point function.
+    Returned by the plugin's ``oxitest_plugin()`` entry-point function.
+    A ``Plugin`` bundles the hooks and backend implementations a plugin
+    contributes to oxitest — lazy fixture/helper hooks activated on first
+    use, eager collector/reporter hooks activated at startup, and
+    singleton backends for async runtime, debugger, and coverage.
+
+    Backends default to null-object stand-ins. Discovery filters null
+    objects by identity, so a plugin that omits a backend contributes
+    nothing at that slot rather than shadowing a real registration
+    from another plugin.
+
+    See Also:
+        - :class:`oxitest.AsyncBackend` — the async runtime backend
+          protocol.
+        - :class:`oxitest.DebuggerBackend` — the debugger backend
+          protocol.
+        - :class:`oxitest.CoverageProvider` — the coverage backend
+          protocol.
+        - :class:`oxitest.CliExtension` — sibling configuration
+          mechanism, exposed via a separate module-level attribute
+          (``oxitest_cli_extension``).
+
+    Examples:
+        A minimal empty plugin contributes nothing:
+
+        >>> from oxitest import Plugin
+        >>> plugin = Plugin()
+        >>> plugin.fixture_providers
+        ()
+        >>> plugin.reporters
+        ()
+
+        Fields are declared by keyword — construct with just the hooks
+        the plugin provides:
+
+        >>> class MyReporter:
+        ...     pass
+        >>> plugin = Plugin(reporters=(MyReporter(),))
+        >>> len(plugin.reporters)
+        1
+
     """
 
     # Fixture-adjacent hooks (lazy — activated on first use)

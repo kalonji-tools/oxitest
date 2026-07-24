@@ -30,7 +30,6 @@ oxitest.LogCapture
 oxitest.parametrize
 oxitest.partial
 oxitest.Patcher
-oxitest.Plugin
 oxitest.plugin.skipped
 oxitest.plugin.SkippedResult
 oxitest.plugin.StatusKind
