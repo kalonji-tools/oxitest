@@ -73,11 +73,41 @@ def partial(target_type: type, **fields: Any) -> _Partial:
     a valid field on the dataclass. At least one field is required.
     ``FixtureRef[T]`` fields must hold callables.
 
-    Use with stacked ``@oxi.parametrize`` decorators::
+    Use with stacked ``@oxi.parametrize`` decorators to express the
+    cartesian product of independently-varying dimensions.
 
-        @oxi.parametrize(pg=oxi.partial(Case, db=pg_db))
-        @oxi.parametrize(add=oxi.partial(Case, x=1, y=2))
-        def test_math(db: Fixture[str], x: int, y: int) -> None: ...
+    See Also:
+        - :func:`parametrize` — the consumer decorator.
+        - :class:`oxitest.FixtureRef` — for fixture-reference fields.
+
+    Examples:
+        Partial construction takes a dataclass and a subset of its fields::
+
+            @oxi.parametrize(pg=oxi.partial(Case, db=pg_db))
+            @oxi.parametrize(add=oxi.partial(Case, x=1, y=2))
+            def test_math(db: Fixture[str], x: int, y: int) -> None: ...
+
+        Direct verification of the constructed partial + error cases:
+
+        >>> from dataclasses import dataclass
+        >>> from oxitest import partial, raises
+        >>> @dataclass(frozen=True)
+        ... class Case:
+        ...     x: int
+        ...     y: int
+        >>> p = partial(Case, x=1)
+        >>> p.target_type is Case
+        True
+        >>> "x" in p.provided_fields
+        True
+
+        Unknown fields and empty partials both raise ``TypeError``:
+
+        >>> with raises(TypeError):
+        ...     partial(Case, bogus=1)
+        >>> with raises(TypeError):
+        ...     partial(Case)
+
     """
     if not dataclasses.is_dataclass(target_type):
         msg = f"partial: {target_type!r} must be a dataclass"
@@ -498,33 +528,61 @@ def _dataclass_decorator(cases: dict[str, Any]) -> Callable[[_F], _F]:
 def parametrize(**cases: Any) -> Callable[[_F], _F]:
     """Register named test cases on a test function.
 
-    Each keyword argument is a named test case. Case values must all be dicts,
-    frozen dataclass instances, or ``partial()`` instances — mixing is not allowed.
+    Each keyword argument is a named test case. Case values must all be
+    dicts, frozen dataclass instances, or ``partial()`` instances — mixing
+    is not allowed. The decorator itself is identical in all modes; the
+    function signature expresses intent.
 
-    **Expanded mode** — use field-name parameters to receive individual values.
-    Any parameter whose name matches a dataclass field (and is not annotated
-    `Fixture[T]`) receives that field's value::
+    Three modes:
+
+    **Expanded** — use field-name parameters to receive individual values.
+    Any parameter whose name matches a dataclass field (and is not
+    annotated ``Fixture[T]``) receives that field's value::
 
         @oxitest.parametrize(basic=AddCase(x=1, y=2, expected=3))
         def test_add(x: int, y: int, expected: int) -> None:
             assert x + y == expected
 
-    **Compact mode** — annotate a single parameter with the dataclass type to
-    receive the whole instance. oxitest detects compact mode when exactly one
-    non-`Fixture[T]` parameter is annotated with the case type::
+    **Compact** — annotate a single parameter with the dataclass type to
+    receive the whole instance. oxitest detects compact mode when exactly
+    one non-``Fixture[T]`` parameter is annotated with the case type::
 
         @oxitest.parametrize(basic=AddCase(x=1, y=2, expected=3))
         def test_add(params: AddCase) -> None:
             assert params.x + params.y == params.expected
 
-    **Composition mode** — use ``partial()`` with stacked decorators::
+    **Composition** — use :func:`partial` with stacked decorators to
+    express the cartesian product of independently-varying dimensions::
 
         @oxitest.parametrize(pg=oxi.partial(Case, db=pg_db))
         @oxitest.parametrize(add=oxi.partial(Case, x=1, y=2))
         def test_math(db: Fixture[str], x: int, y: int) -> None: ...
 
-    The decorator itself is identical in both modes — the function signature
-    expresses intent.
+    See Also:
+        - :func:`partial` — case builder for composition mode.
+        - :class:`oxitest.FixtureRef` — for fixture-reference case fields.
+
+    Examples:
+        Applying ``@parametrize`` attaches case metadata to the function:
+
+        >>> import oxitest
+        >>> from dataclasses import dataclass
+        >>> @dataclass(frozen=True)
+        ... class AddCase:
+        ...     x: int
+        ...     y: int
+        >>> @oxitest.parametrize(basic=AddCase(x=1, y=2))
+        ... def test_add(x, y):
+        ...     pass
+        >>> hasattr(test_add, "_oxitest_meta")
+        True
+
+        Calling ``parametrize()`` with no cases is an error:
+
+        >>> from oxitest import raises
+        >>> with raises(TypeError):
+        ...     oxitest.parametrize()
+
     """
     if not cases:
         msg = "parametrize requires at least one case"
