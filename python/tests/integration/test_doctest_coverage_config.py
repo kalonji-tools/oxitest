@@ -15,7 +15,6 @@ def test_doctest_section_parses(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest.doctest]
             scope = "off"
-            strictness = "off"
         """,
         tests={
             "test_pass.py": """\

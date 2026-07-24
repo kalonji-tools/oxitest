@@ -27,9 +27,9 @@ def test_single_hop_alias_from_private_source(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
@@ -79,9 +79,9 @@ def test_multi_hop_alias_reaches_class_docstring(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
@@ -132,9 +132,9 @@ def test_dedup_public_to_public_reexport(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": (
@@ -183,9 +183,9 @@ def test_alias_cycle_produces_scanner_diagnostic(tmp: TempDir) -> None:
         pyproject="""\
             [tool.oxitest]
             testpaths = ["mypkg"]
+            strict = "enforce"
             [tool.oxitest.doctest]
             scope = "public"
-            strictness = "warn"
         """,
         extra_files={
             "mypkg/__init__.py": '__all__ = ["A"]\nA = B\nB = A\n',
