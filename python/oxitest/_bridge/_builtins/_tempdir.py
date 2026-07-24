@@ -45,20 +45,39 @@ def _should_keep(mode: str, result_cell: list) -> bool:
 class TempDir:
     """A temporary directory provided to a test.
 
-    Created fresh for each test and deleted (with all contents) after the test
-    completes. Use ``--keep-tmp`` to preserve the directory on failure for
-    debugging (see :ref:`builtins-keep-tmp`).
+    Created fresh for each test and deleted (with all contents) after the
+    test completes. Use ``--keep-tmp`` to preserve the directory on failure
+    for debugging (see :ref:`builtins-keep-tmp`).
 
-    Use the `.path` attribute to get a `pathlib.Path`, or use the object
-    directly anywhere a path is accepted (`/` operator, `os.fspath`, `str`).
+    Use the ``.path`` attribute to get a :class:`pathlib.Path`, or use the
+    object directly anywhere a path is accepted (``/`` operator,
+    :func:`os.fspath`, :class:`str`).
 
-    Example:
-        ```python
-        def test_writes_file(tmp: TempDir) -> None:
-            output = tmp / "result.txt"
-            output.write_text("hello")
-            assert output.read_text() == "hello"
-        ```
+    See Also:
+        - :class:`TempDirFactory` — for tests that need multiple named
+          temp directories.
+
+    Examples:
+        Injected by parameter type — declare ``tmp: TempDir`` on the test
+        and oxitest provides a fresh directory for each run::
+
+            def test_writes_file(tmp: TempDir) -> None:
+                output = tmp / "result.txt"
+                output.write_text("hello")
+                assert output.read_text() == "hello"
+
+        The wrapper supports ``/``, ``str()``, and ``os.fspath()`` — it's
+        a drop-in wherever a path-like is expected:
+
+        >>> from oxitest import TempDir
+        >>> from pathlib import Path
+        >>> tmp = TempDir(Path("/tmp/example"))
+        >>> str(tmp)
+        '/tmp/example'
+        >>> str(tmp / "file.txt")
+        '/tmp/example/file.txt'
+        >>> isinstance(tmp.path, Path)
+        True
 
     """
 
@@ -78,17 +97,38 @@ class TempDir:
 class TempDirFactory:
     """Session-scoped factory for creating multiple named temp directories.
 
-    Injected as `factory: TempDirFactory`. Each call to `mktemp` returns a
-    new `TempDir` with a unique name. All directories are deleted at the end
-    of the test session.
+    Injected as ``factory: TempDirFactory``. Each call to :meth:`mktemp`
+    returns a new :class:`TempDir` with a unique name. All directories are
+    deleted at the end of the test session (or preserved when
+    ``--keep-tmp`` is set — see :ref:`builtins-keep-tmp`).
 
-    Example:
-        ```python
-        def test_two_dirs(factory: TempDirFactory) -> None:
-            src = factory.mktemp("src")
-            dst = factory.mktemp("dst")
-            shutil.copy(src / "a.txt", dst / "a.txt")
-        ```
+    See Also:
+        - :class:`TempDir` — for tests that only need one directory.
+
+    Examples:
+        Injected by parameter type::
+
+            def test_two_dirs(factory: TempDirFactory) -> None:
+                src = factory.mktemp("src")
+                dst = factory.mktemp("dst")
+                shutil.copy(src / "a.txt", dst / "a.txt")
+
+        A factory can be constructed and used directly for illustration —
+        each ``mktemp`` returns a live directory that is tracked for
+        cleanup via ``close()``:
+
+        >>> from oxitest import TempDirFactory
+        >>> factory = TempDirFactory()
+        >>> factory.dirs
+        ()
+        >>> tmp = factory.mktemp("data")
+        >>> tmp.path.exists()
+        True
+        >>> len(factory.dirs)
+        1
+        >>> factory.close()
+        >>> len(factory.dirs)
+        0
 
     """
 
