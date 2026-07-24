@@ -19,11 +19,7 @@
 # block the ratchet. Fix by adding docstrings to the aliased sources.
 oxitest.approx
 oxitest.arrange
-oxitest.Both
 oxitest.CaptureResult
-oxitest.Cli
-oxitest.CliExtension
-oxitest.Conf
 oxitest.FdCapture
 oxitest.Fixture
 oxitest.FixtureRef

@@ -11,7 +11,25 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 @dataclass(frozen=True, slots=True)
 class Cli:
-    """Field is CLI-only. Not read from pyproject.toml."""
+    """Field is CLI-only. Not read from pyproject.toml.
+
+    Attach to a config field via ``Annotated[T, Cli(help="...", short="-x")]``.
+    The field generates a CLI flag (long form always, short optional) and is
+    absent from pyproject.toml handling.
+
+    See Also:
+        - :class:`Conf` — pyproject.toml-only counterpart.
+        - :class:`Both` — the "both sources" variant.
+
+    Examples:
+        >>> from oxitest import Cli
+        >>> marker = Cli(help="Server port", short="-p")
+        >>> marker.help
+        'Server port'
+        >>> marker.short
+        '-p'
+
+    """
 
     help: str = ""
     short: str | None = None
@@ -19,14 +37,47 @@ class Cli:
 
 @dataclass(frozen=True, slots=True)
 class Conf:
-    """Field is pyproject.toml-only. No CLI flag generated."""
+    """Field is pyproject.toml-only. No CLI flag generated.
+
+    Attach to a config field via ``Annotated[T, Conf(help="...")]``. The
+    field is read from ``[tool.oxitest.<plugin>]`` in pyproject.toml but
+    has no corresponding CLI flag.
+
+    See Also:
+        - :class:`Cli` — CLI-only counterpart.
+        - :class:`Both` — the "both sources" variant.
+
+    Examples:
+        >>> from oxitest import Conf
+        >>> marker = Conf(help="Only readable from pyproject.toml")
+        >>> marker.help
+        'Only readable from pyproject.toml'
+
+    """
 
     help: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class Both:
-    """Field is both CLI and pyproject.toml. CLI overrides config."""
+    """Field is both CLI and pyproject.toml. CLI overrides config.
+
+    Attach to a config field via
+    ``Annotated[T, Both(help="...", short="-x", env="VAR")]``.
+    Precedence at merge time: CLI flag > env var (if set) > pyproject
+    value > default.
+
+    See Also:
+        - :class:`Cli` — CLI-only counterpart.
+        - :class:`Conf` — pyproject-only counterpart.
+
+    Examples:
+        >>> from oxitest import Both
+        >>> marker = Both(help="Timeout", short="-t", env="MY_TIMEOUT")
+        >>> marker.env
+        'MY_TIMEOUT'
+
+    """
 
     help: str = ""
     short: str | None = None
@@ -38,7 +89,32 @@ SourceMarker = Cli | Conf | Both
 
 @dataclass(frozen=True, slots=True)
 class CliExtension:
-    """Declares a plugin's CLI prefix and config type."""
+    """Declares a plugin's CLI prefix and config type.
+
+    A plugin exposes its configuration by assigning ``oxitest_cli_extension =
+    CliExtension(prefix=..., config_type=...)`` at module level. Oxitest picks
+    up the extension at plugin load, introspects the frozen config dataclass
+    (whose fields must be annotated with :class:`Cli`, :class:`Conf`, or
+    :class:`Both`), and namespaces both CLI flags and pyproject.toml sections
+    under the given prefix.
+
+    See Also:
+        - :class:`Cli`, :class:`Conf`, :class:`Both` — source markers for
+          config fields.
+
+    Examples:
+        >>> from oxitest import CliExtension
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyPluginConfig:
+        ...     level: int = 1
+        >>> ext = CliExtension(prefix="my", config_type=MyPluginConfig)
+        >>> ext.prefix
+        'my'
+        >>> ext.config_type.__name__
+        'MyPluginConfig'
+
+    """
 
     prefix: str
     config_type: type
