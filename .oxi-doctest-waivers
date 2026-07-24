@@ -19,10 +19,8 @@
 # block the ratchet. Fix by adding docstrings to the aliased sources.
 oxitest.approx
 oxitest.arrange
-oxitest.ArrangeError
 oxitest.AsyncBackend
 oxitest.AsyncSession
-oxitest.AutouseRegistrationError
 oxitest.Both
 oxitest.CaptureResult
 oxitest.Cli
@@ -53,7 +51,6 @@ oxitest.plugin.WarnedResult
 oxitest.plugin.xfailed
 oxitest.plugin.XFailedResult
 oxitest.raises
-oxitest.SharedFixtureMutationError
 oxitest.skip
 oxitest.StdCapture
 oxitest.TempDir
