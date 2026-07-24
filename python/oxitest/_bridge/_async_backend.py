@@ -49,6 +49,24 @@ class AsyncSession(Protocol):
     Multiple :meth:`run` calls on the same session share one runtime context.
     Backends decide what "shared context" means (asyncio: one event loop; trio:
     one nursery/runtime). The framework treats sessions as opaque handles.
+    Runtime-checkable, so ``isinstance()`` structurally verifies conformance.
+
+    See Also:
+        - ``AsyncBackend.acquire_session`` — the producer of session instances.
+        - ``AsyncioSession`` — the default asyncio implementation.
+
+    Examples:
+        Any object with a matching ``run`` method satisfies the protocol:
+
+        >>> from oxitest import AsyncSession
+        >>> class MySession:
+        ...     def run(self, coro, /):
+        ...         return None
+        >>> isinstance(MySession(), AsyncSession)
+        True
+        >>> isinstance(object(), AsyncSession)
+        False
+
     """
 
     def run(self, coro: Coroutine[Any, Any, _T], /) -> _T:
@@ -63,7 +81,32 @@ class AsyncBackend(Protocol):
     Backends produce :class:`AsyncSession` instances via
     :meth:`acquire_session`. Nested acquires are rejected by default at the
     framework guard; opt in by setting :attr:`supports_nested_acquire` to
-    ``True`` on the concrete backend class.
+    ``True`` on the concrete backend class.  Runtime-checkable, so
+    ``isinstance()`` structurally verifies conformance.
+
+    See Also:
+        - ``oxitest.Plugin.async_backend`` — how a plugin exposes an
+          implementation to oxitest.
+        - ``AsyncioBackend`` — the default implementation shipped with oxitest.
+        - ``resolve_backend`` — the discovery function that picks the active
+          backend from the plugin registry.
+
+    Examples:
+        Any object with a matching ``name`` property, ``acquire_session``
+        method, and ``supports_nested_acquire`` attribute satisfies the
+        protocol:
+
+        >>> from oxitest import AsyncBackend
+        >>> class MyBackend:
+        ...     supports_nested_acquire = False
+        ...     @property
+        ...     def name(self) -> str: return "my"
+        ...     def acquire_session(self): ...
+        >>> isinstance(MyBackend(), AsyncBackend)
+        True
+        >>> isinstance(object(), AsyncBackend)
+        False
+
     """
 
     @property
