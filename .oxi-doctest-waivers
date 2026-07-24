@@ -17,29 +17,6 @@
 # listing them here would make them permanently stale. They are left
 # out; the analysis errors are visible under `--warnings` but do not
 # block the ratchet. Fix by adding docstrings to the aliased sources.
-conftest.assert_collection_error
-conftest.assert_contains
-conftest.assert_excludes
-conftest.assert_failed
-conftest.assert_passed
-conftest.assert_result
-conftest.clean_git_env
-conftest.exec_inline
-conftest.install_module
-conftest.make_exc
-conftest.make_fixture_def
-conftest.make_meta
-conftest.make_plugin_module
-conftest.make_registry
-conftest.make_session
-conftest.make_session_with
-conftest.RecordingDebugger
-conftest.run_oxitest
-conftest.run_oxitest_subcmd
-conftest.run_test
-conftest.write_project
-conftest.write_test_file
-conftest.write_test_module
 oxitest.approx
 oxitest.arrange
 oxitest.ArrangeError

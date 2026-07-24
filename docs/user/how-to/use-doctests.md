@@ -126,6 +126,15 @@ oxitest finds doctests in:
 Discovery uses Rust AST analysis — files without `>>>` examples are
 skipped without importing them into Python.
 
+**Test infrastructure is auto-excluded from public-subject coverage.**
+Files named `conftest.py` (at any nesting level) and files matching
+`python_files` (default `test_*.py`) are skipped from the coverage
+rule's subject enumeration — their top-level definitions are fixture
+registrations and test helpers by pytest/oxitest convention, not
+public API. Their docstrings can still contain `>>>` blocks that get
+collected and run as regular doctests; only the coverage rule ignores
+them.
+
 ## Failure diagnostics
 
 When a doctest fails, the output shows the expected vs actual result:
