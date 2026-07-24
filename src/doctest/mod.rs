@@ -11,3 +11,4 @@ pub(crate) use scanner::scan_doctests;
 pub(crate) mod alias;
 pub(crate) mod coverage;
 pub(crate) mod subjects;
+pub(crate) mod waivers;

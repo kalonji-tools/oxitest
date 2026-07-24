@@ -7,7 +7,7 @@ mod merge;
 
 mod pyproject;
 use pyproject::PyprojectToml;
-pub use pyproject::{DoctestConfig, DoctestScope, DoctestStrictness};
+pub use pyproject::{DoctestConfig, DoctestScope};
 
 impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.

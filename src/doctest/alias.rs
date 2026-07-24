@@ -13,7 +13,8 @@
 //! - Name not found in target module (parsed but binding absent) → `AliasError::NameNotFound`
 //! - Module file not found on disk → `AliasError::ModuleFileNotFound`
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
+use ignore::WalkBuilder;
 
 use crate::doctest::subjects::SubjectSource;
 
@@ -23,13 +24,35 @@ use crate::doctest::subjects::SubjectSource;
 #[derive(Debug, Clone)]
 pub(crate) struct ModuleRoot {
     pub(crate) root: Utf8PathBuf,
+    pub(crate) use_gitignore: bool,
 }
 
 impl ModuleRoot {
     /// Look up a dotted module name as an `__init__.py` (package) or `<name>.py` (module).
-    /// Returns None if neither exists.
+    ///
+    /// Tries the root directly first; falls back to trying each auto-detected
+    /// source-root candidate as a prefix. A source-root candidate is a direct
+    /// child directory of `root` that does NOT contain `__init__.py` (e.g.
+    /// `python/` in a maturin-style project layout). Hidden (`.`-prefixed)
+    /// directories are skipped to avoid false candidates like `.venv/`.
+    ///
+    /// Returns None if the module isn't found under any candidate.
     pub(crate) fn resolve(&self, dotted: &str) -> Option<Utf8PathBuf> {
-        let mut candidate = self.root.clone();
+        // Try the root directly first — packages that live at the top level.
+        if let Some(path) = self.try_resolve_under(&self.root, dotted) {
+            return Some(path);
+        }
+        // Fall back to source-root candidates (dirs at root without __init__.py).
+        for candidate in self.source_root_candidates() {
+            if let Some(path) = self.try_resolve_under(&candidate, dotted) {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    fn try_resolve_under(&self, base: &Utf8Path, dotted: &str) -> Option<Utf8PathBuf> {
+        let mut candidate = base.to_owned();
         for component in dotted.split('.') {
             candidate.push(component);
         }
@@ -42,6 +65,41 @@ impl ModuleRoot {
             return Some(module_file);
         }
         None
+    }
+
+    fn source_root_candidates(&self) -> Vec<Utf8PathBuf> {
+        let mut out = Vec::new();
+        let walker = WalkBuilder::new(&self.root)
+            .follow_links(false)
+            .hidden(false) // walk hidden dirs — match main collector convention
+            .max_depth(Some(1)) // root + direct children only
+            .git_ignore(self.use_gitignore)
+            .git_global(false) // ~/.gitignore_global bypassed for reproducibility
+            .git_exclude(false) // .git/info/exclude bypassed for reproducibility
+            .build();
+        for entry in walker.filter_map(|e| e.ok()) {
+            // Skip the root entry itself (depth 0).
+            if entry.depth() == 0 {
+                continue;
+            }
+            // Only direct-child directories qualify as source-root candidates.
+            let Some(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let path = entry.path();
+            let init = path.join("__init__.py");
+            if init.exists() {
+                // Directory has __init__.py — it's a package, not a source root.
+                continue;
+            }
+            if let Ok(utf8) = Utf8PathBuf::from_path_buf(path.to_owned()) {
+                out.push(utf8);
+            }
+        }
+        out
     }
 }
 
@@ -187,10 +245,93 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
+    #[test]
+    fn module_root_resolve_finds_file_under_source_root_prefix() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // Layout: python/ (no __init__.py) → oxitest/ (has __init__.py) → _bridge/_errors.py
+        fs::create_dir_all(root.join("python/oxitest/_bridge")).unwrap();
+        fs::write(root.join("python/oxitest/__init__.py"), "").unwrap();
+        fs::write(root.join("python/oxitest/_bridge/__init__.py"), "").unwrap();
+        fs::write(root.join("python/oxitest/_bridge/_errors.py"), "").unwrap();
+        let mr = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: true,
+        };
+        let resolved = mr.resolve("oxitest._bridge._errors");
+        assert_eq!(
+            resolved,
+            Some(root.join("python/oxitest/_bridge/_errors.py")),
+            "resolve must try source-root candidates (dirs without __init__.py) as prefixes; got {:?}",
+            resolved
+        );
+    }
+
+    #[test]
+    fn module_root_resolve_prefers_root_level_when_package_lives_at_root() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        fs::create_dir_all(root.join("pkg")).unwrap();
+        fs::write(root.join("pkg/__init__.py"), "").unwrap();
+        fs::write(root.join("pkg/mod.py"), "").unwrap();
+        let mr = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: true,
+        };
+        let resolved = mr.resolve("pkg.mod");
+        assert_eq!(
+            resolved,
+            Some(root.join("pkg/mod.py")),
+            "resolve must still work when the package lives at the root itself (no source-root prefix)"
+        );
+    }
+
+    #[test]
+    fn module_root_resolve_returns_none_when_module_truly_missing() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        let mr = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
+        let resolved = mr.resolve("nonexistent.module");
+        assert_eq!(
+            resolved, None,
+            "genuine missing modules still return None so the walker can emit ModuleFileNotFound"
+        );
+    }
+
+    #[test]
+    fn module_root_resolve_source_root_detection_ignores_dot_dirs() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // .venv is a hidden dir that would falsely look like a source root without filtering
+        fs::create_dir_all(root.join(".venv/lib")).unwrap();
+        fs::create_dir_all(root.join("python/pkg")).unwrap();
+        fs::write(root.join("python/pkg/__init__.py"), "").unwrap();
+        fs::write(root.join("python/pkg/mod.py"), "").unwrap();
+        let mr = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: true,
+        };
+        let resolved = mr.resolve("pkg.mod");
+        assert_eq!(
+            resolved,
+            Some(root.join("python/pkg/mod.py")),
+            "dot-prefixed dirs must not be treated as source-root candidates"
+        );
+    }
+
     fn make_root() -> (tempfile::TempDir, ModuleRoot) {
         let tmp = tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
-        (tmp, ModuleRoot { root })
+        (
+            tmp,
+            ModuleRoot {
+                root,
+                use_gitignore: true,
+            },
+        )
     }
 
     #[test]
@@ -313,6 +454,79 @@ X = 42
         assert!(
             matches!(err, AliasError::UnknownTerminus { .. }),
             "int literal terminus ⇒ UnknownTerminus per #1609 Q2 sub-2.5"
+        );
+    }
+
+    #[test]
+    fn source_root_candidates_respect_gitignore_when_enabled() {
+        use std::fs;
+        use std::process::Command;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // Initialise a git repo so the ignore crate honours .gitignore
+        // (require_git=true by default — same as the main collector).
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(tmp.path())
+            .status()
+            .unwrap();
+        // Real source-root candidate
+        fs::create_dir(root.join("python")).unwrap();
+        // Gitignored candidate — should not appear
+        fs::create_dir(root.join("build")).unwrap();
+        fs::write(root.join(".gitignore"), "build/\n").unwrap();
+
+        let mr = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: true,
+        };
+        let candidates = mr.source_root_candidates();
+        let candidate_names: Vec<String> = candidates
+            .iter()
+            .filter_map(|p| p.file_name().map(str::to_owned))
+            .collect();
+        assert!(
+            candidate_names.contains(&"python".to_owned()),
+            "non-gitignored directory must be a source-root candidate; got: {:?}",
+            candidate_names
+        );
+        assert!(
+            !candidate_names.contains(&"build".to_owned()),
+            "gitignored directory must NOT be a source-root candidate; got: {:?}",
+            candidate_names
+        );
+    }
+
+    #[test]
+    fn source_root_candidates_ignore_gitignore_when_disabled() {
+        use std::fs;
+        use std::process::Command;
+        use tempfile::tempdir;
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        // Initialise a git repo so the ignore crate would normally see .gitignore.
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(tmp.path())
+            .status()
+            .unwrap();
+        fs::create_dir(root.join("build")).unwrap();
+        fs::write(root.join(".gitignore"), "build/\n").unwrap();
+
+        let mr = ModuleRoot {
+            root: root.clone(),
+            use_gitignore: false,
+        };
+        let candidates = mr.source_root_candidates();
+        let candidate_names: Vec<String> = candidates
+            .iter()
+            .filter_map(|p| p.file_name().map(str::to_owned))
+            .collect();
+        assert!(
+            candidate_names.contains(&"build".to_owned()),
+            "with gitignore disabled, gitignored dirs still qualify (user opted out of the filter); got: {:?}",
+            candidate_names
         );
     }
 

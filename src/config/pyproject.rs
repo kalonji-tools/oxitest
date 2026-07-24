@@ -124,8 +124,13 @@ pub(super) struct OxitestConfig {
 #[serde(deny_unknown_fields)]
 pub struct DoctestConfig {
     pub scope: Option<DoctestScope>,
-    pub strictness: Option<DoctestStrictness>,
-    pub allowlist: Option<String>,
+    pub waivers: Option<String>,
+    /// Path prefixes (rootdir-relative) to exclude from doctest coverage
+    /// scanning. Files under any listed prefix are skipped for both subject
+    /// enumeration and alias-walking, so no coverage or analysis diagnostics
+    /// fire for them.
+    #[serde(default)]
+    pub skip: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
@@ -135,14 +140,6 @@ pub enum DoctestScope {
     /// Reserved for M2 — currently identical to `Public` (no code path in
     /// `src/doctest/` differentiates the two). See wayfinder #1602.
     All,
-    Off,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
-pub enum DoctestStrictness {
-    Required,
-    Warn,
     Off,
 }
 
@@ -371,8 +368,7 @@ mod tests {
         let toml_src = r#"
 [tool.oxitest.doctest]
 scope = "public"
-strictness = "warn"
-allowlist = ".oxi-doctest-allowlist"
+waivers = ".oxi-doctest-waivers"
 "#;
         let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
         let cfg = parsed
@@ -387,14 +383,9 @@ allowlist = ".oxi-doctest-allowlist"
             "scope should parse as Public enum variant"
         );
         assert_eq!(
-            dt.strictness,
-            Some(DoctestStrictness::Warn),
-            "strictness should parse as Warn variant"
-        );
-        assert_eq!(
-            dt.allowlist.as_deref(),
-            Some(".oxi-doctest-allowlist"),
-            "allowlist path passes through as string"
+            dt.waivers.as_deref(),
+            Some(".oxi-doctest-waivers"),
+            "waivers path passes through as string"
         );
     }
 
@@ -431,6 +422,53 @@ doctest_modules = false
             err.to_string().contains("doctest_modules"),
             "value-agnostic rejection: false should hard-error too, got: {}",
             err
+        );
+    }
+
+    #[test]
+    fn doctest_sub_table_accepts_skip_paths() {
+        // Use the full pyproject.toml shape so [tool.oxitest.doctest] is a
+        // proper sub-table (not prepended by the parse_oxitest helper).
+        let toml_src = r#"
+[tool.oxitest.doctest]
+scope = "public"
+skip = ["python/tests/fixtures", "python/tests/docs"]
+"#;
+        let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
+        let cfg = parsed
+            .tool
+            .expect("tool table present")
+            .oxitest
+            .expect("oxitest table present");
+        let dt = cfg.doctest.expect("doctest sub-table present");
+        assert_eq!(
+            dt.skip,
+            vec![
+                "python/tests/fixtures".to_owned(),
+                "python/tests/docs".to_owned()
+            ],
+            "skip must parse as a list of path prefix strings"
+        );
+    }
+
+    #[test]
+    fn doctest_sub_table_skip_defaults_to_empty() {
+        // Omitting `skip` must default to an empty Vec, not None.
+        let toml_src = r#"
+[tool.oxitest.doctest]
+scope = "public"
+"#;
+        let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
+        let cfg = parsed
+            .tool
+            .expect("tool table present")
+            .oxitest
+            .expect("oxitest table present");
+        let dt = cfg.doctest.expect("doctest sub-table present");
+        assert!(
+            dt.skip.is_empty(),
+            "omitted skip defaults to an empty list; got {:?}",
+            dt.skip
         );
     }
 
@@ -502,10 +540,6 @@ doctest = {}
             dt.scope, None,
             "raw sub-table stores None; defaults applied by Config::resolve"
         );
-        assert_eq!(
-            dt.strictness, None,
-            "strictness omitted ⇒ None at parse time"
-        );
-        assert_eq!(dt.allowlist, None, "allowlist omitted ⇒ None at parse time");
+        assert_eq!(dt.waivers, None, "waivers omitted ⇒ None at parse time");
     }
 }
