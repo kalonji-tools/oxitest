@@ -23,10 +23,16 @@ def warns(category: type[Warning], *, match: str | None = None) -> Iterator[None
                         `match` is given and no matching warning's message
                         contains the pattern.
 
-    Example::
+    See Also:
+        - :func:`raises` — the sibling assertion for expected exceptions.
 
-        with oxitest.warns(UserWarning, match="deprecated"):
-            call_legacy_api()
+    Examples:
+        Assert a warning of a given category fires within the block:
+
+        >>> import warnings
+        >>> from oxitest import warns
+        >>> with warns(UserWarning, match="deprecated"):
+        ...     warnings.warn("deprecated feature", UserWarning)
 
     """
     with warnings.catch_warnings(record=True) as caught:

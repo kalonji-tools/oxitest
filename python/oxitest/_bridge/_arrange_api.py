@@ -38,6 +38,20 @@ def arrange(*args: type | str) -> Callable[[_F], _F]:
         This is intentional — arrange represents test-run setup, not overhead
         that should fire unconditionally.
 
+    Examples:
+        Applying ``@arrange`` attaches fixture metadata to the function.
+        Passing no arguments is an error:
+
+        >>> import oxitest
+        >>> from oxitest import TempDir, raises
+        >>> @oxitest.arrange(TempDir)
+        ... def test_fn():
+        ...     pass
+        >>> hasattr(test_fn, "_oxitest_meta")
+        True
+        >>> with raises(TypeError):
+        ...     oxitest.arrange()
+
     """
     # Bare form @oxi.arrange (no parens) passes the decorated function as the sole
     # argument — a callable but not a type.  Empty-args @oxi.arrange() is also

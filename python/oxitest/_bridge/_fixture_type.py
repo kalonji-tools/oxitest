@@ -176,8 +176,23 @@ def injectable(cls: _T) -> _T:
             ...
 
     ``Fixture[T]`` still works on ``@injectable`` types (redundant but
-    harmless).  ``Fixture[T]`` remains the only mechanism for conftest
+    harmless). ``Fixture[T]`` remains the only mechanism for conftest
     fixtures whose types are generic (e.g. ``list[int]``).
+
+    See Also:
+        - :class:`Fixture` — the explicit injection-signal annotation.
+
+    Examples:
+        Applying ``@injectable`` sets the marker attribute the
+        collector uses to recognise the class:
+
+        >>> from oxitest import injectable
+        >>> @injectable
+        ... class DbSession:
+        ...     pass
+        >>> DbSession.__oxitest_injectable__
+        True
+
     """
     setattr(cls, "__oxitest_injectable__", True)  # noqa: B010 — dynamic marker not in type stubs
     return cls
