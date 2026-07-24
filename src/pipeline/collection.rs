@@ -351,6 +351,10 @@ pub(super) fn collect_coverage_diagnostics(
                 !rel.file_name().is_some_and(|name| g.is_match(name))
             })
         })
+        // `conftest.py` is test infrastructure by pytest/oxitest convention —
+        // its top-level definitions are fixture registrations and helper setup,
+        // never public API. Excluded alongside `python_files` matches. See #1616.
+        .filter(|rel| rel.file_name() != Some("conftest.py"))
         .filter(|rel| !dt.skip.iter().any(|prefix| rel.starts_with(prefix)))
         .collect();
 
@@ -919,6 +923,58 @@ mod tests {
         assert!(
             !has_test_it,
             "test_*.py files must be excluded from public-subject scanning — test functions aren't public API; got diags: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn conftest_py_excluded_from_public_subject_scanning() {
+        let (cfg, _tmp) = doctest_only_cfg(
+            crate::config::DoctestScope::Public,
+            Some(crate::config::StrictMode::Abort),
+            None,
+        );
+        use std::fs;
+        // Regular public module with a missing subject
+        fs::create_dir_all(cfg.rootdir.join("mypkg")).unwrap();
+        fs::write(cfg.rootdir.join("mypkg/__init__.py"), "").unwrap();
+        fs::write(
+            cfg.rootdir.join("mypkg/lib.py"),
+            "\"\"\"lib.\"\"\"\n\n__all__ = [\"foo\"]\n\ndef foo():\n    \"\"\"No examples.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        // Root conftest.py — must be excluded from scanning
+        fs::write(
+            cfg.rootdir.join("conftest.py"),
+            "\"\"\"conftest.\"\"\"\n\ndef helper():\n    \"\"\"No examples but conftest is test infra.\"\"\"\n    pass\n",
+        )
+        .unwrap();
+        // Nested conftest.py — also excluded regardless of depth
+        fs::create_dir_all(cfg.rootdir.join("tests/integration")).unwrap();
+        fs::write(
+            cfg.rootdir.join("tests/integration/conftest.py"),
+            "def inner_helper():\n    pass\n",
+        )
+        .unwrap();
+        let files = vec![
+            cfg.rootdir.join("mypkg/__init__.py"),
+            cfg.rootdir.join("mypkg/lib.py"),
+            cfg.rootdir.join("conftest.py"),
+            cfg.rootdir.join("tests/integration/conftest.py"),
+        ];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        let has_lib_foo = diags
+            .iter()
+            .any(|d| d.message.contains("pkg.lib.foo") || d.message.contains("lib.foo"));
+        let has_helper = diags.iter().any(|d| d.message.contains("helper"));
+        assert!(
+            has_lib_foo,
+            "regular public module subjects must still be checked; got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        assert!(
+            !has_helper,
+            "conftest.py definitions (at any nesting level) must be excluded from public-subject scanning — they are test infrastructure per pytest/oxitest convention; got: {:?}",
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
