@@ -143,10 +143,22 @@ class UnannotatedFixtureParamError(FixtureError):
 class SharedFixtureMutationError(RuntimeError, OxitestError):
     """Raised when code attempts to mutate a shared (immutable) fixture value.
 
-    Shared and session-scope fixtures are exposed to tests as immutable proxies
-    so that per-test mutations cannot leak into sibling tests. Any write attempt
-    (attribute assignment, item assignment, or the setter half of an augmented
-    assign like ``x.attr += y``) on such a proxy fires this error.
+    When it fires:
+        Shared and session-scope fixtures are exposed to tests as immutable
+        ``FrozenProxy`` wrappers so that per-test mutations cannot leak into
+        sibling tests. Any write attempt — attribute assignment, item
+        assignment, or the setter half of an augmented assign like
+        ``x.attr += y`` — on such a proxy raises.
+
+    How to fix:
+        If per-test mutation is intentional, switch to a function-scope
+        fixture (``@Fixtures.fixture`` with ``shared=False``, the default)
+        so each test gets its own value. If it is unintentional, treat the
+        fixture value as read-only — build a fresh derived value instead
+        of writing to the shared one.
+
+    See Also:
+        - ``Fixtures.fixture`` for scope configuration.
 
     Examples:
         Mutating a shared-fixture proxy raises this error:
@@ -279,21 +291,32 @@ def _relpath(path: str) -> str:
         return path
 
 
+# Design rationale: see #1535 (Q5) and #1538.
 class AutouseRegistrationError(TypeError):
     """Raised at decorator time on an illegal async-each autouse registration.
 
-    Triggered when @Fixtures.fixture registers a factory with the illegal
-    combination `autouse=True` + `shared=False` + async factory. This has no
-    legal semantics: it would only fire on async tests, silently skipping
-    sync tests. oxitest is strict — refuse the combination at registration
-    so the intent is stated up front.
+    When it fires:
+        ``Fixtures.fixture`` registers a factory with the illegal combination
+        ``autouse=True`` + ``shared=False`` + async factory. This has no legal
+        semantics: it would only fire on async tests, silently skipping sync
+        ones. oxitest is strict — refuses the combination at registration so
+        the intent is stated up front.
 
-    See #1535 (Q5) and #1538.
+    How to fix:
+        Two supported options:
+
+        - Drop ``autouse=True`` and use ``@arrange(name)`` on the async tests
+          that need the fixture.
+        - Pass ``shared=True`` — a shared-scope async autouse applies to
+          both sync and async tests.
+
+    See Also:
+        - ``Fixtures.fixture`` for scope and autouse configuration.
+        - ``arrange`` for opt-in per-test fixture attachment.
 
     Examples:
         Registering an async function-scope autouse fixture raises this
-        at decorator time. The error message lists the two supported
-        ways forward (drop ``autouse=True``, or pass ``shared=True``):
+        at decorator time:
 
         >>> from oxitest import Fixtures, AutouseRegistrationError, raises
         >>> fx = Fixtures()
@@ -329,25 +352,34 @@ class AutouseRegistrationError(TypeError):
 
 
 class ArrangeError(OxitestError):
-    """Raised when @oxi.arrange is used with an incompatible fixture.
+    """Raised when ``@arrange`` is used with an incompatible fixture.
 
-    Fires when a sync test arranges one or more async function-scope
-    fixtures — the illegal cell in the (test kind x fixture kind) matrix.
-    Async tests legally consume async-each fixtures; sync fixtures compose
-    freely on either test kind.
+    When it fires:
+        A sync test arranges one or more async function-scope fixtures —
+        the illegal cell in the (test kind x fixture kind) matrix. Detected
+        during collection, not at decorator time. Async tests legally
+        consume async-each fixtures; sync fixtures compose freely on either
+        test kind.
 
-    Other @arrange failure modes surface through the existing error
-    hierarchy: missing arranged fixtures via `FixtureNotFoundError`
-    (caught upstream by the Rust `FixtureValidationPhase`), factory
-    raises via `FixtureSetupError`.
+    How to fix:
+        Three options:
+
+        - Make the test async — ``async def test_...``.
+        - Widen the fixture scope to ``shared`` or ``session``.
+        - Convert the fixture to sync (remove ``async`` from its ``def``).
+
+    See Also:
+        - ``FixtureNotFoundError`` — raised when ``@arrange`` names a
+          fixture that doesn't exist (caught upstream by the Rust
+          ``FixtureValidationPhase``).
+        - ``FixtureSetupError`` — raised when an arranged fixture's
+          factory itself raises.
 
     Examples:
-        Raised during test collection (not at decorator time), so the
-        organic trigger requires a running collector. The error message
-        lists three remediations (make the test async, widen the fixture
-        scope, or convert the fixture to sync).
-
-        Direct catch pattern:
+        Collection-time raises can't be triggered from a doctest (no
+        running collector). Direct catch pattern — the second constructor
+        arg is normally ``list[tuple[str, FixtureDef]]`` naming the
+        illegal fixtures:
 
         >>> from oxitest import ArrangeError, raises
         >>> def _fake_test(): pass
