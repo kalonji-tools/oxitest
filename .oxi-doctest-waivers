@@ -19,8 +19,6 @@
 # block the ratchet. Fix by adding docstrings to the aliased sources.
 oxitest.approx
 oxitest.arrange
-oxitest.CaptureResult
-oxitest.FdCapture
 oxitest.importorskip
 oxitest.injectable
 oxitest.LogCapture
@@ -36,7 +34,6 @@ oxitest.plugin.xfailed
 oxitest.plugin.XFailedResult
 oxitest.raises
 oxitest.skip
-oxitest.StdCapture
 oxitest.TestContext
 oxitest.WarnCapture
 oxitest.warns
