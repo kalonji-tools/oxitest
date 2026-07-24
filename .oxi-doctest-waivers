@@ -24,4 +24,3 @@ oxitest.plugin.warned
 oxitest.plugin.WarnedResult
 oxitest.plugin.xfailed
 oxitest.plugin.XFailedResult
-oxitest.raises

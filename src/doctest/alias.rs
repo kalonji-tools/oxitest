@@ -214,14 +214,18 @@ fn find_def_line_and_docstring(
                     crate::doctest::scanner::extract_docstring(&cls.body).map(|s| s.to_string());
                 return (lineno, doc);
             }
-            Stmt::FunctionDef(f) if f.name.as_str() == name => {
+            Stmt::FunctionDef(f)
+                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
+            {
                 let lineno =
                     crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
                 let doc =
                     crate::doctest::scanner::extract_docstring(&f.body).map(|s| s.to_string());
                 return (lineno, doc);
             }
-            Stmt::AsyncFunctionDef(f) if f.name.as_str() == name => {
+            Stmt::AsyncFunctionDef(f)
+                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
+            {
                 let lineno =
                     crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
                 let doc =

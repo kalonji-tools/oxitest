@@ -241,6 +241,30 @@ pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
     Some(mark_name.to_string())
 }
 
+/// Check whether a function body is a stub — i.e. exactly `...`.
+///
+/// Used by the doctest scanner to skip stubs when resolving the
+/// authoritative docstring for a subject. Covers `@overload` stubs
+/// (regardless of how `overload` is imported), abstract-method stubs,
+/// protocol methods, and any other `def foo(...) -> T: ...` idiom. The
+/// real implementation follows and carries the docstring.
+///
+/// A body of just a docstring (`"""..."""`) is not a stub — that's a
+/// docstring-only function with an implicit `return None`, which does
+/// have a docstring worth using.
+pub(crate) fn is_stub_body(body: &[ast::Stmt]) -> bool {
+    let [ast::Stmt::Expr(e)] = body else {
+        return false;
+    };
+    matches!(
+        &*e.value,
+        ast::Expr::Constant(ast::ExprConstant {
+            value: ast::Constant::Ellipsis,
+            ..
+        })
+    )
+}
+
 /// Extract all unique mark names from test functions and Test* class methods
 /// in the given statement list.
 ///
@@ -577,6 +601,54 @@ pub(crate) mod tests {
         let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow()\ndef test_it(): pass\n");
         let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
         assert_eq!(extract_decorator_marks(&stmts), vec!["slow"]);
+    }
+
+    // ── is_stub_body ──────────────────────────────────────────────────
+
+    fn get_body<'a>(stmts: &'a [ast::Stmt]) -> &'a [ast::Stmt] {
+        match &stmts[0] {
+            ast::Stmt::FunctionDef(f) => &f.body,
+            ast::Stmt::AsyncFunctionDef(f) => &f.body,
+            _ => panic!("expected FunctionDef in test fixture"),
+        }
+    }
+
+    #[test]
+    fn stub_body_ellipsis_only() {
+        let f = write_temp_py("def foo() -> int: ...\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(is_stub_body(get_body(&stmts)));
+    }
+
+    #[test]
+    fn stub_body_docstring_and_ellipsis_is_not_stub() {
+        // Body has 2 statements (docstring + ellipsis), so not a stub —
+        // the docstring is authoritative.
+        let f = write_temp_py("def foo() -> int:\n    \"\"\"doc\"\"\"\n    ...\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(!is_stub_body(get_body(&stmts)));
+    }
+
+    #[test]
+    fn stub_body_real_impl_is_not_stub() {
+        let f = write_temp_py("def foo():\n    return 42\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(!is_stub_body(get_body(&stmts)));
+    }
+
+    #[test]
+    fn stub_body_pass_body_is_not_stub() {
+        // `pass` is not the ellipsis idiom.
+        let f = write_temp_py("def foo(): pass\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(!is_stub_body(get_body(&stmts)));
+    }
+
+    #[test]
+    fn stub_body_async() {
+        let f = write_temp_py("async def foo() -> int: ...\n");
+        let (_, stmts) = parse_file(&temp_path(&f)).unwrap();
+        assert!(is_stub_body(get_body(&stmts)));
     }
 
     // ── FnDef ──────────────────────────────────────────────────────────
