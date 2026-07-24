@@ -21,7 +21,25 @@ except ImportError:
 
 
 class CovReportFormat(Enum):
-    """Report format for coverage output."""
+    """Report format for coverage output.
+
+    Passed to :meth:`CoverageProvider.report` to select the output format.
+    ``NONE`` short-circuits the report step and returns 0 without emitting
+    any output.
+
+    See Also:
+        - :meth:`oxitest.CoverageProvider.report` — the consumer.
+
+    Examples:
+        >>> from oxitest import CovReportFormat
+        >>> CovReportFormat.HTML
+        <CovReportFormat.HTML: 'html'>
+        >>> CovReportFormat.TERM.value
+        'term'
+        >>> CovReportFormat("json")
+        <CovReportFormat.JSON: 'json'>
+
+    """
 
     TERM = "term"
     HTML = "html"
