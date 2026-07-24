@@ -21,10 +21,20 @@ def importorskip(modname: str, *, reason: str | None = None) -> Any:
     Raises:
         unittest.SkipTest: If the module cannot be imported.
 
-    Example::
+    Examples:
+        Existing module — behaves like a normal ``import``:
 
-        loguru = oxitest.importorskip("loguru")
-        loguru.logger.info("only runs when loguru is installed")
+        >>> import unittest
+        >>> from oxitest import importorskip, raises
+        >>> os_mod = importorskip("os")
+        >>> callable(os_mod.getcwd)
+        True
+
+        Missing module — raises :class:`unittest.SkipTest`, which the
+        runner interprets as a skipped test rather than a failure:
+
+        >>> with raises(unittest.SkipTest):
+        ...     importorskip("nonexistent_module_xyz123")
 
     """
     try:

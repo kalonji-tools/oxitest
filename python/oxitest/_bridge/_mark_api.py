@@ -16,7 +16,7 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 def skip(reason: str = "") -> None:
     """Unconditionally skip the current test.
 
-    Equivalent to `@mark.skip` but callable from inside the test body to
+    Equivalent to ``@mark.skip`` but callable from inside the test body to
     skip at runtime after setup has already begun.
 
     Args:
@@ -25,13 +25,24 @@ def skip(reason: str = "") -> None:
     Raises:
         unittest.SkipTest: Always. Caught by the test runner, not the test.
 
-    Example:
-        ```python
-        def test_requires_network() -> None:
-            if not network_available():
-                oxitest.skip("no network")
-            ...
-        ```
+    See Also:
+        - :func:`importorskip` — skip when a dependency is missing.
+
+    Examples:
+        Typical use — skip when a runtime precondition is missing::
+
+            def test_requires_network() -> None:
+                if not network_available():
+                    oxitest.skip("no network")
+                ...
+
+        Direct call from a doctest, catching the raised
+        :class:`unittest.SkipTest`:
+
+        >>> import unittest
+        >>> from oxitest import skip, raises
+        >>> with raises(unittest.SkipTest):
+        ...     skip("no network")
 
     """
     raise unittest.SkipTest(reason)

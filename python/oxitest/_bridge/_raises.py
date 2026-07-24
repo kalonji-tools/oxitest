@@ -69,20 +69,30 @@ def raises(
                not found in the exception message.
 
     Returns:
-        A context manager. Use `as exc_info` to access `exc_info.value`
-        (the caught exception, typed as `exc_type`) after the block.
+        A context manager. Use ``as exc_info`` to access ``exc_info.value``
+        (the caught exception, typed as ``exc_type``) after the block.
 
-    Example::
+    See Also:
+        - :func:`warns` — the sibling assertion for expected warnings.
 
-        with oxitest.raises(ValueError, match="must be positive"):
-            validate(-1)
+    Examples:
+        Catch a specific exception type:
 
-        with oxitest.raises((AttributeError, RuntimeError)):
-            obj.method()
+        >>> from oxitest import raises
+        >>> with raises(ValueError):
+        ...     int("not a number")
 
-        with oxitest.raises(KeyError) as exc_info:
-            d["missing"]
-        assert exc_info.value.args[0] == "missing"
+        Match a substring/regex against the exception message:
+
+        >>> with raises(ValueError, match="invalid literal"):
+        ...     int("nope")
+
+        Bind the caught exception via ``as`` for further inspection:
+
+        >>> with raises(KeyError) as exc_info:
+        ...     {"a": 1}["b"]
+        >>> exc_info.value.args[0]
+        'b'
 
     """
     return _RaisesContext(exc_type, match)

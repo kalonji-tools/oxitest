@@ -163,10 +163,18 @@ def approx(
         abs: Absolute tolerance (default ``1e-12``).
         nan_ok: If ``True``, ``NaN == NaN`` compares as equal.
 
-    Example::
+    Returns:
+        An :class:`ApproxBase` that supports ``==`` and ``!=`` against
+        the reference value using the configured tolerances.
 
-        assert 0.1 + 0.2 == approx(0.3)
-        assert [0.1, 0.2] == approx([0.1, 0.2], abs=1e-9)
+    Examples:
+        Compare floats with default tolerance:
+
+        >>> from oxitest import approx
+        >>> 0.1 + 0.2 == approx(0.3)
+        True
+        >>> [0.1, 0.2] == approx([0.1, 0.2])
+        True
 
     """
     if isinstance(expected, set):
