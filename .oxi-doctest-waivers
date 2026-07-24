@@ -21,10 +21,8 @@ oxitest.approx
 oxitest.arrange
 oxitest.importorskip
 oxitest.injectable
-oxitest.LogCapture
 oxitest.parametrize
 oxitest.partial
-oxitest.Patcher
 oxitest.plugin.skipped
 oxitest.plugin.SkippedResult
 oxitest.plugin.StatusKind
@@ -34,6 +32,4 @@ oxitest.plugin.xfailed
 oxitest.plugin.XFailedResult
 oxitest.raises
 oxitest.skip
-oxitest.TestContext
-oxitest.WarnCapture
 oxitest.warns

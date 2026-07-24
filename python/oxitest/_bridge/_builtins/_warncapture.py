@@ -12,20 +12,46 @@ from oxitest._bridge._fixture_type import injectable
 
 @injectable
 class WarnCapture:
-    """Captures all `warnings.warn()` calls issued during a test.
+    r"""Captures all ``warnings.warn()`` calls issued during a test.
 
-    Installed automatically when a test parameter is annotated `warn: WarnCapture`.
-    Access captured warnings via `warn.warnings`; reset between assertions with
-    `warn.clear()`.
+    Installed automatically when a test parameter is annotated
+    ``warn: WarnCapture``. Access captured warnings via
+    :attr:`warnings`; reset between assertions with :meth:`clear`.
 
     Implementation note: the executor wraps each test in
-    `warnings.catch_warnings(record=True)`, which replaces
-    `warnings._showwarnmsg_impl` with its own accumulator list.  Patching
-    `showwarning` or `_showwarnmsg_impl` would therefore be overwritten.
-    Instead this class patches `warnings._showwarnmsg` — the function that
-    `warnings.warn()` calls directly and that `catch_warnings` does *not*
-    save or restore — so the intercept survives any number of nested
-    `catch_warnings` contexts.
+    :func:`warnings.catch_warnings` with ``record=True``, which replaces
+    ``warnings._showwarnmsg_impl`` with its own accumulator list. Patching
+    ``showwarning`` or ``_showwarnmsg_impl`` would therefore be
+    overwritten. Instead this class patches ``warnings._showwarnmsg`` —
+    the function that :func:`warnings.warn` calls directly and that
+    ``catch_warnings`` does *not* save or restore — so the intercept
+    survives any number of nested ``catch_warnings`` contexts.
+
+    See Also:
+        - :func:`oxitest.warns` — context-manager assertion that a
+          specific warning fires.
+
+    Examples:
+        Injected by parameter type — declare ``warn: WarnCapture`` on
+        the test::
+
+            def test_deprecated(warn: WarnCapture) -> None:
+                do_thing()
+                assert any("deprecated" in str(w.message) for w in warn.warnings)
+
+        For illustration, direct construction + close (production code
+        should let oxitest manage the lifecycle):
+
+        >>> from oxitest import WarnCapture
+        >>> import warnings
+        >>> cap = WarnCapture()
+        >>> warnings.warn("test")
+        >>> len(cap.warnings)
+        1
+        >>> str(cap.warnings[0].message)
+        'test'
+        >>> cap.close()
+
     """
 
     def __init__(self) -> None:

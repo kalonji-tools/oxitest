@@ -18,7 +18,42 @@ from oxitest._bridge._fixture_type import injectable
 class Patcher:
     """Applies temporary overrides to attributes, env vars, and working directory.
 
-    All changes are reverted in LIFO order when the test completes.
+    All changes are reverted in LIFO order when the test completes. Four
+    scoped mutation surfaces:
+
+    - :meth:`setattr` — swap an attribute on any object.
+    - :meth:`setenv` — set an environment variable.
+    - :meth:`delenv` — remove an environment variable.
+    - :meth:`chdir` — change the working directory.
+
+    Each records the previous value so :meth:`close` restores everything
+    on teardown.
+
+    See Also:
+        - :class:`TestContext` — for imperative teardown of arbitrary
+          resources via ``addfinalizer``.
+
+    Examples:
+        Injected by parameter type — declare ``patch: Patcher`` on the
+        test::
+
+            def test_env(patch: Patcher) -> None:
+                patch.setenv("DEBUG", "1")
+                run_thing()  # sees DEBUG=1
+
+        For illustration, direct construction + close (production code
+        should let oxitest manage the lifecycle):
+
+        >>> from oxitest import Patcher
+        >>> import os
+        >>> patcher = Patcher()
+        >>> patcher.setenv("OXITEST_DOCTEST_VAR", "hello")
+        >>> os.environ["OXITEST_DOCTEST_VAR"]
+        'hello'
+        >>> patcher.close()
+        >>> "OXITEST_DOCTEST_VAR" in os.environ
+        False
+
     """
 
     def __init__(self) -> None:
