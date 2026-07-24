@@ -22,7 +22,6 @@ class DebuggerBackend(Protocol):
     Plugins implement this to provide alternative debuggers (ipdb, pudb, etc.).
     oxitest owns capture management, banners, and *when* to call the debugger.
     The backend only provides the *what* — the actual debugger interaction.
-    Runtime-checkable, so ``isinstance()`` structurally verifies conformance.
 
     See Also:
         - ``oxitest.Plugin.debugger_backend`` — how a plugin exposes an
