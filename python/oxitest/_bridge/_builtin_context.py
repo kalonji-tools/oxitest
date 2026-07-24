@@ -38,17 +38,47 @@ class _BuiltinContext:
 class TestContext:
     """Test identity metadata and imperative teardown registration.
 
-    Injected when a test parameter is annotated with `TestContext`::
+    Injected when a test parameter is annotated with ``TestContext``. Exposes
+    the current test's name, node id, module path, applied marks, and the
+    current parametrize case value. Use :meth:`addfinalizer` (or its alias
+    :meth:`on_teardown`) to register cleanup callbacks — all registered
+    callbacks run after the test completes, in LIFO order, regardless of
+    pass or fail.
 
-        def test_example(ctx: TestContext) -> None:
-            ctx.name       # "test_example"
-            ctx.node_id    # "tests/test_example.py::test_example"
-            ctx.marks      # frozenset({"slow"})
-            ctx.addfinalizer(resource.close)
+    See Also:
+        - :class:`Patcher` — for scoped attribute / env / cwd overrides
+          with automatic restoration.
 
-    Use `addfinalizer` (or its alias `on_teardown`) to register cleanup
-    callbacks. All registered callbacks run after the test completes, in LIFO
-    order, regardless of pass or fail.
+    Examples:
+        Injected by parameter type — declare ``ctx: TestContext`` on
+        the test::
+
+            def test_example(ctx: TestContext) -> None:
+                ctx.name       # "test_example"
+                ctx.node_id    # "tests/test_example.py::test_example"
+                ctx.marks      # frozenset({"slow"})
+                ctx.addfinalizer(resource.close)
+
+        For illustration, direct construction with a synthetic
+        :class:`TestMeta`:
+
+        >>> from oxitest import TestContext
+        >>> from oxitest._bridge._test_meta import TestMeta
+        >>> meta = TestMeta(
+        ...     module_path="/t.py",
+        ...     fn_name="test_x",
+        ...     node_id="/t.py::test_x",
+        ... )
+        >>> teardown = []
+        >>> ctx = TestContext(meta, teardown)
+        >>> ctx.name
+        'test_x'
+        >>> ctx.node_id
+        '/t.py::test_x'
+        >>> ctx.addfinalizer(lambda: None)
+        >>> len(teardown)
+        1
+
     """
 
     __test__ = False  # prevent pytest from treating this as a test class

@@ -113,11 +113,38 @@ class StdlibLogBackend:
 
 @injectable
 class LogCapture:
-    """Aggregates log records from all registered backends.
+    r"""Aggregates log records from all registered backends.
 
-    Constructed with a list of `LogBackend` instances. Each backend is
-    installed immediately; all are uninstalled on `_teardown()`.
+    Constructed with a list of :class:`LogBackend` instances. Each backend
+    is installed immediately; all are uninstalled on :meth:`close`.
     Records from all backends are merged and sorted by creation time.
+
+    See Also:
+        - :class:`LogBackend` — the backend protocol (plugin extension point).
+        - :class:`StdlibLogBackend` — the default stdlib-``logging`` backend.
+
+    Examples:
+        Injected by parameter type — declare ``log: LogCapture`` on the
+        test::
+
+            def test_logs(log: LogCapture) -> None:
+                logging.warning("something")
+                assert "something" in log.text
+
+        For illustration, direct construction with a stdlib backend
+        (production code should let oxitest manage the lifecycle):
+
+        >>> from oxitest import LogCapture
+        >>> from oxitest._bridge._builtins._logcapture import StdlibLogBackend
+        >>> import logging
+        >>> cap = LogCapture([StdlibLogBackend(level=logging.WARNING)])
+        >>> logging.getLogger("demo").warning("hi")
+        >>> len(cap.records)
+        1
+        >>> cap.records[0].getMessage()
+        'hi'
+        >>> cap.close()
+
     """
 
     def __init__(self, backends: list[LogBackend]) -> None:
