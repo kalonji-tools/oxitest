@@ -17,12 +17,10 @@ Or permanently in `pyproject.toml`:
 [tool.oxitest]
 strict = "enforce"                     # "off" | "enforce" | "abort" — controls coverage severity
 
-[tool.oxitest.doctest]
-scope = "public"                       # "public" | "off"
-skip = ["tests/fixtures", "generated"] # path prefixes to exclude (optional; see below)
+[tool.oxitest.doctest]                 # empty table = enable with defaults (scope = "public")
 ```
 
-Present-with-defaults is enough: an empty `[tool.oxitest.doctest]` table enables collection. Coverage severity comes from the global `[tool.oxitest].strict` setting.
+The bare table is enough to opt in — an empty `[tool.oxitest.doctest]` enables collection with `scope = "public"`. Coverage severity comes from the global `[tool.oxitest].strict` setting. **To disable coverage, drop the whole `[tool.oxitest.doctest]` table** — absence of the table means the rule is off.
 
 ### Strictness semantics
 
@@ -32,20 +30,61 @@ Coverage severity is controlled by the global `[tool.oxitest].strict` mode — t
 - **`strict = "enforce"`** — every public subject missing an `Examples:` section (or with an empty one) surfaces as a Warning diagnostic. The run does not fail on coverage gaps.
 - **`strict = "abort"`** — the same gaps surface as Error diagnostics and hard-fail the run at collection time. Analysis errors (scanner could not resolve an alias chain) also hard-fail under `abort`.
 
-### Excluding path prefixes
+### Curating scope
 
-Some directories under `testpaths` aren't part of your public API — test fixtures, generated stubs, vendored code. Add path prefixes to `skip` to exclude them from coverage scanning entirely (no subject enumeration, no alias walking, no diagnostics):
+The default `scope = "public"` scans every public subject under `testpaths`. For a targeted subset, pass a **list of entries** instead:
+
+```toml
+[tool.oxitest.doctest]
+scope = [
+    "src/mypkg/api.py",                 # every subject in the file
+    "src/mypkg/util/",                  # every subject under the directory (trailing / required)
+    "src/mypkg/other.py::PublicClass",  # one top-level symbol
+]
+```
+
+The three entry shapes:
+
+| Shape | Meaning |
+|-------|---------|
+| `"path/to/dir/"` | Directory prefix. Trailing `/` is required. |
+| `"path/to/mod.py"` | Whole file. Every subject in the module. |
+| `"path/to/mod.py::sym"` | One top-level function or class. |
+
+Nested references like `"mod.py::Cls::method"` are rejected with a pointer to [issue #1644](https://github.com/kalonji-tools/oxitest/issues/1644) — member-level coverage lives in a follow-up.
+
+**Explicit list entries bypass the leading-underscore filter.** `scope = ["src/mypkg/mod.py::_helper"]` will cover `_helper`, because naming it explicitly is opt-in. The scalar `scope = "public"` still filters underscored names — the private-bypass only applies to list-form entries. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it.
+
+### Skipping subjects
+
+`skip` uses the same list grammar as `scope` and subtracts from the resolved subject set:
 
 ```toml
 [tool.oxitest.doctest]
 scope = "public"
-skip = ["tests/fixtures", "generated"]
+skip  = [
+    "src/mypkg/internal/",              # directory prefix
+    "src/mypkg/lib.py::deprecated_helper",
+]
 ```
 
-Prefixes are matched relative to the project root using `starts_with` semantics (no globs). A prefix `tests/fixtures` matches `tests/fixtures/sample/mod.py` but not `tests/fixtures_utils/helper.py` — matching is component-wise, not substring. Skipped files produce no coverage or analysis diagnostics.
+Every entry shape valid in `scope` is valid in `skip`. Skipped subjects produce no coverage or analysis diagnostics.
+
+### Stale entry detection
+
+An entry that matches zero subjects — a typo, a moved file, a renamed symbol — is **stale**. Stale entries surface via the global `strict` dial:
+
+- **`strict` absent** — silent. Stale entries are not reported.
+- **`strict = "enforce"`** — each stale entry surfaces as a Warning diagnostic.
+- **`strict = "abort"`** — each stale entry surfaces as an Error and hard-fails collection.
+
+This lets a strict project catch drift in its `scope` / `skip` config without a separate lint pass.
 
 When enabled, oxitest scans all `.py` files in your test paths for
 docstrings containing `>>>` interactive examples.
+
+!!! warning "The `scope = "off"` scalar was removed"
+    Earlier revisions accepted `scope = "off"` to disable coverage. That scalar is gone — the config parser now rejects it with a migration hint. **To opt out, delete the whole `[tool.oxitest.doctest]` table.** Absence of the table disables the rule; presence enables it with `scope = "public"` unless you override.
 
 !!! note "Upgrading from `doctest_modules = true`"
     The legacy `doctest_modules` boolean at `[tool.oxitest]` was replaced by the `[tool.oxitest.doctest]` sub-table. Runs with the old key hard-error at config load — replace with the shape above.
