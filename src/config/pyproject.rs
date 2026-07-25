@@ -79,20 +79,15 @@ pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
 /// `Config::load` distinguish absent-subtable (silent defaults) from
 /// whole-file syntax error (warn + defaults). See ADR-0008.
 #[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired into Config::load in Task 4 of PR #1646")
-)]
 pub(crate) enum ParseOutcome {
-    /// `[tool.oxitest]` parsed successfully.
-    Present(OxitestConfig),
+    /// `[tool.oxitest]` parsed successfully. Boxed to keep enum size flat —
+    /// `OxitestConfig` is ~448 bytes, dwarfing the other variants (per
+    /// `clippy::large_enum_variant`).
+    Present(Box<OxitestConfig>),
     /// Pyproject parses but has no `[tool.oxitest]` sub-table.
     Absent,
     /// Whole-file TOML syntax error — subtable extraction skipped by design.
-    WholeFileParseError(
-        #[allow(dead_code)] // destructured by Config::load in Task 4; tests match via `matches!`
-        toml::de::Error,
-    ),
+    WholeFileParseError(toml::de::Error),
 }
 
 /// Extract and validate `[tool.oxitest]` from raw pyproject.toml content.
@@ -109,10 +104,6 @@ pub(crate) enum ParseOutcome {
 ///   caller decides whether to warn.
 /// - `Err(ConfigError::Toml(_))` — `[tool.oxitest]` failed to deserialize
 ///   (unknown field via `deny_unknown_fields`, wrong type, malformed value).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "wired into Config::load in Task 4 of PR #1646")
-)]
 pub(crate) fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigError> {
     // Whole-file syntax errors: not our department. Return the error via
     // ParseOutcome so the caller can warn without our forcing an exit.
@@ -125,7 +116,7 @@ pub(crate) fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigErro
     };
     // Deserialize just the subtable — errors here ARE our department.
     let config: OxitestConfig = oxitest_value.clone().try_into()?;
-    Ok(ParseOutcome::Present(config))
+    Ok(ParseOutcome::Present(Box::new(config)))
 }
 
 #[derive(serde::Deserialize, Debug, Clone)]

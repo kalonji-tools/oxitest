@@ -61,18 +61,13 @@ def test_legacy_doctest_modules_hard_errors(tmp: TempDir) -> None:
 
 
 def test_invalid_scope_surfaces_deserializer_error(tmp: TempDir) -> None:
-    """An unknown ``scope`` value surfaces the deserializer error to the user.
+    """An unknown ``scope`` value hard-exits with the deserializer error.
 
-    The Rust unit test ``invalid_scope_enum_hard_fails_at_parse`` proves
-    ``serde`` rejects unknown enum variants. E2E, ``Config::load`` currently
-    catches the ``toml::de::Error`` and logs a WARN before falling back to
-    defaults — see ``src/config/mod.rs`` around the ``pyproject.toml parse
-    failed`` site. That soft-fallback is broader than doctest and pre-dates
-    #1602; tightening it would change how every ``[tool.oxitest]`` typo is
-    surfaced. Until that decision is made, verify the invariant that
-    actually holds: the user sees a diagnostic message naming the bad
-    variant (``bogus``) so they can fix it — silent acceptance would be the
-    real regression.
+    Per ADR-0008, any deserialization error inside ``[tool.oxitest]``
+    (including unknown enum variants like ``scope = "bogus"``) causes
+    oxitest to exit ``UsageError`` (4) with the offending field named in
+    stderr. This replaces the earlier soft-fallback contract that let typos
+    silently drop config.
     """
     helpers.integ.write_project(
         tmp,
@@ -87,7 +82,11 @@ def test_invalid_scope_surfaces_deserializer_error(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.common.run_oxitest(tmp)
+    assert rc != 0, (
+        "an unknown scope value must hard-exit — silent fallback to defaults "
+        f"would let typos ship undetected: {out}{err}"
+    )
     combined = out + err
     assert "bogus" in combined, (
         "the deserializer error naming the bad variant must reach the user — "
@@ -251,4 +250,69 @@ def test_stale_scope_entry_hard_fails_under_abort(tmp: TempDir) -> None:
     assert "stale" in combined.lower() or "matched no" in combined.lower(), (
         "the error output must explain WHY the run failed — the message needs "
         f"to name the stale entry so users can locate the typo: {combined!r}"
+    )
+
+
+def test_unknown_oxitest_key_hard_exits(tmp: TempDir) -> None:
+    """An unknown top-level ``[tool.oxitest]`` key hard-exits per ADR-0008.
+
+    ``deny_unknown_fields`` on ``OxitestConfig`` catches typos like
+    ``waivres`` at deserialization time. Without the fail-closed contract
+    this would silently drop the field; with it, oxitest exits
+    ``UsageError`` and names the offender so users can grep their
+    pyproject for the typo.
+    """
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            waivres = "typo"
+        """,
+        tests={
+            "test_pass.py": """\
+                def test_x():
+                    assert True, "sanity"
+            """,
+        },
+    )
+    out, err, rc = helpers.common.run_oxitest(tmp)
+    assert rc != 0, (
+        "unknown top-level [tool.oxitest] keys must hard-exit — silent drop "
+        f"would let typos evade the fail-closed contract: {out}{err}"
+    )
+    combined = out + err
+    assert "waivres" in combined, (
+        "the deserializer error must name the offending field so users can "
+        f"grep pyproject.toml for the typo: {combined!r}"
+    )
+
+
+def test_whole_file_syntax_error_does_not_block_oxitest(tmp: TempDir) -> None:
+    """A syntax error outside ``[tool.oxitest]`` must not fail oxitest.
+
+    Narrow scope per ADR-0008: oxitest is a test runner, not a TOML linter.
+    A broken ``[tool.ruff]`` or ``[build-system]`` should not prevent
+    oxitest from running under defaults — other tools reading pyproject
+    will complain on their own turf.
+    """
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.ruff
+            line-length = 100
+
+            [tool.oxitest]
+            timeout = 60
+        """,
+        tests={
+            "test_pass.py": """\
+                def test_x():
+                    assert True, "sanity"
+            """,
+        },
+    )
+    out, err, rc = helpers.common.run_oxitest(tmp)
+    assert rc == 0, (
+        "whole-file TOML syntax errors outside [tool.oxitest] must not fail "
+        f"oxitest — narrow scope per ADR-0008: {out}{err}"
     )

@@ -733,26 +733,6 @@ spawn_overhead_ms = 100.0
     }
 
     #[test]
-    fn test_load_malformed_toml_returns_defaults() {
-        let dir = TempDir::new().unwrap();
-        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
-        fs::write(
-            dir.path().join("pyproject.toml"),
-            "[tool.oxitest]\ntimeout = \"not_a_number\"\n",
-        )
-        .unwrap();
-        let config = Config::load(utf8_dir);
-        assert_eq!(
-            config.exec.timeout_secs,
-            Config::default().exec.timeout_secs
-        );
-        assert_eq!(
-            config.paths.python_files,
-            Config::default().paths.python_files
-        );
-    }
-
-    #[test]
     fn test_strict_loads_from_toml() {
         let toml = "[tool.oxitest]\nstrict = \"enforce\"\n";
         let cfg = Config::from_str(toml).unwrap();
