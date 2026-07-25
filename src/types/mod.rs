@@ -6,7 +6,7 @@
 
 mod exit;
 mod item;
-mod node_id;
+pub(crate) mod node_id;
 mod outcome;
 
 #[cfg(test)]

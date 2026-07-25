@@ -6,7 +6,7 @@
 //! Both serial and parallel execution paths converge through this module.
 
 mod arrange;
-mod collection;
+pub(crate) mod collection;
 pub(crate) mod execution;
 mod helpers;
 mod transitions;

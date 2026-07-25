@@ -72,7 +72,7 @@ impl Pipeline {
 
         // Collect doctest items when doctest collection is opted in — either
         // via `--doctest-modules` on the CLI or a `[tool.oxitest.doctest]`
-        // table in pyproject.toml (unless `scope = "off"` disables it).
+        // table in pyproject.toml.
         if shared.cfg.doctest_enabled() {
             let doctest_files = collector::collect_doctest_files(&shared.cfg);
             let doctest_items = collection::collect_doctest_items(&doctest_files);

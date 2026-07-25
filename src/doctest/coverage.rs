@@ -123,17 +123,115 @@ pub(crate) fn diagnostic_for_gap(
     }
 }
 
+/// Match a single `ScopeEntry` against a `Subject`.
+///
+/// Public/private-name filtering is a separate axis handled by the caller.
+fn subject_matches(
+    entry: &crate::config::ScopeEntry,
+    s: &crate::doctest::subjects::Subject,
+) -> bool {
+    use crate::config::ScopeEntry;
+    match entry {
+        ScopeEntry::Prefix(p) => s.file.starts_with(p),
+        ScopeEntry::File(f) => s.file == *f,
+        ScopeEntry::Symbol { file, name } => s.file == *file && s.name == *name,
+    }
+}
+
+/// `(scope_matched, skip_matched)` pair of `Vec<bool>` indexed by entry
+/// position — surfaced by `filter_subjects_by_scope` for stale-entry detection.
+/// `scope_matched` is empty under `Public` scope.
+pub(crate) type ScopeMatchBits = (Vec<bool>, Vec<bool>);
+
+/// Filter subjects against scope + skip, applying the public/private name
+/// filter only under scalar `Public` scope (list-form entries are explicit opt-in).
+///
+/// Returns `(kept_subjects, match_bits)`. `match_bits` is threaded out for
+/// stale-entry detection at the caller.
+///
+/// The `scope: &Option<DoctestScope>` mirrors `config.doctest.scope` — `None`
+/// (or absent doctest table) defaults to Public behavior.
+#[allow(
+    clippy::type_complexity,
+    reason = "tuple return is local — introducing a struct would add a struct definition + two field renames at each callsite for one function's use"
+)]
+pub(crate) fn filter_subjects_by_scope(
+    subjects: Vec<(String, crate::doctest::subjects::Subject)>,
+    scope: &Option<crate::config::DoctestScope>,
+    skip: &[crate::config::ScopeEntry],
+) -> (
+    Vec<(String, crate::doctest::subjects::Subject)>,
+    ScopeMatchBits,
+) {
+    use crate::config::DoctestScope;
+
+    let (scope_entries, apply_private_filter): (&[crate::config::ScopeEntry], bool) = match scope {
+        None | Some(DoctestScope::Public) => (&[], true),
+        Some(DoctestScope::List(entries)) => (entries.as_slice(), false),
+    };
+
+    let mut scope_hits = vec![false; scope_entries.len()];
+    let mut skip_hits = vec![false; skip.len()];
+    let mut kept = Vec::new();
+
+    for (module_dotted, subj) in subjects {
+        // Private-name filter (scalar Public only): drop _-prefixed leaf names.
+        if apply_private_filter && subj.name.starts_with('_') {
+            continue;
+        }
+
+        // Under List: subject must match ≥1 scope entry.
+        if !scope_entries.is_empty() {
+            let mut any_scope_match = false;
+            for (i, e) in scope_entries.iter().enumerate() {
+                if subject_matches(e, &subj) {
+                    scope_hits[i] = true;
+                    any_scope_match = true;
+                }
+            }
+            if !any_scope_match {
+                continue;
+            }
+        }
+
+        // Skip subtracts (any form, any list).
+        let mut subtracted = false;
+        for (i, e) in skip.iter().enumerate() {
+            if subject_matches(e, &subj) {
+                skip_hits[i] = true;
+                subtracted = true;
+                // don't break — track matches on other skip entries too
+            }
+        }
+        if subtracted {
+            continue;
+        }
+
+        kept.push((module_dotted, subj));
+    }
+
+    (kept, (scope_hits, skip_hits))
+}
+
 /// Full orchestration: scan → filter public modules → enumerate → dedup → check → emit.
 ///
-/// - `files`: paths relative to `root.root`. Layer 1 (privacy) filter is applied per-file.
+/// - `files`: paths relative to `root.root`. Layer 1 (privacy) filter is applied per-file
+///   unless the file is explicitly named by a `List`-form scope entry.
 /// - `root`: filesystem root for `dotted_path_for` inversion and cross-file walks.
 /// - `severity`: applied to every emitted diagnostic. Callers derive this from the
 ///   global `strict` mode: `Enforce` → `Warning`, `Abort` → `Error`.
+/// - `scope`: user-configured `[tool.oxitest.doctest].scope` (or `None`/`Public`).
+///   Under `List`, files explicitly named bypass the private-path gate; the subject
+///   filter then applies list semantics without dropping `_`-prefixed leaves.
+/// - `skip`: user-configured `[tool.oxitest.doctest].skip` entries. Applied at the
+///   subject level via `filter_subjects_by_scope`.
 pub(crate) fn run_coverage_check(
     files: &[Utf8PathBuf],
     root: &ModuleRoot,
     severity: DiagnosticSeverity,
-) -> Vec<DiagnosticEntry> {
+    scope: &Option<crate::config::DoctestScope>,
+    skip: &[crate::config::ScopeEntry],
+) -> (Vec<DiagnosticEntry>, ScopeMatchBits) {
     use std::collections::HashMap;
 
     use crate::doctest::subjects::{
@@ -151,7 +249,17 @@ pub(crate) fn run_coverage_check(
 
     for file in files {
         let dotted = dotted_path_for_file(file, &root.root);
-        if !is_public_module_path(&dotted) {
+        let module_is_public = is_public_module_path(&dotted);
+        // Under List scope, allow explicitly-named private files into the scanner.
+        // Explicit opt-in beats the blanket privacy gate — a user asking for
+        // `pkg/_internal/mod.py::_helper` expects to actually check it.
+        let file_explicitly_scoped = match scope {
+            Some(crate::config::DoctestScope::List(entries)) => {
+                crate::pipeline::collection::file_could_match(file, entries)
+            }
+            _ => false,
+        };
+        if !module_is_public && !file_explicitly_scoped {
             continue;
         }
         let full = root.root.join(file);
@@ -159,7 +267,7 @@ pub(crate) fn run_coverage_check(
             continue;
         };
         let line_index = crate::python_ast::build_line_index(&src);
-        for subj in enumerate_subjects(&stmts, &dotted) {
+        for subj in enumerate_subjects(&stmts, &dotted, file) {
             all_subjects.push((dotted.clone(), subj));
         }
         per_module.insert(dotted, (stmts, full, line_index));
@@ -182,6 +290,11 @@ pub(crate) fn run_coverage_check(
             _ => true,
         })
         .collect();
+
+    // Subject-level scope + skip filter. `match_bits` is threaded out to the
+    // caller so `collect_coverage_diagnostics` can emit stale-entry diagnostics
+    // for scope/skip entries that matched zero subjects (Task 9).
+    let (deduped, match_bits) = filter_subjects_by_scope(deduped, scope, skip);
 
     let mut diagnostics = Vec::new();
     for (module_dotted, subject) in deduped {
@@ -245,7 +358,7 @@ pub(crate) fn run_coverage_check(
             }
         }
     }
-    diagnostics
+    (diagnostics, match_bits)
 }
 
 /// Locate a class/function definition by name; return (docstring, 1-indexed lineno).
@@ -337,7 +450,9 @@ mod tests {
     fn sample_subject() -> Subject {
         Subject {
             public_id: "mypkg.foo".into(),
+            name: "foo".into(),
             source: SubjectSource::LocalDefinition,
+            file: Utf8PathBuf::from("mypkg/foo.py"),
         }
     }
 
@@ -522,7 +637,13 @@ def foo():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
+        let (diags, _) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
         assert_eq!(
             diags.len(),
             1,
@@ -575,7 +696,13 @@ def foo():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
+        let (diags, _) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
         assert!(
             diags.is_empty(),
             "fully covered subject ⇒ no diagnostics, got: {:?}",
@@ -612,7 +739,13 @@ def uncovered():
             Utf8PathBuf::from("mypkg/_private/__init__.py"),
             Utf8PathBuf::from("mypkg/_private/thing.py"),
         ];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
+        let (diags, _) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
         assert!(
             diags.is_empty(),
             "underscore-prefixed module path ⇒ subjects not scanned (Layer 1 filter), got: {:?}",
@@ -638,7 +771,13 @@ def uncovered():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
+        let (diags, _) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
         assert_eq!(diags.len(), 1, "one missing-header diagnostic expected");
         let d = &diags[0];
         // Line 4 is where `def foo():` starts. This regression-tests the audit's
@@ -673,7 +812,13 @@ B = A
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Warning);
+        let (diags, _) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
         assert!(!diags.is_empty(), "cycle should produce a diagnostic");
         let cycle_diag = diags
             .iter()
@@ -713,7 +858,8 @@ B = A
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let diags = run_coverage_check(&files, &module_root, DiagnosticSeverity::Error);
+        let (diags, _) =
+            run_coverage_check(&files, &module_root, DiagnosticSeverity::Error, &None, &[]);
 
         // Under the fix, the Call RHS terminus produces NO diagnostic — silent skip.
         // Both `mypkg.thing` (coverage subject) and any alias walk terminating on
@@ -725,6 +871,135 @@ B = A
                 .iter()
                 .map(|d| (d.context.as_ref(), &d.message))
                 .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[cfg(test)]
+mod scope_filter_tests {
+    use super::filter_subjects_by_scope;
+    use crate::config::ScopeEntry;
+    use crate::doctest::subjects::{Subject, SubjectSource};
+    use camino::Utf8PathBuf;
+
+    fn subj(module: &str, name: &str, file: &str) -> Subject {
+        Subject {
+            public_id: format!("{module}.{name}"),
+            name: name.to_owned(),
+            source: SubjectSource::LocalDefinition,
+            file: Utf8PathBuf::from(file),
+        }
+    }
+
+    #[test]
+    fn public_scope_applies_private_filter() {
+        let subjects = vec![
+            (
+                String::from("pkg.mod"),
+                subj("pkg.mod", "foo", "pkg/mod.py"),
+            ),
+            (
+                String::from("pkg.mod"),
+                subj("pkg.mod", "_hidden", "pkg/mod.py"),
+            ),
+        ];
+        let scope: Option<crate::config::DoctestScope> = None; // treated as Public
+        let (kept, _) = filter_subjects_by_scope(subjects, &scope, &[]);
+        let names: Vec<String> = kept.iter().map(|(_, s)| s.public_id.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["pkg.mod.foo".to_string()],
+            "Public scope drops _-prefixed names",
+        );
+    }
+
+    #[test]
+    fn list_scope_bypasses_private_filter_when_explicit() {
+        let subjects = vec![
+            (
+                String::from("pkg.mod"),
+                subj("pkg.mod", "foo", "pkg/mod.py"),
+            ),
+            (
+                String::from("pkg.mod"),
+                subj("pkg.mod", "_hidden", "pkg/mod.py"),
+            ),
+        ];
+        let scope = Some(crate::config::DoctestScope::List(vec![
+            ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("pkg/mod.py"),
+                name: "_hidden".to_string(),
+            },
+        ]));
+        let (kept, _) = filter_subjects_by_scope(subjects, &scope, &[]);
+        let names: Vec<String> = kept.iter().map(|(_, s)| s.public_id.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["pkg.mod._hidden".to_string()],
+            "List scope with explicit _hidden entry bypasses the private filter",
+        );
+    }
+
+    #[test]
+    fn list_scope_multiple_entries_union() {
+        let subjects = vec![
+            (String::from("a"), subj("a", "x", "a.py")),
+            (String::from("b"), subj("b", "y", "b.py")),
+            (String::from("c"), subj("c", "z", "c.py")),
+        ];
+        let scope = Some(crate::config::DoctestScope::List(vec![
+            ScopeEntry::File(Utf8PathBuf::from("a.py")),
+            ScopeEntry::File(Utf8PathBuf::from("b.py")),
+        ]));
+        let (kept, _) = filter_subjects_by_scope(subjects, &scope, &[]);
+        let names: Vec<String> = kept.iter().map(|(_, s)| s.public_id.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["a.x".to_string(), "b.y".to_string()],
+            "union of two File entries covers both files' subjects",
+        );
+    }
+
+    #[test]
+    fn skip_subtracts_from_scope() {
+        let subjects = vec![
+            (String::from("a"), subj("a", "x", "a.py")),
+            (String::from("a"), subj("a", "y", "a.py")),
+        ];
+        let scope = Some(crate::config::DoctestScope::List(vec![ScopeEntry::File(
+            Utf8PathBuf::from("a.py"),
+        )]));
+        let skip = vec![ScopeEntry::Symbol {
+            file: Utf8PathBuf::from("a.py"),
+            name: "y".to_string(),
+        }];
+        let (kept, _) = filter_subjects_by_scope(subjects, &scope, &skip);
+        let names: Vec<String> = kept.iter().map(|(_, s)| s.public_id.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["a.x".to_string()],
+            "skip subtracts individual subjects even when scope is coarser",
+        );
+    }
+
+    #[test]
+    fn symbol_entry_matches_only_named_top_level() {
+        let subjects = vec![
+            (String::from("m"), subj("m", "foo", "m.py")),
+            (String::from("m"), subj("m", "bar", "m.py")),
+        ];
+        let scope = Some(crate::config::DoctestScope::List(vec![
+            ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("m.py"),
+                name: "foo".to_string(),
+            },
+        ]));
+        let (kept, _) = filter_subjects_by_scope(subjects, &scope, &[]);
+        let names: Vec<String> = kept.iter().map(|(_, s)| s.public_id.clone()).collect();
+        assert_eq!(
+            names,
+            vec!["m.foo".to_string()],
+            "Symbol entry with name='foo' matches only that top-level symbol",
         );
     }
 }

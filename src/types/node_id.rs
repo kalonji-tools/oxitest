@@ -144,6 +144,26 @@ impl std::fmt::Display for LineNo {
     }
 }
 
+/// Split a pytest-node-ID-shaped string into `(file_part, chain_segments)`.
+///
+/// Format: `file::seg1::seg2::…`. The file part is everything before the first
+/// `::`; the chain is the remaining segments split on subsequent `::`.
+///
+/// **Empty segments are preserved, not rejected.** Callers decide the policy:
+/// - The CLI positional parser treats any string with `::` as a node ID and
+///   lets downstream validation surface malformed inputs like `"file.py::"`.
+/// - The `[tool.oxitest.doctest].scope` deserializer applies strict validation
+///   on the chain (rejects empty segments, checks segment count, etc.).
+///
+/// Shared between CLI positional parsing (`partition_positionals`) and
+/// `[tool.oxitest.doctest].scope` entry deserialization.
+pub fn split_node_id_str(s: &str) -> (&str, Vec<&str>) {
+    let Some((file, rest)) = s.split_once("::") else {
+        return (s, Vec::new());
+    };
+    (file, rest.split("::").collect())
+}
+
 #[cfg(test)]
 mod node_id_tests {
     use super::*;
@@ -200,6 +220,41 @@ mod node_id_tests {
     fn test_node_id_module_path_no_separator() {
         let id = NodeId::from_raw("bare_name");
         assert_eq!(id.module_path(), None);
+    }
+
+    #[test]
+    fn split_node_id_str_bare_path_returns_empty_chain() {
+        let (file, chain) = split_node_id_str("path/to/mod.py");
+        assert_eq!(
+            file, "path/to/mod.py",
+            "bare path returns full input as file"
+        );
+        assert!(chain.is_empty(), "bare path has no chain segments");
+    }
+
+    #[test]
+    fn split_node_id_str_single_segment_returns_one_chain() {
+        let (file, chain) = split_node_id_str("path/to/mod.py::foo");
+        assert_eq!(file, "path/to/mod.py", "file part precedes ::");
+        assert_eq!(chain, vec!["foo"], "one segment after ::");
+    }
+
+    #[test]
+    fn split_node_id_str_two_segments_returns_two_chain() {
+        let (file, chain) = split_node_id_str("path/to/mod.py::Cls::method");
+        assert_eq!(file, "path/to/mod.py", "file part precedes first ::");
+        assert_eq!(chain, vec!["Cls", "method"], "two segments after ::");
+    }
+
+    #[test]
+    fn split_node_id_str_preserves_empty_trailing_segment() {
+        let (file, chain) = split_node_id_str("path/to/mod.py::");
+        assert_eq!(file, "path/to/mod.py", "file part precedes trailing ::");
+        assert_eq!(
+            chain,
+            vec![""],
+            "trailing :: yields one empty chain segment — helper is non-validating; callers apply their own policy",
+        );
     }
 }
 

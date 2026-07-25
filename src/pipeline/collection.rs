@@ -18,6 +18,22 @@ fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
         .unwrap_or(0)
 }
 
+/// Returns true iff any scope entry could match a subject in `rel`.
+///
+/// Prefix entries match by `starts_with`; File/Symbol entries match only when
+/// the entry's `file` equals `rel`. Used by the Phase-1 prescreen to filter
+/// the file set handed to the scanner.
+pub(crate) fn file_could_match(
+    rel: &camino::Utf8Path,
+    entries: &[crate::config::ScopeEntry],
+) -> bool {
+    use crate::config::ScopeEntry;
+    entries.iter().any(|e| match e {
+        ScopeEntry::Prefix(p) => rel.starts_with(p),
+        ScopeEntry::File(f) | ScopeEntry::Symbol { file: f, .. } => rel == *f,
+    })
+}
+
 /// Per-file collection timing.
 #[derive(Debug)]
 pub(crate) struct FileProfile {
@@ -293,7 +309,7 @@ pub(super) fn collect_coverage_diagnostics(
     doctest_files: &[Utf8PathBuf],
     config: &crate::config::Config,
 ) -> Vec<crate::reporter::stats::DiagnosticEntry> {
-    use crate::config::{DoctestScope, StrictMode};
+    use crate::config::StrictMode;
     use crate::doctest::alias::ModuleRoot;
     use crate::doctest::coverage::run_coverage_check;
     use crate::reporter::stats::DiagnosticSeverity;
@@ -301,9 +317,6 @@ pub(super) fn collect_coverage_diagnostics(
     let Some(dt) = config.doctest.as_ref() else {
         return vec![];
     };
-    if matches!(dt.scope, Some(DoctestScope::Off)) {
-        return vec![];
-    }
 
     // Severity is driven by the global strict mode — same axis, one vocabulary.
     let severity = match config.markers.strict.as_ref() {
@@ -328,9 +341,9 @@ pub(super) fn collect_coverage_diagnostics(
     // modules aren't part of the public API surface — their `test_*` functions
     // should not be treated as coverage subjects.
     let python_files_glob = crate::collector::build_glob_set(&config.paths.python_files).ok();
-    // Filter out files matching any [tool.oxitest.doctest].skip prefix. Path
-    // prefixes are matched via `starts_with` — simple, no globs. Skipped files
-    // are excluded from both subject enumeration and alias-walking downstream.
+    // Skip is applied at the subject level by `filter_subjects_by_scope`
+    // inside `run_coverage_check` (Task 8). A pre-scan skip filter would be
+    // both redundant and too coarse — Symbol entries would drop the whole file.
     let rel_files: Vec<Utf8PathBuf> = doctest_files
         .iter()
         .filter_map(|abs| abs.strip_prefix(&config.rootdir).ok().map(|p| p.to_owned()))
@@ -348,20 +361,81 @@ pub(super) fn collect_coverage_diagnostics(
         // its top-level definitions are fixture registrations and helper setup,
         // never public API. Excluded alongside `python_files` matches. See #1616.
         .filter(|rel| rel.file_name() != Some("conftest.py"))
-        .filter(|rel| !dt.skip.iter().any(|prefix| rel.starts_with(prefix)))
         .collect();
 
-    run_coverage_check(&rel_files, &root, severity)
+    // Phase-1 scope prescreen: under scope = List, drop files that no scope
+    // entry could plausibly match. Under Public, no prescreen (every file
+    // that survived the built-in filters is considered).
+    let rel_files: Vec<Utf8PathBuf> = rel_files
+        .into_iter()
+        .filter(|rel| match dt.scope.as_ref() {
+            None | Some(crate::config::DoctestScope::Public) => true,
+            Some(crate::config::DoctestScope::List(entries)) => file_could_match(rel, entries),
+        })
+        .collect();
+
+    let (mut diagnostics, (scope_hits, skip_hits)) =
+        run_coverage_check(&rel_files, &root, severity.clone(), &dt.scope, &dt.skip);
+
+    let scope_entries: &[crate::config::ScopeEntry] = match dt.scope.as_ref() {
+        Some(crate::config::DoctestScope::List(e)) => e,
+        _ => &[],
+    };
+    diagnostics.extend(stale_diagnostics(
+        scope_entries,
+        &scope_hits,
+        "doctest.coverage.stale-scope",
+        "scope",
+        &severity,
+    ));
+    diagnostics.extend(stale_diagnostics(
+        &dt.skip,
+        &skip_hits,
+        "doctest.coverage.stale-skip",
+        "skip",
+        &severity,
+    ));
+
+    diagnostics
+}
+
+/// Emit one diagnostic per configured entry whose `hits[i]` is false — i.e.
+/// entries that matched zero subjects during scope/skip filtering.
+fn stale_diagnostics(
+    entries: &[crate::config::ScopeEntry],
+    hits: &[bool],
+    context: &'static str,
+    kind: &'static str,
+    severity: &crate::reporter::stats::DiagnosticSeverity,
+) -> Vec<crate::reporter::stats::DiagnosticEntry> {
+    entries
+        .iter()
+        .zip(hits.iter())
+        .filter(|(_, hit)| !**hit)
+        .map(|(entry, _)| crate::reporter::stats::DiagnosticEntry {
+            severity: severity.clone(),
+            context: std::sync::Arc::from(context),
+            message: format!(
+                "{kind} entry '{}' matched no coverage subjects (remove it or fix the path)",
+                crate::config::render_entry(entry),
+            ),
+            file: None,
+            lineno: None,
+        })
+        .collect()
 }
 
 /// Split a coverage diagnostic set into hard-fail errors and pending diagnostics.
 ///
-/// `doctest.coverage` and `doctest.coverage.analysis` Error-severity entries
-/// all become `CollectError::PyError` (hard fail under `strict = "abort"`).
+/// `doctest.coverage`, `doctest.coverage.analysis`, `doctest.coverage.stale-scope`,
+/// and `doctest.coverage.stale-skip` Error-severity entries all become
+/// `CollectError::PyError` (hard fail under `strict = "abort"`).
+///
 /// Under `abort`, an analysis error means "the scanner cannot verify coverage
-/// for this subject" — that is semantically a coverage failure. Users who need
-/// to allow unresolvable aliases must fix the alias chain or downgrade
-/// `strict` globally.
+/// for this subject" — that is semantically a coverage failure. Stale scope/skip
+/// entries are also hard-failed under `abort` so a typo (`src/mod.py` vs
+/// `src/mods.py`) cannot silently bypass coverage. Users who need to allow
+/// unresolvable aliases must fix the alias chain or downgrade `strict` globally.
 ///
 /// Warning/Notice always pass through to pending.
 pub(super) fn split_coverage_diagnostics(
@@ -377,7 +451,10 @@ pub(super) fn split_coverage_diagnostics(
     for d in diagnostics {
         let is_hard_fail_context = matches!(
             d.context.as_ref(),
-            "doctest.coverage" | "doctest.coverage.analysis"
+            "doctest.coverage"
+                | "doctest.coverage.analysis"
+                | "doctest.coverage.stale-scope"
+                | "doctest.coverage.stale-skip"
         );
         if d.severity == DiagnosticSeverity::Error && is_hard_fail_context {
             let mut msg = d.message.clone();
@@ -555,31 +632,6 @@ mod tests {
             diags[0].context.as_ref(),
             "doctest.coverage",
             "reporter dedup groups on this exact context string"
-        );
-    }
-
-    #[test]
-    fn collect_coverage_diagnostics_returns_empty_when_scope_off() {
-        use crate::config::{DoctestConfig, DoctestScope, StrictMode};
-
-        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
-            .expect("tempdir path must be valid UTF-8");
-        write_pkg_with_missing_examples(&root);
-
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.markers.strict = Some(StrictMode::Enforce);
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Off),
-            ..Default::default()
-        });
-
-        let files = vec![root.join("mypkg/__init__.py")];
-        let diags = collect_coverage_diagnostics(&files, &cfg);
-        assert!(
-            diags.is_empty(),
-            "scope=off must short-circuit before running the rule — no diagnostics"
         );
     }
 
@@ -847,7 +899,9 @@ mod tests {
             Some(crate::config::StrictMode::Abort),
         );
         if let Some(dt) = cfg.doctest.as_mut() {
-            dt.skip = vec!["fixtures".to_owned()];
+            dt.skip = vec![crate::config::ScopeEntry::Prefix(Utf8PathBuf::from(
+                "fixtures/",
+            ))];
         }
         use std::fs;
         // Regular package
@@ -901,7 +955,9 @@ mod tests {
         use crate::reporter::stats::DiagnosticSeverity;
         let subj = Subject {
             public_id: "mypkg.foo".into(),
+            name: "foo".into(),
             source: crate::doctest::subjects::SubjectSource::LocalDefinition,
+            file: camino::Utf8PathBuf::from("mypkg/foo.py"),
         };
         let cases = [
             AliasError::Cycle {
@@ -978,6 +1034,119 @@ mod tests {
     }
 
     #[test]
+    fn stale_scope_entry_emits_warning_under_enforce() {
+        use crate::config::{DoctestConfig, DoctestScope, ScopeEntry, StrictMode};
+
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(StrictMode::Enforce);
+        cfg.rootdir = Utf8PathBuf::from(".");
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::List(vec![ScopeEntry::File(
+                Utf8PathBuf::from("nonexistent/mod.py"),
+            )])),
+            skip: vec![],
+        });
+        let diags = collect_coverage_diagnostics(&[], &cfg);
+        let stale = diags
+            .iter()
+            .find(|d| d.context.as_ref() == "doctest.coverage.stale-scope");
+        assert!(
+            stale.is_some(),
+            "stale scope entry must emit doctest.coverage.stale-scope diagnostic",
+        );
+        assert_eq!(
+            stale.unwrap().severity,
+            crate::reporter::stats::DiagnosticSeverity::Warning,
+            "Warning under strict = enforce",
+        );
+    }
+
+    #[test]
+    fn stale_skip_entry_emits_diagnostic() {
+        use crate::config::{DoctestConfig, DoctestScope, ScopeEntry, StrictMode};
+
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(StrictMode::Enforce);
+        cfg.rootdir = Utf8PathBuf::from(".");
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::Public),
+            skip: vec![ScopeEntry::File(Utf8PathBuf::from("nonexistent/mod.py"))],
+        });
+        let diags = collect_coverage_diagnostics(&[], &cfg);
+        let stale = diags
+            .iter()
+            .find(|d| d.context.as_ref() == "doctest.coverage.stale-skip");
+        assert!(
+            stale.is_some(),
+            "stale skip entry must emit doctest.coverage.stale-skip diagnostic",
+        );
+    }
+
+    #[test]
+    fn stale_scope_fires_when_file_scanned_but_all_subjects_filtered() {
+        use crate::config::{DoctestConfig, DoctestScope, ScopeEntry, StrictMode};
+
+        // Scope entry names a REAL file that gets scanned, but every subject
+        // in that file is private (leading _) so the Public private-filter drops
+        // them all. Under List scope with just this one entry we'd expect it to
+        // match at least one of the _-subjects (list bypasses the private
+        // filter) — but the entry is Symbol-form for a name that doesn't exist,
+        // so it still matches zero subjects and must fire stale-scope. This
+        // guards against a regression where "file existed in scan" was
+        // mistakenly treated as "entry matched".
+        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
+            .expect("tempdir path must be valid UTF-8");
+        std::fs::create_dir_all(root.join("mypkg")).unwrap();
+        std::fs::write(root.join("mypkg/__init__.py"), "def real_symbol(): pass\n").unwrap();
+
+        let mut cfg = crate::config::Config::default();
+        cfg.rootdir = root.clone();
+        cfg.markers.strict = Some(StrictMode::Enforce);
+        cfg.doctest = Some(DoctestConfig {
+            scope: Some(DoctestScope::List(vec![ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("mypkg/__init__.py"),
+                name: "not_real_symbol".to_string(),
+            }])),
+            skip: vec![],
+        });
+
+        let files = vec![root.join("mypkg/__init__.py")];
+        let diags = collect_coverage_diagnostics(&files, &cfg);
+        let stale = diags
+            .iter()
+            .find(|d| d.context.as_ref() == "doctest.coverage.stale-scope");
+        assert!(
+            stale.is_some(),
+            "stale-scope must fire even when the entry's file was scanned — matching is subject-level, and 'file entered the pipeline' must not silently satisfy the entry (diags: {diags:?})",
+        );
+    }
+
+    #[test]
+    fn stale_entries_promote_to_collect_error_under_abort() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        use std::sync::Arc;
+
+        let d = DiagnosticEntry {
+            severity: DiagnosticSeverity::Error,
+            context: Arc::from("doctest.coverage.stale-scope"),
+            message: "scope entry 'x' matched no coverage subjects".to_string(),
+            file: None,
+            lineno: None,
+        };
+        let (errors, pending) = split_coverage_diagnostics(vec![d]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "stale-scope Error must promote to CollectError under abort — otherwise typos silently bypass coverage under strict",
+        );
+        assert!(
+            pending.is_empty(),
+            "no pending diagnostic left behind when a stale-scope Error is promoted",
+        );
+    }
+
+    #[test]
     fn split_coverage_diagnostics_analysis_error_hard_fails_under_abort() {
         // Under strict=abort, an analysis-context Error means "the scanner cannot
         // verify coverage for this subject" — semantically a coverage failure.
@@ -1023,6 +1192,82 @@ mod tests {
             msgs.iter().any(|m| m.contains("mypkg.y")),
             "the coverage-gap hard-fail must name the missing subject; got: {:?}",
             msgs
+        );
+    }
+}
+
+#[cfg(test)]
+mod file_prescreen_tests {
+    use super::file_could_match;
+    use crate::config::ScopeEntry;
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn prefix_entry_matches_nested_files() {
+        let entries = vec![ScopeEntry::Prefix(Utf8PathBuf::from("src/pkg/"))];
+        let rel = Utf8PathBuf::from("src/pkg/sub/mod.py");
+        assert!(
+            file_could_match(&rel, &entries),
+            "Prefix entry with trailing / matches any file under the directory",
+        );
+    }
+
+    #[test]
+    fn prefix_entry_rejects_sibling_files() {
+        let entries = vec![ScopeEntry::Prefix(Utf8PathBuf::from("src/pkg/"))];
+        let rel = Utf8PathBuf::from("src/other/mod.py");
+        assert!(
+            !file_could_match(&rel, &entries),
+            "Prefix does not match siblings — starts_with semantics",
+        );
+    }
+
+    #[test]
+    fn file_entry_matches_only_exact_path() {
+        let entries = vec![ScopeEntry::File(Utf8PathBuf::from("src/mod.py"))];
+        assert!(
+            file_could_match(&Utf8PathBuf::from("src/mod.py"), &entries),
+            "File entry matches exact path",
+        );
+        assert!(
+            !file_could_match(&Utf8PathBuf::from("src/mod2.py"), &entries),
+            "File entry rejects different filename",
+        );
+        assert!(
+            !file_could_match(&Utf8PathBuf::from("src/sub/mod.py"), &entries),
+            "File entry rejects same filename in different directory",
+        );
+    }
+
+    #[test]
+    fn symbol_entry_matches_files_by_path() {
+        let entries = vec![ScopeEntry::Symbol {
+            file: Utf8PathBuf::from("src/mod.py"),
+            name: "foo".to_string(),
+        }];
+        assert!(
+            file_could_match(&Utf8PathBuf::from("src/mod.py"), &entries),
+            "Symbol entry matches its file at prescreen — subject-level filter narrows to the symbol",
+        );
+    }
+
+    #[test]
+    fn multiple_entries_union() {
+        let entries = vec![
+            ScopeEntry::File(Utf8PathBuf::from("src/a.py")),
+            ScopeEntry::Prefix(Utf8PathBuf::from("lib/")),
+        ];
+        assert!(
+            file_could_match(&Utf8PathBuf::from("src/a.py"), &entries),
+            "union: file entry matches its exact file",
+        );
+        assert!(
+            file_could_match(&Utf8PathBuf::from("lib/x.py"), &entries),
+            "union: prefix entry matches nested file",
+        );
+        assert!(
+            !file_could_match(&Utf8PathBuf::from("src/b.py"), &entries),
+            "union: file not matched by any entry is excluded",
         );
     }
 }
