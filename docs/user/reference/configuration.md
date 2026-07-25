@@ -60,7 +60,7 @@ only this section — it does not fall back to `[tool.pytest]` or
 | `plugins` | list of strings | `[]` | Python module paths of oxitest plugins to load. Each module must export an `oxitest_plugin(config=None)` function returning `oxitest.Plugin`. |
 | `plugin_settings` | table | `{}` | Per-plugin configuration. Each key is a plugin module name, value is a table of settings passed to `oxitest_plugin(config=...)`. |
 | `use_gitignore` | boolean | `true` | Respect `.gitignore` files when discovering test files during collection. Pyproject.toml only (not a CLI flag). |
-| `[tool.oxitest.doctest]` | sub-table | — | Doctest collection + coverage. Present-with-default enables collection; keys documented below. See [Use doctests](../how-to/use-doctests.md). CLI `--doctest-modules` maps to `scope = "public"`. |
+| `[tool.oxitest.doctest]` | sub-table | — | Doctest collection + coverage. Presence of the table enables the rule (default `scope = "public"`); absence disables it. `scope` accepts either the scalar `"public"` or a list of node-ID-style entries (`"path/to/dir/"`, `"path/to/mod.py"`, `"path/to/mod.py::sym"`). `skip` uses the same list grammar and subtracts from the resolved subject set. Stale entries (matching zero subjects) surface via the global `strict` dial. See [Use doctests](../how-to/use-doctests.md). CLI `--doctest-modules` maps to `scope = "public"`. |
 | `inspect_timeout` | integer | `30` | Phase-2 (Python-tier) loading timeout for `oxitest inspect` in seconds. Pyproject.toml only (not a CLI flag). |
 
 ## plugins
