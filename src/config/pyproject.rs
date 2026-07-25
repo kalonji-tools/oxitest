@@ -131,6 +131,10 @@ pub(super) enum AutoArrangeToml {
 /// Deliberately lacks `#[serde(deny_unknown_fields)]` — `[project]`,
 /// `[build-system]`, and other root tables live here alongside `[tool]`.
 /// Adding it would break every pyproject that isn't oxitest-only. See ADR-0008.
+///
+/// Only used by test-only `Config::from_str` and inline unit tests; production
+/// `Config::load` extracts `[tool.oxitest]` via `parse_oxitest_config` (Value-based).
+#[cfg(test)]
 #[derive(Deserialize, Default, Debug)]
 pub(super) struct PyprojectToml {
     pub(super) tool: Option<ToolTable>,
@@ -142,6 +146,10 @@ pub(super) struct PyprojectToml {
 /// `[tool.mypy]`, `[tool.black]`, and other tools' sub-tables live here
 /// alongside `[tool.oxitest]`. Adding it would break every user pyproject
 /// that configures any other tool. See ADR-0008.
+///
+/// Only used by test-only `Config::from_str` and inline unit tests; production
+/// `Config::load` extracts `[tool.oxitest]` via `parse_oxitest_config` (Value-based).
+#[cfg(test)]
 #[derive(Deserialize, Default, Debug)]
 pub(super) struct ToolTable {
     pub(super) oxitest: Option<OxitestConfig>,
