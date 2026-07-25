@@ -139,7 +139,6 @@ affected_base = "main"
 [tool.oxitest.doctest]
 scope = "public"
 skip = ["python/tests/fixtures"]
-waivers = ".oxi-doctest-waivers"
 
 [tool.coverage.run]
 source = ["python/oxitest"]

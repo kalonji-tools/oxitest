@@ -124,7 +124,7 @@ pub(crate) fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
 /// A public-facing subject the coverage rule may target.
 #[derive(Debug, Clone)]
 pub(crate) struct Subject {
-    /// Public dotted path — used in diagnostics and (M2) the waivers file.
+    /// Public dotted path — used in diagnostics.
     pub(crate) public_id: String,
     /// Where the binding lives in AST terms.
     pub(crate) source: SubjectSource,
@@ -174,11 +174,10 @@ pub(crate) fn classify_top_level_binding(stmts: &[ast::Stmt], name: &str) -> Opt
             }
             ast::Stmt::ImportFrom(imp) => {
                 // Relative imports (`from . import X`, `from ..foo import Y`)
-                // aren't supported by the M1 alias walker — the walker resolves
-                // absolute dotted paths only. Skipping ensures we don't
-                // misclassify a relative alias as absolute and walk into the
-                // wrong module (or into an empty `source_module = ""`). M2 can
-                // add proper relative-import resolution.
+                // aren't supported by the alias walker — it resolves absolute
+                // dotted paths only. Skipping ensures we don't misclassify a
+                // relative alias as absolute and walk into the wrong module
+                // (or into an empty `source_module = ""`).
                 if imp.level.is_some_and(|l| l != 0u32) {
                     continue;
                 }
@@ -477,26 +476,25 @@ __all__ = ["foo", 42, "bar"]
 
     #[test]
     fn classify_relative_import_is_skipped() {
-        // Relative imports aren't classified as AliasImport in M1 — the walker
+        // Relative imports aren't classified as AliasImport — the walker
         // resolves absolute dotted paths only. Skipping them means the caller
-        // sees the name as absent (fallback path). M2 can add proper
-        // relative-import resolution.
+        // sees the name as absent (fallback path).
         let stmts = parse_stmts("from . import Foo\n");
         assert!(
             classify_top_level_binding(&stmts, "Foo").is_none(),
-            "relative `from . import` should skip classification in M1"
+            "relative `from . import` should skip classification"
         );
 
         let stmts = parse_stmts("from .foo import Bar\n");
         assert!(
             classify_top_level_binding(&stmts, "Bar").is_none(),
-            "relative `from .foo import` should skip classification in M1"
+            "relative `from .foo import` should skip classification"
         );
 
         let stmts = parse_stmts("from ..evil import Zap\n");
         assert!(
             classify_top_level_binding(&stmts, "Zap").is_none(),
-            "double-dot relative import should skip classification in M1"
+            "double-dot relative import should skip classification"
         );
     }
 

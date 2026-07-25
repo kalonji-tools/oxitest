@@ -105,7 +105,7 @@ pub(crate) struct DoctestLocation {
     pub lineno: usize,
     #[allow(
         dead_code,
-        reason = "Populated for future M2 execution wiring; asserted in tests today."
+        reason = "Populated for future execution wiring; asserted in tests today."
     )]
     pub example_count: usize,
 }

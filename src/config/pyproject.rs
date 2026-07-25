@@ -124,7 +124,6 @@ pub(super) struct OxitestConfig {
 #[serde(deny_unknown_fields)]
 pub struct DoctestConfig {
     pub scope: Option<DoctestScope>,
-    pub waivers: Option<String>,
     /// Path prefixes (rootdir-relative) to exclude from doctest coverage
     /// scanning. Files under any listed prefix are skipped for both subject
     /// enumeration and alias-walking, so no coverage or analysis diagnostics
@@ -137,9 +136,6 @@ pub struct DoctestConfig {
 #[serde(rename_all = "lowercase")]
 pub enum DoctestScope {
     Public,
-    /// Reserved for M2 — currently identical to `Public` (no code path in
-    /// `src/doctest/` differentiates the two). See wayfinder #1602.
-    All,
     Off,
 }
 
@@ -368,7 +364,7 @@ mod tests {
         let toml_src = r#"
 [tool.oxitest.doctest]
 scope = "public"
-waivers = ".oxi-doctest-waivers"
+skip = ["python/tests/fixtures"]
 "#;
         let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
         let cfg = parsed
@@ -377,16 +373,8 @@ waivers = ".oxi-doctest-waivers"
             .oxitest
             .expect("oxitest table present");
         let dt = cfg.doctest.expect("doctest sub-table present");
-        assert_eq!(
-            dt.scope,
-            Some(DoctestScope::Public),
-            "scope should parse as Public enum variant"
-        );
-        assert_eq!(
-            dt.waivers.as_deref(),
-            Some(".oxi-doctest-waivers"),
-            "waivers path passes through as string"
-        );
+        assert_eq!(dt.scope, Some(DoctestScope::Public));
+        assert_eq!(dt.skip, vec!["python/tests/fixtures".to_owned()]);
     }
 
     #[test]
@@ -540,6 +528,6 @@ doctest = {}
             dt.scope, None,
             "raw sub-table stores None; defaults applied by Config::resolve"
         );
-        assert_eq!(dt.waivers, None, "waivers omitted ⇒ None at parse time");
+        assert!(dt.skip.is_empty(), "skip omitted ⇒ empty at parse time");
     }
 }
