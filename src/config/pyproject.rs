@@ -208,8 +208,6 @@ pub struct DoctestConfig {
 /// A single entry in `[tool.oxitest.doctest].scope` (list form) or `.skip`.
 ///
 /// Grammar mirrors pytest node IDs. See spec 2026-07-25 for the full rule set.
-///
-/// Deferred to #1644: `file.py::Cls::method` (member-level scope).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ScopeEntry {
     /// Directory prefix, trailing `/` required. Matches subjects under the prefix.
@@ -218,6 +216,14 @@ pub enum ScopeEntry {
     File(Utf8PathBuf),
     /// Top-level symbol (`def` or `class`) in a `.py` file.
     Symbol { file: Utf8PathBuf, name: String },
+    /// Method inside a class in a `.py` file. Explicit per-method opt-in;
+    /// bare `Cls` still matches the class subject only (existing `Symbol`
+    /// semantics unchanged) — users list each method they want checked.
+    Member {
+        file: Utf8PathBuf,
+        cls: String,
+        name: String,
+    },
 }
 
 impl<'de> serde::Deserialize<'de> for ScopeEntry {
@@ -234,8 +240,8 @@ impl<'de> serde::Deserialize<'de> for ScopeEntry {
 /// with the offending entry quoted on any failure. See spec for the full grammar.
 ///
 /// The `split_node_id_str` helper is non-validating — this function applies the
-/// strict-mode policy: empty segments rejected, chain length limited to 1,
-/// 2-segment chains rejected with a #1644 pointer.
+/// strict-mode policy: empty segments rejected, 1-segment chain → Symbol,
+/// 2-segment chain → Member, 3+ segments rejected as too many.
 pub(crate) fn parse_scope_entry_str(raw: &str) -> Result<ScopeEntry, String> {
     // Reject absolute paths and parent components up front — same for all forms.
     // Windows drive-letter form covers both `C:\path` (backslash, native) and
@@ -287,9 +293,11 @@ pub(crate) fn parse_scope_entry_str(raw: &str) -> Result<ScopeEntry, String> {
             file,
             name: chain[0].to_string(),
         }),
-        2 => Err(format!(
-            "entry '{raw}' — member-level scope not yet supported, see #1644"
-        )),
+        2 => Ok(ScopeEntry::Member {
+            file,
+            cls: chain[0].to_string(),
+            name: chain[1].to_string(),
+        }),
         _ => Err(format!("entry '{raw}' has too many :: segments")),
     }
 }
@@ -393,6 +401,9 @@ pub(crate) fn render_entry(e: &ScopeEntry) -> String {
         ScopeEntry::Prefix(p) => p.as_str().to_string(),
         ScopeEntry::File(f) => f.as_str().to_string(),
         ScopeEntry::Symbol { file, name } => format!("{}::{}", file.as_str(), name),
+        ScopeEntry::Member { file, cls, name } => {
+            format!("{}::{}::{}", file.as_str(), cls, name)
+        }
     }
 }
 
@@ -808,11 +819,37 @@ doctest = {}
     }
 
     #[test]
-    fn scope_entry_rejects_member_syntax_pointing_at_followup() {
-        let err = parse_scope_entry("src/mod.py::Cls::method").unwrap_err();
+    fn scope_entry_parses_member_form_into_member_variant() {
+        let entry = parse_scope_entry("src/mod.py::Cls::method").expect("member form must parse");
+        assert_eq!(
+            entry,
+            ScopeEntry::Member {
+                file: Utf8PathBuf::from("src/mod.py"),
+                cls: "Cls".into(),
+                name: "method".into(),
+            },
+            "2-segment chain must produce Member so scope entries can target per-method docstrings",
+        );
+    }
+
+    #[test]
+    fn scope_entry_member_form_rejects_empty_cls_segment() {
+        // `a.py::::method` has an empty segment between the two `::` — the
+        // existing empty-segment guard must fire before the Member branch so
+        // users don't silently get `Member { cls: "", name: "method" }`.
+        let err = parse_scope_entry("src/mod.py::::method").unwrap_err();
         assert!(
-            err.contains("member-level") && err.contains("#1644"),
-            "member syntax must be rejected with a pointer to the follow-up issue (got: {err})",
+            err.contains("empty"),
+            "empty segment inside a 2-chain must be rejected by the empty-segment guard (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_member_form_rejects_non_py_file_prefix() {
+        let err = parse_scope_entry("src/mod.js::Cls::method").unwrap_err();
+        assert!(
+            err.contains(".py") && err.contains("src/mod.js"),
+            "path before :: must still be a .py file even for member form so a stray extension doesn't create a Member(js) subject (got: {err})",
         );
     }
 

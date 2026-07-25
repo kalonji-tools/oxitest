@@ -135,6 +135,9 @@ fn subject_matches(
         ScopeEntry::Prefix(p) => s.file.starts_with(p),
         ScopeEntry::File(f) => s.file == *f,
         ScopeEntry::Symbol { file, name } => s.file == *file && s.name == *name,
+        ScopeEntry::Member { file, cls, name } => {
+            s.file == *file && s.class_context.as_deref() == Some(cls.as_str()) && s.name == *name
+        }
     }
 }
 
@@ -273,6 +276,35 @@ pub(crate) fn run_coverage_check(
         per_module.insert(dotted, (stmts, full, line_index));
     }
 
+    // Scope-driven member seeding (#1644): for each `ScopeEntry::Member` entry
+    // that points at a real class + method in an already-parsed module, seed
+    // one method subject. Missing method → no subject, so the stale-entry
+    // diagnostic (via `match_bits`) surfaces the typo.
+    if let Some(crate::config::DoctestScope::List(entries)) = scope {
+        for entry in entries {
+            let crate::config::ScopeEntry::Member { file, cls, name } = entry else {
+                continue;
+            };
+            let dotted = dotted_path_for_file(file, &root.root);
+            let Some((stmts, _full, _line_index)) = per_module.get(&dotted) else {
+                continue;
+            };
+            if find_class_method(stmts, cls, name).is_none() {
+                continue;
+            }
+            all_subjects.push((
+                dotted.clone(),
+                Subject {
+                    public_id: format!("{dotted}.{cls}.{name}"),
+                    name: name.clone(),
+                    source: SubjectSource::LocalDefinition,
+                    file: file.clone(),
+                    class_context: Some(cls.clone()),
+                },
+            ));
+        }
+    }
+
     // Q1 dedup by identity to definition site (#1609 Q1): drop AliasImport subjects
     // whose target is also a LocalDefinition subject in this scan.
     let definition_sites: std::collections::HashSet<String> = all_subjects
@@ -319,9 +351,14 @@ pub(crate) fn run_coverage_check(
             SubjectSource::LocalDefinition => {
                 let entry = per_module.get(&module_dotted);
                 let (doc, lineno) = entry
-                    .map(|(stmts, _, line_index)| {
-                        let name = subject.public_id.rsplit('.').next().unwrap_or_default();
-                        find_docstring_and_lineno_for_local_def(stmts, name, line_index)
+                    .map(|(stmts, _, line_index)| match &subject.class_context {
+                        Some(cls) => find_class_method(stmts, cls, &subject.name)
+                            .map(|t| docstring_and_lineno_from(t, line_index))
+                            .unwrap_or((None, 0)),
+                        None => {
+                            let name = subject.public_id.rsplit('.').next().unwrap_or_default();
+                            find_docstring_and_lineno_for_local_def(stmts, name, line_index)
+                        }
                     })
                     .unwrap_or((None, 0));
                 let file = entry.map(|(_, f, _)| f.clone());
@@ -361,46 +398,107 @@ pub(crate) fn run_coverage_check(
     (diagnostics, match_bits)
 }
 
-/// Locate a class/function definition by name; return (docstring, 1-indexed lineno).
+/// A def-like statement located by name — the shape unified across the
+/// top-level lookup and the `Cls::method` member lookup paths.
 ///
-/// The line index is used to convert the AST `range` (a byte offset) into a lineno. If
-/// the name isn't found, returns `(None, 0)` — coverage falls back to no docstring +
-/// line 1 in the diagnostic. This shouldn't normally happen because the caller only
-/// invokes this for LocalDefinition subjects (already classified from the same stmts).
+/// Unifies the three AST shapes coverage checks care about (class, def,
+/// async def) so `find_def_by_name` / `find_class_method` can share one
+/// walk primitive and one docstring extractor.
+enum DefTarget<'a> {
+    Class(&'a rustpython_parser::ast::StmtClassDef),
+    Function(&'a rustpython_parser::ast::StmtFunctionDef),
+    AsyncFunction(&'a rustpython_parser::ast::StmtAsyncFunctionDef),
+}
+
+/// Locate the first non-stub `class`/`def`/`async def` by name in a stmt
+/// block.
+///
+/// First-match wins after skipping ellipsis-body function stubs (see
+/// [`crate::python_ast::is_stub_body`]) so the walker naturally advances
+/// past `@overload` chains to the real implementation — historical
+/// behavior preserved from the pre-refactor top-level helper. The same
+/// filter applies to class-body walks used by `find_class_method`, which
+/// makes an ellipsis-body abstract method surface as a stale-entry
+/// diagnostic rather than a false-positive MissingHeader.
+fn find_def_by_name<'a>(
+    stmts: &'a [rustpython_parser::ast::Stmt],
+    name: &str,
+) -> Option<DefTarget<'a>> {
+    use rustpython_parser::ast::Stmt;
+    for stmt in stmts {
+        match stmt {
+            Stmt::ClassDef(c) if c.name.as_str() == name => return Some(DefTarget::Class(c)),
+            Stmt::FunctionDef(f)
+                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
+            {
+                return Some(DefTarget::Function(f));
+            }
+            Stmt::AsyncFunctionDef(f)
+                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
+            {
+                return Some(DefTarget::AsyncFunction(f));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Extract `(docstring, 1-indexed lineno)` from a def target.
+///
+/// No stub check — `find_def_by_name` filters ellipsis-body stubs at
+/// lookup, so any `DefTarget` reaching this helper is guaranteed to have
+/// meaningful body content.
+fn docstring_and_lineno_from(target: DefTarget<'_>, line_index: &[u32]) -> (Option<String>, u32) {
+    match target {
+        DefTarget::Class(c) => {
+            let lineno = crate::python_ast::offset_to_line(line_index, c.range.start().to_u32());
+            let doc = crate::doctest::scanner::extract_docstring(&c.body).map(str::to_string);
+            (doc, lineno)
+        }
+        DefTarget::Function(f) => {
+            let lineno = crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
+            let doc = crate::doctest::scanner::extract_docstring(&f.body).map(str::to_string);
+            (doc, lineno)
+        }
+        DefTarget::AsyncFunction(f) => {
+            let lineno = crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
+            let doc = crate::doctest::scanner::extract_docstring(&f.body).map(str::to_string);
+            (doc, lineno)
+        }
+    }
+}
+
+/// Thin wrapper preserving the historical name — resolves docstring +
+/// lineno for a top-level `LocalDefinition` subject.
 fn find_docstring_and_lineno_for_local_def(
     stmts: &[rustpython_parser::ast::Stmt],
     name: &str,
     line_index: &[u32],
 ) -> (Option<String>, u32) {
-    use rustpython_parser::ast::Stmt;
-    for stmt in stmts {
-        match stmt {
-            Stmt::ClassDef(c) if c.name.as_str() == name => {
-                let lineno =
-                    crate::python_ast::offset_to_line(line_index, c.range.start().to_u32());
-                let doc = crate::doctest::scanner::extract_docstring(&c.body).map(str::to_string);
-                return (doc, lineno);
-            }
-            Stmt::FunctionDef(f)
-                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
-            {
-                let lineno =
-                    crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
-                let doc = crate::doctest::scanner::extract_docstring(&f.body).map(str::to_string);
-                return (doc, lineno);
-            }
-            Stmt::AsyncFunctionDef(f)
-                if f.name.as_str() == name && !crate::python_ast::is_stub_body(&f.body) =>
-            {
-                let lineno =
-                    crate::python_ast::offset_to_line(line_index, f.range.start().to_u32());
-                let doc = crate::doctest::scanner::extract_docstring(&f.body).map(str::to_string);
-                return (doc, lineno);
-            }
-            _ => {}
-        }
-    }
-    (None, 0)
+    find_def_by_name(stmts, name)
+        .map(|t| docstring_and_lineno_from(t, line_index))
+        .unwrap_or((None, 0))
+}
+
+/// Locate a `def method(...)` / `async def method(...)` inside a top-level
+/// class body, by class name and method name.
+///
+/// Returns `None` if the class doesn't exist, or if the class body has no
+/// def by that name (a nested class or other stmt matching the name is
+/// explicitly rejected — we only want callable methods). The `Member`
+/// seeding path uses `.is_some()` for existence and the doc-resolution
+/// path passes the returned `DefTarget` to `docstring_and_lineno_from`.
+fn find_class_method<'a>(
+    stmts: &'a [rustpython_parser::ast::Stmt],
+    class_name: &str,
+    method_name: &str,
+) -> Option<DefTarget<'a>> {
+    let DefTarget::Class(class_stmt) = find_def_by_name(stmts, class_name)? else {
+        return None;
+    };
+    let target = find_def_by_name(&class_stmt.body, method_name)?;
+    matches!(target, DefTarget::Function(_) | DefTarget::AsyncFunction(_)).then_some(target)
 }
 
 pub(crate) fn diagnostic_for_walk_error(
@@ -453,7 +551,185 @@ mod tests {
             name: "foo".into(),
             source: SubjectSource::LocalDefinition,
             file: Utf8PathBuf::from("mypkg/foo.py"),
+            class_context: None,
         }
+    }
+
+    fn parse_stmts(src: &str) -> Vec<rustpython_parser::ast::Stmt> {
+        use rustpython_parser::{Parse, ast};
+        ast::Suite::parse(src, "<test>").unwrap()
+    }
+
+    // ── Unified DefTarget helper tests (#1644) ────────────────────────────
+
+    #[test]
+    fn find_def_by_name_returns_none_when_no_matching_def() {
+        let stmts = parse_stmts("def foo(): pass\n");
+        assert!(
+            find_def_by_name(&stmts, "Missing").is_none(),
+            "primitive returns None when no class/def/async-def matches — callers (top-level and Member) treat this as the not-found signal",
+        );
+    }
+
+    #[test]
+    fn find_def_by_name_finds_class() {
+        let stmts = parse_stmts("class Foo:\n    pass\n");
+        assert!(
+            matches!(find_def_by_name(&stmts, "Foo"), Some(DefTarget::Class(_))),
+            "top-level class must be locatable and classified as Class so `find_class_method` can then walk its body",
+        );
+    }
+
+    #[test]
+    fn find_def_by_name_finds_sync_function() {
+        let stmts = parse_stmts("def foo(): pass\n");
+        assert!(
+            matches!(
+                find_def_by_name(&stmts, "foo"),
+                Some(DefTarget::Function(_))
+            ),
+            "sync def must be classified as Function so the extractor can apply the is_stub guard",
+        );
+    }
+
+    #[test]
+    fn find_def_by_name_finds_async_function() {
+        let stmts = parse_stmts("async def afoo(): pass\n");
+        assert!(
+            matches!(
+                find_def_by_name(&stmts, "afoo"),
+                Some(DefTarget::AsyncFunction(_))
+            ),
+            "async def must be classified as AsyncFunction so the extractor can apply the is_stub guard on its own body",
+        );
+    }
+
+    #[test]
+    fn find_class_method_returns_none_when_class_absent() {
+        let stmts = parse_stmts("def foo(): pass\n");
+        assert!(
+            find_class_method(&stmts, "Missing", "method").is_none(),
+            "class not found means None so the Member seeding path drops the entry and the stale-entry diagnostic surfaces the typo",
+        );
+    }
+
+    #[test]
+    fn find_class_method_returns_none_when_method_absent() {
+        let stmts = parse_stmts("class Cls:\n    def other(self): pass\n");
+        assert!(
+            find_class_method(&stmts, "Cls", "missing").is_none(),
+            "class present but no method by that name means None — same stale-entry path as class-absent",
+        );
+    }
+
+    #[test]
+    fn find_class_method_finds_sync_method() {
+        let stmts = parse_stmts("class Cls:\n    def method(self): pass\n");
+        assert!(
+            matches!(
+                find_class_method(&stmts, "Cls", "method"),
+                Some(DefTarget::Function(_))
+            ),
+            "sync def inside class body must be found so Member seeding produces a subject for it",
+        );
+    }
+
+    #[test]
+    fn find_class_method_finds_async_method() {
+        let stmts = parse_stmts("class Cls:\n    async def amethod(self): pass\n");
+        assert!(
+            matches!(
+                find_class_method(&stmts, "Cls", "amethod"),
+                Some(DefTarget::AsyncFunction(_))
+            ),
+            "async def inside class body counts as a method — the two AST shapes are equivalent for coverage purposes",
+        );
+    }
+
+    #[test]
+    fn find_class_method_rejects_nested_class_named_like_method() {
+        let stmts = parse_stmts("class Cls:\n    class inner:\n        pass\n");
+        assert!(
+            find_class_method(&stmts, "Cls", "inner").is_none(),
+            "a nested class matching the method name must NOT be returned — Member scope entries target callables, not nested classes",
+        );
+    }
+
+    #[test]
+    fn docstring_and_lineno_from_function_returns_docstring() {
+        let src = "def foo():\n    '''doc'''\n    pass\n";
+        let stmts = parse_stmts(src);
+        let line_index = crate::python_ast::build_line_index(src);
+        let target = find_def_by_name(&stmts, "foo").unwrap();
+        let (doc, lineno) = docstring_and_lineno_from(target, &line_index);
+        assert_eq!(
+            doc.as_deref(),
+            Some("doc"),
+            "function's own docstring must be extracted so the coverage check has something to grade against the Examples: contract",
+        );
+        assert_eq!(
+            lineno, 1,
+            "lineno must point at the def line so the diagnostic anchors on the source location the user is editing",
+        );
+    }
+
+    #[test]
+    fn find_def_by_name_skips_ellipsis_stub_function() {
+        // Ellipsis body (`def foo(): ...`) is a stub per `is_stub_body` —
+        // `find_def_by_name` skips it so `@overload` chains resolve to the
+        // real implementation instead of the first `@overload`'d stub.
+        let stmts = parse_stmts("def foo(): ...\n");
+        assert!(
+            find_def_by_name(&stmts, "foo").is_none(),
+            "ellipsis-only bodies must be filtered at lookup so @overload chains don't emit false-positive MissingHeader diagnostics against the stub",
+        );
+    }
+
+    #[test]
+    fn find_def_by_name_finds_pass_body_function() {
+        // `def foo(): pass` is NOT a stub per `is_stub_body` — only
+        // ellipsis-body counts. A pass-body function IS a real subject that
+        // deserves a MissingHeader diagnostic if it lacks a docstring.
+        let stmts = parse_stmts("def foo(): pass\n");
+        assert!(
+            matches!(
+                find_def_by_name(&stmts, "foo"),
+                Some(DefTarget::Function(_))
+            ),
+            "pass-body must NOT be filtered as a stub — the diagnostic path treats it as a real def missing its docstring, anchoring at the def line",
+        );
+    }
+
+    #[test]
+    fn docstring_and_lineno_from_class_returns_docstring() {
+        let src = "class Cls:\n    '''class doc'''\n    pass\n";
+        let stmts = parse_stmts(src);
+        let line_index = crate::python_ast::build_line_index(src);
+        let target = find_def_by_name(&stmts, "Cls").unwrap();
+        let (doc, _lineno) = docstring_and_lineno_from(target, &line_index);
+        assert_eq!(
+            doc.as_deref(),
+            Some("class doc"),
+            "class docstring extracts through the same primitive as functions — the unified helper is the whole point of the DefTarget shape",
+        );
+    }
+
+    #[test]
+    fn member_docstring_flows_through_find_class_method_and_extractor() {
+        let src = "class Cls:\n    def method(self):\n        '''doc'''\n        pass\n";
+        let stmts = parse_stmts(src);
+        let line_index = crate::python_ast::build_line_index(src);
+        let target = find_class_method(&stmts, "Cls", "method").unwrap();
+        let (doc, lineno) = docstring_and_lineno_from(target, &line_index);
+        assert_eq!(
+            doc.as_deref(),
+            Some("doc"),
+            "method's own docstring (not the class's) must be extracted so the coverage check grades the method's contract",
+        );
+        assert!(
+            lineno >= 2,
+            "lineno must point at the method def line (>= 2 given class on line 1) so the diagnostic anchors on the method, not the class",
+        );
     }
 
     #[test]
@@ -888,6 +1164,7 @@ mod scope_filter_tests {
             name: name.to_owned(),
             source: SubjectSource::LocalDefinition,
             file: Utf8PathBuf::from(file),
+            class_context: None,
         }
     }
 

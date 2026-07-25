@@ -37,21 +37,27 @@ The default `scope = "public"` scans every public subject under `testpaths`. For
 ```toml
 [tool.oxitest.doctest]
 scope = [
-    "src/mypkg/api.py",                 # every subject in the file
-    "src/mypkg/util/",                  # every subject under the directory (trailing / required)
-    "src/mypkg/other.py::PublicClass",  # one top-level symbol
+    "src/mypkg/api.py",                       # every subject in the file
+    "src/mypkg/util/",                        # every subject under the directory (trailing / required)
+    "src/mypkg/other.py::PublicClass",        # one top-level symbol
+    "src/mypkg/other.py::PublicClass::run",   # one method inside a class
 ]
 ```
 
-The three entry shapes:
+The four entry shapes:
 
 | Shape | Meaning |
 |-------|---------|
 | `"path/to/dir/"` | Directory prefix. Trailing `/` is required. |
 | `"path/to/mod.py"` | Whole file. Every subject in the module. |
 | `"path/to/mod.py::sym"` | One top-level function or class. |
+| `"path/to/mod.py::Cls::method"` | One method inside a class. Bare `Cls` still matches the class only — list each method you want checked. |
 
-Nested references like `"mod.py::Cls::method"` are rejected with a pointer to [issue #1644](https://github.com/kalonji-tools/oxitest/issues/1644) — member-level coverage lives in a follow-up.
+Members are opt-in per method: `"Cls"` alone does not walk the class body, and there is no `Cls::*` wildcard. If a listed method doesn't exist at check time, the entry surfaces as a stale-entry diagnostic under `strict`.
+
+**Edge cases.** Only top-level classes are supported — a `Cls::method` entry where `Cls` is nested inside another class silently drops to a stale-entry diagnostic. Ellipsis-body stubs (`def m(self): ...`, common in abstract classes and `@overload` chains) are filtered at lookup so `@overload`'d functions resolve to the real implementation; a Member entry naming an abstract-stub method surfaces as stale rather than a false-positive MissingHeader.
+
+**Skip is subtractive, not additive.** `skip = ["file.py::Cls::method"]` only removes a subject that some `scope` entry already put into scope. A skip Member entry combined with a whole-file scope (`scope = ["file.py"]`) is a no-op — whole-file scope only enumerates top-level subjects, so there is no method subject to subtract; the skip entry becomes stale. Use `scope = ["file.py::Cls::method"]` first if you need the method in scope to then skip it (rare — usually just omit the entry entirely).
 
 **Explicit list entries bypass the leading-underscore filter.** `scope = ["src/mypkg/mod.py::_helper"]` will cover `_helper`, because naming it explicitly is opt-in. The scalar `scope = "public"` still filters underscored names — the private-bypass only applies to list-form entries. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it.
 

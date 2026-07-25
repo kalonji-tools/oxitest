@@ -316,3 +316,219 @@ def test_whole_file_syntax_error_does_not_block_oxitest(tmp: TempDir) -> None:
         "whole-file TOML syntax errors outside [tool.oxitest] must not fail "
         f"oxitest — narrow scope per ADR-0008: {out}{err}"
     )
+
+
+def test_scope_member_form_covered_method_produces_no_diagnostic(
+    tmp: TempDir,
+) -> None:
+    """Member-form scope entry: method with Examples block produces no diagnostic."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "enforce"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::method"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": (
+                "class Cls:\n"
+                "    def method(self):\n"
+                '        """Do the thing.\n'
+                "\n"
+                "        Examples:\n"
+                "\n"
+                "        >>> Cls().method()\n"
+                '        """\n'
+            ),
+        },
+    )
+    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    combined = out + err
+    assert "Cls.method" not in combined, (
+        "a member-form scope entry pointing at a method with an Examples: "
+        "block must produce zero coverage diagnostics — the docstring already "
+        f"satisfies the coverage contract: {combined!r}"
+    )
+
+
+def test_scope_member_form_missing_examples_header_is_diagnosed(
+    tmp: TempDir,
+) -> None:
+    """Member-form: method missing Examples header → diagnostic naming Cls.method."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "enforce"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::method"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": (
+                'class Cls:\n    def method(self):\n        """Do the thing."""\n'
+            ),
+        },
+    )
+    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    combined = out + err
+    assert "Cls.method" in combined, (
+        "the diagnostic must name the method via its dotted public_id "
+        "(mod.Cls.method) so users can jump to the exact source location "
+        f"without inferring the class from the file path: {combined!r}"
+    )
+    assert "Examples" in combined, (
+        "the coverage gap message must mention Examples: so users know "
+        f"which contract fired — not just 'coverage failed': {combined!r}"
+    )
+
+
+def test_scope_member_form_missing_method_hard_fails_as_stale(
+    tmp: TempDir,
+) -> None:
+    """Member-form scope entry with non-existent method: stale hard-fail under abort."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "abort"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::nope"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": (
+                "class Cls:\n"
+                "    def other(self):\n"
+                '        """Examples:\n'
+                "\n"
+                "        >>> 1\n"
+                "        1\n"
+                '        """\n'
+            ),
+        },
+    )
+    out, err, rc = helpers.common.run_oxitest(tmp)
+    combined = out + err
+    assert rc != 0, (
+        "a member-form scope entry naming a non-existent method must hard-fail "
+        "under strict = abort — otherwise typos in the class/method name "
+        f"silently disable coverage for that method: {combined!r}"
+    )
+    assert "stale" in combined.lower() or "matched no" in combined.lower(), (
+        "the stale-entry diagnostic must fire and name the missing entry so "
+        f"users can find the typo in pyproject.toml: {combined!r}"
+    )
+
+
+def test_skip_member_form_excludes_only_that_method(tmp: TempDir) -> None:
+    """Member-form skip: excludes only the named method; sibling still checked."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "enforce"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::method", "src/mod.py::Cls::keep"]
+            skip = ["src/mod.py::Cls::method"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": (
+                "class Cls:\n"
+                "    def method(self):\n"
+                "        pass\n"
+                "    def keep(self):\n"
+                '        """Do it."""\n'
+            ),
+        },
+    )
+    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    combined = out + err
+    assert "Cls.method" not in combined, (
+        "the skip entry must remove the named method from coverage checks — "
+        "otherwise skip and scope form a redundant grammar rather than "
+        f"scope + subtractive-skip: {combined!r}"
+    )
+    assert "Cls.keep" in combined, (
+        "the sibling method still in scope but missing Examples: must still "
+        "diagnose — skip precision is per-method, not per-class: "
+        f"{combined!r}"
+    )
+
+
+def test_scope_member_pass_body_method_diagnoses_at_def_line(tmp: TempDir) -> None:
+    """Pass-body method (not an ellipsis stub) still diagnoses missing Examples."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "enforce"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::method"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": ("class Cls:\n    def method(self):\n        pass\n"),
+        },
+    )
+    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    combined = out + err
+    assert "Cls.method" in combined, (
+        "pass-body is NOT an ellipsis stub — the method is a real subject that "
+        "must diagnose against the Examples: contract when named explicitly in "
+        f"scope: {combined!r}"
+    )
+    assert "Examples" in combined, (
+        "the diagnostic must mention Examples: so the user knows which contract "
+        f"fired, not just 'coverage failed': {combined!r}"
+    )
+
+
+def test_scope_member_ellipsis_stub_method_surfaces_as_stale(tmp: TempDir) -> None:
+    """Ellipsis-body abstract method: filtered at lookup → stale-entry."""
+    helpers.integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "abort"
+
+            [tool.oxitest.doctest]
+            scope = ["src/mod.py::Cls::abstract_method"]
+        """,
+        tests={
+            "test_pass.py": ('def test_x():\n    assert True, "sanity"\n'),
+        },
+        extra_files={
+            "src/mod.py": ("class Cls:\n    def abstract_method(self) -> int: ...\n"),
+        },
+    )
+    out, err, rc = helpers.common.run_oxitest(tmp)
+    combined = out + err
+    assert rc != 0, (
+        "an ellipsis-body abstract method under a Member scope entry must "
+        "surface as a stale-entry hard-fail — better UX than false-positive "
+        "MissingHeader against a method that has no meaningful body to grade: "
+        f"{combined!r}"
+    )
+    assert "stale" in combined.lower() or "matched no" in combined.lower(), (
+        "the diagnostic must name the entry as stale so the user updates "
+        f"pyproject.toml rather than adding docstrings to abstract stubs: {combined!r}"
+    )
