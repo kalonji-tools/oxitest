@@ -28,7 +28,7 @@ impl NodeId {
     ///
     /// Returns `None` if the node ID contains no `::` separator.
     pub fn module_path(&self) -> Option<&str> {
-        self.0.split_once("::").map(|(path, _)| path)
+        split_node_id_once(&self.0).map(|(path, _)| path)
     }
 }
 
@@ -144,6 +144,19 @@ impl std::fmt::Display for LineNo {
     }
 }
 
+/// Split a pytest-node-ID-shaped string on the first `::` separator.
+///
+/// Returns `Some((file_part, rest))` when the string contains `::`, `None`
+/// otherwise. This is the single grammar seed for the node-ID separator —
+/// every consumer of `::` in a node-ID context goes through this primitive
+/// so extending the grammar (e.g. #1644) is a one-edit change.
+///
+/// Non-validating — empty segments in `rest` are preserved. Callers apply
+/// their own policy; see [`split_node_id_str`] for the multi-segment view.
+pub fn split_node_id_once(s: &str) -> Option<(&str, &str)> {
+    s.split_once("::")
+}
+
 /// Split a pytest-node-ID-shaped string into `(file_part, chain_segments)`.
 ///
 /// Format: `file::seg1::seg2::…`. The file part is everything before the first
@@ -156,12 +169,13 @@ impl std::fmt::Display for LineNo {
 ///   on the chain (rejects empty segments, checks segment count, etc.).
 ///
 /// Shared between CLI positional parsing (`partition_positionals`) and
-/// `[tool.oxitest.doctest].scope` entry deserialization.
+/// `[tool.oxitest.doctest].scope` entry deserialization. Built on
+/// [`split_node_id_once`].
 pub fn split_node_id_str(s: &str) -> (&str, Vec<&str>) {
-    let Some((file, rest)) = s.split_once("::") else {
-        return (s, Vec::new());
-    };
-    (file, rest.split("::").collect())
+    match split_node_id_once(s) {
+        None => (s, Vec::new()),
+        Some((file, rest)) => (file, rest.split("::").collect()),
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +268,42 @@ mod node_id_tests {
             chain,
             vec![""],
             "trailing :: yields one empty chain segment — helper is non-validating; callers apply their own policy",
+        );
+    }
+
+    #[test]
+    fn split_node_id_once_bare_path_returns_none() {
+        assert_eq!(
+            split_node_id_once("path/to/mod.py"),
+            None,
+            "no :: means no split — callers distinguish file-only from file+rest",
+        );
+    }
+
+    #[test]
+    fn split_node_id_once_single_segment_returns_file_and_rest() {
+        assert_eq!(
+            split_node_id_once("path/to/mod.py::foo"),
+            Some(("path/to/mod.py", "foo")),
+            "first :: splits file from rest without allocating segments",
+        );
+    }
+
+    #[test]
+    fn split_node_id_once_multi_segment_returns_rest_unsplit() {
+        assert_eq!(
+            split_node_id_once("path/to/mod.py::Cls::method"),
+            Some(("path/to/mod.py", "Cls::method")),
+            "primitive stops at first :: — subsequent :: stay in the rest slice",
+        );
+    }
+
+    #[test]
+    fn split_node_id_once_trailing_separator_returns_empty_rest() {
+        assert_eq!(
+            split_node_id_once("path/to/mod.py::"),
+            Some(("path/to/mod.py", "")),
+            "trailing :: yields empty rest slice — locks the non-validating contract so future 'helpful' validation cannot drift into the primitive",
         );
     }
 }

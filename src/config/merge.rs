@@ -346,7 +346,8 @@ impl Config {
             .iter()
             .map(|id| {
                 let id_str: &str = id.as_ref();
-                let Some((file_part, rest)) = id_str.split_once("::") else {
+                let Some((file_part, rest)) = crate::types::node_id::split_node_id_once(id_str)
+                else {
                     return id.clone();
                 };
 
