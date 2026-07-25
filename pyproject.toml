@@ -126,7 +126,7 @@ unresolved-import = "ignore"
 
 [tool.oxitest]
 testpaths = ["python/tests", "python/oxitest"]
-norecursedirs = ["docs"]
+norecursedirs = ["docs", "fixtures"]
 python_files = ["test_*.py"]
 strict = "abort"
 timeout = 30
@@ -138,7 +138,6 @@ affected_base = "main"
 
 [tool.oxitest.doctest]
 scope = "public"
-skip = ["python/tests/fixtures"]
 
 [tool.coverage.run]
 source = ["python/oxitest"]

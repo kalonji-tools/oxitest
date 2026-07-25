@@ -1,4 +1,5 @@
 use super::WorkerCount;
+use camino::Utf8PathBuf;
 use serde::Deserialize;
 
 /// Errors returned by config parsing when structural rules are violated.
@@ -124,19 +125,151 @@ pub(super) struct OxitestConfig {
 #[serde(deny_unknown_fields)]
 pub struct DoctestConfig {
     pub scope: Option<DoctestScope>,
-    /// Path prefixes (rootdir-relative) to exclude from doctest coverage
-    /// scanning. Files under any listed prefix are skipped for both subject
-    /// enumeration and alias-walking, so no coverage or analysis diagnostics
-    /// fire for them.
+    /// Entries to exclude from doctest coverage. Same grammar as `scope`
+    /// (list form): prefix, file, or `file.py::symbol`. Files/subjects
+    /// matched by any skip entry are excluded from both enumeration and
+    /// analysis.
     #[serde(default)]
-    pub skip: Vec<String>,
+    pub skip: Vec<ScopeEntry>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
+/// A single entry in `[tool.oxitest.doctest].scope` (list form) or `.skip`.
+///
+/// Grammar mirrors pytest node IDs. See spec 2026-07-25 for the full rule set.
+///
+/// Deferred to #1644: `file.py::Cls::method` (member-level scope).
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ScopeEntry {
+    /// Directory prefix, trailing `/` required. Matches subjects under the prefix.
+    Prefix(Utf8PathBuf),
+    /// Whole `.py` file. Matches every subject in the file.
+    File(Utf8PathBuf),
+    /// Top-level symbol (`def` or `class`) in a `.py` file.
+    Symbol { file: Utf8PathBuf, name: String },
+}
+
+impl<'de> serde::Deserialize<'de> for ScopeEntry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        parse_scope_entry_str(&raw).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Classify an entry string into a `ScopeEntry`. Returns a human-readable error
+/// with the offending entry quoted on any failure. See spec for the full grammar.
+///
+/// The `split_node_id_str` helper is non-validating — this function applies the
+/// strict-mode policy: empty segments rejected, chain length limited to 1,
+/// 2-segment chains rejected with a #1644 pointer.
+pub(crate) fn parse_scope_entry_str(raw: &str) -> Result<ScopeEntry, String> {
+    // Reject absolute paths and parent components up front — same for all forms.
+    // Windows drive-letter form covers both `C:\path` (backslash, native) and
+    // `C:/path` (forward slash, which many toolchains normalize into).
+    let looks_like_windows_drive =
+        raw.chars().nth(1) == Some(':') && matches!(raw.chars().nth(2), Some('\\') | Some('/'));
+    if raw.starts_with('/') || raw.starts_with('\\') || looks_like_windows_drive {
+        return Err(format!(
+            "entry '{raw}' must be a rootdir-relative path, not absolute"
+        ));
+    }
+    for component in raw.split('/') {
+        if component == ".." {
+            return Err(format!("entry '{raw}' must not contain '..' components"));
+        }
+    }
+
+    // Split on `::` using the shared node-ID helper.
+    let (file_part, chain) = crate::types::node_id::split_node_id_str(raw);
+
+    if chain.is_empty() {
+        // No `::` — must be Prefix or File.
+        if raw.ends_with('/') {
+            return Ok(ScopeEntry::Prefix(Utf8PathBuf::from(raw)));
+        }
+        if raw.ends_with(".py") {
+            return Ok(ScopeEntry::File(Utf8PathBuf::from(raw)));
+        }
+        return Err(format!(
+            "entry '{raw}' is ambiguous — add trailing / for a directory, .py for a file, or ::name for a symbol"
+        ));
+    }
+
+    // Chain present — validate its segments individually first.
+    if chain.iter().any(|s| s.is_empty()) {
+        return Err(format!("entry '{raw}' has an empty segment after ::"));
+    }
+
+    // File part must be a .py file when chain is present.
+    if !file_part.ends_with(".py") {
+        return Err(format!(
+            "entry '{raw}' — path before :: must end in .py (got '{file_part}')"
+        ));
+    }
+    let file = Utf8PathBuf::from(file_part);
+
+    match chain.len() {
+        1 => Ok(ScopeEntry::Symbol {
+            file,
+            name: chain[0].to_string(),
+        }),
+        2 => Err(format!(
+            "entry '{raw}' — member-level scope not yet supported, see #1644"
+        )),
+        _ => Err(format!("entry '{raw}' has too many :: segments")),
+    }
+}
+
+/// `scope` field of `[tool.oxitest.doctest]`. Either the scalar `"public"` or
+/// a list of `ScopeEntry` values. `"off"` is intentionally not accepted —
+/// drop the whole `[tool.oxitest.doctest]` table to disable coverage.
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DoctestScope {
     Public,
-    Off,
+    List(Vec<ScopeEntry>),
+}
+
+impl<'de> serde::Deserialize<'de> for DoctestScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = DoctestScope;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(r#""public" or a list of entry strings"#)
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<DoctestScope, E> {
+                match v {
+                    "public" => Ok(DoctestScope::Public),
+                    "off" => Err(E::custom(
+                        "scope value 'off' is no longer supported; remove the whole [tool.oxitest.doctest] table to disable coverage",
+                    )),
+                    other => Err(E::custom(format!(
+                        r#"expected "public" or a list, got scope = "{other}""#
+                    ))),
+                }
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<DoctestScope, A::Error> {
+                let mut entries = Vec::new();
+                while let Some(entry) = seq.next_element::<ScopeEntry>()? {
+                    entries.push(entry);
+                }
+                Ok(DoctestScope::List(entries))
+            }
+        }
+
+        deserializer.deserialize_any(V)
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for WorkerCount {
@@ -177,6 +310,17 @@ impl<'de> serde::Deserialize<'de> for WorkerCount {
         }
 
         deserializer.deserialize_any(WorkerCountVisitor)
+    }
+}
+
+/// Format a `ScopeEntry` back into its TOML source form for use in diagnostics.
+///
+/// Round-trips: `render_entry(parse_scope_entry_str(s).unwrap())` == `s`.
+pub(crate) fn render_entry(e: &ScopeEntry) -> String {
+    match e {
+        ScopeEntry::Prefix(p) => p.as_str().to_string(),
+        ScopeEntry::File(f) => f.as_str().to_string(),
+        ScopeEntry::Symbol { file, name } => format!("{}::{}", file.as_str(), name),
     }
 }
 
@@ -364,7 +508,7 @@ mod tests {
         let toml_src = r#"
 [tool.oxitest.doctest]
 scope = "public"
-skip = ["python/tests/fixtures"]
+skip = ["python/tests/fixtures/"]
 "#;
         let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
         let cfg = parsed
@@ -374,7 +518,12 @@ skip = ["python/tests/fixtures"]
             .expect("oxitest table present");
         let dt = cfg.doctest.expect("doctest sub-table present");
         assert_eq!(dt.scope, Some(DoctestScope::Public));
-        assert_eq!(dt.skip, vec!["python/tests/fixtures".to_owned()]);
+        assert_eq!(
+            dt.skip,
+            vec![ScopeEntry::Prefix(Utf8PathBuf::from(
+                "python/tests/fixtures/"
+            ))],
+        );
     }
 
     #[test]
@@ -420,7 +569,7 @@ doctest_modules = false
         let toml_src = r#"
 [tool.oxitest.doctest]
 scope = "public"
-skip = ["python/tests/fixtures", "python/tests/docs"]
+skip = ["python/tests/fixtures/", "python/tests/docs/"]
 "#;
         let parsed: PyprojectToml = toml::from_str(toml_src).expect("valid TOML");
         let cfg = parsed
@@ -432,10 +581,10 @@ skip = ["python/tests/fixtures", "python/tests/docs"]
         assert_eq!(
             dt.skip,
             vec![
-                "python/tests/fixtures".to_owned(),
-                "python/tests/docs".to_owned()
+                ScopeEntry::Prefix(Utf8PathBuf::from("python/tests/fixtures/")),
+                ScopeEntry::Prefix(Utf8PathBuf::from("python/tests/docs/")),
             ],
-            "skip must parse as a list of path prefix strings"
+            "skip must parse as a list of ScopeEntry values using the shared grammar"
         );
     }
 
@@ -529,5 +678,235 @@ doctest = {}
             "raw sub-table stores None; defaults applied by Config::resolve"
         );
         assert!(dt.skip.is_empty(), "skip omitted ⇒ empty at parse time");
+    }
+
+    // ── ScopeEntry deserialization ────────────────────────────────────────────
+
+    #[test]
+    fn scope_entry_parses_directory_prefix() {
+        let raw: std::collections::HashMap<String, ScopeEntry> =
+            toml::from_str(r#"e = "src/pkg/""#).unwrap();
+        assert_eq!(
+            raw["e"],
+            ScopeEntry::Prefix(Utf8PathBuf::from("src/pkg/")),
+            "trailing / classifies as Prefix",
+        );
+    }
+
+    #[test]
+    fn scope_entry_parses_python_file() {
+        let raw: std::collections::HashMap<String, ScopeEntry> =
+            toml::from_str(r#"e = "src/mod.py""#).unwrap();
+        assert_eq!(
+            raw["e"],
+            ScopeEntry::File(Utf8PathBuf::from("src/mod.py")),
+            ".py suffix (no ::) classifies as File",
+        );
+    }
+
+    #[test]
+    fn scope_entry_parses_top_level_symbol() {
+        let raw: std::collections::HashMap<String, ScopeEntry> =
+            toml::from_str(r#"e = "src/mod.py::foo""#).unwrap();
+        assert_eq!(
+            raw["e"],
+            ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("src/mod.py"),
+                name: "foo".to_string(),
+            },
+            "file.py::sym classifies as Symbol",
+        );
+    }
+
+    /// Deserialize a single `ScopeEntry` from a TOML string, returning any error verbatim.
+    fn parse_scope_entry(s: &str) -> Result<ScopeEntry, String> {
+        let src = format!(r#"e = "{s}""#);
+        toml::from_str::<std::collections::HashMap<String, ScopeEntry>>(&src)
+            .map(|m| m["e"].clone())
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn scope_entry_rejects_ambiguous_bare() {
+        let err = parse_scope_entry("src/mod").unwrap_err();
+        assert!(
+            err.contains("ambiguous") && err.contains("src/mod"),
+            "bare entry with no suffix/separator must be rejected (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_member_syntax_pointing_at_followup() {
+        let err = parse_scope_entry("src/mod.py::Cls::method").unwrap_err();
+        assert!(
+            err.contains("member-level") && err.contains("#1644"),
+            "member syntax must be rejected with a pointer to the follow-up issue (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_too_many_segments() {
+        let err = parse_scope_entry("src/mod.py::A::B::C").unwrap_err();
+        assert!(
+            err.contains("too many"),
+            "3+ segments after :: must be rejected (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_non_py_file_before_double_colon() {
+        let err = parse_scope_entry("src/not_py::foo").unwrap_err();
+        assert!(
+            err.contains(".py") && err.contains("src/not_py"),
+            "file part before :: must end in .py (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_absolute_path() {
+        let err = parse_scope_entry("/abs/mod.py").unwrap_err();
+        assert!(
+            err.contains("rootdir-relative") || err.contains("absolute"),
+            "absolute paths must be rejected (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_windows_absolute_paths() {
+        // Bypass TOML wrapping — backslashes trigger TOML string escape rules
+        // and would obscure what we're actually asserting about the parser.
+        for input in ["C:\\Users\\foo\\mod.py", "C:/Users/foo/mod.py"] {
+            let err = parse_scope_entry_str(input).unwrap_err();
+            assert!(
+                err.contains("rootdir-relative") || err.contains("absolute"),
+                "Windows drive-letter absolute paths (both slash forms) must be rejected — the config layer must not silently accept them and then fail path matching later (input: {input}, got: {err})",
+            );
+        }
+    }
+
+    #[test]
+    fn scope_entry_rejects_parent_component() {
+        let err = parse_scope_entry("../mod.py").unwrap_err();
+        assert!(
+            err.contains(".."),
+            "entries with .. must be rejected (got: {err})",
+        );
+    }
+
+    #[test]
+    fn scope_entry_rejects_empty_symbol_after_double_colon() {
+        let err = parse_scope_entry("src/mod.py::").unwrap_err();
+        assert!(
+            err.contains("empty"),
+            "empty segment after :: must be rejected (got: {err})",
+        );
+    }
+
+    // ── DoctestScope deserialization ──────────────────────────────────────────
+
+    #[test]
+    fn doctest_scope_parses_public_scalar() {
+        let cfg: DoctestConfig = toml::from_str(r#"scope = "public""#).unwrap();
+        assert_eq!(
+            cfg.scope,
+            Some(DoctestScope::Public),
+            "\"public\" scalar → Public variant",
+        );
+    }
+
+    #[test]
+    fn doctest_scope_parses_empty_list_as_empty_list() {
+        let cfg: DoctestConfig = toml::from_str(r#"scope = []"#).unwrap();
+        assert_eq!(
+            cfg.scope,
+            Some(DoctestScope::List(vec![])),
+            "empty array → List with zero entries (rule fires but matches nothing)",
+        );
+    }
+
+    #[test]
+    fn doctest_scope_parses_heterogeneous_list() {
+        let cfg: DoctestConfig =
+            toml::from_str(r#"scope = ["src/pkg/", "src/mod.py", "src/mod.py::foo"]"#).unwrap();
+        let DoctestScope::List(entries) = cfg.scope.unwrap() else {
+            panic!("expected DoctestScope::List for TOML array");
+        };
+        assert_eq!(
+            entries,
+            vec![
+                ScopeEntry::Prefix(Utf8PathBuf::from("src/pkg/")),
+                ScopeEntry::File(Utf8PathBuf::from("src/mod.py")),
+                ScopeEntry::Symbol {
+                    file: Utf8PathBuf::from("src/mod.py"),
+                    name: "foo".to_string(),
+                },
+            ],
+            "heterogeneous list preserves entry order and mixes variants",
+        );
+    }
+
+    #[test]
+    fn doctest_scope_rejects_off_with_migration_hint() {
+        let err = toml::from_str::<DoctestConfig>(r#"scope = "off""#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("off") && err.contains("[tool.oxitest.doctest]"),
+            "scope = \"off\" must be rejected with a migration hint pointing at the whole doctest table (got: {err})",
+        );
+    }
+
+    #[test]
+    fn doctest_scope_rejects_unknown_scalar() {
+        let err = toml::from_str::<DoctestConfig>(r#"scope = "private""#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("private"),
+            "unknown scalar must be rejected with the offending value in the error (got: {err})",
+        );
+    }
+
+    #[test]
+    fn doctest_skip_parses_list_of_scope_entries() {
+        let cfg: DoctestConfig = toml::from_str(
+            r#"skip = ["tests/", "src/generated.py", "src/mod.py::internal_helper"]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.skip,
+            vec![
+                ScopeEntry::Prefix(Utf8PathBuf::from("tests/")),
+                ScopeEntry::File(Utf8PathBuf::from("src/generated.py")),
+                ScopeEntry::Symbol {
+                    file: Utf8PathBuf::from("src/mod.py"),
+                    name: "internal_helper".to_string(),
+                },
+            ],
+            "skip uses the same grammar as scope list — heterogeneous entries preserved",
+        );
+    }
+
+    #[test]
+    fn doctest_skip_rejects_ambiguous_entry() {
+        let err = toml::from_str::<DoctestConfig>(r#"skip = ["tests"]"#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("ambiguous") && err.contains("tests"),
+            "skip entries follow the same strict grammar (got: {err})",
+        );
+    }
+
+    #[test]
+    fn render_entry_round_trips_all_three_forms() {
+        for input in ["src/pkg/", "src/mod.py", "src/mod.py::foo"] {
+            let entry = parse_scope_entry_str(input).unwrap();
+            assert_eq!(
+                render_entry(&entry),
+                input,
+                "render_entry must round-trip parse_scope_entry_str for '{input}' so diagnostics quote the exact TOML form the user wrote",
+            );
+        }
     }
 }

@@ -3,7 +3,7 @@
 //! Layer 1: filter modules by dotted-path privacy (any `_`-prefixed component → private).
 //! Layer 2 (later task): resolve names within a public module via `__all__` or fallback.
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use rustpython_parser::ast;
 
 /// True if every component of the dotted path is public (no `_` prefix).
@@ -126,8 +126,15 @@ pub(crate) fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
 pub(crate) struct Subject {
     /// Public dotted path — used in diagnostics.
     pub(crate) public_id: String,
+    /// The leaf symbol name (last segment of `public_id`). Stored separately
+    /// so the scope filter can compare against `ScopeEntry::Symbol { name }`
+    /// without recovering it from `public_id`'s format.
+    pub(crate) name: String,
     /// Where the binding lives in AST terms.
     pub(crate) source: SubjectSource,
+    /// The rootdir-relative file this subject was enumerated from.
+    /// Used by the scope filter to match Prefix/File/Symbol entries.
+    pub(crate) file: Utf8PathBuf,
 }
 
 /// How a public-facing name is bound at the top level of its module.
@@ -233,7 +240,11 @@ fn classify_rhs(rhs: &ast::Expr) -> SubjectSource {
 ///   (ClassDef, FunctionDef, AsyncFunctionDef, or Assign whose LHS is a non-underscore Name).
 ///
 /// Caller is responsible for having filtered the module through Layer 1 (`is_public_module_path`).
-pub(crate) fn enumerate_subjects(stmts: &[ast::Stmt], module_dotted: &str) -> Vec<Subject> {
+pub(crate) fn enumerate_subjects(
+    stmts: &[ast::Stmt],
+    module_dotted: &str,
+    file: &Utf8Path,
+) -> Vec<Subject> {
     let names: Vec<String> = match extract_dunder_all(stmts) {
         Some(explicit) => explicit,
         None => fallback_top_level_names(stmts),
@@ -243,7 +254,9 @@ pub(crate) fn enumerate_subjects(stmts: &[ast::Stmt], module_dotted: &str) -> Ve
         .filter_map(|name| {
             classify_top_level_binding(stmts, &name).map(|source| Subject {
                 public_id: format!("{module_dotted}.{name}"),
+                name,
                 source,
+                file: file.to_owned(),
             })
         })
         .collect()
@@ -552,7 +565,7 @@ class Bar: pass
 class NotExported: pass
 "#,
         );
-        let subjects = enumerate_subjects(&stmts, "oxitest");
+        let subjects = enumerate_subjects(&stmts, "oxitest", &Utf8PathBuf::from("oxitest.py"));
         let ids: Vec<&str> = subjects.iter().map(|s| s.public_id.as_str()).collect();
         assert_eq!(
             ids,
@@ -571,7 +584,11 @@ class Bar: pass
 def _private(): pass
 "#,
         );
-        let subjects = enumerate_subjects(&stmts, "oxitest.plugin");
+        let subjects = enumerate_subjects(
+            &stmts,
+            "oxitest.plugin",
+            &Utf8PathBuf::from("oxitest/plugin.py"),
+        );
         let ids: Vec<&str> = subjects.iter().map(|s| s.public_id.as_str()).collect();
         assert_eq!(
             ids,
@@ -588,7 +605,7 @@ from a.b import Imported
 __all__ = ["Imported"]
 "#,
         );
-        let subjects = enumerate_subjects(&stmts, "oxitest");
+        let subjects = enumerate_subjects(&stmts, "oxitest", &Utf8PathBuf::from("oxitest.py"));
         let ids: Vec<&str> = subjects.iter().map(|s| s.public_id.as_str()).collect();
         assert_eq!(
             ids,
@@ -607,7 +624,7 @@ class _Internal: pass
 Foo = _Internal
 "#,
         );
-        let subjects = enumerate_subjects(&stmts, "oxitest");
+        let subjects = enumerate_subjects(&stmts, "oxitest", &Utf8PathBuf::from("oxitest.py"));
         let ids: Vec<&str> = subjects.iter().map(|s| s.public_id.as_str()).collect();
         assert_eq!(
             ids,
@@ -619,7 +636,7 @@ Foo = _Internal
     #[test]
     fn enumerate_subjects_empty_module_returns_empty() {
         let stmts = parse_stmts("");
-        let subjects = enumerate_subjects(&stmts, "oxitest");
+        let subjects = enumerate_subjects(&stmts, "oxitest", &Utf8PathBuf::from("oxitest.py"));
         assert!(subjects.is_empty(), "no statements ⇒ no subjects");
     }
 
@@ -631,11 +648,25 @@ def _private(): pass
 class _Private: pass
 "#,
         );
-        let subjects = enumerate_subjects(&stmts, "oxitest");
+        let subjects = enumerate_subjects(&stmts, "oxitest", &Utf8PathBuf::from("oxitest.py"));
         assert!(
             subjects.is_empty(),
             "all names underscore-prefixed and no __all__ ⇒ no public subjects"
         );
+    }
+
+    #[test]
+    fn enumerate_subjects_stamps_file_on_each_subject() {
+        let stmts = parse_stmts("def foo(): pass\nclass Bar: pass\n");
+        let file = Utf8PathBuf::from("some/dir/mod.py");
+        let subjects = enumerate_subjects(&stmts, "some.dir.mod", &file);
+        assert!(!subjects.is_empty(), "sanity: got subjects to inspect");
+        for s in &subjects {
+            assert_eq!(
+                s.file, file,
+                "every subject carries the file it was enumerated from — needed by the scope filter",
+            );
+        }
     }
 
     #[test]

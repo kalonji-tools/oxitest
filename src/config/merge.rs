@@ -119,7 +119,8 @@ impl Config {
         apply_if_some!(self.paths, use_gitignore, tc.use_gitignore);
 
         // A present [tool.oxitest.doctest] table opts in — the doctest_enabled()
-        // accessor treats `scope = "off"` as a real opt-out.
+        // accessor returns true whenever this field is `Some`. To disable the
+        // rule, drop the whole table.
         if let Some(dt) = tc.doctest {
             self.doctest = Some(dt);
         }

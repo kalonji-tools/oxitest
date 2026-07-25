@@ -7,7 +7,8 @@ mod merge;
 
 mod pyproject;
 use pyproject::PyprojectToml;
-pub use pyproject::{DoctestConfig, DoctestScope};
+pub(crate) use pyproject::render_entry;
+pub use pyproject::{DoctestConfig, DoctestScope, ScopeEntry};
 
 impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.
@@ -466,11 +467,9 @@ pub struct Config {
     pub filter: FilterConfig,
     /// Feature flags: plugins, coverage, async, caching.
     pub features: FeatureConfig,
-    /// Doctest collection settings.
-    ///
-    /// `None` means doctest collection is disabled. `Some` opts in — the
-    /// `scope` sub-field can still explicitly disable via `DoctestScope::Off`
-    /// (used by consumers as the enablement check).
+    /// Doctest configuration. `None` means the rule is disabled (no
+    /// `[tool.oxitest.doctest]` table). `Some(config)` means the rule
+    /// fires; severity is driven by `[tool.oxitest].strict`.
     pub doctest: Option<DoctestConfig>,
 }
 
@@ -493,11 +492,9 @@ impl Config {
     /// Return true when doctest collection should run.
     ///
     /// True when a `[tool.oxitest.doctest]` table is present OR `--doctest-modules`
-    /// was passed, unless the user explicitly set `scope = "off"` to disable it.
+    /// was passed. Presence of the table = opt-in; absence = silent.
     pub fn doctest_enabled(&self) -> bool {
-        self.doctest
-            .as_ref()
-            .is_some_and(|d| !matches!(d.scope, Some(DoctestScope::Off)))
+        self.doctest.is_some()
     }
 }
 
@@ -1122,35 +1119,5 @@ mod tests {
             2,
             "glob-containing node IDs must not produce source files"
         );
-    }
-
-    #[test]
-    fn doctest_enabled_reflects_scope_semantics() {
-        use crate::config::pyproject::{DoctestConfig, DoctestScope};
-
-        // No sub-table ⇒ disabled.
-        let mut cfg = Config::default();
-        assert!(!cfg.doctest_enabled(), "no sub-table ⇒ disabled");
-
-        // Sub-table present, scope=None ⇒ enabled (uses default).
-        cfg.doctest = Some(DoctestConfig::default());
-        assert!(
-            cfg.doctest_enabled(),
-            "present sub-table with default scope ⇒ enabled"
-        );
-
-        // scope=Public ⇒ enabled.
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            ..Default::default()
-        });
-        assert!(cfg.doctest_enabled(), "scope=Public ⇒ enabled");
-
-        // scope=Off ⇒ disabled.
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Off),
-            ..Default::default()
-        });
-        assert!(!cfg.doctest_enabled(), "scope=Off ⇒ disabled");
     }
 }

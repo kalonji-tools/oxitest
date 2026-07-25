@@ -66,7 +66,11 @@ pub(crate) fn partition_positionals(
 
     for arg in raw {
         let arg_str = arg.as_str();
-        if let Some((file_part, _)) = arg_str.split_once("::") {
+        let (file_part, chain) = crate::types::node_id::split_node_id_str(arg_str);
+        if !chain.is_empty() {
+            // Any :: in the arg — treat as a node ID, matching pre-refactor
+            // behavior. Empty-segment / malformed cases fall through to
+            // downstream validation which surfaces "invalid node ID" errors.
             node_ids.push(crate::types::NodeId::from_raw(arg_str));
             // Only extract the path for file collection if it has no glob chars.
             // Glob paths (e.g. "tests/test_*.py") are not real files.
@@ -517,6 +521,25 @@ mod tests {
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0], Utf8PathBuf::from("tests/test_a.py"));
         assert_eq!(ids.len(), 1);
+    }
+
+    #[test]
+    fn partition_positionals_malformed_node_id_still_classified_as_node_id() {
+        // Regression test for the refactor in Task 1 of #1638. A trailing ::
+        // (empty segment) is malformed but must still be treated as a NodeId
+        // so downstream validation reports "invalid node ID" — not "file not
+        // found: tests/test_a.py::".
+        let (paths, node_ids) = partition_positionals(vec![Utf8PathBuf::from("tests/test_a.py::")]);
+        assert_eq!(
+            node_ids.len(),
+            1,
+            "trailing :: must classify as a NodeId, not a plain path — preserves pre-refactor CLI behavior",
+        );
+        assert_eq!(
+            paths,
+            vec![Utf8PathBuf::from("tests/test_a.py")],
+            "file part before :: still gets extracted for file collection",
+        );
     }
 
     // ── node_id integration tests ───────────────────────────────────────────
