@@ -86,6 +86,57 @@ conftest files listed in the error message.
 
 ---
 
+## Configuration errors
+
+Configuration errors surface when `pyproject.toml` cannot be parsed into a
+valid `[tool.oxitest]` section. They produce **exit code 4** (`UsageError`).
+See [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) for the
+fail-closed design and its narrow scope.
+
+---
+
+```text
+error: <path>/pyproject.toml: unknown field `<name>`, expected one of `testpaths`, `python_files`, ...
+```
+
+**Cause:** A key inside `[tool.oxitest]` is not a recognized field. Usually
+a typo (`waivres` → `waivers`) or a stale key from a prior oxitest version.
+
+**Fix:** Fix the typo, or remove the key if it was removed in a recent
+oxitest release. See the [Configuration reference](configuration.md#keys)
+for the current schema.
+
+---
+
+```text
+error: <path>/pyproject.toml: invalid type: string "<value>", expected <T>
+```
+
+**Cause:** A key inside `[tool.oxitest]` has the wrong type — e.g.
+`timeout = "10"` instead of `timeout = 10`, or `serial = "true"` instead
+of `serial = true`.
+
+**Fix:** Adjust the value to match the type listed in the
+[Configuration reference](configuration.md#keys).
+
+---
+
+```text
+error: <path>/pyproject.toml: `<key>` is no longer supported; move settings under <replacement> instead
+```
+
+**Cause:** A key was removed in a prior oxitest release. The error names
+the new location for the settings (e.g. `doctest_modules` → `[tool.oxitest.doctest]`).
+
+**Fix:** Follow the migration hint in the error message. See the
+[Configuration reference](configuration.md#keys) for the current schema.
+
+**Note:** Syntax errors elsewhere in `pyproject.toml` (a broken
+`[tool.ruff]`, `[project]`, etc.) do not produce this error — oxitest warns
+and runs under defaults, letting each tool police its own section.
+
+---
+
 ## Plugin errors
 
 Plugin errors occur when oxitest cannot load or initialize a declared plugin.
