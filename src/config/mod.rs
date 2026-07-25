@@ -580,19 +580,23 @@ impl Config {
             eprintln!("error: {}: {}", pyproject_path, err);
             std::process::exit(crate::types::ExitCode::UsageError.into());
         }
-        let pyproject: PyprojectToml = match toml::from_str(&content) {
-            Ok(p) => p,
-            Err(e) => {
+        let tc = match pyproject::parse_oxitest_config(&content) {
+            Ok(pyproject::ParseOutcome::Present(cfg)) => *cfg,
+            Ok(pyproject::ParseOutcome::Absent) => pyproject::OxitestConfig::default(),
+            Ok(pyproject::ParseOutcome::WholeFileParseError(e)) => {
                 tracing::warn!(
                     path = %pyproject_path,
                     error = %e,
-                    "pyproject.toml parse failed — running with default config"
+                    "pyproject.toml parse failed — running with default oxitest config"
                 );
-                return config;
+                pyproject::OxitestConfig::default()
+            }
+            Err(err) => {
+                eprintln!("error: {}: {}", pyproject_path, err);
+                std::process::exit(crate::types::ExitCode::UsageError.into());
             }
         };
 
-        let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
         // rootdir was moved into config; re-derive from pyproject_path
         let rootdir = pyproject_path.parent().expect("pyproject_path has parent");
         config.merge_toml(tc, Some(rootdir))
