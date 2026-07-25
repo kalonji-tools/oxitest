@@ -43,6 +43,12 @@ impl From<toml::de::Error> for ConfigError {
 /// Called before serde deserialization so we can produce a helpful migration
 /// message pointing at the new sub-table, rather than letting the field be
 /// silently ignored or (worse) accepted into a stale field on `OxitestConfig`.
+///
+/// **Convention:** when removing a field from `OxitestConfig` with a
+/// migration path, add a matching `LegacyKey` variant here so users see the
+/// specific hint rather than the generic `unknown field 'X'` from
+/// `deny_unknown_fields`. Purely removed fields (no migration path) rely on
+/// the generic error. See ADR-0008.
 pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
     // Parse to a generic `toml::Value` — cheaper than reflecting on OxitestConfig
     // and independent of the field set we're actively evolving.
@@ -74,11 +80,22 @@ pub(super) enum AutoArrangeToml {
     Disabled(bool),
 }
 
+/// Root-level pyproject.toml deserialization target.
+///
+/// Deliberately lacks `#[serde(deny_unknown_fields)]` — `[project]`,
+/// `[build-system]`, and other root tables live here alongside `[tool]`.
+/// Adding it would break every pyproject that isn't oxitest-only. See ADR-0008.
 #[derive(Deserialize, Default, Debug)]
 pub(super) struct PyprojectToml {
     pub(super) tool: Option<ToolTable>,
 }
 
+/// The `[tool]` sub-table.
+///
+/// Deliberately lacks `#[serde(deny_unknown_fields)]` — `[tool.ruff]`,
+/// `[tool.mypy]`, `[tool.black]`, and other tools' sub-tables live here
+/// alongside `[tool.oxitest]`. Adding it would break every user pyproject
+/// that configures any other tool. See ADR-0008.
 #[derive(Deserialize, Default, Debug)]
 pub(super) struct ToolTable {
     pub(super) oxitest: Option<OxitestConfig>,

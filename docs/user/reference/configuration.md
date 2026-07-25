@@ -26,6 +26,25 @@ Place oxitest settings under `[tool.oxitest]` in `pyproject.toml`. oxitest reads
 only this section — it does not fall back to `[tool.pytest]` or
 `[tool.pytest.ini_options]`.
 
+## Validation
+
+`[tool.oxitest]` is fail-closed: unknown keys, wrong types, and malformed
+values inside the section cause oxitest to exit with `UsageError` (code 4)
+before any tests run. The error names the offending field so you can grep
+your `pyproject.toml` for it.
+
+```text
+error: pyproject.toml: unknown field `waivres`, expected one of `testpaths`, `python_files`, ...
+```
+
+This applies **only** to the `[tool.oxitest]` sub-tree. Syntax errors elsewhere
+in `pyproject.toml` (a broken `[tool.ruff]`, `[project]`, or `[build-system]`)
+do not fail oxitest — it warns and runs under defaults, letting each tool
+police its own section.
+
+See [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) for the
+design rationale.
+
 ## Keys
 
 | Key | Type | Default | Description |
