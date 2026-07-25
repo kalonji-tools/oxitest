@@ -208,17 +208,7 @@ impl Config {
         }
         apply_if_some!(self.exec, timeout_secs, args.timeout, wrap);
         if args.doctest_modules {
-            // `--doctest-modules` opts in to doctest collection.
-            //
-            // Map to `DoctestScope::Public` because M1 only implements the
-            // `Public` semantic — no code path in `src/doctest/` currently
-            // differentiates `All` from `Public`. Mapping to `All` would be
-            // a user-visible lie (help text promising broader scan than the
-            // engine delivers). M2 (per wayfinder #1602 planning) will
-            // define the `All` semantic and this mapping can be revisited
-            // then. The CLI still wins over TOML unconditionally, matching
-            // the established `strict`/`color`/`keep_tmp`/`timeout` pattern
-            // (a TOML `scope = "off"` should not silently defeat the flag).
+            // Doctest collection opt-in from --doctest-modules.
             let dt = self.doctest.get_or_insert_with(DoctestConfig::default);
             dt.scope = Some(DoctestScope::Public);
         }

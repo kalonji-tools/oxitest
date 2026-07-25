@@ -1146,13 +1146,6 @@ mod tests {
         });
         assert!(cfg.doctest_enabled(), "scope=Public ⇒ enabled");
 
-        // scope=All ⇒ enabled.
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::All),
-            ..Default::default()
-        });
-        assert!(cfg.doctest_enabled(), "scope=All ⇒ enabled");
-
         // scope=Off ⇒ disabled.
         cfg.doctest = Some(DoctestConfig {
             scope: Some(DoctestScope::Off),

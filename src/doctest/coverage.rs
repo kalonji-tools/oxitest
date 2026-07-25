@@ -682,7 +682,7 @@ B = A
         assert_eq!(
             cycle_diag.context.as_ref(),
             "doctest.coverage.analysis",
-            "walk errors emit under the analysis context — the ratchet must not treat them as coverage gaps"
+            "walk errors emit under the analysis context — must not be conflated with coverage gaps"
         );
     }
 
