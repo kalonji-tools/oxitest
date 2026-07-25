@@ -73,6 +73,61 @@ pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Outcome of extracting `[tool.oxitest]` from raw pyproject.toml content.
+///
+/// The three-variant shape (rather than `Option<OxitestConfig>`) lets
+/// `Config::load` distinguish absent-subtable (silent defaults) from
+/// whole-file syntax error (warn + defaults). See ADR-0008.
+#[derive(Debug)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "wired into Config::load in Task 4 of PR #1646")
+)]
+pub(crate) enum ParseOutcome {
+    /// `[tool.oxitest]` parsed successfully.
+    Present(OxitestConfig),
+    /// Pyproject parses but has no `[tool.oxitest]` sub-table.
+    Absent,
+    /// Whole-file TOML syntax error — subtable extraction skipped by design.
+    WholeFileParseError(
+        #[allow(dead_code)] // destructured by Config::load in Task 4; tests match via `matches!`
+        toml::de::Error,
+    ),
+}
+
+/// Extract and validate `[tool.oxitest]` from raw pyproject.toml content.
+///
+/// Value-based extraction: only errors inside `[tool.oxitest]` reach the
+/// caller as `Err`. Whole-file TOML syntax errors and missing/absent
+/// `[tool.oxitest]` sub-table are signalled via `ParseOutcome` — see ADR-0008
+/// for the narrow-scope rationale.
+///
+/// Returns:
+/// - `Ok(ParseOutcome::Present(config))` — `[tool.oxitest]` parsed successfully.
+/// - `Ok(ParseOutcome::Absent)` — pyproject parses, no `[tool.oxitest]` sub-table.
+/// - `Ok(ParseOutcome::WholeFileParseError(e))` — whole-file TOML syntax broken;
+///   caller decides whether to warn.
+/// - `Err(ConfigError::Toml(_))` — `[tool.oxitest]` failed to deserialize
+///   (unknown field via `deny_unknown_fields`, wrong type, malformed value).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "wired into Config::load in Task 4 of PR #1646")
+)]
+pub(crate) fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigError> {
+    // Whole-file syntax errors: not our department. Return the error via
+    // ParseOutcome so the caller can warn without our forcing an exit.
+    let value: toml::Value = match toml::from_str(raw) {
+        Ok(v) => v,
+        Err(e) => return Ok(ParseOutcome::WholeFileParseError(e)),
+    };
+    let Some(oxitest_value) = value.get("tool").and_then(|t| t.get("oxitest")) else {
+        return Ok(ParseOutcome::Absent);
+    };
+    // Deserialize just the subtable — errors here ARE our department.
+    let config: OxitestConfig = oxitest_value.clone().try_into()?;
+    Ok(ParseOutcome::Present(config))
+}
+
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub(super) enum AutoArrangeToml {
@@ -102,6 +157,7 @@ pub(super) struct ToolTable {
 }
 
 #[derive(Deserialize, Default, Debug)]
+#[serde(deny_unknown_fields)]
 pub(super) struct OxitestConfig {
     pub(super) testpaths: Option<Vec<String>>,
     pub(super) python_files: Option<Vec<String>>,
@@ -925,5 +981,109 @@ doctest = {}
                 "render_entry must round-trip parse_scope_entry_str for '{input}' so diagnostics quote the exact TOML form the user wrote",
             );
         }
+    }
+
+    #[test]
+    fn parse_present_for_well_formed_oxitest_config() {
+        let raw = r#"
+[tool.oxitest]
+timeout = 60
+"#;
+        let outcome = parse_oxitest_config(raw).expect(
+            "well-formed config must not Err — otherwise the extractor is \
+                     rejecting valid input",
+        );
+        let ParseOutcome::Present(cfg) = outcome else {
+            panic!("well-formed [tool.oxitest] must produce Present variant, got: {outcome:?}",);
+        };
+        assert_eq!(cfg.timeout, Some(60), "timeout field must round-trip");
+    }
+
+    #[test]
+    fn parse_absent_for_missing_oxitest_subtable() {
+        let raw = r#"
+[project]
+name = "foo"
+
+[tool.ruff]
+line-length = 100
+"#;
+        let outcome = parse_oxitest_config(raw).expect(
+            "valid TOML without [tool.oxitest] must not Err — other tools' \
+                     configs are not our concern",
+        );
+        assert!(
+            matches!(outcome, ParseOutcome::Absent),
+            "missing [tool.oxitest] must produce Absent, got: {outcome:?}",
+        );
+    }
+
+    #[test]
+    fn parse_whole_file_error_for_broken_toml() {
+        // Broken bracket in [tool.ruff] — syntactically invalid whole-file TOML.
+        let raw = r#"
+[tool.ruff
+line-length = 100
+"#;
+        let outcome = parse_oxitest_config(raw).expect(
+            "whole-file TOML syntax errors must not hard-fail oxitest — \
+                     narrow scope per ADR-0008",
+        );
+        assert!(
+            matches!(outcome, ParseOutcome::WholeFileParseError(_)),
+            "broken whole-file TOML must produce WholeFileParseError, got: {outcome:?}",
+        );
+    }
+
+    #[test]
+    fn parse_errs_on_unknown_field_in_oxitest_subtable() {
+        let raw = r#"
+[tool.oxitest]
+waivres = "typo"
+"#;
+        let err = parse_oxitest_config(raw).expect_err(
+            "unknown fields in [tool.oxitest] must Err — silent drop would let \
+             typos evade the fail-closed contract per ADR-0008",
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("waivres"),
+            "the error must name the offending field so users can grep for it in \
+             pyproject.toml — got: {msg}",
+        );
+    }
+
+    #[test]
+    fn parse_errs_on_wrong_type_in_oxitest_subtable() {
+        let raw = r#"
+[tool.oxitest]
+timeout = "not-a-number"
+"#;
+        let err = parse_oxitest_config(raw).expect_err(
+            "type mismatches in [tool.oxitest] must Err — silent coercion or \
+             default-substitution would hide config bugs per ADR-0008",
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("timeout"),
+            "the error must name the offending field — got: {msg}",
+        );
+    }
+
+    #[test]
+    fn parse_present_for_empty_oxitest_subtable() {
+        let raw = r#"
+[tool.oxitest]
+"#;
+        let outcome = parse_oxitest_config(raw)
+            .expect("empty [tool.oxitest] must not Err — the table exists, just no keys");
+        let ParseOutcome::Present(cfg) = outcome else {
+            panic!("empty [tool.oxitest] must produce Present with defaults, got: {outcome:?}");
+        };
+        assert_eq!(
+            cfg.timeout, None,
+            "unspecified fields must remain None so downstream layers apply defaults \
+             (not silently zeroed)",
+        );
     }
 }
