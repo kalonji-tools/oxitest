@@ -6,6 +6,7 @@ pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, RunArgs};
 mod merge;
 
 mod pyproject;
+#[cfg(test)]
 use pyproject::PyprojectToml;
 pub(crate) use pyproject::render_entry;
 pub use pyproject::{DoctestConfig, DoctestScope, ScopeEntry};
@@ -509,15 +510,20 @@ pub fn has_plugins_configured(rootdir: &Utf8Path) -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    let pyproject: Result<PyprojectToml, _> = toml::from_str(&content);
-    match pyproject {
-        Ok(p) => p
-            .tool
-            .and_then(|t| t.oxitest)
-            .and_then(|o| o.plugins)
-            .is_some_and(|plugins| !plugins.is_empty()),
-        Err(_) => false,
-    }
+    // Value-based probe rather than full OxitestConfig deserialization —
+    // this function is a pre-check on the clap-error recovery path
+    // (`src/pipeline/mod.rs`), and must survive unrelated typos in
+    // `[tool.oxitest]`. Full validation runs in `Config::load` per ADR-0008.
+    let value: toml::Value = match toml::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    value
+        .get("tool")
+        .and_then(|t| t.get("oxitest"))
+        .and_then(|o| o.get("plugins"))
+        .and_then(|p| p.as_array())
+        .is_some_and(|plugins| !plugins.is_empty())
 }
 
 pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
@@ -1122,6 +1128,76 @@ mod tests {
             files.len(),
             2,
             "glob-containing node IDs must not produce source files"
+        );
+    }
+
+    #[test]
+    fn has_plugins_configured_true_for_non_empty_plugins() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        std::fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nplugins = [\"oxitest_mypy\"]\n",
+        )
+        .unwrap();
+        assert!(
+            has_plugins_configured(utf8_dir),
+            "a non-empty plugins list must be detected — otherwise plugin recovery \
+             for clap-unknown-arg errors won't kick in",
+        );
+    }
+
+    #[test]
+    fn has_plugins_configured_false_for_missing_oxitest_section() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        std::fs::write(
+            dir.path().join("pyproject.toml"),
+            "[project]\nname = \"x\"\n",
+        )
+        .unwrap();
+        assert!(
+            !has_plugins_configured(utf8_dir),
+            "no [tool.oxitest] means no plugins configured — plugin recovery should \
+             be skipped rather than probing modules the user never asked for",
+        );
+    }
+
+    #[test]
+    fn has_plugins_configured_false_for_empty_plugins_list() {
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        std::fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nplugins = []\n",
+        )
+        .unwrap();
+        assert!(
+            !has_plugins_configured(utf8_dir),
+            "an empty plugins list must be treated as no plugins — otherwise we'd \
+             spin up plugin recovery machinery for zero plugins",
+        );
+    }
+
+    #[test]
+    fn has_plugins_configured_true_despite_unrelated_typo_in_oxitest_section() {
+        // Value-based probe must survive typos elsewhere in [tool.oxitest] —
+        // this is the concrete scenario ADR-0008's narrow-scope contract created:
+        // Config::load hard-exits on `waivres` but has_plugins_configured runs
+        // BEFORE Config::load, on the clap-error path, and must still detect
+        // plugins so plugin recovery gets a chance.
+        let dir = TempDir::new().unwrap();
+        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        std::fs::write(
+            dir.path().join("pyproject.toml"),
+            "[tool.oxitest]\nplugins = [\"oxitest_mypy\"]\nwaivres = \"typo\"\n",
+        )
+        .unwrap();
+        assert!(
+            has_plugins_configured(utf8_dir),
+            "an unrelated typo in [tool.oxitest] must not blind the plugin probe — \
+             a full OxitestConfig deserialization would reject the typo via \
+             deny_unknown_fields and lose sight of the plugins array",
         );
     }
 }
