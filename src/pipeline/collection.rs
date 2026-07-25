@@ -30,7 +30,9 @@ pub(crate) fn file_could_match(
     use crate::config::ScopeEntry;
     entries.iter().any(|e| match e {
         ScopeEntry::Prefix(p) => rel.starts_with(p),
-        ScopeEntry::File(f) | ScopeEntry::Symbol { file: f, .. } => rel == *f,
+        ScopeEntry::File(f)
+        | ScopeEntry::Symbol { file: f, .. }
+        | ScopeEntry::Member { file: f, .. } => rel == *f,
     })
 }
 
@@ -958,6 +960,7 @@ mod tests {
             name: "foo".into(),
             source: crate::doctest::subjects::SubjectSource::LocalDefinition,
             file: camino::Utf8PathBuf::from("mypkg/foo.py"),
+            class_context: None,
         };
         let cases = [
             AliasError::Cycle {

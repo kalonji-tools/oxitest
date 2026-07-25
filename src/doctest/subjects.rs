@@ -135,6 +135,11 @@ pub(crate) struct Subject {
     /// The rootdir-relative file this subject was enumerated from.
     /// Used by the scope filter to match Prefix/File/Symbol entries.
     pub(crate) file: Utf8PathBuf,
+    /// `None` for top-level subjects. `Some(cls)` when the subject is a
+    /// method inside a class, seeded by a `ScopeEntry::Member` entry —
+    /// orthogonal to `SubjectSource` (which describes AST binding shape,
+    /// not container context).
+    pub(crate) class_context: Option<String>,
 }
 
 /// How a public-facing name is bound at the top level of its module.
@@ -257,6 +262,7 @@ pub(crate) fn enumerate_subjects(
                 name,
                 source,
                 file: file.to_owned(),
+                class_context: None,
             })
         })
         .collect()
