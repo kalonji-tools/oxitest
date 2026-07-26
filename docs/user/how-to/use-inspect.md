@@ -4,10 +4,8 @@
     Explore your test suite interactively — browse tests, fixtures, marks,
     conftests, plugins, and helpers in a terminal UI without running any tests.
 
-## Overview
-
-`oxitest inspect` opens a ratatui-based TUI that lets you navigate all six node
-kinds in your project:
+`oxitest inspect` opens a ratatui-based TUI over your project's six built-in
+**Inspect Node** kinds:
 
 | Kind | Sigil | What it represents |
 |------|-------|--------------------|
@@ -18,11 +16,27 @@ kinds in your project:
 | Plugin | `P` | Registered plugins and the protocols they implement |
 | Helper | `H` | Conftest helper namespaces |
 
-The TUI starts instantly because instant-tier data (tests, marks, helpers) is
-extracted from the Rust AST before any Python session starts. Fixtures and
-plugins load in the background and appear automatically when ready.
+The TUI starts instantly because phase-1 data (tests, marks, helpers) is
+extracted from the Rust AST before any Python session starts. Phase-2 data
+(fixture types, plugin metadata, fixture-derived signals) loads in the
+background and appears automatically when ready.
 
-Press `q` or `Esc` to quit. Press `?` to toggle the in-app help overlay.
+Press `q` to quit. Press `?` to toggle the in-app help overlay.
+
+## Two modes
+
+`oxitest inspect` has two entry modes — the invocation picks which one you
+land in:
+
+- **Cartographic** (`oxitest inspect`, no arguments) — lands on the **Overview**
+  screen. Use this to understand the shape of an unfamiliar test suite.
+- **Diagnostic** (`oxitest inspect <name>`) — jumps directly to **Node Focus**
+  on the matched node. Use this when you already know the fixture, test, or
+  mark you want to inspect.
+
+If a diagnostic invocation's `<name>` matches multiple nodes, a
+**Disambiguation** screen lists all matches; navigate with `j`/`k` and press
+`Enter` to focus one. Direct-jump matching is case-insensitive substring.
 
 ## Launching with filters
 
@@ -32,7 +46,8 @@ Press `q` or `Esc` to quit. Press `?` to toggle the in-app help overlay.
 $ oxitest inspect
 ```
 
-Opens the Home screen listing all non-empty node kinds with their counts.
+Opens the Overview showing the four cartographic sections (see
+[Overview](#overview-cartographic-mode) below).
 
 ### Jump directly to a node
 
@@ -40,9 +55,8 @@ Opens the Home screen listing all non-empty node kinds with their counts.
 $ oxitest inspect db_session
 ```
 
-If exactly one node name contains `db_session`, the TUI opens on the Test or
-Fixture list with the cursor on that node. If multiple nodes match, a
-disambiguation screen lists all matches.
+If exactly one node name contains `db_session`, the TUI opens on Node Focus
+for that node. If multiple nodes match, the Disambiguation screen appears.
 
 ### Filter by DSL expression
 
@@ -50,8 +64,9 @@ disambiguation screen lists all matches.
 $ oxitest inspect -E 'mark(slow)'
 ```
 
-Only tests matching the query DSL expression are loaded into the graph. Fixture
-and conftest data is still fully loaded — only the test set is narrowed.
+Only tests matching the query DSL expression are loaded into the graph.
+Fixture and conftest data is still fully loaded — only the test set is
+narrowed.
 
 ### Show only previously-failed tests
 
@@ -59,8 +74,8 @@ and conftest data is still fully loaded — only the test set is narrowed.
 $ oxitest inspect --lf
 ```
 
-Loads the test cache and limits the test graph to tests that failed in the last
-run. Useful for focusing on regressions.
+Loads the test cache and limits the test graph to tests that failed in the
+last run. Useful for focusing on regressions.
 
 ### Limit to affected tests
 
@@ -81,59 +96,115 @@ $ oxitest inspect -E 'mark(slow)' --affected=HEAD
 Filters are applied in order: `--affected` narrows test files first, then `-E`
 filters the surviving entries, then `--lf` (if given) applies last.
 
-## Navigation model
+## Layout
 
-The TUI uses a stack-based navigation model. There are four screens:
+Both Overview and Node Focus use the same two-pane layout:
 
-```
-Home → NodeList → NodeDetail
-         ↑
-    Disambiguation (when a direct-jump name matches multiple nodes)
-```
+- **Left pane** — the selectable item list (Overview sections, or edges of the
+  focused node). This is where the cursor lives.
+- **Right pane** — the **Preview** of whatever item the cursor is on. It
+  updates automatically as the cursor moves; no click, tab, or enter is needed
+  to preview.
+- **Header** — a breadcrumb of the current navigation path, e.g.
+  `overview > F db_session > F db_engine`. It truncates from the left with
+  `...` when the path is too long.
+- **Footer** — contextual keybinding hints on the left, live status on the
+  right (loading indicator, node counts, search match counts).
 
-- **Home** — lists the six node kinds with sigil, display name, and count.
-  Only kinds with at least one node are shown.
-- **NodeList** — lists all nodes of the selected kind. Parametrized tests are
-  collapsed by default (see [Parametrized test collapsing](#parametrized-test-collapsing)).
-- **NodeDetail** — shows fields and connections for a single node.
-- **Disambiguation** — shown when a `NAME` argument matches multiple nodes;
-  navigate and press `Space` to select one.
+The split ratio adapts to preview length: a short preview leaves more room for
+the item list; a long preview grows the right pane.
 
-Navigate forward with `Space`, `l`, or the right arrow key. Go back with
-`Backspace` or the left arrow key. `Backspace` at the Home screen has no
-effect (Home is always the bottom of the stack).
+## Overview (cartographic mode)
 
-## Home screen
+The Overview is the landing screen for `oxitest inspect` with no arguments.
+It shows four fixed **Sections** in this order:
 
-The Home screen shows the six node kinds in a fixed display order:
+1. **Fixture Gravity** — fixtures ranked by consumer count. Reveals which
+   fixtures the test suite leans on most. *(phase 2)*
+2. **Marks** — every registered mark with the number of tests that carry it.
+   *(phase 1)*
+3. **Conftests** — every `conftest.py` with its fixture and helper counts.
+   *(helper counts are phase 1; fixture counts are phase 2)*
+4. **Signals** — graph-derived diagnostics: unused fixtures, unused helpers,
+   broken edges, high-fan-in fixtures, deep dependency chains, and scope
+   mismatches. *(phase 2)*
 
-1. Tests
-2. Fixtures
-3. Marks
-4. Conftests
-5. Plugins
-6. Helpers
+Phase-1 data is available immediately from the Rust AST scan. Phase-2 data
+appears once the background Python session finishes fixture and plugin
+introspection — until then, phase-2 sections show a loading indicator in the
+footer.
 
-Kinds with zero nodes are hidden. Use `j`/`k` or the arrow keys to move the
-cursor, then press `Space` to enter that kind's list.
+The cursor moves flat across all four sections with `j`/`k` or the arrow keys
+— sections are visual grouping, not a tab-between mode. Press `Enter` on any
+item to navigate into its Node Focus.
+
+## Node Focus (diagnostic mode)
+
+Node Focus is the detail view for a single Inspect Node — it replaces the old
+list-plus-detail split with one screen that shows both.
+
+- **Left pane** — the node's full properties plus its outgoing **Edge**
+  groups (e.g., a fixture's consumers; a test's fixture dependencies).
+- **Right pane** — the Preview of whichever edge target the cursor is on.
+
+Node Focus uses **edge-following** navigation: press `Enter` (or `l`/`Right`)
+on an edge to focus the target node, building a trail. Press `Backspace` (or
+`h`/`Left`) to pop the trail and return to the previous focus. There are no
+mandatory intermediate list screens — you move directly from one node to
+another along its edges.
+
+### Source view
+
+Node Focus exposes the underlying source for nodes that have code (Fixture,
+Test, Helper):
+
+- **`s`** — show the node's source in-TUI, syntax-highlighted, read-only.
+- **`e`** — open the node's source in `$EDITOR` (or `$VISUAL`) at the correct
+  line. Inspect suspends while the editor is open and resumes when the editor
+  exits.
+
+Source-view keys are hidden from the footer for nodes without source, and
+pressing them flashes a "not available" message.
+
+## Preview pane
+
+The Preview shows a compact summary of the cursor-selected item — key
+properties and its top edges. It updates automatically as the cursor moves,
+so you can browse the whole item list without navigating in. This is the
+second tier of the four-tier progressive disclosure:
+
+1. **At a glance** — one line in the left pane (sigil, name, one contextual
+   piece of metadata).
+2. **Preview** — the right pane summary.
+3. **Navigate in** — `Enter` makes the item the focused node.
+4. **Source** — `s` (in-TUI) or `e` (`$EDITOR`), for nodes with code.
+
+On terminals narrower than 80 columns the Preview disappears and inspect
+falls back to two-tier disclosure (at-a-glance → navigate in).
 
 ## Searching
 
 Press `/` to enter search mode. The footer changes to show the search prompt.
 
-- **Substring match** — typing plain text filters nodes whose names contain the
+- **Substring match** — plain text filters nodes whose names contain the
   query (case-insensitive). For example, `db` matches `db_session` and
   `db_cleanup`.
-- **DSL auto-detection** — if the query contains `(`, `&`, or `|`, oxitest
-  attempts to parse it as a query DSL expression (e.g. `mark(slow)`,
-  `name(~login) & async()`). If the parse fails, the query falls back to
+- **DSL auto-detection** — if the query contains `(`, `&`, `|`, or `!`,
+  oxitest attempts to parse it as a query DSL expression (e.g. `mark(slow)`,
+  `name(login) & async()`). If the parse fails, the query falls back to
   substring matching.
 - **Empty query** — no results are shown; the list is not modified until you
   type.
 
-Press `Esc` to exit search mode and clear the query. Press `Enter` to accept
-the current results and return to normal navigation mode (results remain
-visible).
+Search is context-scoped by default: results are limited to the nodes visible
+on the current screen (Overview items, or the focused node's edges). Press
+`Tab` in search mode to toggle **ScopeMode** between **Context** and
+**Global** — Global searches every node in the graph regardless of the
+current screen.
+
+Press `Enter` to accept the current results and return to normal navigation
+mode (results remain visible). Press `Esc` to clear the search and return to
+normal mode.
 
 ### Search DSL reference
 
@@ -155,29 +226,47 @@ mark(slow) & !source(legacy)
 async() | name(integration)
 ```
 
+## Session history
+
+`oxitest inspect` records every node you open in Node Focus during the
+session, in visit order.
+
+Press `H` (capital) from any screen to open the **History** screen, which
+lists visited nodes in reverse chronological order (most recent first).
+Navigate with `j`/`k` and press `Enter` to re-focus a node. Press
+`Backspace` (or `h`/`Left`) to close History without navigating.
+
+## Refresh
+
+Press `r` at any time to trigger a manual refresh: inspect re-runs file
+collection, rebuilds the graph, and re-applies your startup filters (`-E`,
+`--affected`, `--lf`). Use this after editing test files (either via `e` or
+externally) to pick up the changes without restarting the TUI.
+
 ## Parametrized test collapsing
 
-In the Tests node list, parametrized test variants are collapsed into a single
+Wherever parametrized test variants appear in a list (Overview signals,
+edge groups on a Test's parent, etc.), variants are collapsed into a single
 group header by default. A group header shows the base function name and the
 total variant count.
 
-- Press `Space` on a group header to **expand** it and reveal the individual
+- Press `Enter` on a group header to **expand** it and reveal the individual
   variants.
-- Press `Space` again on the header to **collapse** the group.
-- Press `Space` on a variant row to open its `NodeDetail` view.
+- Press `Enter` again on the header to **collapse** the group.
+- Press `Enter` on a variant row to focus its Node Focus.
 
 Non-parametrized (standalone) tests are always shown as individual rows.
 
 Example (collapsed):
 
-```
+```text
   test_add  (3 variants)
   test_solo
 ```
 
 Example (expanded):
 
-```
+```text
 ▸ test_add  (3 variants)
     test_add[1+2]
     test_add[3+4]
@@ -185,37 +274,37 @@ Example (expanded):
   test_solo
 ```
 
-## Session history
-
-`oxitest inspect` records every node you open in a NodeDetail view during the
-session.
-
-Press `h` from any screen to open the **History** screen, which lists visited
-nodes in reverse chronological order (most recent first). Navigate with `j`/`k`
-and press `Space` to re-open a node's detail view. Press `Backspace` or the
-left arrow key to close the History screen without navigating.
-
 ## Common workflows
 
 ### Find which fixtures a test uses
 
-1. `oxitest inspect` — open the TUI.
-2. Navigate to Tests (`Space`), find the test with `/db_test`.
-3. Press `Space` on the test to open its detail view.
-4. The detail view lists the fixture dependencies and their types.
+```console
+$ oxitest inspect test_creates_user
+```
+
+Diagnostic jump lands on Node Focus for the test. Its edge groups list the
+fixtures it consumes; move the cursor to preview each fixture, or press
+`Enter` to follow the edge and inspect the fixture in turn.
 
 ### Check what marks are used in the project
 
-1. `oxitest inspect` — open the TUI.
-2. At the Home screen, navigate to Marks (`j`/`k`), press `Space`.
-3. Browse the mark list. Press `Space` on a mark to see which tests use it.
+```console
+$ oxitest inspect
+```
+
+The Overview's **Marks** section lists every mark with its test count.
+Move the cursor to a mark to preview its tests, or press `Enter` to focus
+the mark node and see the full list.
 
 ### Explore the fixture dependency chain
 
-1. `oxitest inspect` — open the TUI.
-2. Navigate to Fixtures, press `Space`.
-3. Find the fixture with `/db_session`, press `Space` to open its detail.
-4. The detail view shows which fixtures it depends on and which tests consume it.
+```console
+$ oxitest inspect db_session
+```
+
+Node Focus opens on the fixture. Its edges list both the fixtures it depends
+on and the tests that consume it. Press `Enter` on any edge to walk the
+chain; `Backspace` pops back along your trail.
 
 ### Focus on a slow subset before debugging
 
@@ -223,16 +312,43 @@ left arrow key to close the History screen without navigating.
 $ oxitest inspect -E 'mark(slow)' --lf
 ```
 
-Opens inspect showing only slow tests that failed in the last run — useful for
-prioritising which tests to debug next.
+Opens inspect showing only slow tests that failed in the last run — useful
+for prioritising which tests to debug next.
 
-### Re-open a node visited earlier
+## Keybindings reference
 
-Press `h` from any screen to open History, navigate to the node, and press
-`Space` to re-open its detail view.
+**Normal mode:**
+
+| Key | Action |
+|-----|--------|
+| `Up` / `k` | Move cursor up |
+| `Down` / `j` | Move cursor down |
+| `Enter` / `l` / `Right` | Navigate into / follow edge |
+| `Left` / `h` / `Backspace` | Back (pop trail) |
+| `/` | Enter search (context-scoped) |
+| `?` | Toggle help overlay |
+| `H` | Open history |
+| `s` | Source view (in-TUI) |
+| `e` | Open source in `$EDITOR` / `$VISUAL` |
+| `r` | Refresh graph data |
+| `q` | Quit |
+| `Ctrl+C` | Force quit |
+| `Esc` | Clear search / close overlay |
+
+**Search mode:**
+
+| Key | Action |
+|-----|--------|
+| Characters | Append to query |
+| `Backspace` | Delete last character |
+| `Up` / `Down` | Navigate search results |
+| `Tab` | Toggle ScopeMode (Context ↔ Global) |
+| `Enter` | Accept results, return to normal mode |
+| `Esc` | Clear search, return to normal mode |
 
 ## See also
 
+- [ADR-0003 — Two-mode inspect navigation](../../adr/0003-inspect-two-mode-navigation.md) — design rationale for the two-mode model
 - [CLI reference — `oxitest inspect`](../reference/cli.md#oxitest-inspect) — flag reference
 - [Filter tests](filter-tests.md) — query DSL syntax and predicates
 - [Use the test cache](use-test-cache.md) — how `--lf` and `--ff` use the cache
