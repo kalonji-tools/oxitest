@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [3.0.0] - 2026-07-26
+
+### Bug Fixes
+
+
+- Exclude conftest.py from doctest coverage subject enumeration (#1616)
+- Doctest scanner skips stub bodies when resolving source docstring (#1633)
+
+### Features
+
+
+- Doctest coverage rule — config + scanner + coverage check + pipeline wiring (#1602)
+- Doctest coverage rule + waivers ratchet + scanner scope (#1611)
+- [**breaking**] List-form scope with unified skip grammar for [tool.oxitest.doctest] (#1638)
+- Strict [tool.oxitest] schema + parse_oxitest_config helper (#1641, #1642)
+- [**breaking**] Fail-closed on [tool.oxitest] deserialization errors (#1641, #1642)
+- Member-level [tool.oxitest.doctest] scope subjects (#1644)
+
 ## [2.4.0] - 2026-07-23
 
 ### Features
