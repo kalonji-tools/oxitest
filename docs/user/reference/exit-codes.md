@@ -12,7 +12,7 @@
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
 | `3` | Collection error (a test file could not be imported) or strict violations detected when using `--strict=abort` |
-| `4` | Invalid CLI arguments — oxitest exits before running any tests. Also returned when `--json` output file cannot be written. |
+| `4` | `UsageError` — oxitest exits before running any tests. Sources: invalid CLI arguments; `--json` output file cannot be written; `[tool.oxitest]` in `pyproject.toml` has unknown fields, wrong types, or values pointing at removed options. See [Error reference — Configuration errors](errors.md#configuration-errors) and [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md). |
 
 ## See also
 
