@@ -99,7 +99,19 @@ class Helpers:
         *,
         name: str | None = None,
     ):
-        """Register a helper callable with this registry."""
+        """Register a helper callable with this registry.
+
+        Args:
+            fn: The helper function (when used as a bare decorator). Omit to
+                use the keyword form and receive a decorator instead.
+            name: Override the registered attribute name. Defaults to the
+                function's ``__name__``.
+
+        See Also:
+            :class:`oxitest.plugin.HelperProvider` — the plugin protocol
+            that provides helpers from packages rather than conftests.
+
+        """
 
         def _register(f: _F) -> _F:
             helper_name = name or getattr(f, "__name__", repr(f))
