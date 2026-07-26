@@ -7,4 +7,5 @@ nav:
   - Lazy collection: lazy-collection.md
   - Parallelism: parallelism.md
   - Conftest helpers: conftest-helpers.md
+  - Provisional APIs: provisional-apis.md
   - Working with AI: why-ai.md
