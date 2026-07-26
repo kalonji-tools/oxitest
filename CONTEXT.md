@@ -48,7 +48,7 @@
 
 **Namespace** — A `Fixtures()` instance acts as a namespace. Two registries can define fixtures with the same name without conflict. Namespace names must not be Python keywords or builtins.
 
-**Scope** — The lifetime of a fixture value. Three tiers: `"each"` (per-test, default), `"shared"` (per-module, FrozenProxy-wrapped), or `"session"` (per-process/run).
+**Scope** — The lifetime of a fixture value. Three tiers: `"each"` (per-test, default), `"shared"` (per-session, FrozenProxy-wrapped — set via `shared=True` on the decorator), or `"session"` (per-process/run, reserved for built-in fixtures).
 
 **Autouse** — A fixture that is automatically injected into every test in its scope without explicit annotation.
 
