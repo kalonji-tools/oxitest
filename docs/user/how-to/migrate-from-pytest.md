@@ -33,9 +33,7 @@ def app():
     return create_app()
 ```
 
-`Fixtures.fixture` accepts `autouse`, `name`, and `shared`. Use `shared=True` instead of
-`scope="session"` — a shared fixture is created once per session and immutable. You can
-create multiple `Fixtures()` instances in one `conftest.py`; all are discovered automatically.
+`Fixtures.fixture` accepts `autouse`, `name`, and `shared`. See [Understand fixture scoping](#understand-fixture-scoping) below for the pytest→oxitest scope mapping. You can create multiple `Fixtures()` instances in one `conftest.py`; all are discovered automatically.
 
 Fixture teardown uses `yield` or `TestContext` with `ctx.addfinalizer()`:
 
@@ -52,6 +50,66 @@ def tmp_file(ctx: TestContext):
 !!! tip "Migration step"
     Replace `@pytest.fixture` declarations with a `Fixtures()` instance in each `conftest.py`.
     See [Use fixtures](use-fixtures.md) for full details.
+
+## Understand fixture scoping
+
+pytest has five fixture scopes (`function`, `class`, `module`, `package`, `session`). oxitest has two: **function** (per-test, default) and **session** (once per session, via `shared=True`). Every pytest scope maps to one of the two:
+
+| pytest scope | oxitest equivalent | Notes |
+|---|---|---|
+| `function` (default) | `@fx.fixture` | Direct 1:1 |
+| `class` | `@fx.fixture` (per-test) — no shortcut | Class-shared state needs a per-test fixture reused via helper functions |
+| `module` | `@fx.fixture(shared=True)` — but see below | Semantically **wider**: what was module-bounded becomes session-bounded |
+| `package` | `@fx.fixture(shared=True)` | Same widening as module |
+| `session` | `@fx.fixture(shared=True)` | Direct 1:1 |
+
+### When the module → session collapse hurts
+
+For most fixtures that were `scope="module"` — per-module DB connections, loaded config, compiled schemas — the shift to `shared=True` is neutral or a slight win: the resource persists longer and cost amortizes across more tests.
+
+**The collapse hurts when the fixture mutates process-global state.** A per-module reset of process globals under pytest becomes a session-long override under `shared=True`, silently affecting tests in other modules whose expectations may differ. Watch for:
+
+- `os.umask` changes
+- `os.chdir` context
+- `sys.path` munging
+- environment-variable overrides shared across a group of tests
+- global logging configuration
+- global socket / DNS / networking hooks
+
+**Recommended pattern for process-global state:** convert the fixture into a plain `@contextlib.contextmanager` helper and invoke it explicitly at the block scope where the state actually matters:
+
+```python
+# BEFORE — pytest, scope="module"
+@pytest.fixture(scope="module", autouse=True)
+def set_umask():
+    default = os.umask(0)
+    yield
+    os.umask(default)
+
+
+# AFTER — oxitest, explicit block scope
+import contextlib
+from collections.abc import Iterator
+
+
+@contextlib.contextmanager
+def cleared_umask() -> Iterator[None]:
+    default = os.umask(0)
+    try:
+        yield
+    finally:
+        os.umask(default)
+
+
+def test_permissions(tmp: TempDir) -> None:
+    with cleared_umask():
+        # umask change is bounded to this block
+        ...
+```
+
+You lose autouse ergonomics — every affected test must open the `with` — but you gain visible, bounded scope. For process-global state that could contaminate other modules, this is usually the right trade.
+
+See also [Use fixtures → Understand fixture scoping](use-fixtures.md#understand-fixture-scoping) for the oxitest-native treatment of the two scopes.
 
 ## Use markers
 
