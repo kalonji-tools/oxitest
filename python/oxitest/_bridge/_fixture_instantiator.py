@@ -47,6 +47,7 @@ from oxitest._bridge._fixture_context import (
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
+    ModuleSource,
     PluginSource,
     _fixture_inner_type,
 )
@@ -257,11 +258,11 @@ class FixtureInstantiator:
             raise FixtureNotFoundError(param_name) from None
 
         # For Builtin/Plugin sources found by type, use direct instantiation
-        if not isinstance(defn.source, ConftestSource):
+        if not isinstance(defn.source, (ConftestSource, ModuleSource)):
             return True, self.resolve_by_source(defn, ctx)
 
-        # For ConftestSource: prefer name-based (preserves cycle detection),
-        # fall back to type-resolved name.
+        # For ConftestSource/ModuleSource: prefer name-based (preserves cycle
+        # detection), fall back to type-resolved name.
         resolve_name = (
             param_name if self._registry.get(param_name) is not None else defn.name
         )
@@ -276,14 +277,17 @@ class FixtureInstantiator:
 
         Dispatches per ``FixtureSource`` variant:
 
-        - ``ConftestSource``: routes through ``ctx.resolve_user_fixture`` to preserve
-          cycle detection and scope caching.
+        - ``ConftestSource`` / ``ModuleSource``: routes through
+          ``ctx.resolve_user_fixture`` to preserve cycle detection and scope
+          caching.  Slice 1: both variants behave identically here; divergence
+          appears in slices 2 (module-lifetime scope cache), 6 (B1 boundary
+          enforcement), and 9 (autouse).
         - ``PluginSource``: invokes ``provider.create(ctx=None)`` and appends the
           provider's teardown to ``ctx.fn_teardowns``.
         - ``BuiltinSource``: delegates to ``inject_builtin`` with function scope.
         """
         match defn.source:
-            case ConftestSource():
+            case ConftestSource() | ModuleSource():
                 return ctx.resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
                 value = provider.create(ctx=None)

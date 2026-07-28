@@ -7,6 +7,7 @@ __all__ = [
     "FixtureRegistry",
     "FixtureScope",
     "FixtureSource",
+    "ModuleSource",
     "PluginSource",
     "_fixture_inner_type",
 ]
@@ -27,6 +28,7 @@ from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge.result import CollectedViolation, DiagnosticSeverity, ViolationKind
 
 T = TypeVar("T")
@@ -57,7 +59,17 @@ class BuiltinSource:
     impl_cls: type  # type[BuiltinFixture] — use type to avoid circular import
 
 
-FixtureSource = ConftestSource | PluginSource | BuiltinSource
+@dataclass(frozen=True, slots=True)
+class ModuleSource:
+    """A fixture declared via @oxi.fixture at module level (ADR-0009)."""
+
+    func: ConftestFunc
+    defining_module_path: str
+    anchor_package_path: str
+    lifetime: Lifetime
+
+
+FixtureSource = ConftestSource | PluginSource | BuiltinSource | ModuleSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +85,8 @@ class FixtureDef(Generic[T]):
 
     @property
     def func(self) -> Callable[..., T]:
-        """Backward-compat: conftest fixture callable."""
-        if isinstance(self.source, ConftestSource):
+        """Backward-compat: user-fixture callable (ConftestSource + ModuleSource)."""
+        if isinstance(self.source, (ConftestSource, ModuleSource)):
             return self.source.func
         msg = (
             f"FixtureDef '{self.name}' has no func "
@@ -92,6 +104,11 @@ class FixtureDef(Generic[T]):
                 return f"<plugin:{m}>"
             case BuiltinSource():
                 return "<builtin>"
+            case ModuleSource(defining_module_path=p):
+                return p
+            case _:
+                msg = f"unhandled FixtureSource variant: {self.source!r}"
+                raise AssertionError(msg)
 
     @property
     def shared(self) -> bool:
