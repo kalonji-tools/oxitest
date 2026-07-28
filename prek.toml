@@ -79,9 +79,13 @@ stages = ["pre-push"]
 
 [[repos.hooks]]
 id = "cargo-lock-check"
-name = "cargo update --locked"
+name = "cargo metadata --locked"
 language = "system"
-entry = "cargo update --locked"
+# Not `cargo update --locked`: that asserts every dependency is pinned to its
+# newest compatible release, which any upstream publish falsifies without this
+# repo changing. `cargo metadata --locked` asserts what the hook name promises —
+# that Cargo.lock satisfies Cargo.toml — mirroring `uv lock --check` above.
+entry = "cargo metadata --locked --format-version 1 --quiet"
 pass_filenames = false
 files = "(Cargo\\.toml|Cargo\\.lock)$"
 stages = ["pre-push"]

@@ -59,7 +59,7 @@ check: (_log _blue "Running static checks...")
 # Validate lock files match manifests (matches prek pre-push hooks)
 check-locks: (_log _blue "Checking lock files...")
     uv lock --check
-    cargo update --locked
+    cargo metadata --locked --format-version 1 --quiet > /dev/null
 
 # Full pre-push gate: clean, check, test everything
 preflight: clean check-locks check test-rust build test-python
