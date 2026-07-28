@@ -263,11 +263,17 @@ def test_fixture_wrapper_on_injectable_still_works() -> None:
 
 
 def test_fixture_scope_values() -> None:
-    """FixtureScope has three tiers: each, shared, session."""
+    """FixtureScope has four tiers: each, module, shared, session.
+
+    ``module`` arrived with ADR-0009 slice 2; ``package`` follows in slice 3.
+    The count assertion is deliberate — the caching machinery branches on this
+    enum, so a new member must be a considered addition, not an accident.
+    """
     assert FixtureScope.EACH == "each", "EACH should be 'each'"
+    assert FixtureScope.MODULE == "module", "MODULE should be 'module'"
     assert FixtureScope.SHARED == "shared", "SHARED should be 'shared'"
     assert FixtureScope.SESSION == "session", "SESSION should be 'session'"
-    assert len(FixtureScope) == 3, "FixtureScope should have exactly 3 members"
+    assert len(FixtureScope) == 4, "FixtureScope should have exactly 4 members"
 
 
 # ── Source variants ──────────────────────────────────────────────────────────

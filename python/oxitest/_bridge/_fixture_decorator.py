@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from oxitest._bridge._errors import UsageError
+from oxitest._bridge._fixture_registry import LIFETIME_SCOPES
 from oxitest._bridge._lifetime import Lifetime
 
 _F = TypeVar("_F", bound=Callable[..., Any])
@@ -22,15 +23,16 @@ class _FixtureMarker:
 
 
 def fixture(*, lifetime: str) -> Callable[[_F], _F]:
-    """Declare a fixture (ADR-0009 slice 1 subset).
+    """Declare a fixture (ADR-0009 subset).
 
-    Only lifetime="function" is accepted in slice 1. Other tiers raise
+    ``"function"`` and ``"module"`` are accepted. The remaining tiers raise
     UsageError with pointers to their follow-on slices.
 
     Args:
-        lifetime: Fixture lifetime tier. Only ``"function"`` is supported
-            in slice 1; ``"module"``, ``"package"``, and ``"session"``
-            are reserved for follow-on slices.
+        lifetime: Fixture lifetime tier. ``"function"`` builds a fresh
+            instance per test; ``"module"`` builds one per test module and
+            disposes it after that module's last test. ``"package"`` and
+            ``"session"`` are reserved for follow-on slices.
 
     Returns:
         A decorator that attaches the fixture marker to the decorated
@@ -40,7 +42,7 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
         ValueError: If *lifetime* is not a recognised :class:`~oxitest.Lifetime`
             member.
         UsageError: If *lifetime* is valid but not yet implemented
-            (i.e. anything other than ``"function"`` in slice 1).
+            (``"package"`` or ``"session"``).
 
     Examples:
         Declare a function-scoped fixture in a ``__fixtures__.py`` module:
@@ -52,13 +54,23 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
         >>> db_conn()
         'connected'
 
+        A module-scoped fixture is built once per test module. Use ``yield``
+        to attach teardown, which runs after the module's last test:
+
+        >>> @fixture(lifetime="module")
+        ... def db_pool() -> str:
+        ...     return "pool"
+        >>> db_pool()
+        'pool'
+
     """
     tier = Lifetime(lifetime)  # ValueError on unknown value — desired
-    if tier is not Lifetime.FUNCTION:
+    if tier not in LIFETIME_SCOPES:
+        supported = ", ".join(repr(t.value) for t in LIFETIME_SCOPES)
         msg = (
             f"@oxi.fixture(lifetime={lifetime!r}) is not yet supported. "
-            f"Slice 1 ships only 'function'; see kalonji-tools/oxitest#1709 "
-            f"(module), #1710 (package), #1711 (session)."
+            f"Supported so far: {supported}; see "
+            f"kalonji-tools/oxitest#1710 (package), #1711 (session)."
         )
         raise UsageError(msg)
 

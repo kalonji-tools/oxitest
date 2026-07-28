@@ -18,9 +18,9 @@ from typing import Any, get_type_hints
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import MARKER_ATTR
 from oxitest._bridge._fixture_registry import (
+    LIFETIME_SCOPES,
     FixtureDef,
     FixtureRegistry,
-    FixtureScope,
     ModuleSource,
 )
 
@@ -66,7 +66,7 @@ def register_module_source_fixtures(
             FixtureDef(
                 name=attr_name,
                 fixture_type=_infer_return_type(obj),
-                scope=FixtureScope.EACH,
+                scope=LIFETIME_SCOPES[marker.lifetime],
                 source=ModuleSource(
                     func=obj,
                     defining_module_path=module_path,

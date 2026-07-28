@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "LIFETIME_SCOPES",
     "BuiltinSource",
     "ConftestSource",
     "FixtureDef",
@@ -13,10 +14,12 @@ __all__ = [
 ]
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import StrEnum, auto
+from types import MappingProxyType
 from typing import (
     Annotated,
     Any,
+    Final,
     Generic,
     TypeAlias,
     TypeVar,
@@ -37,9 +40,24 @@ ConftestFunc: TypeAlias = Callable[..., Any]
 
 
 class FixtureScope(StrEnum):
-    EACH = "each"
-    SHARED = "shared"
-    SESSION = "session"
+    EACH = auto()
+    MODULE = auto()
+    SHARED = auto()
+    SESSION = auto()
+
+
+#: Declared tier → caching vocabulary. ``Lifetime`` is what users write;
+#: ``FixtureScope`` is what the caching machinery reads. The two stay separate
+#: until slice 13 retires the old ``Fixtures()`` API, so this is the single
+#: translation point — slices 3 (package) and 4 (session) extend this table and
+#: nothing else. Membership doubles as "is this tier implemented yet", which is
+#: how ``@oxi.fixture`` gates declarations.
+LIFETIME_SCOPES: Final = MappingProxyType(
+    {
+        Lifetime.FUNCTION: FixtureScope.EACH,
+        Lifetime.MODULE: FixtureScope.MODULE,
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
