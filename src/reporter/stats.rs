@@ -20,16 +20,17 @@ pub(crate) struct FixtureCacheStats {
 
 impl FixtureCacheStats {
     /// Format the fixture cache summary line.
+    ///
+    /// Labelled "fixture cache", not "shared fixture cache": these numbers
+    /// cover every cached tier, which since ADR-0009 slice 2 means
+    /// `lifetime="module"` fixtures as well as `shared=True` ones.
     pub(crate) fn summary(&self) -> String {
         let total = self.hits + self.misses;
         if total == 0 {
-            return "shared fixture cache: no fixtures used".to_string();
+            return "fixture cache: no fixtures used".to_string();
         }
         let pct = 100 * self.hits / total;
-        format!(
-            "shared fixture cache: {}/{} hits ({}%)",
-            self.hits, total, pct
-        )
+        format!("fixture cache: {}/{} hits ({}%)", self.hits, total, pct)
     }
 }
 
@@ -441,7 +442,26 @@ mod tests {
             breakdown: vec![],
         };
         let s = stats.summary();
-        assert!(!s.is_empty());
+        assert_eq!(
+            s, "fixture cache: no fixtures used",
+            "the zero case must divide by nothing and must not say 'shared' — \
+             these numbers cover every cached tier, not just shared=True"
+        );
+    }
+
+    #[test]
+    fn fixture_cache_summary_reports_hits_over_total() {
+        let stats = FixtureCacheStats {
+            hits: 2,
+            misses: 1,
+            breakdown: vec![],
+        };
+        let s = stats.summary();
+        assert_eq!(
+            s, "fixture cache: 2/3 hits (66%)",
+            "the denominator is hits+misses, not misses alone, and the label \
+             must stay tier-neutral — module-lifetime fixtures land here too"
+        );
     }
 
     #[test]

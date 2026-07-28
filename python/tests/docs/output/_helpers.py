@@ -53,10 +53,10 @@ def _normalize(text, tmp_path=None):
     text = re.sub(r"\d+\.\d+\s*s\b", "<TIMING>", text)
     # Strip worker IDs
     text = re.sub(r"worker #\d+", "worker #N", text)
-    # Strip shared fixture cache stats
+    # Strip fixture cache stats
     text = re.sub(
-        r"shared fixture cache: \d+/\d+ hits \(\d+%\)",
-        "shared fixture cache: N/N hits (N%)",
+        r"fixture cache: \d+/\d+ hits \(\d+%\)",
+        "fixture cache: N/N hits (N%)",
         text,
     )
     # Normalize tip line counts (vary based on assertion messages)
