@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-__all__ = ["collect_module"]
+__all__ = ["collect_module", "register_module_source_fixtures_for_module"]
 
 import dataclasses
 import hashlib
+import importlib.util
 import inspect
 import itertools
 import sys
@@ -16,7 +17,11 @@ from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import CollectionError
-from oxitest._bridge._fixture_registry import ConftestSource, _fixture_inner_type
+from oxitest._bridge._fixture_registry import (
+    ConftestSource,
+    FixtureRegistry,
+    _fixture_inner_type,
+)
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import _update, get_metadata
@@ -24,6 +29,7 @@ from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
+from oxitest._bridge._module_source_registrar import register_module_source_fixtures
 from oxitest._bridge._test_kind import Parametrized, Solitary
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import ComposedCases, _as_composed
@@ -617,3 +623,53 @@ def collect_module(
     # Bare-assert detection is now handled in Rust (bare_asserts.rs).
     items.sort(key=lambda x: x.lineno)
     return items, violations
+
+
+def register_module_source_fixtures_for_module(
+    *,
+    registry: FixtureRegistry,
+    fixture_module_path: str,
+    anchor_package_path: str,
+) -> None:
+    """Bridge entry point: import a __fixtures__.py and register its fixtures.
+
+    Called by the Rust bridge after prescan when a test module has a sibling
+    __fixtures__.py. Uses standard importlib machinery so Python's cache
+    handles repeat calls efficiently.
+
+    Parameters
+    ----------
+    registry:
+        The live FixtureRegistry for this run. Fixtures are registered into
+        it using the ModuleSource variant (ADR-0009 slice 1).
+    fixture_module_path:
+        Absolute path to the ``__fixtures__.py`` file to import.
+    anchor_package_path:
+        Absolute path to the directory containing the fixture module. Used
+        to derive the namespace name (the final path segment).
+    """
+    # Unsigned 64-bit hash — force positive to avoid a leading hyphen in the
+    # internal module name. Python's built-in hash() may return a negative
+    # integer; `:x` would format that as e.g. `-7f3a…` which contains a
+    # hyphen and is therefore not a valid Python identifier (LOW-1 fix).
+    key = hash(fixture_module_path) & 0xFFFF_FFFF_FFFF_FFFF
+    module_name = f"_oxitest_fixture_module_{key:x}"
+    spec = importlib.util.spec_from_file_location(module_name, fixture_module_path)
+    if spec is None or spec.loader is None:
+        # prescan already flagged this file; defer to the usual import errors
+        # during test execution if we can't create a spec here.
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+    except BaseException:
+        # Clean up the partial module so a later re-import or introspection
+        # does not see a poisoned entry (HIGH-2 fix). Re-raise so the bridge
+        # sees the error and surfaces it to the user.
+        sys.modules.pop(spec.name, None)
+        raise
+
+    register_module_source_fixtures(
+        registry, module, anchor_package_path=anchor_package_path
+    )

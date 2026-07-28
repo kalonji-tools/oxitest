@@ -157,6 +157,11 @@ pub(super) fn collect_items(
     let wall_start = std::time::Instant::now();
     let mut file_profiles: Vec<FileProfile> = Vec::new();
 
+    // Deduplicate fixture-module registrations: multiple test files in the
+    // same directory all share the same __fixtures__.py. Register once per dir.
+    let mut registered_fixture_dirs: std::collections::HashSet<camino::Utf8PathBuf> =
+        std::collections::HashSet::new();
+
     for file in test_files {
         // Pre-scan: skip files with no test functions.
         // When collecting violations (strict mode), keep the parsed AST
@@ -188,6 +193,77 @@ pub(super) fn collect_items(
             }
         };
 
+        // Fixture-module registration: if this file's directory contains a
+        // __fixtures__.py whose prescan found @oxi.fixture declarations,
+        // register them into the session registry before collecting tests.
+        // One registration per directory (multiple test files share the same
+        // __fixtures__.py — the HashSet deduplicates).
+        //
+        // IMPORTANT: this must run BEFORE the cache-hit check below. On warm
+        // cache runs the per-file `continue` fires before any code below it,
+        // so any registration placed after the cache check is silently skipped
+        // for cached modules (HIGH-1 fix).
+        if let Some(parent_dir) = file.parent()
+            && !registered_fixture_dirs.contains(parent_dir)
+        {
+            let fixture_path = parent_dir.join("__fixtures__.py");
+            if fixture_path.exists() {
+                let prescan_result = crate::prescan::prescan_fixture_module(&fixture_path);
+                match prescan_result {
+                    crate::prescan::PrescanFixtureResult::HasFixtures(_) => {
+                        let session_obj = session.as_py_object(py);
+                        if let Err(e) = bridge::register_fixture_module_for_path(
+                            py,
+                            session_obj,
+                            &fixture_path,
+                            parent_dir,
+                        ) {
+                            errors.push(e);
+                        }
+                    }
+                    crate::prescan::PrescanFixtureResult::Unavailable => {
+                        // MED-1: __fixtures__.py exists but could not be parsed
+                        // (syntax error, I/O error, etc.). Surface a clear
+                        // collection error naming the file so the user knows
+                        // where to look, rather than a silent fixture-not-found
+                        // at test time.
+                        tracing::warn!(
+                            path = fixture_path.as_str(),
+                            "prescan: __fixtures__.py could not be parsed"
+                        );
+                        errors.push(types::CollectError::PyError(format!(
+                            "__fixtures__.py at {} could not be parsed \
+                             (syntax error or I/O error); \
+                             fixtures in this file will not be registered",
+                            fixture_path,
+                        )));
+                    }
+                    crate::prescan::PrescanFixtureResult::NoFixtures(payload) => {
+                        // MED-3: __fixtures__.py exists and was parsed, but zero
+                        // recognized @oxi.fixture declarations were found. If the
+                        // file has decorated top-level functions whose decorator
+                        // wasn't recognized, hint at the probable cause.
+                        if payload.has_unrecognized_decorated_functions {
+                            tracing::warn!(
+                                path = fixture_path.as_str(),
+                                "prescan: __fixtures__.py has @-decorated functions \
+                                 but no recognized @oxi.fixture calls — check import alias"
+                            );
+                            errors.push(types::CollectError::PyError(format!(
+                                "__fixtures__.py at {} has @-decorated functions \
+                                 but no recognized @oxi.fixture declarations. \
+                                 Only `import oxitest as oxi`, `import oxitest`, \
+                                 or `from oxitest import fixture` are recognized \
+                                 as import aliases for oxitest.",
+                                fixture_path,
+                            )));
+                        }
+                    }
+                }
+                registered_fixture_dirs.insert(parent_dir.to_owned());
+            }
+        }
+
         let mtime = file_mtime_secs(file);
         let cached = if collect_violations {
             None
@@ -206,6 +282,7 @@ pub(super) fn collect_items(
             }
             continue;
         }
+
         let collection_start = std::time::Instant::now();
         match bridge::collect_module_with_session_obj(
             py,
