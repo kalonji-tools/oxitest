@@ -96,20 +96,32 @@ impl Pipeline {
                     if !p.module_markers.is_empty() {
                         module_markers.insert(file.clone(), p.module_markers);
                     }
+                    let fixture_module = file
+                        .parent()
+                        .map(|dir| dir.join("__fixtures__.py"))
+                        .filter(|p| p.exists())
+                        .map(|p| crate::prescan::prescan_fixture_module(&p));
                     prescan_data.push(crate::prescan::PrescanModule {
                         path: file,
                         items: p.items,
                         has_dynamic_collection: p.has_dynamic_collection,
+                        fixture_module,
                     });
                 }
                 crate::prescan::PrescanResult::NoTests => {
                     tracing::debug!(path = file.as_str(), "prescan: no tests, skipping");
                 }
                 crate::prescan::PrescanResult::Unavailable => {
+                    let fixture_module = file
+                        .parent()
+                        .map(|dir| dir.join("__fixtures__.py"))
+                        .filter(|p| p.exists())
+                        .map(|p| crate::prescan::prescan_fixture_module(&p));
                     prescan_data.push(crate::prescan::PrescanModule {
                         path: file,
                         items: vec![],
                         has_dynamic_collection: true,
+                        fixture_module,
                     });
                 }
             }
