@@ -538,3 +538,53 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod slice1_collector_tests {
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn prescan_fixture_module_recognizes_oxi_fixture_in_same_dir() {
+        // Inlined from prescan_test_module tests: verify that a __fixtures__.py
+        // sibling containing @oxi.fixture returns HasFixtures when prescanned.
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("slice1_pkg");
+        fs::create_dir(&pkg).unwrap();
+        fs::write(pkg.join("__init__.py"), "").unwrap();
+        fs::write(
+            pkg.join("__fixtures__.py"),
+            r#"
+import oxitest as oxi
+
+@oxi.fixture(lifetime="function")
+def conn():
+    return object()
+"#,
+        )
+        .unwrap();
+
+        let fixture_path = camino::Utf8PathBuf::from_path_buf(pkg.join("__fixtures__.py")).unwrap();
+        let result = crate::prescan::prescan_fixture_module(&fixture_path);
+        assert!(
+            matches!(result, crate::prescan::PrescanFixtureResult::HasFixtures(_)),
+            "a __fixtures__.py with @oxi.fixture must prescan as HasFixtures"
+        );
+    }
+
+    #[test]
+    fn prescan_fixture_module_returns_none_when_no_sibling_file() {
+        // Inlined from prescan_test_module tests: verify that attempting to
+        // prescan a non-existent __fixtures__.py yields Unavailable (file not found).
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("slice1_pkg");
+        fs::create_dir(&pkg).unwrap();
+
+        let missing_path = camino::Utf8PathBuf::from_path_buf(pkg.join("__fixtures__.py")).unwrap();
+        let result = crate::prescan::prescan_fixture_module(&missing_path);
+        assert!(
+            matches!(result, crate::prescan::PrescanFixtureResult::Unavailable),
+            "a missing __fixtures__.py must prescan as Unavailable (I/O error path)"
+        );
+    }
+}

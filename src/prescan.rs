@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::types::PyAnyMethods as _;
-use rustpython_parser::ast;
+use rustpython_parser::{Parse as _, ast};
 
 use crate::python_ast;
 
@@ -42,6 +42,11 @@ pub(crate) struct PrescanModule {
     pub(crate) path: Utf8PathBuf,
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
+    /// Prescan result for the sibling `__fixtures__.py` in the same directory,
+    /// if one exists. `None` means no sibling was found. Consumed in later
+    /// pipeline slices; collection uses a fresh prescan directly.
+    #[allow(dead_code)] // read in later pipeline slice
+    pub(crate) fixture_module: Option<PrescanFixtureResult>,
 }
 
 /// Payload extracted from a Python file that has test functions.
@@ -62,6 +67,56 @@ pub(crate) enum PrescanResult {
     /// File has no test functions.
     NoTests,
     /// File could not be read or parsed (caller should fall through to Python).
+    Unavailable,
+}
+
+/// A fixture declaration extracted from AST (no Python import).
+///
+/// The payload fields are read in the pipeline's later slices (slice 5+).
+/// The `HasFixtures` variant is matched in collection to gate the bridge call;
+/// the inner payload data is reserved for future optimisations.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PrescanDeclaration {
+    pub(crate) fn_name: String,
+    pub(crate) lineno: crate::types::LineNo,
+    pub(crate) lifetime: String,
+    pub(crate) is_async: bool,
+}
+
+/// Per-fixture-module payload (mirrors PrescanPayload).
+///
+/// `declarations` is consumed by later slices (slice 5+ diagnostics + slice 9
+/// async support). `is_async` and `lineno` on each `PrescanDeclaration` are
+/// intentional scaffolding; their `#[allow(dead_code)]` markers document the
+/// deferral.
+#[derive(Debug)]
+pub(crate) struct PrescanFixturePayload {
+    #[allow(dead_code)] // payload consumed in later slice
+    pub(crate) declarations: Vec<PrescanDeclaration>,
+}
+
+/// Payload for the `NoFixtures` variant — carries DX hints.
+#[derive(Debug, Default)]
+pub(crate) struct NoFixturesPayload {
+    /// True when the file has @-decorated top-level functions but none matched
+    /// the recognized `@oxi.fixture` / `@oxitest.fixture` / `@fixture` forms.
+    /// Indicates a probable unrecognized import alias (MED-3).
+    pub(crate) has_unrecognized_decorated_functions: bool,
+}
+
+/// Result of pre-scanning a __fixtures__.py file.
+///
+/// `HasFixtures` is matched in `collection.rs` to gate the Python bridge call.
+/// The inner payload is reserved for later-slice optimisations.
+#[derive(Debug)]
+pub(crate) enum PrescanFixtureResult {
+    /// File contains @oxi.fixture declarations. The payload fields are reserved
+    /// for later-slice optimisations; the variant itself gates the bridge call.
+    #[allow(dead_code)] // inner payload read in later pipeline slice
+    HasFixtures(PrescanFixturePayload),
+    /// File has no recognized @oxi.fixture declarations. The payload carries
+    /// DX hints (e.g. unrecognized import alias) for MED-3 diagnostics.
+    NoFixtures(NoFixturesPayload),
     Unavailable,
 }
 
@@ -609,6 +664,128 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     }
 }
 
+// ── Fixture module prescan ──────────────────────────────────────────────
+
+/// Check if a call target is one of the recognized fixture decorator forms:
+/// `oxi.fixture(...)`, `oxitest.fixture(...)`, or bare `fixture(...)`.
+fn is_fixture_call(func: &ast::Expr) -> bool {
+    match func {
+        ast::Expr::Attribute(a) => {
+            if a.attr.as_str() != "fixture" {
+                return false;
+            }
+            match a.value.as_ref() {
+                ast::Expr::Name(n) => python_ast::is_oxitest_namespace(n.id.as_str()),
+                _ => false,
+            }
+        }
+        ast::Expr::Name(n) => n.id.as_str() == "fixture",
+        _ => false,
+    }
+}
+
+/// Recognize `@oxi.fixture(...)` / `@oxitest.fixture(...)` / `@fixture(...)`.
+///
+/// Returns `Some(lifetime_string)` if the decorator is a static call with a
+/// single `lifetime="..."` kwarg and no positional args. Returns `None`
+/// otherwise (unrecognized shape → skipped, does NOT set has_dynamic flag).
+fn extract_fixture_decorator_lifetime(dec: &ast::Expr) -> Option<String> {
+    let call = match dec {
+        ast::Expr::Call(c) => c,
+        _ => return None,
+    };
+    if !is_fixture_call(&call.func) {
+        return None;
+    }
+    if !call.args.is_empty() {
+        return None; // slice 1 forbids positional args
+    }
+    if call.keywords.len() != 1 {
+        return None;
+    }
+    let kw = &call.keywords[0];
+    let key = kw.arg.as_ref()?.as_str();
+    if key != "lifetime" {
+        return None;
+    }
+    match &kw.value {
+        ast::Expr::Constant(c) => match &c.value {
+            ast::Constant::Str(s) => Some(s.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Read `path` from disk and prescan it as a fixture module.
+///
+/// Returns `Unavailable` if the file can't be read or parsed.
+pub(crate) fn prescan_fixture_module(path: &Utf8Path) -> PrescanFixtureResult {
+    let source = match std::fs::read_to_string(path.as_std_path()) {
+        Ok(s) => s,
+        Err(_) => return PrescanFixtureResult::Unavailable,
+    };
+    prescan_fixture_module_from_source(path, &source)
+}
+
+/// Test-friendly variant that takes source directly (skips fs read).
+pub(crate) fn prescan_fixture_module_from_source(
+    path: &Utf8Path,
+    source: &str,
+) -> PrescanFixtureResult {
+    let stmts = match ast::Suite::parse(source, path.as_str()) {
+        Ok(s) => s,
+        Err(_) => return PrescanFixtureResult::Unavailable,
+    };
+
+    let line_index = python_ast::build_line_index(source);
+    let mut declarations: Vec<PrescanDeclaration> = Vec::new();
+
+    for stmt in &stmts {
+        let (fn_name, decorators, range, is_async) = match stmt {
+            ast::Stmt::FunctionDef(f) => (f.name.to_string(), &f.decorator_list, f.range, false),
+            ast::Stmt::AsyncFunctionDef(f) => {
+                (f.name.to_string(), &f.decorator_list, f.range, true)
+            }
+            _ => continue,
+        };
+        for dec in decorators {
+            if let Some(lifetime) = extract_fixture_decorator_lifetime(dec) {
+                let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
+                    &line_index,
+                    range.start().to_u32(),
+                ));
+                declarations.push(PrescanDeclaration {
+                    fn_name: fn_name.clone(),
+                    lineno,
+                    lifetime,
+                    is_async,
+                });
+                break;
+            }
+        }
+    }
+
+    if declarations.is_empty() {
+        // MED-3: detect decorated top-level functions whose decorator was not
+        // recognized as an @oxi.fixture form. This hints at a probable
+        // unrecognized import alias (e.g. `import oxitest as ox`).
+        let has_unrecognized_decorated_functions = stmts.iter().any(|stmt| {
+            let decorators: &[ast::Expr] = match stmt {
+                ast::Stmt::FunctionDef(f) => &f.decorator_list,
+                ast::Stmt::AsyncFunctionDef(f) => &f.decorator_list,
+                _ => return false,
+            };
+            !decorators.is_empty()
+        });
+        return PrescanFixtureResult::NoFixtures(NoFixturesPayload {
+            has_unrecognized_decorated_functions,
+        });
+    }
+
+    PrescanFixtureResult::HasFixtures(PrescanFixturePayload { declarations })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1044,5 +1221,235 @@ def test_it():
         assert!(!is_stdlib_module("requests"));
         assert!(!is_stdlib_module("numpy"));
         assert!(!is_stdlib_module("django.db"));
+    }
+
+    // ── slice1_recognizer_tests ─────────────────────────────────────────────
+
+    #[cfg(test)]
+    mod slice1_recognizer_tests {
+        use super::*;
+
+        fn prescan(src: &str) -> PrescanFixtureResult {
+            let path = camino::Utf8PathBuf::from("/virtual/__fixtures__.py");
+            prescan_fixture_module_from_source(&path, src)
+        }
+
+        #[test]
+        fn recognizes_oxi_fixture_call() {
+            let src = r#"
+import oxitest as oxi
+
+@oxi.fixture(lifetime="function")
+def conn():
+    return object()
+"#;
+            match prescan(src) {
+                PrescanFixtureResult::HasFixtures(payload) => {
+                    assert_eq!(
+                        payload.declarations.len(),
+                        1,
+                        "expected exactly 1 declaration, got {:?}",
+                        payload.declarations
+                    );
+                    assert_eq!(
+                        payload.declarations[0].fn_name, "conn",
+                        "fixture function name must be 'conn'"
+                    );
+                    assert_eq!(
+                        payload.declarations[0].lifetime, "function",
+                        "lifetime kwarg must be captured verbatim"
+                    );
+                    assert!(
+                        !payload.declarations[0].is_async,
+                        "sync def must not be flagged is_async"
+                    );
+                }
+                other => panic!("expected HasFixtures, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn recognizes_direct_fixture_import() {
+            let src = r#"
+from oxitest import fixture
+
+@fixture(lifetime="function")
+def conn():
+    return object()
+"#;
+            match prescan(src) {
+                PrescanFixtureResult::HasFixtures(payload) => {
+                    assert_eq!(
+                        payload.declarations.len(),
+                        1,
+                        "bare @fixture should be recognized when imported from oxitest"
+                    );
+                    assert_eq!(
+                        payload.declarations[0].fn_name, "conn",
+                        "fixture function name must be 'conn'"
+                    );
+                }
+                other => panic!("expected HasFixtures, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn falls_through_on_dynamic_decoration() {
+            // Dynamic decoration (`dec = oxi.fixture(...); @dec def conn():`)
+            // is not statically recognized. The prescan returns NoFixtures
+            // (declarations.is_empty() == true). With_unrecognized_decorated_
+            // functions may be set since `conn` has a decorator `@dec`.
+            let src = r#"
+import oxitest as oxi
+
+dec = oxi.fixture(lifetime="function")
+@dec
+def conn():
+    return object()
+"#;
+            let result = prescan(src);
+            assert!(
+                !matches!(result, PrescanFixtureResult::Unavailable),
+                "dynamic-decoration is not a parse error, must not return Unavailable"
+            );
+            // Both HasFixtures(empty) and NoFixtures are acceptable outcomes;
+            // either way the bridge call is gated on HasFixtures so the
+            // unrecognized dynamic pattern falls through to Python import.
+        }
+
+        #[test]
+        fn no_fixtures_file_returns_nofixtures() {
+            let src = r#"
+def not_a_fixture():
+    return 1
+"#;
+            assert!(
+                matches!(prescan(src), PrescanFixtureResult::NoFixtures(_)),
+                "plain functions without @fixture decorator must yield NoFixtures"
+            );
+        }
+
+        #[test]
+        fn parse_error_returns_unavailable() {
+            let src = "def broken(\n"; // syntactically invalid
+            assert!(
+                matches!(prescan(src), PrescanFixtureResult::Unavailable),
+                "a syntax error must return Unavailable so the caller falls back to Python"
+            );
+        }
+
+        /// Every decorator shape the slice-1 recognizer must reject.
+        ///
+        /// Each case is a decorator the user might plausibly write that
+        /// slice 1 does not accept. All must fall through to NoFixtures with
+        /// `has_unrecognized_decorated_functions` set, which is what drives
+        /// the MED-3 "check your import alias" diagnostic — a silent
+        /// acceptance here would register a fixture the runtime cannot honour.
+        #[test]
+        fn rejects_unsupported_decorator_shapes() {
+            let cases: &[(&str, &str)] = &[
+                (
+                    "@oxi.other(lifetime=\"function\")",
+                    "attribute is not `fixture`",
+                ),
+                (
+                    "@a.b.fixture(lifetime=\"function\")",
+                    "namespace is not a bare name",
+                ),
+                (
+                    "@decs[\"f\"](lifetime=\"function\")",
+                    "callee is neither Name nor Attribute",
+                ),
+                ("@oxi.fixture", "bare decorator, not a call"),
+                (
+                    "@oxi.fixture(\"function\")",
+                    "slice 1 forbids positional args",
+                ),
+                ("@oxi.fixture()", "no keyword arguments"),
+                (
+                    "@oxi.fixture(lifetime=\"function\", autouse=True)",
+                    "more than one keyword",
+                ),
+                (
+                    "@oxi.fixture(scope=\"function\")",
+                    "keyword is not `lifetime`",
+                ),
+                (
+                    "@oxi.fixture(lifetime=1)",
+                    "lifetime is not a string constant",
+                ),
+                (
+                    "@oxi.fixture(lifetime=DEFAULT)",
+                    "lifetime is not a constant at all",
+                ),
+                ("@oxi.fixture(**opts)", "double-star keyword has no name"),
+            ];
+
+            for (decorator, why) in cases {
+                let src = format!(
+                    "import oxitest as oxi\n\n{decorator}\ndef conn():\n    return object()\n"
+                );
+                match prescan(&src) {
+                    PrescanFixtureResult::NoFixtures(payload) => {
+                        assert!(
+                            payload.has_unrecognized_decorated_functions,
+                            "`{decorator}` ({why}) is rejected but the function is still \
+                             decorated — has_unrecognized_decorated_functions must be true \
+                             so the MED-3 diagnostic fires"
+                        );
+                    }
+                    other => panic!("`{decorator}` must be rejected ({why}), got {other:?}"),
+                }
+            }
+        }
+
+        #[test]
+        fn recognizes_async_fixture_declaration() {
+            let src = r#"
+import oxitest as oxi
+
+@oxi.fixture(lifetime="function")
+async def conn():
+    return object()
+"#;
+            match prescan(src) {
+                PrescanFixtureResult::HasFixtures(payload) => {
+                    assert_eq!(
+                        payload.declarations.len(),
+                        1,
+                        "an async fixture is a declaration like any other; \
+                         slice-9 needs is_async recorded at prescan time"
+                    );
+                    assert!(
+                        payload.declarations[0].is_async,
+                        "is_async must be true for `async def` so slice-9 async \
+                         support can dispatch without re-parsing"
+                    );
+                }
+                other => panic!("expected HasFixtures for an async fixture, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn async_function_counts_as_unrecognized_decoration() {
+            let src = r#"
+import oxitest as testing
+
+@testing.fixture(lifetime="function")
+async def conn():
+    return object()
+"#;
+            match prescan(src) {
+                PrescanFixtureResult::NoFixtures(payload) => {
+                    assert!(
+                        payload.has_unrecognized_decorated_functions,
+                        "a decorated `async def` must count toward the MED-3 hint \
+                         exactly as a decorated `def` does — otherwise an unknown \
+                         alias on an async fixture fails silently"
+                    );
+                }
+                other => panic!("expected NoFixtures for an unrecognized alias, got {other:?}"),
+            }
+        }
     }
 }
