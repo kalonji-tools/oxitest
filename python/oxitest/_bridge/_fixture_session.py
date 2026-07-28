@@ -24,6 +24,7 @@ from oxitest._bridge._errors import (
     UnannotatedFixtureParamError,
 )
 from oxitest._bridge._fixture_context import (
+    _current_teardown_node_id,
     _fixture_scope,
     _warn_teardown,
 )
@@ -419,7 +420,12 @@ class FixtureSession:
         ignored for every other scope.
         """
         if defn.scope is FixtureScope.MODULE:
-            s = self._module_scopes.setdefault(module_path, _Scope())
+            # Not setdefault(): its default arg is evaluated on every call, so
+            # each cache hit would build and discard a _Scope (two dicts, a
+            # list, and two defaultdicts) on a per-resolution hot path.
+            s = self._module_scopes.get(module_path)
+            if s is None:
+                s = self._module_scopes[module_path] = _Scope()
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         if defn.shared:
             s = self._shared_scope
@@ -466,7 +472,15 @@ class FixtureSession:
         """
         scope = self._module_scopes.pop(module_path, None)
         if scope is not None:
-            scope.drain()
+            # No single test owns a module-scope teardown, so the per-test node
+            # id is empty here. Name the module instead — otherwise a failure
+            # reports only the fixture name, leaving the user to guess which
+            # module it came from.
+            token = _current_teardown_node_id.set(module_path)
+            try:
+                scope.drain()
+            finally:
+                _current_teardown_node_id.reset(token)
         self._module_cache.evict(module_path)
 
     def end_session(self) -> None:
