@@ -47,6 +47,7 @@ from oxitest._bridge._fixture_context import (
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
+    FixtureScope,
     ModuleSource,
     PluginSource,
     _fixture_inner_type,
@@ -99,7 +100,26 @@ class _ResolutionContext:
     module_path: str
     fn_teardowns: list[Callable[[], None]]
     resolving: frozenset[str]
-    scope_callback: Callable[[FixtureDef[Any]], ScopeRefs | None]
+    scope_callback: Callable[[FixtureDef[Any], str], ScopeRefs | None]
+
+
+def _cache_key(defn: FixtureDef[Any]) -> str:
+    """Key a fixture within its scope's cache.
+
+    Module scope is the first path on which a *namespaced* fixture is cached,
+    so ``defn.name`` alone is no longer unique: two module-lifetime fixtures
+    with the same short name in different namespaces (``pkg_a.resource`` and
+    ``pkg_b.resource``) used by one test module would collide, and the second
+    would silently receive the first's instance.
+
+    Shared scope deliberately keeps the bare name. ``FixtureSession.get_cache_stats``
+    surfaces these keys verbatim as user-facing fixture names in the cache
+    report, so qualifying them would change reporter output — a change that
+    belongs with the old-API retirement in slice 13, not here.
+    """
+    if defn.scope is FixtureScope.MODULE and defn.namespace:
+        return f"{defn.namespace}.{defn.name}"
+    return defn.name
 
 
 def _resolve_deps(
@@ -177,8 +197,10 @@ class FixtureInstantiator:
     """Resolves and creates fixture values. Stateless — scope refs passed in.
 
     The Instantiator never owns fixture scopes; callers supply scope information
-    via a ``scope_callback`` that maps a ``FixtureDef`` to ``ScopeRefs | None``.
-    ``None`` means function scope (no caching), ``ScopeRefs`` means shared scope.
+    via a ``scope_callback`` that maps a ``(FixtureDef, module_path)`` pair to
+    ``ScopeRefs | None``. ``None`` means function scope (no caching); a
+    ``ScopeRefs`` means a cached scope — shared, or the module bucket selected
+    by *module_path*.
     """
 
     def __init__(
@@ -340,23 +362,24 @@ class FixtureInstantiator:
         ctx: _ResolutionContext,
     ) -> Any:
         """Resolve a fixture definition, handling scope caching."""
-        scope_refs = ctx.scope_callback(defn)
+        scope_refs = ctx.scope_callback(defn, ctx.module_path)
 
         if scope_refs is not None:
-            # Shared fixture — check cache first
-            if defn.name in scope_refs.cache:
+            # Cached fixture (shared or module scope) — check cache first
+            key = _cache_key(defn)
+            if key in scope_refs.cache:
                 if defn.is_async and self._async_mgr is not None:
                     self._async_mgr.was_used = True
-                scope_refs.hits[defn.name] = scope_refs.hits.get(defn.name, 0) + 1
-                return scope_refs.cache[defn.name]
+                scope_refs.hits[key] = scope_refs.hits.get(key, 0) + 1
+                return scope_refs.cache[key]
 
-            scope_refs.misses[defn.name] = scope_refs.misses.get(defn.name, 0) + 1
+            scope_refs.misses[key] = scope_refs.misses.get(key, 0) + 1
 
             if defn.is_async:
                 return self._resolve_shared_async(defn, ctx, scope_refs)
 
             value = FrozenProxy(self._instantiate(defn, ctx, scope_refs.teardowns))
-            scope_refs.cache[defn.name] = value
+            scope_refs.cache[key] = value
             return value
 
         # Function scope — no caching
@@ -382,10 +405,12 @@ class FixtureInstantiator:
         with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
             _start = time.monotonic()
             value = self._async_mgr.resolve(defn.func, deps)
-            self._setup_times[defn.name].append((time.monotonic() - _start) * 1000.0)
+            self._setup_times[_cache_key(defn)].append(
+                (time.monotonic() - _start) * 1000.0
+            )
 
         proxy = FrozenProxy(value)
-        scope_refs.cache[defn.name] = proxy
+        scope_refs.cache[_cache_key(defn)] = proxy
         return proxy
 
     def _instantiate(
@@ -412,7 +437,7 @@ class FixtureInstantiator:
                 _start = time.monotonic()
                 result = defn.func(**deps)
                 outcome = _unpack_sync(result, defn.name)
-                self._setup_times[defn.name].append(
+                self._setup_times[_cache_key(defn)].append(
                     (time.monotonic() - _start) * 1000.0
                 )
             except Exception as exc:
@@ -423,7 +448,7 @@ class FixtureInstantiator:
 
                 def _timed_teardown(
                     _orig: Callable[[], None] = teardown_fn,
-                    _name: str = defn.name,
+                    _name: str = _cache_key(defn),
                 ) -> None:
                     _td_start = time.monotonic()
                     _orig()

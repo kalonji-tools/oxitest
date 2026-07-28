@@ -8,9 +8,9 @@ from enum import StrEnum, auto
 class Lifetime(StrEnum):
     """Fixture lifetime tier per ADR-0009 Rule 2.
 
-    Slice 1 exposes only FUNCTION. MODULE / PACKAGE / SESSION arrive in
-    slices 2 / 3 / 4 — enum values are pre-declared so the union type is
-    stable across the redesign.
+    All four values are declared so the union type stays stable across the
+    redesign; ``_fixture_registry.LIFETIME_SCOPES`` is what says which ones
+    actually work yet.
     """
 
     FUNCTION = auto()

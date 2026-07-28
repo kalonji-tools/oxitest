@@ -44,19 +44,44 @@ def test_decorator_preserves_callable() -> None:
     )
 
 
+def test_module_lifetime_is_accepted() -> None:
+    """lifetime="module" produces a working decorator with a MODULE marker."""
+
+    @fixture(lifetime="module")
+    def pool() -> str:
+        return "pool"
+
+    marker = getattr(pool, MARKER_ATTR)
+    assert marker.lifetime is Lifetime.MODULE, (
+        "marker must record MODULE so the registrar can map it to "
+        "FixtureScope.MODULE — a FUNCTION marker here silently downgrades the "
+        "fixture to per-test"
+    )
+    assert pool() == "pool", (
+        "the decorator is a pure marker — declaring a tier must not wrap or "
+        "replace the function (ADR-0009 Rule 1)"
+    )
+
+
 @dataclass(frozen=True)
 class _RejectedTier:
     lifetime: str
+    slice_issue: str
 
 
 @parametrize(
-    module=_RejectedTier(lifetime="module"),
-    package=_RejectedTier(lifetime="package"),
-    session=_RejectedTier(lifetime="session"),
+    package=_RejectedTier(lifetime="package", slice_issue="1710"),
+    session=_RejectedTier(lifetime="session", slice_issue="1711"),
 )
-def test_slice1_rejects_non_function_lifetime(case: _RejectedTier) -> None:
-    """Slice 1 rejects non-function lifetimes with UsageError."""
-    with raises(UsageError, match="not yet supported"):
+def test_unimplemented_lifetimes_rejected_with_slice_pointer(
+    case: _RejectedTier,
+) -> None:
+    """Tiers without scope wiring raise UsageError naming their owning slice.
+
+    The pointer matters: without it a user hitting this has no way to tell a
+    typo from a tier that simply has not landed yet.
+    """
+    with raises(UsageError, match=case.slice_issue):
         fixture(lifetime=case.lifetime)
 
 

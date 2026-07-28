@@ -65,6 +65,49 @@ def test_registers_decorated_functions(tmp: TempDir) -> None:
     )
 
 
+def test_declared_lifetime_reaches_fixture_def_scope(tmp: TempDir) -> None:
+    """A module-lifetime declaration must survive into FixtureDef.scope.
+
+    Slice 1 hardcoded ``scope=FixtureScope.EACH`` here. The tier survived on
+    ``ModuleSource.lifetime`` but the caching machinery reads ``FixtureDef.scope``,
+    so every declaration was silently function-scoped. That was invisible while
+    ``"function"`` was the only legal value — this test is the tripwire that
+    keeps the mapping wired as slices 3 and 4 add tiers.
+    """
+    registry = FixtureRegistry()
+    (tmp / "slice2_pkg").mkdir()
+
+    mod = types.ModuleType("slice2_pkg.__fixtures__")
+    mod.__file__ = str(tmp / "slice2_pkg" / "__fixtures__.py")
+
+    @fixture(lifetime="module")
+    def conn() -> object:
+        return object()
+
+    setattr(mod, "conn", conn)  # noqa: B010 — dynamic module attr
+
+    register_module_source_fixtures(
+        registry, mod, anchor_package_path=str(tmp / "slice2_pkg")
+    )
+
+    defn = registry.get_in_namespace("conn", "slice2_pkg")
+    assert defn is not None, (
+        "fixture must land in the registry before its scope can be checked"
+    )
+    assert isinstance(defn.source, ModuleSource), (
+        "registrar must produce a ModuleSource — the lifetime assertion below "
+        "only exists on that variant"
+    )
+    assert defn.source.lifetime is Lifetime.MODULE, (
+        "ModuleSource must retain the declared tier"
+    )
+    assert defn.scope is FixtureScope.MODULE, (
+        "Lifetime.MODULE must map to FixtureScope.MODULE — the caching machinery "
+        "reads scope, so a hardcoded EACH here makes every module-lifetime "
+        "fixture silently rebuild per test"
+    )
+
+
 def test_skips_undecorated_functions(tmp: TempDir) -> None:
     """Functions without the @oxi.fixture marker must not be registered."""
     registry = FixtureRegistry()

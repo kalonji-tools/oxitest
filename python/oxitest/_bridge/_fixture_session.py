@@ -247,10 +247,13 @@ def _check_unannotated_params(
 class FixtureSession:
     """Manages fixture lifecycle for a single oxitest run.
 
-    Owns three fixture scopes:
+    Owns four fixture scopes:
 
     - **function scope** (per-test teardown list, `fn_teardowns`) — default
       for all user-defined fixtures.
+    - **module scope** (`_module_scopes`) — one `_Scope` per module path, for
+      fixtures declared ``@oxi.fixture(lifetime="module")``; created on first
+      use and drained at `end_module`.
     - **shared scope** (`_shared_scope`) — for fixtures declared with
       ``shared=True``; initialised once and torn down at `end_session`.
     - **session scope** (`_session_scope`) — for built-in session-lifetime
@@ -279,6 +282,10 @@ class FixtureSession:
         self._shared_scope = (
             _Scope()
         )  # shared=True fixtures — init once, drain at end_session
+        # lifetime="module" fixtures — one scope per module path, created on
+        # first use and popped+drained by end_module. Popping (rather than
+        # clearing) keeps a long run from retaining one _Scope per module.
+        self._module_scopes: dict[str, _Scope] = {}
         self._module_cache = ModuleCache()
 
         # ── Register all fixture sources into the unified registry ──
@@ -405,8 +412,15 @@ class FixtureSession:
         if self._prev_helpers_var is None:
             _helpers_registry_var.set(registry)
 
-    def _scope_for(self, defn: FixtureDef) -> ScopeRefs | None:
-        """Map a fixture def to its scope refs. None = function scope."""
+    def _scope_for(self, defn: FixtureDef, module_path: str) -> ScopeRefs | None:
+        """Map a fixture def to its scope refs. None = function scope.
+
+        *module_path* selects the bucket for module-lifetime fixtures; it is
+        ignored for every other scope.
+        """
+        if defn.scope is FixtureScope.MODULE:
+            s = self._module_scopes.setdefault(module_path, _Scope())
+            return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         if defn.shared:
             s = self._shared_scope
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
@@ -445,6 +459,14 @@ class FixtureSession:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def end_module(self, module_path: str) -> None:
+        """Dispose everything scoped to *module_path*.
+
+        Drains before evicting so a module-lifetime teardown can still touch
+        the module it was defined in.
+        """
+        scope = self._module_scopes.pop(module_path, None)
+        if scope is not None:
+            scope.drain()
         self._module_cache.evict(module_path)
 
     def end_session(self) -> None:

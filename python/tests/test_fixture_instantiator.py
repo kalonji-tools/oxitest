@@ -49,7 +49,9 @@ def test_resolve_simple_fixture() -> None:
     )
     teardowns: list = []
 
-    ctx = _ResolutionContext("test.py", teardowns, frozenset(), lambda _defn: None)
+    ctx = _ResolutionContext(
+        "test.py", teardowns, frozenset(), lambda _defn, _mod: None
+    )
     result = inst.resolve_fixture("db", ctx)
 
     assert result == "conn", f"expected 'conn', got {result!r}"
@@ -71,7 +73,8 @@ def test_resolve_cycle_raises() -> None:
 
     with raises(FixtureCycleError):
         inst.resolve_fixture(
-            "a", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+            "a",
+            _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None),
         )
 
 
@@ -81,7 +84,8 @@ def test_resolve_not_found_raises() -> None:
 
     with raises(FixtureNotFoundError):
         inst.resolve_fixture(
-            "nope", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+            "nope",
+            _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None),
         )
 
 
@@ -98,7 +102,7 @@ def test_resolve_shared_uses_scope_refs() -> None:
     shared_misses: dict = {}
     scope_refs = ScopeRefs(shared_cache, shared_teardowns, shared_hits, shared_misses)
 
-    ctx = _ResolutionContext("test.py", [], frozenset(), lambda _defn: scope_refs)
+    ctx = _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: scope_refs)
     inst.resolve_fixture("shared_db", ctx)
 
     assert "shared_db" in shared_cache, (
@@ -113,7 +117,7 @@ def test_timing_recorded() -> None:
     )
 
     inst.resolve_fixture(
-        "fast", _ResolutionContext("test.py", [], frozenset(), lambda _defn: None)
+        "fast", _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None)
     )
 
     timings = inst.get_fixture_timings()
@@ -168,7 +172,10 @@ def test_resolve_param_by_type_not_name() -> None:
         meta,
         fn_teardowns=teardowns,
         resolve_user_fixture=lambda n: inst.resolve_fixture(
-            n, _ResolutionContext("t.py", teardowns, frozenset(), lambda _defn: None)
+            n,
+            _ResolutionContext(
+                "t.py", teardowns, frozenset(), lambda _defn, _mod: None
+            ),
         ),
     )
     assert resolved is True, "should resolve by type"
@@ -199,7 +206,10 @@ def test_resolve_param_type_miss_name_fallback() -> None:
         meta,
         fn_teardowns=teardowns,
         resolve_user_fixture=lambda n: inst.resolve_fixture(
-            n, _ResolutionContext("t.py", teardowns, frozenset(), lambda _defn: None)
+            n,
+            _ResolutionContext(
+                "t.py", teardowns, frozenset(), lambda _defn, _mod: None
+            ),
         ),
     )
     assert resolved is True, "name fallback should resolve the fixture"
