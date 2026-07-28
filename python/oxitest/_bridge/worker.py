@@ -48,7 +48,20 @@ import os
 import sys
 import time
 import types
-from typing import NotRequired, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
+
+if TYPE_CHECKING:
+    # Type-only — `from __future__ import annotations` keeps these out of the
+    # runtime path, which matters because worker startup is on the hot path.
+    from typing import Protocol
+
+    class _TeardownTarget(Protocol):
+        """Just the lifecycle drains, so teardown can be tested with a stub."""
+
+        def end_module(self, module_path: str, /) -> None: ...
+
+        def end_session(self) -> None: ...
+
 
 try:
     import coverage as _coverage
@@ -126,29 +139,60 @@ def run(task: WorkerTask) -> None:
     # instance at module level). This mirrors what the serial runner does via
     # collect_module during collection, so self-contained test files that define
     # their own fixtures work correctly in parallel mode too.
-    # Register fixtures — skip for pure doctest modules that aren't test files.
-    with contextlib.suppress(ImportError, ModuleNotFoundError):
-        collect_module(module_path, session)
+    try:
+        # Register fixtures — skip for pure doctest modules that aren't test files.
+        # Inside the try: collect_module imports the test module, which can raise
+        # anything (a SyntaxError in the file, say) and must not skip teardown.
+        with contextlib.suppress(ImportError, ModuleNotFoundError):
+            collect_module(module_path, session)
 
-    for item in items:
-        meta = TestMeta(
-            module_path=module_path,
-            fn_name=item["fn_name"],
-            node_id=item["node_id"],
-            kind=from_wire(item.get("param_id")),
-            markers=frozenset(item.get("markers", [])),
-        )
+        for item in items:
+            meta = TestMeta(
+                module_path=module_path,
+                fn_name=item["fn_name"],
+                node_id=item["node_id"],
+                kind=from_wire(item.get("param_id")),
+                markers=frozenset(item.get("markers", [])),
+            )
 
-        start = time.monotonic()
-        result = run_test(
-            meta,
-            session=session,
-            default_timeout=timeout_secs,
-            keep_tmp=keep_tmp,
-            debug=debug,
-        )
-        duration_ms = (time.monotonic() - start) * 1000.0
-        _emit(result.to_wire(meta.node_id, duration_ms))
+            start = time.monotonic()
+            result = run_test(
+                meta,
+                session=session,
+                default_timeout=timeout_secs,
+                keep_tmp=keep_tmp,
+                debug=debug,
+            )
+            duration_ms = (time.monotonic() - start) * 1000.0
+            _emit(result.to_wire(meta.node_id, duration_ms))
+    finally:
+        _end_task_session(session, module_path)
+
+
+def _end_task_session(session: _TeardownTarget, module_path: str) -> None:
+    """Drain the task's fixture session, mirroring the serial path's teardown.
+
+    Failures are swallowed: raising here would discard results this task has
+    already emitted, and the serial path routes them to
+    ``record_teardown_warning`` rather than aborting. Each teardown gets its
+    own ``try`` so a failing ``end_module`` cannot skip ``end_session``.
+    """
+    from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
+
+    for context, teardown in (
+        (f"end_module({module_path})", lambda: session.end_module(module_path)),
+        ("end_session", session.end_session),
+    ):
+        try:
+            teardown()
+        except Exception as exc:  # noqa: BLE001 — teardown must not kill the worker
+            _emit(
+                Diagnostic(
+                    severity=DiagnosticSeverity.WARNING,
+                    context=context,
+                    message=f"teardown error: {exc}",
+                ).to_wire()
+            )
 
 
 def main() -> None:
