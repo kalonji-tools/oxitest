@@ -48,6 +48,9 @@ ignore = [
 # ── Source code ─────────────────────────────────────────────────────────
 "python/oxitest/_bridge/worker.py" = ["PLC0415"]
 
+# ── Test data projects ──────────────────────────────────────────────────
+"python/tests/data/**" = ["D100", "D103", "D104"]
+
 # ── Test infrastructure ─────────────────────────────────────────────────
 "python/tests/*" = [
     "PLR2004",  # magic values in comparisons — universal in test assertions
@@ -126,7 +129,7 @@ unresolved-import = "ignore"
 
 [tool.oxitest]
 testpaths = ["python/tests", "python/oxitest"]
-norecursedirs = ["docs", "fixtures"]
+norecursedirs = ["docs", "fixtures", "data"]
 python_files = ["test_*.py"]
 strict = "abort"
 timeout = 30
