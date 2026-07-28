@@ -11,11 +11,11 @@ The core reframe is one sentence: **visibility is Python's job; lifecycle is the
 
 ## Considered Options
 
-1. **Retrofit Position 4 onto the current shape.** Add a `ModuleSource` variant next to `ConftestSource`, keep `Fixtures()` and `Helpers()` instance registries, keep walk-up-tree conftest discovery, drop `registrar-in-test-module`, introduce `registrar-in-class-body`. Rejected: it grafts a new axis onto machinery that was never meant to carry it, and preserves the `Fixtures()` / `Helpers()` `&mut` exceptions on ADR-0005 Rule 4 alongside a new co-existing declaration path. The result is defensible but organically foreign — two ways to declare a fixture, one legacy, one new, both alive indefinitely.
+1. **Retrofit Position 4 onto the current shape.** Add a `ModuleSource` variant next to `ConftestSource`, keep `Fixtures()` and `Helpers()` instance registries, keep walk-up-tree conftest discovery, drop `registrar-in-test-module`, introduce `registrar-in-class-body`. Rejected: it grafts a new axis onto machinery that was never meant to carry it, and preserves the `Fixtures()` / `Helpers()` `&mut` exceptions on [ADR-0005](0005-immutable-by-default-interfaces.md) Rule 4 alongside a new co-existing declaration path. The result is defensible but organically foreign — two ways to declare a fixture, one legacy, one new, both alive indefinitely.
 
 2. **Full runtime enforcement of file conventions via a custom import hook.** Install a Python meta-path finder that intercepts imports of any non-conforming file and rejects fixture-decorated functions found outside `__fixtures__.py` / `__helpers__.py` / `__init__.py` / `test_*.py`. Maximum enforcement, no possibility of dead-code fixtures in unscanned files. Rejected: high runtime cost, poor interoperability with editors and static analysis, breaks under the standard three-tier collection fallback when AST prescan fails. Convention-plus-loud-collection-time-error achieves the same goal with none of the cost.
 
-3. **Principle-plus-rules with file-convention discovery (chosen).** Establish the visibility/lifecycle reframe as the governing principle. Define eight rules covering declaration files, lifetime tiers and boundaries, B1 strict boundary, lifetime cap, proxy access, plugin convergence, autouse, and retirements. Discovery via Rust AST prescan on a reserved-name file set — dunder convention matching Python's own `__init__.py` / `__main__.py`, zero collision with user modules. Enforcement via prescan-time errors (loud rejection at the shallowest catchable frame, per ADR-0006) plus a strict dial for shortcut access. No new tooling; existing `ty` + collection-time diagnostics + strict dial suffice.
+3. **Principle-plus-rules with file-convention discovery (chosen).** Establish the visibility/lifecycle reframe as the governing principle. Define eight rules covering declaration files, lifetime tiers and boundaries, B1 strict boundary, lifetime cap, proxy access, plugin convergence, autouse, and retirements. Discovery via Rust AST prescan on a reserved-name file set — dunder convention matching Python's own `__init__.py` / `__main__.py`, zero collision with user modules. Enforcement via prescan-time errors (loud rejection at the shallowest catchable frame, per [ADR-0006](0006-async-organizational-strategy.md)) plus a strict dial for shortcut access. No new tooling; existing `ty` + collection-time diagnostics + strict dial suffice.
 
 ## Decision
 
@@ -55,7 +55,7 @@ Yield-based fixtures use `Yields[T]` and expose their teardown code after the `y
 
 A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the Python package containing the declaration file. For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
 
-Sibling and unrelated packages cannot access the fixture. Attempted use is a **collection-time error** naming the fixture's anchor and the test's location. No allow-comment escape hatch. No `strict = "warn"` softening. This follows ADR-0006's loud-rejection precedent: violations fire at collection time, before any test runs, at the shallowest catchable frame.
+Sibling and unrelated packages cannot access the fixture. Attempted use is a **collection-time error** naming the fixture's anchor and the test's location. No allow-comment escape hatch. No `strict = "warn"` softening. This follows [ADR-0006](0006-async-organizational-strategy.md)'s loud-rejection precedent: violations fire at collection time, before any test runs, at the shallowest catchable frame.
 
 Package-scope fixtures anchored at `tests/api/` are usable from `tests/api/v1/test_x.py` (descendant) but not from `tests/other/test_y.py` (sibling). Hierarchical prescan enforces this at discovery: given a test being collected, the framework prescans only the ancestor-chain declaration files.
 
@@ -128,17 +128,17 @@ The redesign retires the following surface. Each entry names what goes and why.
 
 - **`Fixtures()` and `Helpers()` as instance-based registries** — the `db = Fixtures(name="db")` + `@db.fixture` pattern is replaced by module-level `@oxi.fixture` / `@oxi.helper`. The **names** `Fixtures` and `Helpers` are reused as the access-proxy type annotations in test signatures (Rule 5); the old instance usage no longer exists.
 - **`conftest.py` as a special filename** — replaced by `__fixtures__.py` / `__helpers__.py` / `__init__.py`. Walk-up-tree conftest discovery (`find_conftest_paths` in `conftest_loader.py`) is replaced by hierarchical AST prescan on the ancestor chain of the tests being collected.
-- **`registrar-in-test-module` strict violation and its `# oxitest: allow[registrar-in-test-module]` escape hatch** — the whole class of violation becomes nonsensical (there is no registrar to be in a test module). The allow-comment escape hatch was itself an ADR-0008 violation and its removal restores the no-escape-hatch discipline.
+- **`registrar-in-test-module` strict violation and its `# oxitest: allow[registrar-in-test-module]` escape hatch** — the whole class of violation becomes nonsensical (there is no registrar to be in a test module). The allow-comment escape hatch was itself an [ADR-0008](0008-config-fail-closed-narrow-scope.md) violation and its removal restores the no-escape-hatch discipline.
 - **`ConftestSource` variant** in `_fixture_registry.py` — replaced by a location-agnostic source variant carrying `defining_module_path` + `anchor_package_path`.
 - **`FixtureProvider` and `HelperProvider` plugin protocols** — plugins converge with the user path via `@oxi.fixture` + `register_fixtures` hook (Rule 6).
-- **ADR-0005 Rule 4's `Fixtures` / `Helpers` `&mut` exception** — no mutable registrar exists; the decorator writes marker attributes directly at import time, no accumulation phase.
+- **[ADR-0005](0005-immutable-by-default-interfaces.md) Rule 4's `Fixtures` / `Helpers` `&mut` exception** — no mutable registrar exists; the decorator writes marker attributes directly at import time, no accumulation phase.
 
 ### Reconciliation with prior ADRs
 
-- **ADR-0002 (Unified fixture backend)** — Type-based resolution (`Fixture[T]` primary key, parameter name as qualifier) and the unified registry survive intact. Source variants collapse: `ConftestSource` retires; the new source variant carries `defining_module_path` + `anchor_package_path`. Override precedence extends naturally with the new lifetime tiers.
-- **ADR-0005 (Immutable-by-default) Rule 4** — Retires the `Fixtures` / `Helpers` `&mut` exceptions. Decorators write marker attributes at import time; no accumulation-during-conftest-loading phase remains. The reused type annotation names (`Fixtures`, `Helpers` on test parameters) are proxy accessors, not mutable registrars — they do not re-inherit the exception.
-- **ADR-0006 (Async organizational strategy)** — Async fixture behavior is orthogonal to declaration mechanism. `@fixture(lifetime="function")` on an `async def` continues to behave per ADR-0006's per-test-loop rules. Illegal cell combinations (sync test + function-scope async fixture) still rejected loud at arrange time. Loud-rejection DNA is *reinforced* by this ADR: B1 boundary violations, lifetime-cap violations, and strict-abort shortcut violations all fire at collection time.
-- **ADR-0008 (Config fail-closed)** — B1 boundary violation, lifetime-cap violation, and strict-dial-forbidden shortcut all fail closed with `UsageError` exit codes. No per-callsite bypass anywhere in the new surface; all configurability lives on the strict dial.
+- **[ADR-0002](0002-unified-fixture-backend.md) (Unified fixture backend)** — Type-based resolution (`Fixture[T]` primary key, parameter name as qualifier) and the unified registry survive intact. Source variants collapse: `ConftestSource` retires; the new source variant carries `defining_module_path` + `anchor_package_path`. Override precedence extends naturally with the new lifetime tiers.
+- **[ADR-0005](0005-immutable-by-default-interfaces.md) (Immutable-by-default) Rule 4** — Retires the `Fixtures` / `Helpers` `&mut` exceptions. Decorators write marker attributes at import time; no accumulation-during-conftest-loading phase remains. The reused type annotation names (`Fixtures`, `Helpers` on test parameters) are proxy accessors, not mutable registrars — they do not re-inherit the exception.
+- **[ADR-0006](0006-async-organizational-strategy.md) (Async organizational strategy)** — Async fixture behavior is orthogonal to declaration mechanism. `@fixture(lifetime="function")` on an `async def` continues to behave per ADR-0006's per-test-loop rules. Illegal cell combinations (sync test + function-scope async fixture) still rejected loud at arrange time. Loud-rejection DNA is *reinforced* by this ADR: B1 boundary violations, lifetime-cap violations, and strict-abort shortcut violations all fire at collection time.
+- **[ADR-0008](0008-config-fail-closed-narrow-scope.md) (Config fail-closed)** — B1 boundary violation, lifetime-cap violation, and strict-dial-forbidden shortcut all fail closed with `UsageError` exit codes. No per-callsite bypass anywhere in the new surface; all configurability lives on the strict dial.
 
 ## Consequences
 
@@ -148,7 +148,7 @@ The redesign retires the following surface. Each entry names what goes and why.
 - **Fallback to Python-import discovery survives.** If AST prescan encounters dynamic decoration patterns it cannot statically parse (e.g., `if flag: dec = fixture; @dec def x(): ...`), it emits `PrescanResult::Unavailable` and the file falls through to Python-import-based discovery — the same three-tier collection model already used for tests.
 - **Deferred design questions.** The following are real design questions this ADR does not fully resolve; they belong to the impl-plan phase or a follow-on spec: IDE / type-checker stub generation for the `fx` / `hlp` proxies (auto-generated `.pyi` vs. dynamic-only vs. user-declared Protocol overlay); `FixtureRegistry.add()` runtime API details (ordering guarantees, duplicate-name handling); the migration story from the current design to this one (incremental coexistence vs. hard cutover); `FixtureRef[T]` internals under the new source variant; `oxitest inspect` updates for the new source variant and autouse-firing view.
 - **Prototype is throwaway.** `scripts/prototype_fixture_redesign/` is a 300-line Python-only simulation with six interactive scenarios. Delete it once the follow-on impl issues are filed, or fold pieces into test fixtures for the real implementation.
-- **Follow-on impl work (24 tickets in 5 phases).** This ADR **lists** the follow-on work; it does **not** file the tickets. Filing happens post-merge per the standard project pipeline (grill → spec → PR). Enumeration:
+- **Follow-on impl work (23 tickets in 5 phases).** This ADR **lists** the follow-on work; it does **not** file the tickets. Filing happens post-merge per the standard project pipeline (grill → spec → PR). Enumeration:
 
   **Foundation (v0 — non-shipping):**
   1. `PrescanDeclaration` in `src/prescan.rs` — extend `PrescanItem` with fixture/helper declaration extraction.
@@ -175,17 +175,16 @@ The redesign retires the following surface. Each entry names what goes and why.
   14. Remove `Fixtures()` and `Helpers()` classes (instance-registry meaning only; access-proxy type annotation reuses the name).
   15. Remove `conftest.py` special-case discovery.
   16. Remove `registrar-in-test-module` violation kind and its allow-comment path.
-  17. Update ADR-0005 Rule 4 (drop the `Fixtures` / `Helpers` `&mut` entries).
+  17. Update [ADR-0005](0005-immutable-by-default-interfaces.md) Rule 4 (drop the `Fixtures` / `Helpers` `&mut` entries).
   18. Retire `FixtureProvider` and `HelperProvider` plugin protocols.
 
   **Documentation (v1):**
   19. Rewrite `docs/user/how-to/use-fixtures.md` around the new model.
   20. Rewrite `docs/user/how-to/migrate-from-pytest.md` for the new discovery convention.
-  21. New ADR (this one) at `docs/adr/0009-fixture-system-redesign.md`. *(Landed by this PR.)*
-  22. Migration guide for existing oxitest users (bridging from `Fixtures()` instances to `@oxi.fixture`).
+  21. Migration guide for existing oxitest users (bridging from `Fixtures()` instances to `@oxi.fixture`).
 
   **Tooling (v1):**
-  23. `oxitest inspect` — autouse-firing view per test.
-  24. IDE / type-checker stub generation for `fx` / `hlp` proxies (may spawn its own spec).
+  22. `oxitest inspect` — autouse-firing view per test.
+  23. IDE / type-checker stub generation for `fx` / `hlp` proxies (may spawn its own spec).
 
 - **Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) reaches its destination on merge of this ADR.** The map's remaining work was tracked by [#1707](https://github.com/kalonji-tools/oxitest/issues/1707), whose task was drafting this document. Once merged, the map closes; the follow-on impl tickets above are filed as fresh project work, not resumed map tickets.
