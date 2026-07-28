@@ -1,0 +1,6 @@
+[tool.oxitest]
+testpaths = ["slice1_warm_cache"]
+python_files = ["test_*.py"]
+# No strict = "abort" here so that cache is actually used on repeat runs.
+# The slice1_same_package project uses strict="abort" which disables caching;
+# this project exercises the warm-cache path (HIGH-1 regression guard).

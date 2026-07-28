@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice1_collision"]
+python_files = ["test_*.py"]
+strict = "abort"
