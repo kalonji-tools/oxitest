@@ -259,30 +259,6 @@ def test_wrong_annotation_matching_fixture_raises_helpful_error() -> None:
     )
 
 
-# ── oxitest.fixture sentinel ──────────────────────────────────────────────────
-
-
-def test_oxitest_fixture_sentinel_raises_with_instructions() -> None:
-    """oxitest.fixture sentinel raises with instructions to use Fixtures() instead."""
-    with raises((AttributeError, RuntimeError)) as exc_info:
-        oxitest.fixture(lambda: None)
-    msg = str(exc_info.value)
-    assert "Fixtures()" in msg, (
-        f"oxitest.fixture sentinel error should mention 'Fixtures()', got {msg!r}"
-    )
-    assert "@fixtures.fixture" in msg, (
-        f"oxitest.fixture sentinel error should mention '@fixtures.fixture', got "
-        f"{msg!r}"
-    )
-
-
-def test_oxitest_fixture_sentinel_exists_as_attribute() -> None:
-    """oxitest.fixture is a top-level sentinel; raises on use, exists for imports."""
-    assert hasattr(oxitest, "fixture"), (
-        "'fixture' should be exported as an attribute of the oxitest module"
-    )
-
-
 # ── TestContext.on_teardown alias ────────────────────────────────────────────
 
 

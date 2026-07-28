@@ -133,6 +133,7 @@ from oxitest._bridge._errors import (
     AutouseRegistrationError as AutouseRegistrationError,
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
+from oxitest._bridge._fixture_decorator import fixture as fixture
 from oxitest._bridge._fixture_type import (
     Fixture as Fixture,
     FixtureRef as FixtureRef,
@@ -203,6 +204,7 @@ __all__ = [
     "Yields",
     "approx",
     "arrange",
+    "fixture",
     "fixtures",
     "helpers",
     "importorskip",
@@ -218,20 +220,6 @@ __all__ = [
 
 helpers = _HelpersProxy()
 fixtures = _FixturesProxy()
-
-
-def fixture(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
-    """Sentinel: raises with instructions to use Fixtures() registry instead."""
-    msg = (
-        "oxitest.fixture does not exist.\n"
-        "Fixtures in oxitest are declared via a Fixtures() registry:\n\n"
-        "    fixtures = oxitest.Fixtures()\n\n"
-        "    @fixtures.fixture\n"
-        "    def my_fixture() -> MyType:\n"
-        "        ...\n\n"
-        "Define your Fixtures() instance in conftest.py and import the functions."
-    )
-    raise AttributeError(msg)
 
 
 def helper(*_args: _Any, **_kwargs: _Any) -> _NoReturn:

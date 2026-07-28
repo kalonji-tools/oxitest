@@ -26,6 +26,7 @@ __all__ = [
     "ParametrizeError",
     "SharedFixtureMutationError",
     "UnannotatedFixtureParamError",
+    "UsageError",
 ]
 
 from typing import TYPE_CHECKING, Any
@@ -226,6 +227,10 @@ class ConflictingCoverageError(OxitestError):
 
 class ParametrizeError(OxitestError):
     """Raised when parametrize case resolution fails due to misconfiguration."""
+
+
+class UsageError(OxitestError):
+    """Raised when a user-facing API is used incorrectly."""
 
 
 class LoadError(OxitestError):
