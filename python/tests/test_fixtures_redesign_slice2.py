@@ -231,6 +231,94 @@ def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
     )
 
 
+def test_failing_module_teardown_is_reported(tmp: TempDir) -> None:
+    """A module-lifetime teardown failure must reach the user, naming its module.
+
+    Scope drains swallow the exception and emit a ``Diagnostic`` instead of
+    raising, so ``end_module`` returns ``Ok`` and Rust's teardown-warning path
+    never fires. Diagnostics were drained only inside the per-test loop, which
+    left this failure to surface on some later module's first test — or vanish
+    entirely when the failing module ran last, which is the case here.
+    """
+    root = Path(tmp) / "proj"
+    pkg = root / "pkg"
+    pkg.mkdir(parents=True)
+
+    (root / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+    )
+    (pkg / "__init__.py").write_text("")
+    (pkg / "__fixtures__.py").write_text(
+        "from __future__ import annotations\n"
+        "from collections.abc import Iterator\n"
+        "import oxitest as oxi\n\n\n"
+        '@oxi.fixture(lifetime="module")\n'
+        "def mod_raiser() -> Iterator[str]:\n"
+        "    yield 'm'\n"
+        "    msg = 'module teardown boom'\n"
+        "    raise RuntimeError(msg)\n"
+    )
+    (pkg / "test_only.py").write_text(
+        "from oxitest import Fixtures\n\n\n"
+        "def test_uses_raiser(fx: Fixtures) -> None:\n"
+        "    assert fx.pkg.mod_raiser == 'm', 'fixture injects before it fails'\n"
+    )
+
+    out, err, rc = helpers.common.run_oxitest(
+        None, "--serial", "--warnings", cwd=str(root)
+    )
+
+    assert rc == 0, (
+        f"a failing teardown must not fail the run (rc={rc})\n"
+        f"stdout:\n{out}\nstderr:\n{err}"
+    )
+    assert "module teardown boom" in out, (
+        "the teardown failure was swallowed — this is the only module, so "
+        "nothing runs afterwards to trigger a drain. Diagnostics must be "
+        f"drained after end_module, not only inside the test loop\nstdout:\n{out}"
+    )
+    assert "test_only.py" in out, (
+        "the diagnostic named no module. No single test owns a module-scope "
+        "teardown, so without the module path the user cannot tell where the "
+        f"failure came from\nstdout:\n{out}"
+    )
+
+
+def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
+    """The same guarantee at ``end_session`` for the old shared=True API.
+
+    Pre-existing gap with the same root cause: nothing drained diagnostics
+    after ``end_session``, so a shared fixture's teardown failure was lost on
+    every run.
+    """
+    (tmp / "conftest.py").write_text(
+        "from collections.abc import Iterator\n"
+        "from oxitest import Fixtures\n\n"
+        "fx = Fixtures()\n\n\n"
+        "@fx.fixture(shared=True)\n"
+        "def shared_raiser() -> Iterator[str]:\n"
+        "    yield 's'\n"
+        "    msg = 'shared teardown boom'\n"
+        "    raise RuntimeError(msg)\n"
+    )
+    (tmp / "test_s.py").write_text(
+        "from oxitest import Fixture\n\n\n"
+        "def test_s(shared_raiser: Fixture[str]) -> None:\n"
+        "    assert shared_raiser == 's', 'shared fixture injects'\n"
+    )
+
+    out, err, rc = helpers.common.run_oxitest(tmp, "--serial", "--warnings")
+
+    assert rc == 0, (
+        f"a failing teardown must not fail the run (rc={rc})\n"
+        f"stdout:\n{out}\nstderr:\n{err}"
+    )
+    assert "shared teardown boom" in out, (
+        "the shared fixture's teardown failure was swallowed — diagnostics "
+        f"must be drained after end_session too\nstdout:\n{out}"
+    )
+
+
 def test_lifetime_inversion_resolves_without_crashing(tmp: TempDir) -> None:
     """A module-lifetime fixture depending on a function-lifetime one must not crash.
 

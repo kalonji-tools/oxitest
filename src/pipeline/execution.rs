@@ -39,6 +39,25 @@ impl Default for DebugOptions<'_> {
     }
 }
 
+/// Move any diagnostics the session has accumulated into the reporter.
+///
+/// Must run after every lifecycle call, not only after each test. Scope
+/// teardowns swallow their exception and emit a `Diagnostic` instead of
+/// raising, so `end_module` / `end_session` returning `Ok` does **not** mean
+/// nothing went wrong. Draining only inside the test loop means a failing
+/// module- or session-scope teardown surfaces just when a later test happens
+/// to trigger a drain — and is lost outright when nothing runs afterwards.
+fn drain_diagnostics(
+    py: Python<'_>,
+    session: &bridge::FixtureSession,
+    rep: &mut dyn reporter::Reporter,
+) {
+    let diags = bridge::drain_session_diagnostics(py, session);
+    if !diags.is_empty() {
+        rep.record_diagnostics(diags);
+    }
+}
+
 fn resolve_timeout(
     cache: &cache::TestCache,
     item: &types::TestItem,
@@ -134,6 +153,15 @@ impl<'a> ExecutionDispatch<'a> {
                 let total: usize = groups.iter().map(|g| g.items.len()).sum();
                 let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
+                let end_scope =
+                    |rep: &mut dyn reporter::Reporter, context: String, result: PyResult<()>| {
+                        if let Err(e) = result {
+                            tracing::warn!(%e, %context, "teardown error");
+                            rep.record_teardown_warning(&context, &e.to_string());
+                        }
+                        drain_diagnostics(*py, session, rep);
+                    };
+
                 'run: for ModuleGroup { module_path, items } in &groups {
                     for item in items {
                         rep.test_started(item);
@@ -141,10 +169,7 @@ impl<'a> ExecutionDispatch<'a> {
                             resolve_timeout(cache, item, *timeout_secs, *timeout_multiplier);
                         let (outcome, duration_ms) = run_timed(*py, item, session, timeout, *opts);
                         // Drain diagnostics emitted during test execution
-                        let diags = bridge::drain_session_diagnostics(*py, session);
-                        if !diags.is_empty() {
-                            rep.record_diagnostics(diags);
-                        }
+                        drain_diagnostics(*py, session, rep);
                         timings.push(types::TestTiming {
                             node_id: item.node_id.clone(),
                             duration_ms,
@@ -153,28 +178,21 @@ impl<'a> ExecutionDispatch<'a> {
                         rep.test_completed(item, &outcome, duration_ms, None);
                         if acc.record(&outcome) {
                             interrupted = true;
-                            if let Err(e) = session.end_module(*py, module_path) {
-                                tracing::warn!(%e, module = %module_path, "teardown error in end_module");
-                                rep.record_teardown_warning(
-                                    &format!("end_module({})", module_path),
-                                    &e.to_string(),
-                                );
-                            }
+                            end_scope(
+                                rep,
+                                format!("end_module({})", module_path),
+                                session.end_module(*py, module_path),
+                            );
                             break 'run;
                         }
                     }
-                    if let Err(e) = session.end_module(*py, module_path) {
-                        tracing::warn!(%e, module = %module_path, "teardown error in end_module");
-                        rep.record_teardown_warning(
-                            &format!("end_module({})", module_path),
-                            &e.to_string(),
-                        );
-                    }
+                    end_scope(
+                        rep,
+                        format!("end_module({})", module_path),
+                        session.end_module(*py, module_path),
+                    );
                 }
-                if let Err(e) = session.end_session(*py) {
-                    tracing::warn!(%e, "teardown error in end_session");
-                    rep.record_teardown_warning("end_session", &e.to_string());
-                }
+                end_scope(rep, "end_session".to_string(), session.end_session(*py));
 
                 parallel::PhaseResult {
                     interrupted,
