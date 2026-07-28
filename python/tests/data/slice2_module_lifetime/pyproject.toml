@@ -1,0 +1,10 @@
+[tool.oxitest]
+testpaths = ["slice2_module_lifetime"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Arrangement pins modules to the main process, which would collapse a
+# parallel run to one PID and make its assertions prove nothing about the
+# worker path. Set here for the parallel acceptance test, which is skipped
+# until kalonji-tools/oxitest#1732 makes __fixtures__.py fixtures visible to
+# workers at all. Harmless for the serial run.
+auto_arrange = false
