@@ -390,6 +390,52 @@ pub(crate) fn collect_module_with_session_obj(
     Ok((items_vec, raw_violations))
 }
 
+/// Register fixtures from a `__fixtures__.py` sibling into the session registry.
+///
+/// Called during collection when a test module's directory contains a
+/// `__fixtures__.py` whose prescan revealed at least one `@oxi.fixture`
+/// decorator. Extracts the `FixtureRegistry` from the Python session object
+/// and calls `importer.register_module_source_fixtures_for_module` to import
+/// the fixture module and register its fixtures.
+///
+/// # Errors
+///
+/// Returns a `CollectError::PyError` if the Python import or registration
+/// raises (e.g. syntax error in `__fixtures__.py`, or fixture name collision).
+pub(crate) fn register_fixture_module_for_path(
+    py: Python<'_>,
+    session_obj: Bound<'_, PyAny>,
+    fixture_module_path: &Utf8Path,
+    anchor_package_path: &Utf8Path,
+) -> Result<(), CollectError> {
+    let registry = session_obj.getattr("registry").map_err(py_collect_err)?;
+
+    let importer = py
+        .import("oxitest._bridge.importer")
+        .map_err(py_collect_err)?;
+
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs
+        .set_item("registry", registry)
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("fixture_module_path", fixture_module_path.as_str())
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("anchor_package_path", anchor_package_path.as_str())
+        .map_err(py_collect_err)?;
+
+    importer
+        .call_method(
+            "register_module_source_fixtures_for_module",
+            (),
+            Some(&kwargs),
+        )
+        .map_err(|e| CollectError::PyError(e.to_string()))?;
+
+    Ok(())
+}
+
 /// Validate that all collected fixture names can resolve in the registry.
 ///
 /// Returns `(node_id, fixture_name)` pairs for names that cannot resolve.

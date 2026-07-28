@@ -34,6 +34,12 @@ ignore:
   - "src/pipeline/mod.rs"
   - "src/pipeline/transitions/"
   - "src/pipeline/execution.rs"
+  # collect_items() takes Python<'_> + a live FixtureSession and is reachable
+  # only from transitions/session_ready.rs, so `cargo llvm-cov` (which runs
+  # cargo test alone) can never enter it. Its behaviour is covered end to end
+  # by python/tests/test_fixtures_redesign_slice1.py, which drives the runner
+  # as a subprocess and contributes nothing to the Rust flag.
+  - "src/pipeline/collection.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
