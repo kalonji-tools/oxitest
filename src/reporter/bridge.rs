@@ -33,7 +33,7 @@ struct BridgeFixtureTiming {
     teardown_count: usize,
 }
 
-/// Fetch shared fixture cache hit/miss statistics.
+/// Fetch fixture cache hit/miss statistics across every cached tier.
 pub(crate) fn get_cache_stats(
     session: &FixtureSession,
     py: Python<'_>,

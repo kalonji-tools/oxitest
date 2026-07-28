@@ -8,7 +8,7 @@ __all__ = [
 
 import asyncio
 import inspect
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, Self
@@ -287,6 +287,12 @@ class FixtureSession:
         # first use and popped+drained by end_module. Popping (rather than
         # clearing) keeps a long run from retaining one _Scope per module.
         self._module_scopes: dict[str, _Scope] = {}
+        # Module scopes are discarded at end_module, taking their counters with
+        # them, so cache stats are folded into these before the pop. Without
+        # that, a run using only module-lifetime fixtures reports no cache
+        # activity at all.
+        self._module_hits: defaultdict[str, int] = defaultdict(int)
+        self._module_misses: defaultdict[str, int] = defaultdict(int)
         self._module_cache = ModuleCache()
 
         # ── Register all fixture sources into the unified registry ──
@@ -472,6 +478,10 @@ class FixtureSession:
         """
         scope = self._module_scopes.pop(module_path, None)
         if scope is not None:
+            for name, count in scope.hits.items():
+                self._module_hits[name] += count
+            for name, count in scope.misses.items():
+                self._module_misses[name] += count
             # No single test owns a module-scope teardown, so the per-test node
             # id is empty here. Name the module instead — otherwise a failure
             # reports only the fixture name, leaving the user to guess which
@@ -503,17 +513,29 @@ class FixtureSession:
             _diagnostic_collector_var.set(None)
 
     def get_cache_stats(self) -> CacheStats:
-        """Return shared fixture cache hit/miss statistics."""
+        """Return fixture cache hit/miss statistics across every cached tier.
+
+        Covers ``shared=True`` fixtures and ``lifetime="module"`` ones. Module
+        counters come from ``_module_hits`` / ``_module_misses`` rather than
+        the live scopes, which ``end_module`` has already discarded by the time
+        anything reads stats.
+        """
         s = self._shared_scope
-        names = sorted(set(s.hits.keys()) | set(s.misses.keys()))
+        # update(), not a dict merge: a name present in both tiers must sum,
+        # not have one tier's count silently replace the other's.
+        hits: Counter[str] = Counter(s.hits)
+        hits.update(self._module_hits)
+        misses: Counter[str] = Counter(s.misses)
+        misses.update(self._module_misses)
+        names = sorted(set(hits) | set(misses))
         return CacheStats(
-            total_hits=sum(s.hits.values()),
-            total_misses=sum(s.misses.values()),
+            total_hits=sum(hits.values()),
+            total_misses=sum(misses.values()),
             breakdown=tuple(
                 CacheEntry(
                     name=n,
-                    hits=s.hits.get(n, 0),
-                    misses=s.misses.get(n, 0),
+                    hits=hits.get(n, 0),
+                    misses=misses.get(n, 0),
                 )
                 for n in names
             ),
