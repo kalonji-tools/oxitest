@@ -7,6 +7,7 @@ import os
 __all__ = [
     "AmbiguousFixtureError",
     "ArrangeError",
+    "AsyncFixtureAccessError",
     "AutouseRegistrationError",
     "BackendNotFoundError",
     "BroadFixtureTypeError",
@@ -354,6 +355,52 @@ class AutouseRegistrationError(TypeError):
 
 
 # ─── Arrange errors ──────────────────────────────────────────────────────────
+
+
+class AsyncFixtureAccessError(OxitestError):
+    """Raised when a sync test reaches an async fixture through the ``fx.`` proxy.
+
+    When it fires:
+        The same illegal cell ``ArrangeError`` covers for ``@arrange``, on the
+        other access path. A sync test cannot await anything, so handing it an
+        async fixture can only produce an un-awaited coroutine — the silent
+        failure kalonji-tools/oxitest#1733 exists to remove. Raised at
+        **access**, before the factory runs, so the traceback points at the
+        ``fx.`` line rather than into the fixture body.
+
+    How to fix:
+        Three options, same as the ``@arrange`` path:
+
+        - Make the test async — ``async def test_...``, then ``await`` it.
+        - Raise the fixture's lifetime so it is built outside the test.
+        - Convert the fixture to sync (remove ``async`` from its ``def``).
+
+    See Also:
+        - ``ArrangeError`` — the same cell reached via ``@oxi.arrange``.
+
+    Examples:
+        >>> from oxitest import raises
+        >>> from oxitest._bridge._errors import AsyncFixtureAccessError
+        >>> with raises(AsyncFixtureAccessError):
+        ...     raise AsyncFixtureAccessError("conn", "db", "function")
+
+    """
+
+    def __init__(self, name: str, namespace: str, lifetime: str) -> None:
+        qualified = f"fx.{namespace}.{name}" if namespace else f"fx.{name}"
+        message = (
+            f"async fixture {name!r} cannot be used by a sync test.\n"
+            f"  Accessed as: {qualified}\n"
+            f"  Test kind:   sync (`def test_...`)\n"
+            f"  Lifetime:    {lifetime}\n"
+            f"  Three ways forward:\n"
+            f"    1. Make the test async — `async def test_...`, "
+            f"then `await {qualified}`\n"
+            f"    2. Raise the fixture's lifetime so it is built "
+            f"outside the test\n"
+            f"    3. Convert fixture to sync — remove `async` from def\n"
+        )
+        super().__init__(message)
 
 
 class ArrangeError(OxitestError):

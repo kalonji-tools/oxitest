@@ -26,6 +26,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, assert_never
 
+from oxitest._bridge._async_fixture_handle import (
+    AsyncFixtureHandle,
+    register_async_teardown,
+)
 from oxitest._bridge._async_orchestrator import (
     AsyncPolicy,
     _check_async_dep,
@@ -412,6 +416,132 @@ class FixtureInstantiator:
         proxy = FrozenProxy(value)
         scope_refs.cache[_cache_key(defn)] = proxy
         return proxy
+
+    def resolve_async_in_namespace(
+        self,
+        defn: FixtureDef[Any],
+        ctx: _ResolutionContext,
+    ) -> AsyncFixtureHandle:
+        """Return an awaitable handle for an async fixture reached via ``fx.``.
+
+        Deliberately does *not* route through :meth:`_resolve_shared_async`.
+        That path resolves eagerly with ``session.run(...)`` — i.e.
+        ``run_until_complete`` — which raises ``Cannot run the event loop
+        while another loop is running`` when called from inside the test
+        body's loop, which is exactly where ``fx.`` resolution happens. The
+        handle awaits on whatever loop the body is already using instead.
+        """
+        scope_refs = ctx.scope_callback(defn, ctx.module_path)
+        return AsyncFixtureHandle(
+            lambda: self._build_async(defn, ctx, scope_refs), defn.name
+        )
+
+    async def _build_async(
+        self,
+        defn: FixtureDef[Any],
+        ctx: _ResolutionContext,
+        scope_refs: ScopeRefs | None,
+    ) -> Any:
+        """Build (or return the cached) value for an async fixture.
+
+        Runs on the caller's event loop. *scope_refs* is ``None`` for function
+        lifetime — no caching — and the tier's scope otherwise.
+        """
+        key = _cache_key(defn)
+        if scope_refs is not None:
+            if key in scope_refs.cache:
+                scope_refs.hits[key] = scope_refs.hits.get(key, 0) + 1
+                return scope_refs.cache[key]
+            scope_refs.misses[key] = scope_refs.misses.get(key, 0) + 1
+
+        deps = await self._resolve_async_deps(defn, ctx, scope_refs)
+
+        with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
+            _start = time.monotonic()
+            try:
+                raw = defn.func(**deps)
+                if inspect.isasyncgen(raw):
+                    value = await raw.__anext__()
+                    self._queue_async_teardown(defn, ctx, scope_refs, raw)
+                elif inspect.iscoroutine(raw):
+                    value = await raw
+                else:
+                    value = raw
+            except Exception as exc:
+                raise FixtureSetupError(defn.name, exc) from exc
+            self._setup_times[key].append((time.monotonic() - _start) * 1000.0)
+
+        if scope_refs is not None:
+            value = FrozenProxy(value)
+            scope_refs.cache[key] = value
+        return value
+
+    async def _resolve_async_deps(
+        self,
+        defn: FixtureDef[Any],
+        ctx: _ResolutionContext,
+        scope_refs: ScopeRefs | None,
+    ) -> dict[str, Any]:
+        """Resolve *defn*'s dependencies, advancing any that are async.
+
+        The sync resolution path hands coroutines and async generators back
+        untouched, so anything async arrives un-advanced and has to be driven
+        here, on the caller's loop.
+        """
+        deps = _resolve_deps(
+            self,
+            defn.func,
+            ctx,
+            fn_name=defn.name,
+            resolve_user=lambda n: self.resolve_fixture(n, ctx),
+        )
+        for dep_name, dep_val in deps.items():
+            if scope_refs is not None:
+                # This fixture outlives the test; a dependency that does not
+                # would be captured into the wider cache and handed to every
+                # later test — and, being loop-bound, to tests whose loop it
+                # no longer belongs to. The eager path rejects the same shape.
+                _check_async_dep(
+                    dep_name,
+                    dep_val,
+                    defn.name,
+                    f"fixture '{defn.name}' (scope '{defn.scope.value}') "
+                    f"cannot depend on the shorter-lived async fixture "
+                    f"'{dep_name}' — its value is bound to one test's event "
+                    f"loop and would be reused after that loop is gone",
+                )
+            if inspect.iscoroutine(dep_val):
+                deps[dep_name] = await dep_val
+            elif inspect.isasyncgen(dep_val):
+                deps[dep_name] = await dep_val.__anext__()
+                self._queue_async_teardown(defn, ctx, scope_refs, dep_val)
+        return deps
+
+    def _queue_async_teardown(
+        self,
+        defn: FixtureDef[Any],
+        ctx: _ResolutionContext,
+        scope_refs: ScopeRefs | None,
+        agen: Any,
+    ) -> None:
+        """Queue an async generator's post-``yield`` half at the right boundary.
+
+        Function lifetime (*scope_refs* is ``None``) drains inside the test
+        body, while the loop that created the generator is still open — an
+        async generator can only be resumed on the loop it was started on, so
+        anything later is a teardown on a dead loop.
+
+        Wider lifetimes outlive that loop by definition, so they go to the
+        session-lifetime manager, tagged with the boundary whose exit should
+        dispose them. Module lifetime is keyed by module path; anything else
+        falls back to session end.
+        """
+        if scope_refs is None and register_async_teardown(defn.name, agen):
+            return
+        if self._async_mgr is None:
+            return
+        boundary = ctx.module_path if defn.scope is FixtureScope.MODULE else None
+        self._async_mgr.register_teardown(defn.name, agen, boundary=boundary)
 
     def _instantiate(
         self,

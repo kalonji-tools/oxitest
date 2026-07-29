@@ -19,6 +19,7 @@ from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import (
+    AsyncFixtureAccessError,
     FixtureNotFoundError,
     FixtureTypeNotFoundError,
     UnannotatedFixtureParamError,
@@ -111,6 +112,8 @@ class _SessionProtocol(Protocol):
         namespace: str,
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
+        *,
+        test_is_async: bool = True,
     ) -> Any: ...
 
     def get_namespace_for_func(
@@ -287,6 +290,7 @@ class FixtureSession:
         # first use and popped+drained by end_module. Popping (rather than
         # clearing) keeps a long run from retaining one _Scope per module.
         self._module_scopes: dict[str, _Scope] = {}
+        self._has_wide_async: bool | None = None
         # Module scopes are discarded at end_module, taking their counters with
         # them, so cache stats are folded into these before the pop. Without
         # that, a run using only module-lifetime fixtures reports no cache
@@ -458,6 +462,35 @@ class FixtureSession:
     def _used_shared_async(self) -> bool:
         return self._async_mgr.was_used
 
+    def has_wide_async_fixtures(self) -> bool:
+        """Whether any registered async fixture outlives a single test.
+
+        Drives promotion of async test bodies onto the shared loop. The check
+        is *visibility*, not use: ``fx.<ns>.<name>`` resolves lazily inside the
+        body, long after the strategy was chosen, so waiting to find out
+        whether a test actually touched one is waiting too long.
+
+        Deliberately conservative — a test that could reach such a fixture but
+        never does is still promoted. The alternative is a value built on a
+        per-test loop and cached past that loop's death, which is the dominant
+        failure mode of wider-than-test async fixtures across every framework
+        surveyed in #1739.
+
+        Computed once. Registration finishes before the first test runs, so
+        the answer cannot change mid-run — and rebuilding the registry's
+        tuple on every async test to re-derive a constant is pure waste.
+        """
+        if self._has_wide_async is None:
+            self._has_wide_async = any(
+                defn.is_async and defn.scope is not FixtureScope.EACH
+                for defn in self._registry.all()
+            )
+        return self._has_wide_async
+
+    def ensure_async_session(self) -> AsyncSession | None:
+        """Acquire the shared async session up front, for promoted tests."""
+        return self._async_mgr.ensure_session()
+
     @property
     def plugin_registry(self) -> PluginRegistry:
         """Read-only access to the plugin registry."""
@@ -476,6 +509,9 @@ class FixtureSession:
         Drains before evicting so a module-lifetime teardown can still touch
         the module it was defined in.
         """
+        # Async generators first: their post-yield half may touch the sync
+        # values below, and both belong to the module that is ending.
+        self._async_mgr.drain_boundary(module_path)
         scope = self._module_scopes.pop(module_path, None)
         if scope is not None:
             for name, count in scope.hits.items():
@@ -659,7 +695,14 @@ class FixtureSession:
                     continue
                 if hint is Fixtures:
                     kwargs[param_name] = FixturesProxy(
-                        self, meta.module_path, fn_teardowns, fn_name=meta.fn_name
+                        self,
+                        meta.module_path,
+                        fn_teardowns,
+                        fn_name=meta.fn_name,
+                        # A sync test cannot await, so the proxy rejects async
+                        # fixtures at access rather than handing back a
+                        # coroutine nothing will ever await (ADR-0006).
+                        test_is_async=inspect.iscoroutinefunction(fn),
                     )
                     continue
                 resolved, value = self._instantiator.resolve_param(
@@ -720,6 +763,8 @@ class FixtureSession:
         namespace: str,
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
+        *,
+        test_is_async: bool = True,
     ) -> Any:
         defn = self._registry.get_in_namespace(name, namespace)
         if defn is None:
@@ -727,6 +772,13 @@ class FixtureSession:
         ctx = _ResolutionContext(
             module_path, fn_teardowns, frozenset(), self._scope_for
         )
+        if defn.is_async:
+            # ADR-0006's illegal cell, on the proxy path. Raised here rather
+            # than on await because a sync test has no loop to await on — the
+            # mistake is the access itself.
+            if not test_is_async:
+                raise AsyncFixtureAccessError(name, namespace, defn.scope.value)
+            return self._instantiator.resolve_async_in_namespace(defn, ctx)
         return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
 
     def get_namespace_for_func(

@@ -9,6 +9,7 @@ and _fixture_instantiator.py.
 from __future__ import annotations
 
 __all__ = [
+    "SESSION_BOUNDARY",
     "AsyncPolicy",
     "SharedAsyncManager",
     "_Idle",
@@ -33,6 +34,11 @@ if TYPE_CHECKING:
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown
+
+#: Teardown-store key for fixtures disposed at the end of the run. Every other
+#: key is the boundary's own identity — a module path, today. Not a valid
+#: module path itself, so it cannot collide with one.
+SESSION_BOUNDARY = "<session>"
 
 # ── State variants for lazy session acquisition (ADR-0007 Rule 4) ────────────
 
@@ -103,7 +109,12 @@ class SharedAsyncManager:
         self._backend = async_backend
         self._state: _SessionState = _Idle()
         self._stack: ExitStack = ExitStack()
-        self._teardowns: list[tuple[str, Any]] = []
+        #: Pending async-generator teardowns, keyed by the boundary whose exit
+        #: disposes them. ``SESSION_BOUNDARY`` holds the ones that live for the
+        #: whole run. One store rather than two: a separate session-level list
+        #: meant two drain paths, and the two drifted into different guard
+        #: orderings — one of which discarded teardowns.
+        self._teardowns: dict[str, list[tuple[str, Any]]] = {}
         self._used = False
 
     @property
@@ -122,8 +133,82 @@ class SharedAsyncManager:
 
     @property
     def teardowns(self) -> tuple[tuple[str, Any], ...]:
-        """Pending async teardowns (immutable view)."""
-        return tuple(self._teardowns)
+        """Every pending async teardown, across all boundaries (immutable)."""
+        return tuple(pair for pairs in self._teardowns.values() for pair in pairs)
+
+    @staticmethod
+    def _drain_pairs(pairs: list[tuple[str, Any]], live_session: Any) -> None:
+        """Advance each generator past its ``yield``, most recent first.
+
+        The single place a pending async generator is resumed. *live_session*
+        is passed rather than read from ``self._state`` so the caller has to
+        have proved a session exists — resuming on a closed or absent loop is
+        the failure this whole mechanism exists to prevent.
+        """
+        for name, gen in reversed(pairs):
+
+            def _drain(session: Any = live_session, generator: Any = gen) -> None:
+                with contextlib.suppress(StopAsyncIteration):
+                    session.run(anext(generator))
+
+            safe_teardown(_drain, name, warn=_warn_teardown)
+
+    def ensure_session(self) -> Any:
+        """Acquire the shared session if idle, and return it.
+
+        The one place this manager's session is created. Two callers:
+        :meth:`resolve`, which needs a loop to run a fixture on, and the
+        promotion path in the executor, which needs the loop to exist
+        *before* the test body starts — the lazy ``fx.`` path never calls
+        :meth:`resolve`, so without that the manager would stay ``_Idle``,
+        ``session`` would be ``None``, and ``cleanup`` would return before
+        draining anything.
+
+        Calls ``backend.acquire_session()`` directly rather than routing
+        through ``acquire_session_guarded``: the guard's ``ContextVar`` would
+        stay ``True`` for this manager's whole lifetime (until
+        :meth:`cleanup`), tripping the middleware's own guarded acquire for
+        the next test that uses no shared fixtures. The framework owns this
+        seam; the guard protects short-lived acquires that would nest in the
+        same call stack.
+        """
+        if isinstance(self._state, _Idle):
+            session = self._stack.enter_context(self._backend.acquire_session())
+            self._state = _Live(session=session)
+        return self._state.session
+
+    def drain_boundary(self, boundary: str) -> None:
+        """Run the pending teardowns registered against *boundary*.
+
+        Called when the boundary's scope exits — a module's last test, say —
+        so disposal happens where the fixture's declared lifetime says it
+        should, rather than being deferred to the end of the run. Ten
+        surveyed frameworks agree on that, and every deferral any of them
+        shipped was later logged as a bug (see #1739).
+        """
+        # Guard before popping. Popping first would discard the teardowns on
+        # the very path that cannot run them, turning "no loop to drain on"
+        # into "silently never disposed".
+        if isinstance(self._state, _Idle) or boundary not in self._teardowns:
+            return
+        self._drain_pairs(self._teardowns.pop(boundary), self._state.session)
+
+    def register_teardown(
+        self, name: str, agen: Any, *, boundary: str | None = None
+    ) -> None:
+        """Track an async generator whose post-``yield`` half is still pending.
+
+        Used by the lazy ``fx.`` resolution path, which advances the generator
+        on the *test's* loop rather than through :meth:`resolve`, but still
+        needs its drain to happen somewhere the loop is guaranteed alive.
+
+        *boundary* names the scope whose exit should dispose it — a module
+        path for module lifetime. ``None`` means session end, which is both
+        the correct answer for session-lifetime fixtures and the fallback for
+        anything whose boundary cannot be determined.
+        """
+        key = SESSION_BOUNDARY if boundary is None else boundary
+        self._teardowns.setdefault(key, []).append((name, agen))
 
     @property
     def session(self) -> AsyncSession | None:
@@ -154,26 +239,14 @@ class SharedAsyncManager:
             FixtureSetupError: If the fixture raises during setup.
 
         """
-        if isinstance(self._state, _Idle):
-            # The manager holds this session across every test in the fixture
-            # session. It calls ``backend.acquire_session()`` directly rather
-            # than routing through ``acquire_session_guarded`` because the
-            # guard's ``ContextVar`` would stay ``True`` for the manager's
-            # entire lifetime (until ``cleanup()``), tripping middleware's
-            # own guarded acquire for the next test that does not use shared
-            # fixtures. The framework owns this seam; the guard protects
-            # short-lived acquires that would nest in the same call stack.
-            session = self._stack.enter_context(self._backend.acquire_session())
-            self._state = _Live(session=session)
-
+        live_session = self.ensure_session()
         self._used = True
-        live_session = self._state.session
 
         try:
             result = func(**deps)
             if inspect.isasyncgen(result):
                 value = live_session.run(anext(result))
-                self._teardowns.append((getattr(func, "__name__", ""), result))
+                self.register_teardown(getattr(func, "__name__", ""), result)
             elif inspect.iscoroutine(result):
                 value = live_session.run(result)
             else:
@@ -193,14 +266,16 @@ class SharedAsyncManager:
         """
         if isinstance(self._state, _Idle):
             return
+        # Clamp: effective boundary is min(declared boundary, loop lifetime).
+        # A boundary whose scope never exited would otherwise have its
+        # teardown finalised by loop close instead of run — the failure mode
+        # pytest-asyncio fixed in 0.25.3 and anyio in 4.1.0 (see #1739).
+        # Session-lifetime teardowns drain last, so a narrower fixture can
+        # still touch a wider one on its way out.
         live_session = self._state.session
-        for name, gen in reversed(self._teardowns):
-
-            def _drain(session: Any = live_session, generator: Any = gen) -> None:
-                with contextlib.suppress(StopAsyncIteration):
-                    session.run(anext(generator))
-
-            safe_teardown(_drain, name, warn=_warn_teardown)
+        for boundary in [b for b in self._teardowns if b != SESSION_BOUNDARY]:
+            self._drain_pairs(self._teardowns.pop(boundary), live_session)
+        self._drain_pairs(self._teardowns.pop(SESSION_BOUNDARY, []), live_session)
         self._stack.close()
         self._state = _Idle()
         self._teardowns.clear()

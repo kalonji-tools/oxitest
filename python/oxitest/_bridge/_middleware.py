@@ -19,6 +19,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, assert_never
 
 from oxitest._bridge._async_backend import AsyncBackend, AsyncSession
+from oxitest._bridge._async_fixture_handle import async_teardown_sink
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import async_safe_call
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
@@ -260,11 +261,17 @@ async def _async_test_core(plan: ExecutionPlan) -> TestResult:
     if isinstance(unpacked, TestResult):
         return unpacked
     resolved, async_teardowns = unpacked
+    # Fixtures resolved lazily inside the body (via `await fx.<ns>.<name>`)
+    # append their generators to this same list, so the drain below covers
+    # them too. Doing it any later would run their post-yield half after this
+    # loop has closed.
+    token = async_teardown_sink.set(async_teardowns)
     try:
         return await _run_with_timeout(
             plan.fn, resolved, plan.no_message_lines, timeout_secs
         )
     finally:
+        async_teardown_sink.reset(token)
         await _teardown_async_generators(async_teardowns)
 
 

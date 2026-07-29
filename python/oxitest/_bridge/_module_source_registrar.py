@@ -11,6 +11,7 @@ from __future__ import annotations
 
 __all__ = ["register_module_source_fixtures"]
 
+import inspect
 from pathlib import Path
 from types import ModuleType
 from typing import Any, get_type_hints
@@ -74,8 +75,20 @@ def register_module_source_fixtures(
                     lifetime=marker.lifetime,
                 ),
                 namespace=namespace,
+                is_async=_is_async(obj),
             )
         )
+
+
+def _is_async(obj: Any) -> bool:
+    """Whether *obj* is a coroutine function or an async-generator function.
+
+    Mirrors the ConftestSource path (``_fixtures.py``) exactly. Without this
+    the whole async surface is invisible to the resolver: an ``async def``
+    fixture is treated as an ordinary callable and its coroutine is injected
+    un-awaited (kalonji-tools/oxitest#1733).
+    """
+    return inspect.iscoroutinefunction(obj) or inspect.isasyncgenfunction(obj)
 
 
 def _infer_return_type(obj: Any) -> type:
