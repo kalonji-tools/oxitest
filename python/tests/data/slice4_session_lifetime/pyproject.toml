@@ -1,0 +1,10 @@
+[tool.oxitest]
+testpaths = ["slice4_session_lifetime"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Arrangement pins modules to the main process, which would collapse a parallel
+# run to one PID and make the per-worker assertion prove nothing.
+auto_arrange = false
+# Force parallelism regardless of test count: a run that quietly fell back to
+# serial would pass vacuously, since a serial run has one session for everything.
+min_parallel_tests = 1

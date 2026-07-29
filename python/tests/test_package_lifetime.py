@@ -1,7 +1,6 @@
 """lifetime="package" — the exactly-once-per-run tier (#1710)."""
 
 import oxitest as oxi
-from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_registry import LIFETIME_SCOPES, FixtureScope
 from oxitest._bridge._lifetime import Lifetime
 
@@ -35,12 +34,25 @@ def test_decorator_accepts_package_lifetime() -> None:
     )
 
 
-def test_session_lifetime_is_still_rejected() -> None:
-    """`session` stays out until #1711 decides its semantics."""
-    # Act / Assert — shipping it early would mean guessing between per-run and
-    # per-worker, which is exactly the decision #1711 exists to make.
-    with oxi.raises(UsageError):
+def test_session_maps_to_a_different_scope_than_package() -> None:
+    """The two wide tiers must not share a scope.
 
-        @oxi.fixture(lifetime="session")
-        def cluster() -> str:
-            return "cluster"
+    Slice 4 (#1711) settled the semantics this file used to assert were
+    undecided: ``session`` is once per **worker process**, ``package`` exactly
+    once per run. They sit at opposite ends of the same trade — package buys
+    exactness and charges parallelism, session the reverse — so collapsing them
+    onto one scope would silently give one tier the other's behaviour.
+    """
+    # Act
+    package_scope = LIFETIME_SCOPES.get(Lifetime.PACKAGE)
+    session_scope = LIFETIME_SCOPES.get(Lifetime.SESSION)
+
+    # Assert
+    assert session_scope is FixtureScope.SESSION, (
+        f"session lifetime must map to FixtureScope.SESSION, got {session_scope}"
+    )
+    assert package_scope is not session_scope, (
+        "package and session must not share a scope: they cache in different "
+        "buckets (per anchor directory vs per worker process), and sharing one "
+        "would make the declaring subtree's co-location apply to both"
+    )

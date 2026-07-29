@@ -149,24 +149,70 @@ pub(super) struct CollectionOutput {
     pub fixture_modules: Vec<types::FixtureModule>,
 }
 
+/// The top of the collected test tree — the deepest directory that contains
+/// every collected test file.
+///
+/// This is ADR-0009's "rootdir package". It is derived from the files actually
+/// collected rather than from `testpaths`, because a positional path argument
+/// overrides `testpaths` (`config/merge.rs`): `oxitest tests/` and a bare
+/// `oxitest` run from inside `tests/` would otherwise disagree about which
+/// directory is the root, making the same `lifetime="session"` declaration
+/// legal or illegal depending on the caller's shell.
+///
+/// Returns `None` when nothing was collected, in which case there is no tree
+/// and no declaration to place inside it.
+fn test_tree_root(test_files: &[camino::Utf8PathBuf]) -> Option<camino::Utf8PathBuf> {
+    let mut dirs = test_files.iter().filter_map(|file| file.parent());
+    let first = dirs.next()?;
+    Some(dirs.fold(first.to_owned(), |common, dir| {
+        common
+            .ancestors()
+            .find(|candidate| dir.starts_with(candidate))
+            .unwrap_or(camino::Utf8Path::new(""))
+            .to_owned()
+    }))
+}
+
+/// One declaration-home file and where it sits in the collected test tree.
+///
+/// Grouped rather than passed loose: the four travel together and mean nothing
+/// apart, and naming them at the call site is what keeps two `Utf8Path`s and a
+/// bare `bool` from being swappable by accident.
+struct DeclarationHome<'a> {
+    /// The declaration file itself — `__fixtures__.py` or `__init__.py`.
+    path: &'a camino::Utf8Path,
+    /// The directory that owns it; the anchor of everything declared inside.
+    anchor: &'a camino::Utf8Path,
+    /// Whether the filename is one oxitest owns. Gates the mistyped-alias hint.
+    reserved: bool,
+    /// Top of the collected test tree. Equal to `anchor` exactly when this home
+    /// is a *rootdir package*, the only place `lifetime="session"` may be
+    /// declared (ADR-0009 Rule 4).
+    tree_root: Option<&'a camino::Utf8Path>,
+}
+
 /// Prescan one declaration-home file and register whatever it declares.
 ///
-/// `reserved` says whether the filename is one oxitest owns. It gates a single
-/// diagnostic: in a reserved file (`__fixtures__.py`) a decorated top-level
-/// function that is *not* a recognized `@oxi.fixture` almost certainly means a
-/// mistyped import alias, and saying so saves a confusing fixture-not-found at
-/// test time. In `__init__.py` the same shape is ordinary Python — decorators
-/// belong there for reasons that have nothing to do with oxitest — so the hint
-/// would fire on well-formed packages and is suppressed.
+/// `home.reserved` says whether the filename is one oxitest owns. It gates a
+/// single diagnostic: in a reserved file (`__fixtures__.py`) a decorated
+/// top-level function that is *not* a recognized `@oxi.fixture` almost
+/// certainly means a mistyped import alias, and saying so saves a confusing
+/// fixture-not-found at test time. In `__init__.py` the same shape is ordinary
+/// Python — decorators belong there for reasons that have nothing to do with
+/// oxitest — so the hint would fire on well-formed packages and is suppressed.
 fn register_declaration_home(
     py: pyo3::Python<'_>,
     session: &bridge::FixtureSession,
-    path: &camino::Utf8Path,
-    anchor: &camino::Utf8Path,
-    reserved: bool,
+    home: &DeclarationHome<'_>,
     errors: &mut Vec<types::CollectError>,
     fixture_modules: &mut Vec<types::FixtureModule>,
 ) {
+    let DeclarationHome {
+        path,
+        anchor,
+        reserved,
+        tree_root,
+    } = *home;
     match crate::prescan::prescan_fixture_module(path) {
         crate::prescan::PrescanFixtureResult::HasFixtures(payload) => {
             let session_obj = session.as_py_object(py);
@@ -186,6 +232,45 @@ fn register_declaration_home(
                     lineno: d.lineno,
                 })
                 .collect();
+            // ADR-0009 Rule 4: `session` is legal only in a rootdir package. It
+            // is the tier that does not constrain the scheduler, so anchoring it
+            // below the root attaches it to no boundary at all.
+            //
+            // Read off the AST for the same reason the scheduler decision above
+            // is: it must hold even when registration failed, and be available
+            // before any Python runs. Per declaration rather than per file, so
+            // two offending declarations produce two diagnostics.
+            let is_rootdir_package = tree_root == Some(anchor);
+            if !is_rootdir_package {
+                // Name the directory that *is* the root. "Move it to a rootdir
+                // package" is unactionable on its own: the root is derived from
+                // the collected tree, so the user cannot read it off their
+                // config. Absent only when nothing was collected, in which case
+                // this loop cannot produce a diagnostic anyway.
+                let root_hint = tree_root.map_or_else(
+                    || "the root of your test tree".to_owned(),
+                    |root| root.to_string(),
+                );
+                errors.extend(
+                    payload
+                        .declarations
+                        .iter()
+                        .filter(|decl| decl.lifetime == crate::prescan::LIFETIME_SESSION)
+                        .map(|decl| {
+                            types::CollectError::PyError(format!(
+                                "{} in {path} declares lifetime=\"session\", but \
+                                 {anchor} is not a rootdir package.\n\
+                                 session is the tier that does not constrain the \
+                                 scheduler, so anchoring it below the root attaches \
+                                 it to no boundary at all.\n\
+                                 Hint: move the declaration to {root_hint}, or drop \
+                                 to lifetime=\"package\" to scope it to {anchor}, or \
+                                 lifetime=\"module\" for per-file.",
+                                decl.fn_name,
+                            ))
+                        }),
+                );
+            }
             // Recorded even when registration failed above: the serial session
             // and a worker session are independent, so a failure here says
             // nothing about whether the worker will succeed. It reports its own
@@ -239,6 +324,10 @@ pub(super) fn collect_items(
     let profile_enabled = cfg.output.collection_profile;
     let wall_start = std::time::Instant::now();
     let mut file_profiles: Vec<FileProfile> = Vec::new();
+    // Computed once over the whole file list rather than per directory: the
+    // rootdir package is a property of the run, and the per-file loop below
+    // visits directories in collection order, not depth order.
+    let tree_root = test_tree_root(test_files);
 
     // Deduplicate fixture-module registrations: multiple test files in the
     // same directory all share the same __fixtures__.py. Register once per dir.
@@ -304,9 +393,12 @@ pub(super) fn collect_items(
                     register_declaration_home(
                         py,
                         session,
-                        &path,
-                        parent_dir,
-                        reserved,
+                        &DeclarationHome {
+                            path: &path,
+                            anchor: parent_dir,
+                            reserved,
+                            tree_root: tree_root.as_deref(),
+                        },
                         &mut errors,
                         &mut fixture_modules,
                     );
@@ -659,6 +751,85 @@ pub(super) fn split_coverage_diagnostics(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── test_tree_root (#1711) ───────────────────────────────────────────────
+
+    fn paths(entries: &[&str]) -> Vec<Utf8PathBuf> {
+        entries.iter().map(Utf8PathBuf::from).collect()
+    }
+
+    #[test]
+    fn tree_root_of_one_directory_is_that_directory() {
+        let files = paths(&["tests/test_a.py", "tests/test_b.py"]);
+
+        let root = test_tree_root(&files);
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("tests")),
+            "a flat suite's root is the directory holding it — that is where a \
+             lifetime=\"session\" declaration is legal"
+        );
+    }
+
+    #[test]
+    fn tree_root_climbs_to_the_common_ancestor_of_siblings() {
+        let files = paths(&["tests/api/test_a.py", "tests/db/test_b.py"]);
+
+        let root = test_tree_root(&files);
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("tests")),
+            "with tests in two sibling directories the root is their parent, \
+             even though it holds no test file itself; declaring session in \
+             either sibling would scope it below the run"
+        );
+    }
+
+    #[test]
+    fn tree_root_is_independent_of_how_deep_the_search_started() {
+        // The same suite, whether reached via `oxitest project/` or by running
+        // inside it. A positional path overrides testpaths (config/merge.rs),
+        // so deriving the root from config would give two different answers and
+        // make the same declaration legal or illegal depending on the caller.
+        let files = paths(&["project/suite/test_a.py", "project/suite/test_b.py"]);
+
+        let root = test_tree_root(&files);
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("project/suite")),
+            "the root is derived from the files collected, not from the search \
+             root, so invocation style cannot change which directory is rootdir"
+        );
+    }
+
+    #[test]
+    fn tree_root_of_nothing_collected_is_none() {
+        let root = test_tree_root(&[]);
+
+        assert!(
+            root.is_none(),
+            "with no tests there is no tree, so no directory can be the rootdir \
+             package and no session declaration can sit inside one"
+        );
+    }
+
+    #[test]
+    fn tree_root_of_a_single_file_is_its_directory() {
+        let files = paths(&["tests/api/test_only.py"]);
+
+        let root = test_tree_root(&files);
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("tests/api")),
+            "a one-directory run makes that directory the rootdir package — \
+             otherwise a suite that lives in a subdirectory could never declare \
+             a session fixture at all"
+        );
+    }
 
     #[test]
     fn profile_shows_header_and_breakdown() {

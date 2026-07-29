@@ -58,11 +58,18 @@ class FixtureScope(StrEnum):
 #: live (see :attr:`FixtureDef.shared`, ``_fixtures.py``, ``fixture_lister.py``).
 #: Reusing it would make every legacy shared fixture look package-scoped to the
 #: scheduler, collapsing parallelism for suites that never asked for the tier.
+#:
+#: ``SESSION`` reuses the existing scope member the builtins already cache under
+#: (``_TempDirFactoryFixture``). Per ADR-0009 Rule 2 it means once per **worker
+#: process**, not once per run: it is the tier that does not constrain the
+#: scheduler, so a value cannot be shared across the process boundary. Work that
+#: must happen exactly once per run belongs at rootdir ``package`` instead.
 LIFETIME_SCOPES: Final = MappingProxyType(
     {
         Lifetime.FUNCTION: FixtureScope.EACH,
         Lifetime.MODULE: FixtureScope.MODULE,
         Lifetime.PACKAGE: FixtureScope.PACKAGE,
+        Lifetime.SESSION: FixtureScope.SESSION,
     }
 )
 
