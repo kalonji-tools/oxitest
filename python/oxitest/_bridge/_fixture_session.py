@@ -478,6 +478,21 @@ class FixtureSession:
             if s is None:
                 s = self._package_scopes[anchor] = _Scope()
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
+        if defn.scope is FixtureScope.SESSION:
+            # One bucket for the whole process, ignoring both module_path and
+            # anchor. session is the tier that does not constrain the scheduler
+            # (ADR-0009 Rule 2), so its boundary is the worker process itself,
+            # not any directory — which is exactly why it cannot be a run-wide
+            # singleton. Drained by end_session.
+            #
+            # This branch is what makes a *user-declared* lifetime="session"
+            # fixture reach the session scope. Builtins arrive there by a
+            # different route (the FixtureScope.SESSION mapping applied when
+            # registering `impl_cls`), so their working behaviour said nothing
+            # about this path; without this branch a declared session fixture
+            # fell through to function scope and was rebuilt per test.
+            scope = self._session_scope
+            return ScopeRefs(scope.cache, scope.teardowns, scope.hits, scope.misses)
         if defn.shared:
             s = self._shared_scope
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)

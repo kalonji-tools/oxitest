@@ -23,16 +23,20 @@ class _FixtureMarker:
 
 
 def fixture(*, lifetime: str) -> Callable[[_F], _F]:
-    """Declare a fixture (ADR-0009 subset).
+    """Declare a fixture (ADR-0009 Rule 2).
 
-    ``"function"`` and ``"module"`` are accepted. The remaining tiers raise
-    UsageError with pointers to their follow-on slices.
+    All four lifetime tiers are accepted.
 
     Args:
-        lifetime: Fixture lifetime tier. ``"function"`` builds a fresh
-            instance per test; ``"module"`` builds one per test module and
-            disposes it after that module's last test. ``"package"`` and
-            ``"session"`` are reserved for follow-on slices.
+        lifetime: Fixture lifetime tier. ``"function"`` builds a fresh instance
+            per test; ``"module"`` builds one per test module and disposes it
+            after that module's last test; ``"package"`` builds exactly one per
+            run for the declaring directory's subtree, which co-locates that
+            subtree onto a single worker and so costs the run parallelism;
+            ``"session"`` builds one per **worker process** — not one per run,
+            so it is not a true singleton, and it is legal only in a rootdir
+            package. Work that must happen exactly once per run belongs at
+            rootdir ``"package"``.
 
     Returns:
         A decorator that attaches the fixture marker to the decorated
@@ -41,8 +45,7 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
     Raises:
         ValueError: If *lifetime* is not a recognised :class:`~oxitest.Lifetime`
             member.
-        UsageError: If *lifetime* is valid but not yet implemented
-            (``"package"`` or ``"session"``).
+        UsageError: If *lifetime* is a recognised member with no scope mapping.
 
     Examples:
         Declare a function-scoped fixture in a ``__fixtures__.py`` module:
@@ -66,11 +69,15 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
     """
     tier = Lifetime(lifetime)  # ValueError on unknown value — desired
     if tier not in LIFETIME_SCOPES:
+        # Unreachable for every current member: LIFETIME_SCOPES is total over
+        # Lifetime as of #1711. Kept so a member added without a scope mapping
+        # fails here, at the declaration, rather than as a KeyError deeper in
+        # the registrar where the offending decorator is no longer in view.
         supported = ", ".join(repr(t.value) for t in LIFETIME_SCOPES)
         msg = (
-            f"@oxi.fixture(lifetime={lifetime!r}) is not yet supported. "
-            f"Supported so far: {supported}; see "
-            f"kalonji-tools/oxitest#1710 (package), #1711 (session)."
+            f"@oxi.fixture(lifetime={lifetime!r}) has no scope mapping. "
+            f"Supported: {supported}. This is an oxitest bug — please report it "
+            f"at kalonji-tools/oxitest."
         )
         raise UsageError(msg)
 

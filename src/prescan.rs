@@ -89,6 +89,12 @@ pub(crate) struct PrescanDeclaration {
 /// any Python runs — there is no `Lifetime` enum on this side of the bridge.
 pub(crate) const LIFETIME_PACKAGE: &str = "package";
 
+/// The `lifetime=` value that is legal only in a rootdir package (#1711).
+///
+/// Compared as a string for the same reason as [`LIFETIME_PACKAGE`]: prescan
+/// reads the decorator off the AST, before any Python runs.
+pub(crate) const LIFETIME_SESSION: &str = "session";
+
 /// Per-fixture-module payload (mirrors PrescanPayload).
 ///
 /// `declarations` drives package co-location in `collection.rs` and is consumed

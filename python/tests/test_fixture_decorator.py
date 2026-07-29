@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from oxitest import raises
-from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import (
     MARKER_ATTR,
     _FixtureMarker,
     fixture,
 )
+from oxitest._bridge._fixture_registry import LIFETIME_SCOPES
 from oxitest._bridge._lifetime import Lifetime
 
 
@@ -61,19 +61,43 @@ def test_module_lifetime_is_accepted() -> None:
     )
 
 
-def test_session_lifetime_rejected_with_slice_pointer() -> None:
-    """`session` raises UsageError naming the slice that owns it.
+def test_session_lifetime_is_accepted() -> None:
+    """lifetime="session" produces a working decorator with a SESSION marker.
 
-    The pointer matters: without it a user hitting this has no way to tell a
-    typo from a tier that simply has not landed yet.
-
-    This was a two-case parametrize until slice 3 (#1710) landed ``package``.
-    ``session`` stays rejected until #1711 decides whether it means per-run or
-    per-worker — shipping it early would be guessing at the semantics that
-    issue exists to settle.
+    This was a rejection test until slice 4 (#1711) settled the semantics —
+    ``session`` is once per **worker process**, not once per run. All four
+    ADR-0009 tiers are now declarable, so ``LIFETIME_SCOPES`` is total over
+    ``Lifetime`` and no tier is gated any more.
     """
-    with raises(UsageError, match="1711"):
-        fixture(lifetime="session")
+
+    @fixture(lifetime="session")
+    def engine() -> str:
+        return "engine"
+
+    marker = getattr(engine, MARKER_ATTR)
+    assert marker.lifetime is Lifetime.SESSION, (
+        "marker must record SESSION so the registrar maps it to "
+        "FixtureScope.SESSION — any other marker routes the fixture to "
+        "function scope and rebuilds it per test"
+    )
+    assert engine() == "engine", (
+        "the decorator is a pure marker — declaring a tier must not wrap or "
+        "replace the function (ADR-0009 Rule 1)"
+    )
+
+
+def test_every_lifetime_tier_has_a_scope_mapping() -> None:
+    """No ``Lifetime`` member may be declarable without a scope.
+
+    The decorator's gate is membership in ``LIFETIME_SCOPES``. A member added
+    without a mapping would not raise there — it would ``KeyError`` deeper in
+    the registrar, far from the declaration that caused it.
+    """
+    missing = [tier.value for tier in Lifetime if tier not in LIFETIME_SCOPES]
+    assert not missing, (
+        f"these Lifetime members have no FixtureScope mapping: {missing}. "
+        f"Add one, or the decorator will accept a tier the registrar cannot map"
+    )
 
 
 def test_unknown_lifetime_raises_value_error() -> None:

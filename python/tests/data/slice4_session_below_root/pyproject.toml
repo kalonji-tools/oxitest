@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice4_session_below_root"]
+python_files = ["test_*.py"]
+strict = "abort"
