@@ -14,7 +14,7 @@ const MAX_LINE_LENGTH: usize = 10 * 1024 * 1024;
 use crate::{
     parallel::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome},
     scheduler, types,
-    worker_result::{WorkerTask, WorkerTaskItem},
+    worker_result::{WorkerTask, WorkerTaskItem, WorkerTaskModule},
 };
 
 /// Takes stdin and stdout pipes from a child spawned with `Stdio::piped()`.
@@ -230,17 +230,21 @@ fn run_worker_loop(
         let Some(group) = sched.pop() else { break };
 
         let task = WorkerTask {
-            module_path: group.module_path.as_str(),
-            items: group
-                .items
-                .iter()
-                .map(|item| WorkerTaskItem {
-                    fn_name: &item.fn_name,
-                    param_id: item.param_id.as_deref(),
-                    node_id: &item.node_id,
-                    markers: item.markers.iter().collect(),
-                })
-                .collect(),
+            protocol_version: crate::worker_result::PROTOCOL_VERSION,
+            // One module per task today — #1710 makes this a package subtree.
+            modules: vec![WorkerTaskModule {
+                module_path: group.module_path.as_str(),
+                items: group
+                    .items
+                    .iter()
+                    .map(|item| WorkerTaskItem {
+                        fn_name: &item.fn_name,
+                        param_id: item.param_id.as_deref(),
+                        node_id: &item.node_id,
+                        markers: item.markers.iter().collect(),
+                    })
+                    .collect(),
+            }],
             conftest_paths: &conftest_json,
             fixture_modules: &fixture_modules_json,
             timeout_secs,
@@ -401,12 +405,15 @@ mod worker_session_tests {
         fixture_modules: &'a serde_json::value::RawValue,
     ) -> WorkerTask<'a> {
         WorkerTask {
-            module_path: "tests/test_example.py",
-            items: vec![WorkerTaskItem {
-                fn_name: "test_add",
-                param_id: None,
-                node_id: "tests/test_example.py::test_add",
-                markers: vec![],
+            protocol_version: crate::worker_result::PROTOCOL_VERSION,
+            modules: vec![WorkerTaskModule {
+                module_path: "tests/test_example.py",
+                items: vec![WorkerTaskItem {
+                    fn_name: "test_add",
+                    param_id: None,
+                    node_id: "tests/test_example.py::test_add",
+                    markers: vec![],
+                }],
             }],
             conftest_paths: conftest,
             fixture_modules,
@@ -440,8 +447,23 @@ mod worker_session_tests {
         // Must be valid JSON.
         let parsed: serde_json::Value =
             serde_json::from_str(line.trim()).expect("line must be valid JSON");
-        assert_eq!(parsed["module_path"], "tests/test_example.py");
-        assert_eq!(parsed["items"][0]["fn_name"], "test_add");
+        assert_eq!(
+            parsed["protocol_version"],
+            crate::worker_result::PROTOCOL_VERSION,
+            "a task serialized without the version field is rejected by every \
+             worker — the check exists so a stale build fails with an actionable \
+             message instead of a KeyError deep inside run()"
+        );
+        assert_eq!(
+            parsed["modules"][0]["module_path"], "tests/test_example.py",
+            "modules must nest their own path — flattening it onto items would \
+             make item ordering load-bearing for end_module boundaries"
+        );
+        assert_eq!(
+            parsed["modules"][0]["items"][0]["fn_name"], "test_add",
+            "items must stay nested under their module so teardown boundaries \
+             are structural rather than inferred from ordering"
+        );
         assert_eq!(parsed["conftest_paths"], serde_json::json!([]));
         assert!(parsed["timeout_secs"].is_null());
 
@@ -456,12 +478,15 @@ mod worker_session_tests {
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let task = WorkerTask {
-            module_path: "tests/test_math.py",
-            items: vec![WorkerTaskItem {
-                fn_name: "test_mul",
-                param_id: Some("x=2-y=3"),
-                node_id: "tests/test_math.py::test_mul[x=2-y=3]",
-                markers: vec!["slow"],
+            protocol_version: crate::worker_result::PROTOCOL_VERSION,
+            modules: vec![WorkerTaskModule {
+                module_path: "tests/test_math.py",
+                items: vec![WorkerTaskItem {
+                    fn_name: "test_mul",
+                    param_id: Some("x=2-y=3"),
+                    node_id: "tests/test_math.py::test_mul[x=2-y=3]",
+                    markers: vec!["slow"],
+                }],
             }],
             conftest_paths: &conftest,
             fixture_modules: &no_fixtures,
@@ -481,7 +506,11 @@ mod worker_session_tests {
             .expect("must receive echoed line");
         let parsed: serde_json::Value =
             serde_json::from_str(line.trim()).expect("line must be valid JSON");
-        assert_eq!(parsed["items"][0]["param_id"], "x=2-y=3");
+        assert_eq!(
+            parsed["modules"][0]["items"][0]["param_id"], "x=2-y=3",
+            "parametrize case ids travel per item inside their module — losing \
+             them would collapse every case of a parametrized test onto one node id"
+        );
         assert_eq!(parsed["timeout_secs"], 30);
 
         drop(session);
@@ -508,7 +537,11 @@ mod worker_session_tests {
 
         let parsed: serde_json::Value =
             serde_json::from_str(line.trim()).expect("echoed line must be valid JSON");
-        assert_eq!(parsed["module_path"], "tests/test_example.py");
+        assert_eq!(
+            parsed["modules"][0]["module_path"], "tests/test_example.py",
+            "the round trip must preserve the nested shape — a worker reading a \
+             flat module_path would see nothing and run no tests"
+        );
 
         drop(session);
         let _ = child.wait();

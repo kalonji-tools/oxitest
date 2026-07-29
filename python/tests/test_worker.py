@@ -9,19 +9,25 @@ import subprocess
 import sys
 
 from oxitest import TempDir
+from oxitest._bridge.result import PROTOCOL_VERSION
 from oxitest._bridge.worker import _emit
 
 
 def _make_task(path: str, fn_name: str) -> dict:
     """Build a minimal worker task for a single test function."""
     return {
-        "module_path": path,
-        "items": [
+        "protocol_version": PROTOCOL_VERSION,
+        "modules": [
             {
-                "fn_name": fn_name,
-                "param_id": None,
-                "node_id": f"{path}::{fn_name}",
-                "markers": [],
+                "module_path": path,
+                "items": [
+                    {
+                        "fn_name": fn_name,
+                        "param_id": None,
+                        "node_id": f"{path}::{fn_name}",
+                        "markers": [],
+                    }
+                ],
             }
         ],
         "conftest_paths": [],

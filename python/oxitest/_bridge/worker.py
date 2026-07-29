@@ -3,14 +3,17 @@
 Reads a single JSON task from stdin, runs each test item using executor.run_test,
 and writes one JSON result line per test to stdout.
 
-Task schema (stdin):
+Task schema (stdin, protocol v5):
     {
-        "module_path": str,
-        "items": [{
-            "fn_name": str,
-            "param_id": str | null,
-            "node_id": str,
-            "markers": [str]
+        "protocol_version": int,
+        "modules": [{
+            "module_path": str,
+            "items": [{
+                "fn_name": str,
+                "param_id": str | null,
+                "node_id": str,
+                "markers": [str]
+            }]
         }],
         "conftest_paths": [str],
         "fixture_modules": [{"module": str, "anchor": str}],
@@ -54,6 +57,7 @@ from typing import TYPE_CHECKING, NotRequired, TypedDict
 if TYPE_CHECKING:
     # Type-only — `from __future__ import annotations` keeps these out of the
     # runtime path, which matters because worker startup is on the hot path.
+    from collections.abc import Callable, Mapping
     from typing import Protocol
 
     from oxitest._bridge._fixture_registry import FixtureRegistry
@@ -114,20 +118,69 @@ class WorkerFixtureModule(TypedDict):
     anchor: str
 
 
+class WorkerTaskModule(TypedDict):
+    """One module and its test items within a :class:`WorkerTask`.
+
+    A task carries a list of these. The coordinator sends exactly one today;
+    #1710 makes a package's whole subtree a single task so a package-lifetime
+    fixture can be instantiated exactly once per run.
+    """
+
+    module_path: str
+    items: list[WorkerTaskItem]
+
+
 class WorkerTask(TypedDict):
     """JSON task sent from the Rust coordinator to a worker subprocess.
 
     Must stay in sync with ``WorkerTask`` in ``src/worker_result/wire.rs``.
     """
 
-    module_path: str
-    items: list[WorkerTaskItem]
+    protocol_version: int
+    modules: list[WorkerTaskModule]
     conftest_paths: list[str]
     fixture_modules: list[WorkerFixtureModule]
     timeout_secs: int | None
     keep_tmp: str
     show_locals: NotRequired[bool]
     show_internals: NotRequired[bool]
+
+
+def _check_task_protocol(task: Mapping[str, object]) -> None:
+    """Reject a task this worker cannot parse, with an actionable message.
+
+    The task wire is versioned separately from results. Without this check a
+    stale extension fails with ``KeyError`` deep inside :func:`run`, emitting no
+    result line — so the coordinator's result-side version warning never fires
+    and the user sees only a dead worker.
+
+    Absent is treated as mismatch: a pre-v5 coordinator sends no version field
+    at all, and trusting it would resurrect exactly the failure this prevents.
+
+    Takes a bare mapping rather than :class:`WorkerTask` on purpose — this runs
+    *before* the payload is known to have that shape, which is the whole point.
+    """
+    from oxitest._bridge.result import (
+        PROTOCOL_VERSION,
+        Diagnostic,
+        DiagnosticSeverity,
+    )
+
+    got = task.get("protocol_version")
+    if got == PROTOCOL_VERSION:
+        return
+    described = "absent" if got is None else repr(got)
+    message = (
+        f"task protocol version mismatch: coordinator sent {described}, this "
+        f"worker speaks {PROTOCOL_VERSION}. The Rust extension and the Python "
+        f"bridge are out of step — run `just build`."
+    )
+    _emit(
+        Diagnostic(
+            severity=DiagnosticSeverity.ERROR, context="worker", message=message
+        ).to_wire()
+    )
+    raise SystemExit(message)
 
 
 def _register_fixture_modules(
@@ -192,8 +245,9 @@ def run(task: WorkerTask) -> None:
     from oxitest._bridge.executor import run_test
     from oxitest._bridge.importer import collect_module
 
-    module_path: str = task["module_path"]
-    items: list[WorkerTaskItem] = task["items"]
+    _check_task_protocol(task)
+
+    modules: list[WorkerTaskModule] = task["modules"]
     conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str = task.get("keep_tmp", "cleanup")
@@ -201,6 +255,12 @@ def run(task: WorkerTask) -> None:
         show_locals=task.get("show_locals", False),
         show_internals=task.get("show_internals", False),
     )
+
+    # Read every module path before the session exists: a malformed entry raises
+    # here, where there is nothing to leak. Reading it after create_session would
+    # strand a live session, and reading it inside the finally would mask
+    # whatever exception was already in flight.
+    module_paths = [module["module_path"] for module in modules]
 
     session, _violations, _diagnostics = create_session(conftest_paths)
     _register_fixture_modules(session, task.get("fixture_modules", []))
@@ -210,59 +270,73 @@ def run(task: WorkerTask) -> None:
     # collect_module during collection, so self-contained test files that define
     # their own fixtures work correctly in parallel mode too.
     try:
-        # Register fixtures — skip for pure doctest modules that aren't test files.
-        # Inside the try: collect_module imports the test module, which can raise
-        # anything (a SyntaxError in the file, say) and must not skip teardown.
-        with contextlib.suppress(ImportError, ModuleNotFoundError):
-            collect_module(module_path, session)
+        for module in modules:
+            module_path = module["module_path"]
+            # Register fixtures — skip for pure doctest modules that aren't test
+            # files. Inside the try: collect_module imports the test module, which
+            # can raise anything (a SyntaxError in the file, say) and must not
+            # skip teardown.
+            with contextlib.suppress(ImportError, ModuleNotFoundError):
+                collect_module(module_path, session)
 
-        for item in items:
-            meta = TestMeta(
-                module_path=module_path,
-                fn_name=item["fn_name"],
-                node_id=item["node_id"],
-                kind=from_wire(item.get("param_id")),
-                markers=frozenset(item.get("markers", [])),
-            )
+            for item in module["items"]:
+                meta = TestMeta(
+                    module_path=module_path,
+                    fn_name=item["fn_name"],
+                    node_id=item["node_id"],
+                    kind=from_wire(item.get("param_id")),
+                    markers=frozenset(item.get("markers", [])),
+                )
 
-            start = time.monotonic()
-            result = run_test(
-                meta,
-                session=session,
-                default_timeout=timeout_secs,
-                keep_tmp=keep_tmp,
-                debug=debug,
-            )
-            duration_ms = (time.monotonic() - start) * 1000.0
-            _emit(result.to_wire(meta.node_id, duration_ms))
+                start = time.monotonic()
+                result = run_test(
+                    meta,
+                    session=session,
+                    default_timeout=timeout_secs,
+                    keep_tmp=keep_tmp,
+                    debug=debug,
+                )
+                duration_ms = (time.monotonic() - start) * 1000.0
+                _emit(result.to_wire(meta.node_id, duration_ms))
     finally:
-        _end_task_session(session, module_path)
+        _end_task_session(session, module_paths)
 
 
-def _end_task_session(session: _TeardownTarget, module_path: str) -> None:
+def _end_task_session(session: _TeardownTarget, module_paths: list[str]) -> None:
     """Drain the task's fixture session, mirroring the serial path's teardown.
 
-    Failures are swallowed: raising here would discard results this task has
-    already emitted, and the serial path routes them to
-    ``record_teardown_warning`` rather than aborting. Each teardown gets its
-    own ``try`` so a failing ``end_module`` cannot skip ``end_session``.
+    Fires ``end_module`` for every module the task carried, in task order, then
+    ``end_session`` once. Ordering matters: a wider-lifetime fixture disposes at
+    the session drain, so every module teardown must finish first or a module
+    teardown could reach a value that is already gone.
+
+    Each drain gets its own ``try`` so a failing ``end_module`` cannot skip the
+    modules after it or ``end_session``.
+    """
+    for path in module_paths:
+        _drain(f"end_module({path})", session.end_module, path)
+    _drain("end_session", session.end_session)
+
+
+def _drain(context: str, teardown: Callable[..., None], *args: str) -> None:
+    """Run one teardown, reporting failure as a diagnostic instead of raising.
+
+    Raising would discard results the task has already emitted; the serial path
+    routes teardown failures to ``record_teardown_warning`` rather than aborting,
+    and this mirrors that.
     """
     from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
 
-    for context, teardown in (
-        (f"end_module({module_path})", lambda: session.end_module(module_path)),
-        ("end_session", session.end_session),
-    ):
-        try:
-            teardown()
-        except Exception as exc:  # noqa: BLE001 — teardown must not kill the worker
-            _emit(
-                Diagnostic(
-                    severity=DiagnosticSeverity.WARNING,
-                    context=context,
-                    message=f"teardown error: {exc}",
-                ).to_wire()
-            )
+    try:
+        teardown(*args)
+    except Exception as exc:  # noqa: BLE001 — teardown must not kill the worker
+        _emit(
+            Diagnostic(
+                severity=DiagnosticSeverity.WARNING,
+                context=context,
+                message=f"teardown error: {exc}",
+            ).to_wire()
+        )
 
 
 def main() -> None:
