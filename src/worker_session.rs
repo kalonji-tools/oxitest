@@ -180,6 +180,48 @@ pub(crate) struct WorkerParams {
     pub in_flight: std::sync::Arc<parking_lot::Mutex<ahash::AHashSet<String>>>,
 }
 
+/// Build the JSON task for one scheduler unit.
+///
+/// Extracted from [`run_worker_loop`] so it is reachable by `cargo test`: the
+/// loop itself needs a live subprocess and a scheduler, so coverage could never
+/// enter it — which is why `codecov/patch/rust` failed on #1747.
+fn build_task<'a>(
+    group: &'a scheduler::TaskGroup,
+    conftest_json: &'a serde_json::value::RawValue,
+    fixture_modules_json: &'a serde_json::value::RawValue,
+    timeout_secs: Option<u64>,
+    keep_tmp: &'a str,
+    show_locals: bool,
+    show_internals: bool,
+) -> WorkerTask<'a> {
+    WorkerTask {
+        protocol_version: crate::worker_result::PROTOCOL_VERSION,
+        modules: group
+            .modules
+            .iter()
+            .map(|m| WorkerTaskModule {
+                module_path: m.module_path.as_str(),
+                items: m
+                    .items
+                    .iter()
+                    .map(|item| WorkerTaskItem {
+                        fn_name: &item.fn_name,
+                        param_id: item.param_id.as_deref(),
+                        node_id: &item.node_id,
+                        markers: item.markers.iter().collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        conftest_paths: conftest_json,
+        fixture_modules: fixture_modules_json,
+        timeout_secs,
+        keep_tmp,
+        show_locals: if show_locals { Some(true) } else { None },
+        show_internals: if show_internals { Some(true) } else { None },
+    }
+}
+
 /// Runs the task-dispatch loop for a single worker.
 ///
 /// Consumes the already-established subprocess handles (`child`, `stdin`, `line_rx`)
@@ -229,37 +271,27 @@ fn run_worker_loop(
     while subprocess_alive && !cancelled.load(Ordering::Relaxed) {
         let Some(group) = sched.pop() else { break };
 
-        let task = WorkerTask {
-            protocol_version: crate::worker_result::PROTOCOL_VERSION,
-            // One module per task today — #1710 makes this a package subtree.
-            modules: vec![WorkerTaskModule {
-                module_path: group.module_path.as_str(),
-                items: group
-                    .items
-                    .iter()
-                    .map(|item| WorkerTaskItem {
-                        fn_name: &item.fn_name,
-                        param_id: item.param_id.as_deref(),
-                        node_id: &item.node_id,
-                        markers: item.markers.iter().collect(),
-                    })
-                    .collect(),
-            }],
-            conftest_paths: &conftest_json,
-            fixture_modules: &fixture_modules_json,
+        let task = build_task(
+            &group,
+            &conftest_json,
+            &fixture_modules_json,
             timeout_secs,
-            keep_tmp: keep_tmp.as_ref(),
-            show_locals: if show_locals { Some(true) } else { None },
-            show_internals: if show_internals { Some(true) } else { None },
-        };
+            keep_tmp.as_ref(),
+            show_locals,
+            show_internals,
+        );
+
+        // Flattened once: every site below needs every module's items, and
+        // DrainContext borrows the slice for the duration of the drain.
+        let group_items: Vec<std::sync::Arc<types::TestItem>> = group.items().cloned().collect();
 
         if let Err(e) = session.send_task(&task) {
             tracing::warn!(
-                module = %group.module_path,
+                module = %group.label(),
                 error = %e,
                 "failed to send task to worker — emitting error for all group items"
             );
-            for item in &group.items {
+            for item in &group_items {
                 let _ = tx.send(crate::parallel::WorkerResult {
                     resolved: types::ResolvedOutcome {
                         node_id: item.node_id.clone(),
@@ -274,12 +306,12 @@ fn run_worker_loop(
 
         {
             let mut set = in_flight.lock();
-            for item in &group.items {
+            for item in &group_items {
                 set.insert(item.node_id.to_string());
             }
         }
 
-        let expected = group.items.len();
+        let expected = group.item_count();
         let (drain_outcome, received) = session.drain_results(expected, &tx, worker_id);
 
         subprocess_alive = handle_drain_outcome(
@@ -287,9 +319,9 @@ fn run_worker_loop(
             received,
             &mut DrainContext {
                 child: &mut child,
-                items: &group.items,
+                items: &group_items,
                 watchdog,
-                module_path: &group.module_path,
+                module_path: group.label(),
                 tx: &tx,
                 worker_id,
             },
@@ -422,6 +454,74 @@ mod worker_session_tests {
             show_locals: None,
             show_internals: None,
         }
+    }
+
+    /// A `ModuleGroup` with `count` synthetic items.
+    fn task_module(path: &str, count: usize) -> crate::scheduler::ModuleGroup {
+        let items = (0..count)
+            .map(|i| {
+                std::sync::Arc::new(
+                    types::TestItem::builder(path, &format!("test_{i}"))
+                        .lineno(i)
+                        .build(),
+                )
+            })
+            .collect();
+        crate::scheduler::ModuleGroup::new(camino::Utf8PathBuf::from(path), items)
+    }
+
+    #[test]
+    fn build_task_maps_every_module_in_the_group() {
+        // Arrange
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let group = crate::scheduler::TaskGroup {
+            modules: vec![
+                task_module("tests/test_a.py", 2),
+                task_module("tests/test_b.py", 1),
+            ],
+        };
+
+        // Act
+        let task = build_task(&group, &conftest, &fixtures, None, "cleanup", false, false);
+
+        // Assert
+        assert_eq!(
+            task.modules.len(),
+            2,
+            "every module in the group must reach the worker — dropping one strands \
+             its tests, and the coordinator would wait on results never produced"
+        );
+        assert_eq!(
+            task.modules[0].items.len(),
+            2,
+            "items must stay with their own module; misattributing them would run \
+             tests against the wrong module's fixtures"
+        );
+        assert_eq!(
+            task.modules[1].module_path, "tests/test_b.py",
+            "module order must match the group, since the worker emits results in \
+             task order and the coordinator matches them positionally"
+        );
+    }
+
+    #[test]
+    fn build_task_stamps_the_current_protocol_version() {
+        // Arrange
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let group = crate::scheduler::TaskGroup::single(task_module("tests/test_a.py", 1));
+
+        // Act
+        let task = build_task(&group, &conftest, &fixtures, None, "cleanup", false, false);
+
+        // Assert — an unstamped task is rejected by every worker, so forgetting
+        // this would fail the whole run rather than degrade quietly.
+        assert_eq!(
+            task.protocol_version,
+            crate::worker_result::PROTOCOL_VERSION,
+            "the task must carry the version the worker checks against"
+        );
     }
 
     #[test]

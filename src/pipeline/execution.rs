@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use pyo3::prelude::*;
 
 use super::arrange::{self, ExecutionStrategy};
-use crate::scheduler::ModuleGroup;
+use crate::scheduler::{ModuleGroup, TaskGroup};
 use crate::{bridge, cache, config, filter, parallel, reporter, scheduler, strict, types};
 
 pub(super) struct ExecutionContext<'a> {
@@ -88,6 +88,16 @@ pub(crate) fn run_timed(
     (outcome, duration_ms)
 }
 
+/// Wrap module groups as singleton task groups.
+///
+/// The scheduler's unit is a [`TaskGroup`] — what one worker task covers.
+/// Everything upstream (`group_by_module`, `sort_groups`, `arrange`) still works
+/// in [`ModuleGroup`]s, so this is the single conversion point. `group_by_package`
+/// (#1710) replaces it for subtrees that declare a package-lifetime fixture.
+fn into_task_groups(groups: Vec<ModuleGroup>) -> Vec<TaskGroup> {
+    groups.into_iter().map(TaskGroup::single).collect()
+}
+
 /// Dispatch enum for serial vs. parallel execution.
 ///
 /// Replaces the former `ExecutionHarness` trait and its two implementers
@@ -134,9 +144,14 @@ impl<'a> ExecutionDispatch<'a> {
         }
     }
 
+    /// Run one phase's worth of work.
+    ///
+    /// Takes [`TaskGroup`]s rather than [`ModuleGroup`]s: a group is what one
+    /// worker task covers, which `group_by_package` (#1710) makes wider than a
+    /// single module. Callers wrap with [`TaskGroup::single`] until then.
     fn execute_groups(
         &mut self,
-        groups: Vec<ModuleGroup>,
+        groups: Vec<TaskGroup>,
         rep: &mut dyn reporter::Reporter,
     ) -> parallel::PhaseResult {
         match self {
@@ -151,7 +166,7 @@ impl<'a> ExecutionDispatch<'a> {
             } => {
                 let mut acc = types::FailureAccumulator::new(*maxfail);
                 let mut interrupted = false;
-                let total: usize = groups.iter().map(|g| g.items.len()).sum();
+                let total: usize = groups.iter().map(|g| g.item_count()).sum();
                 let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
                 let end_scope =
@@ -163,34 +178,48 @@ impl<'a> ExecutionDispatch<'a> {
                         drain_diagnostics(*py, session, rep);
                     };
 
-                'run: for ModuleGroup { module_path, items } in &groups {
-                    for item in items {
-                        rep.test_started(item);
-                        let timeout =
-                            resolve_timeout(cache, item, *timeout_secs, *timeout_multiplier);
-                        let (outcome, duration_ms) = run_timed(*py, item, session, timeout, *opts);
-                        // Drain diagnostics emitted during test execution
-                        drain_diagnostics(*py, session, rep);
-                        timings.push(types::TestTiming {
-                            node_id: item.node_id.clone(),
-                            duration_ms,
-                            outcome: types::OutcomeKind::from(&outcome),
-                        });
-                        rep.test_completed(item, &outcome, duration_ms, None);
-                        if acc.record(&outcome) {
-                            interrupted = true;
-                            end_scope(
-                                rep,
-                                format!("end_module({})", module_path),
-                                session.end_module(*py, module_path),
-                            );
-                            break 'run;
+                // Modules drain as they finish; the package drains once the whole
+                // group has. A package-lifetime value must outlive every module
+                // in its subtree, so end_package cannot fire per module — and it
+                // cannot ride on end_session either, because a serial run uses
+                // one session for the entire run.
+                'run: for group in &groups {
+                    for ModuleGroup { module_path, items } in &group.modules {
+                        for item in items {
+                            rep.test_started(item);
+                            let timeout =
+                                resolve_timeout(cache, item, *timeout_secs, *timeout_multiplier);
+                            let (outcome, duration_ms) =
+                                run_timed(*py, item, session, timeout, *opts);
+                            // Drain diagnostics emitted during test execution
+                            drain_diagnostics(*py, session, rep);
+                            timings.push(types::TestTiming {
+                                node_id: item.node_id.clone(),
+                                duration_ms,
+                                outcome: types::OutcomeKind::from(&outcome),
+                            });
+                            rep.test_completed(item, &outcome, duration_ms, None);
+                            if acc.record(&outcome) {
+                                interrupted = true;
+                                end_scope(
+                                    rep,
+                                    format!("end_module({})", module_path),
+                                    session.end_module(*py, module_path),
+                                );
+                                break 'run;
+                            }
                         }
+                        end_scope(
+                            rep,
+                            format!("end_module({})", module_path),
+                            session.end_module(*py, module_path),
+                        );
                     }
+                    let package = group.label();
                     end_scope(
                         rep,
-                        format!("end_module({})", module_path),
-                        session.end_module(*py, module_path),
+                        format!("end_package({})", package),
+                        session.end_package(*py, package),
                     );
                 }
                 end_scope(rep, "end_session".to_string(), session.end_session(*py));
@@ -461,7 +490,7 @@ pub(super) fn execute(
             }
         }
         let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
-        mode.execute_groups(plan.inprocess_groups, rep)
+        mode.execute_groups(into_task_groups(plan.inprocess_groups), rep)
     };
 
     if result.interrupted {
@@ -482,7 +511,7 @@ pub(super) fn execute(
             }
 
             let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
-            let serial_result = mode.execute_groups(all_groups, rep);
+            let serial_result = mode.execute_groups(into_task_groups(all_groups), rep);
             result.timings.extend(serial_result.timings);
             result.interrupted |= serial_result.interrupted;
             result
@@ -501,7 +530,7 @@ pub(super) fn execute(
                     if result.interrupted {
                         return result;
                     }
-                    let phase = serial.execute_groups(group_modules, rep);
+                    let phase = serial.execute_groups(into_task_groups(group_modules), rep);
                     result.timings.extend(phase.timings);
                     result.interrupted |= phase.interrupted;
                 }
@@ -524,7 +553,8 @@ pub(super) fn execute(
                 python_bin: ctx.python_bin,
                 pool: Some(pool_guard.take()),
             };
-            let parallel_result = parallel.execute_groups(plan.parallel_groups, rep);
+            let parallel_result =
+                parallel.execute_groups(into_task_groups(plan.parallel_groups), rep);
 
             result.timings.extend(parallel_result.timings);
             result.interrupted |= parallel_result.interrupted;

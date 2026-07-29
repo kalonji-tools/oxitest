@@ -49,32 +49,68 @@ impl ModuleGroup {
     }
 }
 
-#[cfg(test)]
-impl ModuleGroup {
-    pub fn len(&self) -> usize {
-        self.items.len()
+/// What one worker task covers: one or more modules run in a single process.
+///
+/// [`ModuleGroup`] stays exactly what its name says — one module and its items.
+/// This wraps N of them, mirroring `WorkerTask { modules: Vec<WorkerTaskModule> }`
+/// so `build_task` is a 1:1 map. `group_by_package` (#1710) merges a declaring
+/// package's subtree into one of these; every other group stays a singleton.
+#[derive(Debug, Clone)]
+pub(crate) struct TaskGroup {
+    pub(crate) modules: Vec<ModuleGroup>,
+}
+
+impl TaskGroup {
+    /// Wrap a single module — the shape every group has until #1710.
+    pub(crate) fn single(group: ModuleGroup) -> Self {
+        Self {
+            modules: vec![group],
+        }
+    }
+
+    /// Total items across every module.
+    ///
+    /// This is what the coordinator waits for. Undercount it and `drain_results`
+    /// returns before the worker has finished, leaving results unread and the run
+    /// waiting on a watchdog that never trips.
+    pub(crate) fn item_count(&self) -> usize {
+        self.modules.iter().map(|m| m.items.len()).sum()
+    }
+
+    /// Every item across every module, for in-flight tracking and crash synthesis.
+    pub(crate) fn items(&self) -> impl Iterator<Item = &Arc<TestItem>> {
+        self.modules.iter().flat_map(|m| m.items.iter())
+    }
+
+    /// Label for diagnostics. Names the first module; #1710 may prefer the
+    /// package path once groups span directories.
+    pub(crate) fn label(&self) -> &camino::Utf8Path {
+        self.modules
+            .first()
+            .map(|m| m.module_path.as_path())
+            .unwrap_or_else(|| camino::Utf8Path::new("<empty group>"))
     }
 }
 
-/// Work-stealing queue of module groups.
+/// Work-stealing queue of task groups.
 ///
 /// Groups are dispatched in insertion order. Callers are responsible for
 /// pre-sorting groups (e.g., via `cache.sort_groups()`). Workers call `pop()`
 /// atomically to claim the next group.
 pub(crate) struct Scheduler {
-    queue: parking_lot::Mutex<std::collections::VecDeque<ModuleGroup>>,
+    queue: parking_lot::Mutex<std::collections::VecDeque<TaskGroup>>,
 }
 
 impl Scheduler {
-    /// Build from a list of module groups. Preserves insertion order (cache already sorted by duration).
-    pub(crate) fn new(groups: Vec<ModuleGroup>) -> Self {
+    /// Build from a list of task groups. Preserves insertion order (cache already sorted by duration).
+    pub(crate) fn new(groups: Vec<TaskGroup>) -> Self {
         Self {
             queue: parking_lot::Mutex::new(std::collections::VecDeque::from(groups)),
         }
     }
 
     /// Pop the next group. Returns `None` when the queue is empty.
-    pub(crate) fn pop(&self) -> Option<ModuleGroup> {
+    pub(crate) fn pop(&self) -> Option<TaskGroup> {
         self.queue.lock().pop_front()
     }
 }
@@ -104,20 +140,61 @@ mod tests {
         ModuleGroup::new(p, items)
     }
 
+    /// A singleton task group — the shape everything has until #1710.
+    fn make_task(path: &str, count: usize) -> TaskGroup {
+        TaskGroup::single(make_group(path, count))
+    }
+
+    #[test]
+    fn task_group_item_count_sums_every_module() {
+        // Arrange
+        let group = TaskGroup {
+            modules: vec![make_group("a.py", 3), make_group("b.py", 2)],
+        };
+
+        // Act / Assert — the coordinator drains exactly this many result lines,
+        // so a short count returns early and hangs the run on a watchdog that
+        // never trips.
+        assert_eq!(
+            group.item_count(),
+            5,
+            "item_count must sum across every module, not report one module's total"
+        );
+    }
+
+    #[test]
+    fn task_group_items_yields_every_module_in_order() {
+        // Arrange
+        let group = TaskGroup {
+            modules: vec![make_group("a.py", 2), make_group("b.py", 1)],
+        };
+
+        // Act
+        let paths: Vec<&str> = group.items().map(|i| i.module_path()).collect();
+
+        // Assert — in-flight tracking and crash synthesis both walk this; missing
+        // a module's items would leave those tests unaccounted for on a crash.
+        assert_eq!(
+            paths,
+            vec!["a.py", "a.py", "b.py"],
+            "items() must walk every module in group order"
+        );
+    }
+
     #[test]
     fn test_scheduler_preserves_insertion_order() {
         // c=1 is last by count but first in insertion order.
         // After fix: c.py must come out first.
         // Before fix (count sort): b.py would come out first.
         let groups = vec![
-            make_group("c.py", 1), // smallest by count, first by insertion
-            make_group("b.py", 5),
-            make_group("a.py", 2),
+            make_task("c.py", 1), // smallest by count, first by insertion
+            make_task("b.py", 5),
+            make_task("a.py", 2),
         ];
         let sched = Scheduler::new(groups);
         let first = sched.pop().unwrap();
         assert_eq!(
-            first.module_path,
+            first.modules[0].module_path,
             Utf8PathBuf::from("c.py"),
             "Scheduler must preserve insertion order — cache already sorted by duration"
         );
@@ -125,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_scheduler_pop_drains_queue() {
-        let groups = vec![make_group("a.py", 1), make_group("b.py", 2)];
+        let groups = vec![make_task("a.py", 1), make_task("b.py", 2)];
         let sched = Scheduler::new(groups);
         assert_eq!(sched.remaining(), 2);
         sched.pop();
@@ -143,10 +220,10 @@ mod tests {
 
     #[test]
     fn test_scheduler_single_group() {
-        let groups = vec![make_group("only.py", 3)];
+        let groups = vec![make_task("only.py", 3)];
         let sched = Scheduler::new(groups);
         let g = sched.pop().unwrap();
-        assert_eq!(g.len(), 3);
+        assert_eq!(g.item_count(), 3);
         assert!(sched.pop().is_none());
     }
 
