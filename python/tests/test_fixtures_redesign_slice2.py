@@ -363,52 +363,6 @@ def test_lifetime_inversion_resolves_without_crashing(tmp: TempDir) -> None:
     )
 
 
-def test_async_module_lifetime_fixture_is_not_awaited(tmp: TempDir) -> None:
-    """TRIPWIRE for #1733 — asserts today's *wrong* behaviour, deliberately.
-
-    ``register_module_source_fixtures`` never sets ``FixtureDef.is_async``, so
-    an ``async def`` fixture is treated as a plain callable and its coroutine is
-    injected un-awaited. This affects ``lifetime="function"`` identically, so it
-    is a slice-1 gap rather than something the module tier introduced.
-
-    **Delete this test when #1733 is fixed.** It exists so that fix has a
-    failing test waiting for it — do not adjust it to keep passing.
-    """
-    root = Path(tmp) / "proj"
-    pkg = root / "pkg"
-    pkg.mkdir(parents=True)
-
-    (root / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
-    )
-    (pkg / "__init__.py").write_text("")
-    (pkg / "__fixtures__.py").write_text(
-        "from __future__ import annotations\n"
-        "import oxitest as oxi\n\n\n"
-        '@oxi.fixture(lifetime="module")\n'
-        "async def async_res() -> str:\n"
-        "    return 'async-value'\n"
-    )
-    (pkg / "test_async.py").write_text(
-        "from oxitest import Fixtures\n\n\n"
-        "def test_receives_raw_coroutine(fx: Fixtures) -> None:\n"
-        "    resource = fx.pkg.async_res\n"
-        "    assert 'coroutine' in repr(resource), (\n"
-        "        f'expected an un-awaited coroutine (see #1733), got {resource!r} '\n"
-        "        '— if this now holds the awaited value, #1733 is fixed and this '\n"
-        "        'whole test should be deleted'\n"
-        "    )\n"
-    )
-
-    out, err, rc = helpers.common.run_oxitest(None, "--serial", cwd=str(root))
-
-    assert rc == 0, (
-        f"the tripwire project itself failed (rc={rc}) — either #1733 was fixed "
-        f"(delete this test) or something else broke\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
-    )
-
-
 def test_module_lifetime_holds_in_parallel(tmp: TempDir) -> None:
     """Same instantiation/disposal counts under -n 2 as serially.
 
