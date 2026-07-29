@@ -1,6 +1,22 @@
 # Project-level worktrunk overrides.
 # Global config (~/.config/worktrunk/config.toml) provides defaults.
 
+# Approve this worktree's .envrc so entering it activates devenv without a
+# prompt. post-create rather than post-switch: it fires once at creation and
+# blocks, so the environment is trusted before post-switch or --execute try to
+# use it.
+#
+# Guarded on direnv being present, and `|| true` on the end: post-create is a
+# blocking hook, so a non-zero exit aborts worktree creation. Without the guard
+# every `wt switch --create` would fail on any machine that has no direnv.
+#
+# This does not replace a direnv `whitelist` prefix in ~/.config/direnv/direnv.toml
+# — that also covers directories created outside wt, and survives .envrc edits,
+# which re-trigger the approval prompt that this hook only clears at creation.
+# The hook is the portable half: it travels with the repo to machines whose
+# direnv config has never heard of this checkout.
+post-create = "command -v direnv >/dev/null && direnv allow || true"
+
 # Reload direnv when switching worktrees (devenv environment)
 post-switch = "direnv reload"
 
