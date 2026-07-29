@@ -210,7 +210,7 @@ def test_end_task_session_calls_both_teardowns_in_order() -> None:
     """
     session = _StubSession()
 
-    _end_task_session(session, "pkg/test_a.py")
+    _end_task_session(session, ["pkg/test_a.py"])
 
     assert session.calls == ["end_module", "end_session"], (
         f"expected end_module then end_session, got {session.calls} — order "
@@ -230,7 +230,7 @@ def test_end_module_failure_does_not_skip_end_session(capture: StdCapture) -> No
     """
     session = _StubSession(fail_on="end_module")
 
-    _end_task_session(session, "pkg/test_a.py")
+    _end_task_session(session, ["pkg/test_a.py"])
 
     assert session.calls == ["end_module", "end_session"], (
         f"end_session must still run after end_module raised, got {session.calls}"
@@ -257,7 +257,7 @@ def test_teardown_failure_is_reported_and_swallowed(capture: StdCapture) -> None
     """
     session = _StubSession(fail_on="end_session")
 
-    _end_task_session(session, "pkg/test_a.py")
+    _end_task_session(session, ["pkg/test_a.py"])
 
     lines = [ln for ln in capture.readouterr().out.splitlines() if ln.strip()]
     diagnostics = [

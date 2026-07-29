@@ -529,6 +529,25 @@ class FixtureSession:
                 _current_teardown_node_id.reset(token)
         self._module_cache.evict(module_path)
 
+    def end_package(self, package_path: str) -> None:
+        """Dispose everything scoped to *package_path*.
+
+        Peer to :meth:`end_module` one tier up. The seam exists because package
+        disposal cannot ride on ``end_session``: a serial run uses one session
+        for the whole run, so the session drain fires long after the package's
+        last test.
+
+        Scope draining arrives with #1710, which introduces the writer. Its
+        shape is deliberately left open rather than copied from
+        :meth:`end_module` — that would fold package hits and misses into
+        ``_module_hits``/``_module_misses``, reporting package-scope cache
+        activity as module-scope. Whether package stats get their own counters
+        is #1710's call to make, not a default to inherit.
+        """
+        # Async generators first, for the same reason as end_module: their
+        # post-yield half may touch the sync values a package scope will hold.
+        self._async_mgr.drain_boundary(package_path)
+
     def end_session(self) -> None:
         # Tear down shared async fixtures first (reverse order), then sync scopes.
         self._async_mgr.cleanup()

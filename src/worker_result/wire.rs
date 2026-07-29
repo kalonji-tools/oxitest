@@ -7,17 +7,24 @@ use camino::Utf8PathBuf;
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
-pub(crate) const PROTOCOL_VERSION: u32 = 4;
+pub(crate) const PROTOCOL_VERSION: u32 = 5;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
-/// One task describes a single module group: the module file to import, the
-/// list of test items to run, the conftest files to load, and an optional
-/// per-test timeout.  The worker deserializes this from a single JSON line.
+/// One task describes a group of modules: the module files to import, their
+/// test items, the conftest files to load, and an optional per-test timeout.
+/// The worker deserializes this from a single JSON line.
+///
+/// The coordinator sends exactly one module per task today; #1710 makes a
+/// package's whole subtree a single task so a package-lifetime fixture can be
+/// instantiated exactly once per run.
 #[derive(serde::Serialize)]
 pub(crate) struct WorkerTask<'a> {
-    pub module_path: &'a str,
-    pub items: Vec<WorkerTaskItem<'a>>,
+    /// Lets a stale worker reject a task it cannot parse instead of failing
+    /// with a `KeyError` deep inside `run()` — which would emit no result line,
+    /// so the coordinator's result-side version warning never fires.
+    pub protocol_version: u32,
+    pub modules: Vec<WorkerTaskModule<'a>>,
     pub conftest_paths: &'a serde_json::value::RawValue,
     /// `[{"module": ..., "anchor": ...}]` — see `types::FixtureModule` (#1732).
     pub fixture_modules: &'a serde_json::value::RawValue,
@@ -29,7 +36,18 @@ pub(crate) struct WorkerTask<'a> {
     pub show_internals: Option<bool>,
 }
 
-/// One test item within a [`WorkerTask`].
+/// One module and its test items within a [`WorkerTask`].
+///
+/// Items nest under their module rather than carrying a `module_path` each:
+/// a flat list would make item *ordering* load-bearing, since the worker would
+/// have to detect module transitions to know where `end_module` fires.
+#[derive(serde::Serialize)]
+pub(crate) struct WorkerTaskModule<'a> {
+    pub module_path: &'a str,
+    pub items: Vec<WorkerTaskItem<'a>>,
+}
+
+/// One test item within a [`WorkerTaskModule`].
 #[derive(serde::Serialize)]
 pub(crate) struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
