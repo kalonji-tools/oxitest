@@ -280,6 +280,39 @@ See [`@arrange` with async fixtures](../how-to/use-async-tests.md#arrange-with-a
 ---
 
 ```text
+AsyncFixtureAccessError: async fixture 'conn' cannot be used by a sync test.
+  Accessed as: fx.pkg.conn
+  Test kind:   sync (`def test_...`)
+  Lifetime:    each
+  Three ways forward:
+    1. Make the test async — `async def test_...`, then `await fx.pkg.conn`
+    2. Raise the fixture's lifetime so it is built outside the test
+    3. Convert fixture to sync — remove `async` from def
+```
+
+**Cause:** A sync test reached an async fixture through the `fx` proxy. This is
+the same illegal cell `ArrangeError` covers, on the other access path — a sync
+test cannot `await`, so the only thing it could receive is a coroutine nothing
+will ever await.
+
+**Fix:** Pick one of the three the diagnostic names.
+
+The error fires at the access itself, before the fixture factory runs, so the
+traceback points at your line rather than into the fixture body.
+
+A related `AttributeError` covers the neighbouring mistake — an *async* test
+that forgot the `await`:
+
+```text
+AttributeError: 'conn' is an async fixture — await it before use:
+`value = await fx....conn`, then `value.execute`
+```
+
+See [async fixtures declared with `@oxi.fixture`](../how-to/use-async-tests.md#async-fixtures-declared-with-oxifixture).
+
+---
+
+```text
 AutouseRegistrationError: cannot register async fixture '<name>' as function-scope autouse.
   Defined at:  <file>:<lineno>
   Scope:       each  (autouse=True)

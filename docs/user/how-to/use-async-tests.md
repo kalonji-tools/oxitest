@@ -118,6 +118,99 @@ A shared async fixture can only depend on sync fixtures or other shared async
 fixtures. Depending on a non-shared async fixture is an error because their
 lifetimes are incompatible.
 
+### Async fixtures declared with `@oxi.fixture`
+
+Fixtures declared in a `__fixtures__.py` may be `async def` or async
+generators, at any implemented lifetime tier:
+
+```python
+# pkg/__fixtures__.py
+import oxitest as oxi
+
+@oxi.fixture(lifetime="function")
+async def conn() -> str:
+    return await open_connection()
+
+@oxi.fixture(lifetime="module")
+async def pool() -> AsyncIterator[Pool]:
+    pool = await make_pool()
+    yield pool
+    await pool.close()
+```
+
+Reach them through the `fx` proxy with `await`:
+
+```python
+async def test_query(fx: Fixtures) -> None:
+    conn = await fx.pkg.conn
+    pool = await fx.pkg.pool
+```
+
+The `await` is not decoration — `fx.pkg.conn` is an attribute access, so there
+is no earlier point at which oxitest could have awaited anything for you. A
+sync fixture is reached without it; an async one with it. The syntax says
+which you have.
+
+Awaiting the same fixture twice inside one test returns the same value — the
+result is memoised, not the coroutine, so there is no
+`cannot reuse already awaited coroutine` to work around.
+
+Parameter injection (`conn: Fixture[str]`) also works for async fixtures at
+function lifetime, and needs no `await` — the framework resolves those before
+the test body starts.
+
+#### Lifetime and disposal
+
+| Lifetime | Built | Disposed |
+| -------- | ----- | -------- |
+| `function` | per test | after that test, on the same loop that built it |
+| `module` | once per test module | after the module's last test |
+
+An async generator's post-`yield` half always runs on the loop that started
+it, and never after that loop has closed. If a scope somehow never exits, its
+teardown is still drained at session end rather than being finalised silently.
+
+#### Loop selection
+
+When any async fixture wider than `function` lifetime is registered, async
+test bodies run on the shared session loop rather than a fresh per-test loop.
+That is what lets a module-lifetime value outlive the test that built it: a
+value bound to a loop cannot move to another one.
+
+The check is deliberately conservative — a test that *could* reach such a
+fixture runs on the shared loop even if it never touches one.
+
+#### Sync tests cannot reach async fixtures
+
+```python
+def test_sync(fx: Fixtures) -> None:
+    conn = fx.pkg.conn  # raises at this line
+```
+
+Produces:
+
+```text
+async fixture 'conn' cannot be used by a sync test.
+  Accessed as: fx.pkg.conn
+  Test kind:   sync (`def test_...`)
+  Lifetime:    each
+  Three ways forward:
+    1. Make the test async — `async def test_...`, then `await fx.pkg.conn`
+    2. Raise the fixture's lifetime so it is built outside the test
+    3. Convert fixture to sync — remove `async` from def
+```
+
+The error fires at the access, before the fixture factory runs, so the
+traceback points at your line rather than into the fixture body. See
+`AsyncFixtureAccessError` in the [error reference](../reference/errors.md).
+
+Forgetting the `await` is caught too:
+
+```text
+AttributeError: 'conn' is an async fixture — await it before use:
+`value = await fx....conn`, then `value.execute`
+```
+
 ### Built-in task_group fixture
 
 oxitest provides a built-in `task_group` fixture (type: `asyncio.TaskGroup`)
