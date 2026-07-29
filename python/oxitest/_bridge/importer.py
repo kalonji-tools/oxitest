@@ -562,6 +562,33 @@ def _class_members(module: ModuleType) -> Iterable[tuple[str, object]]:
             yield f"{cls_name}::{method_name}", method
 
 
+def _register_inline_fixtures(module: Any, path: str, session: Any | None) -> None:
+    """Register a test module's own ``@oxi.fixture`` declarations (ADR-0009 slice 5).
+
+    The anchor is the test file itself, not its directory. Two consequences, both
+    deliberate:
+
+    * the namespace becomes the module stem, so a fixture in ``test_orders.py``
+      is reached as ``fx.test_orders.conn`` — distinct from the directory's
+      ``fx.api.conn``, which avoids a ``(namespace, name)`` collision the
+      registrar treats as a hard error;
+    * ``anchor_package_path == defining_module_path`` holds for inline fixtures
+      and only for them, since a package-level anchor is a directory. That
+      equality is how resolution recognises an inline fixture without a new
+      field on ``ModuleSource``.
+
+    Registration happens here rather than via the Rust bridge's fixture-module
+    entry point because the module object already exists — re-importing it to
+    find its fixtures would execute every module-level statement a second time.
+    """
+    # One guard, not two: getattr(None, "registry", None) is already None, so a
+    # separate `session is None` check would be dead.
+    registry = getattr(session, "registry", None)
+    if registry is None:
+        return
+    register_module_source_fixtures(registry, module, anchor_package_path=path)
+
+
 def collect_module(
     path: str,
     session: Any | None = None,
@@ -579,6 +606,7 @@ def collect_module(
     digest = hashlib.md5(path.encode(), usedforsecurity=False)
     unique_name = f"_oxitest_collect_{digest.hexdigest()[:12]}"
     module = _import_test_module(path, unique_name, session)
+    _register_inline_fixtures(module, path, session)
     fixture_violations = _check_module_registrars(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)
     items: list[CollectedItem] = []

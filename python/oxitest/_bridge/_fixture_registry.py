@@ -147,6 +147,35 @@ class FixtureDef(Generic[T]):
         """Backward-compat: True when scope is SHARED."""
         return self.scope == FixtureScope.SHARED
 
+    def is_visible_from(self, module_path: str) -> bool:
+        """Whether a test in *module_path* may resolve this fixture (slice 5).
+
+        Only inline declarations are restricted. An inline fixture is anchored to
+        its own module (ADR-0009 Rule 1), so its anchor equals its defining
+        module — true for inline declarations and only for them, because a
+        package-level anchor is a directory. Everything else is visible.
+
+        The check exists because the registry is shared across every module in a
+        run: without it a sibling test file resolves another file's inline
+        fixtures, and every slice built on top inherits the leak.
+
+        Lives on ``FixtureDef`` rather than beside one caller because there are
+        **two** resolution routes — the ``fx.<ns>.<name>`` proxy and ``Fixture[T]``
+        parameter injection, which looks up by bare name and never sees a
+        namespace. Filtering only one leaves the leak open on the other.
+
+        Module-equality only, deliberately. #1713 replaces this with full
+        ancestor-chain B1 enforcement and the two-catalogs ``BoundaryError``
+        diagnostic that distinguishes "not visible here" from "no such fixture".
+        """
+        match self.source:
+            case ModuleSource(
+                anchor_package_path=anchor, defining_module_path=defining
+            ) if anchor == defining:
+                return defining == module_path
+            case _:
+                return True
+
 
 def _build_dependency_graph(registry: FixtureRegistry) -> dict[str, set[str]]:
     """Build adjacency dict: fixture_name -> set of dependency names."""
