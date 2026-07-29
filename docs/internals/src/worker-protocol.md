@@ -69,10 +69,15 @@ Each line on stdin is a JSON object:
 
 ```json
 {
-    "module_path": "tests/test_math.py",
-    "items": [
-        {"fn_name": "test_add", "param_id": null},
-        {"fn_name": "test_mul", "param_id": "x0"}
+    "protocol_version": 5,
+    "modules": [
+        {
+            "module_path": "tests/test_math.py",
+            "items": [
+                {"fn_name": "test_add", "param_id": null},
+                {"fn_name": "test_mul", "param_id": "x0"}
+            ]
+        }
     ],
     "conftest_paths": ["tests/conftest.py", "conftest.py"],
     "timeout_secs": 30,
@@ -84,15 +89,39 @@ Each line on stdin is a JSON object:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `module_path` | string | Relative path to the test module file |
-| `items` | array | Test functions to execute in this module |
-| `items[].fn_name` | string | Function name within the module |
-| `items[].param_id` | string \| null | Parametrize case ID (e.g. `"x0"`) or null |
+| `protocol_version` | int | Wire format version. The worker **rejects** a task whose version it does not speak, or one carrying no version at all, exiting nonzero after emitting an `error` diagnostic. See [Version mismatch](#version-mismatch). |
+| `modules` | array | Modules to execute in this task |
+| `modules[].module_path` | string | Relative path to the test module file |
+| `modules[].items` | array | Test functions to execute in that module |
+| `modules[].items[].fn_name` | string | Function name within the module |
+| `modules[].items[].param_id` | string \| null | Parametrize case ID (e.g. `"x0"`) or null |
 | `conftest_paths` | array of strings | Conftest files to load for fixture resolution |
 | `timeout_secs` | int \| null | Per-test timeout in seconds, or null for no timeout |
 | `keep_tmp` | `string \| null` | Optional. `"failed"`, `"always"`, or omitted. Controls TempDir preservation. |
 | `show_locals` | `bool \| null` | Optional. When `true`, worker captures local variables in traceback frames. |
 | `show_internals` | `bool \| null` | Optional. When `true`, worker includes internal (oxitest) frames in tracebacks. |
+
+A task carries a **list** of modules. The coordinator sends exactly one per task
+today; [#1710](https://github.com/kalonji-tools/oxitest/issues/1710) makes a
+package's whole subtree a single task, so a package-lifetime fixture is
+instantiated exactly once per run.
+
+Items nest under their module rather than each carrying a `module_path`. A flat
+list would make item *ordering* load-bearing: the worker would have to detect
+module transitions to know where `end_module` fires.
+
+### Version mismatch
+
+Results carry `protocol_version` too, but the two directions fail differently:
+
+| Direction | Behaviour |
+|-----------|-----------|
+| Coordinator → worker (task) | **Fail closed.** The worker emits an `error` diagnostic naming both versions and `just build`, then exits nonzero. |
+| Worker → coordinator (result) | **Warn and continue.** `parallel/drain.rs` logs a mismatch once per drain call and still forwards the result. |
+
+The task direction is stricter because it has no fallback: a worker that cannot
+parse the task emits no result line at all, so the result-side warning never
+fires and the coordinator sees only a dead subprocess.
 
 ## Result Schema (stdout)
 
@@ -109,7 +138,7 @@ relevant fields (compact JSON, falsy fields omitted).
 | `node_id` | string | Full test identifier: `module_path::fn_name[param_id]` |
 | `outcome` | string | Test result status -- drives variant selection (see below) |
 | `duration_ms` | float | Wall-clock execution time in milliseconds |
-| `protocol_version` | int | Wire format version (currently `3`). The coordinator warns once per drain call on mismatch. |
+| `protocol_version` | int | Wire format version (currently `5`). The coordinator warns once per drain call on mismatch. |
 
 **Per-outcome fields:**
 
@@ -127,17 +156,17 @@ relevant fields (compact JSON, falsy fields omitted).
 **Examples:**
 
 ```json
-{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 3}
+{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 5}
 ```
 
 ```json
-{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 3,
+{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 5,
  "message": "assert 1 / 0", "file": "tests/test_math.py", "lineno": 8, "source_line": "assert 1 / 0 == 0",
  "left": "ZeroDivisionError", "right": "0", "op": "=="}
 ```
 
 ```json
-{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 3,
+{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 5,
  "message": "needs network"}
 ```
 
@@ -213,32 +242,40 @@ reported as crashed errors via `drain_remaining_into_crashed()`.
 
 ## Protocol Invariants
 
-1. **One result per item:** For N items in a task, the worker MUST write exactly N result lines
-2. **Order matches input:** Results are emitted in the same order as `items` in the task
-3. **No interleaving:** One task is fully processed before the next is read from stdin
-4. **Newline-delimited:** Each JSON object is on its own line (no pretty-printing)
-5. **Stdout only:** Results go to stdout; diagnostic output (tracebacks, prints) goes to stderr
+1. **One result per item:** For N items in a task — summed across all its modules — the worker MUST write exactly N result lines
+2. **Order matches input:** Results are emitted in task order: modules in the order `modules` lists them, and within each module, its `items` in order
+3. **Module teardown is per module:** `end_module` fires after each module's items, before the next module begins; `end_session` fires once, after the last one
+4. **No interleaving:** One task is fully processed before the next is read from stdin
+5. **Newline-delimited:** Each JSON object is on its own line (no pretty-printing)
+6. **Stdout only:** Results go to stdout; diagnostic output (tracebacks, prints) goes to stderr
 
 ## How to add a new field to the wire format
 
 ### Adding a field to the task (Rust -> worker)
 
-The task schema is defined by `WorkerTask` and `WorkerTaskItem` in `src/worker_result/wire.rs`.
-These structs derive `serde::Serialize` and are written as JSON to the worker's stdin.
+The task schema is defined by `WorkerTask`, `WorkerTaskModule`, and `WorkerTaskItem`
+in `src/worker_result/wire.rs`. These structs derive `serde::Serialize` and are
+written as JSON to the worker's stdin.
 
 ```rust
 #[derive(serde::Serialize)]
 pub(crate) struct WorkerTask<'a> {
-    pub module_path: &'a str,
-    pub items: Vec<WorkerTaskItem<'a>>,
+    pub protocol_version: u32,
+    pub modules: Vec<WorkerTaskModule<'a>>,
     pub conftest_paths: &'a serde_json::value::RawValue,
+    pub fixture_modules: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub keep_tmp: Option<&'a str>,
+    pub keep_tmp: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_locals: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_internals: Option<bool>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct WorkerTaskModule<'a> {
+    pub module_path: &'a str,
+    pub items: Vec<WorkerTaskItem<'a>>,
 }
 
 #[derive(serde::Serialize)]
@@ -317,7 +354,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `3`) in both `src/worker_result/wire.rs` and
+- The `PROTOCOL_VERSION` constant (currently `5`) in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
