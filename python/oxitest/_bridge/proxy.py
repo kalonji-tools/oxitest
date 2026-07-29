@@ -12,7 +12,9 @@ __all__ = ["FrozenProxy", "SharedFixtureMutationError"]
 class FrozenProxy:
     """Transparent proxy for a shared fixture value.
 
-    All attribute and item reads pass through to the wrapped object.
+    Attribute reads, item reads, and string conversion (``str``, ``format``)
+    pass through to the wrapped object. ``repr`` deliberately does not — it
+    reports the wrapper, so a developer can see that a value is immutable.
     Any write attempt raises SharedFixtureMutationError.
 
     Note: method calls that mutate the underlying object (e.g. `proxy.list.append(x)`)
@@ -68,6 +70,12 @@ class FrozenProxy:
 
     def __bool__(self) -> bool:
         return bool(object.__getattribute__(self, "_wrapped"))
+
+    def __str__(self) -> str:
+        return str(object.__getattribute__(self, "_wrapped"))
+
+    def __format__(self, format_spec: str) -> str:
+        return format(object.__getattribute__(self, "_wrapped"), format_spec)
 
     def __repr__(self) -> str:
         return f"FrozenProxy({object.__getattribute__(self, '_wrapped')!r})"
