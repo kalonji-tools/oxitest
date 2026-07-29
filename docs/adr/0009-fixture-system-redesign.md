@@ -70,8 +70,6 @@ The ladder is non-monotonic on purpose. `package` buys exactness and charges par
 
 **Builtin fixtures do not trigger the collapse.** Only user-declared `@oxi.fixture` lifetimes do. `_TempDirFactoryFixture` (`_builtins/_tempdir.py`) declares session scope and would otherwise serialise every oxitest run.
 
-**Current limitation.** A declaring subtree must stay within a single dispatch phase, because the coordinator and its workers hold separate fixture sessions. `@oxi.mark.inprocess` inside a package-lifetime subtree is therefore rejected at collection time today; [#1750](https://github.com/kalonji-tools/oxitest/issues/1750) lifts the restriction by teaching the planner to keep a declaring subtree whole.
-
 ### Rule 3 — B1 strict boundary
 
 A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the directory containing the declaration file (Rule 2 — `__init__.py` not required). For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
