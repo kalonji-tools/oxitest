@@ -83,15 +83,20 @@ pub(crate) struct PrescanDeclaration {
     pub(crate) is_async: bool,
 }
 
+/// The `lifetime=` value that triggers scheduler co-location (#1710).
+///
+/// Compared as a string because prescan reads the decorator off the AST, before
+/// any Python runs — there is no `Lifetime` enum on this side of the bridge.
+pub(crate) const LIFETIME_PACKAGE: &str = "package";
+
 /// Per-fixture-module payload (mirrors PrescanPayload).
 ///
-/// `declarations` is consumed by later slices (slice 5+ diagnostics + slice 9
-/// async support). `is_async` and `lineno` on each `PrescanDeclaration` are
-/// intentional scaffolding; their `#[allow(dead_code)]` markers document the
-/// deferral.
+/// `declarations` drives package co-location in `collection.rs` and is consumed
+/// further by later slices (slice 5+ diagnostics, slice 9 async support).
+/// `is_async` and `lineno` on each `PrescanDeclaration` remain intentional
+/// scaffolding; their `#[allow(dead_code)]` markers document the deferral.
 #[derive(Debug)]
 pub(crate) struct PrescanFixturePayload {
-    #[allow(dead_code)] // payload consumed in later slice
     pub(crate) declarations: Vec<PrescanDeclaration>,
 }
 

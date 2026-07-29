@@ -88,14 +88,68 @@ pub(crate) fn run_timed(
     (outcome, duration_ms)
 }
 
-/// Wrap module groups as singleton task groups.
+/// Anchor directories that declared a `lifetime="package"` fixture.
 ///
-/// The scheduler's unit is a [`TaskGroup`] — what one worker task covers.
-/// Everything upstream (`group_by_module`, `sort_groups`, `arrange`) still works
-/// in [`ModuleGroup`]s, so this is the single conversion point. `group_by_package`
-/// (#1710) replaces it for subtrees that declare a package-lifetime fixture.
-fn into_task_groups(groups: Vec<ModuleGroup>) -> Vec<TaskGroup> {
-    groups.into_iter().map(TaskGroup::single).collect()
+/// Read off the prescan results carried on [`types::FixtureModule`], so the
+/// decision is available before any Python runs and holds even if registration
+/// of a declaration failed.
+fn declaring_package_dirs(fixture_modules: &[types::FixtureModule]) -> Vec<Utf8PathBuf> {
+    let mut dirs: Vec<Utf8PathBuf> = fixture_modules
+        .iter()
+        .filter(|m| m.declares_package())
+        .map(|m| m.anchor.clone())
+        .collect();
+    // Both declaration homes in one directory would otherwise list it twice,
+    // which would merge the same subtree into two groups.
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+/// Warn about each package declaration that costs the run its parallelism.
+///
+/// Choosing a structural guarantee (#1710 decision 1) means the tier never
+/// lies about *how many* instances exist. Staying silent about what that costs
+/// would reinstate the lie from the other side: a suite dropping from N workers
+/// to one because of a single decorator, diagnosed weeks later by whoever
+/// bisects CI times.
+///
+/// Emitted only when the collapse actually merges more than one module. A
+/// declaring package holding a single module costs nothing, and warning there
+/// would be noise that trains users to ignore the message.
+fn warn_about_package_collapse(
+    fixture_modules: &[types::FixtureModule],
+    groups: &[ModuleGroup],
+    declaring_dirs: &[Utf8PathBuf],
+    rep: &mut dyn reporter::Reporter,
+) {
+    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+
+    for dir in declaring_dirs {
+        let merged = groups
+            .iter()
+            .filter(|g| g.module_path.starts_with(dir))
+            .count();
+        if merged < 2 {
+            continue;
+        }
+        for module in fixture_modules.iter().filter(|m| &m.anchor == dir) {
+            for decl in &module.package_declarations {
+                rep.record_diagnostics(vec![DiagnosticEntry {
+                    severity: DiagnosticSeverity::Warning,
+                    context: std::sync::Arc::from(decl.fn_name.as_str()),
+                    message: format!(
+                        "{} (lifetime=\"package\") co-locates {merged} modules onto \
+                         one worker — parallelism is disabled for {dir}. Narrow the \
+                         fixture's package, or drop to lifetime=\"module\".",
+                        decl.fn_name,
+                    ),
+                    file: Some(module.module.clone()),
+                    lineno: Some(decl.lineno),
+                }]);
+            }
+        }
+    }
 }
 
 /// Dispatch enum for serial vs. parallel execution.
@@ -473,6 +527,23 @@ pub(super) fn execute(
 
     // ── Dispatch based on plan ─────────────────────────────────────────
 
+    // Directories whose subtree must stay on one worker so a package-lifetime
+    // fixture is built exactly once (#1710). Empty for every suite that does
+    // not use the tier, in which case grouping is unchanged.
+    let declaring_dirs = declaring_package_dirs(ctx.fixture_modules);
+    if !declaring_dirs.is_empty() {
+        // Counted across every phase's groups, so the number quoted is the whole
+        // subtree rather than whichever slice this dispatch happens to hold.
+        let all_groups: Vec<ModuleGroup> = plan
+            .inprocess_groups
+            .iter()
+            .chain(plan.parallel_groups.iter())
+            .chain(plan.arranged_groups.iter().flatten())
+            .cloned()
+            .collect();
+        warn_about_package_collapse(ctx.fixture_modules, &all_groups, &declaring_dirs, rep);
+    }
+
     // Run inprocess tests first (always serial, main process).
     let mut result = if plan.inprocess_groups.is_empty() {
         parallel::PhaseResult {
@@ -490,7 +561,10 @@ pub(super) fn execute(
             }
         }
         let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
-        mode.execute_groups(into_task_groups(plan.inprocess_groups), rep)
+        mode.execute_groups(
+            filter::group_by_package(plan.inprocess_groups, &declaring_dirs),
+            rep,
+        )
     };
 
     if result.interrupted {
@@ -511,7 +585,8 @@ pub(super) fn execute(
             }
 
             let mut mode = ExecutionDispatch::serial_from_ctx(py, ctx);
-            let serial_result = mode.execute_groups(into_task_groups(all_groups), rep);
+            let serial_result =
+                mode.execute_groups(filter::group_by_package(all_groups, &declaring_dirs), rep);
             result.timings.extend(serial_result.timings);
             result.interrupted |= serial_result.interrupted;
             result
@@ -530,7 +605,10 @@ pub(super) fn execute(
                     if result.interrupted {
                         return result;
                     }
-                    let phase = serial.execute_groups(into_task_groups(group_modules), rep);
+                    let phase = serial.execute_groups(
+                        filter::group_by_package(group_modules, &declaring_dirs),
+                        rep,
+                    );
                     result.timings.extend(phase.timings);
                     result.interrupted |= phase.interrupted;
                 }
@@ -553,8 +631,10 @@ pub(super) fn execute(
                 python_bin: ctx.python_bin,
                 pool: Some(pool_guard.take()),
             };
-            let parallel_result =
-                parallel.execute_groups(into_task_groups(plan.parallel_groups), rep);
+            let parallel_result = parallel.execute_groups(
+                filter::group_by_package(plan.parallel_groups, &declaring_dirs),
+                rep,
+            );
 
             result.timings.extend(parallel_result.timings);
             result.interrupted |= parallel_result.interrupted;

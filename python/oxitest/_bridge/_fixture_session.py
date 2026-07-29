@@ -23,6 +23,7 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
     FixtureTypeNotFoundError,
     UnannotatedFixtureParamError,
+    UsageError,
 )
 from oxitest._bridge._fixture_context import (
     _current_teardown_node_id,
@@ -41,6 +42,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    ModuleSource,
     PluginSource,
     _fixture_inner_type,
 )
@@ -290,6 +292,11 @@ class FixtureSession:
         # first use and popped+drained by end_module. Popping (rather than
         # clearing) keeps a long run from retaining one _Scope per module.
         self._module_scopes: dict[str, _Scope] = {}
+        # lifetime="package" fixtures — one scope per *anchor directory*, not per
+        # module. Every module in the anchor's subtree lands in the same bucket,
+        # which is the guarantee the tier makes; the scheduler co-locates that
+        # subtree onto one worker so it holds under parallel execution too.
+        self._package_scopes: dict[str, _Scope] = {}
         self._has_wide_async: bool | None = None
         # Module scopes are discarded at end_module, taking their counters with
         # them, so cache stats are folded into these before the pop. Without
@@ -297,6 +304,11 @@ class FixtureSession:
         # activity at all.
         self._module_hits: defaultdict[str, int] = defaultdict(int)
         self._module_misses: defaultdict[str, int] = defaultdict(int)
+        # Package scopes get their own counters rather than folding into the
+        # module ones: reporting package-scope cache activity as module-scope
+        # would misattribute it in every stats readout.
+        self._package_hits: defaultdict[str, int] = defaultdict(int)
+        self._package_misses: defaultdict[str, int] = defaultdict(int)
         self._module_cache = ModuleCache()
 
         # ── Register all fixture sources into the unified registry ──
@@ -423,6 +435,25 @@ class FixtureSession:
         if self._prev_helpers_var is None:
             _helpers_registry_var.set(registry)
 
+    @staticmethod
+    def _anchor_of(defn: FixtureDef) -> str:
+        """The anchor directory a package-lifetime fixture is bound to.
+
+        Only :class:`ModuleSource` carries an anchor. Any other source variant
+        reaching package scope is a framework bug, not user error — the
+        decorator is the only way to declare the tier, and it always produces a
+        ``ModuleSource``.
+        """
+        source = defn.source
+        if not isinstance(source, ModuleSource):
+            msg = (
+                f"fixture {defn.name!r} has package lifetime but a "
+                f"{type(source).__name__} source, which carries no anchor "
+                f"package. This is an oxitest bug — please report it."
+            )
+            raise UsageError(msg)
+        return source.anchor_package_path
+
     def _scope_for(self, defn: FixtureDef, module_path: str) -> ScopeRefs | None:
         """Map a fixture def to its scope refs. None = function scope.
 
@@ -436,6 +467,16 @@ class FixtureSession:
             s = self._module_scopes.get(module_path)
             if s is None:
                 s = self._module_scopes[module_path] = _Scope()
+            return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
+        if defn.scope is FixtureScope.PACKAGE:
+            # Keyed on the anchor directory, ignoring module_path entirely: every
+            # module in the anchor's subtree must land in the same bucket, which
+            # is the whole point of the tier. Keying on module_path here would
+            # make package lifetime indistinguishable from module lifetime.
+            anchor = self._anchor_of(defn)
+            s = self._package_scopes.get(anchor)
+            if s is None:
+                s = self._package_scopes[anchor] = _Scope()
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         if defn.shared:
             s = self._shared_scope
@@ -537,20 +578,43 @@ class FixtureSession:
         for the whole run, so the session drain fires long after the package's
         last test.
 
-        Scope draining arrives with #1710, which introduces the writer. Its
-        shape is deliberately left open rather than copied from
-        :meth:`end_module` — that would fold package hits and misses into
-        ``_module_hits``/``_module_misses``, reporting package-scope cache
-        activity as module-scope. Whether package stats get their own counters
-        is #1710's call to make, not a default to inherit.
+        Fires once per package boundary, after every module in that package and
+        its descendants has had :meth:`end_module`. The serial path drives this
+        from the group loop; under parallel execution the scheduler co-locates
+        the package's subtree onto one worker so the boundary is a single task.
         """
         # Async generators first, for the same reason as end_module: their
-        # post-yield half may touch the sync values a package scope will hold.
+        # post-yield half may touch the sync values below.
         self._async_mgr.drain_boundary(package_path)
+        scope = self._package_scopes.pop(package_path, None)
+        if scope is None:
+            # Every group fires end_package, including ones whose package
+            # fixtures were never requested. Nothing to drain is normal.
+            return
+        for name, count in scope.hits.items():
+            self._package_hits[name] += count
+        for name, count in scope.misses.items():
+            self._package_misses[name] += count
+        # No single test owns a package-scope teardown, so name the package
+        # instead — otherwise a failure reports only the fixture name and the
+        # user has to guess which boundary it came from.
+        token = _current_teardown_node_id.set(package_path)
+        try:
+            scope.drain()
+        finally:
+            _current_teardown_node_id.reset(token)
 
     def end_session(self) -> None:
         # Tear down shared async fixtures first (reverse order), then sync scopes.
         self._async_mgr.cleanup()
+        # Any package scope still held is drained here as a backstop. The serial
+        # path pops each one at end_package, so this normally finds nothing; a
+        # worker never calls end_package at all, because its session covers
+        # exactly one task and the coordinator co-locates a package's subtree
+        # into that one task. Without this, every package-lifetime teardown
+        # would silently never run under parallel execution.
+        for package_path in list(self._package_scopes):
+            self.end_package(package_path)
         # Drain shared (user fixtures) before session (builtins like TempDirFactory)
         # so that shared fixture teardowns can still access session-scoped builtins.
         self._shared_scope.drain()

@@ -42,6 +42,7 @@ ConftestFunc: TypeAlias = Callable[..., Any]
 class FixtureScope(StrEnum):
     EACH = auto()
     MODULE = auto()
+    PACKAGE = auto()
     SHARED = auto()
     SESSION = auto()
 
@@ -49,13 +50,19 @@ class FixtureScope(StrEnum):
 #: Declared tier → caching vocabulary. ``Lifetime`` is what users write;
 #: ``FixtureScope`` is what the caching machinery reads. The two stay separate
 #: until slice 13 retires the old ``Fixtures()`` API, so this is the single
-#: translation point — slices 3 (package) and 4 (session) extend this table and
-#: nothing else. Membership doubles as "is this tier implemented yet", which is
-#: how ``@oxi.fixture`` gates declarations.
+#: translation point. Membership doubles as "is this tier implemented yet",
+#: which is how ``@oxi.fixture`` gates declarations.
+#:
+#: ``PACKAGE`` is a member of its own rather than a reuse of ``SHARED``:
+#: ``SHARED`` belongs to the legacy ``Fixtures(shared=True)`` API and is still
+#: live (see :attr:`FixtureDef.shared`, ``_fixtures.py``, ``fixture_lister.py``).
+#: Reusing it would make every legacy shared fixture look package-scoped to the
+#: scheduler, collapsing parallelism for suites that never asked for the tier.
 LIFETIME_SCOPES: Final = MappingProxyType(
     {
         Lifetime.FUNCTION: FixtureScope.EACH,
         Lifetime.MODULE: FixtureScope.MODULE,
+        Lifetime.PACKAGE: FixtureScope.PACKAGE,
     }
 )
 

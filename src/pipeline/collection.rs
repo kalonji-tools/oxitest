@@ -149,6 +149,81 @@ pub(super) struct CollectionOutput {
     pub fixture_modules: Vec<types::FixtureModule>,
 }
 
+/// Prescan one declaration-home file and register whatever it declares.
+///
+/// `reserved` says whether the filename is one oxitest owns. It gates a single
+/// diagnostic: in a reserved file (`__fixtures__.py`) a decorated top-level
+/// function that is *not* a recognized `@oxi.fixture` almost certainly means a
+/// mistyped import alias, and saying so saves a confusing fixture-not-found at
+/// test time. In `__init__.py` the same shape is ordinary Python — decorators
+/// belong there for reasons that have nothing to do with oxitest — so the hint
+/// would fire on well-formed packages and is suppressed.
+fn register_declaration_home(
+    py: pyo3::Python<'_>,
+    session: &bridge::FixtureSession,
+    path: &camino::Utf8Path,
+    anchor: &camino::Utf8Path,
+    reserved: bool,
+    errors: &mut Vec<types::CollectError>,
+    fixture_modules: &mut Vec<types::FixtureModule>,
+) {
+    match crate::prescan::prescan_fixture_module(path) {
+        crate::prescan::PrescanFixtureResult::HasFixtures(payload) => {
+            let session_obj = session.as_py_object(py);
+            if let Err(e) = bridge::register_fixture_module_for_path(py, session_obj, path, anchor)
+            {
+                errors.push(e);
+            }
+            // Read off the AST rather than from the registered session: the
+            // scheduler decision must hold even when registration above failed,
+            // and it has to be available before any Python runs.
+            let package_declarations = payload
+                .declarations
+                .iter()
+                .filter(|d| d.lifetime == crate::prescan::LIFETIME_PACKAGE)
+                .map(|d| types::PackageDeclaration {
+                    fn_name: d.fn_name.clone(),
+                    lineno: d.lineno,
+                })
+                .collect();
+            // Recorded even when registration failed above: the serial session
+            // and a worker session are independent, so a failure here says
+            // nothing about whether the worker will succeed. It reports its own
+            // diagnostic.
+            fixture_modules.push(types::FixtureModule {
+                module: path.to_owned(),
+                anchor: anchor.to_owned(),
+                package_declarations,
+            });
+        }
+        crate::prescan::PrescanFixtureResult::Unavailable => {
+            // The file exists but could not be parsed (syntax error, I/O error).
+            // Surface a clear collection error naming it, rather than a silent
+            // fixture-not-found at test time.
+            tracing::warn!(path = path.as_str(), "prescan: file could not be parsed");
+            errors.push(types::CollectError::PyError(format!(
+                "{path} could not be parsed (syntax error or I/O error); \
+                 fixtures in this file will not be registered",
+            )));
+        }
+        crate::prescan::PrescanFixtureResult::NoFixtures(payload) => {
+            if reserved && payload.has_unrecognized_decorated_functions {
+                tracing::warn!(
+                    path = path.as_str(),
+                    "prescan: reserved file has @-decorated functions but no \
+                     recognized @oxi.fixture calls — check import alias"
+                );
+                errors.push(types::CollectError::PyError(format!(
+                    "{path} has @-decorated functions but no recognized \
+                     @oxi.fixture declarations. Only `import oxitest as oxi`, \
+                     `import oxitest`, or `from oxitest import fixture` are \
+                     recognized as import aliases for oxitest.",
+                )));
+            }
+        }
+    }
+}
+
 pub(super) fn collect_items(
     py: Python<'_>,
     test_files: &[Utf8PathBuf],
@@ -219,70 +294,25 @@ pub(super) fn collect_items(
         if let Some(parent_dir) = file.parent()
             && !registered_fixture_dirs.contains(parent_dir)
         {
-            let fixture_path = parent_dir.join("__fixtures__.py");
-            if fixture_path.exists() {
-                let prescan_result = crate::prescan::prescan_fixture_module(&fixture_path);
-                match prescan_result {
-                    crate::prescan::PrescanFixtureResult::HasFixtures(_) => {
-                        let session_obj = session.as_py_object(py);
-                        if let Err(e) = bridge::register_fixture_module_for_path(
-                            py,
-                            session_obj,
-                            &fixture_path,
-                            parent_dir,
-                        ) {
-                            errors.push(e);
-                        }
-                        // Recorded even when registration failed above: the
-                        // serial session and a worker session are independent,
-                        // so a failure here says nothing about whether the
-                        // worker will succeed. It reports its own diagnostic.
-                        fixture_modules.push(types::FixtureModule {
-                            module: fixture_path,
-                            anchor: parent_dir.to_owned(),
-                        });
-                    }
-                    crate::prescan::PrescanFixtureResult::Unavailable => {
-                        // MED-1: __fixtures__.py exists but could not be parsed
-                        // (syntax error, I/O error, etc.). Surface a clear
-                        // collection error naming the file so the user knows
-                        // where to look, rather than a silent fixture-not-found
-                        // at test time.
-                        tracing::warn!(
-                            path = fixture_path.as_str(),
-                            "prescan: __fixtures__.py could not be parsed"
-                        );
-                        errors.push(types::CollectError::PyError(format!(
-                            "__fixtures__.py at {} could not be parsed \
-                             (syntax error or I/O error); \
-                             fixtures in this file will not be registered",
-                            fixture_path,
-                        )));
-                    }
-                    crate::prescan::PrescanFixtureResult::NoFixtures(payload) => {
-                        // MED-3: __fixtures__.py exists and was parsed, but zero
-                        // recognized @oxi.fixture declarations were found. If the
-                        // file has decorated top-level functions whose decorator
-                        // wasn't recognized, hint at the probable cause.
-                        if payload.has_unrecognized_decorated_functions {
-                            tracing::warn!(
-                                path = fixture_path.as_str(),
-                                "prescan: __fixtures__.py has @-decorated functions \
-                                 but no recognized @oxi.fixture calls — check import alias"
-                            );
-                            errors.push(types::CollectError::PyError(format!(
-                                "__fixtures__.py at {} has @-decorated functions \
-                                 but no recognized @oxi.fixture declarations. \
-                                 Only `import oxitest as oxi`, `import oxitest`, \
-                                 or `from oxitest import fixture` are recognized \
-                                 as import aliases for oxitest.",
-                                fixture_path,
-                            )));
-                        }
-                    }
+            // Both declaration homes for this directory, per ADR-0009's
+            // file-convention table. `__fixtures__.py` is reserved and holds any
+            // lifetime; `__init__.py` is an ordinary package-init file that may
+            // also host declarations (package lifetime is the recommended use).
+            for (name, reserved) in [("__fixtures__.py", true), ("__init__.py", false)] {
+                let path = parent_dir.join(name);
+                if path.exists() {
+                    register_declaration_home(
+                        py,
+                        session,
+                        &path,
+                        parent_dir,
+                        reserved,
+                        &mut errors,
+                        &mut fixture_modules,
+                    );
                 }
-                registered_fixture_dirs.insert(parent_dir.to_owned());
             }
+            registered_fixture_dirs.insert(parent_dir.to_owned());
         }
 
         let mtime = file_mtime_secs(file);
