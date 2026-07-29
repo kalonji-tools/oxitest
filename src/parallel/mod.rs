@@ -196,9 +196,14 @@ mod fixture_module_payload_tests {
     /// the array shape and the key names are a cross-language contract.
     #[test]
     fn serializes_to_the_shape_the_worker_reads() {
+        // declares_package is set but must not appear below: it drives
+        // coordinator-side scheduling only, and adding a key to this payload
+        // would change a cross-language contract for no reason the worker cares
+        // about.
         let modules = vec![types::FixtureModule {
             module: camino::Utf8PathBuf::from("pkg/__fixtures__.py"),
             anchor: camino::Utf8PathBuf::from("pkg"),
+            package_declarations: vec![],
         }];
 
         let raw = serialize_fixture_modules(&modules);

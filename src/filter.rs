@@ -9,11 +9,11 @@
 
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexMap;
 
 use crate::prescan::PrescanItem;
-use crate::scheduler::ModuleGroup;
+use crate::scheduler::{ModuleGroup, TaskGroup};
 use crate::types::{CollectError, TestItem};
 
 // Marker names (not conditions) are collected here at collection time.
@@ -257,6 +257,56 @@ pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<ModuleGroup> {
         .collect()
 }
 
+/// Merge each declaring package's subtree into one [`TaskGroup`].
+///
+/// `declaring_dirs` are the anchor directories that declared a package-lifetime
+/// fixture. A module belongs to its **outermost** declaring ancestor: an outer
+/// fixture spanning a subtree makes that subtree indivisible, so a nested
+/// declaration cannot split it back apart.
+///
+/// Modules with no declaring ancestor stay singleton groups, preserving today's
+/// parallelism for every suite that does not use the tier.
+#[must_use = "returns regrouped work units; the original grouping is consumed"]
+pub fn group_by_package(
+    groups: Vec<ModuleGroup>,
+    declaring_dirs: &[Utf8PathBuf],
+) -> Vec<TaskGroup> {
+    if declaring_dirs.is_empty() {
+        return groups.into_iter().map(TaskGroup::single).collect();
+    }
+
+    // Preserve first-seen order so scheduling stays deterministic and the
+    // cache's duration sort is not silently discarded.
+    let mut merged: IndexMap<Utf8PathBuf, Vec<ModuleGroup>> = IndexMap::new();
+    let mut out: Vec<TaskGroup> = Vec::new();
+
+    for group in groups {
+        match outermost_declaring_ancestor(&group.module_path, declaring_dirs) {
+            Some(anchor) => merged.entry(anchor).or_default().push(group),
+            None => out.push(TaskGroup::single(group)),
+        }
+    }
+
+    out.extend(merged.into_values().map(|modules| TaskGroup { modules }));
+    out
+}
+
+/// The shallowest directory in `declaring_dirs` that contains `module_path`.
+///
+/// Shallowest rather than nearest: a fixture declared higher up spans the whole
+/// subtree, so co-locating on a deeper anchor would still let the scheduler
+/// split the outer package across workers and rebuild its value.
+fn outermost_declaring_ancestor(
+    module_path: &Utf8Path,
+    declaring_dirs: &[Utf8PathBuf],
+) -> Option<Utf8PathBuf> {
+    declaring_dirs
+        .iter()
+        .filter(|dir| module_path.starts_with(dir))
+        .min_by_key(|dir| dir.components().count())
+        .cloned()
+}
+
 // ── Prescan-level filtering ───────────────────────────────────────────────────
 
 /// Build a node ID string from prescan data.
@@ -400,6 +450,131 @@ mod tests {
     use crate::types::TestItem;
     use camino::Utf8PathBuf;
     use std::collections::HashSet;
+
+    /// A one-item group for `path`.
+    fn mod_group(path: &str) -> ModuleGroup {
+        let item = Arc::new(TestItem::builder(path, "test_x").lineno(1).build());
+        ModuleGroup::new(Utf8PathBuf::from(path), vec![item])
+    }
+
+    /// Module paths of a task group, for order-insensitive comparison.
+    fn paths_of(group: &TaskGroup) -> Vec<String> {
+        let mut p: Vec<String> = group
+            .modules
+            .iter()
+            .map(|m| m.module_path.to_string())
+            .collect();
+        p.sort();
+        p
+    }
+
+    #[test]
+    fn group_by_package_leaves_everything_alone_when_nothing_declares() {
+        // Arrange
+        let groups = vec![mod_group("tests/a.py"), mod_group("tests/b.py")];
+
+        // Act
+        let out = group_by_package(groups, &[]);
+
+        // Assert — a suite that never uses the tier must keep every module
+        // independently schedulable, or the feature costs parallelism it was
+        // never asked to spend.
+        assert_eq!(out.len(), 2, "each module must remain its own work unit");
+    }
+
+    #[test]
+    fn group_by_package_merges_the_declaring_subtree() {
+        // Arrange
+        let groups = vec![
+            mod_group("tests/api/a.py"),
+            mod_group("tests/api/v1/b.py"),
+            mod_group("tests/core/c.py"),
+        ];
+        let declaring = vec![Utf8PathBuf::from("tests/api")];
+
+        // Act
+        let out = group_by_package(groups, &declaring);
+
+        // Assert — the anchor's subtree becomes one unit so its fixture is built
+        // once; the unrelated sibling keeps its own, since collapsing it would
+        // cost parallelism for a package that declared nothing.
+        assert_eq!(
+            out.len(),
+            2,
+            "one merged package plus one untouched sibling"
+        );
+        let merged = out
+            .iter()
+            .find(|g| g.modules.len() > 1)
+            .expect("a merged group");
+        assert_eq!(
+            paths_of(merged),
+            vec!["tests/api/a.py", "tests/api/v1/b.py"],
+            "the subtree must include descendant directories — B1 makes the \
+             fixture usable from them, so they cannot run in another worker"
+        );
+    }
+
+    #[test]
+    fn group_by_package_gives_the_outermost_declaration_the_subtree() {
+        // Arrange — both a package and its own subpackage declare.
+        let groups = vec![mod_group("tests/api/a.py"), mod_group("tests/api/v1/b.py")];
+        let declaring = vec![
+            Utf8PathBuf::from("tests/api/v1"),
+            Utf8PathBuf::from("tests/api"),
+        ];
+
+        // Act
+        let out = group_by_package(groups, &declaring);
+
+        // Assert — the outer fixture spans the whole subtree, so the subtree is
+        // indivisible. Honouring the inner declaration instead would split
+        // tests/api across workers and rebuild its value, which is the exact
+        // duplicate the tier exists to prevent.
+        assert_eq!(
+            out.len(),
+            1,
+            "a nested declaration must not split its ancestor's subtree"
+        );
+        assert_eq!(
+            paths_of(&out[0]),
+            vec!["tests/api/a.py", "tests/api/v1/b.py"],
+            "both modules belong to the outermost declaring ancestor"
+        );
+    }
+
+    #[test]
+    fn group_by_package_keeps_a_single_module_package_as_one_unit() {
+        // Arrange
+        let groups = vec![mod_group("tests/api/a.py"), mod_group("tests/core/c.py")];
+        let declaring = vec![Utf8PathBuf::from("tests/api")];
+
+        // Act
+        let out = group_by_package(groups, &declaring);
+
+        // Assert — a declaring package holding one module costs no parallelism,
+        // so it must not be treated as a special case.
+        assert_eq!(out.len(), 2, "one module per unit when nothing merges");
+    }
+
+    #[test]
+    fn group_by_package_does_not_merge_on_a_shared_name_prefix() {
+        // Arrange — "tests/api2" starts with the string "tests/api" but is not
+        // inside it.
+        let groups = vec![mod_group("tests/api/a.py"), mod_group("tests/api2/b.py")];
+        let declaring = vec![Utf8PathBuf::from("tests/api")];
+
+        // Act
+        let out = group_by_package(groups, &declaring);
+
+        // Assert — matching on string prefix rather than path components would
+        // drag an unrelated package into the collapse and silently serialise it.
+        assert_eq!(
+            out.len(),
+            2,
+            "tests/api2 is a sibling of tests/api, not a descendant"
+        );
+    }
 
     #[test]
     fn test_group_by_module_single_module() {

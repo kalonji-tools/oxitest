@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from oxitest import parametrize, raises
+from oxitest import raises
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import (
     MARKER_ATTR,
@@ -63,26 +61,19 @@ def test_module_lifetime_is_accepted() -> None:
     )
 
 
-@dataclass(frozen=True)
-class _RejectedTier:
-    lifetime: str
-    slice_issue: str
-
-
-@parametrize(
-    package=_RejectedTier(lifetime="package", slice_issue="1710"),
-    session=_RejectedTier(lifetime="session", slice_issue="1711"),
-)
-def test_unimplemented_lifetimes_rejected_with_slice_pointer(
-    case: _RejectedTier,
-) -> None:
-    """Tiers without scope wiring raise UsageError naming their owning slice.
+def test_session_lifetime_rejected_with_slice_pointer() -> None:
+    """`session` raises UsageError naming the slice that owns it.
 
     The pointer matters: without it a user hitting this has no way to tell a
     typo from a tier that simply has not landed yet.
+
+    This was a two-case parametrize until slice 3 (#1710) landed ``package``.
+    ``session`` stays rejected until #1711 decides whether it means per-run or
+    per-worker — shipping it early would be guessing at the semantics that
+    issue exists to settle.
     """
-    with raises(UsageError, match=case.slice_issue):
-        fixture(lifetime=case.lifetime)
+    with raises(UsageError, match="1711"):
+        fixture(lifetime="session")
 
 
 def test_unknown_lifetime_raises_value_error() -> None:

@@ -265,6 +265,33 @@ impl TestItem {
 pub struct FixtureModule {
     pub module: camino::Utf8PathBuf,
     pub anchor: camino::Utf8PathBuf,
+    /// The `lifetime="package"` fixtures this file declares (#1710).
+    ///
+    /// Drives scheduler co-location: a non-empty list means the anchor's whole
+    /// subtree becomes one task, so the tier's exactly-once guarantee survives
+    /// parallel execution. The names and line numbers are what makes the
+    /// resulting parallelism warning actionable — a file may declare several
+    /// fixtures, and only some of them at package lifetime.
+    ///
+    /// Deliberately not serialized. The worker has no use for any of it — it
+    /// runs whatever task it is handed — and adding a key would change the wire
+    /// shape for a coordinator-only concern.
+    #[serde(skip)]
+    pub package_declarations: Vec<PackageDeclaration>,
+}
+
+impl FixtureModule {
+    /// Whether this file declares any package-lifetime fixture.
+    pub fn declares_package(&self) -> bool {
+        !self.package_declarations.is_empty()
+    }
+}
+
+/// One `lifetime="package"` declaration, located for diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageDeclaration {
+    pub fn_name: String,
+    pub lineno: crate::types::LineNo,
 }
 
 #[cfg(test)]

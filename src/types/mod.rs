@@ -14,7 +14,10 @@ pub(crate) mod test_support;
 
 // Re-export all public types at the `types::` path so no external imports break.
 pub use exit::{ExitCode, TestTiming};
-pub use item::{ArrangedEntry, FieldDiff, FixtureModule, LocalVar, MarkerSet, ParamPair, TestItem};
+pub use item::{
+    ArrangedEntry, FieldDiff, FixtureModule, LocalVar, MarkerSet, PackageDeclaration, ParamPair,
+    TestItem,
+};
 pub use node_id::{DurationMs, LineNo, NodeId};
 pub use outcome::{
     CollectError, ComparisonDetail, FailureDiagnostic, Frame, OutcomeKind, ResolvedOutcome,
