@@ -184,6 +184,8 @@ $RECYCLE.BIN/
 # Devenv / Nix
 .devenv/
 .devenv.flake.nix
+# direnv's per-directory cache of the exported environment (.envrc is tracked)
+.direnv/
 .config/
 !.config/wt.toml
 result
