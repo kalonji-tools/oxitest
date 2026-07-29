@@ -1,6 +1,6 @@
 # ADR-0009: Fixture system redesign
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-07-29 — see [Amendments](#amendments))
 **Date:** 2026-07-28
 
 The fixture system was designed with a single-location assumption: fixtures live in `conftest.py`, declared via a `Fixtures()` instance whose `.fixture` decorator accumulates definitions during conftest loading. Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) opened the debate on where fixtures may live — grilling [#1706](https://github.com/kalonji-tools/oxitest/issues/1706) named **Position 4**: promote test-file top-level to first-class, keep the existing `Fixtures()` machinery, add a `ModuleSource` variant on top of the current registry, drop `registrar-in-test-module`, add a new `registrar-in-class-body` violation.
@@ -33,27 +33,48 @@ Fixtures and helpers may be declared only in four file kinds. The Rust AST presc
 |------|------------------|-----------------|-------|
 | `__fixtures__.py` (any package level) | ✓ any lifetime | ✗ | General fixture home |
 | `__helpers__.py` (any package level) | ✗ | ✓ | Helper home; single-purpose |
-| `__init__.py` (any package level) | ✓ `package` only (recommended) | ✓ | Package-init file; may host package-scope things |
+| `__init__.py` (any package level) | ✓ `package` only (recommended) | ✓ | A *declaration home* for package-lifetime things — not what defines the package boundary (Rule 2) |
 | `test_*.py` | ✓ `function` or `module` only | ✓ | Inline; fixture lifetime capped at module |
 
 A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the framework — dead code by design. Enforced by convention, not by walking every module. Declaration API is a pure decorator with zero import-time side effects: `@oxi.fixture(lifetime=...)` (required kwarg) and `@oxi.helper` (no lifetime), both writing marker attributes directly on the wrapped function.
 
 ### Rule 2 — Lifetime tiers and boundaries
 
-`Lifetime` is a `StrEnum` with four ordered values. Each tier has exactly one boundary — the code-structural unit whose exit triggers teardown.
+`Lifetime` is a `StrEnum` with four values, ordered by the **breadth of the code-structural unit** they name — not by the strength of the guarantee they offer. Under parallel execution the ladder is deliberately non-monotonic in guarantee strength; see *Lifetimes under parallel execution* below. Each tier has exactly one boundary — the code-structural unit whose exit triggers teardown.
 
-| Lifetime | Boundary | Disposal trigger |
-|----------|----------|------------------|
-| `function` | The individual test | After the test completes |
-| `module` | The Python module (test file) | After all tests in the module complete |
-| `package` | The Python package (directory with `__init__.py`) | After all tests in the package + subpackages complete |
-| `session` | The entire test run | At run teardown |
+| Lifetime | Boundary | Disposal trigger | Under parallel execution |
+|----------|----------|------------------|--------------------------|
+| `function` | The individual test | After the test completes | No effect |
+| `module` | The Python module (test file) | After all tests in the module complete | No effect |
+| `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker |
+| `session` | One worker process | At worker teardown | **Once per worker process** — no scheduling constraint |
+
+**A package is any directory.** `__init__.py` is not required and its absence does not make a directory ineligible. What the framework needs from a package is a subtree to bound disposal, to filter the B1 catalog, and to derive a namespace segment — a directory supplies all three. PEP 420 namespace packages are the norm in modern Python, so requiring the marker file would make oxitest stricter than the language itself, and would contradict this ADR's own principle that visibility is Python's job. `__init__.py` remains a legal and recommended *declaration home* for package-lifetime fixtures (Rule 1); it is not what *defines* the boundary. The two roles were originally conflated.
 
 Yield-based fixtures use `Yields[T]` and expose their teardown code after the `yield` statement (unchanged from the current shape).
 
+#### Lifetimes under parallel execution
+
+oxitest distributes work across worker subprocesses by default (`min_parallel_tests = 100`). Any tier wider than the module therefore has to answer a question a single-process framework never faces: *how many* instances exist when the boundary spans more than one process.
+
+`function` and `module` are unaffected — the scheduler never splits a module across workers, so both tiers are exact for free. The two wide tiers each take one side of a trade the framework cannot avoid:
+
+- **`package` guarantees exactly one instance per run**, and pays for it by co-locating the declaring directory's entire subtree onto a single worker. The guarantee is *structural*, not a caching hint: the scheduler is constrained so that the situation in which a second instance could exist never arises.
+- **`session` guarantees one instance per worker process**, and constrains the scheduler not at all. It is the tier for a per-process resource — a connection pool, a compiled-artifact cache — rather than a global singleton.
+
+The ladder is non-monotonic on purpose. `package` buys exactness and charges parallelism; `session` buys parallelism and charges exactness. Neither dominates the other, so the choice stays with the user. Naming a wide tier after the process rather than the code structure has precedent: Playwright's `scope: 'worker'` and Vitest's `scope: 'worker'` both do it. oxitest keeps the structural name `session` for continuity and pins the process semantics here.
+
+**A module belongs to its outermost declaring ancestor.** Where declarations nest, the shallowest wins: a fixture declared higher up already spans the whole subtree, so anchoring on a deeper declaration would still let the scheduler split the outer package across workers and rebuild its value.
+
+**The collapse is announced.** A `package` declaration that merges two or more modules emits a collection-time `WARNING` naming the declaring file, the fixture, and the module count, and pointing at the two exits — narrow the fixture's package, or drop to `lifetime="module"`. A declaring package holding a single module stays silent: it costs no parallelism, and warning there would train users to ignore the message. Documenting the cost beside the tier follows xUnit, which states its widest tier "must be designed for with this parallelism requirement in mind", and Vitest, which introduces its `file`/`worker` collapse in the same paragraph as the tiers themselves.
+
+**Builtin fixtures do not trigger the collapse.** Only user-declared `@oxi.fixture` lifetimes do. `_TempDirFactoryFixture` (`_builtins/_tempdir.py`) declares session scope and would otherwise serialise every oxitest run.
+
+**Current limitation.** A declaring subtree must stay within a single dispatch phase, because the coordinator and its workers hold separate fixture sessions. `@oxi.mark.inprocess` inside a package-lifetime subtree is therefore rejected at collection time today; [#1750](https://github.com/kalonji-tools/oxitest/issues/1750) lifts the restriction by teaching the planner to keep a declaring subtree whole.
+
 ### Rule 3 — B1 strict boundary
 
-A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the Python package containing the declaration file. For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
+A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the directory containing the declaration file (Rule 2 — `__init__.py` not required). For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
 
 Sibling and unrelated packages cannot access the fixture. Attempted use is a **collection-time error** naming the fixture's anchor and the test's location. No allow-comment escape hatch. No `strict = "warn"` softening. This follows [ADR-0006](0006-async-organizational-strategy.md)'s loud-rejection precedent: violations fire at collection time, before any test runs, at the shallowest catchable frame.
 
@@ -68,9 +89,19 @@ Declared `lifetime` cannot exceed the declaration site's boundary.
 | Inline in `test_*.py` | `module` |
 | `__fixtures__.py` or `__helpers__.py` at package X | `package` (anchored at X) |
 | `__init__.py` at package X | `package` (anchored at X) |
-| Any of the above at the rootdir package (`tests/`) | `session` |
+| Any of the above at the rootdir package (`tests/`) | `package` (exactly once per run) or `session` (once per worker) |
 
-Anything else is a **declaration error at prescan time** with three legal-exit hints (move to `__fixtures__.py` at package level; drop to `module` lifetime; restructure as a rootdir `session` fixture). `session` is available only at rootdir because below root, `package(root)` and `session` collapse to the same runtime behavior (the fixture's visibility subtree is smaller than the run — either it's never referenced outside the anchor package under B1 and equals `package`, or it would leak). At rootdir the two ARE the same thing; the framework accepts `session` as the idiomatic name for the run-lifetime tier.
+Anything else is a **declaration error at prescan time** with three legal-exit hints (move to `__fixtures__.py` at package level; drop to `module` lifetime; restructure as a rootdir fixture).
+
+**`session` is available only at rootdir, and is not a synonym for rootdir `package`.** This ADR originally argued the opposite:
+
+> `session` is available only at rootdir because below root, `package(root)` and `session` collapse to the same runtime behavior (the fixture's visibility subtree is smaller than the run — either it's never referenced outside the anchor package under B1 and equals `package`, or it would leak). At rootdir the two ARE the same thing; the framework accepts `session` as the idiomatic name for the run-lifetime tier.
+
+That equivalence is **retracted**. It was sound under the single-process model this ADR was written against, and it does not hold under the real scheduler: rootdir `package` is exactly-once and serialises the run, while `session` is once-per-worker and does not. They are genuinely different tiers, and offering both is strictly more expressive than declaring them synonyms.
+
+The *restriction* of `session` to rootdir survives, for the half of the original argument the retraction does not touch: declared below root, a `session` fixture would outlive the subtree that is allowed to see it, which is exactly what Rule 4 exists to prevent.
+
+**A per-worker `session` fixture cannot be a true singleton.** Anything that must happen exactly once per run — a database migration, a schema create, a shared artifact build — belongs at rootdir `package` and pays the parallelism cost. Frameworks that do offer a cross-process once-per-run hook restrict it to serialised handles rather than live objects; Jest is explicit that "any global variables that are defined through `globalSetup` can only be read in `globalTeardown`. You cannot retrieve globals defined here in your test suites."
 
 ### Rule 5 — Access via `fx` / `hlp` proxies
 
@@ -117,8 +148,8 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 |----------------------------|--------|
 | `function` | Once per test in the fixture's B1 scope |
 | `module` | Once per module boundary in scope |
-| `package` | Once per package boundary in scope |
-| `session` | Once for the whole run |
+| `package` | Once per package boundary in scope — exactly once per run (Rule 2) |
+| `session` | Once per worker process. For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
 
 Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<name>`); autouse is additive, not exclusive. The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view (a follow-on impl item — see Consequences).
 
@@ -139,6 +170,24 @@ The redesign retires the following surface. Each entry names what goes and why.
 - **[ADR-0005](0005-immutable-by-default-interfaces.md) (Immutable-by-default) Rule 4** — Retires the `Fixtures` / `Helpers` `&mut` exceptions. Decorators write marker attributes at import time; no accumulation-during-conftest-loading phase remains. The reused type annotation names (`Fixtures`, `Helpers` on test parameters) are proxy accessors, not mutable registrars — they do not re-inherit the exception.
 - **[ADR-0006](0006-async-organizational-strategy.md) (Async organizational strategy)** — Async fixture behavior is orthogonal to declaration mechanism. `@fixture(lifetime="function")` on an `async def` behaves per ADR-0006's per-test-loop rules. Implemented in [#1733](https://github.com/kalonji-tools/oxitest/issues/1733) for the `function` and `module` tiers, with three refinements ADR-0006 did not anticipate, because it assumed fixtures are resolved *before* the test body: (a) `fx.<ns>.<name>` returns an awaitable — `await fx.pkg.conn` — since attribute access offers no earlier hook; (b) an async fixture wider than `function` lifetime promotes async test bodies onto the shared session loop, because a value cannot move between loops and a per-test loop dies before the fixture's boundary is reached; (c) teardown fires at the declared boundary, clamped so it can never be scheduled after its loop closes. Illegal cell combinations (sync test + function-scope async fixture) are rejected loud on both access paths — at arrange time for `@arrange`, at access time for the proxy. Loud-rejection DNA is *reinforced* by this ADR: B1 boundary violations, lifetime-cap violations, and strict-abort shortcut violations all fire at collection time.
 - **[ADR-0008](0008-config-fail-closed-narrow-scope.md) (Config fail-closed)** — B1 boundary violation, lifetime-cap violation, and strict-dial-forbidden shortcut all fail closed with `UsageError` exit codes. No per-callsite bypass anywhere in the new surface; all configurability lives on the strict dial.
+
+## Amendments
+
+### Amendment 1 — the parallelism model (2026-07-29)
+
+Tracked by [#1746](https://github.com/kalonji-tools/oxitest/issues/1746). Amends Rules 1, 2, 4, and 7. The principle, the declaration-file convention, the B1 boundary, proxy access, plugin convergence, and the retirements all stand as accepted.
+
+This ADR was written against a single-process mental model. Neither the document as accepted on 2026-07-28 nor the [design spec](https://github.com/kalonji-tools/oxitest/issues/1707#issuecomment-5101919212) it came from contains a single occurrence of `parallel`, `worker`, or `subprocess` — while oxitest distributes tests across worker subprocesses by default at `min_parallel_tests = 100`. Three statements did not survive contact with the scheduler:
+
+1. **The lifetime ladder said nothing about parallelism.** Under the real scheduler a fixture session is created and torn down per task, so the widest *effective* tier was the module — narrower than every framework surveyed. Rule 2 now states, per tier, what happens when work spans processes, and `package` earns its exactly-once guarantee structurally by collapsing its subtree onto one worker.
+2. **`package` was defined as "the Python package (directory with `__init__.py`)".** That made the tier unreachable in oxitest's own test suite, in which no directory holding real test modules carries an `__init__.py`. Rule 2 now defines a package as any directory; `__init__.py` keeps its role as a declaration home.
+3. **Rootdir `package` and `session` were declared the same thing.** They are not, once instances can exist per process. Rule 4 carries the retraction with the original argument quoted in full.
+
+Rule 7's autouse table follows from (1) and (3): a `session` autouse fixture fires once per worker process, not "once for the whole run".
+
+**Evidence.** A [primary-source survey of ten frameworks](https://github.com/kalonji-tools/oxitest/issues/1710#issuecomment-5119280622) found that **no surveyed framework ships a code-structural tier wider than the file that is also process-shared.** pytest is alone in offering a `package` scope, and `pytest-xdist` has no package-level `--dist` mode, so that scope degrades silently under distribution. oxitest can do better only because it owns both the static prescan and the scheduler. The seven decisions behind this amendment are recorded in the [grilling outcome](https://github.com/kalonji-tools/oxitest/issues/1710#issuecomment-5119666710).
+
+**Implemented by** [#1745](https://github.com/kalonji-tools/oxitest/issues/1745) (worker tasks carry N modules; wire protocol v5) and [#1710](https://github.com/kalonji-tools/oxitest/issues/1710) (`lifetime="package"`), both merged 2026-07-29 — ahead of this record, which is why the amendment describes shipped behaviour rather than proposing it.
 
 ## Consequences
 
