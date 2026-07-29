@@ -93,6 +93,7 @@ impl Pipeline {
             cache: &shared.cache,
             session: &session,
             conftest_files: &shared.conftest_files,
+            fixture_modules: &shared.fixture_modules,
             python_bin: &shared.python_bin,
             ast_weight: shared.ast_weight,
         };

@@ -249,6 +249,24 @@ impl TestItem {
     }
 }
 
+/// A `__fixtures__.py` discovered during collection, plus the package
+/// directory its namespace is derived from (ADR-0009 Rule 5).
+///
+/// The serial path registers these into the one session it owns; workers build
+/// their own, so the same list is sent to each of them (#1732).
+///
+/// `anchor` is the module's parent directory today, but slice 3 (#1710) adds
+/// `__init__.py` as a package-level fixture home, at which point it is not —
+/// carried explicitly rather than re-derived so that change stays here.
+///
+/// Serializes as `{"module": ..., "anchor": ...}`; `worker.py` reads those
+/// keys by name.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FixtureModule {
+    pub module: camino::Utf8PathBuf,
+    pub anchor: camino::Utf8PathBuf,
+}
+
 #[cfg(test)]
 use super::test_support::TestItemBuilder;
 #[cfg(test)]

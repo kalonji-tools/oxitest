@@ -163,6 +163,9 @@ pub(crate) struct WorkerParams {
     pub cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Pre-serialized conftest JSON sent to the worker on each task.
     pub conftest_json: std::sync::Arc<serde_json::value::RawValue>,
+    /// `[{"module": ..., "anchor": ...}]` — every `__fixtures__.py` collection
+    /// registered serially, so worker sessions match the coordinator (#1732).
+    pub fixture_modules_json: std::sync::Arc<serde_json::value::RawValue>,
     /// Per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
     /// How to handle temp directories: "cleanup", "failed", or "always".
@@ -200,6 +203,7 @@ fn run_worker_loop(
         sched,
         cancelled,
         conftest_json,
+        fixture_modules_json,
         timeout_secs,
         keep_tmp,
         show_locals,
@@ -238,6 +242,7 @@ fn run_worker_loop(
                 })
                 .collect(),
             conftest_paths: &conftest_json,
+            fixture_modules: &fixture_modules_json,
             timeout_secs,
             keep_tmp: keep_tmp.as_ref(),
             show_locals: if show_locals { Some(true) } else { None },
@@ -390,8 +395,11 @@ mod worker_session_tests {
         (child, session)
     }
 
-    /// Helper: build a minimal `WorkerTask` using the given `RawValue`.
-    fn minimal_task(conftest: &serde_json::value::RawValue) -> WorkerTask<'_> {
+    /// Helper: build a minimal `WorkerTask` from the given `RawValue` payloads.
+    fn minimal_task<'a>(
+        conftest: &'a serde_json::value::RawValue,
+        fixture_modules: &'a serde_json::value::RawValue,
+    ) -> WorkerTask<'a> {
         WorkerTask {
             module_path: "tests/test_example.py",
             items: vec![WorkerTaskItem {
@@ -401,6 +409,7 @@ mod worker_session_tests {
                 markers: vec![],
             }],
             conftest_paths: conftest,
+            fixture_modules,
             timeout_secs: None,
             keep_tmp: "cleanup",
             show_locals: None,
@@ -413,7 +422,8 @@ mod worker_session_tests {
         // Arrange
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest);
+        let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest, &no_fixtures);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -444,6 +454,7 @@ mod worker_session_tests {
         // Arrange
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let task = WorkerTask {
             module_path: "tests/test_math.py",
             items: vec![WorkerTaskItem {
@@ -453,6 +464,7 @@ mod worker_session_tests {
                 markers: vec!["slow"],
             }],
             conftest_paths: &conftest,
+            fixture_modules: &no_fixtures,
             timeout_secs: Some(30),
             keep_tmp: "cleanup",
             show_locals: None,
@@ -481,7 +493,8 @@ mod worker_session_tests {
         // Arrange — keep the session alive so we can read from line_rx.
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest);
+        let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest, &no_fixtures);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -518,7 +531,8 @@ mod worker_session_tests {
         let _ = child.wait();
 
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest);
+        let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest, &no_fixtures);
 
         // Act — writing to a dead process should eventually error.
         // The first write may succeed (kernel buffer), so send repeatedly.

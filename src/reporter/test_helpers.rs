@@ -35,6 +35,7 @@ pub(crate) fn make_pipeline(phase: crate::pipeline::PipelinePhase) -> crate::pip
             ast_weight: None,
             test_files: vec![],
             conftest_files: vec![],
+            fixture_modules: vec![],
             pending_diagnostics: vec![],
         },
         phase,

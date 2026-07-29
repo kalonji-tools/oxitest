@@ -14,6 +14,7 @@ full script against a mock repo layout with a deliberate mismatch.
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -176,22 +177,35 @@ def _build_mock_repo(dst: TempDir, py_version: int, rs_version: int) -> None:
         shutil.copy(src, target)
 
     # Rewrite the two version constants to the requested values.
+    #
+    # Matched by pattern, not by the literal current number: a hardcoded
+    # "= 3" here silently becomes a no-op the next time the protocol is
+    # bumped, leaving both sides equal — which makes the mismatch test pass
+    # for the wrong reason and the matched test pass vacuously.
     py_path = dst / "python/oxitest/_bridge/result.py"
-    py_text = py_path.read_text()
-    py_path.write_text(
-        py_text.replace(
-            "PROTOCOL_VERSION: int = 3",
-            f"PROTOCOL_VERSION: int = {py_version}",
-        )
+    py_text, py_subs = re.subn(
+        r"PROTOCOL_VERSION: int = \d+",
+        f"PROTOCOL_VERSION: int = {py_version}",
+        py_path.read_text(),
     )
+    assert py_subs == 1, (
+        f"expected exactly one PROTOCOL_VERSION assignment in result.py, "
+        f"rewrote {py_subs} — the scaffold cannot control the version it is "
+        "testing, so every assertion downstream is meaningless"
+    )
+    py_path.write_text(py_text)
+
     rs_path = dst / "src/worker_result/wire.rs"
-    rs_text = rs_path.read_text()
-    rs_path.write_text(
-        rs_text.replace(
-            "pub(crate) const PROTOCOL_VERSION: u32 = 3;",
-            f"pub(crate) const PROTOCOL_VERSION: u32 = {rs_version};",
-        )
+    rs_text, rs_subs = re.subn(
+        r"pub\(crate\) const PROTOCOL_VERSION: u32 = \d+;",
+        f"pub(crate) const PROTOCOL_VERSION: u32 = {rs_version};",
+        rs_path.read_text(),
     )
+    assert rs_subs == 1, (
+        f"expected exactly one PROTOCOL_VERSION const in wire.rs, rewrote "
+        f"{rs_subs} — see above"
+    )
+    rs_path.write_text(rs_text)
 
 
 def test_script_exits_zero_when_versions_match(tmp: TempDir) -> None:

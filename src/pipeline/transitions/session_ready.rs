@@ -62,13 +62,20 @@ impl Pipeline {
         };
         let mut shared = self.shared;
         shared.cache.invalidate_modules();
-        let (mut items, mut errors, raw_violations, profile) = collection::collect_items(
+        let collection::CollectionOutput {
+            mut items,
+            mut errors,
+            raw_violations,
+            profile,
+            fixture_modules,
+        } = collection::collect_items(
             py,
             &shared.test_files,
             &shared.cfg,
             &session,
             &mut shared.cache,
         );
+        shared.fixture_modules = fixture_modules;
 
         // Collect doctest items when doctest collection is opted in — either
         // via `--doctest-modules` on the CLI or a `[tool.oxitest.doctest]`
