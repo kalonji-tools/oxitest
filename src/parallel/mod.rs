@@ -61,7 +61,7 @@ fn serialize_fixture_modules(
 }
 
 pub(crate) fn run_phase_parallel(
-    groups: Vec<scheduler::ModuleGroup>,
+    groups: Vec<scheduler::TaskGroup>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
     session_inputs: SessionInputs<'_>,
@@ -77,12 +77,12 @@ pub(crate) fn run_phase_parallel(
     use std::sync::atomic::{AtomicBool, Ordering};
 
     let worker_count = worker_count.max(1).min(groups.len().max(1));
-    let total: usize = groups.iter().map(|g| g.items.len()).sum();
+    let total: usize = groups.iter().map(|g| g.item_count()).sum();
     // Build node_id → Arc<TestItem> before groups are consumed by the scheduler.
     // Items are already Arc-wrapped from collection — no deep clone needed.
     let item_lookup: ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>> = groups
         .iter()
-        .flat_map(|g| g.items.iter())
+        .flat_map(|g| g.items())
         .map(|item| (item.node_id.clone(), Arc::clone(item)))
         .collect();
     let in_flight: std::sync::Arc<parking_lot::Mutex<ahash::AHashSet<String>>> =

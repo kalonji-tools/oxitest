@@ -80,6 +80,18 @@ impl FixtureSession {
         Ok(())
     }
 
+    /// Signal that every module in the package has finished; runs package teardowns.
+    ///
+    /// Peer to [`Self::end_module`] one tier up. Package disposal cannot ride on
+    /// `end_session`: a serial run uses one session for the whole run, so the
+    /// session drain fires long after the package's last test.
+    pub fn end_package(&self, py: Python<'_>, package_path: &Utf8Path) -> PyResult<()> {
+        self.0
+            .bind(py)
+            .call_method1("end_package", (package_path.as_str(),))?;
+        Ok(())
+    }
+
     /// Run session-scoped teardowns at the end of the run.
     pub fn end_session(&self, py: Python<'_>) -> PyResult<()> {
         self.0.bind(py).call_method0("end_session")?;

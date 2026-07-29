@@ -275,7 +275,7 @@ pub(super) fn drain_remaining_into_crashed(
     timings: &mut Vec<types::TestTiming>,
 ) {
     while let Some(group) = sched.pop() {
-        for item in &group.items {
+        for item in group.items() {
             let resolved = types::ResolvedOutcome {
                 node_id: item.node_id.clone(),
                 duration_ms: types::DurationMs::ZERO,
@@ -478,14 +478,14 @@ mod drain_tests {
         ];
 
         let groups = vec![
-            crate::scheduler::ModuleGroup::new(
+            crate::scheduler::TaskGroup::single(crate::scheduler::ModuleGroup::new(
                 camino::Utf8PathBuf::from("tests/a.py"),
                 vec![Arc::clone(&all_items[0]), Arc::clone(&all_items[1])],
-            ),
-            crate::scheduler::ModuleGroup::new(
+            )),
+            crate::scheduler::TaskGroup::single(crate::scheduler::ModuleGroup::new(
                 camino::Utf8PathBuf::from("tests/b.py"),
                 vec![Arc::clone(&all_items[2])],
-            ),
+            )),
         ];
 
         let sched = Arc::new(crate::scheduler::Scheduler::new(groups));
