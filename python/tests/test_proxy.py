@@ -117,3 +117,78 @@ def test_frozen_proxy_bool_truthy() -> None:
 def test_frozen_proxy_bool_falsy() -> None:
     """A FrozenProxy wrapping an empty container is falsy."""
     assert not FrozenProxy([]), "FrozenProxy([]) should be falsy (empty list)"
+
+
+def test_frozen_proxy_str_forwards_to_wrapped() -> None:
+    """str() renders the wrapped value rather than the wrapper."""
+    p = FrozenProxy("pg://db")
+
+    rendered = str(p)
+
+    assert rendered == "pg://db", (
+        "assertion messages interpolate fixture values, so a wrapper rendered "
+        f"here is the failure text a user debugs against — got {rendered!r}"
+    )
+
+
+def test_frozen_proxy_fstring_forwards_to_wrapped() -> None:
+    """f-string interpolation renders the wrapped value."""
+    p = FrozenProxy("pg://db")
+
+    rendered = f"{p}"
+
+    assert rendered == "pg://db", (
+        "f-strings are the common way users report a fixture value in an "
+        f"assertion message — got {rendered!r}"
+    )
+
+
+def test_frozen_proxy_format_without_spec_forwards_to_wrapped() -> None:
+    """format() with no spec renders the wrapped value."""
+    p = FrozenProxy("pg://db")
+
+    rendered = format(p)
+
+    assert rendered == "pg://db", (
+        "format() with an empty spec must route to the wrapped object's "
+        f"__format__, not object.__format__ on the proxy — got {rendered!r}"
+    )
+
+
+def test_frozen_proxy_format_honours_spec() -> None:
+    """A non-empty format spec is forwarded to the wrapped object."""
+    p = FrozenProxy(3.14159)
+
+    rendered = f"{p:.2f}"
+
+    assert rendered == "3.14", (
+        "object.__format__ raises on any non-empty spec, so an unforwarded "
+        f"spec is a hard TypeError in a user's f-string — got {rendered!r}"
+    )
+
+
+def test_frozen_proxy_percent_format_forwards_to_wrapped() -> None:
+    """%-formatting renders the wrapped value."""
+    p = FrozenProxy("pg://db")
+
+    # %-formatting is the behaviour under test, not a style choice — rewriting
+    # it to an f-string would exercise a different route.
+    rendered = "%s" % (p,)  # noqa: UP031
+
+    assert rendered == "pg://db", (
+        "%-formatting routes through __str__ like f-strings do; logging calls "
+        f"and legacy code still use it — got {rendered!r}"
+    )
+
+
+def test_frozen_proxy_repr_still_shows_wrapper() -> None:
+    """repr() keeps reporting the proxy even though str() no longer does."""
+    p = FrozenProxy("pg://db")
+
+    rendered = repr(p)
+
+    assert rendered == "FrozenProxy('pg://db')", (
+        "repr must keep naming the wrapper — it is how a developer sees that a "
+        "value is immutable, and oxi.raises/reporter output depends on it; a "
+        f"future 'make it fully transparent' change must fail here — got {rendered!r}"
+    )
