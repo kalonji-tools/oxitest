@@ -106,6 +106,38 @@ fn declaring_package_dirs(fixture_modules: &[types::FixtureModule]) -> Vec<Utf8P
     dirs
 }
 
+/// Move any arranged group inside a declaring subtree back to the parallel set.
+///
+/// Auto-arrange (on by default — `auto_arrange_threshold` is 70) groups modules
+/// by shared-fixture usage and runs those groups serially on the main process,
+/// while everything else goes to workers. That splits a package-lifetime
+/// subtree across two phases, and phases use different fixture sessions, so the
+/// fixture is built once in each — the same duplicate `@oxi.mark.inprocess`
+/// produces (see `reject_inprocess_inside_package`).
+///
+/// Excluded rather than rejected, and the asymmetry is deliberate: `inprocess`
+/// is a semantic the user explicitly asked for and cannot be silently dropped,
+/// whereas arrangement is an internal optimization. Skipping it for these
+/// subtrees costs some scheduling efficiency and nothing else.
+///
+/// The general fix — teach the planner to keep a declaring subtree in one phase
+/// by construction — is #1750.
+fn unarrange_declaring_subtrees(plan: &mut arrange::ExecutionPlan, declaring_dirs: &[Utf8PathBuf]) {
+    if declaring_dirs.is_empty() {
+        return;
+    }
+    let in_declaring =
+        |g: &ModuleGroup| declaring_dirs.iter().any(|d| g.module_path.starts_with(d));
+
+    for bucket in &mut plan.arranged_groups {
+        let (moved, kept): (Vec<_>, Vec<_>) =
+            std::mem::take(bucket).into_iter().partition(&in_declaring);
+        *bucket = kept;
+        plan.parallel_groups.extend(moved);
+    }
+    plan.arranged_groups.retain(|b| !b.is_empty());
+}
+
 /// Warn about each package declaration that costs the run its parallelism.
 ///
 /// Choosing a structural guarantee (#1710 decision 1) means the tier never
@@ -119,7 +151,7 @@ fn declaring_package_dirs(fixture_modules: &[types::FixtureModule]) -> Vec<Utf8P
 /// would be noise that trains users to ignore the message.
 fn warn_about_package_collapse(
     fixture_modules: &[types::FixtureModule],
-    groups: &[ModuleGroup],
+    groups: &[&ModuleGroup],
     declaring_dirs: &[Utf8PathBuf],
     rep: &mut dyn reporter::Reporter,
 ) {
@@ -507,7 +539,7 @@ pub(super) fn execute(
     };
 
     // Build a pure execution plan — no I/O, no PyO3.
-    let plan = arrange::plan_execution(
+    let mut plan = arrange::plan_execution(
         groups,
         &ctx.cfg.exec.mode,
         ctx.cfg.worker_count(),
@@ -518,6 +550,10 @@ pub(super) fn execute(
         estimated,
         cpu_count,
     );
+
+    // Arrangement is an optimization, not a semantic the user asked for, so a
+    // declaring subtree is simply excluded from it rather than rejected.
+    unarrange_declaring_subtrees(&mut plan, &declaring_package_dirs(ctx.fixture_modules));
 
     // ── Verbose scheduling diagnostics ─────────────────────────────────
 
@@ -534,12 +570,12 @@ pub(super) fn execute(
     if !declaring_dirs.is_empty() {
         // Counted across every phase's groups, so the number quoted is the whole
         // subtree rather than whichever slice this dispatch happens to hold.
-        let all_groups: Vec<ModuleGroup> = plan
+        // Borrowed, not cloned: this only ever counts.
+        let all_groups: Vec<&ModuleGroup> = plan
             .inprocess_groups
             .iter()
             .chain(plan.parallel_groups.iter())
             .chain(plan.arranged_groups.iter().flatten())
-            .cloned()
             .collect();
         warn_about_package_collapse(ctx.fixture_modules, &all_groups, &declaring_dirs, rep);
     }
@@ -651,6 +687,102 @@ mod tests {
 
     fn make_item(node_id: &str) -> std::sync::Arc<TestItem> {
         TestItem::builder_raw(node_id).arc()
+    }
+
+    /// A one-item module group at `path`.
+    fn plan_group(path: &str) -> ModuleGroup {
+        ModuleGroup::new(
+            Utf8PathBuf::from(path),
+            vec![make_item(&format!("{path}::t"))],
+        )
+    }
+
+    fn plan_with(
+        arranged: Vec<Vec<ModuleGroup>>,
+        parallel: Vec<ModuleGroup>,
+    ) -> arrange::ExecutionPlan {
+        arrange::ExecutionPlan {
+            strategy: ExecutionStrategy::Parallel { worker_count: 4 },
+            inprocess_groups: vec![],
+            arranged_groups: arranged,
+            parallel_groups: parallel,
+        }
+    }
+
+    #[test]
+    fn unarrange_moves_declaring_subtree_out_of_the_arranged_set() {
+        // Arrange — auto-arrange put a declaring package's module in the
+        // arranged set, which runs on the main process while parallel_groups
+        // run on workers. Two phases, two fixture sessions, two instances.
+        let mut plan = plan_with(
+            vec![vec![
+                plan_group("tests/api/a.py"),
+                plan_group("tests/core/x.py"),
+            ]],
+            vec![plan_group("tests/api/b.py")],
+        );
+
+        // Act
+        unarrange_declaring_subtrees(&mut plan, &[Utf8PathBuf::from("tests/api")]);
+
+        // Assert — the whole declaring subtree must end up in one phase, or the
+        // exactly-once guarantee silently stops holding under `-n`.
+        let arranged_paths: Vec<String> = plan
+            .arranged_groups
+            .iter()
+            .flatten()
+            .map(|g| g.module_path.to_string())
+            .collect();
+        assert_eq!(
+            arranged_paths,
+            vec!["tests/core/x.py"],
+            "only the non-declaring module may stay arranged; leaving tests/api/a.py \
+             behind splits the package across two sessions"
+        );
+        let mut parallel_paths: Vec<String> = plan
+            .parallel_groups
+            .iter()
+            .map(|g| g.module_path.to_string())
+            .collect();
+        parallel_paths.sort();
+        assert_eq!(
+            parallel_paths,
+            vec!["tests/api/a.py", "tests/api/b.py"],
+            "both halves of the declaring subtree must land in the same phase"
+        );
+    }
+
+    #[test]
+    fn unarrange_drops_a_bucket_it_empties() {
+        // Arrange — the arranged bucket holds nothing but declaring modules.
+        let mut plan = plan_with(vec![vec![plan_group("tests/api/a.py")]], vec![]);
+
+        // Act
+        unarrange_declaring_subtrees(&mut plan, &[Utf8PathBuf::from("tests/api")]);
+
+        // Assert — an empty bucket would still cost a serial dispatch phase that
+        // runs no tests.
+        assert!(
+            plan.arranged_groups.is_empty(),
+            "a bucket emptied by the move must not survive as an empty phase"
+        );
+    }
+
+    #[test]
+    fn unarrange_is_a_no_op_without_declaring_dirs() {
+        // Arrange
+        let mut plan = plan_with(vec![vec![plan_group("tests/api/a.py")]], vec![]);
+
+        // Act
+        unarrange_declaring_subtrees(&mut plan, &[]);
+
+        // Assert — suites that never use the tier must keep arrangement, which
+        // exists to speed them up.
+        assert_eq!(
+            plan.arranged_groups.len(),
+            1,
+            "arrangement must survive untouched when no package fixture is declared"
+        );
     }
 
     #[test]
