@@ -55,7 +55,14 @@ class NamespaceProxy(_CachingProxy):
     the same instance within a single test.
     """
 
-    __slots__ = ("_cache", "_fn_teardowns", "_module_path", "_namespace", "_session")
+    __slots__ = (
+        "_cache",
+        "_fn_teardowns",
+        "_module_path",
+        "_namespace",
+        "_session",
+        "_test_is_async",
+    )
 
     def __init__(
         self,
@@ -63,11 +70,14 @@ class NamespaceProxy(_CachingProxy):
         session: FixtureSession,
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
+        *,
+        test_is_async: bool = True,
     ) -> None:
         object.__setattr__(self, "_namespace", namespace)
         object.__setattr__(self, "_session", session)
         object.__setattr__(self, "_module_path", module_path)
         object.__setattr__(self, "_fn_teardowns", fn_teardowns)
+        object.__setattr__(self, "_test_is_async", test_is_async)
         object.__setattr__(self, "_cache", {})
 
     def __getattr__(self, name: str) -> Any:
@@ -80,6 +90,7 @@ class NamespaceProxy(_CachingProxy):
                 self._namespace,
                 self._module_path,
                 self._fn_teardowns,
+                test_is_async=self._test_is_async,
             ),
         )
 
@@ -154,7 +165,14 @@ class FixturesProxy(_CachingProxy):
     each return the same proxy object on repeated accesses within one test.
     """
 
-    __slots__ = ("_cache", "_fn_name", "_fn_teardowns", "_module_path", "_session")
+    __slots__ = (
+        "_cache",
+        "_fn_name",
+        "_fn_teardowns",
+        "_module_path",
+        "_session",
+        "_test_is_async",
+    )
 
     def __init__(
         self,
@@ -162,11 +180,14 @@ class FixturesProxy(_CachingProxy):
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         fn_name: str = "",
+        *,
+        test_is_async: bool = True,
     ) -> None:
         object.__setattr__(self, "_session", session)
         object.__setattr__(self, "_module_path", module_path)
         object.__setattr__(self, "_fn_teardowns", fn_teardowns)
         object.__setattr__(self, "_fn_name", fn_name)
+        object.__setattr__(self, "_test_is_async", test_is_async)
         object.__setattr__(self, "_cache", {})
 
     @property
@@ -197,6 +218,7 @@ class FixturesProxy(_CachingProxy):
                 self._session,
                 self._module_path,
                 self._fn_teardowns,
+                test_is_async=self._test_is_async,
             )
 
         return self._get_cached(name, _resolve)

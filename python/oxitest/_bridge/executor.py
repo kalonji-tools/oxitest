@@ -282,6 +282,14 @@ def _build_execution_chain(
 
     used_shared = getattr(ctx.session, "_used_shared_async", False)
     shared = getattr(ctx.session, "_shared_session", None) if used_shared else None
+    # Promote by visibility. A fixture reached via `await fx.<ns>.<name>` is
+    # built on whatever loop the body is running on, so a wider-than-function
+    # async fixture needs that loop to outlive the test. `_used_shared_async`
+    # cannot answer this: lazy resolution sets it from inside the body, after
+    # the strategy has already been chosen.
+    if not used_shared and plan.is_async:
+        shared = _promote_for_wide_async(ctx.session)
+        used_shared = shared is not None
     backend = ctx.session.async_backend
     strategy = resolve_strategy(
         used_shared=used_shared,
@@ -325,6 +333,23 @@ def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None
                 td()
     finally:
         _current_teardown_node_id.reset(token)
+
+
+def _promote_for_wide_async(session: _SessionProtocol) -> AsyncSession | None:
+    """Return the shared session if this test can reach a wide async fixture.
+
+    ``None`` means no promotion: either nothing wider than function lifetime
+    is registered, or the session predates this capability.
+
+    Duck-typed via ``getattr`` rather than widened on ``_SessionProtocol``,
+    because the protocol is structurally satisfied by test doubles that have
+    no async machinery at all and no reason to grow any.
+    """
+    sees_wide = getattr(session, "has_wide_async_fixtures", None)
+    acquire = getattr(session, "ensure_async_session", None)
+    if sees_wide is None or acquire is None or not sees_wide():
+        return None
+    return acquire()
 
 
 def _drive_arrange_async_each(
