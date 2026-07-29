@@ -82,13 +82,15 @@ impl TaskGroup {
         self.modules.iter().flat_map(|m| m.items.iter())
     }
 
-    /// Label for diagnostics. Names the first module; #1710 may prefer the
-    /// package path once groups span directories.
+    /// Label for diagnostics — the group's first module.
+    ///
+    /// Every constructor guarantees at least one module: [`Self::single`] takes
+    /// one, and `group_by_package` only ever builds a group from a non-empty
+    /// merge. Indexing states that invariant; inventing a placeholder path
+    /// would let an impossible group reach a diagnostic looking like a real
+    /// directory name.
     pub(crate) fn label(&self) -> &camino::Utf8Path {
-        self.modules
-            .first()
-            .map(|m| m.module_path.as_path())
-            .unwrap_or_else(|| camino::Utf8Path::new("<empty group>"))
+        self.modules[0].module_path.as_path()
     }
 }
 
