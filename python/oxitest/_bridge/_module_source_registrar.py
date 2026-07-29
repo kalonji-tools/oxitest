@@ -44,7 +44,14 @@ def register_module_source_fixtures(
     intentional per ADR-0009 Rule 5 (namespace derivation) — the namespace
     prefix makes the full qualified name unambiguous.
     """
-    namespace = Path(anchor_package_path).name
+    # An inline declaration's anchor is its own module (ADR-0009 Rule 1), so the
+    # anchor is a file rather than a directory and its suffix has to come off.
+    #
+    # Not a blanket `.stem`: Path("tests/api.v1").stem is "api" while .name is
+    # "api.v1", so that would silently re-namespace package-level fixtures in any
+    # directory containing a dot.
+    anchor = Path(anchor_package_path)
+    namespace = anchor.stem if anchor.suffix == ".py" else anchor.name
     module_path = fixture_module.__file__ or ""
 
     for attr_name, obj in vars(fixture_module).items():

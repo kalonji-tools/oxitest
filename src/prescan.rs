@@ -57,6 +57,12 @@ pub(crate) struct PrescanPayload {
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
     pub(crate) module_markers: Vec<String>,
+    /// Inline `@oxi.fixture` declarations in this test file (#1712).
+    ///
+    /// Capped at `module` lifetime by home *kind*, independent of the location
+    /// rule that governs declaration homes (#1711): at the rootdir package that
+    /// rule permits `session`, and only the home-kind cap rejects it inline.
+    pub(crate) declarations: Vec<PrescanDeclaration>,
 }
 
 /// Result of pre-scanning a Python file for test functions.
@@ -655,6 +661,11 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
 
     let has_dynamic_collection = detect_dynamic_collection(&parsed.1);
     let module_markers = extract_module_marks(&parsed.1);
+    // Separate walk from `walk_test_defs` above, which visits only `test_*`
+    // functions and so cannot see a fixture-decorated helper. A function that is
+    // both stays in both lists: the two walks answer independent questions, and
+    // collapsing them here would hide a user error a later slice should report.
+    let declarations = collect_declarations(&parsed.1, &line_index);
 
     if keep_ast {
         PrescanResult::HasTests(PrescanPayload {
@@ -663,6 +674,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             items,
             has_dynamic_collection,
             module_markers,
+            declarations,
         })
     } else {
         PrescanResult::HasTests(PrescanPayload {
@@ -670,7 +682,10 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             stmts: Vec::new(),
             items,
             has_dynamic_collection,
+            // Carried in both arms: the inline cap check does not depend on
+            // `keep_ast`, which is driven by strict-mode violation collection.
             module_markers,
+            declarations,
         })
     }
 }
@@ -693,6 +708,44 @@ fn is_fixture_call(func: &ast::Expr) -> bool {
         ast::Expr::Name(n) => n.id.as_str() == "fixture",
         _ => false,
     }
+}
+
+/// Collect every `@oxi.fixture` declaration among a module's top-level functions.
+///
+/// Shared by the fixture-module path and the test-file path (#1712): both ask the
+/// same question of the same AST shape, and a copy would let the two drift on
+/// what counts as a declaration.
+///
+/// Only the first recognized `@oxi.fixture` decorator on a function counts — a
+/// function cannot hold two lifetimes, and stacking them is a user error for a
+/// later slice to diagnose rather than something to record twice here.
+fn collect_declarations(stmts: &[ast::Stmt], line_index: &[u32]) -> Vec<PrescanDeclaration> {
+    let mut declarations: Vec<PrescanDeclaration> = Vec::new();
+    for stmt in stmts {
+        let (fn_name, decorators, range, is_async) = match stmt {
+            ast::Stmt::FunctionDef(f) => (f.name.to_string(), &f.decorator_list, f.range, false),
+            ast::Stmt::AsyncFunctionDef(f) => {
+                (f.name.to_string(), &f.decorator_list, f.range, true)
+            }
+            _ => continue,
+        };
+        for dec in decorators {
+            if let Some(lifetime) = extract_fixture_decorator_lifetime(dec) {
+                let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
+                    line_index,
+                    range.start().to_u32(),
+                ));
+                declarations.push(PrescanDeclaration {
+                    fn_name: fn_name.clone(),
+                    lineno,
+                    lifetime,
+                    is_async,
+                });
+                break;
+            }
+        }
+    }
+    declarations
 }
 
 /// Recognize `@oxi.fixture(...)` / `@oxitest.fixture(...)` / `@fixture(...)`.
@@ -750,32 +803,7 @@ pub(crate) fn prescan_fixture_module_from_source(
     };
 
     let line_index = python_ast::build_line_index(source);
-    let mut declarations: Vec<PrescanDeclaration> = Vec::new();
-
-    for stmt in &stmts {
-        let (fn_name, decorators, range, is_async) = match stmt {
-            ast::Stmt::FunctionDef(f) => (f.name.to_string(), &f.decorator_list, f.range, false),
-            ast::Stmt::AsyncFunctionDef(f) => {
-                (f.name.to_string(), &f.decorator_list, f.range, true)
-            }
-            _ => continue,
-        };
-        for dec in decorators {
-            if let Some(lifetime) = extract_fixture_decorator_lifetime(dec) {
-                let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
-                    &line_index,
-                    range.start().to_u32(),
-                ));
-                declarations.push(PrescanDeclaration {
-                    fn_name: fn_name.clone(),
-                    lineno,
-                    lifetime,
-                    is_async,
-                });
-                break;
-            }
-        }
-    }
+    let declarations = collect_declarations(&stmts, &line_index);
 
     if declarations.is_empty() {
         // MED-3: detect decorated top-level functions whose decorator was not
@@ -801,6 +829,97 @@ pub(crate) fn prescan_fixture_module_from_source(
 mod tests {
     use super::*;
     use crate::python_ast::tests::{temp_path, write_temp_py};
+
+    // ── inline fixture declarations in test files (#1712) ──────────────────
+
+    fn inline_declarations(src: &str) -> Vec<PrescanDeclaration> {
+        let file = write_temp_py(src);
+        match prescan_with_ast(&temp_path(&file), false) {
+            PrescanResult::HasTests(payload) => payload.declarations,
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_fixture_beside_a_test_is_collected() {
+        let declarations = inline_declarations(
+            "import oxitest as oxi\n\n@oxi.fixture(lifetime=\"module\")\ndef conn(): return 1\n\ndef test_uses_it(): pass\n",
+        );
+
+        assert_eq!(
+            declarations.len(),
+            1,
+            "an @oxi.fixture in a test file must be collected; walk_test_defs \
+             only visits test_* functions, so a separate walk is what finds it — \
+             got {declarations:?}"
+        );
+        assert_eq!(
+            declarations[0].fn_name, "conn",
+            "the declaration must name the fixture so the cap diagnostic can too"
+        );
+        assert_eq!(
+            declarations[0].lifetime, "module",
+            "the lifetime kwarg is captured verbatim; the cap check compares strings"
+        );
+    }
+
+    #[test]
+    fn a_test_file_without_fixtures_collects_no_declarations() {
+        let declarations = inline_declarations("def test_alone(): pass\n");
+
+        assert!(
+            declarations.is_empty(),
+            "an ordinary test file declares nothing; a false positive here would \
+             make every existing suite pay the cap check — got {declarations:?}"
+        );
+    }
+
+    #[test]
+    fn two_inline_fixtures_keep_their_separate_lifetimes() {
+        let declarations = inline_declarations(
+            "import oxitest as oxi\n\n@oxi.fixture(lifetime=\"function\")\ndef per_test(): return 1\n\n@oxi.fixture(lifetime=\"module\")\ndef per_module(): return 2\n\ndef test_both(): pass\n",
+        );
+
+        let pairs: Vec<(String, String)> = declarations
+            .iter()
+            .map(|decl| (decl.fn_name.clone(), decl.lifetime.clone()))
+            .collect();
+        assert_eq!(
+            pairs,
+            vec![
+                ("per_test".to_owned(), "function".to_owned()),
+                ("per_module".to_owned(), "module".to_owned()),
+            ],
+            "each declaration carries its own lifetime — collapsing them would \
+             make one of the two tiers silently wrong"
+        );
+    }
+
+    #[test]
+    fn a_function_that_is_both_test_and_fixture_appears_in_both_lists() {
+        let file = write_temp_py(
+            "import oxitest as oxi\n\n@oxi.fixture(lifetime=\"function\")\ndef test_both(): return 1\n",
+        );
+
+        match prescan_with_ast(&temp_path(&file), false) {
+            PrescanResult::HasTests(payload) => {
+                assert_eq!(
+                    payload.items.len(),
+                    1,
+                    "the test_ name still makes it a test item"
+                );
+                assert_eq!(
+                    payload.declarations.len(),
+                    1,
+                    "and the decorator still makes it a declaration. The two walks \
+                     answer independent questions; resolving the conflict here \
+                     would hide a user error that belongs in a diagnostic (#1713 \
+                     or #1716), not in silent precedence"
+                );
+            }
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
 
     // ── prescan items ──────────────────────────────────────────────────────
 

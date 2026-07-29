@@ -865,7 +865,7 @@ class FixtureSession:
         test_is_async: bool = True,
     ) -> Any:
         defn = self._registry.get_in_namespace(name, namespace)
-        if defn is None:
+        if defn is None or not defn.is_visible_from(module_path):
             raise FixtureNotFoundError(name, namespace=namespace)
         ctx = _ResolutionContext(
             module_path, fn_teardowns, frozenset(), self._scope_for

@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice5_inline_cross_file_injection"]
+python_files = ["test_*.py"]
+strict = "abort"

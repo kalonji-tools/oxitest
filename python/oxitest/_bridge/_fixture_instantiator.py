@@ -339,7 +339,12 @@ class FixtureInstantiator:
         if name in ctx.resolving:
             raise FixtureCycleError(name, set(ctx.resolving))
         defn = self._registry.get(name)
-        if defn is None:
+        # Bare-name lookup, so this route never sees a namespace — the inline
+        # module restriction has to be applied here too. Filtering only the
+        # proxy path (`get_fixture_in_namespace`) left an inline fixture
+        # injectable into a sibling file by `Fixture[T]` annotation, which is the
+        # route a user reaches for first.
+        if defn is None or not defn.is_visible_from(ctx.module_path):
             raise FixtureNotFoundError(name)
         return self._resolve_fixture_defn(
             defn, replace(ctx, resolving=ctx.resolving | {name})
