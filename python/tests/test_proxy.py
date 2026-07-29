@@ -76,6 +76,21 @@ def test_frozen_proxy_repr() -> None:
     )
 
 
+def test_frozen_proxy_wrapped_slot_is_an_accepted_escape_hatch() -> None:
+    """`_wrapped` hands back the original object — by design, per ADR-0005."""
+    original = [1, 2]
+
+    p = FrozenProxy(original)
+
+    assert p._wrapped is original, (  # noqa: SLF001
+        "ADR-0005 accepts _wrapped as an escape hatch alongside p[k] and "
+        "iter(p) returning unwrapped elements; blocking it would need a "
+        "__getattribute__ hook on every attribute read. If this ever stops "
+        "being true, update the FrozenProxy limitation bullet in ADR-0005 — "
+        "the change would be a decision, not a bugfix"
+    )
+
+
 def test_shared_fixture_mutation_error_is_runtime_error() -> None:
     """SharedFixtureMutationError is a RuntimeError subclass."""
     assert issubclass(SharedFixtureMutationError, RuntimeError), (
