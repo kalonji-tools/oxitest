@@ -14,6 +14,7 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) cache: &'a cache::TestCache,
     pub(super) session: &'a bridge::FixtureSession,
     pub(super) conftest_files: &'a [Utf8PathBuf],
+    pub(super) fixture_modules: &'a [types::FixtureModule],
     pub(super) python_bin: &'a str,
     /// Sum of AST-derived body weights from prescan; used as fallback for cold-cache estimation.
     pub(super) ast_weight: Option<crate::types::DurationMs>,
@@ -107,7 +108,7 @@ pub(super) enum ExecutionDispatch<'a> {
     Parallel {
         cfg: &'a config::Config,
         workers: usize,
-        conftest_files: &'a [Utf8PathBuf],
+        session_inputs: parallel::SessionInputs<'a>,
         python_bin: &'a str,
         /// Pre-warmed worker pool, consumed on first call.
         pool: Option<Vec<parallel::PrewarmedWorker>>,
@@ -202,14 +203,14 @@ impl<'a> ExecutionDispatch<'a> {
             ExecutionDispatch::Parallel {
                 cfg,
                 workers,
-                conftest_files,
+                session_inputs,
                 python_bin,
                 pool,
             } => parallel::run_phase_parallel(
                 groups,
                 cfg,
                 *workers,
-                conftest_files,
+                *session_inputs,
                 python_bin,
                 rep,
                 pool.take(),
@@ -516,7 +517,10 @@ pub(super) fn execute(
             let mut parallel = ExecutionDispatch::Parallel {
                 cfg: ctx.cfg,
                 workers: worker_count,
-                conftest_files: ctx.conftest_files,
+                session_inputs: parallel::SessionInputs {
+                    conftest_paths: ctx.conftest_files,
+                    fixture_modules: ctx.fixture_modules,
+                },
                 python_bin: ctx.python_bin,
                 pool: Some(pool_guard.take()),
             };

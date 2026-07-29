@@ -35,15 +35,44 @@ pub(crate) struct PhaseResult {
     pub timings: Vec<types::TestTiming>,
 }
 
+/// Everything a worker needs to rebuild the coordinator's fixture registry.
+///
+/// Both halves are collected once and sent with every task: a worker has its
+/// own `FixtureSession`, and anything missing here is simply invisible to it.
+#[derive(Clone, Copy)]
+pub(crate) struct SessionInputs<'a> {
+    pub conftest_paths: &'a [camino::Utf8PathBuf],
+    pub fixture_modules: &'a [types::FixtureModule],
+}
+
+/// Pre-serialize the fixture-module list, once for the whole run.
+///
+/// Every task carries the identical list, so serializing per task would repeat
+/// the work for no gain — the same reason `conftest_paths` is prepared once.
+///
+/// A free function rather than a block inside `run_phase_parallel`, because
+/// that function needs a live scheduler and real subprocesses: nothing in
+/// `cargo test` can enter it, so anything inlined there is untestable.
+fn serialize_fixture_modules(
+    fixture_modules: &[types::FixtureModule],
+) -> std::sync::Arc<serde_json::value::RawValue> {
+    let json_str = serde_json::to_string(fixture_modules).expect("fixture modules serialize");
+    std::sync::Arc::from(serde_json::value::RawValue::from_string(json_str).expect("valid JSON"))
+}
+
 pub(crate) fn run_phase_parallel(
     groups: Vec<scheduler::ModuleGroup>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count
-    conftest_paths: &[camino::Utf8PathBuf],
+    session_inputs: SessionInputs<'_>,
     python_bin: &str,
     rep: &mut dyn reporter::Reporter,
     pool: Option<Vec<PrewarmedWorker>>,
 ) -> PhaseResult {
+    let SessionInputs {
+        conftest_paths,
+        fixture_modules,
+    } = session_inputs;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -67,6 +96,7 @@ pub(crate) fn run_phase_parallel(
             serde_json::value::RawValue::from_string(json_str).expect("valid JSON"),
         )
     };
+    let fixture_modules_raw = serialize_fixture_modules(fixture_modules);
     let timeout_secs = cfg.exec.timeout_secs;
     let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
     let show_locals = cfg.output.show_locals;
@@ -84,6 +114,7 @@ pub(crate) fn run_phase_parallel(
                 sched: Arc::clone(&sched),
                 cancelled: Arc::clone(&cancelled),
                 conftest_json: std::sync::Arc::clone(&conftest_raw),
+                fixture_modules_json: std::sync::Arc::clone(&fixture_modules_raw),
                 timeout_secs,
                 keep_tmp: keep_tmp.clone(),
                 show_locals,
@@ -154,6 +185,44 @@ pub(crate) fn run_phase_parallel(
     PhaseResult {
         interrupted,
         timings,
+    }
+}
+
+#[cfg(test)]
+mod fixture_module_payload_tests {
+    use super::*;
+
+    /// The worker iterates this list and indexes each entry by name, so both
+    /// the array shape and the key names are a cross-language contract.
+    #[test]
+    fn serializes_to_the_shape_the_worker_reads() {
+        let modules = vec![types::FixtureModule {
+            module: camino::Utf8PathBuf::from("pkg/__fixtures__.py"),
+            anchor: camino::Utf8PathBuf::from("pkg"),
+        }];
+
+        let raw = serialize_fixture_modules(&modules);
+
+        assert_eq!(
+            raw.get(),
+            r#"[{"module":"pkg/__fixtures__.py","anchor":"pkg"}]"#,
+            "worker.py reads entry['module'] and entry['anchor'] — a rename or \
+             a switch to positional arrays is a silent KeyError over there"
+        );
+    }
+
+    /// Most projects have no `__fixtures__.py`; the worker must receive an
+    /// empty array it can iterate, not `null`.
+    #[test]
+    fn empty_input_serializes_to_an_empty_array() {
+        let raw = serialize_fixture_modules(&[]);
+
+        assert_eq!(
+            raw.get(),
+            "[]",
+            "null would make the worker's `for entry in ...` raise instead of \
+             skipping"
+        );
     }
 }
 

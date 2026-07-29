@@ -440,9 +440,18 @@ mod compact_and_error_tests {
 
     #[test]
     fn protocol_version_round_trips() {
-        let json = r#"{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":3}"#;
-        let r: WireResult = serde_json::from_str(json).expect("valid JSON");
-        assert_eq!(r.protocol_version(), PROTOCOL_VERSION);
+        // Built from PROTOCOL_VERSION rather than a literal: this test is about
+        // the field surviving deserialization, not about which version is
+        // current, and hardcoding the number makes every bump a false failure.
+        let json = format!(
+            r#"{{"node_id":"t","outcome":"passed","duration_ms":0.0,"protocol_version":{PROTOCOL_VERSION}}}"#
+        );
+        let r: WireResult = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(
+            r.protocol_version(),
+            PROTOCOL_VERSION,
+            "the wire result must report back the version it carried"
+        );
     }
 
     #[test]

@@ -120,6 +120,9 @@ pub(crate) struct PipelineShared {
     pub(crate) ast_weight: Option<types::DurationMs>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    /// `__fixtures__.py` files registered during collection, sent to every
+    /// worker so parallel sessions see what the serial session sees (#1732).
+    pub(crate) fixture_modules: Vec<types::FixtureModule>,
     /// Rust-side diagnostics gathered pre-execution (e.g. doctest coverage in
     /// `collect`) that need to reach the reporter once it exists in `execute`.
     pub(crate) pending_diagnostics: Vec<reporter::stats::DiagnosticEntry>,
@@ -393,6 +396,7 @@ fn build_shared(
         ast_weight: None,
         test_files: vec![],
         conftest_files: vec![],
+        fixture_modules: vec![],
         pending_diagnostics: vec![],
     })
 }

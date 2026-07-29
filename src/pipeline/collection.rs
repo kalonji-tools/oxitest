@@ -136,18 +136,26 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
     out
 }
 
+/// Everything `collect_items` produces.
+///
+/// A named struct rather than a tuple: five positional fields is past the
+/// point where call sites stay readable.
+pub(super) struct CollectionOutput {
+    pub items: Vec<Arc<types::TestItem>>,
+    pub errors: Vec<types::CollectError>,
+    pub raw_violations: Vec<bridge::RawViolation>,
+    pub profile: Option<CollectionProfile>,
+    /// `__fixtures__.py` files registered here, forwarded to workers (#1732).
+    pub fixture_modules: Vec<types::FixtureModule>,
+}
+
 pub(super) fn collect_items(
     py: Python<'_>,
     test_files: &[Utf8PathBuf],
     cfg: &config::Config,
     session: &bridge::FixtureSession,
     cache: &mut cache::TestCache,
-) -> (
-    Vec<Arc<types::TestItem>>,
-    Vec<types::CollectError>,
-    Vec<bridge::RawViolation>,
-    Option<CollectionProfile>,
-) {
+) -> CollectionOutput {
     let mut items: Vec<Arc<types::TestItem>> = Vec::new();
     let mut errors = Vec::new();
     let mut raw_violations: Vec<bridge::RawViolation> = Vec::new();
@@ -161,6 +169,11 @@ pub(super) fn collect_items(
     // same directory all share the same __fixtures__.py. Register once per dir.
     let mut registered_fixture_dirs: std::collections::HashSet<camino::Utf8PathBuf> =
         std::collections::HashSet::new();
+    // The same set, as (module, anchor) pairs, for the parallel path: workers
+    // build their own sessions and must register exactly what the serial path
+    // registered here. Deriving it independently over there would mean two
+    // places deciding what counts as a registrable fixture module.
+    let mut fixture_modules: Vec<types::FixtureModule> = Vec::new();
 
     for file in test_files {
         // Pre-scan: skip files with no test functions.
@@ -220,6 +233,14 @@ pub(super) fn collect_items(
                         ) {
                             errors.push(e);
                         }
+                        // Recorded even when registration failed above: the
+                        // serial session and a worker session are independent,
+                        // so a failure here says nothing about whether the
+                        // worker will succeed. It reports its own diagnostic.
+                        fixture_modules.push(types::FixtureModule {
+                            module: fixture_path,
+                            anchor: parent_dir.to_owned(),
+                        });
                     }
                     crate::prescan::PrescanFixtureResult::Unavailable => {
                         // MED-1: __fixtures__.py exists but could not be parsed
@@ -343,7 +364,13 @@ pub(super) fn collect_items(
         None
     };
 
-    (items, errors, raw_violations, profile)
+    CollectionOutput {
+        items,
+        errors,
+        raw_violations,
+        profile,
+        fixture_modules,
+    }
 }
 
 /// Scan files for docstrings with `>>>` examples and create doctest `TestItem`s.

@@ -12,7 +12,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-import oxitest
 from oxitest import TempDir, helpers
 
 _TESTS_ROOT = Path(__file__).parent
@@ -410,13 +409,6 @@ def test_async_module_lifetime_fixture_is_not_awaited(tmp: TempDir) -> None:
     )
 
 
-@oxitest.mark.skip(
-    reason=(
-        "blocked on #1732 — __fixtures__.py fixtures are invisible to parallel "
-        "workers, so every test here errors with 'no fixture namespace' before "
-        "module lifetime is ever exercised. Slice-1 gap, not a module-tier one."
-    )
-)
 def test_module_lifetime_holds_in_parallel(tmp: TempDir) -> None:
     """Same instantiation/disposal counts under -n 2 as serially.
 

@@ -13,6 +13,7 @@ Task schema (stdin):
             "markers": [str]
         }],
         "conftest_paths": [str],
+        "fixture_modules": [{"module": str, "anchor": str}],
         "timeout_secs": int | null,
         "keep_tmp": str,
         "show_locals": bool | null,
@@ -55,12 +56,20 @@ if TYPE_CHECKING:
     # runtime path, which matters because worker startup is on the hot path.
     from typing import Protocol
 
+    from oxitest._bridge._fixture_registry import FixtureRegistry
+
     class _TeardownTarget(Protocol):
         """Just the lifecycle drains, so teardown can be tested with a stub."""
 
         def end_module(self, module_path: str, /) -> None: ...
 
         def end_session(self) -> None: ...
+
+    class _RegistryOwner(Protocol):
+        """Just the registry, so fixture registration can take a stub."""
+
+        @property
+        def registry(self) -> FixtureRegistry: ...
 
 
 try:
@@ -92,19 +101,79 @@ class WorkerTaskItem(TypedDict):
     markers: list[str]
 
 
+class WorkerFixtureModule(TypedDict):
+    """One ``__fixtures__.py`` to register into this worker's session.
+
+    ``anchor`` is the package directory the namespace is derived from
+    (ADR-0009 Rule 5). It is the module's parent today, but slice 3 adds
+    ``__init__.py`` as a package-level fixture home, so it is sent rather
+    than re-derived here.
+    """
+
+    module: str
+    anchor: str
+
+
 class WorkerTask(TypedDict):
     """JSON task sent from the Rust coordinator to a worker subprocess.
 
-    Must stay in sync with ``WorkerTask`` in ``src/worker_result.rs``.
+    Must stay in sync with ``WorkerTask`` in ``src/worker_result/wire.rs``.
     """
 
     module_path: str
     items: list[WorkerTaskItem]
     conftest_paths: list[str]
+    fixture_modules: list[WorkerFixtureModule]
     timeout_secs: int | None
     keep_tmp: str
     show_locals: NotRequired[bool]
     show_internals: NotRequired[bool]
+
+
+def _register_fixture_modules(
+    session: _RegistryOwner, fixture_modules: list[WorkerFixtureModule]
+) -> None:
+    """Register every ``__fixtures__.py`` the coordinator discovered.
+
+    Mirrors ``bridge::register_fixture_module_for_path`` on the serial path.
+    Workers build their own sessions, so without this the whole
+    ``@oxi.fixture`` declaration layer is invisible to them and every test
+    using one fails with a misleading "no fixture namespace" error (#1732).
+
+    The full list is registered, not just this task's sibling: cross-package
+    access (``fx.other_pkg.thing``) resolves serially today, and a worker that
+    saw only its own package would diverge from that.
+
+    The guard is **defensive, not a known path**. Anything the coordinator can
+    detect — a parse error, or a name collision between a ``conftest.py`` and a
+    ``__fixtures__.py`` — is a collection error, and collection errors abort
+    the run before a single worker spawns. What is left is the unmodelled: the
+    file changing between collection and execution, or an import that behaves
+    differently in a subprocess. Those should fail the tests needing the
+    fixture, not strand the whole group.
+    """
+    from oxitest._bridge.importer import register_module_source_fixtures_for_module
+    from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
+
+    for entry in fixture_modules:
+        try:
+            register_module_source_fixtures_for_module(
+                registry=session.registry,
+                fixture_module_path=entry["module"],
+                anchor_package_path=entry["anchor"],
+            )
+        except BaseException as exc:  # noqa: BLE001 — must not kill the worker
+            # BaseException, not Exception: a fixture module calling sys.exit()
+            # at import time raises SystemExit, which would otherwise take the
+            # worker down and strand every test in the group. importer.py
+            # catches BaseException around the same import for this reason.
+            _emit(
+                Diagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    context=f"fixture registration ({entry['module']})",
+                    message=f"{type(exc).__name__}: {exc}",
+                ).to_wire()
+            )
 
 
 def _maybe_start_coverage() -> None:
@@ -134,6 +203,7 @@ def run(task: WorkerTask) -> None:
     )
 
     session, _violations, _diagnostics = create_session(conftest_paths)
+    _register_fixture_modules(session, task.get("fixture_modules", []))
 
     # Register fixtures declared in the test module itself (e.g. a Fixtures()
     # instance at module level). This mirrors what the serial runner does via
