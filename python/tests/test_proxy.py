@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from oxitest import SharedFixtureMutationError, raises
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from oxitest import SharedFixtureMutationError, parametrize, raises
 from oxitest._bridge.proxy import FrozenProxy
 
 
@@ -119,39 +123,32 @@ def test_frozen_proxy_bool_falsy() -> None:
     assert not FrozenProxy([]), "FrozenProxy([]) should be falsy (empty list)"
 
 
-def test_frozen_proxy_str_forwards_to_wrapped() -> None:
-    """str() renders the wrapped value rather than the wrapper."""
+@dataclass(frozen=True)
+class RenderCase:
+    """Parametrize case for one string-conversion route through FrozenProxy."""
+
+    label: str
+    render: Callable[[Any], str]
+
+
+@parametrize(
+    builtin_str=RenderCase(label="str()", render=str),
+    fstring=RenderCase(label='f"{p}"', render=lambda p: f"{p}"),
+    builtin_format=RenderCase(label="format()", render=format),
+    # %-formatting is the behaviour under test, not a style choice — rewriting
+    # it to an f-string would exercise a different route.
+    percent=RenderCase(label='"%s" %', render=lambda p: "%s" % (p,)),  # noqa: UP031
+)
+def test_frozen_proxy_string_conversion_forwards_to_wrapped(case: RenderCase) -> None:
+    """Every string-conversion route renders the wrapped value, not the wrapper."""
     p = FrozenProxy("pg://db")
 
-    rendered = str(p)
+    rendered = case.render(p)
 
     assert rendered == "pg://db", (
-        "assertion messages interpolate fixture values, so a wrapper rendered "
-        f"here is the failure text a user debugs against — got {rendered!r}"
-    )
-
-
-def test_frozen_proxy_fstring_forwards_to_wrapped() -> None:
-    """f-string interpolation renders the wrapped value."""
-    p = FrozenProxy("pg://db")
-
-    rendered = f"{p}"
-
-    assert rendered == "pg://db", (
-        "f-strings are the common way users report a fixture value in an "
-        f"assertion message — got {rendered!r}"
-    )
-
-
-def test_frozen_proxy_format_without_spec_forwards_to_wrapped() -> None:
-    """format() with no spec renders the wrapped value."""
-    p = FrozenProxy("pg://db")
-
-    rendered = format(p)
-
-    assert rendered == "pg://db", (
-        "format() with an empty spec must route to the wrapped object's "
-        f"__format__, not object.__format__ on the proxy — got {rendered!r}"
+        f"{case.label} rendered the wrapper — assertion messages interpolate "
+        f"fixture values, so this is the text a user debugs a failure against; "
+        f"got {rendered!r}"
     )
 
 
@@ -164,20 +161,6 @@ def test_frozen_proxy_format_honours_spec() -> None:
     assert rendered == "3.14", (
         "object.__format__ raises on any non-empty spec, so an unforwarded "
         f"spec is a hard TypeError in a user's f-string — got {rendered!r}"
-    )
-
-
-def test_frozen_proxy_percent_format_forwards_to_wrapped() -> None:
-    """%-formatting renders the wrapped value."""
-    p = FrozenProxy("pg://db")
-
-    # %-formatting is the behaviour under test, not a style choice — rewriting
-    # it to an f-string would exercise a different route.
-    rendered = "%s" % (p,)  # noqa: UP031
-
-    assert rendered == "pg://db", (
-        "%-formatting routes through __str__ like f-strings do; logging calls "
-        f"and legacy code still use it — got {rendered!r}"
     )
 
 
