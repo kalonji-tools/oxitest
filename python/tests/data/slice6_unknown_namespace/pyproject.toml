@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice6_unknown_namespace"]
+python_files = ["test_*.py"]
+strict = "abort"
