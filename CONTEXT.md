@@ -34,7 +34,7 @@
 
 ## Fixtures
 
-**Fixture** — A reusable value injected into test functions. Resolved primarily by type via `Fixture[T]` annotation. Sources: conftest definitions, plugin providers, and builtins.
+**Fixture** — A reusable value injected into test functions, or read through the `fx` proxy. Resolved primarily by type via `Fixture[T]` annotation. Sources: `@oxi.fixture` declarations in a `__fixtures__.py`, `__init__.py`, or inline in a `test_*.py`; conftest definitions; plugin providers; and builtins.
 
 **Fixture[T]** — Type annotation that signals oxitest to inject a fixture whose binding type is `T`. Resolution: match by type first; if ambiguous, the parameter name acts as a qualifier.
 
@@ -46,9 +46,15 @@
 
 **Fixtures (registry)** — An instance-based registry (`fixtures = Fixtures()`) that collects fixture definitions via the `@fixtures.fixture` decorator.
 
-**Namespace** — A `Fixtures()` instance acts as a namespace. Two registries can define fixtures with the same name without conflict. Namespace names must not be Python keywords or builtins.
+**Namespace** — The qualifier in `fx.<namespace>.<name>`. Two sources: the basename of a fixture's anchor directory (`tests/api/__fixtures__.py` → `api`), or the name of a `Fixtures()` instance, which is rejected if it is a Python keyword or builtin. Directory-derived namespaces are **not unique in a tree** — `tests/api/v1/` and `tests/admin/v1/` both derive `v1` — so `fx.v1.conn` means whichever declaration is visible from the reading test, and resolution picks the deepest visible anchor.
 
-**Scope** — The lifetime of a fixture value. Three tiers: `"each"` (per-test, default), `"shared"` (per-session, FrozenProxy-wrapped — set via `shared=True` on the decorator), or `"session"` (per-process/run, reserved for built-in fixtures).
+**Anchor** — The directory a fixture is scoped to: the package holding its `__fixtures__.py`, or, for an inline declaration, the test module itself. Conftest, plugin, and builtin fixtures have no anchor.
+
+**B1 boundary** — ADR-0009 Rule 3: a fixture is usable only by tests in its anchor package or a descendant of it. Enforced at access time on both resolution routes (`fx.` proxy and `Fixture[T]` injection), and again when a fixture resolves its own dependencies — those are governed by the fixture's anchor, not by the location of whichever test triggered resolution. On the `fx.` proxy a violation raises `BoundaryError` (diagnostic code `fixture-boundary`), which is distinct from `FixtureNotFoundError`: the fixture exists, elsewhere. The `Fixture[T]` route resolves by bare name and has no namespace segment to attribute, so it reports the invisible fixture as `FixtureNotFoundError`.
+
+**Lifetime** — What a `@oxi.fixture` declaration writes: `"function"` (per test), `"module"` (per test module), `"package"` (per anchor package — exactly once per run, which collapses the subtree onto one worker), or `"session"` (per worker process, legal only in a rootdir package). Required keyword; there is no default. Capped by the declaration site (ADR-0009 Rule 4): inline declarations may not exceed `module`.
+
+**Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Five members: `each`, `module`, `package`, `session`, plus `shared` — the legacy `Fixtures(shared=True)` tier, which no `Lifetime` maps to and which stays separate until #1720 retires the old API.
 
 **Autouse** — A fixture that is automatically injected into every test in its scope without explicit annotation.
 
@@ -56,7 +62,7 @@
 
 ## Conftest
 
-**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures and helpers scoped to that directory subtree.
+**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures and helpers. Unlike pytest — and unlike `@oxi.fixture` declarations — its fixtures are registered **run-wide**, not scoped to the containing subtree, so they are exempt from the B1 boundary. Two visibility regimes therefore run side by side until `conftest.py` support is retired (#1720); the gap is tracked as #1760.
 
 **Helpers** — Callables explicitly registered via a `Helpers()` instance in conftest.py. Accessed via `from oxitest import helpers` as `helpers.<namespace>.<fn>()`. Sources: conftest definitions and plugin providers.
 
