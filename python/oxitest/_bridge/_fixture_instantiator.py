@@ -99,12 +99,21 @@ class DispatchContext:
 
 @dataclass(frozen=True, slots=True)
 class _ResolutionContext:
-    """Shared context threaded through fixture resolution."""
+    """Shared context threaded through fixture resolution.
+
+    ``module_path`` and ``boundary_path`` are deliberately separate. The first
+    is *where execution is* — it selects the module-lifetime scope bucket and
+    fills ``TestMeta`` — and must keep pointing at the running test all the way
+    down a dependency chain. The second is *what the B1 rules are being read
+    against*, and switches to a fixture's own anchor the moment resolution
+    descends into that fixture's dependencies.
+    """
 
     module_path: str
     fn_teardowns: list[Callable[[], None]]
     resolving: frozenset[str]
     scope_callback: Callable[[FixtureDef[Any], str], ScopeRefs | None]
+    boundary_path: str
 
 
 def _cache_key(defn: FixtureDef[Any]) -> str:
@@ -124,6 +133,24 @@ def _cache_key(defn: FixtureDef[Any]) -> str:
     if defn.scope is FixtureScope.MODULE and defn.namespace:
         return f"{defn.namespace}.{defn.name}"
     return defn.name
+
+
+def _boundary_for(defn: FixtureDef[Any], ctx: _ResolutionContext) -> str:
+    """The B1 boundary in force while resolving *defn*'s own dependencies.
+
+    A fixture's dependencies are its own declarations, so they are governed by
+    its anchor — not by wherever the test that happened to trigger resolution
+    lives. Threading the test's path unchanged down the chain let a
+    ``tests/api`` fixture pick up a ``tests/api/v1`` dependency it could never
+    legally declare, whenever a test living in ``v1`` resolved it. At
+    ``lifetime="package"`` the resulting cache entry then embedded a value from
+    the narrower boundary and handed it to every other package member.
+
+    Unanchored sources — conftest, plugin, builtin — are exempt from B1 and
+    leave the boundary where it was.
+    """
+    anchor = defn.anchor
+    return anchor if anchor is not None else ctx.boundary_path
 
 
 def _resolve_deps(
@@ -338,13 +365,14 @@ class FixtureInstantiator:
         """
         if name in ctx.resolving:
             raise FixtureCycleError(name, set(ctx.resolving))
-        defn = self._registry.get(name)
         # Bare-name lookup, so this route never sees a namespace — the inline
         # module restriction has to be applied here too. Filtering only the
         # proxy path (`get_fixture_in_namespace`) left an inline fixture
         # injectable into a sibling file by `Fixture[T]` annotation, which is the
-        # route a user reaches for first.
-        if defn is None or not defn.is_visible_from(ctx.module_path):
+        # route a user reaches for first. The boundary is ctx.boundary_path, not
+        # ctx.module_path — see _boundary_for.
+        defn = self._registry.get_visible(name, ctx.boundary_path)
+        if defn is None:
             raise FixtureNotFoundError(name)
         return self._resolve_fixture_defn(
             defn, replace(ctx, resolving=ctx.resolving | {name})
@@ -371,6 +399,10 @@ class FixtureInstantiator:
         ctx: _ResolutionContext,
     ) -> Any:
         """Resolve a fixture definition, handling scope caching."""
+        # From here down we are inside *defn*'s own declarations, so B1 is read
+        # against its anchor. Covers _instantiate and _resolve_shared_async,
+        # both of which reach dependencies through this ctx.
+        ctx = replace(ctx, boundary_path=_boundary_for(defn, ctx))
         scope_refs = ctx.scope_callback(defn, ctx.module_path)
 
         if scope_refs is not None:
@@ -452,6 +484,7 @@ class FixtureInstantiator:
         Runs on the caller's event loop. *scope_refs* is ``None`` for function
         lifetime — no caching — and the tier's scope otherwise.
         """
+        ctx = replace(ctx, boundary_path=_boundary_for(defn, ctx))
         key = _cache_key(defn)
         if scope_refs is not None:
             if key in scope_refs.cache:

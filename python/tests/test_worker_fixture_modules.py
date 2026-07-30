@@ -135,14 +135,35 @@ def test_own_package_fixtures_resolve_in_workers(tmp: TempDir) -> None:
     )
 
 
-def test_cross_package_access_matches_serial(tmp: TempDir) -> None:
-    """A worker must see every namespace, not just its own sibling.
+def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
+    tmp: TempDir,
+) -> None:
+    """A worker must reject a cross-sibling reach exactly as serial does.
 
-    This is the test that fails if the implementation is "simplified" into
-    deriving ``__fixtures__.py`` from the task's own module path. Cross-package
-    access resolves serially — parallel has to match it. B1 boundary
-    enforcement (#1713) may make this illegal later; until it does, the two
-    paths must agree.
+    This used to be titled "...matches serial" and asserted both paths
+    *succeeded* — before #1713, B1 did not exist yet and every non-inline
+    fixture was visible run-wide. The old docstring flagged this in advance:
+    "B1 boundary enforcement (#1713) may make this illegal later; until it
+    does, the two paths must agree." It has come true: reaching from one
+    sibling package into another is now an illegal cross-boundary access, so
+    the invariant this test guards is unchanged — serial and parallel must
+    agree — but what they must agree *on* flipped from a success to a
+    rejection.
+
+    That is a strictly stronger test than the one it replaces: slice 6's
+    determinism claim is that the boundary verdict cannot depend on worker
+    assignment, ``-k`` selection, or import order. If the full fixture-module
+    catalog stopped reaching workers, a cross-boundary access would silently
+    degrade from "rejected" to "not found" *in parallel only* — and a test
+    that only checked "both succeed" would never have caught that regression
+    once cross-package access itself became illegal.
+
+    Deliberately not asserting on the error type or the ``fixture-boundary``
+    diagnostic code: nothing raises ``BoundaryError`` yet (that lands in Task
+    7), so today this is rejected as ``FixtureNotFoundError`` in both paths.
+    Keeping the assertion at the process-exit-code level means this test stays
+    green across that change. The diagnostic code itself is pinned in Task 9's
+    dedicated slice-6 trees, which already cover serial and ``-n 2``.
     """
     root = Path(tmp) / "proj"
     root.mkdir()
@@ -152,18 +173,22 @@ def test_cross_package_access_matches_serial(tmp: TempDir) -> None:
     serial_out, serial_err, serial_rc = helpers.common.run_oxitest(
         None, "--serial", cwd=str(root)
     )
-    assert serial_rc == 0, (
-        f"serial baseline failed (rc={serial_rc}) — the parallel comparison "
-        f"below is meaningless\nstdout:\n{serial_out}\nstderr:\n{serial_err}"
+    assert serial_rc != 0, (
+        f"serial run succeeded (rc={serial_rc}) at a cross-sibling access — "
+        f"B1 should reject this\nstdout:\n{serial_out}\nstderr:\n{serial_err}"
     )
 
     log.unlink(missing_ok=True)
     out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
 
-    assert rc == 0, (
-        f"cross-package access resolves serially but not under -n (rc={rc}) — "
-        "the worker is seeing only a subset of the fixture modules\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
+    assert rc != 0, (
+        f"parallel run succeeded (rc={rc}) at a cross-sibling access that "
+        f"serial correctly rejected\nstdout:\n{out}\nstderr:\n{err}"
+    )
+    assert rc == serial_rc, (
+        f"serial rejected with rc={serial_rc} but parallel rejected with "
+        f"rc={rc} — the boundary verdict must not depend on worker "
+        f"assignment\nstdout:\n{out}\nstderr:\n{err}"
     )
     _assert_fanned_out(log, out)
 
@@ -175,11 +200,16 @@ def test_fixtures_resolve_on_a_warm_cache(tmp: TempDir) -> None:
     ``continue``; anything placed below it is silently skipped for cached
     modules. A warm run is also the common case in CI, which is where parallel
     matters most.
+
+    ``cross_package=False``: since #1713, cross-package access is a B1
+    violation and would fail this run regardless of cache state, which proves
+    nothing about the cache-hit branch. Own-package resolution is unaffected
+    by B1 and demonstrates the collection-time hook just as well.
     """
     root = Path(tmp) / "proj"
     root.mkdir()
     log = Path(tmp) / "pids.log"
-    _write_multi_package_project(root, log, cross_package=True)
+    _write_multi_package_project(root, log, cross_package=False)
 
     first_out, _, first_rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
     assert first_rc == 0, (

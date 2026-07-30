@@ -30,8 +30,17 @@ def _module_defn(
     func: Callable[..., Any],
     *,
     namespace: str = "pkg",
+    anchor: str | None = None,
 ) -> FixtureDef[Any]:
-    """Build a module-lifetime FixtureDef backed by *func*."""
+    """Build a module-lifetime FixtureDef backed by *func*.
+
+    *anchor* defaults to deriving ``/proj/{namespace}`` from the namespace,
+    which is a convenience for tests that don't care about B1 visibility.
+    Under B1, anchors and the module paths they're resolved from have to be
+    genuinely coherent (the anchor must be the resolving module's own
+    directory or an ancestor of it) — pass an explicit *anchor* when a test
+    needs that relationship to hold.
+    """
     return FixtureDef(
         name=name,
         fixture_type=object,
@@ -39,7 +48,7 @@ def _module_defn(
         source=ModuleSource(
             func=func,
             defining_module_path=f"/proj/{namespace}/__fixtures__.py",
-            anchor_package_path=f"/proj/{namespace}",
+            anchor_package_path=anchor if anchor is not None else f"/proj/{namespace}",
             lifetime=Lifetime.MODULE,
         ),
         namespace=namespace,
@@ -169,8 +178,16 @@ def test_same_short_name_in_two_namespaces_stays_distinct() -> None:
     """Namespaces must not collide inside one module's scope.
 
     Module scope is the first path on which a namespaced fixture is cached.
-    Keying the cache on the bare short name would hand ``pkg_b.resource``
-    whatever ``pkg_a.resource`` built first — a silently wrong instance.
+    Keying the cache on the bare short name would hand ``sub.resource``
+    whatever ``pkg.resource`` built first — a silently wrong instance.
+
+    The two namespaces nest (``pkg`` and ``pkg/sub``) rather than sitting as
+    unrelated siblings: under B1 an anchor and the module path resolved
+    against it have to be genuinely coherent, and a nested pair is a tree that
+    could actually exist on disk, resolved from one module inside the deeper
+    package. That keeps the module-lifetime cache under test (one module
+    path) while still proving namespace qualification (two distinct
+    namespaces).
     """
 
     def resource_a() -> str:
@@ -179,18 +196,19 @@ def test_same_short_name_in_two_namespaces_stays_distinct() -> None:
     def resource_b() -> str:
         return "from-b"
 
+    module_path = "/proj/pkg/sub/test_a.py"
     session = _session_with(
-        _module_defn("resource", resource_a, namespace="pkg_a"),
-        _module_defn("resource", resource_b, namespace="pkg_b"),
+        _module_defn("resource", resource_a, namespace="pkg", anchor="/proj/pkg"),
+        _module_defn("resource", resource_b, namespace="sub", anchor="/proj/pkg/sub"),
     )
     teardowns: list[Callable[[], None]] = []
 
-    from_a = session.get_fixture_in_namespace("resource", "pkg_a", _MOD_A, teardowns)
-    from_b = session.get_fixture_in_namespace("resource", "pkg_b", _MOD_A, teardowns)
+    from_a = session.get_fixture_in_namespace("resource", "pkg", module_path, teardowns)
+    from_b = session.get_fixture_in_namespace("resource", "sub", module_path, teardowns)
 
-    assert from_a == "from-a", "pkg_a.resource must resolve to its own factory"
+    assert from_a == "from-a", "pkg.resource must resolve to its own factory"
     assert from_b == "from-b", (
-        f"pkg_b.resource resolved to {from_b!r} — the module scope keyed both "
+        f"sub.resource resolved to {from_b!r} — the module scope keyed both "
         "fixtures on the bare name 'resource', so the second lookup hit the "
         "first one's cache entry"
     )

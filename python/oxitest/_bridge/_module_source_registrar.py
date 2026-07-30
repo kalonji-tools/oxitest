@@ -1,10 +1,20 @@
-"""Module-source fixture registrar (ADR-0009 slice 1).
+"""Module-source fixture registrar (ADR-0009 slices 1 and 6).
 
 Scans a Python module for @oxi.fixture-decorated functions and writes
 FixtureDef entries into the FixtureRegistry using the ModuleSource variant.
-Enforces the collision rule from the design spec (Q3): a fixture declared
-in both a conftest.py Fixtures() instance and a __fixtures__.py module
-raises UsageError naming both source paths.
+
+Duplicate detection has two rules, because a namespace is an anchor-directory
+basename and basenames are not unique in a tree:
+
+- against a conftest.py Fixtures() instance (the slice-1 Q3 rule) — always a
+  collision. A ConftestSource has no anchor and resolves run-wide, so it is
+  reachable from wherever the other declaration is.
+- against another __fixtures__.py (#1713) — a collision only when one anchor's
+  subtree contains the other's. ``tests/api/v1`` and ``tests/admin/v1`` both
+  derive the namespace ``v1``, but no test can see both, so rejecting that pair
+  would kill the run over an ambiguity that cannot arise.
+
+Either way the UsageError names both source paths.
 """
 
 from __future__ import annotations
@@ -24,6 +34,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     ModuleSource,
 )
+from oxitest._bridge._visibility import anchors_overlap
 
 
 def register_module_source_fixtures(
@@ -69,12 +80,14 @@ def register_module_source_fixtures(
         if not isinstance(marker, _FixtureMarker):
             continue
 
-        existing = registry.get_in_namespace(attr_name, namespace)
+        existing = _clashing_declaration(
+            registry.defs_in_namespace(attr_name, namespace), anchor_package_path
+        )
         if existing is not None:
-            existing_path = existing.conftest_path
             msg = (
-                f"fixture '{namespace}.{attr_name}' declared twice:\n"
-                f"  {existing_path}\n"
+                f"fixture '{namespace}.{attr_name}' declared twice in "
+                f"overlapping packages:\n"
+                f"  {existing.conftest_path}\n"
                 f"  {module_path}\n"
                 f"→ delete one declaration (ADR-0009 slice-1 coexistence)"
             )
@@ -95,6 +108,29 @@ def register_module_source_fixtures(
                 is_async=_is_async(obj),
             )
         )
+
+
+def _clashing_declaration(
+    existing: tuple[FixtureDef[Any], ...], anchor_package_path: str
+) -> FixtureDef[Any] | None:
+    """The declaration *anchor_package_path* really clashes with, if any.
+
+    Sharing a ``(namespace, name)`` pair is not enough. A namespace is a
+    directory basename, so ``tests/api/v1`` and ``tests/admin/v1`` both derive
+    ``v1`` — and no test can see both, so nothing is ambiguous. The clash is
+    real only when one anchor's subtree contains the other's, because then some
+    test does see two fixtures under one qualified name.
+
+    An unanchored declaration — a conftest ``Fixtures()`` instance — is run-wide
+    and therefore clashes with everything. That is the conftest-versus-
+    ``__fixtures__.py`` case this check was written for (slice-1 Q3), and it
+    keeps working unchanged.
+    """
+    for defn in existing:
+        anchor = defn.anchor
+        if anchor is None or anchors_overlap(anchor, anchor_package_path):
+            return defn
+    return None
 
 
 def _is_async(obj: Any) -> bool:

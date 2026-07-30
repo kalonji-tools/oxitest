@@ -156,3 +156,84 @@ def test_collision_with_conftest_source_is_loud(tmp: TempDir) -> None:
         register_module_source_fixtures(
             registry, mod, anchor_package_path=str(tmp / "slice1_pkg")
         )
+
+
+def _fixtures_module(path: str) -> types.ModuleType:
+    """A synthetic ``__fixtures__.py`` declaring one fixture named ``conn``."""
+    mod = types.ModuleType("synthetic_fixtures")
+    mod.__file__ = path
+
+    @fixture(lifetime="function")
+    def conn() -> str:
+        return "conn"
+
+    setattr(mod, "conn", conn)  # noqa: B010 — dynamic module attr
+    return mod
+
+
+def test_disjoint_subtrees_may_share_a_namespace_and_name() -> None:
+    """Two packages both named `v1` are not a duplicate declaration."""
+    # Arrange
+    registry = FixtureRegistry()
+    register_module_source_fixtures(
+        registry,
+        _fixtures_module("/t/api/v1/__fixtures__.py"),
+        anchor_package_path="/t/api/v1",
+    )
+
+    # Act — must not raise
+    register_module_source_fixtures(
+        registry,
+        _fixtures_module("/t/admin/v1/__fixtures__.py"),
+        anchor_package_path="/t/admin/v1",
+    )
+
+    # Assert
+    assert len(registry.defs_in_namespace("conn", "v1")) == 2, (
+        "both declarations must survive registration — an anchor-blind check "
+        "aborts the run with \"fixture 'v1.conn' declared twice\" for two "
+        "packages whose tests can never see each other's fixtures, so a legal "
+        "tree that merely reuses a directory name becomes uncollectable"
+    )
+
+
+def test_nested_anchors_sharing_a_namespace_and_name_are_rejected() -> None:
+    """An ancestor/descendant pair is a real clash — some test sees both."""
+    # Arrange — same basename at two nested depths, so both derive namespace 'v1'
+    registry = FixtureRegistry()
+    register_module_source_fixtures(
+        registry,
+        _fixtures_module("/t/v1/__fixtures__.py"),
+        anchor_package_path="/t/v1",
+    )
+
+    # Act / Assert
+    with raises(UsageError):
+        register_module_source_fixtures(
+            registry,
+            _fixtures_module("/t/v1/v1/__fixtures__.py"),
+            anchor_package_path="/t/v1/v1",
+        )
+
+
+def test_a_conftest_declaration_still_clashes_with_any_anchor() -> None:
+    """Unanchored sources are run-wide, so they clash regardless of tree shape."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+            namespace="v1",
+        )
+    )
+
+    # Act / Assert
+    with raises(UsageError):
+        register_module_source_fixtures(
+            registry,
+            _fixtures_module("/t/api/v1/__fixtures__.py"),
+            anchor_package_path="/t/api/v1",
+        )

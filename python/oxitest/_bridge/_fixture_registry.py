@@ -12,7 +12,7 @@ __all__ = [
     "PluginSource",
     "_fixture_inner_type",
 ]
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from types import MappingProxyType
@@ -32,6 +32,7 @@ from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge._lifetime import Lifetime
+from oxitest._bridge._visibility import anchor_depth, is_visible
 from oxitest._bridge.result import CollectedViolation, DiagnosticSeverity, ViolationKind
 
 T = TypeVar("T")
@@ -147,32 +148,48 @@ class FixtureDef(Generic[T]):
         """Backward-compat: True when scope is SHARED."""
         return self.scope == FixtureScope.SHARED
 
+    @property
+    def anchor(self) -> str | None:
+        """The B1 anchor path, or ``None`` for sources exempt from B1.
+
+        Only ``ModuleSource`` is anchored. Conftest, plugin, and builtin
+        fixtures are ambient by design (ADR-0009 Rules 6 and 7), and ``None``
+        is what tells the registry's ordering rule to leave their existing
+        locality semantics untouched.
+        """
+        return (
+            self.source.anchor_package_path
+            if isinstance(self.source, ModuleSource)
+            else None
+        )
+
     def is_visible_from(self, module_path: str) -> bool:
-        """Whether a test in *module_path* may resolve this fixture (slice 5).
+        """Whether code at *module_path* may resolve this fixture (ADR-0009 B1).
 
-        Only inline declarations are restricted. An inline fixture is anchored to
-        its own module (ADR-0009 Rule 1), so its anchor equals its defining
-        module — true for inline declarations and only for them, because a
-        package-level anchor is a directory. Everything else is visible.
-
-        The check exists because the registry is shared across every module in a
-        run: without it a sibling test file resolves another file's inline
-        fixtures, and every slice built on top inherits the leak.
+        Full ancestor-chain enforcement: a package fixture reaches its own
+        package and every descendant, an inline fixture reaches only its own
+        module, and everything unanchored is ambient.
 
         Lives on ``FixtureDef`` rather than beside one caller because there are
-        **two** resolution routes — the ``fx.<ns>.<name>`` proxy and ``Fixture[T]``
-        parameter injection, which looks up by bare name and never sees a
-        namespace. Filtering only one leaves the leak open on the other.
+        **two** resolution routes — the ``fx.<ns>.<name>`` proxy and
+        ``Fixture[T]`` parameter injection, which looks up by bare name and
+        never sees a namespace. Filtering only one leaves the leak open on the
+        other, so both get B1 from this single method.
 
-        Module-equality only, deliberately. #1713 replaces this with full
-        ancestor-chain B1 enforcement and the two-catalogs ``BoundaryError``
-        diagnostic that distinguishes "not visible here" from "no such fixture".
+        *module_path* is the calling test's module at the top of a resolution
+        chain, and the resolving fixture's own anchor once the chain descends
+        into that fixture's dependencies — see
+        ``_ResolutionContext.boundary_path``. Passing the test's path all the
+        way down would let a ``tests/api`` fixture acquire a ``tests/api/v1``
+        dependency it could never legally declare.
         """
         match self.source:
             case ModuleSource(
                 anchor_package_path=anchor, defining_module_path=defining
-            ) if anchor == defining:
-                return defining == module_path
+            ):
+                return is_visible(
+                    anchor=anchor, defining=defining, module_path=module_path
+                )
             case _:
                 return True
 
@@ -274,6 +291,34 @@ def _merge_components(
     return tuple(sorted(components))
 
 
+def _deepest_visible(
+    defs: Sequence[FixtureDef[Any]], module_path: str
+) -> FixtureDef[Any] | None:
+    """The visible def with the deepest anchor; ties break by registration order.
+
+    Deepest-wins is what makes flat namespaces safe in a tree. A namespace is a
+    directory basename, so a ``(namespace, name)`` pair can name two different
+    fixtures — ``tests/api/v1`` and ``tests/admin/v1`` both derive ``v1``. At
+    most one of those is visible to a given test, so filtering resolves the
+    ambiguity on its own; the depth order only matters for the remaining case
+    where one anchor is an ancestor of the other, and there the nearer
+    declaration should override, exactly as conftest locality already does.
+
+    Unanchored sources score 0, so a list with no ``ModuleSource`` in it reduces
+    to the previous last-registered-wins behaviour unchanged.
+    """
+    best: FixtureDef[Any] | None = None
+    best_depth = -1
+    for defn in defs:
+        if not defn.is_visible_from(module_path):
+            continue
+        anchor = defn.anchor
+        depth = anchor_depth(anchor) if anchor is not None else 0
+        if depth >= best_depth:  # >= so the last of equal-depth ties wins
+            best, best_depth = defn, depth
+    return best
+
+
 class FixtureRegistry:
     """Registry of all fixture definitions collected from conftest files.
 
@@ -295,7 +340,11 @@ class FixtureRegistry:
         self._by_name: dict[str, list[FixtureDef[Any]]] = {}
         # type -> list of FixtureDef, indexed by fixture_type for type-based resolve
         self._by_type: dict[type, list[FixtureDef[Any]]] = {}
-        self._namespaces: set[str] = set()  # O(1) namespace existence check
+        # namespace -> defs declared into it. Replaces a bare set[str]: the keys
+        # still answer "does this namespace exist", and the values turn the
+        # per-test visibility question into a scan of one namespace rather than
+        # of every fixture in the run.
+        self._namespace_defs: dict[str, list[FixtureDef[Any]]] = {}
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
         existing = self._by_name.get(defn.name)
@@ -310,7 +359,7 @@ class FixtureRegistry:
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)
         if defn.namespace:
-            self._namespaces.add(defn.namespace)
+            self._namespace_defs.setdefault(defn.namespace, []).append(defn)
 
         # Only check return annotation for conftest fixtures with real paths
         if not isinstance(defn.source, ConftestSource):
@@ -359,15 +408,41 @@ class FixtureRegistry:
             defs[-1] for defs in self._by_name.values() if defs and defs[-1].autouse
         )
 
-    def get_in_namespace(self, name: str, namespace: str) -> FixtureDef[Any] | None:
-        """Return the most-local FixtureDef for name within the given namespace."""
+    def defs_in_namespace(
+        self, name: str, namespace: str
+    ) -> tuple[FixtureDef[Any], ...]:
+        """Every def registered as ``(namespace, name)``, in registration order.
+
+        Full-catalog query. The registrar's collision check needs all of them,
+        not just the winner, because whether two declarations clash depends on
+        their anchors rather than on which registered last.
+        """
         defs = self._by_name.get(name)
         if not defs:
-            return None
-        for defn in reversed(defs):
-            if defn.namespace == namespace:
-                return defn
-        return None
+            return ()
+        return tuple(defn for defn in defs if defn.namespace == namespace)
+
+    def get_in_namespace(self, name: str, namespace: str) -> FixtureDef[Any] | None:
+        """Most-local def for ``(namespace, name)``, ignoring anchors.
+
+        Full-catalog query — "does this fixture exist anywhere in the run?".
+        Resolution must use :meth:`get_visible_in_namespace` instead; this one
+        stays for the read/introspection APIs (``_read_fixtures.py``) and for
+        the diagnostic that has to distinguish "exists, elsewhere" from "no
+        such fixture".
+        """
+        defs = self.defs_in_namespace(name, namespace)
+        return defs[-1] if defs else None
+
+    def get_visible_in_namespace(
+        self, name: str, namespace: str, module_path: str
+    ) -> FixtureDef[Any] | None:
+        """Filtered counterpart of :meth:`get_in_namespace` — the resolution query."""
+        return _deepest_visible(self.defs_in_namespace(name, namespace), module_path)
+
+    def get_visible(self, name: str, module_path: str) -> FixtureDef[Any] | None:
+        """Filtered counterpart of :meth:`get` — the bare-name resolution query."""
+        return _deepest_visible(self._by_name.get(name, ()), module_path)
 
     def get_namespace_for_func(self, name: str, func: Callable[..., Any]) -> str | None:
         """Return the namespace of the FixtureDef whose func is *func*, or None.
@@ -385,8 +460,31 @@ class FixtureRegistry:
         return None
 
     def has_namespace(self, namespace: str) -> bool:
-        """Return True if any registered fixture belongs to the given namespace."""
-        return namespace in self._namespaces
+        """Whether *namespace* exists anywhere in the run. Full-catalog query."""
+        return namespace in self._namespace_defs
+
+    def has_visible_namespace(self, namespace: str, module_path: str) -> bool:
+        """Whether any def in *namespace* is reachable from *module_path*."""
+        return any(
+            defn.is_visible_from(module_path)
+            for defn in self._namespace_defs.get(namespace, ())
+        )
+
+    def namespace_anchors(self, namespace: str) -> tuple[str, ...]:
+        """Distinct anchors declaring into *namespace*, deepest first.
+
+        Full-catalog query behind the ``BoundaryError`` message: it answers
+        "where does this namespace actually live?" for a test that cannot see
+        it. Unanchored sources contribute nothing, so a namespace made only of
+        conftest fixtures reports ``()`` — which is what keeps the legacy API
+        out of B1 diagnostics.
+        """
+        anchors = {
+            anchor
+            for defn in self._namespace_defs.get(namespace, ())
+            if (anchor := defn.anchor) is not None
+        }
+        return tuple(sorted(anchors, key=anchor_depth, reverse=True))
 
     def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
         """Compute connected components of shared fixture dependencies.

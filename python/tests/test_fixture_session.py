@@ -10,15 +10,22 @@ from typing import Any
 
 import oxitest
 from oxitest import Fixture, TempDir, TempDirFactory, helpers
-from oxitest._bridge._errors import FixtureNotFoundError, FixtureTypeNotFoundError
+from oxitest._bridge._errors import (
+    BoundaryError,
+    FixtureNotFoundError,
+    FixtureTypeNotFoundError,
+)
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
     FixtureDef,
+    FixtureRegistry,
     FixtureScope,
+    ModuleSource,
     PluginSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession, _SessionProtocol
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge.plugin_loader import (
     ActivatedPluginEntry,
     PluginRegistry,
@@ -494,3 +501,115 @@ def test_get_fixture_by_type_raises_on_unknown_type() -> None:
         "error message must NOT mention 'Fixture[<type>]' — that hint applies to "
         "the by-name path, not the by-type path used by @oxi.arrange(MyType)"
     )
+
+
+@dataclass(frozen=True)
+class LookupCase:
+    """Parametrize case for the boundary-versus-not-found taxonomy."""
+
+    namespace: str
+    leaf: str
+    module_path: str
+    expected_type: type[Exception]
+
+
+def _api_session() -> FixtureSession:
+    """A session whose only fixture is anchored at /t/api."""
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="api_conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ModuleSource(
+                func=object,
+                defining_module_path="/t/api/__fixtures__.py",
+                anchor_package_path="/t/api",
+                lifetime=Lifetime.FUNCTION,
+            ),
+            namespace="api",
+        )
+    )
+    return FixtureSession(registry)
+
+
+@oxitest.parametrize(
+    unreachable_segment_real_leaf=LookupCase(
+        namespace="api",
+        leaf="api_conn",
+        module_path="/t/admin/test_a.py",
+        expected_type=BoundaryError,
+    ),
+    unreachable_segment_bad_leaf=LookupCase(
+        namespace="api",
+        leaf="typo",
+        module_path="/t/admin/test_a.py",
+        expected_type=BoundaryError,
+    ),
+    unknown_segment=LookupCase(
+        namespace="nope",
+        leaf="x",
+        module_path="/t/admin/test_a.py",
+        expected_type=FixtureNotFoundError,
+    ),
+    reachable_segment_bad_leaf=LookupCase(
+        namespace="api",
+        leaf="typo",
+        module_path="/t/api/test_a.py",
+        expected_type=FixtureNotFoundError,
+    ),
+)
+def test_error_type_is_a_function_of_the_segment(case: LookupCase) -> None:
+    """Decision 9's taxonomy: the segment decides, never the leaf."""
+    # Arrange
+    session = _api_session()
+
+    # Act
+    error = session.fixture_lookup_error(case.leaf, case.namespace, case.module_path)
+
+    # Assert
+    assert type(error) is case.expected_type, (
+        f"reaching '{case.namespace}.{case.leaf}' from {case.module_path}: making "
+        f"the error type depend on the leaf too turns one documentable line into "
+        f"a 2x2, and a leaf-first message for a cross-boundary typo tells the "
+        f"user that fixing the spelling will work — it will not"
+    )
+
+
+def test_a_conftest_only_namespace_never_produces_a_boundary_error() -> None:
+    """The legacy API is exempt from B1 until #1720 retires it."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="legacy_conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ConftestSource(func=object, conftest_path="/t/api/conftest.py"),
+            namespace="legacy",
+        )
+    )
+    session = FixtureSession(registry)
+
+    # Act
+    error = session.fixture_lookup_error("typo", "legacy", "/t/elsewhere/test_a.py")
+
+    # Assert
+    assert type(error) is FixtureNotFoundError, (
+        "conftest fixtures resolve run-wide, so there is no boundary to report "
+        "crossing; raising BoundaryError here would tell the user to restructure "
+        "packages to fix what is only a misspelling"
+    )
+
+
+def test_cross_boundary_resolution_raises_rather_than_reporting_not_found() -> None:
+    """The end of the wiring: the proxy path actually raises the new error."""
+    # Arrange
+    session = _api_session()
+    teardowns: list[Callable[[], None]] = []
+
+    # Act / Assert
+    with oxitest.raises(BoundaryError):
+        session.get_fixture_in_namespace(
+            "api_conn", "api", "/t/admin/test_a.py", teardowns
+        )
