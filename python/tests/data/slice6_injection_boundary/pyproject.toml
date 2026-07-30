@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice6_injection_boundary"]
+python_files = ["test_*.py"]
+strict = "abort"
