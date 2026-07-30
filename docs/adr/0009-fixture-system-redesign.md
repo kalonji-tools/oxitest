@@ -123,20 +123,16 @@ Tests receive fixtures and helpers via two synthesized proxy parameters — the 
 def test_flow(fx: Fixtures, hlp: Helpers):
     conn = fx.api.conn                    # qualified
     resp = hlp.api.make_request(conn, "/users")
-    tx = fx.tx                            # shortcut (gated by strict dial)
+    tx = fx.tx                            # shortcut — unconditionally legal
 ```
 
 **Qualified access** (`fx.<segment>.<name>`) walks the package path and always works when the fixture is in the test's ancestor chain. Cross-boundary use raises `BoundaryError` with an actionable diagnostic.
 
-**Shortcut access** (`fx.<name>` without a package prefix) is gated by the strict dial:
+**Shortcut access** (`fx.<name>` without a package prefix) resolves the nearest visible fixture and is **unconditionally legal** — no diagnostic, no configuration. Resolution is B1-filtered exactly as qualified access is, so a shortcut can never reach a fixture the test could not reach by its qualified path; the shortcut saves keystrokes, never scope. Because a bare name carries no segment to attribute blame to, a cross-boundary shortcut reports `FixtureNotFoundError` rather than `BoundaryError`, matching what `Fixture[T]` injection already does (see *Error type is a function of the segment alone*, below).
 
-| `strict` value | `fx.tx` shortcut | Diagnostic |
-|----------------|-----------------|------------|
-| `"off"` | Allowed | Silent |
-| `"warn"` (default) | Allowed | `NOTICE` diagnostic suggesting the qualified form |
-| `"abort"` | Collection error `fixture-shortcut-in-strict` | Names the fixture's qualified path |
+This ADR originally gated the shortcut behind a three-position strict dial. That gate is retracted; see [Amendment 3](#amendment-3--the-shortcut-strict-dial-is-retracted-2026-07-30) for why, including the industry-precedent argument that motivated it and why the argument does not survive the fact that oxitest's dial has no `warn` position.
 
-The strict-dial pattern (rather than always-allow or always-forbid) matches industry precedent for scope-narrowing shortcuts: Rust Clippy's `wildcard_imports` (in `pedantic`, not `default`), Java Checkstyle's configurable `AvoidStarImport`, C++ Core Guidelines' scope-stratified rules on unqualified names. All three leave the shortcut legal at the language level and delegate suppression to opt-in strict modes. oxitest's `strict = "warn"` default mirrors this: shortcuts work, users get a `NOTICE` on each use, `strict = "abort"` upgrades the notice to a collection error.
+**Two access routes, asymmetric on purpose.** `Fixture[T]` parameter injection is bare-name *only* — `resolve_param` looks up by parameter name and no `Fixture[T]` spelling carries a package path. So un-prefixed access is mandatory on that route while the proxy route offers both forms. The asymmetry is not a claim that the routes are principled opposites: functionally `conn: Fixture[Connection]` resolves exactly as `fx.conn` does. It is that the injection route has no alternative spelling, so forbidding bare names there would delete the route, whereas on the proxy route the qualified form always exists. Recorded so a later reader does not mistake it for an oversight. A qualification syntax for `Fixture[T]` is not planned.
 
 **Two-catalogs design constraint.** Both `FixturesProxy` and `HelpersProxy` must be able to consult two views — the **B1-filtered catalog** (fixtures visible to *this* test, used for resolution) and the **full catalog** (every fixture in the run, used for diagnostic quality). The prototype surfaced this: without the full view, the proxy cannot tell "package `api`" apart from "fixture `api`" when neither is in the filtered set (both would look like unknown names), and cross-boundary access reports as `FixtureNotFoundError` — "you have a typo" — when the correct diagnostic is `BoundaryError`. Neither view is optional.
 
@@ -146,7 +142,9 @@ The constraint is about *reachability of both views*, not about object count. Th
 
 **Error type is a function of the segment alone.** An unreachable segment raises `BoundaryError`; a segment unknown anywhere raises `FixtureNotFoundError`. When the segment is unreachable *and* the leaf does not exist there either, the boundary is reported first, with the missing leaf appended — the boundary statement is true regardless of the leaf, whereas leading with the typo would imply that fixing the spelling makes the access work.
 
-**Naming clash rule.** A fixture named the same as a sibling package segment is shadowed by the segment in shortcut form (`fx.api` returns the sub-proxy, not a fixture named `api`); the fixture remains reachable via the qualified path. Convention: avoid the collision. Applies identically to helpers.
+**Naming clash rule.** A fixture named the same as a sibling package segment is shadowed by the segment in shortcut form (`fx.api` returns the sub-proxy, not a fixture named `api`); the fixture remains reachable via the qualified path. Convention: avoid the collision. Applies identically to helpers. This rule was vacuous until shortcut access existed — `FixturesProxy.__getattr__` had no fixture branch for a segment to win against — and became live with [#1714](https://github.com/kalonji-tools/oxitest/issues/1714).
+
+**Framework builtins are not shortcut-reachable.** `fx.oxi.tmp` is the only spelling for a builtin; the reserved `oxi` namespace exists so framework names cannot collide with user fixture names, and hoisting them into the flat namespace would put `log`, `patch`, and `cap` where a user's own fixture of that name would clash. The registry names builtins after their private implementation class (`_TempDirFixture`), which the proxy's leading-underscore guard already rejects, so the property holds without a filter — but it holds *incidentally*, resting on a naming convention rather than a predicate, and is pinned by a regression test rather than left to be rediscovered.
 
 **Namespace derivation.** Default namespace = the anchor-package segment name; overridable via `namespace=` on the decorator. Use overrides sparingly.
 
@@ -186,8 +184,8 @@ The redesign retires the following surface. Each entry names what goes and why.
 
 - **[ADR-0002](0002-unified-fixture-backend.md) (Unified fixture backend)** — Type-based resolution (`Fixture[T]` primary key, parameter name as qualifier) and the unified registry survive intact. Source variants collapse: `ConftestSource` retires; the new source variant carries `defining_module_path` + `anchor_package_path`. Override precedence extends naturally with the new lifetime tiers.
 - **[ADR-0005](0005-immutable-by-default-interfaces.md) (Immutable-by-default) Rule 4** — Retires the `Fixtures` / `Helpers` `&mut` exceptions. Decorators write marker attributes at import time; no accumulation-during-conftest-loading phase remains. The reused type annotation names (`Fixtures`, `Helpers` on test parameters) are proxy accessors, not mutable registrars — they do not re-inherit the exception.
-- **[ADR-0006](0006-async-organizational-strategy.md) (Async organizational strategy)** — Async fixture behavior is orthogonal to declaration mechanism. `@fixture(lifetime="function")` on an `async def` behaves per ADR-0006's per-test-loop rules. Implemented in [#1733](https://github.com/kalonji-tools/oxitest/issues/1733) for the `function` and `module` tiers, with three refinements ADR-0006 did not anticipate, because it assumed fixtures are resolved *before* the test body: (a) `fx.<ns>.<name>` returns an awaitable — `await fx.pkg.conn` — since attribute access offers no earlier hook; (b) an async fixture wider than `function` lifetime promotes async test bodies onto the shared session loop, because a value cannot move between loops and a per-test loop dies before the fixture's boundary is reached; (c) teardown fires at the declared boundary, clamped so it can never be scheduled after its loop closes. Illegal cell combinations (sync test + function-scope async fixture) are rejected loud on both access paths — at arrange time for `@arrange`, at access time for the proxy. Loud-rejection DNA is *reinforced* by this ADR: B1 boundary violations, lifetime-cap violations, and strict-abort shortcut violations all fire at the shallowest frame that can catch them — declaration-site violations at prescan, B1 violations at access (Rule 3, as amended).
-- **[ADR-0008](0008-config-fail-closed-narrow-scope.md) (Config fail-closed)** — B1 boundary violation, lifetime-cap violation, and strict-dial-forbidden shortcut all fail closed. No per-callsite bypass anywhere in the new surface; all configurability lives on the strict dial. The *exit code* differs by when the violation is catchable: declaration-site violations abort collection with a `UsageError` exit code, while a B1 violation surfaces as a test `ERROR` and the ordinary failing-run exit code, because it is detected inside a running test and must not blank the results of every other test in the run. Giving the run a `UsageError` exit code without aborting it needs a per-test bridge-to-coordinator exit vote that does not exist yet — [#1761](https://github.com/kalonji-tools/oxitest/issues/1761).
+- **[ADR-0006](0006-async-organizational-strategy.md) (Async organizational strategy)** — Async fixture behavior is orthogonal to declaration mechanism. `@fixture(lifetime="function")` on an `async def` behaves per ADR-0006's per-test-loop rules. Implemented in [#1733](https://github.com/kalonji-tools/oxitest/issues/1733) for the `function` and `module` tiers, with three refinements ADR-0006 did not anticipate, because it assumed fixtures are resolved *before* the test body: (a) `fx.<ns>.<name>` returns an awaitable — `await fx.pkg.conn` — since attribute access offers no earlier hook; (b) an async fixture wider than `function` lifetime promotes async test bodies onto the shared session loop, because a value cannot move between loops and a per-test loop dies before the fixture's boundary is reached; (c) teardown fires at the declared boundary, clamped so it can never be scheduled after its loop closes. Illegal cell combinations (sync test + function-scope async fixture) are rejected loud on both access paths — at arrange time for `@arrange`, at access time for the proxy. Loud-rejection DNA is *reinforced* by this ADR: B1 boundary violations and lifetime-cap violations fire at the shallowest frame that can catch them — declaration-site violations at prescan, B1 violations at access (Rule 3, as amended). The same loud rejection covers the shortcut route: a sync test reaching an async fixture via `fx.<name>` raises `AsyncFixtureAccessError` at access, before the factory runs, exactly as the qualified route does, so async-ness is a property of the fixture rather than of the access form chosen. (This list previously included strict-abort shortcut violations; the strict dial is retracted — see Amendment 3.)
+- **[ADR-0008](0008-config-fail-closed-narrow-scope.md) (Config fail-closed)** — B1 boundary violation and lifetime-cap violation both fail closed. No per-callsite bypass anywhere in the new surface. This originally read "…and strict-dial-forbidden shortcut all fail closed. No per-callsite bypass anywhere in the new surface; all configurability lives on the strict dial" — with the dial retracted (Amendment 3) the new surface has **no** configurability at all, which is a stronger fail-closed position than the one claimed, not a weaker one. The *exit code* differs by when the violation is catchable: declaration-site violations abort collection with a `UsageError` exit code, while a B1 violation surfaces as a test `ERROR` and the ordinary failing-run exit code, because it is detected inside a running test and must not blank the results of every other test in the run. Giving the run a `UsageError` exit code without aborting it needs a per-test bridge-to-coordinator exit vote that does not exist yet — [#1761](https://github.com/kalonji-tools/oxitest/issues/1761).
 
 ## Amendments
 
@@ -224,6 +222,34 @@ Two further points Rule 3 and Rule 5 did not state at all, both surfaced by gril
 
 The decisions behind this amendment are recorded in the [grilling outcome](https://github.com/kalonji-tools/oxitest/issues/1713#issuecomment-5124157268).
 
+### Amendment 3 — the shortcut strict dial is retracted (2026-07-30)
+
+Tracked by [#1714](https://github.com/kalonji-tools/oxitest/issues/1714). Amends Rule 5, the ADR-0006 and ADR-0008 reconciliations, and Consequences item 9. Shortcut access itself stands as accepted, along with the naming-clash rule, which this slice makes live. What is retracted is the dial that was to police it.
+
+Amendment 1 found this ADR written against a single-process model; Amendment 2 found it also written against the prototype. This one finds it written against a **configuration surface that does not exist**. Rule 5's table specified three positions:
+
+| Rule 5 claimed | `main` |
+|---|---|
+| `strict = "off"` | `StrictMode::Off` exists |
+| `strict = "warn"`, **the default** | there is no `warn` position. The dial is `off \| enforce \| abort`, and the default is *absent*, which is silent |
+| `strict = "abort"` → collection error `fixture-shortcut-in-strict` | the variant exists; the violation is invisible to collection |
+| `NOTICE` severity under warn | `enforce` maps to `Warning` and never to `Error` — an invariant [#1613](https://github.com/kalonji-tools/oxitest/issues/1613) established deliberately |
+
+A fourth problem sat underneath all three: the strict *value* never crosses into Python. Only a `collect_violations: bool` does, so no proxy can consult the dial at access time even in principle.
+
+Three ways out were weighed — map `"warn"` onto the existing `enforce`, add a real `Warn` variant, or drop the dial. Adding a variant was rejected as a global config change rippling through every existing strict rule, colliding with #1613's invariant that already makes `enforce` *be* warn. Mapping onto `enforce` was accepted, then superseded once the costs were measured against each other:
+
+- **Shortcut resolution was already built.** `FixtureRegistry.get_visible` (bare-name, B1-filtered), `FixtureSession.get_fixture_by_name`, nearest-visible-wins with its tie-break, cycle detection, and scope caching all shipped with slices 1 and 6 and are shared with `Fixture[T]` injection. The proxy branch is a handful of lines at an insertion point Amendment 2's slice deliberately left open.
+- **The dial was the entire remaining cost**, none of it shared: plumbing a value across both the PyO3 and worker-LDJSON paths, an access-time diagnostic, and an `abort` position that cannot abort — a violation found inside a running test can only report as a test `ERROR`, so `abort` would have needed the run-level usage-error vote that [#1761](https://github.com/kalonji-tools/oxitest/issues/1761) still does not provide.
+
+So the dial cost more than the feature it governed, and it governed a habit no user has yet complained about. The industry precedent Rule 5 cited — Clippy's `wildcard_imports` in `pedantic`, Checkstyle's `AvoidStarImport`, the C++ Core Guidelines on unqualified names — argues that scope-narrowing shortcuts should be *legal by default with opt-in suppression*. oxitest's dial has no position that expresses "legal, but noticed", and manufacturing one is a config change, not a slice. The precedent's first half is honoured: the shortcut is legal. The second half is deferred until someone asks for it, at which point a `NOTICE` can be added without breaking any existing suite.
+
+The enforcement-point question the milestone flagged as this slice's tail risk dissolves with the dial. It was: a collection-time strict error cannot be implemented, because prescan extracts declarations rather than usages and `is_fixture_annotation` does not even recognise a bare `fx: Fixtures` parameter. With no strict error to place, there is nothing to enforce early. Worth recording for whoever revisits this: at access time the distinction is *structurally exact* — `fx.tx` reaches `FixturesProxy.__getattr__` and `fx.api.tx` reaches `NamespaceProxy.__getattr__`, two different classes, with no inference required and dynamic `getattr(fx, "tx")` caught identically. Any future static gate would be the approximation, not the fallback.
+
+**Drift is now a pattern, not an incident.** Three amendments in three days, each from the same root cause: normative claims about oxitest that were never checked against oxitest, each discovered at slice-pickup time after the cost of a grilling. The remaining slices rest on rules that have had no such check. [#1769](https://github.com/kalonji-tools/oxitest/issues/1769) sweeps the unshipped rules once, before slice 8, rather than paying that cost eight more times. The ADR's *principles* are not what drifts — B1, the declaration-file convention, the lifetime ladder, and plugin convergence have survived all three amendments untouched — which is why this is a third amendment and not a rewrite.
+
+The decisions behind this amendment are recorded in the [grilling outcome](https://github.com/kalonji-tools/oxitest/issues/1714#issuecomment-5131149592).
+
 ## Consequences
 
 - **New declaration surface for users.** All fixture and helper declarations move to module-level `@oxi.fixture(lifetime=...)` / `@oxi.helper` in one of four reserved file kinds. Existing users need a migration path (see follow-on impl, Documentation phase). Green-field users see only the new surface.
@@ -247,7 +273,7 @@ The decisions behind this amendment are recorded in the [grilling outcome](https
 
   **Access (v0):**
   8. `FixturesProxy` + `HelpersProxy` synthesis, with both filtered and full catalogs.
-  9. Shortcut behavior + strict-dial gating.
+  9. Shortcut behavior. (Enumerated here as "+ strict-dial gating"; the dial is retracted — see Amendment 3.)
   10. Namespace derivation + `namespace=` override.
 
   **Plugins (v0):**
