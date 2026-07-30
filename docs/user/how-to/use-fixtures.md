@@ -138,7 +138,7 @@ are four tiers:
 | `"function"` | Once per test that requests it | After that test | No effect |
 | `"module"` | Once per test module | After the module's last test | No effect |
 | `"package"` | Once per anchor package | After the subtree's last test | **Exactly once per run** — the subtree is collapsed onto a single worker |
-| `"session"` | Once per worker process | At worker teardown | **Once per worker**, not once per run |
+| `"session"` | Once per worker *task group* — the unit of work a worker picks up, which is a single module unless a `"package"` declaration merges a subtree | At task-group teardown | **Once per task group**, not once per run and not once per worker |
 
 `module` lifetime with a `yield` is the common shape for an expensive resource
 shared by one test file:
@@ -179,12 +179,17 @@ def engine() -> Iterator[Engine]:
 ```
 
 !!! note "Wide lifetimes in parallel mode"
-    Each worker subprocess builds its own fixture session, so a `session`
-    fixture runs once **per worker**, not once per run. Anything that must
-    happen exactly once per run — a schema migration, a shared artifact build —
-    belongs at rootdir `package` and pays the parallelism cost. See
+    A worker builds a fresh fixture session for **every task group** it picks
+    up, not one per worker, so a `session` fixture runs once per task group.
+    A task group is a single module unless a `package` declaration merges its
+    subtree — which means that in a suite with no `package` declaration,
+    `session` behaves exactly like `module`. Anything that must happen exactly
+    once per run — a schema migration, a shared artifact build — belongs at
+    rootdir `package` and pays the parallelism cost. See
     [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs)
-    for the subprocess model behind this.
+    for the subprocess model behind this — noting that that section describes the
+    legacy `shared=True` tier and still states the count as once per worker
+    process, which is being re-checked separately.
 
 ## Understand fixture visibility: the B1 boundary
 
