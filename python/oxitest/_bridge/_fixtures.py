@@ -267,7 +267,7 @@ class Fixtures:
 
         return _register(fn) if fn is not None else _register
 
-    def __getattr__(self, name: str) -> FixtureAccessor:
+    def __getattr__(self, name: str) -> Any:
         """Return a FixtureAccessor for the named fixture.
 
         Enables both FixtureRef usage in `@oxitest.parametrize` and lazy
@@ -275,6 +275,12 @@ class Fixtures:
 
             backend=kvault.store          # FixtureRef: resolves at test time
             kvault.store.namespace("x")   # lazy: proxied via contextvar
+
+        Returns ``Any`` because this class name also annotates the access proxy
+        (``fx: Fixtures``), where the runtime object is a ``FixturesProxy`` and
+        a top-level attribute is three-valued — sub-proxy, fixture value, or
+        awaitable handle. No single class models that. Splitting the annotation
+        from the registry belongs to #1720, which retires the registry role.
         """
         if name.startswith("_"):
             raise AttributeError(name)

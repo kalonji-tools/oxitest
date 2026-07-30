@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["slice7_shortcut_cross"]
+python_files = ["test_*.py"]
+strict = "abort"

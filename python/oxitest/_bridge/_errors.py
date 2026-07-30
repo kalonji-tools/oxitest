@@ -144,12 +144,9 @@ class BoundaryError(FixtureError):
 
     """
 
-    #: Stable diagnostic code — what lets the docs link this failure and CI grep
-    #: for it without matching on prose that may be reworded. This previously
-    #: cited ``fixture-shortcut-in-strict`` (ADR-0009 Rule 5) as the naming
-    #: precedent; that code never came into existence, because ADR-0009
-    #: Amendment 3 retracted the shortcut strict dial. ``fixture-boundary`` is
-    #: the only kebab-case fixture diagnostic code so far.
+    #: Stable diagnostic code — lets docs link this failure and CI grep for it
+    #: without matching prose. The ``fixture-shortcut-in-strict`` code once
+    #: cited here never existed; ADR-0009 Amendment 3 retracted its dial.
     CODE = "fixture-boundary"
 
     def __init__(

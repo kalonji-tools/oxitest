@@ -144,6 +144,6 @@
 
 ## Strict Mode
 
-**Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "warn"` or `strict = "abort"`.
+**Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "enforce"` or `strict = "abort"`; absent or `"off"` disables it. There is no `"warn"` position — `"enforce"` is the warn-only one, and it never escalates a diagnostic to an error.
 
 **Violation** — A strict-mode rule breach detected during collection (e.g. bare assert, dict parametrize, missing mark reason).

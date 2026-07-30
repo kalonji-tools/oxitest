@@ -92,6 +92,42 @@ A yield fixture annotates its return as `Iterator[T]` rather than `T`, so
 type-based matching never sees `T`. Reach those through
 `fx.<namespace>.<name>`.
 
+### Drop the namespace with `fx.<name>`
+
+`fx.<name>` reaches a fixture without naming its package. It resolves the
+**nearest** visible declaration, so a fixture redeclared closer to the test
+wins — the same locality rule the qualified form follows:
+
+```python
+def test_orders(fx: Fixtures) -> None:
+    conn = fx.conn          # nearest visible `conn`
+    conn = fx.api.conn      # explicitly api's, even if a nearer one exists
+```
+
+The shortcut saves typing, never scope. It reads the same filtered catalog the
+qualified form does, so it can never reach a fixture the boundary rules would
+refuse — a fixture anchored in a sibling package stays out of reach either way.
+When it cannot resolve a name it reports it as not found, rather than as a
+boundary violation, because a bare name carries no package to point at.
+
+Two cases behave in ways worth knowing up front:
+
+- **A package name wins over a fixture of the same name.** If a package `api`
+  sits beside a fixture called `api`, `fx.api` is the package. The fixture is
+  still reachable, as `fx.api.api`. Avoid the collision rather than rely on the
+  rule.
+- **Built-ins keep their prefix.** `fx.oxi.tmp` has no shortcut form; the `oxi`
+  namespace exists precisely so framework names cannot collide with yours.
+
+For an `async` fixture, await the shortcut exactly as you would the qualified
+form — `value = await fx.conn`. A sync test that reaches an async fixture is
+refused at the access, before the fixture body runs.
+
+!!! tip "Prefer the qualified form in large suites"
+    `fx.api.conn` says where the fixture comes from; `fx.conn` makes the reader
+    find out. Neither is enforced — oxitest has no setting that warns on or
+    forbids the shortcut — so this is a convention for your team to pick.
+
 ## Choose a lifetime
 
 `lifetime` names the code-structural unit whose exit disposes the value. There
@@ -198,8 +234,8 @@ BoundaryError: [fixture-boundary] fixture 'api.api_conn' is not visible from thi
 The error is deliberately not `FixtureNotFoundError` — the fixture exists and
 is spelled correctly, so "not found" would send you hunting for a typo that is
 not there. The code `fixture-boundary` is stable: link it from your own docs,
-grep for it in CI. There is no allow-comment escape hatch and no
-`strict = "warn"` softening. See the
+grep for it in CI. There is no allow-comment escape hatch, and no `strict` position softens
+it. See the
 [error reference](../reference/errors.md#fixture-errors) for the full entry.
 
 The boundary is enforced on both access routes, but only the `fx` proxy can

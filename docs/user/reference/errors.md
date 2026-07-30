@@ -406,8 +406,8 @@ prose.
 **Fix:** Pick one of the three restructurings the diagnostic names — move the
 declaration up to a package that is an ancestor of both, move the test into the
 fixture's package or below it, or declare a fixture of the same shape in the
-test's own package. There is no allow-comment escape hatch and no
-`strict = "warn"` softening; the boundary is not configurable.
+test's own package. There is no allow-comment escape hatch, and no `strict` position softens
+it; the boundary is not configurable.
 
 When the leaf name is also wrong, the boundary is still reported first, with the
 missing leaf appended:

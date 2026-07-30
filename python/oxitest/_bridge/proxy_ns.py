@@ -11,7 +11,6 @@ from oxitest._bridge._builtins._capture import FdCapture, StdCapture
 from oxitest._bridge._builtins._logcapture import LogCapture
 from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._builtins._tempdir import TempDir, TempDirFactory
-from oxitest._bridge._errors import FixtureNotFoundError
 from oxitest._bridge._test_meta import TestMeta
 
 if TYPE_CHECKING:
@@ -201,11 +200,12 @@ class FixturesProxy(_CachingProxy):
             raise AttributeError(name)
 
         def _resolve() -> Any:
-            # Segment precedence, in order. #1714 inserts the top-level
-            # fixture-name branch immediately BELOW the namespace branch: a
-            # package segment wins over a same-named fixture, which is
-            # reachable only by its qualified path. There is no fixture branch
-            # here yet, so that rule is currently true vacuously.
+            # Segment precedence, in order. The fixture-name branch sits
+            # immediately BELOW the namespace branch: a package segment wins
+            # over a same-named fixture, which stays reachable by its qualified
+            # path (ADR-0009 Rule 5's naming-clash rule, live since #1714).
+            # Reordering these two silently makes a package unaddressable by
+            # its own name.
             if name == "oxi":
                 return OxiNamespaceProxy(
                     self._session,
@@ -226,12 +226,17 @@ class FixturesProxy(_CachingProxy):
                     self._fn_teardowns,
                     test_is_async=self._test_is_async,
                 )
-            msg = (
-                f"no fixture namespace '{name}'.\n"
-                f"  Hint: a namespace is the directory name of the package "
-                f"whose __fixtures__.py declares the fixture, or the name of a "
-                f"Fixtures() instance. Check the spelling."
+            # Last resort, and deliberately unconditional. Gating this on a
+            # full-catalog "is it a fixture name?" query would make the *message*
+            # depend on whether some other module happened to be imported into
+            # this worker — inline declarations register per worker, so the same
+            # source produced different diagnostics serially and under -n.
+            # get_fixture_shortcut owns one message that is true either way.
+            return self._session.get_fixture_shortcut(
+                name,
+                self._module_path,
+                self._fn_teardowns,
+                test_is_async=self._test_is_async,
             )
-            raise FixtureNotFoundError(name, message=msg)
 
         return self._get_cached(name, _resolve)
