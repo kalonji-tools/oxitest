@@ -1,0 +1,3 @@
+[tool.oxitest]
+testpaths = ["slice7_shortcut_foreign_inline"]
+python_files = ["test_*.py"]

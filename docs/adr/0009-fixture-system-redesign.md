@@ -1,6 +1,6 @@
 # ADR-0009: Fixture system redesign
 
-**Status:** Accepted (amended 2026-07-29 — see [Amendments](#amendments))
+**Status:** Accepted (amended 2026-07-30 — see [Amendments](#amendments))
 **Date:** 2026-07-28
 
 The fixture system was designed with a single-location assumption: fixtures live in `conftest.py`, declared via a `Fixtures()` instance whose `.fixture` decorator accumulates definitions during conftest loading. Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) opened the debate on where fixtures may live — grilling [#1706](https://github.com/kalonji-tools/oxitest/issues/1706) named **Position 4**: promote test-file top-level to first-class, keep the existing `Fixtures()` machinery, add a `ModuleSource` variant on top of the current registry, drop `registrar-in-test-module`, add a new `registrar-in-class-body` violation.
@@ -15,7 +15,7 @@ The core reframe is one sentence: **visibility is Python's job; lifecycle is the
 
 2. **Full runtime enforcement of file conventions via a custom import hook.** Install a Python meta-path finder that intercepts imports of any non-conforming file and rejects fixture-decorated functions found outside `__fixtures__.py` / `__helpers__.py` / `__init__.py` / `test_*.py`. Maximum enforcement, no possibility of dead-code fixtures in unscanned files. Rejected: high runtime cost, poor interoperability with editors and static analysis, breaks under the standard three-tier collection fallback when AST prescan fails. Convention-plus-loud-collection-time-error achieves the same goal with none of the cost.
 
-3. **Principle-plus-rules with file-convention discovery (chosen).** Establish the visibility/lifecycle reframe as the governing principle. Define eight rules covering declaration files, lifetime tiers and boundaries, B1 strict boundary, lifetime cap, proxy access, plugin convergence, autouse, and retirements. Discovery via Rust AST prescan on a reserved-name file set — dunder convention matching Python's own `__init__.py` / `__main__.py`, zero collision with user modules. Enforcement via prescan-time errors (loud rejection at the shallowest catchable frame, per [ADR-0006](0006-async-organizational-strategy.md)) plus a strict dial for shortcut access. No new tooling; existing `ty` + collection-time diagnostics + strict dial suffice.
+3. **Principle-plus-rules with file-convention discovery (chosen).** Establish the visibility/lifecycle reframe as the governing principle. Define eight rules covering declaration files, lifetime tiers and boundaries, B1 strict boundary, lifetime cap, proxy access, plugin convergence, autouse, and retirements. Discovery via Rust AST prescan on a reserved-name file set — dunder convention matching Python's own `__init__.py` / `__main__.py`, zero collision with user modules. Enforcement via prescan-time errors (loud rejection at the shallowest catchable frame, per [ADR-0006](0006-async-organizational-strategy.md)). This originally added "plus a strict dial for shortcut access"; the dial is retracted (Amendment 3) and shortcut access is unconditional. No new tooling; existing `ty` + collection-time diagnostics suffice.
 
 ## Decision
 
@@ -74,7 +74,7 @@ The ladder is non-monotonic on purpose. `package` buys exactness and charges par
 
 A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the directory containing the declaration file (Rule 2 — `__init__.py` not required). For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
 
-Sibling and unrelated packages cannot access the fixture. Attempted use raises `BoundaryError` (diagnostic code `fixture-boundary`) naming the fixture's anchor, the test's package, and the legal exits. No allow-comment escape hatch. No `strict = "warn"` softening. This follows [ADR-0006](0006-async-organizational-strategy.md)'s loud-rejection precedent.
+Sibling and unrelated packages cannot access the fixture. Attempted use raises `BoundaryError` (diagnostic code `fixture-boundary`) naming the fixture's anchor, the test's package, and the legal exits. No allow-comment escape hatch. No `strict` softening — and note that the `"warn"` position this originally named has never existed (Amendment 3). This follows [ADR-0006](0006-async-organizational-strategy.md)'s loud-rejection precedent.
 
 Package-scope fixtures anchored at `tests/api/` are usable from `tests/api/v1/test_x.py` (descendant) but not from `tests/other/test_y.py` (sibling).
 

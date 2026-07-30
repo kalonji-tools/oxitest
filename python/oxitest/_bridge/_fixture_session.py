@@ -120,6 +120,15 @@ class _SessionProtocol(Protocol):
         test_is_async: bool = True,
     ) -> Any: ...
 
+    def get_fixture_shortcut(
+        self,
+        name: str,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+        *,
+        test_is_async: bool = True,
+    ) -> Any: ...
+
     def get_namespace_for_func(
         self,
         name: str,
@@ -927,6 +936,64 @@ class FixtureSession:
             # mistake is the access itself.
             if not test_is_async:
                 raise AsyncFixtureAccessError(name, namespace, defn.scope.value)
+            return self._instantiator.resolve_async_in_namespace(defn, ctx)
+        return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
+
+    def get_fixture_shortcut(
+        self,
+        name: str,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+        *,
+        test_is_async: bool = True,
+    ) -> Any:
+        """Resolve ``fx.<name>`` — shortcut access, no package prefix (#1714).
+
+        The bare-name peer of :meth:`get_fixture_in_namespace`, and deliberately
+        *not* an extension of :meth:`get_fixture_by_name`. That one is the
+        ``Fixture[T]`` injection route's resolver; injection reaches a sync test
+        through resolved kwargs, where ``AsyncDepGuardMiddleware`` already
+        catches an async fixture before the body runs. A proxy access has no
+        kwarg to inspect — it happens lazily inside the body, after middleware
+        — so it needs the guard here, exactly as the qualified route does. A
+        shared signature would have put an async branch on injection's hot path
+        for no benefit and some risk.
+
+        Resolution reads the B1-filtered catalog, so a shortcut can never reach
+        a fixture the qualified path could not. An invisible name raises
+        ``FixtureNotFoundError`` rather than ``BoundaryError``: a bare name has
+        no segment to attribute the boundary to (ADR-0009 Rule 5, as amended).
+
+        One message covers every miss — typo, cross-boundary, and foreign
+        inline alike — because the alternatives are not distinguishable
+        *deterministically*. Telling them apart needs the unfiltered catalog,
+        which contains inline declarations, and those register only in the
+        worker that imported their module. Branching on it made the diagnostic
+        vary with worker assignment, which is the scheduling-dependent message
+        ADR-0009 Rule 5 rules out. So the wording states what is true in all
+        three cases rather than guessing which one happened.
+        """
+        defn = self._registry.get_visible(name, module_path)
+        if defn is None:
+            msg = (
+                f"cannot resolve fixture '{name}'.\n"
+                f"  Hint: '{name}' is neither a package segment reachable from "
+                f"this test nor a fixture visible to it. A shortcut "
+                f"(fx.{name}) needs a fixture of that name declared in this "
+                f"test's own package or an ancestor of it; a fixture declared "
+                f"inline in another test module is never visible here. Check "
+                f"the spelling, or use the qualified form fx.<package>.{name}."
+            )
+            raise FixtureNotFoundError(name, message=msg)
+        ctx = _ResolutionContext(
+            module_path, fn_teardowns, frozenset(), self._scope_for, module_path
+        )
+        if defn.is_async:
+            # ADR-0006's illegal cell on the shortcut route. Namespace is empty
+            # because there is none — AsyncFixtureAccessError renders `fx.<name>`
+            # rather than `fx.<ns>.<name>` when it is.
+            if not test_is_async:
+                raise AsyncFixtureAccessError(name, "", defn.scope.value)
             return self._instantiator.resolve_async_in_namespace(defn, ctx)
         return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
 
