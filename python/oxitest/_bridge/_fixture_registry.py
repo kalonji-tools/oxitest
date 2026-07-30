@@ -463,10 +463,24 @@ class FixtureRegistry:
         """Whether *namespace* exists anywhere in the run. Full-catalog query."""
         return namespace in self._namespace_defs
 
-    def has_visible_namespace(self, namespace: str, module_path: str) -> bool:
-        """Whether any def in *namespace* is reachable from *module_path*."""
+    def has_visible_anchor(self, namespace: str, module_path: str) -> bool:
+        """Whether any **anchored** def in *namespace* reaches *module_path*.
+
+        The filtered counterpart of :meth:`has_namespace`, and the question the
+        ``BoundaryError`` decision actually needs: *does B1 let this test
+        through?*
+
+        Anchored is the load-bearing word. Conftest, plugin and builtin defs are
+        exempt from B1, so ``is_visible_from`` reports them visible everywhere.
+        A namespace may hold both kinds at once — the registrar only rejects a
+        repeated ``(namespace, name)`` pair, so a conftest ``api.conn`` and a
+        ``tests/api/__fixtures__.py`` declaring ``api.other`` coexist happily.
+        Counting the exempt def as evidence of reachability would make that
+        namespace look reachable from every test in the run and strand its
+        genuine cross-boundary accesses on ``FixtureNotFoundError``.
+        """
         return any(
-            defn.is_visible_from(module_path)
+            defn.anchor is not None and defn.is_visible_from(module_path)
             for defn in self._namespace_defs.get(namespace, ())
         )
 

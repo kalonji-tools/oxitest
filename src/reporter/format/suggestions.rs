@@ -28,14 +28,6 @@ pub(crate) fn suggest_fix(outcome: &TestOutcome) -> Option<String> {
         );
     }
 
-    if message.contains("fixture") && message.contains("not found") {
-        return Some(
-            "Check that the fixture name matches a `@fixtures.fixture` definition \
-             and that the parameter is annotated with `Fixture[T]`."
-                .to_string(),
-        );
-    }
-
     None
 }
 
@@ -95,15 +87,18 @@ mod tests {
     }
 
     #[test]
-    fn suggest_fixture_not_found() {
+    fn no_suggestion_for_fixture_not_found() {
+        // FixtureNotFoundError's Python-side message (_default_fixture_not_found_message
+        // in python/oxitest/_bridge/_errors.py) already names the namespace, both
+        // declaration routes (@oxi.fixture in __fixtures__.py or a plugin), and the
+        // Fixture[<type>] annotation requirement. A Rust-side hint here would either
+        // repeat that or, worse, contradict it with the legacy `@fixtures.fixture` name.
         let outcome = TestOutcome::error("fixture 'db' not found")
             .file("test.py")
             .lineno(5)
             .source("def test(db):")
             .build();
-        let hint = suggest_fix(&outcome);
-        assert!(hint.is_some());
-        assert!(hint.unwrap().contains("Fixture[T]"));
+        assert!(suggest_fix(&outcome).is_none());
     }
 
     #[test]

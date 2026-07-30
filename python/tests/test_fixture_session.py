@@ -602,6 +602,74 @@ def test_a_conftest_only_namespace_never_produces_a_boundary_error() -> None:
     )
 
 
+def _mixed_api_session() -> FixtureSession:
+    """A namespace ``api`` fed by both a conftest instance and ``/t/api``.
+
+    The registrar permits this: its duplicate check fires on a repeated
+    ``(namespace, name)`` pair, and ``api.legacy_conn`` and ``api.api_conn``
+    are different pairs.
+    """
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="legacy_conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ConftestSource(func=object, conftest_path="/t/conftest.py"),
+            namespace="api",
+        )
+    )
+    registry.register(
+        FixtureDef(
+            name="api_conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ModuleSource(
+                func=object,
+                defining_module_path="/t/api/__fixtures__.py",
+                anchor_package_path="/t/api",
+                lifetime=Lifetime.FUNCTION,
+            ),
+            namespace="api",
+        )
+    )
+    return FixtureSession(registry)
+
+
+def test_a_mixed_namespace_still_reports_a_crossed_boundary() -> None:
+    """An unanchored def in the namespace must not mask the anchored one."""
+    # Arrange
+    session = _mixed_api_session()
+
+    # Act
+    error = session.fixture_lookup_error("api_conn", "api", "/t/admin/test_a.py")
+
+    # Assert
+    assert type(error) is BoundaryError, (
+        "conftest fixtures are exempt from B1 and so read as visible from "
+        "everywhere; letting one stand as proof that the segment is reachable "
+        "makes the BoundaryError branch unreachable for every namespace that "
+        "also holds a directory anchor, and sends the user hunting for a typo "
+        "in a name they spelled correctly"
+    )
+
+
+def test_a_mixed_namespace_reports_not_found_inside_the_anchor() -> None:
+    """Narrowing the reachability question must not break the legal access."""
+    # Arrange
+    session = _mixed_api_session()
+
+    # Act
+    error = session.fixture_lookup_error("typo", "api", "/t/api/v1/test_a.py")
+
+    # Assert
+    assert type(error) is FixtureNotFoundError, (
+        "the test sits under /t/api, so B1 lets it through and the only thing "
+        "wrong is the leaf name — a BoundaryError here would tell the user to "
+        "restructure packages to fix a misspelling"
+    )
+
+
 def test_cross_boundary_resolution_raises_rather_than_reporting_not_found() -> None:
     """The end of the wiring: the proxy path actually raises the new error."""
     # Arrange
