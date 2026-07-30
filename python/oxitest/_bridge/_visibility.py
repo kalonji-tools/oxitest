@@ -35,6 +35,14 @@ def is_visible(*, anchor: str, defining: str, module_path: str) -> bool:
     filesystem: a package anchor is a directory and its defining module is the
     ``__fixtures__.py`` inside it, so the two can never be equal.
 
+    That test is string equality across a layer seam, so it is only as good as
+    the canonical form promised in the module docstring. *anchor* comes from
+    ``collector.rs``; *defining* comes from a Python module's ``__file__``,
+    which the import machinery does not resolve. ``_module_source_registrar``
+    canonicalises the latter at registration so the two arrive comparable —
+    move that normalisation and the discriminator misreads an inline
+    declaration as a package one the moment a symlink separates the spellings.
+
     *module_path* is the test's module at the top of a resolution chain and the
     resolving fixture's own anchor once the chain descends into dependencies —
     see ``_ResolutionContext.boundary_path``.

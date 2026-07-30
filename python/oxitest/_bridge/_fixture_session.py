@@ -136,8 +136,6 @@ class _SessionProtocol(Protocol):
 
     def has_namespace(self, namespace: str) -> bool: ...
 
-    def has_visible_namespace(self, namespace: str, module_path: str) -> bool: ...
-
     def get_fixture_timings(self) -> tuple[FixtureTiming, ...]: ...
 
 
@@ -761,10 +759,6 @@ class FixtureSession:
         """Return True if any registered fixture belongs to the given namespace."""
         return self._registry.has_namespace(namespace)
 
-    def has_visible_namespace(self, namespace: str, module_path: str) -> bool:
-        """Whether *namespace* holds anything reachable from *module_path*."""
-        return self._registry.has_visible_namespace(namespace, module_path)
-
     def fixture_lookup_error(
         self, name: str, namespace: str, module_path: str
     ) -> FixtureError:
@@ -780,6 +774,18 @@ class FixtureSession:
           fixing the spelling makes the access work.
         - segment unknown anywhere → ``FixtureNotFoundError``.
 
+        "Reachable" means *reachable under B1*, which is why the first branch
+        asks :meth:`FixtureRegistry.has_visible_anchor` rather than anything
+        broader. Unanchored defs are exempt from B1 and report visible from
+        everywhere, and a namespace may hold both kinds at once: the registrar
+        only rejects a repeated ``(namespace, name)`` pair, so a conftest
+        ``api.conn`` and a ``tests/api/__fixtures__.py`` declaring ``api.other``
+        coexist. Counting the conftest def as evidence of reachability would
+        make this branch unconditionally true for that namespace and strand
+        every genuine cross-boundary access on ``FixtureNotFoundError`` — the
+        go-hunt-for-a-typo-in-a-correctly-spelled-name failure ``BoundaryError``
+        exists to remove.
+
         A namespace built only from conftest ``Fixtures()`` instances reports no
         anchors and therefore never reaches the ``BoundaryError`` branch — the
         legacy API is exempt from B1 until #1720 retires it (#1760).
@@ -791,7 +797,7 @@ class FixtureSession:
         schedule. They fall through to ``FixtureNotFoundError``, whose hint
         names the inline cap unconditionally (#1759).
         """
-        if self._registry.has_visible_namespace(namespace, module_path):
+        if self._registry.has_visible_anchor(namespace, module_path):
             return FixtureNotFoundError(name, namespace=namespace)
         anchors = self._registry.namespace_anchors(namespace)
         if not anchors:

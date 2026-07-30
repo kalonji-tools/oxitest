@@ -63,7 +63,7 @@ def register_module_source_fixtures(
     # directory containing a dot.
     anchor = Path(anchor_package_path)
     namespace = anchor.stem if anchor.suffix == ".py" else anchor.name
-    module_path = fixture_module.__file__ or ""
+    module_path = _canonical_module_path(fixture_module.__file__)
 
     for attr_name, obj in vars(fixture_module).items():
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
@@ -108,6 +108,30 @@ def register_module_source_fixtures(
                 is_async=_is_async(obj),
             )
         )
+
+
+def _canonical_module_path(module_file: str | None) -> str:
+    """*module_file* in the canonical form the collector uses for anchors.
+
+    The two halves of a ``ModuleSource`` come from different layers.
+    ``anchor_package_path`` is handed over by ``collector.rs``, which runs every
+    collected path through ``std::fs::canonicalize``. ``__file__`` is whatever
+    the import machinery recorded — CPython only ``abspath``-es a spec origin,
+    so ``.``, ``..`` and symlinks survive it.
+
+    ``is_visible`` tells an inline declaration from a package one by comparing
+    those two for equality (ADR-0009 Rules 1 and 3), and it may not reach for
+    the filesystem: it runs on every fixture resolution and is deliberately
+    pure path arithmetic. Reconciling the provenances therefore happens here,
+    once per fixture module.
+
+    An empty ``__file__`` stays empty. ``Path("").resolve()`` is the working
+    directory, which would silently anchor a synthetic module to the project
+    root instead of leaving it obviously path-less.
+    """
+    if not module_file:
+        return ""
+    return str(Path(module_file).resolve())
 
 
 def _clashing_declaration(

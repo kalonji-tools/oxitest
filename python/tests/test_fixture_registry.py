@@ -576,8 +576,8 @@ def test_namespace_visibility_and_anchors_are_separate_queries() -> None:
     registry.register(_module_def("api_conn", "api", "/t/api"))
 
     # Act
-    visible_here = registry.has_visible_namespace("api", "/t/api/v1/test_a.py")
-    visible_elsewhere = registry.has_visible_namespace("api", "/t/admin/test_a.py")
+    visible_here = registry.has_visible_anchor("api", "/t/api/v1/test_a.py")
+    visible_elsewhere = registry.has_visible_anchor("api", "/t/admin/test_a.py")
     known_anywhere = registry.has_namespace("api")
     anchors = registry.namespace_anchors("api")
 
